@@ -16,12 +16,17 @@ on:
       - apps/api/db/queries/recording_key_object_authority.sql
       - apps/api/db/queries/recording_pipeline.sql
       - apps/api/db/queries/sync_lifecycle.sql
+      - apps/api/db/queries/telemetry_outbox.sql
+      - apps/api/db/queries/telemetry_sources.sql
       - apps/api/internal/adapters/postgres/episode_control.go
       - apps/api/internal/adapters/postgres/episode_lifecycle_create.go
       - apps/api/internal/adapters/postgres/episode_public_join.go
       - apps/api/internal/adapters/postgres/public_episode_admission.go
       - apps/api/internal/adapters/postgres/public_invites.go
+      - apps/api/internal/adapters/postgres/telemetry_ledger.go
+      - apps/api/internal/adapters/postgres/telemetry_relay.go
       - apps/api/internal/capturesignaling/**
+      - apps/api/internal/httpapi/telemetry.go
       - apps/api/internal/providerbridge/sfu_executor.go
       - apps/api/internal/publicinviteapp/**
       - apps/api/internal/publicinvites/**
@@ -29,6 +34,8 @@ on:
       - apps/api/internal/recorderworker/**
       - apps/api/internal/recordingorchestrator/**
       - apps/api/internal/recordingpipeline/**
+      - apps/api/internal/sdktelemetry/**
+      - apps/api/internal/telemetrydelivery/**
       - apps/sync/lib/chalk_sync/episodes/coordinator.ex
       - apps/sync/lib/chalk_sync/episodes/coordinator/**
       - apps/sync/lib/chalk_sync/episodes/reducer.ex
@@ -59,14 +66,17 @@ on:
       - apps/sync/test/chalk_sync/episode_lifecycle_replay_test.exs
       - apps/sync/test/chalk_sync/external_operations_findings_test.exs
       - apps/sync/test/chalk_sync/stateholder/screen_share_lease_postgres_test.exs
+      - sdks/typescript/client/src/access/grant.ts
       - sdks/typescript/client/src/access/manager.ts
       - sdks/typescript/client/src/connection/lifecycle.ts
+      - sdks/typescript/client/src/connection/telemetry.ts
       - sdks/typescript/client/src/media/client.ts
       - sdks/typescript/client/src/media/local-publications.ts
       - sdks/typescript/client/src/media/plane.ts
       - sdks/typescript/client/src/media/types.ts
       - sdks/typescript/client/src/space-client/media-controller.ts
       - sdks/typescript/client/src/sync/v1-client.ts
+      - sdks/typescript/client/src/telemetry/**
       - tools/formal/check-manifest.mjs
       - tools/formal/client-recovery/**
       - tools/formal/episode-lifecycle/**
@@ -79,6 +89,7 @@ on:
       - tools/formal/screen-share-lease/**
       - tools/formal/select-models.mjs
       - tools/formal/sfu-publication-lifecycle/**
+      - tools/formal/telemetry-delivery/**
       - tools/formal/tla2tools.sh
   workflow_dispatch:
 
@@ -132,3 +143,17 @@ jobs:
       # ubuntu-24.04 ships Java 17, which TLC needs.
       - name: Model-check ${{ matrix.id }}
         run: ${{ matrix.run }}
+
+      # The telemetry model also replays what the real outbox did, which needs the SDK's dependencies.
+      - uses: ./.github/actions/setup-js
+        if: ${{ matrix.id == 'telemetry-delivery' }}
+
+      - name: Record delivery traces of the real outbox
+        if: ${{ matrix.id == 'telemetry-delivery' }}
+        env:
+          TELEMETRY_TRACE_DIR: ${{ runner.temp }}/telemetry-traces
+        run: pnpm --dir sdks/typescript/client exec vitest run src/telemetry/outbox.delivery
+
+      - name: Replay the traces against the model
+        if: ${{ matrix.id == 'telemetry-delivery' }}
+        run: tools/formal/telemetry-delivery/run.sh --trace "$RUNNER_TEMP/telemetry-traces"

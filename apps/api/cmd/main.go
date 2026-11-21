@@ -29,23 +29,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: %w", err)
 	}
-	telemetry, err := observability.Start(context.Background(), observability.Config{
-		Environment:  cfg.Observability.Environment,
-		OTLPEndpoint: cfg.Observability.OTLPEndpoint,
-		OTLPInsecure: cfg.Observability.OTLPInsecure,
-		Service:      cfg.Observability.Service,
-		Version:      cfg.Observability.Version,
-	})
+	evidenceSink, shutdownTelemetry, err := startTelemetry(cfg.Observability)
 	if err != nil {
-		return fmt.Errorf("start telemetry: %w", err)
+		return err
 	}
-	defer func() {
-		shutdownCtx, cancel := observability.TelemetryShutdownContext()
-		defer cancel()
-		if err := telemetry.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "api: shutdown telemetry: %v\n", err)
-		}
-	}()
+	defer shutdownTelemetry()
 
 	diagnostics := newDiagnostics(cfg)
 	logger := diagnostics.Logger()
@@ -63,7 +51,7 @@ func run() error {
 	w := apiWiring{
 		cfg: cfg, pool: pool, diagnostics: diagnostics, logger: logger,
 		queries:         diagnostics.Queries(postgressqlc.New(pool)),
-		launchTelemetry: launchTelemetry,
+		launchTelemetry: launchTelemetry, evidenceSink: evidenceSink,
 	}
 	if err := w.openRedis(); err != nil {
 		return err

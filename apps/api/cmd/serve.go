@@ -35,6 +35,7 @@ type serverResults struct {
 func (w *apiWiring) serve(server *http.Server) error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	defer startEvidenceRelay(signalCtx, w.telemetryLedger, w.evidenceSink, w.logger)()
 	results, err := w.startServersAndWorkers(signalCtx, server)
 	if err != nil {
 		return err

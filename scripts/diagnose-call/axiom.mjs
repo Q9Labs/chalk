@@ -2,6 +2,7 @@
 /** Axiom's query client for the diagnosis: one query, its rows, and whether the row cap cut it off. */
 export const ROW_CAP = 5000;
 const ID = /^[\w.:-]{1,128}$/u;
+const EVIDENCE_PREFIX = "chalk-evidence-v2:";
 
 /** An id may go into a query only when it is made of the characters ids are made of. */
 export function quote(id) {
@@ -25,8 +26,22 @@ export async function axiom({ token, org, dataset, apl, start, end, signal }, fe
   });
   if (!response.ok) throw new Error(`Axiom answered HTTP ${response.status} for dataset ${dataset}: ${(await response.text()).slice(0, 300)}`);
   const body = await response.json();
-  const rows = (body.matches ?? []).map((match) => ({ _time: match._time, _rowId: match._rowId, ...match.data }));
+  const rows = (body.matches ?? []).map((match) => unpackEvidence({ _time: match._time, _rowId: match._rowId, ...match.data }));
   return { rows, truncated: rows.length >= ROW_CAP };
+}
+
+function unpackEvidence(row) {
+  if (typeof row.body !== "string" || !row.body.startsWith(EVIDENCE_PREFIX)) return row;
+  try {
+    const attributes = JSON.parse(row.body.slice(EVIDENCE_PREFIX.length));
+    if (attributes && typeof attributes === "object" && !Array.isArray(attributes)) {
+      const { body: _, ...indexes } = row;
+      return { ...indexes, attributes };
+    }
+  } catch {
+    // A damaged body can leave its indexes visible but never counts as evidence.
+  }
+  return row;
 }
 
 /**

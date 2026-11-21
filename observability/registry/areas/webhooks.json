@@ -1,0 +1,11 @@
+{
+  "area": "webhooks",
+  "slice": 12,
+  "title": "Webhooks and tenant integration",
+  "prefixes": ["webhook", "integration"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": []
+}

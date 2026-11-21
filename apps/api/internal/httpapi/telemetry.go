@@ -13,10 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
+	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -35,8 +38,9 @@ type telemetryRequest struct {
 	Frame string
 }
 
-// telemetryCharge prices a request in bytes of the participant's budget. A body
-// that was too large to read costs the largest body.
+// telemetryCharge prices a request in bytes of the participant's budget. A body that was too large
+// to read costs the largest body. Rows are bounded apart from bytes: a batch writes only its own
+// source, and the ledger caps the sources one participant owns.
 func telemetryCharge(request telemetryRequest) (ratelimit.Policy, bool) {
 	policy := telemetryBudget
 	policy.Cost = request.Bytes
@@ -63,10 +67,28 @@ func decodeTelemetry(r *http.Request) (telemetryRequest, error) {
 	return request, nil
 }
 
-// A still-valid signed credential is enough, and it keeps being enough after the
-// participant leaves: the last events are sent as the client goes, and the
-// credential only stamps rows, so the byte budget is all it needs to be safe.
-func telemetryEndpoint(verifier ParticipantMediaVerifier) Endpoint[telemetryRequest, sdktelemetry.Response] {
+// TelemetryVerifier verifies the telemetry token, which only the telemetry route accepts.
+type TelemetryVerifier interface {
+	VerifyTelemetry(context.Context, string) (accessgrants.Subject, error)
+}
+
+// TelemetryLedger admits a version 2 batch against the stored ledger and returns only after the
+// admission is durable; an error leaves the ledger as it was. Live is the same participant fence
+// on its own, for a version 1 batch, which has no ledger row: it returns
+// telemetrydelivery.ErrParticipantGone unless the participant's row exists. See
+// telemetrydelivery.MemoryLedger and postgres.TelemetryLedger.
+type TelemetryLedger interface {
+	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, stamp sdktelemetry.Stamp) (telemetrydelivery.Admission, error)
+	Live(ctx context.Context, identity telemetrydelivery.Identity) error
+}
+
+// A still-valid signed credential is enough to send, and it keeps being enough after the
+// participant leaves: the last events are sent as the client goes. The credential names who sends,
+// so a batch of either version is logged only while that participant's row exists, a version 2
+// batch reaches only a source of its own participant, and the byte budget bounds the rest. The
+// credential is the telemetry token, or the media credential for a client that has no telemetry
+// token yet.
+func telemetryEndpoint(telemetry TelemetryVerifier, media ParticipantMediaVerifier, ledger TelemetryLedger) Endpoint[telemetryRequest, sdktelemetry.Response] {
 	return Post("/v1/tenants/{tenant_id}/telemetry", "uploadTelemetry", decodeTelemetry,
 		func(ctx context.Context, request telemetryRequest) (sdktelemetry.Response, error) {
 			subject, ok := accessgrants.SubjectFromContext(ctx)
@@ -79,19 +101,101 @@ func telemetryEndpoint(verifier ParticipantMediaVerifier) Endpoint[telemetryRequ
 			if request.Frame != "" {
 				return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, request.Frame)
 			}
+			if request.Batch.Version == sdktelemetry.LedgerVersion {
+				return admitTelemetry(ctx, ledger, subject, request)
+			}
+			if err := liveTelemetry(ctx, ledger, subject); err != nil {
+				return sdktelemetry.Response{}, refuseTelemetry(ctx, subject, request.Batch, err)
+			}
 			return logTelemetry(ctx, subject, request.Batch, request.Origin), nil
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimitFor(telemetryBudget, telemetryCharge).
+		}).Auth(APIAuthParticipantTelemetry).Middleware(requireTelemetryCredential(telemetry, media)).Needs(ledger).RateLimitFor(telemetryBudget, telemetryCharge).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("TelemetryRequest", sdktelemetry.Request{}, sdktelemetry.BodyLimit).
 		Responds(http.StatusOK, "TelemetryResponse", sdktelemetry.Response{}).
-		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorTelemetryRefused, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+}
+
+// admitTelemetry acknowledges only once the ledger has committed both the ranges and the new payload.
+func admitTelemetry(ctx context.Context, ledger TelemetryLedger, subject accessgrants.Subject, request telemetryRequest) (sdktelemetry.Response, error) {
+	received := time.Now()
+	stamp := sdktelemetry.Stamp{Legacy: telemetryStamp(subject, request.Origin), Record: recordStamp(subject)}
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		stamp.Legacy = append(stamp.Legacy, "trace_id", span.TraceID().String(), "span_id", span.SpanID().String())
+	}
+	admission, err := ledger.Admit(ctx, telemetryIdentity(subject), request.Batch, received, stamp)
+	if err != nil {
+		return sdktelemetry.Response{}, refuseTelemetry(ctx, subject, request.Batch, err)
+	}
+	rejected := request.Batch
+	rejected.Events = nil
+	for _, event := range admission.New {
+		if event.Rejection() != "" {
+			rejected.Events = append(rejected.Events, event)
+		}
+	}
+	response := sdktelemetry.Log(ctx, observability.RequestLogger(ctx), rejected, received, stamp)
+	response.Accepted = len(admission.New) - response.Rejected
+	response.Duplicates = admission.Duplicates
+	response.Acks = telemetrydelivery.Acks(request.Batch, admission.Settled)
+	if admission.EndRejection != "" {
+		response.EndRejection = admission.EndRejection
+		observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).WarnContext(ctx, "Rejected SDK telemetry end",
+			"event", "sdk.telemetry.rejected", "reason", admission.EndRejection, "source_id", request.Batch.SourceID, "batch_id", request.Batch.BatchID)
+	}
+	return response, nil
+}
+
+// liveTelemetry fences a version 1 batch the way Admit fences a version 2 one, so a still-valid
+// credential of a purged tenant or a removed participant logs nothing.
+func liveTelemetry(ctx context.Context, ledger TelemetryLedger, subject accessgrants.Subject) error {
+	return ledger.Live(ctx, telemetryIdentity(subject))
+}
+
+// telemetryIdentity is who the ledger sees behind a subject's credential.
+func telemetryIdentity(subject accessgrants.Subject) telemetrydelivery.Identity {
+	return telemetrydelivery.Identity{TenantID: subject.TenantID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID}
+}
+
+// refuseTelemetry answers a batch the ledger refused as a whole. A refusal the client cannot fix
+// by sending again is final: it drops the batch as refused. Any other failure is a retry.
+func refuseTelemetry(ctx context.Context, subject accessgrants.Subject, batch sdktelemetry.Request, err error) error {
+	switch {
+	case errors.Is(err, telemetrydelivery.ErrLedgerFull):
+		return rejectTelemetry(ctx, subject, "ledger_full")
+	case errors.Is(err, telemetrydelivery.ErrSourceOwned):
+		return rejectTelemetry(ctx, subject, telemetrydelivery.ReasonSourceOwned, "source_id", batch.SourceID)
+	case errors.Is(err, telemetrydelivery.ErrSourceBudget):
+		return rejectTelemetry(ctx, subject, telemetrydelivery.ReasonSourceBudget, "source_id", batch.SourceID)
+	case errors.Is(err, telemetrydelivery.ErrParticipantGone):
+		return rejectTelemetry(ctx, subject, telemetrydelivery.ReasonParticipantGone)
+	case errors.Is(err, telemetrydelivery.ErrBatch):
+		return rejectTelemetry(ctx, subject, "schema")
+	}
+	observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).ErrorContext(ctx, "Telemetry ledger failed",
+		"event", "sdk.telemetry.ledger_failed", "source_id", batch.SourceID, "batch_id", batch.BatchID)
+	return apiErrorServiceUnavailableRetry
 }
 
 // logTelemetry writes the rows of a batch. The credential names the tenant, Space, Episode,
 // participant and provider; the client names nothing of that. provider and provider_session_id
 // join a row to the media plane's own logs for the same connection.
 func logTelemetry(ctx context.Context, subject accessgrants.Subject, batch sdktelemetry.Request, origin []any) sdktelemetry.Response {
-	return sdktelemetry.Log(ctx, observability.RequestLogger(ctx), batch, time.Now(), telemetryStamp(subject, origin)...)
+	stamp := sdktelemetry.Stamp{Legacy: telemetryStamp(subject, origin), Record: recordStamp(subject)}
+	return sdktelemetry.Log(ctx, observability.RequestLogger(ctx), batch, time.Now(), stamp)
+}
+
+// recordStamp is the credential's trail on a kernel record's row, under registry field names. A
+// kernel row names its seat by participant_id, as the server kernels' rows do, so a reader joins the
+// seat's client records to its Sync and API records.
+func recordStamp(subject accessgrants.Subject) []any {
+	stamp := []any{
+		"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
+		"participant_id", subject.ParticipantID.String(), "generation", subject.ParticipantGeneration,
+	}
+	if subject.ConnectionID != "" {
+		stamp = append(stamp, "provider_media_id", subject.ConnectionID)
+	}
+	return stamp
 }
 
 func telemetryStamp(subject accessgrants.Subject, origin []any) []any {
@@ -103,13 +207,16 @@ func telemetryStamp(subject accessgrants.Subject, origin []any) []any {
 }
 
 // Reasons are fixed labels from the checks, never decoder errors or input.
-func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason string) error {
+func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason string, extra ...any) error {
 	observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).WarnContext(ctx, "Rejected SDK telemetry batch",
-		"event", "sdk.telemetry.rejected", "reason", reason)
-	if reason == "body_too_large" {
+		append([]any{"event", "sdk.telemetry.rejected", "reason", reason}, extra...)...)
+	switch reason {
+	case "body_too_large":
 		return apiErrorPayloadTooLarge
+	case telemetrydelivery.ReasonParticipantGone:
+		return apiErrorForbidden
 	}
-	return apiErrorInvalidRequest
+	return apiErrorTelemetryRefused
 }
 
 var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)

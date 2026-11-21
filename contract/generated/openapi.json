@@ -9952,7 +9952,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["telemetry.refused", "tenant.invalid_id"]
           },
           "401": {
             "content": {
@@ -10042,6 +10042,9 @@
           }
         },
         "security": [
+          {
+            "participantTelemetryBearer": []
+          },
           {
             "participantMediaBearer": []
           }
@@ -12898,6 +12901,12 @@
         "scheme": "bearer",
         "type": "http"
       },
+      "participantTelemetryBearer": {
+        "bearerFormat": "JWT",
+        "description": "Participant telemetry token, valid for 24 hours and accepted only by the telemetry route. The participant media credential is accepted there too. It cannot call any other route.",
+        "scheme": "bearer",
+        "type": "http"
+      },
       "sessionOrBearer": {
         "description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
         "scheme": "bearer",
@@ -13130,6 +13139,19 @@
             },
             "required": ["expires_at", "token"],
             "type": "object"
+          },
+          "telemetry": {
+            "additionalProperties": false,
+            "properties": {
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["expires_at", "token"],
+            "type": ["object", "null"]
           }
         },
         "required": ["media", "subject", "sync"],
@@ -15889,10 +15911,18 @@
       "TelemetryRequest": {
         "additionalProperties": false,
         "properties": {
+          "batch_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "client_session_id": {
             "$ref": "#/components/schemas/UUID"
           },
+          "end": {
+            "enum": ["closed", "abandoned"],
+            "type": "string"
+          },
           "events": {
+            "description": "Version 1 requires 1 to 100 events. Version 2 allows 0 to 100, and an empty list only when end is set.",
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -15949,10 +15979,35 @@
                   "enum": ["microphone", "camera", "speaker", "screen"],
                   "type": "string"
                 },
+                "drop_reason": {
+                  "enum": ["queue_full", "credential_expired", "refused"],
+                  "type": "string"
+                },
                 "dropped": {
                   "maximum": 2147483647,
                   "minimum": 0,
                   "type": ["integer", "null"]
+                },
+                "dropped_seqs": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "to": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
                 },
                 "duration_ms": {
                   "maximum": 2147483647,
@@ -15975,6 +16030,9 @@
                 "error_name": {
                   "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
                   "type": "string"
+                },
+                "event_id": {
+                  "$ref": "#/components/schemas/UUID"
                 },
                 "granted_audio": {
                   "enum": ["granted", "not_granted", "unknown"],
@@ -16308,15 +16366,23 @@
               "type": "object"
             },
             "maxItems": 100,
-            "minItems": 1,
+            "minItems": 0,
             "type": "array"
           },
+          "next_seq": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": ["integer", "null"]
+          },
+          "source_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "version": {
-            "enum": [1],
+            "enum": [1, 2],
             "type": "integer"
           }
         },
-        "required": ["client_session_id", "events", "version"],
+        "required": ["events", "version"],
         "type": "object"
       },
       "TelemetryResponse": {
@@ -16325,11 +16391,52 @@
           "accepted": {
             "type": "integer"
           },
+          "acks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                }
+              },
+              "required": ["from", "to"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "end_rejection": {
+            "type": "string"
+          },
           "rejected": {
+            "type": "integer"
+          },
+          "rejections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer"
+                }
+              },
+              "required": ["reason", "seq"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "server_ms": {
             "type": "integer"
           }
         },
-        "required": ["accepted", "rejected"],
+        "required": ["accepted", "acks", "duplicates", "rejected", "rejections"],
         "type": "object"
       },
       "Tenant": {

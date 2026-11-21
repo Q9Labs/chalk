@@ -98,26 +98,8 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 			},
 			Paths: make(map[string]map[string]any),
 			Components: openAPIComponents{
-				SecuritySchemes: map[string]any{
-					"sessionOrBearer": map[string]any{
-						"type":        "http",
-						"scheme":      "bearer",
-						"description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
-					},
-					"participantMediaBearer": map[string]any{
-						"type":         "http",
-						"scheme":       "bearer",
-						"bearerFormat": "JWT",
-						"description":  "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
-					},
-					"participantSyncBearer": map[string]any{
-						"type":         "http",
-						"scheme":       "bearer",
-						"bearerFormat": "JWT",
-						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
-					},
-				},
-				Schemas: make(map[string]map[string]any),
+				SecuritySchemes: securitySchemes(),
+				Schemas:         make(map[string]map[string]any),
 			},
 		},
 	}
@@ -177,6 +159,11 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		}
 	case httpapi.APIAuthParticipantMedia:
 		operation["security"] = []map[string][]string{
+			{"participantMediaBearer": {}},
+		}
+	case httpapi.APIAuthParticipantTelemetry:
+		operation["security"] = []map[string][]string{
+			{"participantTelemetryBearer": {}},
 			{"participantMediaBearer": {}},
 		}
 	case httpapi.APIAuthParticipantSync:

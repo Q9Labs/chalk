@@ -1,0 +1,113 @@
+{
+  "area": "selftest",
+  "slice": 0,
+  "title": "Kernel self-tests. Test-only: never emitted in production, and left out of the Axiom schema and the CLI tables.",
+  "prefixes": ["selftest"],
+  "fields": [
+    {
+      "name": "item_count",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "How many items a self-test op handled."
+    },
+    {
+      "name": "banner_kind",
+      "type": "enum",
+      "values": ["info", "warning"],
+      "sensitivity": null,
+      "doc": "Which self-test banner."
+    },
+    {
+      "name": "note_kind",
+      "type": "enum",
+      "values": ["a", "b"],
+      "sensitivity": null,
+      "doc": "Which self-test note."
+    }
+  ],
+  "events": [
+    {
+      "name": "selftest.work",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "any",
+      "modules": [],
+      "doc": "A self-test op.",
+      "fields": {
+        "item_count": {
+          "required": false
+        }
+      },
+      "emit_sites": []
+    },
+    {
+      "name": "selftest.admit",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "doc": "A self-test decision.",
+      "decisions": ["admitted", "refused"],
+      "fields": {},
+      "emit_sites": []
+    },
+    {
+      "name": "selftest.banner",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [],
+      "doc": "A self-test surface.",
+      "fields": {
+        "banner_kind": {
+          "required": true
+        }
+      },
+      "emit_sites": []
+    },
+    {
+      "name": "selftest.note",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "any",
+      "modules": [],
+      "doc": "A self-test fact.",
+      "fields": {
+        "note_kind": {
+          "required": true,
+          "values": ["a"]
+        }
+      },
+      "emit_sites": []
+    }
+  ],
+  "reasons": [
+    {
+      "code": "selftest.busy",
+      "outcome": "expected",
+      "doc": "A self-test expected outcome."
+    },
+    {
+      "code": "selftest.broken",
+      "outcome": "error",
+      "doc": "A self-test error."
+    }
+  ],
+  "machines": [
+    {
+      "name": "selftest.door",
+      "doc": "A self-test machine.",
+      "states": ["closed", "open", "locked"],
+      "initial": "closed",
+      "edges": [
+        ["closed", "open"],
+        ["open", "closed"],
+        ["closed", "locked"],
+        ["locked", "closed"]
+      ],
+      "triggers": ["push", "pull", "lock", "unlock"]
+    }
+  ],
+  "symptoms": [],
+  "test_only": true
+}

@@ -1,0 +1,21 @@
+# Broken variants of the code. `run.sh` runs each one and
+# requires TLC to report the named rule as broken.
+# Format: <Break value><TAB><rule TLC must report><TAB><bounds: main, Join, Live or LiveJoin,
+# the TelemetryDelivery*.cfg it runs under><TAB><code edit it mirrors>
+ack_before_store	AckSafe	main	telemetry.go answers the batch before the ledger commit
+sink_before_ledger	SinkCommitted	main	the relay writes rows before the ledger commits
+omit_payload_on_commit	TruthfulLedger	main	the ledger commits the range without its outbox payload
+rejected_as_stored	TruthfulLedger	main	telemetrydelivery.Admit adds a rejected seq to Stored instead of Rejected
+accept_short_end	SuffixKept	main	applyEnd applies an end below the floor instead of naming it end_short
+send_before_save	EndsReported	Live	the outbox sends a batch before #form saves the journal high-water mark
+one_source_across_joins	DurableDelivered	LiveJoin	the outbox keeps its source when the credential names another Participant
+name_abandoned_drops	SeqNeverReused	Join	#takeOver merges an abandoned predecessor drop list and names it at the saved mark
+dedupe_on_seq_only	DurableAccounted	main	telemetrydelivery.Admit keys dedupe on seq alone, not on (source_id, seq)
+reuse_source_on_reload	DurableAccounted	main	the outbox reads its source_id from the journal on boot instead of minting one
+evict_without_drop_record	DurableAccounted	main	the queue evicts a record without adding its seq to the drop list
+volatile_drop_list	DurableAccounted	main	the drop list lives in memory only and is left out of the journal
+ack_whole_batch	DurableAccounted	main	the outbox settles a whole batch on 200 instead of the seqs in acks
+no_p0_reserve	P0Reserved	Join	the queue evicts oldest first regardless of the priority table
+abandoned_as_closed	CloseHonest	main	a reloaded outbox reports its predecessor closed without the closing mark
+ignore_journal_on_reload	DurableDelivered	Live	the outbox persists its journal but never loads a predecessor on boot
+no_owner_check	OwnerWrites	main	telemetrydelivery.Admit skips the owner check, so any Participant of the tenant writes a source

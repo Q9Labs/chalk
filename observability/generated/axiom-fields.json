@@ -1,0 +1,1253 @@
+{
+  "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
+  "schema_ver": "2637fcfa1f33",
+  "datasets": [
+    {
+      "dataset": "lifecycle",
+      "budget": 256,
+      "used": 62,
+      "fields": [
+        {
+          "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "app_build",
+          "type": "string"
+        },
+        {
+          "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "attempt",
+          "type": "integer"
+        },
+        {
+          "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "client_mono_ms",
+          "type": "float"
+        },
+        {
+          "name": "client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "client_wall_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "clock_err_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "decision",
+          "type": "string"
+        },
+        {
+          "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "device_ephemeral",
+          "type": "boolean"
+        },
+        {
+          "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "drop_reason",
+          "type": "string"
+        },
+        {
+          "name": "dropped_seqs",
+          "type": "array"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "end",
+          "type": "string"
+        },
+        {
+          "name": "end_reason",
+          "type": "string"
+        },
+        {
+          "name": "env",
+          "type": "string"
+        },
+        {
+          "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "est_server_ms",
+          "type": "integer"
+        },
+        {
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "from_state",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "job_id",
+          "type": "string"
+        },
+        {
+          "name": "journey_id",
+          "type": "string"
+        },
+        {
+          "name": "jump_ms",
+          "type": "integer"
+        },
+        {
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "machine",
+          "type": "string"
+        },
+        {
+          "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "parent_op_id",
+          "type": "string"
+        },
+        {
+          "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_id",
+          "type": "string"
+        },
+        {
+          "name": "release_sha",
+          "type": "string"
+        },
+        {
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "schema_ver",
+          "type": "string"
+        },
+        {
+          "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "source_id",
+          "type": "string"
+        },
+        {
+          "name": "space_id",
+          "type": "string"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "sync_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "to_state",
+          "type": "string"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_delivery_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "dataset": "requests",
+      "budget": 256,
+      "used": 60,
+      "fields": [
+        {
+          "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "app_build",
+          "type": "string"
+        },
+        {
+          "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "attempt",
+          "type": "integer"
+        },
+        {
+          "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "client_mono_ms",
+          "type": "float"
+        },
+        {
+          "name": "client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "client_wall_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "clock_err_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "decision",
+          "type": "string"
+        },
+        {
+          "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "device_ephemeral",
+          "type": "boolean"
+        },
+        {
+          "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "drop_reason",
+          "type": "string"
+        },
+        {
+          "name": "dropped_seqs",
+          "type": "array"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "end",
+          "type": "string"
+        },
+        {
+          "name": "env",
+          "type": "string"
+        },
+        {
+          "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "est_server_ms",
+          "type": "integer"
+        },
+        {
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "from_state",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "job_id",
+          "type": "string"
+        },
+        {
+          "name": "journey_id",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "machine",
+          "type": "string"
+        },
+        {
+          "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "parent_op_id",
+          "type": "string"
+        },
+        {
+          "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_id",
+          "type": "string"
+        },
+        {
+          "name": "release_sha",
+          "type": "string"
+        },
+        {
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "schema_ver",
+          "type": "string"
+        },
+        {
+          "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "source_id",
+          "type": "string"
+        },
+        {
+          "name": "space_id",
+          "type": "string"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "sync_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "to_state",
+          "type": "string"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_delivery_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "dataset": "media-stats",
+      "budget": 256,
+      "used": 60,
+      "fields": [
+        {
+          "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "app_build",
+          "type": "string"
+        },
+        {
+          "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "attempt",
+          "type": "integer"
+        },
+        {
+          "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "client_mono_ms",
+          "type": "float"
+        },
+        {
+          "name": "client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "client_wall_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "clock_err_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "decision",
+          "type": "string"
+        },
+        {
+          "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "device_ephemeral",
+          "type": "boolean"
+        },
+        {
+          "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "drop_reason",
+          "type": "string"
+        },
+        {
+          "name": "dropped_seqs",
+          "type": "array"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "end",
+          "type": "string"
+        },
+        {
+          "name": "env",
+          "type": "string"
+        },
+        {
+          "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "est_server_ms",
+          "type": "integer"
+        },
+        {
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "from_state",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "job_id",
+          "type": "string"
+        },
+        {
+          "name": "journey_id",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "machine",
+          "type": "string"
+        },
+        {
+          "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "parent_op_id",
+          "type": "string"
+        },
+        {
+          "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_id",
+          "type": "string"
+        },
+        {
+          "name": "release_sha",
+          "type": "string"
+        },
+        {
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "schema_ver",
+          "type": "string"
+        },
+        {
+          "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "source_id",
+          "type": "string"
+        },
+        {
+          "name": "space_id",
+          "type": "string"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "sync_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "to_state",
+          "type": "string"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_delivery_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "dataset": "infra",
+      "budget": 256,
+      "used": 61,
+      "fields": [
+        {
+          "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "app_build",
+          "type": "string"
+        },
+        {
+          "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "attempt",
+          "type": "integer"
+        },
+        {
+          "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "client_mono_ms",
+          "type": "float"
+        },
+        {
+          "name": "client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "client_wall_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "clock_err_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "decision",
+          "type": "string"
+        },
+        {
+          "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "device_ephemeral",
+          "type": "boolean"
+        },
+        {
+          "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "drop_reason",
+          "type": "string"
+        },
+        {
+          "name": "dropped_seqs",
+          "type": "array"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "end",
+          "type": "string"
+        },
+        {
+          "name": "env",
+          "type": "string"
+        },
+        {
+          "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "est_server_ms",
+          "type": "integer"
+        },
+        {
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "name": "flags",
+          "type": "map"
+        },
+        {
+          "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "from_state",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "job_id",
+          "type": "string"
+        },
+        {
+          "name": "journey_id",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "machine",
+          "type": "string"
+        },
+        {
+          "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "parent_op_id",
+          "type": "string"
+        },
+        {
+          "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_id",
+          "type": "string"
+        },
+        {
+          "name": "release_sha",
+          "type": "string"
+        },
+        {
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "schema_ver",
+          "type": "string"
+        },
+        {
+          "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "source_id",
+          "type": "string"
+        },
+        {
+          "name": "space_id",
+          "type": "string"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "sync_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "to_state",
+          "type": "string"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_delivery_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "dataset": "logs",
+      "budget": 256,
+      "used": 60,
+      "fields": [
+        {
+          "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "app_build",
+          "type": "string"
+        },
+        {
+          "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "attempt",
+          "type": "integer"
+        },
+        {
+          "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "client_mono_ms",
+          "type": "float"
+        },
+        {
+          "name": "client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "client_wall_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "clock_err_ms",
+          "type": "integer"
+        },
+        {
+          "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "decision",
+          "type": "string"
+        },
+        {
+          "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "device_ephemeral",
+          "type": "boolean"
+        },
+        {
+          "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "drop_reason",
+          "type": "string"
+        },
+        {
+          "name": "dropped_seqs",
+          "type": "array"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "end",
+          "type": "string"
+        },
+        {
+          "name": "env",
+          "type": "string"
+        },
+        {
+          "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "est_server_ms",
+          "type": "integer"
+        },
+        {
+          "name": "event_id",
+          "type": "string"
+        },
+        {
+          "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "from_state",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "job_id",
+          "type": "string"
+        },
+        {
+          "name": "journey_id",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "machine",
+          "type": "string"
+        },
+        {
+          "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "parent_op_id",
+          "type": "string"
+        },
+        {
+          "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_id",
+          "type": "string"
+        },
+        {
+          "name": "release_sha",
+          "type": "string"
+        },
+        {
+          "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "schema_ver",
+          "type": "string"
+        },
+        {
+          "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "source_id",
+          "type": "string"
+        },
+        {
+          "name": "space_id",
+          "type": "string"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "sync_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "to_state",
+          "type": "string"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_delivery_id",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

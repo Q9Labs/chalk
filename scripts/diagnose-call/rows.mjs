@@ -88,10 +88,11 @@ export function normalizeRow(data, fallbackSource = "api") {
   const flat = flatten(data);
   const rawParticipant = field(flat, "participant_id");
   const hash = field(flat, "participant_id_hash") ?? (rawParticipant ? participantHash(String(rawParticipant)) : undefined);
+  const receipt = field(flat, "event") === "sdk.telemetry" ? Date.parse(field(flat, "received_at")) : NaN;
   return {
     id: flat._rowId ?? flat.id ?? `row:${createHash("sha1").update(JSON.stringify(data)).digest("hex").slice(0, 12)}`,
     source: sourceOf(flat, fallbackSource),
-    time: Date.parse(String(flat._time ?? flat.time)),
+    time: Number.isFinite(receipt) ? receipt : Date.parse(String(flat._time ?? flat.time)),
     event: eventOf(flat),
     episode: field(flat, "episode_id"),
     participant: hash,

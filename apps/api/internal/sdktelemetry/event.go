@@ -8,18 +8,19 @@ package sdktelemetry
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
 	"regexp"
-	"slices"
-	"strings"
 )
 
 // MIDPattern is the shape of a media id, which the SFU also logs for the same subscription.
 const MIDPattern = `^[0-9A-Za-z_-]{1,16}$`
 
 const (
-	// Version is the only wire version.
+	// Version is the legacy wire version: batches name a client session and get no acknowledgment.
+	// The call-stats route and the connection report translate into it as well.
 	Version = 1
+	// LedgerVersion is the wire version whose batches name a source and a batch, carry an id on
+	// every event, and are settled seq by seq in the answer.
+	LedgerVersion = 2
 	// BodyLimit is the largest request body, the same as the browser's keepalive limit.
 	BodyLimit = 65536
 	// EventLimit is the most events in one request.
@@ -28,6 +29,8 @@ const (
 	MaxMilliseconds = 2147483647
 	// MaxTracks is the most remote tracks one stats window names.
 	MaxTracks = 32
+	// MaxDropRanges is the most seq ranges one drop record names.
+	MaxDropRanges = 64
 	// MaxReceiveCount is the largest receive counter.
 	MaxReceiveCount = 10000
 	// MaxTrackPackets is the most packets one track can count in a window.
@@ -43,14 +46,20 @@ var (
 	midPattern  = regexp.MustCompile(MIDPattern)
 )
 
-// Event is one thing a client saw. Type picks which of the other fields may be
-// set: a field that Type does not name makes the event invalid.
+// Event is one thing a client saw. A version 2 batch carries kernel records, which name their
+// registry event by kind and name and are checked against the registry, beside events of the
+// legacy vocabulary. In a legacy event, Type picks which of the other fields may be set: a field
+// that Type does not name makes the event invalid.
 type Event struct {
 	Type string `json:"type"`
-	// Seq counts the events of one client session from zero, in the order they happened.
+	// Seq counts the events of one client session (version 1) or source (version 2) from zero, in the
+	// order they happened.
 	Seq int64 `json:"seq"`
 	// ElapsedMS is the client's monotonic time since its session began.
 	ElapsedMS int64 `json:"elapsed_ms"`
+	// EventID names this record for good, so a copy that arrives twice collapses into one. It is an
+	// envelope field like Seq, not a field of any type. Version 2 requires it.
+	EventID string `json:"event_id,omitempty"`
 	// OpID joins the intent and the result of one operation, and the SFU's view of it.
 	OpID string `json:"op_id,omitempty"`
 
@@ -91,11 +100,20 @@ type Event struct {
 	Stats            *StatsWindow   `json:"stats,omitempty"`
 	// Dropped is how many events the client's outbox lost to its byte bound.
 	Dropped *int64 `json:"dropped,omitempty"`
+	// DroppedSeqs names the seqs the outbox gave up on, as half-open ranges. Version 2 requires it
+	// on a drop record, which carries at most MaxDropRanges of them.
+	DroppedSeqs []SeqRange `json:"dropped_seqs,omitempty"`
+	// DropReason says why the outbox gave them up. Version 2 requires it on a drop record.
+	DropReason string `json:"drop_reason,omitempty"`
 
 	// rejection is why this event failed its own check, set while decoding.
 	rejection string
 	// seen is the type and sequence number read from an event that failed its check.
 	seen seenEvent
+	// seqRead says the body gave a readable seq, so the seq can name the event in an answer.
+	seqRead bool
+	// record is the kernel record this event carries, or nil for an event of the legacy vocabulary.
+	record *record
 }
 
 type seenEvent struct {
@@ -120,25 +138,49 @@ type ReceiveCounts struct {
 // It is a fixed label, never decoder text or input.
 func (e Event) Rejection() string { return e.rejection }
 
+// Refused is the event as the ledger settles it when it refuses the event's content after the
+// event passed its own check: a rejection with the given fixed reason that keeps the type and seq.
+func (e Event) Refused(reason string) Event {
+	refused := Event{rejection: reason, seqRead: true}
+	refused.seen = seenEvent{Type: e.Type, Seq: e.Seq}.known()
+	return refused
+}
+
 // Seen returns the type and sequence number of an invalid event as far as they could be read.
 func (e Event) Seen() (eventType string, seq int64) {
 	return e.seen.Type, e.seen.Seq
 }
 
+// IsRecord says the event is a kernel record that passed its registry check.
+func (e Event) IsRecord() bool { return e.record != nil }
+
 // UnmarshalJSON checks one event alone, so that one bad event cannot fail its batch.
 func (e *Event) UnmarshalJSON(data []byte) error {
+	if isRecordJSON(data) {
+		*e = decodeRecord(data)
+		return nil
+	}
 	type plain Event
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var decoded plain
 	if err := decoder.Decode(&decoded); err != nil {
 		*e = Event{rejection: "schema"}
-		_ = json.Unmarshal(data, &e.seen)
+		var read struct {
+			Type string `json:"type"`
+			Seq  *int64 `json:"seq"`
+		}
+		_ = json.Unmarshal(data, &read)
+		e.seqRead = read.Seq != nil
+		if e.seqRead {
+			e.seen = seenEvent{Type: read.Type, Seq: *read.Seq}
+		}
 		e.seen = e.seen.known()
 		return nil
 	}
 	*e = Event(decoded)
 	e.rejection = orderingMissing(data)
+	e.seqRead = e.rejection != "seq_missing"
 	if e.rejection == "" {
 		e.rejection = e.Check()
 	}
@@ -156,6 +198,54 @@ func (s seenEvent) known() seenEvent {
 	return s
 }
 
+// seqValue is the seq of the event as far as it could be read, also for an event that failed its check.
+func (e Event) seqValue() int64 {
+	if e.rejection != "" {
+		return e.seen.Seq
+	}
+	return e.Seq
+}
+
+// checkLedger marks the event when it breaks a rule of a version 2 batch whose source will
+// give its next record nextSeq. An event that already failed its own check keeps that reason.
+func (e *Event) checkLedger(nextSeq int64) {
+	if e.rejection != "" {
+		return
+	}
+	e.rejection = e.ledgerRejection(nextSeq)
+	if e.rejection != "" {
+		e.seen = seenEvent{Type: e.Type, Seq: e.Seq}.known()
+	}
+}
+
+func (e Event) ledgerRejection(nextSeq int64) string {
+	switch {
+	case e.EventID == "":
+		return "event_id_missing"
+	case e.Seq >= nextSeq:
+		return "seq_range"
+	case e.Type != "telemetry_dropped":
+		return ""
+	case len(e.DroppedSeqs) == 0:
+		return "dropped_seqs_missing"
+	case e.DropReason == "":
+		return "drop_reason_missing"
+	}
+	var total int64
+	for _, dropped := range e.DroppedSeqs {
+		total += dropped.To - dropped.From
+	}
+	if e.Dropped == nil || total != *e.Dropped {
+		return "dropped_count"
+	}
+	for _, dropped := range e.DroppedSeqs {
+		if dropped.To > e.Seq {
+			return "dropped_seqs_range"
+		}
+	}
+	return ""
+}
+
 // orderingMissing names the sequence field an event left out or set to null. Without it a zero
 // would stand in for an order the client never gave, and hide a gap in the session.
 func orderingMissing(data []byte) string {
@@ -169,125 +259,6 @@ func orderingMissing(data []byte) string {
 		return "seq_missing"
 	case given.ElapsedMS == nil:
 		return "elapsed_ms_missing"
-	}
-	return ""
-}
-
-// Check returns the reason the event is invalid, or an empty string. The reason is
-// a fixed label built from a field name and a rule.
-func (e Event) Check() string {
-	spec, ok := specs[e.Type]
-	if !ok {
-		return "type"
-	}
-	if e.Seq < 0 || e.Seq > MaxMilliseconds || e.ElapsedMS < 0 || e.ElapsedMS > MaxMilliseconds {
-		return "elapsed_range"
-	}
-	present := e.presentFields()
-	for _, name := range present {
-		if !slices.Contains(spec.allowed, name) {
-			return name + "_not_allowed"
-		}
-	}
-	for _, name := range spec.required {
-		if !slices.Contains(present, name) {
-			return name + "_missing"
-		}
-	}
-	if reason := checkValues(reflect.ValueOf(e), ""); reason != "" {
-		return reason
-	}
-	if e.Stats != nil {
-		return e.Stats.check()
-	}
-	return ""
-}
-
-// presentFields lists the JSON names of the optional fields the event sets.
-func (e Event) presentFields() []string {
-	var names []string
-	value := reflect.ValueOf(e)
-	for index := range value.NumField() {
-		field := reflect.TypeFor[Event]().Field(index)
-		name, optional := jsonName(field)
-		if optional && !value.Field(index).IsZero() {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-func jsonName(field reflect.StructField) (name string, optional bool) {
-	tag, ok := field.Tag.Lookup("json")
-	if !ok {
-		return "", false
-	}
-	name, options, _ := strings.Cut(tag, ",")
-	return name, options == "omitempty"
-}
-
-// checkValues checks every set field against its enum, its range and its pattern.
-func checkValues(value reflect.Value, prefix string) string {
-	for index := range value.NumField() {
-		field := value.Type().Field(index)
-		name, _ := jsonName(field)
-		if name == "" || value.Field(index).IsZero() {
-			continue
-		}
-		if reason := checkField(name, value.Field(index)); reason != "" {
-			return prefix + reason
-		}
-	}
-	return ""
-}
-
-func checkField(name string, value reflect.Value) string {
-	switch value.Kind() {
-	case reflect.Pointer:
-		return checkField(name, value.Elem())
-	case reflect.String:
-		return checkString(name, value.String())
-	case reflect.Int64:
-		return checkNumber(name, float64(value.Int()))
-	case reflect.Float64:
-		return checkNumber(name, value.Float())
-	case reflect.Struct:
-		return checkValues(value, name+".")
-	case reflect.Slice:
-		if value.Len() > MaxTracks {
-			return name + "_count"
-		}
-		for index := range value.Len() {
-			if reason := checkValues(value.Index(index), name+"."); reason != "" {
-				return reason
-			}
-		}
-	}
-	return ""
-}
-
-func checkString(name, value string) string {
-	switch name {
-	case "op_id":
-		if !uuidPattern.MatchString(value) {
-			return name + "_label"
-		}
-	case "mid":
-		if !midPattern.MatchString(value) {
-			return name + "_label"
-		}
-	default:
-		if enum := FieldEnum(name); enum != nil && !slices.Contains(enum, value) {
-			return name + "_label"
-		}
-	}
-	return ""
-}
-
-func checkNumber(name string, value float64) string {
-	low, high, numeric := FieldRange(name)
-	if !numeric || value < low || value > high {
-		return name + "_range"
 	}
 	return ""
 }
