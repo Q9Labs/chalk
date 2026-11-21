@@ -48,3 +48,19 @@ it("lets a host leave or end the call for everyone from the Leave call menu", as
   expect(calls).toEqual(["leave", "end"]);
   act(() => root.unmount());
 });
+
+it("keeps Raise hand in the dock while the reactions button is disabled for a reconnecting call", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let raised = 0;
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() =>
+    root.render(<ControlBarSurface buttons={["reactions", "handraise"]} detectDevices={false} onOpenReactions={() => {}} reactionsDisabled onToggleHandRaise={() => void raised++} />),
+  );
+  const dock = document.querySelector("[data-part=dock]");
+  expect(dock?.querySelector<HTMLButtonElement>("[data-reactions-trigger]")?.disabled).toBe(true);
+  const hand = dock?.querySelector<HTMLButtonElement>("[aria-label='Raise hand']");
+  expect(hand, "Raise hand in the dock").toBeTruthy();
+  act(() => hand?.click());
+  expect(raised).toBe(1);
+  act(() => root.unmount());
+});
