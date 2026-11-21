@@ -21,13 +21,23 @@
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let markerPixels = 0;
+    let markerX = 0;
+    let markerY = 0;
     let targetPixels = 0;
     for (let offset = 0; offset < pixels.length; offset += 4) {
       const [r, g, b] = pixels.subarray(offset, offset + 3);
-      if (r > 205 && b > 205 && g < 64) markerPixels += 1;
+      if (r > 205 && b > 205 && g < 64) {
+        const pixel = offset / 4;
+        markerPixels += 1;
+        markerX += pixel % canvas.width + 0.5;
+        markerY += Math.floor(pixel / canvas.width) + 0.5;
+      }
       if (r < 38 && g > 38 && g < 74 && b > 45 && b < 85) targetPixels += 1;
     }
-    return { markerPixels, targetPixels };
+    return {
+      markerPixels, targetPixels,
+      markerCenter: markerPixels ? [markerX / markerPixels / canvas.width, markerY / markerPixels / canvas.height] : null
+    };
   };
   const handoff = new URL(location.href).searchParams.has("handoff");
   if (handoff) button.textContent = "Receive filtered screen track";

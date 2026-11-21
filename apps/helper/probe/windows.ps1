@@ -47,5 +47,10 @@ $actual = [uint32]0
 if (-not [ChalkMarker]::GetWindowDisplayAffinity($form.Handle, [ref]$actual) -or $actual -ne $expected) {
     throw "Display affinity did not match the requested value."
 }
-Write-Output "Marker display affinity: $actual"
+$screen = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+$center = @(
+    ($form.Left - $screen.Left + $form.Width / 2) / $screen.Width,
+    ($form.Top - $screen.Top + $form.Height / 2) / $screen.Height
+)
+@{ affinity = $actual; center = $center } | ConvertTo-Json -Compress
 [Windows.Forms.Application]::Run($form)

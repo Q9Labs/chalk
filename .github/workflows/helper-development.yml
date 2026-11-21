@@ -26,6 +26,8 @@ jobs:
         working-directory: apps/helper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test the Helper
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --features fixture
       - name: Build local development installer
         env:
           HELPER_BUNDLE: ${{ matrix.bundle }}
@@ -41,3 +43,12 @@ jobs:
           name: chalk-helper-dev-${{ matrix.name }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
+      - name: Measure Chrome monitor capture on Windows
+        if: runner.os == 'Windows'
+        run: node probe/windows-chrome.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && runner.os == 'Windows'
+        with:
+          name: windows-monitor-capture
+          path: apps/helper/windows-capture-result.json
+          if-no-files-found: warn
