@@ -1,0 +1,97 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000006",
+    "next_seq": 1,
+    "events": [
+      {
+        "type": "platform_changed",
+        "platform_state": "online",
+        "seq": 0,
+        "event_id": "00000000-0000-4000-8000-000000000005",
+        "elapsed_ms": 0
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000011",
+    "next_seq": 4,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "phase": "live",
+        "js_ready": true,
+        "app_state": "active",
+        "clean_exit": "call_ended",
+        "pid": 4201,
+        "launch_id": "l4",
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701600000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.previous_run",
+        "event_id": "00000000-0000-4000-8000-000000000008",
+        "seq": 1
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "exit_reason": "REASON_USER_REQUESTED",
+        "pid": 4201,
+        "launch_id": "l4",
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701600000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.app_exit_info",
+        "event_id": "00000000-0000-4000-8000-000000000009",
+        "seq": 2
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "dead_markers": 1,
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701600000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "outcome": "ok",
+        "duration_ms": 0,
+        "op_id": "00000000-0000-4000-8000-000000000007",
+        "kind": "op",
+        "name": "previous_run.read",
+        "event_id": "00000000-0000-4000-8000-000000000010",
+        "seq": 3
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000012",
+    "next_seq": 4,
+    "end": "closed",
+    "events": []
+  }
+]

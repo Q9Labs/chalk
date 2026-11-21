@@ -1,0 +1,37 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/telemetry/page-tab-died.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/telemetry/page-tab-died.fault.test.ts",
+      "writes": [
+        "client-frames.positive.json",
+        "client-frames.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "apps/api/internal/httpapi/crash_chain_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run 'TestTelemetryChainCrash/page.tab_died' -count=1",
+      "writes": [
+        "api-rows.positive.json",
+        "api-rows.healthy.json",
+        "ledger.positive.json",
+        "ledger.healthy.json",
+        "server-rows.positive.json",
+        "server-rows.healthy.json",
+        "db-rows.positive.json",
+        "db-rows.healthy.json"
+      ]
+    },
+    {
+      "hop": "d",
+      "test": "scripts/crash-check/chain.test.mjs",
+      "command": "CHALK_CHAIN_CODE=page.tab_died node --test scripts/crash-check/chain.test.mjs",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

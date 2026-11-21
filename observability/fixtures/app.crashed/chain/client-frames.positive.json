@@ -1,0 +1,149 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000006",
+    "next_seq": 1,
+    "events": [
+      {
+        "type": "platform_changed",
+        "platform_state": "online",
+        "seq": 0,
+        "event_id": "00000000-0000-4000-8000-000000000005",
+        "elapsed_ms": 0
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000012",
+    "next_seq": 5,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "phase": "live",
+        "js_ready": true,
+        "app_state": "active",
+        "last_elapsed_ms": 300000,
+        "pid": 4100,
+        "launch_id": "l1",
+        "launched_at_ms": 1795700000000,
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701300000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.previous_run",
+        "event_id": "00000000-0000-4000-8000-000000000008",
+        "seq": 1
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "exit_reason": "REASON_CRASH",
+        "pid": 4100,
+        "launch_id": "l1",
+        "launched_at_ms": 1795700000000,
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701300000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.app_exit_info",
+        "event_id": "00000000-0000-4000-8000-000000000009",
+        "seq": 2
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "dead_markers": 1,
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701300000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "outcome": "ok",
+        "duration_ms": 0,
+        "op_id": "00000000-0000-4000-8000-000000000007",
+        "kind": "op",
+        "name": "previous_run.read",
+        "event_id": "00000000-0000-4000-8000-000000000010",
+        "seq": 3
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "error_name": "TypeError",
+        "error_class": "other",
+        "error_fingerprint": "aabbccddee01",
+        "app_state": "active",
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701300000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.app_js_fatal",
+        "event_id": "00000000-0000-4000-8000-000000000011",
+        "seq": 4
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000014",
+    "next_seq": 6,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "render_cause": "render_error",
+        "error_name": "TypeError",
+        "error_class": "other",
+        "error_fingerprint": "2d6c13427333",
+        "module": "sdk",
+        "env": "test",
+        "platform": "ios",
+        "client_mono_ms": 1100,
+        "client_wall_ms": 1795599001100,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701300000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.render_crashed",
+        "event_id": "00000000-0000-4000-8000-000000000013",
+        "seq": 5
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000015",
+    "next_seq": 6,
+    "end": "closed",
+    "events": []
+  }
+]

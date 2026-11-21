@@ -1,0 +1,33 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/telemetry/perf-ui-unresponsive.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/telemetry/perf-ui-unresponsive.fault.test.ts",
+      "writes": [
+        "client-frames.positive.json",
+        "client-frames.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "apps/api/internal/httpapi/crash_chain_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run 'TestTelemetryChainCrash/perf.ui_unresponsive' -count=1",
+      "writes": [
+        "api-rows.positive.json",
+        "api-rows.healthy.json",
+        "ledger.positive.json",
+        "ledger.healthy.json"
+      ]
+    },
+    {
+      "hop": "d",
+      "test": "scripts/crash-check/chain.test.mjs",
+      "command": "CHALK_CHAIN_CODE=perf.ui_unresponsive node --test scripts/crash-check/chain.test.mjs",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000006",
+    "next_seq": 1,
+    "events": [
+      {
+        "type": "platform_changed",
+        "platform_state": "online",
+        "seq": 0,
+        "event_id": "00000000-0000-4000-8000-000000000005",
+        "elapsed_ms": 0
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000008",
+    "next_seq": 2,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "window_ms": 30000,
+        "visibility": "visible",
+        "long_task_max_ms_30s": 15,
+        "long_task_total_ms_30s": 15,
+        "heap_probe": "measured",
+        "memory_state": "measured",
+        "heap_used_mib": 320,
+        "heap_limit_mib": 4096,
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795701000000,
+        "clock_err_ms": 25,
+        "schema_ver": "7c0fc3ba3f4b",
+        "kind": "fact",
+        "name": "client.perf_heartbeat",
+        "event_id": "00000000-0000-4000-8000-000000000007",
+        "seq": 1
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000009",
+    "next_seq": 2,
+    "end": "closed",
+    "events": []
+  }
+]

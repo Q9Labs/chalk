@@ -1,0 +1,103 @@
+{
+  "description": "The seat ran under memory pressure: a low-memory warning and a heap near its limit.",
+  "asof_ms": 1795702600000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": [],
+    "window": {
+      "from_ms": 1795699900000,
+      "to_ms": 1795702000000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat A",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795699900000,
+          "to_ms": 1795702000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat A"
+        }
+      }
+    ]
+  },
+  "chain": [
+    "observability/fixtures/perf.memory_pressure/chain/api-rows.positive.json"
+  ],
+  "rows": [
+    {
+      "app_state": "active",
+      "batch_id": "00000000-0000-4000-8000-000000000009",
+      "client_mono_ms": 1050,
+      "client_session_id": "00000000-0000-4000-8000-000000000004",
+      "client_wall_ms": 1795599001050,
+      "clock_epoch": 0,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "env": "test",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "est_server_ms": 1795700900000,
+      "event_id": "00000000-0000-4000-8000-000000000007",
+      "generation": 1,
+      "kind": "fact",
+      "low_memory": true,
+      "module": "sdk",
+      "name": "client.memory_warning",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "platform": "web",
+      "provider_media_id": "pm-chain-0001",
+      "schema_ver": "7c0fc3ba3f4b",
+      "seq": 1,
+      "source_id": "00000000-0000-4000-8000-000000000001",
+      "space_id": "d1000000-0000-4000-8000-000000000001",
+      "tenant_id": "c1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "batch_id": "00000000-0000-4000-8000-000000000009",
+      "client_mono_ms": 1050,
+      "client_session_id": "00000000-0000-4000-8000-000000000004",
+      "client_wall_ms": 1795599001050,
+      "clock_epoch": 0,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "env": "test",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "est_server_ms": 1795700900000,
+      "event_id": "00000000-0000-4000-8000-000000000008",
+      "generation": 1,
+      "heap_limit_mib": 4096,
+      "heap_probe": "measured",
+      "heap_used_mib": 3800,
+      "kind": "fact",
+      "long_task_max_ms_30s": 20,
+      "long_task_total_ms_30s": 20,
+      "low_memory": true,
+      "main_ping_max_ms_30s": 14,
+      "memory_state": "measured",
+      "module": "sdk",
+      "name": "client.perf_heartbeat",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "platform": "web",
+      "provider_media_id": "pm-chain-0001",
+      "schema_ver": "7c0fc3ba3f4b",
+      "seq": 2,
+      "source_id": "00000000-0000-4000-8000-000000000001",
+      "space_id": "d1000000-0000-4000-8000-000000000001",
+      "tenant_id": "c1000000-0000-4000-8000-000000000001",
+      "visibility": "visible",
+      "window_ms": 30000,
+      "worker_late_max_ms_30s": 0
+    }
+  ]
+}

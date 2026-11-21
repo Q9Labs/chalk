@@ -1,0 +1,34 @@
+{
+  "tenant_id": "c1000000-0000-4000-8000-000000000001",
+  "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "sources": [
+    {
+      "source_id": "00000000-0000-4000-8000-000000000001",
+      "watermark": {
+        "source_id": "00000000-0000-4000-8000-000000000001",
+        "tenant_id": "c1000000-0000-4000-8000-000000000001",
+        "participants": [
+          "a1000000-0000-4000-8000-000000000001"
+        ],
+        "episodes": [
+          "0f8fad5b-d9cb-469f-a165-70867728950e"
+        ],
+        "next_seq": 2,
+        "end": "closed",
+        "end_next_seq": 2,
+        "stored": [
+          {
+            "from": 0,
+            "to": 2
+          }
+        ],
+        "rejected": [],
+        "dropped": {},
+        "missing": [],
+        "first_received_at": "2026-11-26T14:06:40Z",
+        "last_received_at": "2026-11-26T14:06:40Z"
+      },
+      "gaps": []
+    }
+  ]
+}

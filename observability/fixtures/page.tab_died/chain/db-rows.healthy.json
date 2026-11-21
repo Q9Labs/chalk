@@ -1,0 +1,18 @@
+[
+  {
+    "connected": true,
+    "connection_id": "pm-chain-0001",
+    "duration_ms": 90000,
+    "ended_at_ms": 1795700090000,
+    "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "est_server_ms": 1795700090000,
+    "event_id": "012001b3-2a8e-accc-f7a8-10adc7d099aa",
+    "kind": "fact",
+    "lifetime_ms": 90000,
+    "name": "db.participant_media_sessions",
+    "participant_id": "a1000000-0000-4000-8000-000000000001",
+    "sfu_cause": "participant_left",
+    "sfu_outcome": "left",
+    "tenant_id": "c1000000-0000-4000-8000-000000000001"
+  }
+]
