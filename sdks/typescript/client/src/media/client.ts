@@ -34,6 +34,8 @@ import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure, pullShortfall, subscribeFailure } from "./failure-diagnostics";
 import { observeOperation } from "../telemetry/operation";
+import { errorNameOf } from "./capture-error";
+import { TelemetryOutbox } from "../telemetry/outbox";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -224,7 +226,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#telemetry = options.telemetry;
     this.#onDiagnostic = options.onDiagnostic;
     this.#onReceiveHealth = options.onReceiveHealth;
-    this.#callStats = createCallStatsCollector({ record: (draft) => options.telemetry?.record(draft), interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null });
+    this.#callStats = createCallStatsCollector({
+      record: (draft) => options.telemetry?.record(draft),
+      interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null,
+      videoFacts: (rows) => {
+        const obs = options.telemetry instanceof TelemetryOutbox ? options.telemetry.obs : undefined;
+        for (const row of rows) obs?.fact(row.event as never, row.fields as never);
+      },
+    });
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -2285,9 +2294,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);
-      } catch {
+      } catch (cause) {
         // Stats and optional sender controls must never break publication.
         cameraPolicy.reset();
+        const obs = this.#telemetry instanceof TelemetryOutbox ? this.#telemetry.obs : undefined;
+        obs?.fact("video.stats_failed", { capture_error_name: errorNameOf(cause) });
       } finally {
         if (observed()) cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
       }

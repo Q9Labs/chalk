@@ -48,6 +48,8 @@ export type CallStatsOptions = {
   /** Why the platform may have stopped the poll, to name a gap. */
   readonly interruption: (withinMs: number) => "offline" | "hidden" | null;
   readonly now?: () => number;
+  /** Kernel facts a closed window yields: one per camera encoding, one per received video track, and the window summary. */
+  readonly videoFacts?: (rows: readonly { readonly event: string; readonly fields: Record<string, unknown> }[]) => void;
 };
 
 export function createCallStatsCollector(options: CallStatsOptions): CallStatsCollector {
@@ -69,7 +71,12 @@ export function createCallStatsCollector(options: CallStatsOptions): CallStatsCo
     const sample = summarise(latest, baseline, windowMs, gauges, delivery);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
-    if (windowMs > CALL_STATS_MAX_WINDOW_MS) return gap(windowMs);
+    if (windowMs > CALL_STATS_MAX_WINDOW_MS) {
+      const reason = options.interruption(windowMs) ?? "poll_failed";
+      options.videoFacts?.([{ event: "video.call_stats", fields: { window_ms: Math.min(MAX_MS, Math.round(windowMs)), gap: reason, gap_ms: Math.min(MAX_MS, Math.round(windowMs)) } }]);
+      return gap(windowMs);
+    }
+    options.videoFacts?.(videoWindows(latest, baseline, windowMs, sample));
     history = Object.freeze([...history, sample].slice(-CALL_STATS_HISTORY));
     options.record({ type: "call_stats", stats: sample });
   };
@@ -153,7 +160,7 @@ function readBaseline(report: RTCStatsReport, at: number): Baseline {
   return { at, counters };
 }
 
-const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount", "totalAudioEnergy"] as const;
+const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount", "totalAudioEnergy", "framesEncoded", "framesReceived", "framesDecoded", "framesDropped", "keyFramesDecoded", "pliCount", "nackCount", "firCount"] as const;
 
 /** Sum of per-stream growth since the window began. Streams that vanished or restarted count as zero. */
 function sumDelta(report: RTCStatsReport, baseline: Baseline, type: string, field: string, kind?: string): number | null {
@@ -281,6 +288,59 @@ function audioWindow(stat: Stat, baseline: Baseline, delivery: CallStatsDelivery
   const energy = grown(baseline, stat, "totalAudioEnergy");
   const playout = typeof stat.trackIdentifier === "string" ? delivery?.playout?.(stat.trackIdentifier) : undefined;
   return { ...(energy === undefined ? {} : { audio_energy: scaled(energy, 1000, MAX_MS) }), playout: playout ?? "unknown" };
+}
+
+/** The kernel rows one closed window yields: video.send_window per camera encoding, video.track_window per received video track, and one video.call_stats summary. */
+function videoWindows(report: RTCStatsReport, baseline: Baseline, windowMs: number, sample: CallStatsSample): { event: string; fields: Record<string, unknown> }[] {
+  const rows: { event: string; fields: Record<string, unknown> }[] = [];
+  const ms = Math.round(windowMs);
+  for (const stat of stats(report, "outbound-rtp", "video")) {
+    const fields: Record<string, unknown> = { window_ms: ms };
+    if (typeof stat.rid === "string" && (RID_ORDER as readonly string[]).includes(stat.rid)) fields.rid = stat.rid;
+    const bytesSent = grown(baseline, stat, "bytesSent");
+    if (bytesSent !== undefined) fields.bytes_sent = scaled(bytesSent, 1, MAX_MS);
+    const framesEncoded = grown(baseline, stat, "framesEncoded");
+    if (framesEncoded !== undefined) fields.frames_encoded = scaled(framesEncoded, 1, 10_000_000);
+    if (typeof stat.frameHeight === "number") fields.frame_height = clampInt(stat.frameHeight, 4320);
+    const limitation = stat.qualityLimitationReason;
+    if (limitation === "none" || limitation === "cpu" || limitation === "bandwidth" || limitation === "other") fields.quality_limitation_reason = limitation;
+    if (bytesSent !== undefined) fields.active = bytesSent > 0;
+    rows.push({ event: "video.send_window", fields });
+  }
+  for (const stat of stats(report, "inbound-rtp", "video")) {
+    if (typeof stat.mid !== "string") continue;
+    const fields: Record<string, unknown> = { mid: stat.mid, window_ms: ms, playout: "unknown" };
+    const pairs: [string, string, number][] = [
+      ["packets", "packetsReceived", 10_000_000], ["lost", "packetsLost", 10_000_000], ["bytes", "bytesReceived", MAX_MS],
+      ["frames_received", "framesReceived", 10_000_000], ["frames_decoded", "framesDecoded", 10_000_000],
+      ["frames_dropped", "framesDropped", 10_000_000], ["key_frames_decoded", "keyFramesDecoded", 10_000_000],
+      ["freeze_count", "freezeCount", 10_000], ["freeze_ms", "totalFreezesDuration", 600_000],
+      ["pli_sent", "pliCount", 1_000_000], ["nack_sent", "nackCount", 10_000_000],
+    ];
+    for (const [name, field, max] of pairs) {
+      const value = grown(baseline, stat, field);
+      if (value !== undefined) fields[name] = scaled(value, 1, max);
+    }
+    if (typeof stat.frameHeight === "number") fields.frame_height = clampInt(stat.frameHeight, 4320);
+    rows.push({ event: "video.track_window", fields });
+  }
+  const summary: Record<string, unknown> = { window_ms: ms };
+  const map: Record<string, keyof CallStatsSample> = {
+    send_layer: "send_layer", send_loss_pct: "send_loss_pct", send_jitter_ms: "send_jitter_ms",
+    recv_loss_pct: "recv_loss_pct", recv_jitter_ms: "recv_jitter_ms", rtt_ms: "rtt_ms",
+    connection_type: "connection_type", local_candidate_type: "local_candidate_type",
+    remote_candidate_type: "remote_candidate_type", relay_protocol: "relay_protocol",
+    recv_height: "recv_height", recv_paused_videos: "recv_paused_videos", recv_hidden_videos: "recv_hidden_videos",
+    freeze_count: "freeze_count", freeze_ms: "freeze_ms",
+  };
+  for (const [name, key] of Object.entries(map)) {
+    const value = sample[key];
+    if (value !== undefined) summary[name] = value;
+  }
+  if (typeof sample.send_bitrate_kbps === "number") summary.send_bitrate_bps = sample.send_bitrate_kbps * 1000;
+  if (typeof sample.recv_bitrate_kbps === "number") summary.recv_bitrate_bps = sample.recv_bitrate_kbps * 1000;
+  rows.push({ event: "video.call_stats", fields: summary });
+  return rows;
 }
 
 /** How much a counter grew since the last window, or undefined when it has no earlier reading. */
