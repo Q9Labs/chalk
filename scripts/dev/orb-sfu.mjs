@@ -10,7 +10,7 @@ export function orbAPIIdentity(config) {
 }
 
 export function orbSfuAPIEnvironment(config) {
-  if (!config.orb) return {};
+  if (!config.localOrbSfu) return {};
   return {
     CHALK_NEW_SPACE_MEDIA_PLANE: config.mediaPlane,
     CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
