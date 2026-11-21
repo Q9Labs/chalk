@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
@@ -93,7 +93,13 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
             <MoreButton
               label="Show more calls"
               cursor={state.data.nextCursor}
-              load={(cursor) => readPage("home", { cursor })}
+              load={(cursor) =>
+                readPage("home", { cursor }).catch((error: unknown) => {
+                  // A cursor from before the list was ordered by last use belongs to another order, so start again from the top.
+                  if (error instanceof DashboardRequestError && error.code === "invalid_cursor") reload();
+                  throw error;
+                })
+              }
               onLoaded={(page) => {
                 // A call made elsewhere may already be on top, so skip calls the list already holds.
                 update(

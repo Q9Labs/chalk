@@ -53,7 +53,8 @@ func TestListRefusesACursorFromAnotherOrder(t *testing.T) {
 		{"created cursor on the created list", ListOrderCreated, ListOrderCreated, nil},
 		{"active cursor on the active list", ListOrderActive, ListOrderActive, nil},
 		{"active cursor on the default list", ListOrderActive, "", pagination.ErrInvalidCursor},
-		{"created cursor on the active list", ListOrderCreated, ListOrderActive, pagination.ErrInvalidCursor},
+		// A cursor with no recorded order was made by the created list, so its position is a creation time and means nothing in the activity order.
+		{"created cursor (or one from before orders) on the active list", ListOrderCreated, ListOrderActive, pagination.ErrInvalidCursor},
 		{"active cursor on the created list", ListOrderActive, ListOrderCreated, pagination.ErrInvalidCursor},
 	} {
 		repository := &listRepository{}
