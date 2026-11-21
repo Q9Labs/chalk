@@ -1,7 +1,7 @@
-import { NativeModules } from "react-native";
 import type { TelemetryOutbox } from "@q9labsai/chalk-client/telemetry/outbox";
 
-type NativeAppHealth = {
+/** The native module's surface, injected so tests drive the scan without react-native. */
+export type NativeAppHealth = {
   markReady(cs: string): void;
   markFatal(errorName: string): void;
   markCallEnded(): void;
@@ -11,9 +11,6 @@ type NativeAppHealth = {
   lowMemory(): Promise<boolean>;
   thermalState(): Promise<string>;
 };
-
-/** The native module that owns the launch marker file and the OS exit/thermal readers. Absent where the bridge is not linked. */
-const native = (): NativeAppHealth | null => (NativeModules.ChalkAppHealth as NativeAppHealth | undefined) ?? null;
 
 export type NativeRunMarker = {
   readonly launch_id?: string;
@@ -29,20 +26,20 @@ export type NativeRunMarker = {
 
 const PHASES = new Set(["launch", "boot", "joining", "live", "reconnecting"]);
 const APP_STATES = new Set(["active", "inactive", "background"]);
+const EXIT_REASONS = new Set(["REASON_USER_REQUESTED", "REASON_USER_STOPPED", "REASON_CRASH", "REASON_CRASH_NATIVE", "REASON_ANR", "REASON_LOW_MEMORY", "REASON_SIGNALED", "REASON_EXCESSIVE_RESOURCE_USAGE", "REASON_FREEZER", "REASON_OTHER", "REASON_INITIALIZATION_FAILURE", "REASON_PERMISSION_CHANGE", "REASON_DEPENDENCY_DIED", "REASON_EXIT_SELF", "REASON_STATE_CHANGE", "REASON_SYSTEM_STATE_CHANGE", "REASON_UNKNOWN", "MX_CRASH", "no_record", "no_exit_reason", "unsupported"]);
 
 /**
  * The once-per-launch native scan: reads the marker the previous process left, asks the OS why it exited, records
  * previous_run.read and emits client.previous_run and client.app_exit_info under the new run's credential.
  */
-export async function scanNativePreviousRun(outbox: TelemetryOutbox): Promise<void> {
-  const module = native();
+export async function scanNativePreviousRun(outbox: TelemetryOutbox, health: NativeAppHealth | null): Promise<void> {
   await outbox.obs
     .op("previous_run.read", {}, async (scope) => {
-      if (module === null) {
+      if (health === null) {
         scope.expected("app.storage_unreadable");
         return;
       }
-      const marker = (await module.readMarker().catch(() => null)) as NativeRunMarker | null;
+      const marker = (await health.readMarker().catch(() => null)) as NativeRunMarker | null;
       if (marker === null || (marker.phase === undefined && marker.launch_id === undefined)) {
         scope.expected("app.no_marker");
         return;
@@ -60,8 +57,8 @@ export async function scanNativePreviousRun(outbox: TelemetryOutbox): Promise<vo
         ...(typeof marker.launched_at_ms === "number" ? { launched_at_ms: marker.launched_at_ms } : {}),
         ...(typeof marker.will_terminate === "boolean" ? { will_terminate: marker.will_terminate } : {}),
       });
-      const exit = typeof marker.pid === "number" ? await module.readExitInfo(marker.pid).catch(() => null) : null;
-      const reason = exit?.reason ?? "no_exit_reason";
+      const exit = typeof marker.pid === "number" ? await health.readExitInfo(marker.pid).catch(() => null) : null;
+      const reason = typeof exit?.reason === "string" && EXIT_REASONS.has(exit.reason) ? exit.reason : "no_exit_reason";
       outbox.obs.fact("client.app_exit_info", {
         exit_reason: reason as never,
         ...(typeof marker.pid === "number" ? { pid: marker.pid } : {}),
@@ -70,34 +67,4 @@ export async function scanNativePreviousRun(outbox: TelemetryOutbox): Promise<vo
       });
     })
     .catch(() => undefined);
-}
-
-/** Tells the marker JS is alive: marks it js_ready and stamps this run's cs. Call once when the SDK boots. */
-export function markJsReady(outbox: TelemetryOutbox): void {
-  native()?.markReady(outbox.clientSessionId);
-}
-
-/** What the dying JS writes last: the native marker's fatal flag, before the fatal record and flush. */
-export function markFatal(errorName: string): void {
-  native()?.markFatal(errorName);
-}
-
-/** The run ended cleanly by the person's hand: the marker's clean_exit, never a crash. */
-export function markCallEnded(): void {
-  native()?.markCallEnded();
-}
-
-/** Keeps the marker's app_state current so a background kill reads the truth. */
-export function markAppState(state: string): void {
-  native()?.setAppState(state);
-}
-
-/** Whether the OS says memory is low (Android lowMemory; iOS reports via memoryWarning). */
-export function readLowMemory(): Promise<boolean | null> {
-  return native()?.lowMemory().catch(() => null) ?? Promise.resolve(null);
-}
-
-/** The OS thermal state, or "unsupported" where the platform has no probe. */
-export function readThermalState(): Promise<string> {
-  return native()?.thermalState().catch(() => "unsupported") ?? Promise.resolve("unsupported");
 }

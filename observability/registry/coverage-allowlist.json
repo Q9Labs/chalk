@@ -11,7 +11,6 @@
     { "code": "access.connection_lost", "slice": 7 },
     { "code": "end.time_limit", "slice": 8 },
     { "code": "rejoin.refused", "slice": 8 },
-    { "code": "page.crashed", "slice": 9 },
     { "code": "recording.not_ready", "slice": 10 }
   ]
 }

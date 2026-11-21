@@ -12,10 +12,11 @@ describe("app telemetry", () => {
     expect(test.accepted.map((event) => event.type)).toEqual(["problem_reported"]);
   });
 
-  it("sends a render crash with its cause", async () => {
+  it("sends a render crash with its cause as a kernel record", async () => {
     const test = createTestOutbox();
     appTelemetry(test.outbox).renderCrashed("chunk_reload");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await test.outbox.flush();
-    expect(test.accepted.map(({ type, render_cause }) => ({ type, render_cause }))).toEqual([{ type: "render_crashed", render_cause: "chunk_reload" }]);
+    expect(test.accepted.map((event) => ("name" in event ? { name: event.name, render_cause: event.render_cause } : { name: event.type }))).toEqual([{ name: "client.render_crashed", render_cause: "chunk_reload" }]);
   });
 });

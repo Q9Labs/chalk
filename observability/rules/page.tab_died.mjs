@@ -32,8 +32,7 @@ export function decide({ readings, declaration, seat }) {
   if (closes.kind !== "present") return { status: "unknown", reason: "a dead marker was found but Sync's closes are not witnessed" };
   const byHash = closesBySeatHash(closes);
   const seats = declaration.kind === "episode" ? declaration.seats : [];
-  const others = seats.filter((s) => s.participant !== seat?.participant);
-  const deadSeat = others.find((s) => (byHash.get(hashParticipant(s.participant)) ?? []).length > 0);
+  const deadSeat = seats.find((s) => (byHash.get(hashParticipant(s.participant)) ?? []).length > 0);
   const close = deadSeat === undefined ? undefined : byHash.get(hashParticipant(deadSeat.participant))?.find((o) => o.claim !== "normal" && o.claim !== "client_closed") ?? byHash.get(hashParticipant(deadSeat.participant))?.[0];
   if (close === undefined || close.claim === "normal" || close.claim === "client_closed") {
     return { status: "unknown", reason: "a marker names a dead run but Sync saw no abnormal close for it" };

@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "420c1e5c0c7a",
+  "schema_ver": "7c0fc3ba3f4b",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -57,7 +57,7 @@
             {
               "event": "previous_run.read",
               "source": "client",
-              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+              "fields": ["participant_id", "client_session_id", "dead_markers", "outcome", "platform", "est_server_ms"]
             }
           ]
         },
@@ -81,26 +81,7 @@
             {
               "event": "client.previous_run",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "previous_client_session_id",
-                "phase",
-                "visibility",
-                "app_state",
-                "clean_exit",
-                "last_elapsed_ms",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "js_ready",
-                "was_discarded",
-                "pid",
-                "launch_id",
-                "launched_at_ms",
-                "will_terminate",
-                "platform",
-                "est_server_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "phase", "js_ready", "last_elapsed_ms", "platform", "est_server_ms"]
             }
           ]
         },
@@ -234,7 +215,7 @@
             {
               "event": "previous_run.read",
               "source": "client",
-              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+              "fields": ["participant_id", "client_session_id", "dead_markers", "outcome", "platform", "est_server_ms"]
             }
           ]
         },
@@ -258,26 +239,7 @@
             {
               "event": "client.previous_run",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "previous_client_session_id",
-                "phase",
-                "visibility",
-                "app_state",
-                "clean_exit",
-                "last_elapsed_ms",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "js_ready",
-                "was_discarded",
-                "pid",
-                "launch_id",
-                "launched_at_ms",
-                "will_terminate",
-                "platform",
-                "est_server_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "phase", "js_ready", "last_elapsed_ms", "platform", "est_server_ms"]
             }
           ]
         }
@@ -345,7 +307,7 @@
             {
               "event": "previous_run.read",
               "source": "client",
-              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+              "fields": ["participant_id", "client_session_id", "dead_markers", "outcome", "platform", "est_server_ms"]
             }
           ]
         },
@@ -369,26 +331,7 @@
             {
               "event": "client.previous_run",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "previous_client_session_id",
-                "phase",
-                "visibility",
-                "app_state",
-                "clean_exit",
-                "last_elapsed_ms",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "js_ready",
-                "was_discarded",
-                "pid",
-                "launch_id",
-                "launched_at_ms",
-                "will_terminate",
-                "platform",
-                "est_server_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "phase", "js_ready", "last_elapsed_ms", "platform", "est_server_ms"]
             }
           ]
         },
@@ -658,7 +601,7 @@
       "code": "page.crashed",
       "area": "crash",
       "slice": 9,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
       "witnesses": [
@@ -670,26 +613,7 @@
             {
               "event": "client.perf_heartbeat",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "window_ms",
-                "visibility",
-                "app_state",
-                "long_task_max_ms_30s",
-                "long_task_total_ms_30s",
-                "main_ping_max_ms_30s",
-                "worker_late_max_ms_30s",
-                "js_lag_max_ms_30s",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "heap_probe",
-                "memory_state",
-                "low_memory",
-                "platform",
-                "est_server_ms",
-                "clock_err_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "window_ms", "visibility", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "heap_probe", "memory_state", "platform", "est_server_ms"]
             }
           ]
         },
@@ -748,11 +672,7 @@
           "fields": [],
           "emit_sites": [
             {
-              "path": "apps/web/src/components/space/CallErrorBoundary.tsx",
-              "literal": "\"client.call_crashed\""
-            },
-            {
-              "path": "apps/mobile/src/call/CallErrorBoundary.tsx",
+              "path": "sdks/typescript/client/src/telemetry/app.ts",
               "literal": "\"client.call_crashed\""
             }
           ]
@@ -781,7 +701,7 @@
             {
               "event": "previous_run.read",
               "source": "client",
-              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+              "fields": ["participant_id", "client_session_id", "dead_markers", "outcome", "platform", "est_server_ms"]
             }
           ]
         },
@@ -805,26 +725,7 @@
             {
               "event": "client.previous_run",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "previous_client_session_id",
-                "phase",
-                "visibility",
-                "app_state",
-                "clean_exit",
-                "last_elapsed_ms",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "js_ready",
-                "was_discarded",
-                "pid",
-                "launch_id",
-                "launched_at_ms",
-                "will_terminate",
-                "platform",
-                "est_server_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "phase", "js_ready", "last_elapsed_ms", "platform", "est_server_ms"]
             }
           ]
         },
@@ -929,26 +830,7 @@
             {
               "event": "client.perf_heartbeat",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "window_ms",
-                "visibility",
-                "app_state",
-                "long_task_max_ms_30s",
-                "long_task_total_ms_30s",
-                "main_ping_max_ms_30s",
-                "worker_late_max_ms_30s",
-                "js_lag_max_ms_30s",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "heap_probe",
-                "memory_state",
-                "low_memory",
-                "platform",
-                "est_server_ms",
-                "clock_err_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "window_ms", "visibility", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "heap_probe", "memory_state", "platform", "est_server_ms"]
             }
           ]
         },
@@ -1058,7 +940,7 @@
             {
               "event": "client.perf_heartbeat",
               "source": "client",
-              "fields": ["participant_id", "client_session_id", "memory_state", "heap_used_mib", "heap_limit_mib", "heap_probe", "low_memory", "platform", "est_server_ms"]
+              "fields": ["participant_id", "client_session_id", "memory_state", "heap_probe", "heap_used_mib", "heap_limit_mib", "low_memory", "platform", "est_server_ms"]
             },
             {
               "event": "client.memory_warning",
@@ -1075,26 +957,7 @@
             {
               "event": "client.perf_heartbeat",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "window_ms",
-                "visibility",
-                "app_state",
-                "long_task_max_ms_30s",
-                "long_task_total_ms_30s",
-                "main_ping_max_ms_30s",
-                "worker_late_max_ms_30s",
-                "js_lag_max_ms_30s",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "heap_probe",
-                "memory_state",
-                "low_memory",
-                "platform",
-                "est_server_ms",
-                "clock_err_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "window_ms", "visibility", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "heap_probe", "memory_state", "platform", "est_server_ms"]
             }
           ]
         }
@@ -1148,26 +1011,7 @@
             {
               "event": "client.perf_heartbeat",
               "source": "client",
-              "fields": [
-                "participant_id",
-                "client_session_id",
-                "window_ms",
-                "visibility",
-                "app_state",
-                "long_task_max_ms_30s",
-                "long_task_total_ms_30s",
-                "main_ping_max_ms_30s",
-                "worker_late_max_ms_30s",
-                "js_lag_max_ms_30s",
-                "heap_used_mib",
-                "heap_limit_mib",
-                "heap_probe",
-                "memory_state",
-                "low_memory",
-                "platform",
-                "est_server_ms",
-                "clock_err_ms"
-              ]
+              "fields": ["participant_id", "client_session_id", "window_ms", "visibility", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "heap_probe", "memory_state", "platform", "est_server_ms"]
             }
           ]
         }

@@ -13,8 +13,16 @@ export class CallErrorBoundary extends Component<{ readonly onCrash: (error: Err
     this.props.onCrash(error);
   }
 
+  override componentDidMount() {
+    if (this.state.crashed) this.#showSurface();
+  }
+
   override componentDidUpdate(_previous: Readonly<{ onCrash: (error: Error) => void }>, previousState: Readonly<{ crashed: boolean }>) {
-    if (!previousState.crashed && this.state.crashed && this.#dismissSurface === undefined && document.visibilityState === "visible") this.#dismissSurface = this.props.onFallbackShown?.();
+    if (!previousState.crashed && this.state.crashed) this.#showSurface();
+  }
+
+  #showSurface() {
+    if (this.#dismissSurface === undefined && document.visibilityState === "visible") this.#dismissSurface = this.props.onFallbackShown?.();
   }
 
   override componentWillUnmount() {

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "420c1e5c0c7a",
+  "schema_ver": "7c0fc3ba3f4b",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1688,11 +1688,7 @@
       "fields": {},
       "emit_sites": [
         {
-          "path": "apps/web/src/components/space/CallErrorBoundary.tsx",
-          "literal": "\"client.call_crashed\""
-        },
-        {
-          "path": "apps/mobile/src/call/CallErrorBoundary.tsx",
+          "path": "sdks/typescript/client/src/telemetry/app.ts",
           "literal": "\"client.call_crashed\""
         }
       ],
@@ -2366,7 +2362,7 @@
           "source": "client",
           "claim": "outcome",
           "failure_claims": [],
-          "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+          "fields": ["participant_id", "client_session_id", "dead_markers", "outcome", "platform", "est_server_ms"]
         }
       ],
       "doc": "The boot-time scan for dead run markers. Claim: the op's outcome; ok or expected means the scan ran, error means it could not read the store. Its presence proves this client reports dead runs."
@@ -2382,26 +2378,7 @@
           "source": "client",
           "claim": "phase",
           "failure_claims": [],
-          "fields": [
-            "participant_id",
-            "client_session_id",
-            "previous_client_session_id",
-            "phase",
-            "visibility",
-            "app_state",
-            "clean_exit",
-            "last_elapsed_ms",
-            "heap_used_mib",
-            "heap_limit_mib",
-            "js_ready",
-            "was_discarded",
-            "pid",
-            "launch_id",
-            "launched_at_ms",
-            "will_terminate",
-            "platform",
-            "est_server_ms"
-          ]
+          "fields": ["participant_id", "client_session_id", "phase", "js_ready", "last_elapsed_ms", "platform", "est_server_ms"]
         }
       ],
       "doc": "A dead run's marker, reported by the next run under its own credential. Claim: the phase the dead run reached. The reporting seat's row names the dead cs_, which is what identifies whose run died."
@@ -2576,26 +2553,7 @@
           "source": "client",
           "claim": "window_ms",
           "failure_claims": [],
-          "fields": [
-            "participant_id",
-            "client_session_id",
-            "window_ms",
-            "visibility",
-            "app_state",
-            "long_task_max_ms_30s",
-            "long_task_total_ms_30s",
-            "main_ping_max_ms_30s",
-            "worker_late_max_ms_30s",
-            "js_lag_max_ms_30s",
-            "heap_used_mib",
-            "heap_limit_mib",
-            "heap_probe",
-            "memory_state",
-            "low_memory",
-            "platform",
-            "est_server_ms",
-            "clock_err_ms"
-          ]
+          "fields": ["participant_id", "client_session_id", "window_ms", "visibility", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "heap_probe", "memory_state", "platform", "est_server_ms"]
         }
       ],
       "doc": "One 30 s health window the seat's client measured. Claim: the window's length; the measurement fields are in the value. Its delivery also proves this build can report slice 9 evidence, and its absence marks an open tail."
@@ -2611,7 +2569,7 @@
           "source": "client",
           "claim": "memory_state",
           "failure_claims": [],
-          "fields": ["participant_id", "client_session_id", "memory_state", "heap_used_mib", "heap_limit_mib", "heap_probe", "low_memory", "platform", "est_server_ms"]
+          "fields": ["participant_id", "client_session_id", "memory_state", "heap_probe", "heap_used_mib", "heap_limit_mib", "low_memory", "platform", "est_server_ms"]
         },
         {
           "event": "client.memory_warning",
@@ -3317,10 +3275,6 @@
     {
       "code": "join.no_media",
       "slice": 2
-    },
-    {
-      "code": "page.crashed",
-      "slice": 9
     },
     {
       "code": "recording.not_ready",
