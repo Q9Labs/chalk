@@ -1,0 +1,154 @@
+import { paintFixture } from "./fixture-paint.js";
+
+const { invoke } = window.__TAURI__.core;
+const label = window.__TAURI_INTERNALS__.metadata.currentWindow.label;
+const root = document.querySelector("#view");
+const run = (kind, fields = {}) => invoke("act", { action: { kind, ...fields } });
+const listen = (selector, event, handle) => root.querySelector(selector).addEventListener(event, handle);
+
+function control(action, selector) {
+  listen(selector, "click", () => void run(action).catch(showError));
+}
+
+function styleButtons() {
+  return `<button type="button" data-style="island">Island</button>
+    <button type="button" data-style="pill">Pill</button>`;
+}
+
+function bindStyleButtons() {
+  root.querySelectorAll("[data-style]").forEach(button => {
+    button.addEventListener("click", () => void run("change_style", { style: button.dataset.style }).catch(showError));
+  });
+}
+
+function showError(error) {
+  const status = root.querySelector("[role=status]");
+  if (status) status.textContent = error instanceof Error ? error.message : String(error);
+}
+
+const isOverlay = label.startsWith("ink-");
+if (isOverlay) {
+  root.innerHTML = '<canvas aria-label="Draw on the shared surface"></canvas>';
+  const canvas = root.querySelector("canvas");
+  let stroke = Promise.resolve();
+  let lastMove = 0;
+  const point = event => ({ x: event.clientX * devicePixelRatio, y: event.clientY * devicePixelRatio });
+  const send = (kind, fields) => {
+    stroke = stroke.then(() => run(kind, fields)).catch(showError);
+  };
+  canvas.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    canvas.setPointerCapture(event.pointerId);
+    send("begin_stroke", point(event));
+  });
+  canvas.addEventListener("pointermove", event => {
+    if (canvas.hasPointerCapture(event.pointerId) && performance.now() - lastMove > 15) {
+      lastMove = performance.now();
+      send("add_point", point(event));
+    }
+  });
+  canvas.addEventListener("pointerup", event => {
+    if (!canvas.hasPointerCapture(event.pointerId)) return;
+    send("add_point", point(event));
+    send("finish_stroke");
+  });
+  canvas.addEventListener("pointercancel", () => send("cancel_stroke"));
+  window.addEventListener("keydown", event => {
+    if (event.key === "Escape") send("cancel_draw");
+  });
+} else if (label === "hud") {
+  root.innerHTML = `<div class="hud" data-look="island" data-edge="top">
+    <button class="grip" type="button" aria-label="Drag control" tabindex="-1"></button>
+    <span class="sharing"><span class="pulse"></span><span class="word">Sharing screen</span></span>
+    <button class="pencil" type="button" aria-label="Draw" title="Draw">✎</button>
+    <button class="overflow" type="button" aria-label="Control options">•••</button>
+    <span role="status" class="sr-only"></span>
+  </div>`;
+  control("toggle_draw", ".pencil");
+  listen(".overflow", "click", () => void run("show_hud_menu").catch(showError));
+  const grip = root.querySelector(".grip");
+  let lastMove = 0;
+  let drag = Promise.resolve();
+  const send = kind => { drag = drag.then(() => run(kind)).catch(showError); };
+  grip.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    grip.setPointerCapture(event.pointerId);
+    send("begin_drag");
+  });
+  grip.addEventListener("pointermove", event => {
+    if (grip.hasPointerCapture(event.pointerId) && performance.now() - lastMove > 24) {
+      lastMove = performance.now();
+      send("drag");
+    }
+  });
+  const end = () => send("end_drag");
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+} else if (label === "draw-bar") {
+  const colors = ["white", "blue", "yellow", "red"];
+  root.innerHTML = `<div class="drawbar"><span>Draw</span>
+    ${colors.map(color => `<button class="color ${color}" type="button" data-color="${color}" aria-label="${color} ink"></button>`).join("")}
+    <button type="button" class="done">Done</button><span role="status" class="sr-only"></span></div>`;
+  root.querySelectorAll("[data-color]").forEach(button => {
+    button.addEventListener("click", () => void run("change_color", { color: button.dataset.color }).catch(showError));
+  });
+  control("cancel_draw", ".done");
+} else {
+  root.innerHTML = `<section class="settings">
+    <h1>Chalk Helper</h1>
+    <p id="connection">Not connected</p>
+    <p id="connection-help">Start sharing in Chalk to connect.</p>
+    <div class="approval" hidden>
+      <p>Compare this code with the code in Chalk.</p>
+      <p id="fingerprint"></p>
+      <button type="button" id="deny">Deny</button>
+      <button type="button" id="allow">Allow</button>
+    </div>
+    <div class="setting"><span>Sharer control</span><div class="segment">${styleButtons()}</div></div>
+    <div class="setting" id="shortcut" hidden><span>Draw shortcut</span><kbd>${navigator.platform.startsWith("Mac") ? "⌘ ⇧ 9" : "Ctrl Shift 9"}</kbd></div>
+    <button type="button" id="update">Check for updates</button>
+    <p role="status" id="status"></p>
+  </section>`;
+  bindStyleButtons();
+  control("check_for_update", "#update");
+  for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
+    listen(id, "click", () => void run("decide_pairing", {
+      fingerprint: root.querySelector("#fingerprint").textContent,
+      allowed
+    }).catch(showError));
+  }
+}
+
+async function refresh() {
+  try {
+    const view = await invoke("view");
+    if (isOverlay && view.segment) {
+      paintFixture(root.querySelector("canvas"), view);
+    } else if (label === "hud") {
+      const hud = root.querySelector(".hud");
+      hud.dataset.look = view.preferences.style;
+      hud.dataset.edge = view.preferences.dock.edge;
+      hud.querySelector(".word").textContent = view.paused ? "Marks paused" : "Sharing screen";
+      hud.querySelector(".pencil").setAttribute("aria-pressed", String(view.drawing));
+      hud.querySelector(".pencil").disabled = view.paused;
+    } else if (label === "settings") {
+      root.querySelector("#shortcut").hidden = !view.hotkey;
+      root.querySelector("#connection").textContent = view.fixture ? "Development fixture" : view.connected ? "Connected" : "Not connected";
+      root.querySelector("#connection-help").textContent = view.connected
+        ? "Use the preview in Chalk while this capture is unverified."
+        : "Start sharing in Chalk to connect.";
+      root.querySelector(".approval").hidden = !view.fingerprint;
+      root.querySelector("#fingerprint").textContent = view.fingerprint ?? "";
+      if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
+      root.querySelectorAll("[data-style]").forEach(button => {
+        button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));
+      });
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    setTimeout(refresh, isOverlay ? 35 : 200);
+  }
+}
+
+void refresh();
