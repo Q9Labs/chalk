@@ -9,6 +9,7 @@ import { chromium, devices } from "playwright";
 import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
 import { collectPage } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
 
@@ -26,6 +27,26 @@ export const deviceProfiles = {
   iphone: { engine: webkit, options: engine.devices["iPhone 15"] },
   android: { engine: chromium, options: devices["Pixel 7"] },
 };
+
+async function createCallThroughBrowser(page) {
+  const deadline = Date.now() + 40_000;
+  for (;;) {
+    const created = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
+    await page.getByRole("button", { name: "Join call", exact: true }).click();
+    const response = await created;
+    if (response.status() === 201) return response.json();
+    const body = await response.json().catch(() => null);
+    const code = body?.error?.code;
+    if (response.status() === 503 && code === "media.unavailable" && Date.now() < deadline) {
+      // On a shared proof host, wait out brief SFU pressure without disabling admission protection.
+      console.log("Start call: media temporarily unavailable; retrying through the browser in 5 seconds");
+      await delay(5000);
+      continue;
+    }
+    const detail = typeof code === "string" && /^[a-z0-9_.]+$/.test(code) ? ` (${code})` : "";
+    throw new Error(`Start call answered HTTP ${response.status()}${detail}`);
+  }
+}
 
 export async function runJourney(journey, body) {
   const runId = process.argv[2];
@@ -103,16 +124,7 @@ export async function runJourney(journey, body) {
   const startCall = async (host) => {
     await host.page.goto(new URL("/space/", web).href);
     await host.page.getByLabel("Your name", { exact: true }).fill(host.name);
-    const created = host.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
-    await host.page.getByRole("button", { name: "Join call", exact: true }).click();
-    const response = await created;
-    if (response.status() !== 201) {
-      const body = await response.json().catch(() => null);
-      const code = body?.error?.code;
-      const detail = typeof code === "string" && /^[a-z0-9_.]+$/.test(code) ? ` (${code})` : "";
-      throw new Error(`Start call answered HTTP ${response.status()}${detail}`);
-    }
-    const call = await response.json();
+    const call = await createCallThroughBrowser(host.page);
     const mediaPlane = call.arrival?.access?.media?.provider;
     if (mediaPlane !== "chalk_sfu") throw new Error(`Start call issued ${mediaPlane ?? "no media grant"}, not chalk_sfu`);
     await host.page.getByRole("button", { name: `Video tile for ${host.name}`, exact: true }).waitFor({ timeout: 60_000 });
