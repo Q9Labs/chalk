@@ -4,6 +4,7 @@ export * from "./collaboration";
 export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
+export * from "./screen-annotation";
 export * from "./public-invites";
 export type { AppTelemetry } from "./telemetry/app";
 export { TelemetryOutbox } from "./telemetry/outbox";
