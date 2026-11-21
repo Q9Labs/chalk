@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameProvesStroke, makeStrokeProof, type InkRaster } from "./baked-stroke-proof";
+import { frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "./baked-stroke-proof";
 
 // A narrow stroke and its unchanged surroundings; values are straight-alpha pixels.
 function raster(background: number, stroke?: { dark: number; bright: number; alpha: number }): InkRaster {
@@ -53,5 +53,37 @@ describe("baked stroke frame evidence", () => {
   it("keeps the local copy if matching background supplies no new evidence", () => {
     const sameColor = raster(50, { dark: 30, bright: 250, alpha: 255 });
     expect(makeStrokeProof(sameColor, stencil(254))).toBeNull();
+  });
+});
+
+describe("own ink paint source", () => {
+  const input = {
+    baked: true,
+    nowMs: 4000,
+    revision: 4,
+    mark: { expires_at_ms: null },
+    preview: { startedBaked: true, expiresAt: 1000, revision: 4 },
+    proved: false,
+  };
+
+  it("keeps local ink after the receipt, then selects exactly one source for the proving frame", () => {
+    const proof = proofFor();
+    const frames = [raster(50), raster(50), raster(53, { dark: 35, bright: 203, alpha: 255 })];
+    expect(frames.map((frame) => inkHandoff({ ...input, proved: frameProvesStroke(frame, proof) }))).toEqual(["local", "local", "video"]);
+  });
+
+  it("does not erase on a receipt ahead of a recovered snapshot", () => {
+    expect(inkHandoff({ ...input, mark: undefined, revision: 3 })).toBe("local");
+    expect(inkHandoff({ ...input, mark: undefined, revision: 4 })).toBe("removed");
+  });
+
+  it("does not resurrect erased, undone or expired ink when a late frame still contains it", () => {
+    expect(inkHandoff({ ...input, mark: undefined, revision: 6, proved: true })).toBe("removed");
+    expect(inkHandoff({ ...input, mark: { expires_at_ms: 3999 }, proved: true })).toBe("removed");
+  });
+
+  it("uses data when baked presentation is no longer active", () => {
+    expect(inkHandoff({ ...input, baked: false, proved: true })).toBe("data");
+    expect(inkHandoff({ ...input, baked: false, mark: undefined, revision: 3 })).toBe("local");
   });
 });

@@ -1,7 +1,7 @@
 import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, LASER_TRAIL_MS, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { frameProvesStroke, type StrokeProof } from "./baked-stroke-proof";
+import { frameProvesStroke, inkHandoff, type StrokeProof } from "./baked-stroke-proof";
 import { createBakedVideoSurface } from "./baked-video";
 import { loadAnnotationFont } from "./font";
 import { addGesturePoint, clampPoint, gestureDraft, localPoint, sameRect, type Gesture } from "./gesture";
@@ -30,7 +30,7 @@ type Preview = {
   readonly expiresAt: number;
   revision?: number;
 };
-type TextAnchor = { readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
+type TextAnchor = { readonly fence: number; readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
 
 function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, track: MediaStreamTrack, fit: AnnotationFit) {
   const frame = video && videoMatchesTrack(video, track) ? decodedSize(video) : null;
@@ -42,7 +42,7 @@ function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, tra
 
 /** The canvas and video must occupy the same positioned box and use the same fit and transforms. */
 export function ScreenAnnotationLayer(props: ScreenAnnotationLayerProps): React.JSX.Element {
-  return <LayerCanvas key={`${props.state.layer.layer_id}:${props.state.fence}`} {...props} />;
+  return <LayerCanvas key={`${props.state.layer.layer_id}:${props.state.layer.publication_id}:${props.track.id}`} {...props} />;
 }
 
 function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, input }: ScreenAnnotationLayerProps): React.JSX.Element {
@@ -56,7 +56,8 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const tracker = useRef(createAnnotationPresenceTracker());
   const refresh = useRef<() => void>(() => undefined);
   const previewUpdate = useRef<number>(-Infinity);
-  const [textAnchor, setTextAnchor] = useState<TextAnchor | null>(null);
+  const [anchor, setTextAnchor] = useState<TextAnchor | null>(null);
+  const textAnchor = anchor?.fence === state.fence ? anchor : null;
   const actor = input?.actor;
   const drawing = Boolean(input && actor && canDraw(state, actor.participant_id));
   const target = targetOf(state);
@@ -117,17 +118,13 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         context.drawImage(image, rect.x, rect.y, rect.width, rect.height);
       }
       const pending = [];
-      const marks = new Map(state.marks.map((mark) => [mark.draft.mark_id, mark]));
+      const marks = optimistic.current.size ? new Map(state.marks.map((mark) => [mark.draft.mark_id, mark])) : null;
       const decoded = image && optimistic.current.size ? surface?.pixels() : null;
       for (const [id, preview] of optimistic.current) {
-        const committed = marks.get(id);
+        const committed = marks?.get(id);
         preview.revision ??= committed?.created_revision;
-        const known = preview.revision !== undefined && state.revision >= preview.revision;
-        const removed = known && !committed;
-        const expired = committed?.expires_at_ms != null && committed.expires_at_ms <= nowMs;
-        const proved = decoded && preview.proof && frameProvesStroke(decoded, preview.proof);
-        const oldDataPreview = !preview.startedBaked && preview.expiresAt <= nowMs;
-        if (removed || expired || proved || (!baked && committed) || oldDataPreview) {
+        const proved = Boolean(decoded && preview.proof && frameProvesStroke(decoded, preview.proof));
+        if (inkHandoff({ baked, revision: state.revision, nowMs, mark: committed, preview, proved }) !== "local") {
           optimistic.current.delete(id);
           continue;
         }
@@ -208,25 +205,23 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     if (!input || !actor) return;
     const live = matchesTarget(client, target);
     if (!live || !canDraw(live, actor.participant_id)) return;
-    const preview =
+    const preview: Preview | null =
       command.kind === "commit"
-        ? ({
+        ? {
             draft: command.draft,
             author: actor,
             startedBaked: baked,
             proof: baked ? (videoSurface.current?.baselineFor(command.draft) ?? null) : null,
             expiresAt: client.serverNowMs() + 1000,
-          } satisfies Preview)
+          }
         : null;
     if (preview) optimistic.current.set(preview.draft.mark_id, preview);
     refresh.current();
     try {
       const result = await client.dispatch(target, command);
       if (preview && optimistic.current.get(preview.draft.mark_id) === preview) {
-        if (result.kind === "accepted") {
-          const accepted: Preview = preview;
-          accepted.revision = result.revision;
-        } else optimistic.current.delete(preview.draft.mark_id);
+        if (result.kind === "accepted") preview.revision = result.revision;
+        else optimistic.current.delete(preview.draft.mark_id);
       }
       if (result.kind !== "accepted" && matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     } catch {
@@ -292,7 +287,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
             width: brush.width,
           };
           if (brush.tool === "text") {
-            setTextAnchor({ at: point, style });
+            setTextAnchor({ fence: live.fence, at: point, style });
             return;
           }
           event.currentTarget.setPointerCapture(event.pointerId);

@@ -69,3 +69,25 @@ export function frameProvesStroke(frame: InkRaster, proof: StrokeProof): boolean
   const steady = proof.background.filter(({ offset, before }) => distance(pixel(frame.data, offset), before) <= 35);
   return steady.length >= Math.ceil(proof.background.length * 0.65);
 }
+
+export function inkHandoff({
+  baked,
+  revision,
+  nowMs,
+  mark,
+  preview,
+  proved,
+}: {
+  readonly baked: boolean;
+  readonly revision: number;
+  readonly nowMs: number;
+  readonly mark: { readonly expires_at_ms: number | null } | undefined;
+  readonly preview: { readonly startedBaked: boolean; readonly expiresAt: number; readonly revision?: number };
+  readonly proved: boolean;
+}): "local" | "video" | "data" | "removed" {
+  if ((!mark && preview.revision !== undefined && revision >= preview.revision) || (mark?.expires_at_ms != null && mark.expires_at_ms <= nowMs)) return "removed";
+  if (baked && proved) return "video";
+  if (!baked && mark) return "data";
+  if (!preview.startedBaked && preview.expiresAt <= nowMs) return "removed";
+  return "local";
+}
