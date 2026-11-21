@@ -257,13 +257,7 @@ export async function probePort(port, host = "127.0.0.1", transport = "tcp") {
   });
 }
 
-export async function preflight(config, { which = async (tool) => commandExists(tool), probe = probePort, requiredTools = config.requiredTools, allowBusyPorts = config.allowBusyPorts } = {}) {
-  const missing = [];
-  for (const tool of requiredTools) {
-    if (!(await which(tool))) missing.push(tool);
-  }
-  if (missing.length > 0) throw failure(FailureKind.MISSING_TOOL, `missing required tools: ${missing.join(", ")}`, { stage: "preflight" });
-
+async function assertPortsAvailable(config, probe, allowBusyPorts) {
   const busy = [];
   for (const [name, port] of Object.entries(config.ports)) {
     if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
@@ -278,6 +272,16 @@ export async function preflight(config, { which = async (tool) => commandExists(
     if (!udp.available) busy.push(`${name}:${port}/udp`);
   }
   if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });
+}
+
+export async function preflight(config, { which = async (tool) => commandExists(tool), probe = probePort, requiredTools = config.requiredTools, allowBusyPorts = config.allowBusyPorts } = {}) {
+  const missing = [];
+  for (const tool of requiredTools) {
+    if (!(await which(tool))) missing.push(tool);
+  }
+  if (missing.length > 0) throw failure(FailureKind.MISSING_TOOL, `missing required tools: ${missing.join(", ")}`, { stage: "preflight" });
+
+  await assertPortsAvailable(config, probe, allowBusyPorts);
   try {
     await access(config.root);
   } catch (error) {
