@@ -176,7 +176,7 @@ with baseline as (
         'operation_id', receipts.operation_id,
         'scene_id', receipts.scene_id,
         'revision', receipts.revision,
-        'elements', receipts.event_elements,
+        'elements', coalesce(receipts.event_elements, '[]'::jsonb),
         'presenting', receipts.event_presenting,
         'completed_at', receipts.completed_at
     ) order by receipts.completed_at, receipts.operation_id)
@@ -316,7 +316,8 @@ with authority as (
     select event->>'scene_id', element
     from boundary
     cross join lateral jsonb_array_elements(boundary.whiteboard_events) as event
-    cross join lateral jsonb_array_elements(event->'elements') as element
+    -- Older capture sources froze non-drawing receipts with JSON null elements.
+    cross join lateral jsonb_array_elements(nullif(event->'elements', 'null'::jsonb)) as element
     union all
     select receipt.scene_id::text, element
     from whiteboard_tail receipt
@@ -484,7 +485,7 @@ select boundary.*,
             'operation_id', receipts.operation_id,
             'scene_id', receipts.scene_id,
             'revision', receipts.revision,
-            'elements', receipts.event_elements,
+            'elements', coalesce(receipts.event_elements, '[]'::jsonb),
             'presenting', receipts.event_presenting,
             'completed_at', receipts.completed_at
         ) order by receipts.completed_at, receipts.operation_id)

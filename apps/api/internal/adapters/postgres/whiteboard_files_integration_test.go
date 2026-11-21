@@ -243,6 +243,8 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 		version, version_nonce, element_index, is_deleted, payload, encoded_bytes
 	) values ($1, $2, $3, $4, 'image', 'image', 1, 1, 'a0', false, '{"fileId":"published","status":"saved"}', 39)`,
 		tenant.Bytes(), space.Bytes(), episode.Bytes(), scene.Bytes())
+	// Run commit checks before invoking cleanup inside the roll-back-only fixture.
+	exec(`set constraints all immediate`)
 	exec(`update sync_whiteboard_files set expires_at = now() - interval '30 minutes' where tenant_id = $1`, tenant.Bytes())
 	if _, err := whiteboardfiles.NewCleanupWorker(repo, objects).Run(ctx); err != nil {
 		t.Fatal(err)

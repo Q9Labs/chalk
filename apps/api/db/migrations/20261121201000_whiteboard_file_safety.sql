@@ -1,8 +1,4 @@
 -- +goose Up
-create index sync_whiteboard_files_unreferenced_idx
-    on sync_whiteboard_files (tenant_id, participant_id)
-    where referenced_at is null;
-
 -- +goose StatementBegin
 create function can_reserve_whiteboard_file(
     scope_tenant uuid, scope_space uuid, scope_scene uuid, caller uuid, requested_file_id text
@@ -36,33 +32,44 @@ $$;
 
 -- +goose StatementBegin
 create function reference_committed_whiteboard_image() returns trigger language plpgsql as $$
+declare
+    file sync_whiteboard_files%rowtype;
 begin
-    -- Older Sync binaries write the same element, but not referenced_at.
-    -- Update the file in that very transaction so orphan cleanup and the
-    -- first committed reference agree about which one got the file row first.
-    update sync_whiteboard_files
-    set referenced_at = now()
-    where (tenant_id, space_id, episode_id, scene_id, file_id) =
+    -- Take the file lock even if our snapshot still shows a pending upload.
+    -- Once finalize or cleanup commits, the locked row (or its absence)
+    -- decides whether this reference can commit, including on older Sync.
+    select uploads.* into file
+    from sync_whiteboard_files uploads
+    where (uploads.tenant_id, uploads.space_id, uploads.episode_id, uploads.scene_id, uploads.file_id) =
         (new.tenant_id, new.space_id, new.episode_id, new.scene_id, new.payload->>'fileId')
-      and status = 'ready' and referenced_at is null and cleanup_claim_token is null;
+    for no key update;
 
-    if not found and exists (
-        select 1 from sync_whiteboard_files
-        where (tenant_id, space_id, episode_id, scene_id, file_id) =
-            (new.tenant_id, new.space_id, new.episode_id, new.scene_id, new.payload->>'fileId')
-          and cleanup_claim_token is not null
-    ) then
-        raise check_violation using message = 'whiteboard file has been claimed for cleanup';
+    if not found or file.status <> 'ready' or file.cleanup_claim_token is not null then
+        raise check_violation using message = 'whiteboard image requires a ready, unclaimed file';
+    end if;
+
+    if file.referenced_at is null then
+        update sync_whiteboard_files set referenced_at = now() where upload_id = file.upload_id;
     end if;
     return null;
 end;
 $$;
 -- +goose StatementEnd
 
-create trigger reference_committed_whiteboard_image
+-- Current Sync validates files itself after writing elements. Do not replace
+-- its invalid-payload result with a database error from the element write.
+create constraint trigger reference_committed_whiteboard_image
     after insert or update of payload, is_deleted on sync_whiteboard_elements
-    for each row when (new.element_type = 'image' and not new.is_deleted and new.payload->>'fileId' is not null)
+    deferrable initially deferred
+    for each row when (new.element_type = 'image' and not new.is_deleted
+        and new.payload->>'status' = 'saved' and new.payload->>'fileId' is not null)
     execute function reference_committed_whiteboard_image();
+
+-- Sync writes elements before referencing files. Install the trigger before
+-- taking a files-table lock for the index or the reference backfill.
+create index sync_whiteboard_files_unreferenced_idx
+    on sync_whiteboard_files (tenant_id, participant_id)
+    where referenced_at is null;
 
 -- Existing elements can have been committed by older Sync before this migration.
 update sync_whiteboard_files file
