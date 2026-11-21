@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/q9labs/chalk/apps/api/internal/config"
 )
 
 func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
-	databaseURL := os.Getenv(config.DatabaseURL)
+	databaseURL := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
 	if testing.Short() || databaseURL == "" {
 		t.Skip("requires a migrated test database")
 	}
@@ -78,8 +77,19 @@ func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
 	expect(true, uuid(layer), connection)
 	expect(false, uuid(accountTenantIntegrationID(t)), connection)
 	expect(false, uuid(layer), "replaced")
+	exec(`insert into sync_media_pauses(tenant_id, space_id, episode_id, participant_id, participant_generation, source, publication_id)
+		values($1, $2, $3, $4, 3, 'screen', $5)`, uuid(tenant), uuid(space), uuid(episode), uuid(actor), publication)
+	expect(false, uuid(layer), connection)
+	exec(`delete from sync_media_pauses where tenant_id = $1 and episode_id = $2 and participant_id = $3`, uuid(tenant), uuid(episode), uuid(actor))
+	expect(true, uuid(layer), connection)
+
 	observe(2, publication, "second-screen")
 	expect(false, uuid(layer), connection)
 	observe(3, "replacement-screen")
+	expect(false, uuid(layer), connection)
+	observe(4, publication)
+	expect(true, uuid(layer), connection)
+	exec(`update sync_screen_share_leases set acquired_at = now() - interval '2 minutes', renewed_until = now() - interval '1 minute'
+		where lease_id = $1`, uuid(lease))
 	expect(false, uuid(layer), connection)
 }
