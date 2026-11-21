@@ -1,3 +1,4 @@
+import { registerAnnotationSession } from "../screen-annotation";
 import { Effect, ManagedRuntime } from "effect";
 import { SpaceClientCoreService, makeSpaceClientCoreLayer, type SpaceClientCore, type SpaceClientPlatform } from "./core";
 import { toPromiseController } from "./promise-facade";
@@ -22,6 +23,7 @@ class PromiseSpaceClient implements SpaceClient {
     this.#logger = options.logger;
     this.#runtime = ManagedRuntime.make(makeSpaceClientCoreLayer(options, platform));
     this.#core = this.#runtime.runSync(Effect.service(SpaceClientCoreService));
+    registerAnnotationSession(this, this.#core.annotation);
     const controllers = this.#core.controllers;
     this.telemetry = this.#core.telemetry;
     this.media = toPromiseController(this.#runtime, controllers.media);

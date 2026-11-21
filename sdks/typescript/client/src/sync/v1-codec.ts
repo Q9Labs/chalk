@@ -6,7 +6,11 @@ export function encodeV1ClientFrame(frame: unknown): string {
 }
 
 export function decodeV1ServerFrame(wire: string): SyncV1ServerFrame {
-  return Schema.decodeUnknownSync(SyncV1ServerFrameSchema)(JSON.parse(wire));
+  return decodeV1ServerValue(JSON.parse(wire));
+}
+
+export function decodeV1ServerValue(value: unknown): SyncV1ServerFrame {
+  return Schema.decodeUnknownSync(SyncV1ServerFrameSchema)(value);
 }
 
 export function decodeV1ClientFrame(value: unknown): SyncV1ClientFrame {

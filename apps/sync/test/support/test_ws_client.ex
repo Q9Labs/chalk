@@ -25,9 +25,12 @@ defmodule ChalkSync.TestWSClient do
     {:ok, conn} = HTTP.connect(:http, "127.0.0.1", port, transport_options)
     {:ok, conn, ref} = WebSocket.upgrade(:ws, conn, path, headers)
 
-    with {:ok, conn, status, headers} <- await_upgrade(conn, ref, %{headers: []}),
-         {:ok, conn, websocket} <- WebSocket.new(conn, ref, status, headers) do
-      {:ok, %__MODULE__{conn: conn, ref: ref, websocket: websocket}}
+    with {:ok, conn, upgrade} <- await_upgrade(conn, ref, %{headers: [], data: []}),
+         {:ok, conn, websocket} <- WebSocket.new(conn, ref, upgrade.status, upgrade.headers) do
+      client = %__MODULE__{conn: conn, ref: ref, websocket: websocket}
+      # Mint returns any WebSocket bytes coalesced with the 101 as upgrade data.
+      {client, frames} = decode_entries(client, Enum.reverse(upgrade.data))
+      {:ok, %{client | buffered: frames}}
     end
   end
 
@@ -187,7 +190,7 @@ defmodule ChalkSync.TestWSClient do
       acc = Enum.reduce(entries, acc, &collect_upgrade(&1, &2, ref))
 
       if acc[:done],
-        do: {:ok, conn, acc[:status], acc[:headers]},
+        do: {:ok, conn, acc},
         else: await_upgrade(conn, ref, acc)
     else
       {:error, :timeout} -> {:error, :upgrade_timeout}
@@ -198,6 +201,10 @@ defmodule ChalkSync.TestWSClient do
   defp collect_upgrade({:status, ref, status}, acc, ref), do: Map.put(acc, :status, status)
   defp collect_upgrade({:headers, ref, headers}, acc, ref), do: Map.put(acc, :headers, headers)
   defp collect_upgrade({:done, ref}, acc, ref), do: Map.put(acc, :done, true)
+
+  defp collect_upgrade({:data, ref, _data} = entry, acc, ref),
+    do: %{acc | data: [entry | acc.data]}
+
   defp collect_upgrade(_entry, acc, _ref), do: acc
 
   # Several clients share the test process mailbox; only take this
