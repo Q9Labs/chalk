@@ -39,7 +39,7 @@ function contentBox(selector) {
   const layer = doc?.querySelector(typeof selector === "string" ? selector : selector.pip);
   if (!layer) return null;
   const rect = layer.getBoundingClientRect();
-  const video = layer.parentElement.querySelector("video");
+  const video = (layer.closest('[data-part="share-media"]') ?? layer.parentElement).querySelector("video");
   if (!rect.width || !rect.height || !video?.videoWidth) return null;
   const fit = doc.defaultView.getComputedStyle(video).objectFit;
   const scale = (fit === "cover" ? Math.max : Math.min)(layer.clientWidth / video.videoWidth, layer.clientHeight / video.videoHeight);
@@ -139,6 +139,10 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
       }, endpoint.selector);
     }
 
+    const input = await drawer.context.newCDPSession(drawer.page);
+    const mouse = (type, point, buttons) => input.send("Input.dispatchMouseEvent", {
+      type, ...point, buttons, button: type === "mouseMoved" ? "none" : "left", clickCount: 1,
+    });
     const trace = [];
     for (let i = 0; i < attempts; i++) {
       const x = 0.12 + (i % 10) * 0.079;
@@ -155,17 +159,16 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
       const origin = placement(senderBox, { x, y });
       const finish = placement(senderBox, end);
       await drawer.page.evaluate(() => { window.annotationInput = []; });
-      await drawer.page.mouse.move(origin.x, origin.y);
+      await mouse("mouseMoved", origin, 0);
       const sendStart = sent.length;
-      await drawer.page.mouse.down();
+      await mouse("mousePressed", origin, 1);
       for (let move = 1; move <= 8; move++) {
         const mid = placement(senderBox, { x: x + 0.026 * move / 8, y });
-        await drawer.page.mouse.move(mid.x, mid.y);
+        await mouse("mouseMoved", mid, 1);
         await delay(13);
       }
       await delay(70);
-      await drawer.page.mouse.move(finish.x, finish.y);
-      await drawer.page.mouse.up();
+      await mouse("mouseReleased", finish, 0);
 
       await Promise.all(surfaces.map(({ page }) => page.waitForFunction(() => window.annotationPaint?.commit !== null, undefined, { timeout: 600 }).catch(() => {})));
       const [input, ...paints] = await Promise.all([

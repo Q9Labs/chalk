@@ -82,7 +82,8 @@ function measureLatency(scenarios) {
     const attempts = scenario.samples.length;
     const preview = summarizeLatency(previews, attempts, uncertaintyMs);
     const commit = summarizeLatency(commits, attempts, uncertaintyMs);
-    const verdict = attempts < 100 || preview.samples === 0 || commit.samples === 0 ? "incomplete" : preview.p95UpperMs >= targetMs ? "fail" : "pass";
+    const excessiveLoss = Math.max(preview.missing, commit.missing) > attempts / 100;
+    const verdict = attempts < 100 ? "incomplete" : excessiveLoss || preview.p95UpperMs >= targetMs ? "fail" : "pass";
     return {
       id: scenario.id,
       surface: scenario.surface,
