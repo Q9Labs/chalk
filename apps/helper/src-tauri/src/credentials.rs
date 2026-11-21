@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const ACCOUNT: &str = "Chalk Helper";
 
 #[cfg(target_os = "macos")]
@@ -103,3 +104,18 @@ mod windows {
 
 #[cfg(target_os = "windows")]
 pub use windows::{clear, read, store};
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn read(_: &str) -> Result<Option<Vec<u8>>, &'static str> {
+    Err("Device credentials are not supported on this operating system.")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn store(_: &str, _: &[u8]) -> Result<(), &'static str> {
+    Err("Device credentials are not supported on this operating system.")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn clear(_: &str) -> Result<(), &'static str> {
+    Err("Device credentials are not supported on this operating system.")
+}
