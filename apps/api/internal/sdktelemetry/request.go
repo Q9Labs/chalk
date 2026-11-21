@@ -83,6 +83,10 @@ func appendSet(attributes []any, value reflect.Value) []any {
 			attributes = appendSet(attributes, field)
 			continue
 		}
+		if name == "render_cause" {
+			// Keep the wire field, but reuse the established log column.
+			name = "cause"
+		}
 		attributes = append(attributes, name, field.Interface())
 	}
 	return attributes

@@ -1,3 +1,4 @@
+import { mergeDevices, withSelectedDeviceFallback, type MediaDevice } from "./control-bar-devices";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
@@ -13,12 +14,7 @@ import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { useDeviceAccess } from "../device-access/useDeviceAccess";
 import type { DeviceKind } from "../device-access/model";
 
-export interface MediaDevice {
-  deviceId: string;
-  label: string;
-  kind: MediaDeviceKind;
-  groupId?: string;
-}
+export type { MediaDevice } from "./control-bar-devices";
 
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
@@ -32,6 +28,7 @@ export interface ControlBarSurfaceProps {
   buttons?: ControlBarButtonName[];
 
   microphoneTrack?: MediaStreamTrack | null;
+  microphonePicker?: ControlBarProps["microphonePicker"];
   cameraTrack?: MediaStreamTrack | null;
   captureCameraPreview?: () => Promise<CameraPreview>;
   microphoneWarning?: boolean;
@@ -97,6 +94,8 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
+  /** Control the existing microphone picker from elsewhere in the call. */
+  readonly microphonePicker?: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void };
   /** Local self-view only. Omit to use the persisted mirror preference. */
   readonly mirrored?: boolean;
   readonly onMirrorChange?: (mirrored: boolean) => void;
@@ -125,24 +124,6 @@ export interface ControlBarProps {
 }
 
 export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
-
-function mergeDevices(...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>): MediaDevice[] {
-  const devicesById = new Map<string, MediaDevice>();
-  for (const deviceGroup of deviceGroups) {
-    for (const device of deviceGroup ?? []) {
-      const existing = devicesById.get(device.deviceId);
-      if (!existing || (!existing.label && device.label)) {
-        devicesById.set(device.deviceId, device);
-      }
-    }
-  }
-  return [...devicesById.values()];
-}
-
-function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined, selectedDeviceId: string | undefined, fallbackLabel: string, kind: MediaDevice["kind"]): MediaDevice[] {
-  if (devices?.length) return [...devices];
-  return selectedDeviceId ? [{ deviceId: selectedDeviceId, label: fallbackLabel, kind }] : [];
-}
 
 interface ControlBarSurfaceBehaviorOptions {
   readonly density: "comfortable" | "compact";

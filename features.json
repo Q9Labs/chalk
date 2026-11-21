@@ -114,6 +114,7 @@
         "sdks/typescript/client/src/space-client/media-controller.ts",
         "sdks/typescript/client/src/space-client/media-convergence.test.ts",
         "sdks/typescript/client/src/space-client/media-device-selection.ts",
+        "sdks/typescript/client/src/space-client/media-snapshot.ts",
         "sdks/typescript/client/src/space-client/media-projection-monitor.ts",
         "sdks/typescript/react-native/android/src/main",
         "sdks/typescript/react-native/ios",
