@@ -62,9 +62,8 @@ func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, prov
 		attribute.String("chalk.media_plane.placement_reason", bounded),
 	))
 	if role == "overflow" {
-		// The Chalk SFU had no room, so the Episode moved to Cloudflare, or was refused
-		// when the provider here is still chalk_sfu. A log line is what Axiom monitors read.
-		t.logger.WarnContext(ctx, "new Episode overflowed from the Chalk SFU",
+		// Keep the event name for the existing Axiom monitors.
+		t.logger.WarnContext(ctx, "Chalk SFU refused new Episode placement",
 			"event", "chalk_sfu.overflow",
 			"provider", boundedMediaPlaneProvider(provider),
 			"placement_reason", bounded,
@@ -73,9 +72,7 @@ func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, prov
 }
 
 // boundedPlacement maps a placement reason to its node role and a known reason.
-// A no-capacity Episode stays on the primary. A refused Episode, with overflow off,
-// counts under its overflow reason on the Chalk SFU provider; one that moved to
-// Cloudflare counts the same reason under the Cloudflare provider.
+// Refused Episodes count under the historical overflow label.
 func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) {
 	switch reason {
 	case mediaplane.PlacementPrimary, mediaplane.PlacementNoCapacity:

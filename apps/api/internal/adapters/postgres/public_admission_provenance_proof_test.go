@@ -72,7 +72,7 @@ func proveAdmissionProvenanceCollection(t *testing.T, ctx context.Context, pool 
 				case <-ctx.Done():
 					return publicinvites.PublicAccessGrant{}, ctx.Err()
 				}
-				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderChalkSFU, ProviderSubject: "policy-race", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "policy-race", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}, nil
+				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderChalkSFU, ProviderSubject: "policy-race", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "policy-race", EpisodeRef: binding.EpisodeID.String()}, ExpiresAt: time.Now().Add(time.Hour)}, nil
 			}
 			repository := NewPublicInviteRepositoryWithPool(collector)
 			runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repository), admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, outcomeProofAccounts{}, admissionProofLinks{})

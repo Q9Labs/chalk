@@ -134,8 +134,8 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 
 	ended := episode("ended", `{"provider":"chalk_sfu","node":"sfu-a"}`)
 	grant(ended, participant(ended, "active", "{publishAudio}"), "microphone", "confirmed", 3)
-	cloudflare := episode("active", `{"provider":"chalk_sfu"}`)
-	grant(cloudflare, participant(cloudflare, "active", "{publishAudio}"), "microphone", "confirmed", 3)
+	retired := episode("active", `{"provider":"cf_sfu"}`)
+	grant(retired, participant(retired, "active", "{publishAudio}"), "microphone", "confirmed", 3)
 
 	// A page of one proves the cursor walks every row without repeating any.
 	grants := NewSourceGrants(tx)

@@ -83,14 +83,10 @@ const (
 	// the first configured node is the primary and every later one a standby.
 	PlacementPrimary PlacementReason = "primary"
 	PlacementStandby PlacementReason = "standby"
-	// PlacementOverflowNoRoom, PlacementOverflowHostGuard,
-	// PlacementOverflowDraining and PlacementOverflowNodeUnavailable bind the
-	// Episode to Cloudflare because no Chalk SFU node had room. NoRoom: a node
-	// that takes new Episodes was out of packet budget. HostGuard: the host
-	// guard refused new Episodes (CPU or scheduler pressure) although packet
-	// budget may be left. Draining: every answering node was draining, a
-	// planned state and not a capacity shortage. NodeUnavailable: no node
-	// answered ready.
+	// These persisted labels now describe why admission was refused.
+	// NoRoom means no eligible node had packet budget; HostGuard means host
+	// pressure barred admission; Draining means every answering node was
+	// draining; NodeUnavailable means no node answered ready.
 	PlacementOverflowNoRoom          PlacementReason = "overflow_no_room"
 	PlacementOverflowHostGuard       PlacementReason = "overflow_host_guard"
 	PlacementOverflowDraining        PlacementReason = "overflow_draining"
@@ -100,19 +96,15 @@ const (
 	// PlacementOverflowNodeUnavailable (see Placed); the decision's telemetry and a refusal keep
 	// this reason.
 	PlacementOverflowNodeProtocol PlacementReason = "overflow_node_protocol_too_old"
-	// PlacementNoCapacity keeps the Episode on the first node although no node had
-	// room, because the Tenant has no Cloudflare application to take it. The
-	// node's admission then refuses the join.
+	// PlacementNoCapacity is a historical label for a placement on a full node.
 	PlacementNoCapacity PlacementReason = "no_capacity"
 )
 
-// ErrPlacementRefused means a new Episode was refused because no Chalk SFU node had
-// room and Cloudflare overflow is off. The wrapping error names the overflow
-// placement reason. It is a bounded reason, safe to log.
+// ErrPlacementRefused means no Chalk SFU node could take a new Episode.
+// The wrapping error names the bounded placement reason.
 var ErrPlacementRefused = errors.New("no Chalk SFU node with room (full, draining, host guard closed or not answering)")
 
-// Placement is where a new Episode goes: a node of a provider that runs several,
-// or none for a provider with one global endpoint.
+// Placement is the Chalk SFU node chosen for an Episode.
 type Placement struct {
 	Node        string
 	Incarnation string
@@ -154,8 +146,7 @@ func (binding Binding) Placed(placement Placement) (Binding, error) {
 var ErrBindingStale = errors.New("episode media plane binding moved to a newer generation")
 
 // ErrRecoveryRefused means a live Episode lost its node and no Chalk SFU node reserved room for
-// it. The Episode never goes to Cloudflare: its binding stays as it was and the caller may
-// retry. The wrapping error names a bounded reason.
+// it. The binding stays as it was and the caller may retry. The wrapping error names a bounded reason.
 var ErrRecoveryRefused = errors.New("no Chalk SFU node reserved room for the recovering episode")
 
 // Moved returns the binding of an Episode that recovers onto placement: the next generation,

@@ -16,10 +16,6 @@ export function proofPlan(name) {
 export const dryRunNames = proofNames.filter((name) => registry[name].dryRun);
 export const noBrowserNames = proofNames.filter((name) => registry[name].browser === false);
 
-export function unsupportedOnPlane(plane, names) {
-  return names.filter((name) => !registry[name]?.planes.includes(plane));
-}
-
 if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2);
   if (command === "check") {
@@ -28,11 +24,6 @@ if (import.meta.main) {
     if (plane !== "chalk_sfu") fail("Unsupported media plane");
     if (names.length === 0) fail("PROOF configuration: failed (empty-proof-list)");
     if (unknown.length > 0) fail(`Unsupported proof command: ${unknown.join(" ")}`);
-    const unsupported = unsupportedOnPlane(plane, names);
-    if (unsupported.length > 0) {
-      const supported = proofNames.filter((name) => registry[name].planes.includes(plane));
-      fail(`${plane} supports only ${supported.join(", ")}; not ${unsupported.join(", ")}`);
-    }
   } else if (command === "lane" && registry[args[0]]) {
     console.log(registry[args[0]].ownSpace ? "own" : "shared");
   } else fail("usage: registry.mjs check <media-plane> <proof>... | lane <proof>");

@@ -16,11 +16,6 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
-      media_plane:
-        description: Media provider of the proof Space. Promote runs on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. ; the per-Space switch back to Cloudflare is still the undo
-        type: choice
-        options: [chalk_sfu]
-        default: chalk_sfu
       transcribe:
         description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
         type: boolean
@@ -55,10 +50,6 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
-      media_plane:
-        description: Media provider of the proof Space. Promote runs on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. ; the per-Space switch back to Cloudflare is still the undo
-        type: string
-        default: chalk_sfu
       transcribe:
         description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
         type: boolean
@@ -128,11 +119,15 @@ on:
 concurrency:
   # In production the Chalk SFU call-artifacts proof alone uses the automatic Recording Space, so it has its own group and runs beside the proofs that use the manual Space.
   # Every other production run, web-call-proof.yml included, shares one group. A production run that mixes call-artifacts with other proofs, or adds latency to it, is refused below.
-  group: ${{ format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && inputs.media_plane == 'chalk_sfu' && '-recording' || '') }}
+  group: ${{ format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && '-recording' || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
   queue: max
+
+env:
+  # This workflow can run older proof revisions that defaulted to the retired provider.
+  CHALK_PROOF_MEDIA_PLANE: chalk_sfu
 
 jobs:
   smoke:
@@ -163,17 +158,16 @@ jobs:
         if: ${{ inputs.latency_only }}
         env:
           ENVIRONMENT: ${{ inputs.environment }}
-          MEDIA_PLANE: ${{ inputs.media_plane }}
           LATENCY: ${{ inputs.latency }}
         run: |
           # Promote measures production on chalk_sfu beside its proofs.
-          [[ "$ENVIRONMENT" == production && "$MEDIA_PLANE" == chalk_sfu && "$LATENCY" == true ]] || {
+          [[ "$ENVIRONMENT" == production && "$LATENCY" == true ]] || {
             echo "Latency-only mode requires production (chalk_sfu) and latency=true." >&2
             exit 1
           }
       - name: Refuse a production run that spans both proof Spaces
         # call-artifacts alone has its own concurrency group; a run that also uses the manual Space would overlap Promote's other leg.
-        if: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' && contains(inputs.proofs, 'call-artifacts') && (inputs.proofs != 'call-artifacts' || inputs.latency) }}
+        if: ${{ inputs.environment == 'production' && contains(inputs.proofs, 'call-artifacts') && (inputs.proofs != 'call-artifacts' || inputs.latency) }}
         run: |
           echo "A production Chalk SFU run of call-artifacts must run alone and without latency, so it cannot overlap Promote on the other proof Space." >&2
           exit 1
@@ -241,11 +235,10 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
-          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'chalk_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           # Promote's Chalk SFU proof reuses the two Spaces that chalk-sfu-spaces moved, found by slug.
-          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
-          # A Space an operator moved to the Chalk SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
+          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' }}
+          # The dedicated proof Space, also supplied to older proof revisions.
           CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
           # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
           CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
@@ -307,12 +300,11 @@ jobs:
           CHALK_PROOF_CONFIG_SOURCE: env
           # Promote's latency run reuses the proof Space the proofs used, the only Space of this Tenant the plane allowlist admits. Like the proofs, it takes a pinned
           # Space ID when an operator pinned one and otherwise finds the Space by slug.
-          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.latency_only && inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
+          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.latency_only && inputs.environment == 'production' }}
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
-          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'chalk_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
-          # A Space an operator moved to the Chalk SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
+          # The dedicated proof Space, also supplied to older proof revisions.
           CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
           # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
           CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
@@ -346,7 +338,6 @@ jobs:
         # A missing card is the gate's finding for Promote's production run (see the measurement step).
         continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
         env:
-          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'chalk_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
         run: |
           collector=features/scorecard/chalk-sfu.mjs
@@ -395,7 +386,6 @@ jobs:
             --plane "$CHALK_PROOF_MEDIA_PLANE" --region github-hosted --size ubuntu-24-04 --commit "$(git rev-parse HEAD)" \
             --out artifacts/scorecard-proof.json
         env:
-          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'chalk_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           SCORECARD_TIER: promote
           SCORECARD_ENVIRONMENT: production

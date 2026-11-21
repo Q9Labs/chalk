@@ -112,7 +112,6 @@ jobs:
     with:
       environment: production
       proofs: camera-share
-      media_plane: chalk_sfu
       transcribe: false
       release_sha: ${{ inputs.sha }}
       scorecard_label: hotfix

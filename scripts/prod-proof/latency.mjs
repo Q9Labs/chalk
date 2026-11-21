@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Action latency per media plane, from real SDK clients in Chromium on one host.
+// Chalk SFU action latency from real SDK clients in Chromium on one host.
 //
 //   pnpm prod:latency                                  # 20 cycles on the Chalk SFU
-//   pnpm prod:latency --samples 3 --planes chalk_sfu
-//   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # on loopback: no p95 budget and any ICE pair, still fails when a gated metric is missing
-//   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
+//   pnpm prod:latency --samples 3
+//   pnpm prod:latency --samples 3 --smoke   # on loopback: no p95 budget and any ICE pair, still fails when a gated metric is missing
+//   pnpm prod:latency --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
-// One cycle is one Episode in a new Space on that plane, with two guests: guest 1 acts and guest 2 watches.
+// One cycle is one Episode in a Chalk SFU Space, with two guests: guest 1 acts and guest 2 watches.
 // Metric ids and what each one times are in features/scorecard/schema.mjs.
-// A cycle whose admission lands on the other plane, or that fails, is dropped and rerun; its reason is kept.
-// Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
-// public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
-// of samples makes the exit code non-zero.
+// A cycle whose admission lands on the wrong provider, or that fails, is dropped and rerun; its reason is kept.
+// Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-chalk_sfu.json in the
+// public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or too few
+// samples makes the exit code non-zero.
 import { appendFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -30,7 +30,7 @@ import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 
-const providers = { chalk_sfu: "chalk_sfu" };
+const plane = "chalk_sfu";
 const timeoutMs = 20_000;
 const settleMs = 1500;
 const disposeTimeoutMs = 15_000;
@@ -40,7 +40,7 @@ function options() {
   const { values } = parseArgs({
     options: {
       samples: { type: "string", default: "20" },
-      planes: { type: "string", default: "chalk_sfu" },
+      planes: { type: "string", default: plane }, // Older release workflows still pass this flag.
       headed: { type: "boolean", default: false },
       tier: { type: "string", default: "manual" },
       environment: { type: "string" },
@@ -52,15 +52,14 @@ function options() {
     },
   });
   const samples = Number(values.samples);
-  const planes = values.planes.split(",");
   check(Number.isInteger(samples) && samples > 0 && samples <= 60, "--samples must be a whole number from 1 to 60", "configuration");
-  for (const plane of planes) check(plane in providers, `Unknown media plane ${plane}`, "configuration");
+  check(values.planes === plane, "Latency proofs require chalk_sfu", "configuration");
   check(values.environment, "--environment must name where the API runs: ci, nightly or production", "configuration");
   const lobbyDwellMs = Number(values["lobby-dwell-ms"]);
   check(Number.isInteger(lobbyDwellMs) && lobbyDwellMs >= 0 && lobbyDwellMs <= 15000, "--lobby-dwell-ms must be a whole number from 0 to 15000 (preconnect keeps a socket ready for 16 s after its last call)", "configuration");
   check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");
   const { tier, environment, region, size, headed } = values;
-  return { samples, planes, headed, smoke: values.smoke, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
+  return { samples, headed, smoke: values.smoke, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
 }
 
 // measure arms the receiver's watches, runs the action on the sender, and returns each watch's delay in ms.
@@ -130,7 +129,7 @@ async function shareSteps(pages, participantId, sample, stages) {
   Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
-async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath) {
+async function cycle(run, origin, headed, lobbyDwellMs, icePath, ending, checkPath) {
   const space = await createSpace(run);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const { episode, createMs } = await openEpisodeInSpace(run, space);
@@ -140,8 +139,8 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, 
   const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true, lobby: lobbyDwellMs > 0, path: icePath, pathGuest: 1 });
   const landed = guests.admissions.map((admission) => admission.provider);
   check(
-    landed.every((provider) => provider === providers[plane]),
-    `Admitted on ${landed.join(",")}, not ${providers[plane]}`,
+    landed.every((provider) => provider === plane),
+    `Admitted on ${landed.join(",")}, not ${plane}`,
     "media-plane",
   );
   const { pages, participants } = guests;
@@ -253,13 +252,13 @@ async function endEpisode(run, ending) {
   }
 }
 
-async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath, checkPath) {
+async function attempt(run, origin, headed, lobbyDwellMs, icePath, checkPath) {
   const mark = run.resources.length;
   const ending = { current: null };
   const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, headed, lobbyDwellMs, icePath, ending, checkPath)) };
   } catch (error) {
     // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
     if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
@@ -274,47 +273,35 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath, checkP
   return outcome;
 }
 
-// Planes take turns, so a slow minute on the network or the host lands on both.
-async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path, smoke }, report) {
-  const kept = Object.fromEntries(planes.map((plane) => [plane, 0]));
-  const tries = Object.fromEntries(planes.map((plane) => [plane, 0]));
+async function measureCycles(run, origin, { samples, headed, lobbyDwellMs, path, smoke }, report) {
+  let kept = 0;
   const limit = samples + 10;
-  for (let turn = 0; ; turn++) {
-    const open = planes.filter((plane) => kept[plane] < samples && tries[plane] < limit);
-    if (!open.length) return;
-    const plane = open[turn % open.length];
-    tries[plane]++;
-    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path, !smoke);
+  for (let tries = 1; kept < samples && tries <= limit; tries++) {
+    const outcome = await attempt(run, origin, headed, lobbyDwellMs, path, !smoke);
     report.cycles.push(outcome);
-    if (!outcome.dropped) kept[plane]++;
-    console.log(`${plane} cycle ${tries[plane]}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);
+    if (!outcome.dropped) kept++;
+    console.log(`${plane} cycle ${tries}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);
   }
 }
 
-async function conclude(report, { samples, planes, smoke }) {
+async function conclude(report, { samples, smoke }) {
   const { budgets } = await readBudgets();
-  report.planes = {};
-  for (const plane of planes) {
-    const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
-    const summary = summarize(kept.map((outcome) => outcome.sample));
-    // A smoke run measures on a shared runner with few cycles, so its p95 proves nothing about speed. It still fails when a
-    // gated action metric is missing, short of samples or timed out, which proves the kit emits every metric the budgets expect.
-    const limits = smoke ? Object.fromEntries(Object.entries(planeLimits(budgets, plane)).map(([metric, limit]) => [metric, { ...limit, warnOnly: true }])) : planeLimits(budgets, plane);
-    const failures = budgetFailures(summary, limits, samples);
-    const warnings = budgetWarnings(summary, limits);
-    if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
-    report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures, warnings };
-  }
+  const kept = report.cycles.filter((outcome) => !outcome.dropped);
+  const summary = summarize(kept.map((outcome) => outcome.sample));
+  // Smoke runs still verify metric coverage, but shared runner speed is not a release signal.
+  const limits = planeLimits(budgets, plane);
+  const appliedLimits = smoke ? Object.fromEntries(Object.entries(limits).map(([metric, limit]) => [metric, { ...limit, warnOnly: true }])) : limits;
+  const failures = budgetFailures(summary, appliedLimits, samples);
+  const warnings = budgetWarnings(summary, appliedLimits);
+  if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
+  return { kept: kept.length, dropped: report.cycles.length - kept.length, summary, failures, warnings };
 }
 
-function table(report) {
-  const planes = Object.keys(report.planes);
-  const metrics = [...new Set(planes.flatMap((plane) => Object.keys(report.planes[plane].summary)))];
-  const cell = (plane, metric) => {
-    const value = report.planes[plane].summary[metric];
-    return value ? `${value.p50} / ${value.p95} (n=${value.n}${value.timeouts ? `, ${value.timeouts} timed out` : ""})` : "-";
-  };
-  return [`| metric | ${planes.map((plane) => `${plane} p50 / p95 ms`).join(" | ")} |`, `| --- | ${planes.map(() => "---").join(" | ")} |`, ...metrics.map((metric) => `| ${metric} | ${planes.map((plane) => cell(plane, metric)).join(" | ")} |`)].join("\n");
+function table(summary) {
+  const rows = Object.entries(summary).map(([metric, { p50, p95, n, timeouts }]) => (
+    `| ${metric} | ${p50} / ${p95} (n=${n}${timeouts ? `, ${timeouts} timed out` : ""}) |`
+  ));
+  return [`| metric | ${plane} p50 / p95 ms |`, "| --- | --- |", ...rows].join("\n");
 }
 
 async function main() {
@@ -327,34 +314,29 @@ async function main() {
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
     const receiver = await prepareIntegration(run, false);
-    await measureAll(run, receiver.origin, settings, report);
+    await measureCycles(run, receiver.origin, settings, report);
   } catch (error) {
     report.error = errorEvidence(error);
     publicFailure("latency", error);
   } finally {
     if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
   }
-  await conclude(report, settings);
-  report.result = !report.error && !report.cleanupError && Object.values(report.planes).every((plane) => !plane.failures.length) ? "passed" : "failed";
+  const result = await conclude(report, settings);
+  report.planes = { [plane]: result }; // Keep the report shape for existing scorecard readers.
+  report.result = !report.error && !report.cleanupError && !result.failures.length ? "passed" : "failed";
   await save(`${directory}/latency.json`, report);
   const browser = (report.cycles.find((cycle) => cycle.browser)?.browser ?? "unknown").replace(/^chromium/, settings.headed ? "chromium-headed" : "chromium-headless");
   const commit = (await command("git", ["rev-parse", "HEAD"])).trim();
   const client = { kind: "browser", browser, region: settings.scorecard.region, size: settings.scorecard.size };
   const identity = { id: runId, commit, tier: settings.scorecard.tier, environment: settings.scorecard.environment, startedAt: report.startedAt, client };
-  for (const plane of settings.planes) {
-    await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
-    const diagnostics = diagnosticsFile(report, plane);
-    if (diagnostics) await save(`${directory}/${diagnosticsFileName(plane)}`, diagnostics);
-  }
-  console.log(table(report));
-  for (const plane of settings.planes) {
-    const summary = diagnosticsOf(report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped));
-    if (summary) console.log(`\n${plane}\n${diagnosticsMarkdown(summary)}`);
-  }
-  for (const [plane, { failures, warnings }] of Object.entries(report.planes)) {
-    for (const failure of failures) console.log(`${plane}: ${failure}`);
-    for (const warning of warnings) console.log(`${plane}: warning, ${warning}`);
-  }
+  await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
+  const diagnostics = diagnosticsFile(report, plane);
+  if (diagnostics) await save(`${directory}/${diagnosticsFileName(plane)}`, diagnostics);
+  console.log(table(result.summary));
+  const summary = diagnosticsOf(report.cycles.filter((cycle) => !cycle.dropped));
+  if (summary) console.log(`\n${plane}\n${diagnosticsMarkdown(summary)}`);
+  for (const failure of result.failures) console.log(`${plane}: ${failure}`);
+  for (const warning of result.warnings) console.log(`${plane}: warning, ${warning}`);
   console.log(`Private evidence: ${directory}`);
   if (report.result !== "passed") process.exitCode = 1;
 }
