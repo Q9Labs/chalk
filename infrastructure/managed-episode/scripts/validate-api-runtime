@@ -60,6 +60,10 @@ for name in CHALK_SFU_APPLICATION_ID CHALK_SFU_NODES CHALK_SFU_SERVER_NAME CHALK
   require_env "$name"
 done
 
+if [[ "$(env_value "${api_env}" CHALK_RECORDING_ENABLED || true)" == true ]]; then
+  [[ "$(env_value "${api_env}" CHALK_SFU_CAPTURE_ENABLED || true)" == true ]] || fail "Recording requires CHALK_SFU_CAPTURE_ENABLED=true"
+fi
+
 # TURN can serve Chalk SFU peers on networks that cannot reach its public media port.
 turn_key_set=false
 turn_token_set=false

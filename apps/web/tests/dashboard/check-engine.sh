@@ -16,7 +16,12 @@ for delay in 10 30 0; do
 done
 (cd apps/sync && MIX_ENV=dev mix compile)
 case "$proof" in
-  http) bash apps/web/tests/dashboard/real-engine.sh ;;
+  http)
+    # The HTTP proof has no Sync consumer to release SFU seats on End.
+    # Leave room for both owner Episodes, the knock Episode, and recent placements.
+    export SFU_PACKET_BUDGET=48000
+    bash apps/web/tests/dashboard/real-engine.sh
+    ;;
   refresh)
     # Six consecutive ports; remote-slot-env.sh moves the block into the slot's own range.
     refresh_port=${CHALK_DASHBOARD_REFRESH_PORT_BASE:-18180}

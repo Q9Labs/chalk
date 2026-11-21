@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+fixture="$(mktemp -d)"
+trap 'rm -rf "$fixture"' EXIT
+
+# Stop at the Sync input so this exercises the real staging check without any secrets.
+sed -E 's/__[A-Z0-9_]+__/fixture/g' "$managed_root/env/api.env.example" > "$fixture/full.env"
+fixture_api="$fixture/api.env"
+fixture_manifest="$fixture/manifest.json"
+check_refusal() {
+  local reason="$1" output
+  chmod 600 "$fixture_api"
+  if output="$("$managed_root/scripts/validate-runtime" --env-root "$fixture" --secret-root "$fixture" --manifest "$fixture_manifest" --sync-proof "$fixture/not-needed" 2>&1)"; then
+    echo "Expected refusal: $reason" >&2
+    exit 1
+  fi
+  [[ "$output" == *"$reason"* ]] || { printf 'Expected %s; got %s\n' "$reason" "$output" >&2; exit 1; }
+}
+
+grep -v '^CHALK_SFU_' "$fixture/full.env" > "$fixture_api"
+printf '{"database_compatibility":{"minimum_migration":20261120073000}}\n' > "$fixture_manifest"
+check_refusal 'sync.env'
+printf '{"database_compatibility":{"minimum_migration":20261121120000}}\n' > "$fixture_manifest"
+check_refusal 'CHALK_SFU_ENABLED must be true'
+printf 'CHALK_SFU_ENABLED=true\n' >> "$fixture_api"
+check_refusal 'CHALK_SFU_APPLICATION_ID must occur'
+
+cp "$fixture/full.env" "$fixture_api"
+check_refusal 'sync.env'
+sed 's/^CHALK_RECORDING_ENABLED=false$/CHALK_RECORDING_ENABLED=true/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'Recording requires CHALK_SFU_CAPTURE_ENABLED=true'
+printf 'CHALK_SFU_CAPTURE_ENABLED=true\n' >> "$fixture_api"
+check_refusal 'sync.env'
+echo 'PASS managed Chalk SFU runtime input contract'
