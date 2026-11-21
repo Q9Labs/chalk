@@ -32,6 +32,7 @@ export interface ControlBarSurfaceProps {
   buttons?: ControlBarButtonName[];
 
   microphoneTrack?: MediaStreamTrack | null;
+  microphonePicker?: ControlBarProps["microphonePicker"];
   cameraTrack?: MediaStreamTrack | null;
   captureCameraPreview?: () => Promise<CameraPreview>;
   microphoneWarning?: boolean;
@@ -97,6 +98,8 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
+  /** Control the existing microphone picker from elsewhere in the call. */
+  readonly microphonePicker?: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void };
   /** Local self-view only. Omit to use the persisted mirror preference. */
   readonly mirrored?: boolean;
   readonly onMirrorChange?: (mirrored: boolean) => void;

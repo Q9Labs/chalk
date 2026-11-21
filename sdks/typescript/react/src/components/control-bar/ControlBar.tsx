@@ -30,6 +30,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const { buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({ ...props, density: props.density ?? "comfortable", detectDevices: props.detectDevices ?? true });
   const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
   const [deviceSheet, setDeviceSheet] = useState<"mic" | "video" | null>(null);
+  const setMicrophonePickerOpen = props.microphonePicker?.onOpenChange ?? ((open: boolean) => setDeviceSheet(open ? "mic" : null));
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect display-capture support after hydration so server and first client markup agree.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
@@ -94,8 +95,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
           access={props.deviceAccess?.microphone}
-          sheetOpen={deviceSheet === "mic"}
-          onSheetOpenChange={(open) => setDeviceSheet(open ? "mic" : null)}
+          sheetOpen={props.microphonePicker?.open ?? deviceSheet === "mic"}
+          onSheetOpenChange={setMicrophonePickerOpen}
         />
       ) : null}
       {has("video") ? (
@@ -133,7 +134,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           devices={
             <>
               {has("mic") ? (
-                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setDeviceSheet("mic")}>
+                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setMicrophonePickerOpen(true)}>
                   <VolumeHighIcon />
                   <span className="chalk-sheet-label-text">Microphone and speaker</span>
                   <DeviceValue devices={effectiveAudioInputDevices} selectedDeviceId={props.selectedAudioInput} />
