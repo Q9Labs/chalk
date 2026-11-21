@@ -97,14 +97,6 @@ export function ShareControl({
           </>
         ) : (
           <>
-            {helperInstallUrl ? (
-              <>
-                <ChalkMenuLabel>See marks on your real screen</ChalkMenuLabel>
-                <Menu.LinkItem className="chalk-menu-item" href={helperInstallUrl} target="_blank" rel="noopener noreferrer">
-                  Get Chalk Helper
-                </Menu.LinkItem>
-              </>
-            ) : null}
             {(
               [
                 { value: "monitor", label: "Entire screen", description: "Everything on one display" },
@@ -141,6 +133,20 @@ export function ShareControl({
                     </span>
                   </span>
                 </Menu.CheckboxItem>
+              </>
+            ) : null}
+            {helperInstallUrl ? (
+              <>
+                <Menu.Separator className="chalk-shell-menu-separator" />
+                <Menu.LinkItem className="chalk-menu-item chalk-shell-source" href={helperInstallUrl} target="_blank" rel="noopener noreferrer">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+                  </svg>
+                  <span className="chalk-shell-device-label">
+                    <span>Get Chalk Helper</span>
+                    <small>See marks on your real screen</small>
+                  </span>
+                </Menu.LinkItem>
               </>
             ) : null}
           </>
