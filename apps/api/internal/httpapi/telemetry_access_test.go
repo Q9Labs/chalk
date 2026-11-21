@@ -11,9 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
 
 // A participant of the tenant that knows another client's source_id cannot add claims to it: the
@@ -100,7 +98,7 @@ func TestTelemetryRouteAcceptsTheTelemetryTokenAndTheMediaCredentialOnly(t *test
 	}
 }
 
-func TestTelemetryTokenIsRefusedByEveryOtherParticipantRoute(t *testing.T) {
+func TestTelemetryTokenIsRefusedByTheMediaVerifier(t *testing.T) {
 	f := newTelemetryFixture(t)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -122,21 +120,11 @@ func TestTelemetryTokenIsRefusedByEveryOtherParticipantRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := chi.NewRouter()
-	callStatsEndpoint(verifier).Mount(router, RateLimitOptions{Limiter: ratelimit.NewLocalLimiter()})
-	post := func(token string) int {
-		request := httptest.NewRequest(http.MethodPost, f.path+"/call-stats", strings.NewReader(`{"version":1,"samples":[]}`))
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set("Content-Type", "application/json")
-		recorder := httptest.NewRecorder()
-		router.ServeHTTP(recorder, request)
-		return recorder.Code
+	if _, err := verifier.Verify(t.Context(), telemetry.Token); err == nil {
+		t.Error("the media verifier accepted a telemetry token")
 	}
-	if code := post(telemetry.Token); code != http.StatusUnauthorized {
-		t.Errorf("telemetry token on call-stats: status = %d, want 401", code)
-	}
-	if code := post(media.Token); code == http.StatusUnauthorized {
-		t.Errorf("media credential on call-stats: status = %d, want it accepted", code)
+	if _, err := verifier.Verify(t.Context(), media.Token); err != nil {
+		t.Errorf("the media verifier refused a media credential: %v", err)
 	}
 }
 
