@@ -70,10 +70,10 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
       const heading = who.page.getByRole("heading", { name: who === deaf ? /^The call (ended|reached its time limit)$/ : "The call reached its time limit", exact: who !== deaf });
       const deadline = Date.now() + endWait;
       while (Date.now() < deadline) {
-        // Only the Participant's own connection card counts; a remote Participant's row can say "Reconnecting" on a healthy call.
+        // Only the Participant's own "Reconnecting" card counts (not the "Back in the call" toast); a remote Participant's row can say "Reconnecting" on a healthy call.
         if (
           await who.page
-            .locator('[data-part="connection-status"]')
+            .locator('.chalk-connection-card[data-part="connection-status"]')
             .first()
             .isVisible()
             .catch(() => false)
