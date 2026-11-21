@@ -50,3 +50,25 @@ func TestScreenAnnotationAssetBindsCapturedEpochAndCut(t *testing.T) {
 		t.Fatal("change at the capture cut was included")
 	}
 }
+
+func TestBurnedAnnotationKeepsTheRangeButEmitsNoCompositeInk(t *testing.T) {
+	const origin = 100_000
+	fact := ScreenAnnotationFact{
+		Layer:           annotationLayer{BurnedIn: true},
+		InitialAtMS:     origin + 250,
+		InitialRevision: 1,
+		InitialMarks:    []annotationMark{{CommittedAtMS: origin}},
+		ClosedAtMS:      origin + 2_000,
+		Changes:         []annotationRevision{{AtMS: origin + 500, Revision: 2}},
+	}
+	sidecar, emit, err := fact.onCaptureClock(origin, 1_500)
+	if err != nil || !emit || !sidecar.Layer.BurnedIn {
+		t.Fatalf("expected a baked annotation range, got %+v (emit=%v, error=%v)", sidecar, emit, err)
+	}
+	if sidecar.Initial.AtMS != 250 || sidecar.ClosedAtMS != 1_500 {
+		t.Fatalf("wrong baked range: start=%d, end=%d", sidecar.Initial.AtMS, sidecar.ClosedAtMS)
+	}
+	if len(sidecar.Initial.Marks) != 0 || len(sidecar.Changes) != 0 {
+		t.Fatal("baked range retained duplicate overlay ink")
+	}
+}

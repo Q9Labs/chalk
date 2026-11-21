@@ -41,7 +41,12 @@ export function createNativeAnnotationCapture() {
 
       share = track;
       // Chalk's own UI (including annotation controls) must not enter its screen share.
-      await overlay.protectControls(track.id);
+      const protectedControls = await overlay.protectControls(track.id).catch(() => false);
+      if (!protectedControls) {
+        share = undefined;
+        releaseNativeTrack(track);
+        throw new Error("Chalk could not protect the sharing controls.");
+      }
       if (permission) {
         const frame = await overlay.probe(track.id).catch(() => null);
         if (frame && share === track && track.readyState !== "ended") witnesses.set(track, frame);

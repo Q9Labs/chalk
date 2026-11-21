@@ -2,10 +2,10 @@ import type { FileId } from "@excalidraw/excalidraw/element/types";
 import type { ChalkWhiteboardV1Commit, ChalkWhiteboardV1Element, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 import type { AnnotationTextMeasure, ScreenAnnotationFrame } from "@q9labsai/chalk-screen-annotation";
 
-export { fromWireElement } from "../collab/wire";
 import { toFittedWireElement } from "../collab/wire";
 import { annotationBoardElements, type AnnotationWhiteboardPlacement } from "./elements";
 
+export { fromWireElement } from "../collab/wire";
 export { annotationWhiteboardPlacement } from "./elements";
 export type { AnnotationWhiteboardPlacement } from "./elements";
 
