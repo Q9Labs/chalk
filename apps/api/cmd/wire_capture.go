@@ -67,15 +67,14 @@ func (w *apiWiring) wireCaptureWorkers() error {
 		w.options.RecorderFleetController = fleet.service
 		w.options.RecorderFleetWorker = fleet.service
 		w.options.RecorderFleetVerifier = fleet.controllerVerifier
-		var captureRegistrations []captureproviders.Registration
-		if w.ownCapture {
-			binding, err := w.mediaPlaneRegistry.DeploymentBinding()
-			if err != nil {
-				return fmt.Errorf("configure Chalk SFU recording identity: %w", err)
-			}
-			captureRegistrations = append(captureRegistrations, captureproviders.Registration{Binding: binding, Nodes: w.chalkSFU})
+		if !w.ownCapture {
+			return nil
 		}
-		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(w.queries), captureRegistrations...)
+		binding, err := w.mediaPlaneRegistry.DeploymentBinding()
+		if err != nil {
+			return fmt.Errorf("configure Chalk SFU recording identity: %w", err)
+		}
+		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(w.queries), captureproviders.Registration{Binding: binding, Nodes: w.chalkSFU})
 		if err != nil {
 			return fmt.Errorf("configure recording provider registry: %w", err)
 		}

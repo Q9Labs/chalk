@@ -27,21 +27,21 @@ const policyApplied = { recording_policy: "manual", transcription_policy: "on_de
 
 test("a proof Space is created without naming a plane and must be on the requested one", async () => {
   const run = await fakeRun(() => ({ id: "s", effective_media_plane: "chalk_sfu", media_plane: "other", ...policyApplied }));
-  const space = await createSpace(run, "chalk_sfu");
+  const space = await createSpace(run);
   assert.equal(space.id, "s");
   assert.equal("media_plane" in run.requests[0].body, false);
 });
 
 test("a Space on another plane stops the run with media-plane-config", async () => {
   const run = await fakeRun(() => ({ id: "s", effective_media_plane: "cf_sfu", media_plane: "cf_sfu", ...policyApplied }));
-  await assert.rejects(createSpace(run, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /not chalk_sfu/.test(error.message));
+  await assert.rejects(createSpace(run), (error) => error.reason === "media-plane-config" && /not chalk_sfu/.test(error.message));
 });
 
 test("an operator-moved Space is reused for its plane and checked the same way", async () => {
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "pinned";
   try {
     const run = await fakeRun((method) => ({ id: "pinned", effective_media_plane: method === "GET" ? "cf_sfu" : "chalk_sfu" }));
-    await assert.rejects(createSpace(run, "chalk_sfu"), (error) => error.reason === "media-plane-config");
+    await assert.rejects(createSpace(run), (error) => error.reason === "media-plane-config");
     assert.deepEqual(
       run.requests.map((request) => request.method),
       ["GET"],
@@ -55,9 +55,9 @@ test("a reused Space with other policies than the proof asked for stops the run"
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "pinned";
   try {
     const run = await fakeRun(() => ({ id: "pinned", effective_media_plane: "chalk_sfu", recording_policy: "automatic", transcription_policy: "on_demand" }));
-    await assert.rejects(createSpace(run, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /Recording policy automatic/.test(error.message));
+    await assert.rejects(createSpace(run), (error) => error.reason === "media-plane-config" && /Recording policy automatic/.test(error.message));
     const matching = await fakeRun(() => ({ id: "pinned", effective_media_plane: "chalk_sfu", ...policyApplied }));
-    assert.equal((await createSpace(matching, "chalk_sfu")).id, "pinned");
+    assert.equal((await createSpace(matching)).id, "pinned");
   } finally {
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
   }
@@ -205,10 +205,10 @@ test("the automatic-policy proof reuses its own Space and never the manual one",
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC = "automatic-space";
   try {
     const run = await fakeRun((method) => ({ id: method === "GET" ? "automatic-space" : "created", effective_media_plane: "chalk_sfu", recording_policy: "automatic", transcription_policy: "automatic" }));
-    assert.equal((await createSpace(run, "chalk_sfu", automatic)).id, "automatic-space");
+    assert.equal((await createSpace(run, automatic)).id, "automatic-space");
     assert.match(run.requests[0].path, /spaces\/automatic-space$/);
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
-    await assert.rejects(createSpace(await fakeRun(() => ({ id: "created", effective_media_plane: "cf_sfu", recording_policy: "automatic", transcription_policy: "automatic" })), "chalk_sfu", automatic), (error) => error.reason === "media-plane-config" && /not chalk_sfu/.test(error.message));
+    await assert.rejects(createSpace(await fakeRun(() => ({ id: "created", effective_media_plane: "cf_sfu", recording_policy: "automatic", transcription_policy: "automatic" })), automatic), (error) => error.reason === "media-plane-config" && /not chalk_sfu/.test(error.message));
   } finally {
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
@@ -220,13 +220,13 @@ test("Promote's Chalk SFU proof finds its Space by slug and never creates one", 
   try {
     const found = { id: "s", slug: "promote-proof-chalk-sfu", media_plane: "chalk_sfu", ...policyApplied };
     const run = await fakeRun((method) => (method === "GET" ? { spaces: [found], pagination: { next_cursor: "" } } : assert.fail("created a Space")));
-    assert.equal((await createSpace(run, "chalk_sfu")).id, "s");
+    assert.equal((await createSpace(run)).id, "s");
     assert.deepEqual(
       run.requests.map((request) => request.method),
       ["GET"],
     );
     const missing = await fakeRun(() => ({ spaces: [], pagination: { next_cursor: "" } }));
-    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /chalk-sfu-spaces/.test(error.message));
+    await assert.rejects(createSpace(missing), (error) => error.reason === "media-plane-config" && /chalk-sfu-spaces/.test(error.message));
   } finally {
     delete process.env.CHALK_PROOF_SPACE_BY_SLUG;
   }
@@ -237,7 +237,7 @@ test("Promote's Chalk SFU proof uses the Space an operator pinned, the same one 
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "pinned";
   try {
     const run = await fakeRun((method) => (method === "GET" ? { id: "pinned", slug: "operator-space", media_plane: "chalk_sfu", ...policyApplied } : assert.fail("created a Space")));
-    assert.equal((await createSpace(run, "chalk_sfu")).id, "pinned");
+    assert.equal((await createSpace(run)).id, "pinned");
     assert.deepEqual(
       run.requests.map((request) => request.path),
       ["/v1/tenants/t/spaces/pinned"],

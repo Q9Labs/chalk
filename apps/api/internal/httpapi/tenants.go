@@ -10,6 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 
@@ -360,14 +361,25 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 }
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
+	var defaultPlane *string
+	if tenant.DefaultMediaPlane != nil {
+		plane := mediaplane.ProviderChalkSFU.SettingName()
+		defaultPlane = &plane
+	}
+	var mediaConfig *mediaplane.TenantConfig
+	if config, err := mediaplane.ParseTenantConfig(tenant.MediaPlaneProviderConfig); err == nil {
+		config.Provider = mediaplane.ProviderChalkSFU.SettingName()
+		config.Mode = mediaplane.ModeChalkManaged
+		mediaConfig = &config
+	}
 	return tenantResponse{
 		RecordingRenderMode: tenant.RecordingRenderMode,
 		ID:                  tenant.ID.String(),
 		Name:                tenant.Name,
 		ExternalID:          tenant.ExternalID,
 
-		DefaultMediaPlane:                tenant.DefaultMediaPlane,
-		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
+		DefaultMediaPlane:                defaultPlane,
+		MediaPlaneProviderConfig:         mediaConfig,
 		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
 		CORSAllowedOrigins:               append(make([]string, 0, len(tenant.CORSAllowedOrigins)), tenant.CORSAllowedOrigins...),
 		LogoKey:                          tenant.LogoKey,

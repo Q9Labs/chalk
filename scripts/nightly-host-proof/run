@@ -12,8 +12,8 @@
 # rollback). The host is thrown away, so there is no roll-forward leg.
 #
 # --call-proof gives the host the Nightly tunnel, so nightly-api.chalkmeet.com and nightly-sync.chalkmeet.com serve from it while it
-# lives, and after the --then leg and after the rollback leg it seeds a Tenant and runs the camera-share proof on the Cloudflare plane
-# without recording (what the Nightly cloudflare-plane lane runs). It needs the repository's dependencies installed. The Nightly
+# lives, and after the --then leg and after the rollback leg it seeds a Tenant and runs the camera-share proof on the Chalk SFU
+# without recording. It needs the repository's dependencies installed. The Nightly
 # host must stay stopped, and the workflow's concurrency group keeps one host at a time. Recording is proved by the per-cut lanes.
 #
 # AWS credentials come from the environment (the workflow assumes the host-proof role; infrastructure/nightly/host-proof).
@@ -120,8 +120,8 @@ step "Bootstrap finished (the production host's cloud-init)"
 shell "echo $(base64 < "$root/scripts/nightly-host-proof/start-postgres" | tr -d '\n') | base64 -d | bash" > /dev/null
 step "Proof Postgres running on the host"
 
-# Seeds a Tenant on the host through its public address and runs a real call: the camera-share proof on the Cloudflare plane, without
-# recording. The host holds the Cloudflare credentials and the service secret; the run's role cannot read the parameter store, so the
+# Seeds a Tenant on the host through its public address and runs a real call: the camera-share proof on the Chalk SFU, without
+# recording. The host holds the service secret; the run's role cannot read the parameter store, so the
 # secret comes off the host through SSM. SSM keeps every command's output for 30 days, so only ciphertext may appear there: the host
 # encrypts the secret to a key made for this call, and the key never leaves the runner.
 call_proof() {

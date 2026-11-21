@@ -56,7 +56,7 @@ export function bundleFailures(recording) {
 // The Space's automatic policies must start the Recording and the Transcript without any request other than the host's stop.
 export async function captureCall(run, receiver) {
   await checkCaptureSlotFree(run);
-  const space = await createSpace(run, mediaPlane, automatic);
+  const space = await createSpace(run, automatic);
   const policy = transcribes() ? automatic : { ...automatic, transcription: "on_demand" };
   const { episode, end, useSDK } = transcribes() ? await createEpisode(run, space, policy) : await withTranscriptionOnDemand(run, space, () => createEpisode(run, space, policy));
   run.episodeId = episode.id;

@@ -77,9 +77,8 @@ least 14 days.
   DELETE. Other administrators must not write the scoped objects during cleanup.
 - Cleanup requires that object-upload permissions and worker leases have expired
   (with a two-minute margin) and all jobs and Episodes are terminal.
-- Cloudflare SFU and RTK resources are not erased here. Use their verified
-  provider references and the provider's erase APIs. A provider 403 is a
-  leftover, not a deletion.
+- Historical provider resources are outside this database cleanup. Verify any
+  remaining references before removing resources at their original provider.
 - A database-owner credential is needed because the named append-only Recording
   DELETE guards are suspended inside the fenced transaction and restored before
   commit. Constraints stay enabled and unexpected guards fail closed.

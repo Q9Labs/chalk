@@ -11,7 +11,7 @@ import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findChalkSfuSpace, chalkSfuPlane, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
+import { findChalkSfuSpace, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 import { createEpisodeWhenSpaceClears } from "./space-clears.mjs";
 
@@ -41,22 +41,18 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
-// A proof Space on `plane`. The public API refuses a request that names the Chalk SFU, so the
-// proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
-// reuses a Space an operator moved with media-settings, and otherwise the deployment or the
-// Tenant default an operator set decides. Either way the Space must land on `plane`, and a
-// run that cannot get one stops at once with reason media-plane-config. `explicitPlane` names the plane in the request (never for chalk_sfu).
-export async function createSpace(run, plane = mediaPlane, policy = manualPolicy, { explicitPlane = false } = {}) {
-  const pinName = pinnedSpaceVariable(plane, policy);
-  const existing = await pinnedSpace(run, plane, policy, pinName);
+// Use a configured Space or create one. Either must admit new Chalk SFU Episodes.
+export async function createSpace(run, policy = manualPolicy) {
+  const pinName = pinnedSpaceVariable(policy);
+  const existing = await pinnedSpace(run, policy, pinName);
   if (existing) {
-    checkSpacePlane(existing, plane, pinName);
+    checkSpacePlane(existing);
     checkSpacePolicy(existing, policy);
     await save(`${run.directory}/space.json`, existing);
     return existing;
   }
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, metadata: { proof_run_id: run.runId }, mediaPlane: explicitPlane ? plane : undefined }));
-  checkSpacePlane(space, plane, pinName);
+  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, metadata: { proof_run_id: run.runId } }));
+  checkSpacePlane(space);
   checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);
   return space;
@@ -64,9 +60,9 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
 // CHALK_PROOF_SPACE_BY_SLUG=true (Promote's Chalk SFU proof) uses the Space the chalk-sfu-spaces step checked and moved:
 // the pinned Space ID when an operator pinned one, otherwise the Space with the fixed slug (same resolver as the step).
 // Otherwise a Space ID variable reuses the Space an operator moved.
-async function pinnedSpace(run, plane, policy, pinName) {
+async function pinnedSpace(run, policy, pinName) {
   const kind = chalkSfuSpaceKind(policy);
-  if (plane === chalkSfuPlane && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
+  if (kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
     const found = await findChalkSfuSpace(run.apiRequest, run.tenantPath, kind);
     check(found, `The proof Space for ${pinName} or ${chalkSfuSpaces[kind].slug} does not exist: run the chalk-sfu-spaces proof first`, "media-plane-config");
     return found;
@@ -81,15 +77,15 @@ function checkSpacePolicy(space, policy) {
 // The policies of a reused Space are fixed, so each policy set has its own variable: the manual one
 // takes CHALK_PROOF_SPACE_ID_<PLANE> and automatic Recording with automatic Transcription (call-artifacts)
 // takes CHALK_PROOF_SPACE_ID_<PLANE>_AUTOMATIC. Any other policy set is never reused.
-function pinnedSpaceVariable(plane, policy) {
-  const base = `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`;
+function pinnedSpaceVariable(policy) {
+  const base = "CHALK_PROOF_SPACE_ID_CHALK_SFU";
   if (policy.recording === manualPolicy.recording && policy.transcription === manualPolicy.transcription) return base;
   if (policy.recording === "automatic" && policy.transcription === "automatic") return `${base}_AUTOMATIC`;
   return undefined;
 }
-function checkSpacePlane(space, plane, pinName) {
+function checkSpacePlane(space) {
   const got = spacePlane(space);
-  check(got === plane, `A proof Space is on ${got}, not ${plane}: check the Chalk SFU deployment and selected proof Space`, "media-plane-config");
+  check(got === mediaPlane, `A proof Space is on ${got}, not ${mediaPlane}: check the Chalk SFU deployment and selected proof Space`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
   let ended = false;

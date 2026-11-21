@@ -131,7 +131,7 @@ async function shareSteps(pages, participantId, sample, stages) {
 }
 
 async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath) {
-  const space = await createSpace(run, plane);
+  const space = await createSpace(run);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const { episode, createMs } = await openEpisodeInSpace(run, space);
   ending.path = `${path}/${episode.id}`;

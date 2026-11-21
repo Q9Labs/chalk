@@ -19,8 +19,7 @@ const (
 	publicationLivenessEvidenceMaxKeys = 4096
 )
 
-// Cloudflare lists a new track as active several seconds before listeners can pull it
-// (rig runs saw 4.5 s of "track not found"). Only failures older than this count as a stuck track.
+// Give a new publication time to become pullable before treating it as stuck.
 const publicationActiveTrackGrace = 10 * time.Second
 
 type PublisherTrack struct {
@@ -324,7 +323,7 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 				if !due {
 					result.Present++
 					publicationClosuresSkipped.Add(ctx, 1)
-					slog.InfoContext(ctx, "kept media publication that Cloudflare lists as active",
+					slog.InfoContext(ctx, "kept media publication that the SFU lists as active",
 						"event", "media_publication.publisher_track_close_skipped",
 						"listener_failing_ms", failingFor.Milliseconds(),
 					)

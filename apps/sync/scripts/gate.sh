@@ -26,7 +26,7 @@ Checks:
   - scripts/check-file-size (no hand-written file over 300 lines without a reason in size-baseline.txt)
   - mix credo --strict
   - PostgreSQL-backed mix test with zero skipped cases
-  - Real API bridge readiness while Cloudflare cleanup is blocked
+  - Real API bridge readiness while SFU cleanup is blocked
 EOF
 }
 

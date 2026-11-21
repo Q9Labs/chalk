@@ -87,10 +87,8 @@ export async function loadConfig({ readiness = true, capabilities = true } = {})
   }
   return fields;
 }
-// The proof's browser SDK runs both media providers, so an Episode in a Space
-// that chooses the Chalk SFU binds it, as the dashboard's do.
+// The proof declares that its SDK can use the Chalk SFU.
 export const mediaProviders = { "X-Chalk-Media-Providers": "chalk_sfu" };
-// The Space's media plane; recording runs only on Cloudflare.
 export const mediaPlane = "chalk_sfu";
 export async function request(config, method, path, body, authorization = {}, extraHeaders = {}, signal) {
   const response = await fetch(new URL(path, config.api_url), {

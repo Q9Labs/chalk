@@ -55,7 +55,7 @@ async function toggle(page, { kind, enabled }) {
 }
 
 export async function longCallProof(run, receiver) {
-  const space = await createSpace(run, mediaPlane);
+  const space = await createSpace(run);
   const { episode, end } = await createEpisode(run, space);
   run.episodeId = episode.id;
   console.log(`Joining ${guestCount} synthetic camera/voice guests on ${mediaPlane}`);

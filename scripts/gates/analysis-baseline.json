@@ -303,7 +303,6 @@
     "sdks/typescript/react/src/components/space-header/CallDetails.tsx": [27],
     "sdks/typescript/react/src/components/space-header/call-network.ts": [25],
     "sdks/typescript/react/src/components/space-header/SpaceHeader.tsx": [37],
-    "sdks/typescript/client/src/media/cloudflare-sfu.test.ts": [22],
     "sdks/typescript/react/src/components/space-header/useCallShortcuts.ts": [38],
     "sdks/typescript/react-native/src/frame/CallFrame.tsx": [27],
     "packages/whiteboard/src/collab/engine.ts": [25],

@@ -1598,7 +1598,8 @@ export interface components {
     };
     CreateTenantRequest: {
       cors_allowed_origins?: string[];
-      default_media_plane?: string | null;
+      /** @enum {string|null} */
+      default_media_plane?: "chalk_sfu" | null;
       external_id?: string | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
@@ -2095,13 +2096,15 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
       default_episode_duration_seconds: number;
-      effective_media_plane: string | null;
+      /** @enum {string|null} */
+      effective_media_plane: "chalk_sfu" | null;
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
       /** @enum {string} */
       media_plane: "chalk_sfu";
-      media_plane_setting: string | null;
+      /** @enum {string|null} */
+      media_plane_setting: "chalk_sfu" | null;
       metadata:
         | {
             [key: string]: unknown;
@@ -2499,7 +2502,8 @@ export interface components {
     Tenant: {
       cors_allowed_origins: string[];
       created_at: components["schemas"]["DateTimeString"];
-      default_media_plane: string | null;
+      /** @enum {string|null} */
+      default_media_plane: "chalk_sfu" | null;
       external_id: string | null;
       id: components["schemas"]["TenantId"];
       logo_key: string | null;
@@ -2949,7 +2953,8 @@ export interface components {
     };
     UpdateTenantRequest: {
       cors_allowed_origins?: string[];
-      default_media_plane?: string | null;
+      /** @enum {string|null} */
+      default_media_plane?: "chalk_sfu" | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name?: string;

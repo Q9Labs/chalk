@@ -1,5 +1,5 @@
 // This fixture runs the real private API bridge and database-backed executor.
-// Only the external Cloudflare endpoint is faked.
+// The track closer is held behind a latch to exercise in-flight work.
 package main
 
 import (
@@ -105,18 +105,7 @@ func run() error {
 			releaseOnce.Do(func() { close(release) })
 			w.WriteHeader(204)
 		default:
-			if r.Method != http.MethodPut || r.URL.Path != "/apps/test-app/sessions/closed-session/tracks/close" {
-				http.Error(w, "unexpected vendor request", 400)
-				return
-			}
-			enterOnce.Do(func() { close(entered) })
-			select {
-			case <-release:
-				w.WriteHeader(http.StatusGone)
-				_, _ = w.Write([]byte(`{"errorCode":"session_error","errorDescription":"Session is gone"}`))
-			case <-r.Context().Done():
-			case <-ctx.Done():
-			}
+			http.NotFound(w, r)
 		}
 	}))
 	defer vendor.Close()

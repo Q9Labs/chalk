@@ -29,7 +29,7 @@ export async function deployHoldProof(run, receiver) {
   check(!(await exists(doneFile)), `${doneFile} exists from an earlier run: remove it before the proof starts`);
   const joined = [];
   for (const [index, plane] of calls.entries()) {
-    const space = await createSpace(run, plane);
+    const space = await createSpace(run);
     check(!joined.some((call) => call.space.id === space.id), `Calls ${index} and ${index + 1} would share Space ${space.id}: unset the pinned Space variable for ${plane}, or give each plane one call`);
     const { episode, end } = await createEpisode(run, space);
     const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestsPerCall, { plane });

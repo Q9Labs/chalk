@@ -40,7 +40,7 @@ export const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
 export const RECOVERY_HEALTHY_RESET_MS = 10_000;
 // A publish rejected on a connection that is not up replaces it at most this many times, after these delays.
 export const DEAD_CONNECTION_REPLACEMENT_DELAYS_MS = [0, 1000] as const;
-// Cloudflare answers an offer on a session that never came up with 406, and later calls on it with 410 or 404.
+// Statuses that require a new session rather than retrying the same one.
 export const DEAD_SESSION_STATUSES: ReadonlySet<number | undefined> = new Set([404, 406, 410]);
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.
 export const ICE_RESTART_BUDGET_MS = 8000;
@@ -50,8 +50,7 @@ export const ICE_RESTART_FAILURE = Object.freeze({ code: "ice_connection_failed"
 export const VIEWER_LAYER_BATCH_SIZE = 16;
 // Adaptation uses at most 12 of the participant's 60 call-control writes/minute.
 export const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
-// Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
-// resume operation rather than trusting Chalk's registry as provider liveness.
+// Bound reuse for SFU nodes that do not advertise durable idle sessions.
 export const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false, keepsIdleSession: false });
 export const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";

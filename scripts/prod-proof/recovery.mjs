@@ -75,7 +75,7 @@ async function waitReady(page) {
 }
 
 async function callUnderFault(run, origin, settings) {
-  const space = await createSpace(run, "chalk_sfu");
+  const space = await createSpace(run);
   const { path, episode } = await startTrackedEpisode(run, space);
   const ending = episodeEnd(run, `${path}/${episode.id}`);
   const executablePaths = settings.guest2Chromium ? { 1: settings.guest2Chromium } : undefined;

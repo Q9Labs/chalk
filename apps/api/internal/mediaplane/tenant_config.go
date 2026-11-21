@@ -20,11 +20,11 @@ var (
 )
 
 // TenantConfig is the media plane document stored on a Tenant. It says whether
-// media is on and whether Chalk or the Tenant supplies the credentials.
+// media is enabled. Provider and mode are retained for the public contract.
 type TenantConfig struct {
-	Enabled  *bool  `json:"enabled"`
-	Provider string `json:"provider"`
-	Mode     string `json:"mode"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 }
 
 // ChalkManagedTenantConfig is the document of a Tenant that Chalk runs the provider for.

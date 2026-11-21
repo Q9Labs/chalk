@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join as joinPath, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, devices, webkit } from "playwright";
-import { chalkSfuPlane } from "../prod-proof/chalk-sfu-spaces.mjs";
 import { cleanupRun } from "../prod-proof/cleanup.mjs";
 import { createProofKey, createSpace } from "../prod-proof/proofs.mjs";
 import { createRun, loadConfig, maskCredentials, save } from "../prod-proof/runtime.mjs";
@@ -44,7 +43,7 @@ try {
   signal.throwIfAborted();
   run = await createRun(config, directory, signal, runId);
   await createProofKey(run);
-  const space = await createSpace(run, chalkSfuPlane);
+  const space = await createSpace(run);
   await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
   const invite = await run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}/public-invite`, { enabled: true });
   const url = new URL(invite.canonical_url);

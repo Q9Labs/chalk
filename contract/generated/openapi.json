@@ -13777,7 +13777,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu"],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -15401,6 +15401,7 @@
             "type": "integer"
           },
           "effective_media_plane": {
+            "enum": ["chalk_sfu"],
             "type": ["string", "null"]
           },
           "id": {
@@ -15417,6 +15418,7 @@
             "type": "string"
           },
           "media_plane_setting": {
+            "enum": ["chalk_sfu"],
             "type": ["string", "null"]
           },
           "metadata": {
@@ -16350,6 +16352,7 @@
             "$ref": "#/components/schemas/DateTimeString"
           },
           "default_media_plane": {
+            "enum": ["chalk_sfu"],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -17109,7 +17112,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu"],
             "type": ["string", "null"]
           },
           "logo_key": {
