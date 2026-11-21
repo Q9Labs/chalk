@@ -12,7 +12,7 @@ import { containerArguments, containerEnvironment } from "./containers.mjs";
 import { dashboardArtifactBindings } from "./dashboard-seed.mjs";
 import { previewAudio, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { executeDevCommand } from "./exec.mjs";
-import { preflight, resolveDevConfig } from "./config.mjs";
+import { preflight, probePort, resolveDevConfig } from "./config.mjs";
 import { startChalkSfu } from "./chalk-sfu.mjs";
 import { spawnCommand, killTree } from "../lib/platform.mjs";
 
@@ -52,12 +52,16 @@ test("dev preflight rejects an occupied SFU UDP port before starting containers"
   await once(listener, "listening");
   const port = listener.address().port;
   const dev = { ...resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: "192.0.2.42" } }), ports: { sfuMedia: port } };
+  const options = {
+    requiredTools: [],
+    probe: (port, host, transport) => (transport === "udp" ? probePort(port, host, transport) : { available: true }),
+  };
   try {
-    await assert.rejects(preflight(dev, { requiredTools: [] }), new RegExp(`ports already in use: sfuMedia:${port}/udp`));
+    await assert.rejects(preflight(dev, options), new RegExp(`ports already in use: sfuMedia:${port}/udp`));
   } finally {
     await new Promise((done) => listener.close(done));
   }
-  assert.equal((await preflight(dev, { requiredTools: [] })).ok, true);
+  assert.equal((await preflight(dev, options)).ok, true);
 });
 
 test("ownership accepts a real forward-slash Node invocation with Windows recorded separators", async () => {
