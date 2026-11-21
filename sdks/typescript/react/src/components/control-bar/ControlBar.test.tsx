@@ -53,9 +53,7 @@ it("keeps Raise hand in the dock while the reactions button is disabled for a re
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   let raised = 0;
   const root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root.render(<ControlBarSurface buttons={["reactions", "handraise"]} detectDevices={false} onOpenReactions={() => {}} reactionsDisabled onToggleHandRaise={() => void raised++} />),
-  );
+  act(() => root.render(<ControlBarSurface buttons={["reactions", "handraise"]} detectDevices={false} onOpenReactions={() => {}} reactionsDisabled onToggleHandRaise={() => void raised++} />));
   const dock = document.querySelector("[data-part=dock]");
   expect(dock?.querySelector<HTMLButtonElement>("[data-reactions-trigger]")?.disabled).toBe(true);
   const hand = dock?.querySelector<HTMLButtonElement>("[aria-label='Raise hand']");
