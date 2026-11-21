@@ -106,7 +106,12 @@ export async function runJourney(journey, body) {
     const created = host.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
     await host.page.getByRole("button", { name: "Join call", exact: true }).click();
     const response = await created;
-    if (response.status() !== 201) throw new Error(`Start call answered HTTP ${response.status()}`);
+    if (response.status() !== 201) {
+      const body = await response.json().catch(() => null);
+      const code = body?.error?.code;
+      const detail = typeof code === "string" && /^[a-z0-9_.]+$/.test(code) ? ` (${code})` : "";
+      throw new Error(`Start call answered HTTP ${response.status()}${detail}`);
+    }
     const call = await response.json();
     const mediaPlane = call.arrival?.access?.media?.provider;
     if (mediaPlane !== "chalk_sfu") throw new Error(`Start call issued ${mediaPlane ?? "no media grant"}, not chalk_sfu`);

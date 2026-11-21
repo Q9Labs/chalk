@@ -174,13 +174,8 @@ func validSubject(subject Subject) bool {
 		subject.ParticipantGeneration <= 0 {
 		return false
 	}
-	switch subject.Provider {
-	case ProviderChalkSFU:
-		return subject.ProviderSubject == "" && validConnectionID(subject.ConnectionID)
-
-	default:
-		return false
-	}
+	return subject.Provider == ProviderChalkSFU &&
+		subject.ProviderSubject == "" && validConnectionID(subject.ConnectionID)
 }
 
 func canonicalID(value string) (utilities.ID, bool) {

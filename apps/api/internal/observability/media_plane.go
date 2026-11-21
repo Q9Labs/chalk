@@ -135,12 +135,10 @@ func (t MediaPlaneResolutionTelemetry) RecordResolution(ctx context.Context, res
 }
 
 func boundedMediaPlaneProvider(provider mediaplane.Provider) string {
-	switch provider {
-	case mediaplane.ProviderChalkSFU:
+	if provider == mediaplane.ProviderChalkSFU {
 		return provider.SettingName()
-	default:
-		return "unknown"
 	}
+	return "unknown"
 }
 
 func boundedMediaPlaneConfigurationSource(source string) string {

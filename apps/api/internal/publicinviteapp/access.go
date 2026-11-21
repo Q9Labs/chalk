@@ -437,12 +437,8 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 	if subject.TenantID != arrival.TenantID || subject.SpaceID != arrival.SpaceID || subject.EpisodeID != arrival.EpisodeID || subject.ParticipantID != arrival.ParticipantID || subject.ParticipantGeneration != arrival.ParticipantGeneration || subject.Provider != arrival.Provider {
 		return false
 	}
-	switch arrival.Provider {
-	case publicinvites.PublicProviderChalkSFU:
-		return subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
-	default:
-		return false
-	}
+	return arrival.Provider == publicinvites.PublicProviderChalkSFU &&
+		subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 }
 
 var _ publicinvites.Access = accessPort{}

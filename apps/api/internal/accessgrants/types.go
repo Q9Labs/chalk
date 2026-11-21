@@ -91,13 +91,7 @@ func RequireRouteSubject(subject Subject, route RouteSubject) error {
 }
 
 func sameProviderBinding(subject Subject, route RouteSubject) bool {
-	switch subject.Provider {
-	case ProviderChalkSFU:
-		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
-			subject.ConnectionID != "" &&
-			subject.ConnectionID == route.ConnectionID
-
-	default:
-		return false
-	}
+	return subject.Provider == ProviderChalkSFU &&
+		subject.ProviderSubject == "" && route.ProviderSubject == "" &&
+		subject.ConnectionID != "" && subject.ConnectionID == route.ConnectionID
 }
