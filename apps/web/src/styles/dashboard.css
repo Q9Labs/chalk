@@ -1262,7 +1262,7 @@
   align-items: center;
   gap: var(--space-3);
   min-height: 64px;
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border-radius: var(--corner-xl);
 }
 
@@ -1340,31 +1340,24 @@
   min-width: 120px;
 }
 
-/* The people on a call lead its row, in a column as wide as three faces and set against the name, so one face sits
-   right beside the name and every name starts at the same edge. */
+/* The people on a call sit beside its time, so every title starts at the same edge with no gap before it. */
 .site .dash .fcol {
   display: flex;
   justify-content: flex-end;
-  flex: none;
-  width: 68px;
 }
 
-/* The overflow count is one more face: the same size and ring, a visible fill, and the same figures. */
+/* The overflow count joins the stack as one more face. */
 .site .dash .fcol .faces .more {
-  /* The face before it overlaps the chip by 8px, so the count centres in what stays visible. */
-  padding-left: var(--space-2);
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  min-width: var(--space-8);
+  height: var(--space-8);
   margin-left: calc(var(--space-2) * -1);
-  border-radius: 50%;
-  /* A fill that reads as a face on the black canvas as well as on light. */
-  background: color-mix(in srgb, var(--chalk-text) 20%, var(--chalk-canvas));
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-raised);
   box-shadow: var(--elevation-halo-canvas);
-  color: var(--chalk-text);
-  font: 600 var(--type-caption)/1 var(--chalk-font-family);
-  font-variant-numeric: tabular-nums;
+  color: var(--chalk-muted-text);
 }
 
 /* Home's rows: a hairline between calls, hidden beside the one under the pointer. */
@@ -1382,15 +1375,6 @@
 .site .dash .calls .row:hover::before,
 .site .dash .calls .row:hover + .row::before {
   opacity: 0;
-}
-
-/* A call nobody has joined yet keeps one quiet outlined face, so its name starts where every other name does. */
-.site .dash .fcol .noface {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
-  box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
 }
 
 .site .dash .row:hover .fcol .faces .more {
@@ -2945,28 +2929,6 @@
   to {
     opacity: 0;
   }
-}
-
-/* "Your call is ready": the link, who can join and the language, one under the other at the dialog's full width. */
-.site .dash .cready {
-  display: grid;
-  gap: var(--space-5);
-  margin-top: var(--space-4);
-}
-
-.site .dash .cready .field + .field {
-  margin-top: 0;
-}
-
-.site .dash .cready .lp,
-.site .dash .cready .lp-field {
-  display: flex;
-  max-width: none;
-}
-
-.site .dash .cready .lp-trigger {
-  height: 44px;
-  padding: 0 var(--space-4);
 }
 
 /* A setting shown as its current value that opens where it changes. */

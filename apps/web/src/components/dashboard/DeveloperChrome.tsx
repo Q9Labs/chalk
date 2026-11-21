@@ -23,12 +23,17 @@ export function Shell({ nav, children }: { readonly nav?: ReactNode; readonly ch
   );
 }
 
-/** The section the reader is in: the last one whose top has passed the top bar. */
+/**
+ * The section the reader is in: the last one whose top has passed the middle of the window. A jump link centres its
+ * target and a nav click puts a section at the top, and both leave the section they name as the last one above the
+ * middle, which a line near the top bar did not for a short section centred below it.
+ */
 function useActiveSection(ids: readonly string[]) {
   const [active, setActive] = useState(ids[0] ?? "");
   useEffect(() => {
     const update = () => {
-      const passed = ids.filter((id) => (document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= 120);
+      const middle = window.innerHeight / 2 + 1;
+      const passed = ids.filter((id) => (document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= middle);
       setActive(passed.at(-1) ?? ids[0] ?? "");
     };
     update();

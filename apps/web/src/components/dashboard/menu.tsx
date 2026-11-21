@@ -73,7 +73,7 @@ export function MenuItem({ icon, danger, onSelect, children }: { readonly icon?:
 }
 
 /** The rename and archive entries every call menu ends with. */
-export function RenameArchiveItems({ close, onRename, onArchive, archiveIcon = "trash" }: { readonly close: () => void; readonly onRename: () => void; readonly onArchive: () => void; readonly archiveIcon?: IconName }) {
+export function RenameArchiveItems({ close, onRename, onArchive }: { readonly close: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
   return (
     <>
       <MenuItem
@@ -87,7 +87,7 @@ export function RenameArchiveItems({ close, onRename, onArchive, archiveIcon = "
       </MenuItem>
       <div className="msep" />
       <MenuItem
-        icon={archiveIcon}
+        icon="archive"
         danger
         onSelect={() => {
           close();
