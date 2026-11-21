@@ -38,7 +38,7 @@ export type ScreenAnnotationOptions = {
   readonly actions?: ScreenAnnotationActions;
 };
 
-export type StageAnnotation = Omit<ScreenAnnotationOptions, "publicationId"> & { readonly publicationId?: string };
+export type StageAnnotation = Omit<ScreenAnnotationOptions, "publicationId"> & { readonly publicationId?: string; readonly boardSaveEnabled?: boolean };
 
 export type Tool = ScreenAnnotationShape["kind"] | "laser" | "eraser";
 export type Ink = {

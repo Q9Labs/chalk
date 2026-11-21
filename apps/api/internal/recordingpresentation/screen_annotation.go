@@ -31,6 +31,7 @@ type ScreenAnnotationFact struct {
 }
 
 type annotationLayer struct {
+	BurnedIn      bool                             `json:"burned_in,omitempty"`
 	ID            string                           `json:"layer_id"`
 	PublicationID captureplan.PublicationReference `json:"publication_id"`
 	SharerID      string                           `json:"sharer_id"`
@@ -169,6 +170,10 @@ func (fact ScreenAnnotationFact) onCaptureClock(origin, duration int64) (annotat
 		Version: 1, Layer: fact.Layer, ClosedAtMS: closedAt,
 		Initial: annotationCheckpoint{initialAt, fact.InitialRevision, fact.InitialPaused, initialMarks},
 		Changes: make([]annotationRevision, 0, len(fact.Changes)),
+	}
+	if fact.Layer.BurnedIn {
+		sidecar.Initial.Marks = []annotationMark{}
+		return sidecar, true, nil
 	}
 	lastAt := initialAt
 	hasInk := len(initialMarks) != 0

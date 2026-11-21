@@ -46,6 +46,31 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
     Proof.assert_lifecycle_evidence(connection, host.episode.episode_id, layer)
   end
 
+  test "baked mode survives retries and cannot cross a replacement publication", ctx do
+    %{connection: connection, host: host, participant: viewer, publication: publication} = ctx
+    baked = put_in(bind_frame(publication)["command"]["burned_in"], true)
+
+    assert {:ok, {:screen_annotation, ^baked}} = ProtocolV1.decode(JSON.encode!(baked))
+
+    assert {:error, :invalid_annotation_frame} =
+             ProtocolV1.decode(JSON.encode!(put_in(baked["command"]["burned_in"], false)))
+
+    assert {:error, "invalid_target"} = Repository.command(viewer, baked)
+    assert {:ok, %{"layer_id" => layer}} = Repository.command(host, baked)
+    assert {:ok, %{"layer_id" => ^layer}} = Repository.command(host, bind_frame(publication))
+
+    assert {:ok, _, %{binding: %{"layer_id" => ^layer, "burned_in" => true}}, _, _} =
+             Repository.read(viewer)
+
+    replacement = publication(1, "app-only")
+    observe(connection, host, 2, replacement)
+    assert {:error, "invalid_target"} = Repository.command(host, baked)
+    assert {:ok, %{"layer_id" => next}} = Repository.command(host, bind_frame(replacement))
+    refute next == layer
+    assert {:ok, _, %{binding: %{"layer_id" => ^next} = binding}, _, _} = Repository.read(viewer)
+    refute Map.has_key?(binding, "burned_in")
+  end
+
   test "draw grants are shared, and stale fences cannot restore cleared ink or claim a receipt",
        ctx do
     %{host: host, participant: participant, publication: publication} = ctx

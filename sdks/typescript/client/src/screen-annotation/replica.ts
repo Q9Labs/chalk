@@ -8,6 +8,7 @@ type Result = ScreenAnnotationResult;
 type Pending = {
   readonly wire: string;
   readonly publicationId?: string;
+  readonly burnedIn?: true;
   readonly resolve: (result: Result) => void;
   readonly timeout: ReturnType<typeof setTimeout>;
 };
@@ -25,6 +26,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   readonly #presence = new Map<string, Wire["ServerPresence"]>();
   #snapshot: ScreenAnnotationSnapshot = { status: "connecting" };
   #live = false;
+  #burnIn = false;
   #retryAfterReconnect = false;
   #sample: Sample | null = null;
   #sampleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -46,8 +48,18 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   };
   serverNowMs = (): number => performance.now() + this.#clockOffset;
 
-  enterLive(negotiated: boolean): void {
+  get burnInNegotiated(): boolean {
+    return this.#live && this.#burnIn;
+  }
+
+  enterLive(negotiated: boolean, burnIn = false): void {
     this.#live = negotiated;
+    this.#burnIn = burnIn;
+    if (!burnIn) {
+      for (const [id, pending] of this.#pending) {
+        if (pending.burnedIn) this.#settle(id, unavailable);
+      }
+    }
     this.#retryAfterReconnect = negotiated;
     if (negotiated) this.#requestState();
     else this.#reset("unavailable", true);
@@ -91,11 +103,12 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     }
   }
 
-  bind(publicationId: string, frame: Wire["FrameSize"]): Promise<Result> {
+  bind(publicationId: string, frame: Wire["FrameSize"], burnedIn = false): Promise<Result> {
     if (this.#state()?.layer.publication_id === publicationId || Array.from(this.#pending.values()).some((pending) => pending.publicationId === publicationId)) {
       return Promise.resolve(unavailable);
     }
-    return this.#command(null, { kind: "bind", publication_id: publicationId, frame });
+    if (burnedIn && !this.burnInNegotiated) return Promise.resolve(unavailable);
+    return this.#command(null, { kind: "bind", publication_id: publicationId, frame, ...(burnedIn ? { burned_in: true } : {}) });
   }
 
   dispatch(target: Target, command: Wire["Command"]): Promise<Result> {
@@ -138,6 +151,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
       this.#pending.set(operationId, {
         wire,
         publicationId: command.kind === "bind" ? command.publication_id : undefined,
+        burnedIn: command.kind === "bind" ? command.burned_in : undefined,
         resolve,
         timeout: setTimeout(() => this.#settle(operationId, unknown), 10_000),
       });

@@ -87,7 +87,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
         fetch: platform.fetch,
       });
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers, dependencies.telemetry ? appTelemetry(dependencies.telemetry) : silentTelemetry)),
+        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers, dependencies.telemetry ? appTelemetry(dependencies.telemetry) : silentTelemetry, dependencies.mediaDevices.verifiedAnnotationCapture)),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
@@ -108,10 +108,10 @@ export class SpaceClientCore {
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects, telemetry: AppTelemetry) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects, telemetry: AppTelemetry, verifiedCapture?: ConstructorParameters<typeof AnnotationSession>[1]) {
     this.telemetry = telemetry;
     this.#connection = connection;
-    this.annotation = new AnnotationSession(connection);
+    this.annotation = new AnnotationSession(connection, verifiedCapture);
     this.#store = store;
     this.controllers = controllers;
     this.#store.updateConnection(connection.getSnapshot());

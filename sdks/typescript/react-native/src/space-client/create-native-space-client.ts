@@ -21,7 +21,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
-import { releaseNativeTrack } from "../media/native-release-track";
+import { createNativeAnnotationCapture } from "../screen-annotation/android-capture";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
 import { ensureRandomUUID } from "./random-uuid";
@@ -64,6 +64,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
   const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
   const telemetry = new TelemetryOutbox({ platform: createNativeTelemetryPlatform({ appState: AppState, fetch }), endpoint: (tenantId) => apiUrls.telemetry(apiBaseURL, tenantId) });
+  const annotationCapture = createNativeAnnotationCapture();
   const dependencies: PlatformDependencies = {
     telemetry,
     clock: {
@@ -79,8 +80,9 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
           throw toNativeCaptureError(cause);
         }
       },
-      getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
-      releaseTrack: releaseNativeTrack,
+      getDisplayMedia: annotationCapture.getDisplayMedia,
+      releaseTrack: annotationCapture.releaseTrack,
+      verifiedAnnotationCapture: annotationCapture.verifiedAnnotationCapture,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
     createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),
@@ -109,9 +111,11 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   );
   client.subscribe(() => session.setCallOpen(client, CALL_OPEN_STATUSES.has(client.getSnapshot().connection.status)));
   // A disposed client stops publishing, so a dispose without leave() must clear the open-call mark itself.
+  const detachAnnotationCapture = annotationCapture.attach(client);
   const disposeClient = client.dispose;
   return Object.assign(client, {
     dispose: () => {
+      detachAnnotationCapture();
       disposeClient.call(client);
       session.setCallOpen(client, false);
     },

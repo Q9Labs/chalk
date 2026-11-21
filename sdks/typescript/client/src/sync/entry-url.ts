@@ -8,6 +8,7 @@ export function syncEntryUrl(value: string, generation: number | null, confirmat
   // Previous Sync ignores this query, never echoes it in the welcome, and never gets a quality frame.
   url.searchParams.set("connection_quality", "1");
   url.searchParams.set("screen_annotation", "1");
+  url.searchParams.set("screen_annotation_burn_in", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

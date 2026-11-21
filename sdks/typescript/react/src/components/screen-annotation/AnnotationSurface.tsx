@@ -109,7 +109,7 @@ function ActiveAnnotationSurface({
         retry?.frame ??
         captureAnnotationVideoFrame(video, {
           publicationId: live.layer.publication_id,
-          marks: live.marks,
+          marks: live.layer.burned_in ? [] : live.marks,
           paused: live.paused,
           sharerId: live.layer.sharer_id,
           nowMs: client.serverNowMs(),

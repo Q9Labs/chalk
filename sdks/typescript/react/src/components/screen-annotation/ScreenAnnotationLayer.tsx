@@ -77,7 +77,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       const preview = optimistic.current;
       if (preview && (preview.expiresAt <= nowMs || (preview.revision !== undefined && state.revision >= preview.revision) || state.marks.some((mark) => mark.draft.mark_id === preview.draft.mark_id))) optimistic.current = null;
       const ownDraft = gesture.current ? gestureDraft(gesture.current) : (optimistic.current?.draft ?? null);
-      const remote = presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
+      const remote = state.layer.burned_in ? [] : presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
       const local =
         actor && drawing && (cursor.current || ownDraft)
           ? [
@@ -93,7 +93,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
               } satisfies ScreenAnnotationPresence,
             ]
           : [];
-      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.marks, presence: tracker.current.update([...remote, ...local], nowMs), nowMs });
+      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...local], nowMs), nowMs });
       const expiring = state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
       if (expiring || optimistic.current || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < 380)) schedule();
     };

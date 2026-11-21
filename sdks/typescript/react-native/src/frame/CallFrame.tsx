@@ -38,6 +38,7 @@ export type CallFrameProps = {
   readonly displayName?: string;
   readonly callName?: string;
   readonly inviteLink?: string;
+  readonly annotationBoardSaveEnabled?: boolean;
   readonly annotationActions?: ScreenAnnotationActions;
   readonly onLeave?: () => void;
   readonly onOpenSettings?: (permission: Permission) => void;
@@ -52,9 +53,9 @@ type OpenSheet = "more" | "people" | "chat" | "details" | null;
  * overlays, the menus layer and the toasts layer, each inside the safe area for the current
  * arrangement. Each region lives in its own folder so the part lanes can work in parallel.
  */
-export function CallFrame({ displayName, callName = "Call", inviteLink, annotationActions, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
+export function CallFrame({ displayName, callName = "Call", inviteLink, annotationActions, annotationBoardSaveEnabled, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
-  const annotation = useMemo(() => ({ client: screenAnnotationFor(client), actions: annotationActions }), [client, annotationActions]);
+  const annotation = useMemo(() => ({ client: screenAnnotationFor(client), actions: annotationActions, boardSaveEnabled: annotationBoardSaveEnabled }), [client, annotationActions, annotationBoardSaveEnabled]);
   const annotationControls = usePortalCount("annotation");
   const connection = useConnection();
   const media = useMedia();

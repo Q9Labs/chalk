@@ -1,7 +1,7 @@
 import type { ConnectionPorts } from "../connection";
 import type { ConnectionLifecycleCapability } from "../connection/lifecycle";
 import { confirmedScreenPublication } from "../space-client/media-snapshot";
-import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
+import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
 import type { AnnotationReplica } from "./replica";
 
 const unavailable: ScreenAnnotationSnapshot = { status: "unavailable" };
@@ -13,10 +13,11 @@ export class AnnotationSession implements ScreenAnnotationClient {
   #unbind: (() => void) | undefined;
   readonly #unsubscribePorts: () => void;
 
-  constructor(connection: ConnectionLifecycleCapability) {
+  constructor(connection: ConnectionLifecycleCapability, private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
+  supportsBurnIn = (): boolean => this.#replica?.burnInNegotiated === true;
   getSnapshot = () => this.#replica?.getSnapshot() ?? unavailable;
   serverNowMs = () => this.#replica?.serverNowMs() ?? Date.now();
   subscribe = (listener: () => void): (() => void) => {
@@ -54,14 +55,15 @@ export class AnnotationSession implements ScreenAnnotationClient {
       // Wait for Sync to observe this exact locally published track.
       const publicationId = confirmedScreenPublication(screen, sync);
       if (!screen || !publicationId || annotation.state?.layer.publication_id === publicationId) return;
-      const { width, height } = screen.track.getSettings?.() ?? {};
+      const witness = replica.burnInNegotiated ? this.verifiedCapture?.(screen.track) : undefined;
+      const { width, height } = witness ?? screen.track.getSettings?.() ?? {};
       if (!width || !height) {
         schedule();
         return;
       }
 
       binding = true;
-      void replica.bind(publicationId, { width, height }).finally(() => {
+      void replica.bind(publicationId, { width, height }, witness !== undefined).finally(() => {
         binding = false;
         if (!disposed) schedule();
       });

@@ -22,7 +22,7 @@ export function mount(engine) {
     context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     const nowMs = serverNow + performance.now() - receivedAt;
     const presence = trackPresence.update(samples, nowMs);
-    engine.paintAnnotation(context, { ...scene, nowMs, presence });
+    engine.paintAnnotation(context, { ...scene, marks: scene.burnedIn ? [] : scene.marks, nowMs, presence });
     if (presence.length || scene.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs)) {
       animation = requestAnimationFrame(paint);
     }
@@ -41,6 +41,20 @@ export function mount(engine) {
     serverNow = nowMs;
     receivedAt = performance.now();
     requestPaint();
+  };
+  window.chalkAnnotationSystemOverlay = (content, presence, nowMs) => {
+    scene = {
+      ...content,
+      rect: { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight },
+      clip: { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight },
+    };
+    window.chalkAnnotationPresence(presence, nowMs);
+  };
+  window.chalkAnnotationMeasure = async (request, samples) => {
+    await document.fonts.load('600 16px "Chalk Annotation Figtree"');
+    const measure = engine.canvasAnnotationTextMeasure(context);
+    const widths = samples.map(([text, size]) => measure(text, size));
+    window.ReactNativeWebView?.postMessage(JSON.stringify({ measure: request, widths }));
   };
   window.chalkAnnotationHit = (request, point, actor) => {
     if (!scene || !engine.hitTestAnnotation) return;

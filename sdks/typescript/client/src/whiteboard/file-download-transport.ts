@@ -85,9 +85,12 @@ function isUploadInstructions(value: unknown): value is UploadInstructions {
   if (typeof value !== "object" || value === null || !("ready" in value)) return false;
   if (value.ready === true) return true;
   if (value.ready !== false || !("uploadUrl" in value) || typeof value.uploadUrl !== "string" || !("headers" in value)) return false;
-  if (!URL.canParse(value.uploadUrl)) return false;
-  const { protocol } = new URL(value.uploadUrl);
-  return (protocol === "https:" || protocol === "http:") && typeof value.headers === "object" && value.headers !== null && !Array.isArray(value.headers) && Object.values(value.headers).every((header: unknown) => typeof header === "string");
+  try {
+    const { protocol } = new URL(value.uploadUrl);
+    return (protocol === "https:" || protocol === "http:") && typeof value.headers === "object" && value.headers !== null && !Array.isArray(value.headers) && Object.values(value.headers).every((header: unknown) => typeof header === "string");
+  } catch {
+    return false;
+  }
 }
 
 function responseError(response: Response, operation: ChalkWhiteboardV1Failure["operation"]): ChalkWhiteboardV1Error {

@@ -12,6 +12,7 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
       ChalkAudioRouteModule(reactContext),
       ChalkCallServiceModule(reactContext),
       ChalkAnnotationFramesModule(reactContext),
+      ChalkAnnotationOverlayModule(reactContext),
     )
   }
 

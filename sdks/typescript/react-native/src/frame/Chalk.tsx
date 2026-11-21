@@ -25,6 +25,8 @@ export type ChalkProps = {
   readonly callName?: string;
   /** The call's link, which More and the call details offer to copy, share and show as a QR code. */
   readonly inviteLink?: string;
+  /** Enable the built-in Save to board action when the backing API supports whiteboard uploads. */
+  readonly annotationBoardSaveEnabled?: boolean;
   readonly annotationActions?: ScreenAnnotationActions;
   /** Dark by default. Set it with `onColorSchemeChange` to keep the person's choice. */
   readonly colorScheme?: ColorScheme;

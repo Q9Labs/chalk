@@ -79,7 +79,10 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
 }
 
 function AnnotationScreenShare({ annotation, inner, publicationId, selfId, streamURL }: { readonly annotation: StageAnnotation; readonly inner: Frame; readonly publicationId: string; readonly selfId: string; readonly streamURL: string }): React.JSX.Element {
-  const { client, actions } = annotation;
+  const { client, actions, boardSaveEnabled } = annotation;
+  const space = useSpaceClient();
+  const selectBoardTransport = useCallback(() => space.whiteboard.transport(), [space]);
+  const transport = useSpaceSelector(selectBoardTransport);
   const toasts = useToasts();
   const roster = useSpaceSelector(selectRoster);
   const access = useSpaceSelector(selectAccess);
@@ -102,6 +105,7 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
     client={client}
     actions={actions}
     canSave={canSave}
+    boardSave={boardSaveEnabled && transport?.files.uploadFile ? { space, transport } : undefined}
     publicationId={publicationId}
     person={{ id: selfId, name: ownName }}
     people={people}

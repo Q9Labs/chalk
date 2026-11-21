@@ -643,6 +643,7 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
   if (Object.hasOwn(value, "connection_quality") && value.connection_quality !== true) return false;
   if (Object.hasOwn(value, "screen_annotation") && value.screen_annotation !== true) return false;
+  if (Object.hasOwn(value, "screen_annotation_burn_in") && (value.screen_annotation_burn_in !== true || value.screen_annotation !== true)) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
@@ -650,6 +651,7 @@ function strictWelcome(value: Record<string, unknown>): boolean {
     ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
     ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
     ...(Object.hasOwn(value, "screen_annotation") ? ["screen_annotation"] : []),
+    ...(Object.hasOwn(value, "screen_annotation_burn_in") ? ["screen_annotation_burn_in"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -1317,6 +1319,7 @@ const WelcomeBase = {
   media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   connection_quality: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation: Schema.optionalKey(Schema.Literal(true)),
+  screen_annotation_burn_in: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };

@@ -5,6 +5,7 @@ type Definition = {
   readonly $ref?: string;
   readonly oneOf?: readonly Definition[];
   readonly enum?: readonly unknown[];
+  readonly const?: unknown;
   readonly type?: string;
   readonly properties?: Readonly<Record<string, Definition>>;
   readonly required?: readonly string[];
@@ -55,6 +56,7 @@ function matches(value: unknown, schema: Definition): boolean {
     return referenced !== undefined && matches(value, referenced);
   }
   if (schema.oneOf) return schema.oneOf.some((choice) => matches(value, choice));
+  if ("const" in schema) return Object.is(value, schema.const);
   if (schema.enum) return schema.enum.includes(value);
   switch (schema.type) {
     case "null":
@@ -64,10 +66,10 @@ function matches(value: unknown, schema: Definition): boolean {
     case "object":
       return (
         isRecord(value) &&
-        Object.keys(value).length === schema.required?.length &&
-        schema.required.every((key) => {
-          const property = schema.properties?.[key];
-          return !!property && Object.hasOwn(value, key) && matches(value[key], property);
+        schema.required?.every((key) => Object.hasOwn(value, key)) === true &&
+        Object.entries(value).every(([key, field]) => {
+          const property = schema.properties && Object.hasOwn(schema.properties, key) ? schema.properties[key] : undefined;
+          return property !== undefined && matches(field, property);
         })
       );
     case "array":

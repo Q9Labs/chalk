@@ -1,4 +1,5 @@
 import type { ScreenAnnotationMark, ScreenAnnotationPoint, ScreenAnnotationPresence } from "@q9labsai/chalk-client";
+import { projectAnnotationMark, type AnnotationTextMeasure } from "@q9labsai/chalk-screen-annotation";
 import { File } from "expo-file-system";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -11,10 +12,12 @@ export type AnnotationScene = {
   readonly clip: Frame;
   readonly sharerId: string;
   readonly paused: boolean;
+  readonly burnedIn?: true;
   readonly marks: readonly ScreenAnnotationMark[];
 };
 export type AnnotationCanvasHandle = {
   readonly hit: (request: number, point: ScreenAnnotationPoint, actor: string | null) => void;
+  readonly measure: (frame: ScreenAnnotationFrame) => Promise<AnnotationTextMeasure>;
   readonly png: (frame: ScreenAnnotationFrame<string>) => Promise<string>;
 };
 export type AnnotationCanvasProps = {
@@ -34,6 +37,14 @@ type ExportJob = {
   timer: ReturnType<typeof setTimeout>;
   length: number;
 };
+type TextSample = readonly [text: string, size: number];
+type MeasureJob = {
+  readonly id: number;
+  readonly samples: readonly TextSample[];
+  readonly resolve: (measure: AnnotationTextMeasure) => void;
+  readonly reject: (error: Error) => void;
+  readonly timer: ReturnType<typeof setTimeout>;
+};
 const maxBase64Length = 16 * 1024 * 1024;
 const chunkSize = 32768;
 
@@ -42,6 +53,15 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   const [ready, setReady] = useState(false);
   const job = useRef<ExportJob | null>(null);
   const nextId = useRef(0);
+  const measures = useRef<MeasureJob | null>(null);
+
+  function failMeasure(): void {
+    const current = measures.current;
+    if (!current) return;
+    measures.current = null;
+    clearTimeout(current.timer);
+    current.reject(new Error("Unable to measure annotation text"));
+  }
 
   function failExport(): void {
     const current = job.current;
@@ -53,6 +73,27 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
 
   useImperativeHandle(ref, () => ({
     hit: (request, point, actor) => view.current?.injectJavaScript(`window.chalkAnnotationHit?.(${request},${JSON.stringify(point)},${JSON.stringify(actor)});true;`),
+    async measure({ size, marks }) {
+      const rect = { x: 0, y: 0, ...size };
+      const samples = new Map<string, TextSample>();
+      for (const { draft } of marks) {
+        const projected = projectAnnotationMark(rect, draft);
+        if (projected.kind !== "text") continue;
+        for (const line of projected.text.split(/\r\n?|\n/)) {
+          const sample = [line, projected.fontSize] as const;
+          samples.set(JSON.stringify(sample), sample);
+        }
+      }
+      if (!samples.size) return () => 0;
+      const web = view.current;
+      if (!ready || !web || measures.current) throw new Error("The annotation renderer is busy");
+      const id = ++nextId.current;
+      const entries = [...samples.values()];
+      return new Promise((resolve, reject) => {
+        measures.current = { id, samples: entries, resolve, reject, timer: setTimeout(failMeasure, 5_000) };
+        web.injectJavaScript(`window.chalkAnnotationMeasure?.(${id},${JSON.stringify(entries)});true;`);
+      });
+    },
     async png({ image, ...frame }) {
       if (!ready || !view.current || job.current) throw new Error("Another frame export is in progress");
       const { current: web } = view;
@@ -83,7 +124,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   }, [ready, presence, nowMs]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Fail the pending export if the sandbox goes away before returning PNG data.
-  useEffect(() => failExport, []);
+  useEffect(() => () => { failExport(); failMeasure(); }, []);
 
   const onMessage = ({ nativeEvent: { data } }: WebViewMessageEvent) => {
     if (data === "annotation-loaded") {
@@ -98,6 +139,20 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
       if ("hit" in result && "markId" in result && typeof result.hit === "number" &&
           (result.markId === null || typeof result.markId === "string" && result.markId.length <= 36)) {
         onHit(result.hit, result.markId);
+        return;
+      }
+      const measurement = measures.current;
+      if (measurement && "measure" in result && result.measure === measurement.id) {
+        const widths: unknown = "widths" in result ? result.widths : null;
+        if (!Array.isArray(widths) || widths.length !== measurement.samples.length ||
+            !widths.every((width): width is number => typeof width === "number" && Number.isFinite(width) && width >= 0)) {
+          failMeasure();
+          return;
+        }
+        clearTimeout(measurement.timer);
+        measures.current = null;
+        const lookup = new Map(measurement.samples.map((sample, index) => [JSON.stringify(sample), widths[index]]));
+        measurement.resolve((text, size) => lookup.get(JSON.stringify([text, size])) ?? 0);
         return;
       }
       const current = job.current;
@@ -122,6 +177,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   };
   function reset() {
     failExport();
+    failMeasure();
     setReady(false);
     onReady(false);
   }

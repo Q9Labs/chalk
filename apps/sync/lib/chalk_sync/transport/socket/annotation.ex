@@ -56,15 +56,21 @@ defmodule ChalkSync.Transport.Socket.Annotation do
     recent = Enum.filter(state.annotation_commands, &(now - &1 < 1_000))
 
     result =
-      if length(recent) < 24 do
-        Repository.command(
-          state.identity,
-          frame,
-          state.observability,
-          Map.get(state, :attachment)
-        )
-      else
-        {:error, "rate_limited"}
+      cond do
+        length(recent) >= 24 ->
+          {:error, "rate_limited"}
+
+        get_in(frame, ["command", "burned_in"]) == true and
+            not Map.get(state, :screen_annotation_burn_in, false) ->
+          {:error, "forbidden"}
+
+        true ->
+          Repository.command(
+            state.identity,
+            frame,
+            state.observability,
+            Map.get(state, :attachment)
+          )
       end
 
     response = receipt(result)
@@ -146,6 +152,13 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   defp project(state, forced?, _actor, nil, now, share, epoch) do
     close_layer(state, forced?, now, share, epoch, :lost_publication)
+  end
+
+  defp project(state, forced?, _actor, %{binding: %{"burned_in" => true}}, now, _share, epoch)
+       when not is_map_key(state, :screen_annotation_burn_in) or
+              state.screen_annotation_burn_in == false do
+    # An older viewer can play the video but must not be offered a second copy of the ink.
+    suspend(state, forced?, now, epoch)
   end
 
   defp project(state, forced?, actor, layer, now, share, epoch) do

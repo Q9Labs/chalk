@@ -25,6 +25,7 @@ defmodule ChalkSync.ScreenAnnotation.Authority do
       sharer,
       bound_generation,
       frame,
+      burned_in,
       revision,
       fence,
       paused,
@@ -53,13 +54,15 @@ defmodule ChalkSync.ScreenAnnotation.Authority do
 
     layer =
       if id do
+        binding = %{
+          "layer_id" => id,
+          "publication_id" => bound_publication,
+          "sharer_id" => sharer,
+          "frame" => frame
+        }
+
         %{
-          binding: %{
-            "layer_id" => id,
-            "publication_id" => bound_publication,
-            "sharer_id" => sharer,
-            "frame" => frame
-          },
+          binding: if(burned_in, do: Map.put(binding, "burned_in", true), else: binding),
           generation: bound_generation,
           revision: revision,
           fence: fence,

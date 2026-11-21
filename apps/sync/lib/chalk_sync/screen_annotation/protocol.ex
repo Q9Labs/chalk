@@ -57,9 +57,12 @@ defmodule ChalkSync.ScreenAnnotation.Protocol do
   defp valid?(value, %{"enum" => choices}), do: value in choices
 
   defp valid?(value, %{"type" => "object", "properties" => fields, "required" => required}) do
-    is_map(value) and map_size(value) == length(required) and
-      Enum.all?(required, fn key ->
-        Map.has_key?(value, key) and valid_field?(key, value[key], fields[key])
+    is_map(value) and Enum.all?(required, &Map.has_key?(value, &1)) and
+      Enum.all?(value, fn {key, field} ->
+        case Map.fetch(fields, key) do
+          {:ok, property} -> valid?(field, property)
+          :error -> false
+        end
       end)
   end
 
