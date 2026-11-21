@@ -477,12 +477,12 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 			property = nullableSchema(property)
 		}
 
-		if name == "transcript_language" && schemaIncludesNull(property) {
-			values := make([]any, 0, len(artifactpolicy.TranscriptLanguageValues())+1)
-			for _, value := range artifactpolicy.TranscriptLanguageValues() {
-				values = append(values, value)
+		if values, ok := property["enum"].([]string); ok && schemaIncludesNull(property) {
+			enum := make([]any, 0, len(values)+1)
+			for _, value := range values {
+				enum = append(enum, value)
 			}
-			property["enum"] = append(values, nil)
+			property["enum"] = append(enum, nil)
 		}
 
 		properties[name] = property
@@ -800,7 +800,9 @@ func optionalStringAllowsNull(schemaName string, fieldName string) bool {
 		return true
 	case "name":
 		return false
-	case "status", "role", "slug", "media_plane", "provider", "model":
+	case "media_plane":
+		return schemaName == "UpdateSpaceRequest"
+	case "status", "role", "slug", "provider", "model":
 		return false
 	}
 	return !strings.HasPrefix(schemaName, "Update")

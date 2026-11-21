@@ -60,8 +60,7 @@ jobs:
 
   boot:
     needs: changes
-    # Pull requests from forks get no secrets, so the stack cannot reach the SFU there.
-    if: ${{ needs.changes.outputs.boot == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.boot == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

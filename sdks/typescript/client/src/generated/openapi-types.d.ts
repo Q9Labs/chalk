@@ -2824,8 +2824,8 @@ export interface components {
       default_episode_duration_seconds?: number;
       linger_window_seconds?: number;
       maximum_episode_duration_seconds?: number;
-      /** @enum {string} */
-      media_plane?: "chalk_sfu";
+      /** @enum {string|null} */
+      media_plane?: "chalk_sfu" | null;
       metadata?:
         | {
             [key: string]: unknown;

@@ -1834,7 +1834,7 @@ export const UpdateSpaceRequestSchema = /* @__PURE__ */ (() =>
     default_episode_duration_seconds: Schema.optional(Schema.Number),
     linger_window_seconds: Schema.optional(Schema.Number),
     maximum_episode_duration_seconds: Schema.optional(Schema.Number),
-    media_plane: Schema.optional(Schema.Literal("chalk_sfu")),
+    media_plane: Schema.optional(Schema.NullOr(Schema.Literal("chalk_sfu"))),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
     recording_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
