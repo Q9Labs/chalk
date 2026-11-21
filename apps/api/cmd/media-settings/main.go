@@ -201,14 +201,14 @@ func (s settings) get(ctx context.Context, r request) error {
 		if err != nil {
 			return fmt.Errorf("read Space: %w", err)
 		}
-		effective, err := policy.Effective(tenant, space)
-		if err != nil {
-			return fmt.Errorf("resolve the effective plane: %w", err)
+		var effective string
+		if policy.AllowsNewEpisodes(tenant) {
+			effective = mediaplane.ProviderChalkSFU.SettingName()
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
 			"space_setting", valueOrInherit(mediaplane.OptionalSettingName(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
 			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", mediaplane.ProviderChalkSFU.SettingName(),
-			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "effective_plane", effective.Plane.SettingName(), "selected_by", effective.By}
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "effective_plane", effective}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil

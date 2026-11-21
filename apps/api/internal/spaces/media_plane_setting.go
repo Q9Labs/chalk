@@ -44,17 +44,9 @@ func (p PlanePolicy) Paused(live bool) PlanePolicy {
 	return p
 }
 
-// Effective is the plane a new Episode in the Space would start on, ignoring the
-// client's capability and node room. It is empty when the Tenant has media disabled,
-// because such an Episode gets no media binding.
-func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (PlaneChoice, error) {
-	if mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig) {
-		return PlaneChoice{}, nil
-	}
-	if p.NewEpisodesPaused {
-		return PlaneChoice{}, nil
-	}
-	return PlaneChoice{Plane: mediaplane.ProviderChalkSFU, By: mediaplane.SelectedByDefault}, nil
+// AllowsNewEpisodes ignores client capability and SFU capacity.
+func (p PlanePolicy) AllowsNewEpisodes(tenant tenants.Tenant) bool {
+	return !p.NewEpisodesPaused && !mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig)
 }
 
 // TenantPlaneStore reads a Tenant and writes its default plane with operator authority.
@@ -191,9 +183,10 @@ func (s Service) EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID
 		}
 		policy = policy.Paused(paused)
 	}
-	for i, space := range list {
-		if choice, err := policy.Effective(tenant, space); err == nil && choice.Plane != "" {
-			effective[i] = &choice.Plane
+	if policy.AllowsNewEpisodes(tenant) {
+		plane := mediaplane.ProviderChalkSFU
+		for i := range effective {
+			effective[i] = &plane
 		}
 	}
 	return effective, nil

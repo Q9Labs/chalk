@@ -167,21 +167,3 @@ func TestChangeLedgerAnnouncesEachChangeOnce(t *testing.T) {
 		t.Fatalf("second pass announced %+v, want nothing", again)
 	}
 }
-
-// policyResolver binds an Episode to the plane the policy picks. The provider-specific
-// guards (client capability, node room) are the Registry's and have their own tests.
-type policyResolver struct{ policy spaces.PlanePolicy }
-
-func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	live, _ := spaces.NewEpisodesPausedFrom(ctx)
-	choice, err := r.policy.Paused(live).Effective(tenant, space)
-	if err != nil {
-		return nil, err
-	}
-	binding, err := mediaplane.NewBinding(choice.Plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
-	if err != nil {
-		return nil, err
-	}
-	binding, err = binding.SelectedBy(choice.By)
-	return &binding, err
-}

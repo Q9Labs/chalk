@@ -18,7 +18,7 @@ done
 case "$proof" in
   http) bash apps/web/tests/dashboard/real-engine.sh ;;
   refresh)
-    # Five consecutive ports; remote-slot-env.sh moves the block into the slot's own range.
+    # Six consecutive ports; remote-slot-env.sh moves the block into the slot's own range.
     refresh_port=${CHALK_DASHBOARD_REFRESH_PORT_BASE:-18180}
     export CHALK_DASHBOARD_API_PORT=$refresh_port CHALK_DASHBOARD_VENDOR_PORT=$((refresh_port + 1))
     export CHALK_DASHBOARD_BRIDGE_PORT=$((refresh_port + 2))

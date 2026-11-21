@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 
@@ -358,42 +356,6 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 	}
 
 	return response, nil
-}
-
-func newTenantResponse(tenant tenants.Tenant) tenantResponse {
-	var defaultPlane *string
-	if tenant.DefaultMediaPlane != nil {
-		plane := mediaplane.ProviderChalkSFU.SettingName()
-		defaultPlane = &plane
-	}
-	var mediaConfig *mediaplane.TenantConfig
-	if config, err := mediaplane.ParseTenantConfig(tenant.MediaPlaneProviderConfig); err == nil {
-		config.Provider = mediaplane.ProviderChalkSFU.SettingName()
-		config.Mode = mediaplane.ModeChalkManaged
-		mediaConfig = &config
-	}
-	return tenantResponse{
-		RecordingRenderMode: tenant.RecordingRenderMode,
-		ID:                  tenant.ID.String(),
-		Name:                tenant.Name,
-		ExternalID:          tenant.ExternalID,
-
-		DefaultMediaPlane:                defaultPlane,
-		MediaPlaneProviderConfig:         mediaConfig,
-		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
-		CORSAllowedOrigins:               append(make([]string, 0, len(tenant.CORSAllowedOrigins)), tenant.CORSAllowedOrigins...),
-		LogoKey:                          tenant.LogoKey,
-		Website:                          tenant.Website,
-		TranscriptionCeiling:             tenant.ArtifactPolicy.TranscriptionCeiling,
-		TranscriptionDefaultMode:         tenant.ArtifactPolicy.TranscriptionDefault,
-		TranscriptLanguage:               tenant.ArtifactPolicy.TranscriptLanguage.String(),
-		ProviderPolicyVersion:            tenant.ArtifactPolicy.ProviderPolicyVersion,
-		RecordingRetentionSeconds:        int64(tenant.ArtifactPolicy.RecordingRetention / time.Second),
-		TranscriptRetentionSeconds:       int64(tenant.ArtifactPolicy.TranscriptRetention / time.Second),
-		TranscriptionSourceWindowSeconds: int64(tenant.ArtifactPolicy.TranscriptionSourceWindow / time.Second),
-		UpdatedAt:                        utilities.FormatTimestamp(tenant.UpdatedAt),
-		CreatedAt:                        utilities.FormatTimestamp(tenant.CreatedAt),
-	}
 }
 
 func (r createTenantRequest) input() tenants.CreateTenantInput {

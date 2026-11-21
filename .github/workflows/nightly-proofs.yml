@@ -103,7 +103,7 @@ jobs:
       LATENCY_SAMPLES: ${{ inputs.latency_samples }}
       PROOF: ${{ matrix.proof }}
     steps:
-      - name: Refuse a pull of published images, or the real Cloudflare credentials, outside master
+      - name: Refuse a pull of published images outside master
         if: env.IMAGE_SOURCE == 'manifest'
         env:
           WORKFLOW_REF: ${{ github.ref }}
