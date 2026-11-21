@@ -18,10 +18,14 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
     await sharer.page.bringToFront();
     await control(sharer, "Share screen");
     await sharer.page.getByRole("button", { name: "Pop out marks", exact: true }).click(wait);
-    await sharer.page.waitForFunction(() => {
-      const video = window.documentPictureInPicture?.window?.document.querySelector("video");
-      return video?.videoWidth > 0 && video.currentTime > 0;
-    }, undefined, wait);
+    await sharer.page.waitForFunction(
+      () => {
+        const video = window.documentPictureInPicture?.window?.document.querySelector("video");
+        return video?.videoWidth > 0 && video.currentTime > 0;
+      },
+      undefined,
+      wait,
+    );
     await viewer.page.locator(canvas).first().waitFor(wait);
   });
 
@@ -30,7 +34,12 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
       ({ selector, ink }) => {
         const preview = window.documentPictureInPicture?.window?.document.querySelector(selector);
         if (!preview?.width || !preview.height) return false;
-        return preview.getContext("2d").getImageData(0, 0, preview.width, preview.height).data.some((value, index) => index % 4 === 3 && value > 0) === ink;
+        return (
+          preview
+            .getContext("2d")
+            .getImageData(0, 0, preview.width, preview.height)
+            .data.some((value, index) => index % 4 === 3 && value > 0) === ink
+        );
       },
       { selector: canvas, ink },
       wait,
@@ -52,7 +61,10 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
     await inPreview(true);
     await sharer.page.waitForFunction((title) => document.title === title, title, wait);
     await inPreview(true);
-    const preview = sharer.page.context().pages().find((page) => page !== source && page !== sharer.page);
+    const preview = sharer.page
+      .context()
+      .pages()
+      .find((page) => page !== source && page !== sharer.page);
     if (preview) await preview.screenshot({ path: join(out, "screenshots", "sharer-live-pip.png") });
     await shot(sharer, "sharer-tab-marks");
   });

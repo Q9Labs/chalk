@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveRecordingMediaSourceId } from "../../../packages/recording-presentation/src/source-id.ts";
@@ -119,16 +119,16 @@ sidecar.layers.push({
 const bound = { path: join(output, "sidecar.json") };
 bound.sha = write(bound.path, sidecar);
 
-function compose(name, annotation) {
+function compose(name, annotation, requestPath = fixture.requestPath) {
   const result = join(output, `${name}.json`);
   const video = join(output, `${name}.mp4`);
-  const args = [join(renderer, "dist/node/compose.js"), "--request", fixture.requestPath, "--result", result, "--output", video, "--threads", "1"];
+  const args = [join(renderer, "dist/node/compose.js"), "--request", requestPath, "--result", result, "--output", video, "--threads", "1"];
   if (annotation) args.push("--annotation-sidecar", annotation.path, "--annotation-sha256", annotation.sha);
   return { args, video };
 }
 
-function render(name, annotation) {
-  const { args, video } = compose(name, annotation);
+function render(name, annotation, requestPath) {
+  const { args, video } = compose(name, annotation, requestPath);
   run(process.execPath, args);
   return video;
 }
@@ -137,7 +137,15 @@ const clean = render("clean");
 const emptyPath = join(output, "empty-sidecar.json");
 const empty = render("empty", { path: emptyPath, sha: write(emptyPath, { ...sidecar, layers: [] }) });
 assert.equal(hash(readFileSync(empty)), hash(readFileSync(clean)), "an empty sidecar must not change a legacy export");
-const rendered = render("annotated", bound);
+// Exercise the production path: the compositor finds the checksum-bound
+// sidecar in the frozen presentation and reads it from the staged assets.
+const markedTimeline = join(output, "presentation-annotated.json");
+const frozenAsset = { id: "screen_annotation", kind: "screen_annotation", objectKey: "fixture/screen-annotation.json", contentType: "application/json", byteSize: readFileSync(bound.path).byteLength, sha256: bound.sha };
+copyFileSync(bound.path, join(request.asset_directory, bound.sha));
+const presentationSHA = write(markedTimeline, { ...timeline, assets: [...timeline.assets, frozenAsset] });
+const markedRequest = join(output, "request-annotated.json");
+write(markedRequest, { ...request, presentation_path: markedTimeline, presentation_sha256: presentationSHA });
+const rendered = render("annotated", undefined, markedRequest);
 
 const invalidPath = join(output, "invalid-sidecar.json");
 const invalidSHA = write(invalidPath, { ...sidecar, recordingId: "wrong-recording" });

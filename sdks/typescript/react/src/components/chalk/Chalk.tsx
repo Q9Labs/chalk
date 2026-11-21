@@ -303,7 +303,7 @@ function SpaceSurface(
       ...setup,
       client: screenAnnotationFor(client),
       context,
-      publicationForTrack: (track: MediaStreamTrack) => media.screenShare.track === track ? media.screenShare.publicationId : media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId,
+      publicationForTrack: (track: MediaStreamTrack) => (media.screenShare.track === track ? media.screenShare.publicationId : media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId),
       actions: {
         saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? (setup.actions?.saveToWhiteboard ?? saveAnnotation) : undefined,
         downloadPng: setup.actions?.downloadPng,
