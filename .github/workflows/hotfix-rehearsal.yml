@@ -91,7 +91,7 @@ jobs:
         with:
           node-version-file: .tool-versions
           cache: pnpm
-      # What the call proof needs, as the Nightly cloudflare-plane lane installs it (nightly-proofs.yml).
+      # Browser dependencies for the camera-share proof.
       - name: Install proof dependencies
         run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
       - uses: ./.github/actions/apt-install

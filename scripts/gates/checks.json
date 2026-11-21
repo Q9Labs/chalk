@@ -926,7 +926,7 @@
     {
       "id": "workflow:cloudflare-egress-check.yml#check",
       "owner": "Monitoring",
-      "catches": "SFU or TURN egress nearing its Cloudflare limit before calls degrade.",
+      "catches": "TURN relay egress nearing its Cloudflare limit.",
       "runs": ["daily"],
       "blocks": "alert",
       "minutes": null,
