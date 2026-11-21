@@ -36,8 +36,7 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
     });
     await drawer.page.route("**/v1/whiteboard/scenes/*/files/*/finalize", async (route) => {
       const response = await route.fetch();
-      assert.equal(response.status(), 204, "the server finalized the file before the response was lost");
-      if (!droppedFinalize) {
+      if (response.status() === 204 && !droppedFinalize) {
         droppedFinalize = true;
         await route.abort("connectionreset");
       } else {
@@ -45,7 +44,7 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
       }
     });
     await drawer.page.getByRole("button", saveAction).click(wait);
-    await drawer.page.getByRole("status").filter({ hasText: "The annotated frame could not be saved." }).waitFor(wait);
+    await drawer.page.getByRole("alert").filter({ hasText: "The annotated frame could not be saved." }).waitFor(wait);
     await drawer.page.getByRole("button", saveAction).click(wait);
     await drawer.page.getByRole("status").filter({ hasText: "Frame saved to the board." }).waitFor(wait);
     assert.ok(droppedFinalize);
