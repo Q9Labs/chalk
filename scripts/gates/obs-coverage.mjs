@@ -40,10 +40,10 @@ function rowProblems(row, index, events, fields) {
       problems.push(`row ${index} (${eventName}) has unknown field ${name}`);
       continue;
     }
-    const allowed = event.fields[name]?.values ?? field.values;
+    const allowed = event.fields?.[name]?.values ?? field.values;
     if (field.type === "enum" && !allowed?.includes(value)) problems.push(`row ${index} (${eventName}) has ${name}=${JSON.stringify(value)}, not one of ${allowed?.join(", ")}`);
   }
-  for (const [name, rule] of Object.entries(event.fields)) {
+  for (const [name, rule] of Object.entries(event.fields ?? {})) {
     if (rule.required && !(name in row)) problems.push(`row ${index} (${eventName}) is missing required field ${name}`);
   }
   return problems;
@@ -176,7 +176,7 @@ async function symptomLinks(root, symptom, events, fields, declared) {
  * @returns {Promise<{ failures: string[], allowlisted: { code: string, slice: number, missing: string[] }[], covered: string[] }>}
  */
 export async function checkCoverage({ root = repositoryRoot, graph = readJson(root, "observability/generated/coverage-graph.json"), registry = readJson(root, "observability/generated/registry.json") } = {}) {
-  const events = new Map(registry.events.map((event) => [event.name, event]));
+  const events = new Map([...registry.events, ...(registry.machines ?? [])].map((event) => [event.name, event]));
   const fields = new Map(registry.fields.map((field) => [field.name, field]));
   const declared = new Map(registry.symptoms.map((symptom) => [symptom.code, symptom]));
   const result = { failures: [], allowlisted: [], covered: [] };

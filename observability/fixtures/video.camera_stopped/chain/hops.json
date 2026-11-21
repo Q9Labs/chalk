@@ -10,7 +10,7 @@
       "hop": "b",
       "test": "scripts/diagnose-call/proof/video-camera-chain.test.mjs",
       "command": "node --test scripts/diagnose-call/proof/video-camera-chain.test.mjs",
-      "writes": ["rows.wont_start.json", "rows.stopped.json", "rows.healthy.json", "../positive.json", "../healthy.json"]
+      "writes": ["rows.stopped.json", "rows.healthy.json", "../positive.json", "../healthy.json"]
     }
   ]
 }
