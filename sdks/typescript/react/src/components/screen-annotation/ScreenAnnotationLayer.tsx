@@ -44,7 +44,6 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const optimistic = useRef<Preview | null>(null);
   const tracker = useRef(createAnnotationPresenceTracker());
   const refresh = useRef<() => void>(() => undefined);
-  const previewUpdate = useRef<number>(-Infinity);
   const [textAnchor, setTextAnchor] = useState<TextAnchor | null>(null);
   const actor = input?.actor;
   const drawing = Boolean(input && actor && canDraw(state, actor.participant_id));
@@ -142,11 +141,9 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     };
   }, [client, drawing, layerId, fence]);
 
-  const publish = (force = false) => {
+  const publish = () => {
     localPresenceAt.current = client.serverNowMs();
-    const now = performance.now();
-    if (matchesTarget(client, target) && (force || now - previewUpdate.current >= 1000 / 30)) {
-      previewUpdate.current = now;
+    if (matchesTarget(client, target)) {
       client.setPresence(target, cursor.current, gesture.current ? gestureDraft(gesture.current) : null);
     }
     refresh.current();
@@ -154,7 +151,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const cancel = () => {
     gesture.current = null;
     cursor.current = null;
-    publish(true);
+    publish();
   };
   const send = async (command: ScreenAnnotationCommand) => {
     if (!input || !actor) return;
@@ -204,7 +201,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
           const { point, rect, clip, cssPoint } = mapped;
           if (brush.tool === "pointer") {
             cursor.current = { point, tool: "pointer" };
-            publish(true);
+            publish();
             return;
           }
           if (brush.tool === "eraser") {
@@ -236,7 +233,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
           event.currentTarget.setPointerCapture(event.pointerId);
           gesture.current = { pointerId: event.pointerId, target, rect, clip, style, tool: brush.tool, stamp: brush.stamp, points: [point] };
           cursor.current = { point, tool: "ink" };
-          publish(true);
+          publish();
         }}
         onPointerMove={(event) => {
           if (!currentInput() || !event.isPrimary) return;
@@ -248,7 +245,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
           }
           if (draft && mapped) addGesturePoint(draft, mapped.point);
           cursor.current = mapped ? { point: mapped.point, tool: input?.brush.tool === "pointer" ? "pointer" : "ink" } : null;
-          publish(!mapped);
+          publish();
         }}
         onPointerUp={(event) => {
           const draft = gesture.current;

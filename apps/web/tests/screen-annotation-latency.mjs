@@ -146,9 +146,9 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     const trace = [];
     for (let i = 0; i < attempts; i++) {
       const x = 0.12 + (i % 10) * 0.079;
-      const y = 0.12 + Math.floor(i / 10) * 0.04;
+      const y = 0.12 + Math.floor(i / 10) * 0.032;
       const end = { x: x + 0.052, y };
-      const start = { x: x + 0.007, y };
+      const start = { x, y };
       const [senderBox, ...boxes] = await Promise.all([
         drawer.page.evaluate(contentBox, canvas),
         ...surfaces.map(({ page, selector }) => page.evaluate(contentBox, selector)),
@@ -179,13 +179,14 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
       const pointerMs = input.find(({ type }) => type === "pointerdown")?.at ?? null;
       const releaseMs = input.find(({ type }) => type === "pointerup")?.at ?? null;
       const outgoing = sent.slice(sendStart);
-      const mark = outgoing.find(({ type }) => type === "annotation_command")?.mark;
+      const mark = outgoing.find(({ type }) => type === "annotation_command")?.mark ?? outgoing.find(({ type }) => type === "annotation_presence")?.mark;
       trace.push({
-        id, input, observation: paints, sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length,
-        sentCommit: Boolean(mark),
+        id, input, observation: paints, sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length, firstPreviewSentAt: outgoing.find(({ type }) => type === "annotation_presence")?.at ?? null,
+        sentCommit: outgoing.some(({ type }) => type === "annotation_command"),
         received: surfaces.map(({ wire }) => ({
           preview: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_presence").length,
           commit: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_changed").length,
+          firstPreviewAt: wire.find(({ type, mark: id }) => id === mark && type === "annotation_presence")?.at ?? null,
         })),
       });
       for (const [index, endpoint] of surfaces.entries()) {
