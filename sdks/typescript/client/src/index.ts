@@ -4,7 +4,23 @@ export * from "./collaboration";
 export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
-export * from "./screen-annotation";
+export { screenAnnotationFor } from "./screen-annotation";
+export type {
+  ScreenAnnotationClient,
+  ScreenAnnotationCommand,
+  ScreenAnnotationCursor,
+  ScreenAnnotationDraft,
+  ScreenAnnotationFrameSize,
+  ScreenAnnotationLayer,
+  ScreenAnnotationMark,
+  ScreenAnnotationPoint,
+  ScreenAnnotationPresence,
+  ScreenAnnotationResult,
+  ScreenAnnotationShape,
+  ScreenAnnotationSnapshot,
+  ScreenAnnotationState,
+  ScreenAnnotationTarget,
+} from "./screen-annotation";
 export * from "./public-invites";
 export type { AppTelemetry } from "./telemetry/app";
 export { TelemetryOutbox } from "./telemetry/outbox";
