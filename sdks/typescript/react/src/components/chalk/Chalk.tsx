@@ -92,13 +92,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   };
   const [reportOpen, setReportOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
-  // "Report a problem" stays reachable when a report cannot be sent; the dialog says why and keeps the draft.
-  const openReport = props.onReportProblem
-    ? () => {
-        if (props.onOpenReportProblem) props.onOpenReportProblem();
-        else setReportOpen(true);
-      }
-    : undefined;
+  const openReport =
+    props.onReportProblem && !props.reportUnavailableReason
+      ? () => {
+          if (props.onOpenReportProblem) props.onOpenReportProblem();
+          else setReportOpen(true);
+        }
+      : undefined;
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;

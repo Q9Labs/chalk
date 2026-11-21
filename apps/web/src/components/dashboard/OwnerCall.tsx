@@ -10,7 +10,7 @@ import { ErrorPanel } from "./kit";
 import { startCall } from "./language-choice";
 import { joiningCallName } from "./join-call";
 
-import { problemReporter, reportUnavailableReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { ownerAccess } from "./owner-seat";
@@ -172,8 +172,8 @@ function OwnerCallSurface({
         action: deadline && ceiling && !atCeiling && extension !== "pending" ? { label: `Add ${EXTENSION_MINUTES} min`, onClick: () => void extend() } : undefined,
         endAction: { label: "Start a new call", onClick: onStartNewCall },
       }}
-      onReportProblem={onReportProblem}
-      reportUnavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
+      onReportProblem={reportsAvailable ? onReportProblem : undefined}
+      reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
     />
   );
 }

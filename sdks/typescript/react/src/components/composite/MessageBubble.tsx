@@ -63,8 +63,6 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     className,
   }) => {
     const { resolvedUrls, failedAttachmentIds, markFailed, retry } = useChatAttachmentPreviews(attachments, onResolveAttachmentUrl);
-    // A plain sent message needs no label; only waiting, sending and read are news.
-    const statusLabel = status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" || readBy.length > 0 ? "Read" : null;
     const [reactionError, setReactionError] = useState<string | null>(null);
     const [reacting, setReacting] = useState(false);
     const [reactionBarOpen, setReactionBarOpen] = useState(false);
@@ -336,7 +334,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               {reactionError}
             </p>
           ) : null}
-          {isLocal && isLastInGroup && statusLabel ? <span className="call-message-status">{statusLabel}</span> : null}
+          {isLocal && isLastInGroup ? <span className="call-message-status">{status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" || readBy.length > 0 ? "Read" : "Sent"}</span> : null}
         </div>
         <dialog
           ref={viewer}
