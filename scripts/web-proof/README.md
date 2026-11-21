@@ -43,6 +43,22 @@ The runner always attempts cleanup; the hosted workflow repeats cleanup after
 failure or cancellation with `pnpm prod:proof cleanup <run-id>`. Existing product
 retention keeps archived Space/Episode history. No recording starts in this test.
 
+## Listen-only join and access renewal
+
+For the Chalk SFU regression, use the [nightly stack](../nightly-stack/boot) on
+Linux with `--web-https`. Build the web app with `VITE_API_URL` and
+`VITE_PUBLIC_APP_URL` set to `https://127.0.0.1:8000` and `VITE_CHALK_SYNC_URL`
+set to `wss://127.0.0.1:8000/v1/sync`. WebKit requires HTTPS to store the
+guest credential cookie.
+
+Install Edge and WebKit with `pnpm exec playwright install --with-deps msedge webkit`.
+Load the stack's `proof.env`, unset `CHALK_PROOF_SPACE_ID_CHALK_SFU`, and point
+`NODE_EXTRA_CA_CERTS` at the stack's `web-ca.crt`. Run
+`xvfb-run -a node scripts/web-proof/listen-only.mjs`. The proof switches Edge
+to a real background tab and injects the visibility change in WebKit. Both
+use real media and wait over five minutes. The report and screenshots go
+under `.private/web-proof/`.
+
 ## Student before owner
 
 `node scripts/web-proof/student-first.mjs` checks that a collaborator can join an

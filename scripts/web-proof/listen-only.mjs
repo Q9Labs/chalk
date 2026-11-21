@@ -11,7 +11,8 @@ import { createProofKey, createSpace } from "../prod-proof/proofs.mjs";
 import { createRun, loadConfig, maskCredentials, save } from "../prod-proof/runtime.mjs";
 import { webMediaFixture } from "./media.mjs";
 
-// Run against the loopback nightly stack with headed Edge and WebKit under xvfb-run.
+// Use nightly-stack/boot --web-https so WebKit stores the Secure guest cookie.
+// Run under xvfb-run with the stack's proof.env and NODE_EXTRA_CA_CERTS pointing to web-ca.crt.
 const hiddenMs = 315_000;
 const receiveMs = 8_000;
 const runId = `listen-only-${randomUUID()}`;
@@ -26,7 +27,9 @@ let stage = "setup";
 try {
   assert.equal(process.env.CHALK_PROOF_CONFIG_SOURCE, "env");
   for (const name of ["CHALK_PROOF_API_URL", "CHALK_PROOF_WEB_URL"]) {
-    assert.equal(new URL(process.env[name]).hostname, "127.0.0.1", "Use the throwaway loopback stack");
+    const url = new URL(process.env[name]);
+    assert.equal(url.hostname, "127.0.0.1", "Use the throwaway loopback stack");
+    assert.equal(url.protocol, "https:", "Use --web-https to test Secure cookies");
   }
   // Own a fresh Space so cleanup never changes a shared invite.
   assert.ok(!process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU && process.env.CHALK_PROOF_SPACE_BY_SLUG !== "true");
@@ -41,7 +44,7 @@ try {
   const entry = new URL(url.pathname + url.search + url.hash, config.web_url).href;
   stage = "join";
   const [edge, safari] = await Promise.all([launchEdge(), webkit.launch({ headless: false }).then(keepBrowser)]);
-  const listeners = await Promise.all([join(edge.contexts()[0], entry, "Edge listener", 1), join(await safari.newContext(devices["iPad Pro 11"]), entry, "WebKit listener", 2)]);
+  const listeners = await Promise.all([join(edge.contexts()[0], entry, "Edge listener", 1), join(await safari.newContext({ ...devices["iPad Pro 11"], ignoreHTTPSErrors: true }), entry, "WebKit listener", 2)]);
   await Promise.all(listeners.map(checkEmptyJoin));
   stage = "background through grant renewal";
   await Promise.all([backgroundThroughRefresh(listeners[0], hideEdgeTab), backgroundThroughRefresh(listeners[1], hideWebKitPage)]);
@@ -85,7 +88,7 @@ async function launchEdge() {
   // Playwright-launched Chromium forces each page to appear focused. Connect to a
   // regular Edge window so a tab switch produces a real visibility change.
   edgeProfile = await mkdtemp(joinPath(tmpdir(), "chalk-listener-edge-"));
-  edgeProcess = spawn("microsoft-edge", [`--user-data-dir=${edgeProfile}`, "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", "--no-sandbox", "--disable-dev-shm-usage", "about:blank"], { stdio: "ignore" });
+  edgeProcess = spawn("microsoft-edge", [`--user-data-dir=${edgeProfile}`, "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", "--no-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors", "about:blank"], { stdio: "ignore" });
   return Promise.race([
     new Promise((_, reject) => edgeProcess.once("error", reject)),
     (async () => {
@@ -145,6 +148,11 @@ async function join(context, entry, name, fixture) {
   await page.getByLabel("Your name").fill(name);
   await page.getByRole("button", { name: "Join call", exact: true }).click();
   await page.getByRole("region", { name: "Space stage", exact: true }).waitFor({ timeout: 30_000 });
+  const cookies = await context.cookies(entry);
+  assert.ok(
+    cookies.some(({ name, secure }) => secure && name.startsWith("__Host-chalk_space_guest_")),
+    "Browser did not store the Secure guest cookie",
+  );
   return { name, page, context, evidence, responses };
 }
 

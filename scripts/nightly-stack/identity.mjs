@@ -5,7 +5,7 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret, frontPort] = process.argv.slice(2);
+const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret, frontOrigin] = process.argv.slice(2);
 const kid = "nightly-stack";
 // An announce address other than loopback means the Chalk SFU runs on another host, which the API reaches over the network.
 const sfuRemote = announceIp !== "127.0.0.1";
@@ -87,7 +87,7 @@ env("api.env", {
   CHALK_API_ENV: "local",
   CHALK_API_LOCAL_SYSTEM_TOKEN: systemToken,
   CHALK_API_REQUEST_LOGS: "errors",
-  CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${apiPort},http://127.0.0.1:${frontPort},${proofOrigin}`,
+  CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${apiPort},${frontOrigin},${proofOrigin}`,
   CHALK_DATABASE_URL: databaseUrl,
   CHALK_REDIS_URL: "redis://127.0.0.1:6379/0",
   CHALK_R2_ENDPOINT: `http://127.0.0.1:${storagePort}`,
@@ -97,7 +97,7 @@ env("api.env", {
   // The public Space page creates its Space in this Tenant, which boot inserts; its invites point at the stack's own web origin.
   CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID: managedTenantId,
   CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE: mediaPlane,
-  CHALK_PUBLIC_INVITE_WEB_ORIGIN: `http://127.0.0.1:${frontPort}`,
+  CHALK_PUBLIC_INVITE_WEB_ORIGIN: frontOrigin,
   CHALK_PUBLIC_INVITE_KEY_ID: kid,
   CHALK_PUBLIC_INVITE_PRIVATE_KEY: signingKey,
   CHALK_PUBLIC_INVITE_VERIFICATION_KEYS: keyring,
