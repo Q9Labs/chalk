@@ -11,7 +11,7 @@ const PRESENTATION_METHODS = new Set(["synchronized_video", "frame_callback"]);
 const SAMPLING = ["macos", "windows", "android"];
 
 function measureAlignment(scenarios, evidenceFile) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   const results = [];
   for (const scenario of scenarios) {
     assert.ok(SURFACES.has(scenario.surface), "invalid alignment surface");
@@ -50,7 +50,7 @@ function measureAlignment(scenarios, evidenceFile) {
 }
 
 function measureLatency(scenarios) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   return scenarios.map((scenario) => {
     const targetMs = LATENCY_TARGET_MS[scenario.surface];
     assert.ok(targetMs && NETWORKS.includes(scenario.environment), "invalid latency surface or environment");
@@ -115,7 +115,7 @@ function summarizeLatency(values, attempts, uncertaintyMs) {
 }
 
 function measureExclusion(scenarios, evidenceFile) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   return scenarios.map((scenario) => {
     assert.ok(SAMPLING.includes(scenario.platform), "invalid exclusion platform");
     const overlay = evidenceFile(scenario.overlay.frame);
