@@ -34,6 +34,7 @@
     "**/*.test.mjs",
     "scripts/prod-proof/latency-entry-fakes.mjs",
     "scripts/web-proof/connection-lost.mjs",
+    "scripts/web-proof/listen-only.mjs",
     "scripts/web-proof/student-first.mjs",
     "scripts/web-proof/board-local.mjs",
     "apps/api/scripts/check-additive-migrations.mjs",

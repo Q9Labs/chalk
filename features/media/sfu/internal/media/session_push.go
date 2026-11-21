@@ -118,9 +118,8 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 }
 
 // checkOffer bounds the offer before Pion sees it: its size, and the sections it adds. Every
-// new section must belong to a track of the request, and the new tracks must fit the
-// publication and section limits, so the peer connection never allocates for an offer the
-// node would not accept. It returns the parsed sections and the MIDs the connection already has.
+// new section must belong to a track of the request, except for a listener establishing
+// its transport with one receive-only audio section. Both offers fit the section limit.
 func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSection, map[string]bool, error) {
 	sections, err := parseOffer(request.SessionDescription.SDP)
 	if err != nil {
@@ -136,11 +135,12 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 		existing[transceiver.Mid()] = true
 	}
 	added := 0
-	for mid := range sections {
+	for mid, section := range sections {
 		if existing[mid] {
 			continue
 		}
-		if !named[mid] {
+		initialListener := len(existing) == 0 && len(sections) == 1 && len(request.Tracks) == 0 && section.media == "audio" && section.receiveOnly
+		if !named[mid] && !initialListener {
 			return nil, nil, fmt.Errorf("%w: the offer has a section that no track of the request names", ErrInvalidRequest)
 		}
 		added++
@@ -148,18 +148,25 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 	if len(transceivers)+added > s.transceiverLimit() {
 		return nil, nil, fmt.Errorf("%w: too many media sections on this connection", ErrCapacityExceeded)
 	}
+	if err := s.checkPublicationCapacity(request.Tracks); err != nil {
+		return nil, nil, err
+	}
+	return sections, existing, nil
+}
+
+func (s *Session) checkPublicationCapacity(tracks []protocol.Track) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fresh := make(map[string]bool, len(request.Tracks))
-	for _, track := range request.Tracks {
+	fresh := make(map[string]bool, len(tracks))
+	for _, track := range tracks {
 		if s.published[track.Mid] == nil && s.publishedByName(track.TrackName) == nil {
 			fresh[track.Mid] = true
 		}
 	}
 	if len(s.published)+len(fresh) > s.node.cfg.MaxPublishedPerSession {
-		return nil, nil, fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
+		return fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
 	}
-	return sections, existing, nil
+	return nil
 }
 
 // transceiverLimit is the most media sections one connection may ever hold.

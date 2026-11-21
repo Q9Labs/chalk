@@ -12,10 +12,13 @@ import type { CloudflareSFUFailureCode, CloudflareSFUSessionDescription, Cloudfl
 export type IceRestart = { readonly connection: RTCPeerConnection; readonly connectionEpoch: number; state: "running" | "succeeded" | "failed" };
 export type ConnectionObservation = ReturnType<typeof observeConnectionState>;
 export type IceRestartOwner = { readonly generation: number; readonly connectionId: string };
+type TransportOffer = "ice_restart" | "receive_transport";
 
 /** What the controller needs from the coordinator. */
 export interface IceRestartControllerOps {
   readonly restartsInPlace: () => boolean;
+  readonly needsReceiveTransport: (generation: number) => boolean;
+  readonly markNegotiated: (generation: number) => void;
   readonly currentFailure: () => CloudflareSFUSnapshot["failure"];
   readonly generation: () => number;
   readonly connectionEpoch: () => number;
@@ -23,7 +26,7 @@ export interface IceRestartControllerOps {
   readonly bootstrapConnectionId: () => string;
   readonly stopped: () => boolean;
   readonly serializeSDP: <T>(operation: () => Promise<T>) => Promise<T>;
-  readonly createLocalOffer: (connection: RTCPeerConnection) => Promise<CloudflareSFUSessionDescription>;
+  readonly createLocalOffer: (connection: RTCPeerConnection, origin: TransportOffer) => Promise<CloudflareSFUSessionDescription>;
   readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }, owner: IceRestartOwner) => Promise<CloudflareSFUTracksResponse>;
   readonly applyProviderDescription: (response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: IceRestartOwner) => Promise<void>;
   readonly rollbackLocalOffer: (connection: RTCPeerConnection) => Promise<void>;
@@ -38,6 +41,23 @@ export class IceRestartController {
 
   constructor(ops: IceRestartControllerOps) {
     this.#ops = ops;
+  }
+
+  async establishReceiveTransport(generation: number): Promise<void> {
+    if (!this.#ops.needsReceiveTransport(generation)) return;
+    await this.#ops.serializeSDP(async () => {
+      const connection = this.#ops.connection();
+      const owner = { generation, connectionId: this.#ops.bootstrapConnectionId() };
+      const current = () => connection === this.#ops.connection() && generation === this.#ops.generation() && !this.#ops.stopped();
+      if (!current()) throw staleConnection();
+      // A pull can negotiate while startup is waiting its turn in the SDP queue.
+      if (!this.#ops.needsReceiveTransport(generation)) return;
+      // Establish ICE and DTLS without opening a device or publishing a track.
+      connection.addTransceiver("audio", { direction: "recvonly" });
+      await this.#exchangeOffer(connection, owner, "receive_transport", current);
+      if (!current()) throw staleConnection();
+      this.#ops.markNegotiated(generation);
+    });
   }
 
   of(connection: RTCPeerConnection, connectionEpoch: number): IceRestart | null {
@@ -90,28 +110,35 @@ export class IceRestartController {
   // The restart offer keeps every media section, so the SFU keeps the session's publications and subscriptions.
   async #restartIce(connection: RTCPeerConnection, generation: number, current: () => boolean): Promise<void> {
     const connectionId = this.#ops.bootstrapConnectionId();
-    const stale = () => new CloudflareSFUError("Stale media connection", "stale_generation");
     await this.#ops.serializeSDP(async () => {
-      if (!current()) throw stale();
+      if (!current()) throw staleConnection();
       // The path reconnected while earlier SDP work held the queue, so it needs no new credentials.
       if (connectionIsLive(connection)) return;
-      const sessionDescription = await this.#ops.createLocalOffer(connection);
-      try {
-        const response = await this.#ops.addTracks({ connectionId, sessionDescription, tracks: [] }, { generation, connectionId });
-        if (!current()) throw stale();
-        await this.#ops.applyProviderDescription(response, connection, { generation, connectionId });
-      } catch (error) {
-        await this.#ops.rollbackLocalOffer(connection);
-        throw error;
-      }
+      await this.#exchangeOffer(connection, { generation, connectionId }, "ice_restart", current);
     });
     await waitFor(
       () => {
-        if (!current()) throw stale();
+        if (!current()) throw staleConnection();
         return connectionIsLive(connection);
       },
       ICE_RESTART_BUDGET_MS,
       "The ICE restart did not reconnect in time",
     );
   }
+  async #exchangeOffer(connection: RTCPeerConnection, owner: IceRestartOwner, origin: TransportOffer, current: () => boolean): Promise<void> {
+    try {
+      const sessionDescription = await this.#ops.createLocalOffer(connection, origin);
+      if (!current()) throw staleConnection();
+      const response = await this.#ops.addTracks({ connectionId: owner.connectionId, sessionDescription, tracks: [] }, owner);
+      if (!current()) throw staleConnection();
+      await this.#ops.applyProviderDescription(response, connection, owner);
+    } catch (error) {
+      await this.#ops.rollbackLocalOffer(connection);
+      throw error;
+    }
+  }
+}
+
+function staleConnection(): CloudflareSFUError {
+  return new CloudflareSFUError("Stale media connection", "stale_generation");
 }
