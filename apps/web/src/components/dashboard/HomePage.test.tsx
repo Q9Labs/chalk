@@ -52,12 +52,12 @@ async function openHome() {
   const host = document.body.appendChild(document.createElement("div"));
   view = createRoot(host);
   await act(async () => view?.render(<RouterProvider router={router} />));
-  await settle();
+  await until(() => buttonNamed(host, "Start a call"));
   return { host, router };
 }
 
-/** Lets the pending reads and route loads finish. */
-const settle = () => act(async () => void (await new Promise((resolve) => setTimeout(resolve, 20))));
+/** Waits, inside act, until what the person would see holds. */
+const until = (check: () => void) => act(async () => vi.waitFor(check));
 const buttonNamed = (host: HTMLElement, text: string) => {
   const button = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes(text));
   if (!button) throw new Error(`${text} is missing`);
@@ -80,28 +80,24 @@ it("starts one call however often Start a call is pressed while the call page is
   const button = buttonNamed(host, "Start a call");
 
   await act(async () => button.click());
-  await settle();
+  await until(() => expect(router.state.location.pathname).toBe("/dashboard/call/s2/join"));
   // The call exists and the join route is still loading: the button spins, says it is disabled, and starts nothing.
-  expect(router.state.location.pathname).toBe("/dashboard/call/s2/join");
-  expect(button.getAttribute("aria-busy")).toBe("true");
+  await until(() => expect(button.getAttribute("aria-busy")).toBe("true"));
   expect(button.getAttribute("aria-disabled")).toBe("true");
   await act(async () => button.click());
-  await settle();
   expect(dashboard.started()).toBe(1);
 
   await act(async () => finishJoinRoute());
-  await settle();
-  expect(host.textContent).toContain("Joining the call");
+  await until(() => expect(host.textContent).toContain("Joining the call"));
 });
 
 it("reloads Home from the top when Show more is refused a cursor from another order", async () => {
   const dashboard = server();
   dashboard.homeReads.push({ calls: [call("s1", "Old order call")], live: [], nextCursor: "old" }, { calls: [call("s3", "Fresh order call")], live: [], nextCursor: null });
   const { host } = await openHome();
-  expect(host.textContent).toContain("Old order call");
+  await until(() => expect(host.textContent).toContain("Old order call"));
 
   await act(async () => buttonNamed(host, "Show more calls").click());
-  await settle();
-  expect(host.textContent).toContain("Fresh order call");
+  await until(() => expect(host.textContent).toContain("Fresh order call"));
   expect(host.textContent).not.toContain("Old order call");
 });
