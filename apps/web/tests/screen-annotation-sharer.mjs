@@ -73,7 +73,6 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
     await sharer.page.getByRole("button", { name: "Pause marks", exact: true }).click();
     await viewer.page.getByRole("status").filter({ hasText: "Marks are paused" }).waitFor(wait);
     await sharer.page.getByRole("button", { name: "Resume marks", exact: true }).click();
-    await sharer.page.getByRole("button", { name: "Annotate", exact: true }).click();
     await sharer.page.getByRole("button", { name: "Clear marks", exact: true }).click();
     await sharer.page.getByRole("button", { name: "Clear all marks", exact: true }).click();
     await inPreview(false);
