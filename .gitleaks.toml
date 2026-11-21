@@ -10,6 +10,12 @@ regexTarget = "secret"
 regexes = ['''^mcp-admission-deny-01$''']
 
 [[allowlists]]
+description = "Excalidraw 0.18.1 bundles this public Firebase client project identifier in the embedded renderer."
+targetRules = ["gcp-api-key", "generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^[A]IzaSyAd15pYlMci_xIp9ko6wkEsDzAAA0Dn0RU$''']
+
+[[allowlists]]
 description = "Local mobile and app credentials are ignored files, not part of the public gate surface."
 paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''']
 
