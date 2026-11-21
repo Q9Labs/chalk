@@ -10,6 +10,7 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
@@ -32,7 +33,9 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   // The chip opens the menu with the connection charts showing; the plain trigger opens it closed.
   const [revealConnection, setRevealConnection] = useState(false);
   const link = props.network?.live ? props.network.link : undefined;
-  const notice = link && (link.tier === "weak" || link.tier === "poor") ? { tier: link.tier, reason: link.reason } : null;
+  const [dismissed, setDismissed] = useState<NoticeTier | null>(null);
+  if (dismissed !== null && (link === undefined || link.tier === "good")) setDismissed(null);
+  const notice = shownNotice(link, dismissed);
   const { onCallLinkToggle } = props;
   const changeOpen = useCallback(
     (next: boolean) => {
@@ -93,6 +96,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
             setMenuOpen(true);
           }}
           onTurnOffVideo={() => props.onTurnOffVideo?.()}
+          onDismiss={() => setDismissed(notice.tier)}
         />
       </Suspense>
     </div>
