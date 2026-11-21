@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
-import { errorMessage, signOut } from "../../lib/dashboard/client";
+import { DashboardRequestError, errorMessage, signOut } from "../../lib/dashboard/client";
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -11,6 +11,9 @@ import { useSiteTheme } from "../site/theme";
 import { ErrorPanel, Seg, useToast } from "./kit";
 import { Menu, MenuItem } from "./menu";
 import { useSession } from "./use-dashboard";
+
+/** The server refused the session itself, so signing in again is the way forward; any other failure is the dashboard failing to open. */
+const refusedSignIn = (failure: unknown): boolean => failure instanceof DashboardRequestError && (failure.status === 401 || failure.status === 403);
 
 /** The signed-in dashboard: checks the session, then draws the top bar around the page. */
 export function AppShell({ children }: { readonly children: ReactNode }) {
@@ -25,16 +28,20 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
       <main className="main" data-pending={pending || undefined} aria-busy={pending || undefined}>
         {failure ? (
           <div className="wrap">
-            <ErrorPanel
-              title="We couldn’t check your sign-in"
-              detail="Try again, or sign in again."
-              onRetry={retry}
-              more={
-                <a className="btn ol sm" href="/dashboard/sign-in">
-                  Sign in
-                </a>
-              }
-            />
+            {refusedSignIn(failure) ? (
+              <ErrorPanel
+                title="We couldn’t check your sign-in"
+                detail={errorMessage(failure)}
+                onRetry={retry}
+                more={
+                  <a className="btn ol sm" href="/dashboard/sign-in">
+                    Sign in
+                  </a>
+                }
+              />
+            ) : (
+              <ErrorPanel title="Couldn’t open your dashboard" detail={errorMessage(failure)} onRetry={retry} />
+            )}
           </div>
         ) : (
           <>
