@@ -1,0 +1,43 @@
+name: Helper development installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            name: macos-arm64
+            bundle: app
+            artifact: apps/helper/src-tauri/target/release/bundle/macos/Chalk-Helper-dev-arm64.zip
+          - runner: windows-2025
+            name: windows-x64
+            bundle: nsis
+            artifact: apps/helper/src-tauri/target/release/bundle/nsis/*.exe
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: apps/helper
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build local development installer
+        env:
+          HELPER_BUNDLE: ${{ matrix.bundle }}
+        shell: bash
+        run: npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles "$HELPER_BUNDLE"
+      - name: Archive macOS app
+        if: runner.os == 'macOS'
+        run: |
+          cd src-tauri/target/release/bundle/macos
+          ditto -c -k --sequesterRsrc --keepParent "Chalk Helper.app" Chalk-Helper-dev-arm64.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chalk-helper-dev-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
