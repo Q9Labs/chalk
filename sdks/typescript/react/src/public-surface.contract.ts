@@ -55,6 +55,7 @@ type ExpectedChalkProps =
   | "defaults"
   | "displayName"
   | "features"
+  | "screenAnnotation"
   | "theme"
   | "onColorSchemeChange"
   | "pickChatFiles"

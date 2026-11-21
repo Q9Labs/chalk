@@ -5,7 +5,19 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@q9labsai/chalk-assets": ["../../packages/assets/src/index.ts"],
+      "@q9labsai/chalk-ui": ["../../packages/ui/src/index.ts"],
+      "@q9labsai/chalk-ui/reactions": ["../../packages/ui/src/reactions.ts"],
+      "@q9labsai/chalk-whiteboard/react": ["../../packages/whiteboard/src/react/index.ts"],
+      "@q9labsai/facehash/react": ["../../packages/facehash/src/react.ts"],
+      "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
+      "@q9labsai/chalk-react/headless": ["../../sdks/typescript/react/src/headless.ts"],
+      "@q9labsai/chalk-screen-annotation": ["../../packages/screen-annotation/src/index.ts"],
+      "@q9labsai/chalk-whiteboard": ["../../packages/whiteboard/src/index.ts"],
+      "@q9labsai/recording-presentation": ["../../packages/recording-presentation/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

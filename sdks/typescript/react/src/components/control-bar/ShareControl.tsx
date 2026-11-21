@@ -36,8 +36,10 @@ export function ShareControl({
   access,
   disabled = false,
   startDisabled = false,
+  helperInstallUrl,
 }: {
   readonly disabled?: boolean;
+  readonly helperInstallUrl?: string;
   readonly startDisabled?: boolean;
   readonly sharing: boolean;
   readonly access?: DeviceAccessControl;
@@ -95,6 +97,14 @@ export function ShareControl({
           </>
         ) : (
           <>
+            {helperInstallUrl ? (
+              <>
+                <ChalkMenuLabel>See marks on your real screen</ChalkMenuLabel>
+                <Menu.LinkItem className="chalk-menu-item" href={helperInstallUrl} target="_blank" rel="noopener noreferrer">
+                  Get Chalk Helper
+                </Menu.LinkItem>
+              </>
+            ) : null}
             {(
               [
                 { value: "monitor", label: "Entire screen", description: "Everything on one display" },
