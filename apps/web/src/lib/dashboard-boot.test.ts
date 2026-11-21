@@ -8,18 +8,22 @@ afterEach(() => {
 });
 
 it("reports the opening frame gone at once when the page never drew one", () => {
-  const gone = vi.fn();
-  dismissDashboardBoot(gone);
-  expect(gone).toHaveBeenCalledTimes(1);
+  let gone = 0;
+  dismissDashboardBoot(() => {
+    gone += 1;
+  });
+  expect(gone).toBe(1);
 });
 
 it("reports the opening frame gone only after it has faded out and left the page", () => {
   vi.useFakeTimers();
   document.body.innerHTML = `<div id="chalk-dashboard-boot"></div>`;
-  const gone = vi.fn();
-  dismissDashboardBoot(gone);
-  expect(gone).not.toHaveBeenCalled();
+  let gone = 0;
+  dismissDashboardBoot(() => {
+    gone += 1;
+  });
+  expect(gone).toBe(0);
   vi.advanceTimersByTime(500);
   expect(document.getElementById("chalk-dashboard-boot")).toBeNull();
-  expect(gone).toHaveBeenCalledTimes(1);
+  expect(gone).toBe(1);
 });
