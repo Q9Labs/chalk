@@ -1200,6 +1200,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/whiteboard/files/availability": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get whiteboard file availability */
+    get: operations["getWhiteboardFileAvailability"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/whiteboard/files/{fileId}/download": {
     parameters: {
       query?: never;
@@ -3247,6 +3264,9 @@ export interface components {
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
       url_redacted: string;
+    };
+    WhiteboardFileAvailability: {
+      available: boolean;
     };
     WhiteboardFileDownload: {
       downloadUrl: string;
@@ -11213,6 +11233,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getWhiteboardFileAvailability: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WhiteboardFileAvailability"];
         };
       };
     };

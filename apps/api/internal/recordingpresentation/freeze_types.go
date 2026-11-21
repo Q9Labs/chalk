@@ -140,8 +140,9 @@ type WhiteboardEventFact struct {
 }
 
 type WhiteboardFileFact struct {
-	ID     string
-	Object ObjectFact
+	SceneID string
+	ID      string
+	Object  ObjectFact
 }
 
 type ReactionFact struct {

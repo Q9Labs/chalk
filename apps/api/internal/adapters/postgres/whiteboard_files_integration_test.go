@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -61,6 +62,31 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 	exec(`insert into sync_whiteboard_scenes(tenant_id, space_id, episode_id, scene_id) values($1, $2, $3, $4)`,
 		tenant.Bytes(), space.Bytes(), episode.Bytes(), scene.Bytes())
 
+	t.Run("capture stops retaining annotation at its byte budget", func(t *testing.T) {
+		recording := accountTenantIntegrationID(t)
+		layer := accountTenantIntegrationID(t)
+		exec(`insert into recordings(id, tenant_id, space_id, episode_id, status, storage_provider)
+			values ($1, $2, $3, $4, 'completed', 'r2')`, recording.Bytes(), tenant.Bytes(), space.Bytes(), episode.Bytes())
+		exec(`insert into recording_screen_annotation_layers (
+			tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id,
+			publication_id, sharer_generation, layer, initial_at_ms, initial_revision, initial_paused, initial_marks
+		) values ($1, $2, $3, $4, 1, $5, 'screen', 1, '{}', 0, 0, false, '[]')`,
+			tenant.Bytes(), space.Bytes(), episode.Bytes(), recording.Bytes(), layer.Bytes())
+		exec(`insert into recording_screen_annotation_changes (
+			tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id, revision, at_ms, change
+		) select $1, $2, $3, $4, 1, $5, revision, revision, jsonb_build_object('fixture', repeat('x', 32000))
+		from generate_series(1, 1050) as revision`, tenant.Bytes(), space.Bytes(), episode.Bytes(), recording.Bytes(), layer.Bytes())
+		var retained int
+		var closed bool
+		err := tx.QueryRow(ctx, `select count(change.revision), layer.closed_at_ms is not null
+			from recording_screen_annotation_layers layer
+			left join recording_screen_annotation_changes change using (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id)
+			where layer.recording_id = $1 group by layer.closed_at_ms`, recording.Bytes()).Scan(&retained, &closed)
+		if err != nil || retained < 1 || retained >= 1050 || !closed {
+			t.Fatalf("expected a bounded prefix with a closed layer, retained=%d closed=%t: %v", retained, closed, err)
+		}
+	})
+
 	repo := NewWhiteboardFileRepository(tx)
 	var encoded bytes.Buffer
 	if err := png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
@@ -108,6 +134,31 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 	if _, err := service.Initiate(ctx, input); err != nil || objects.signed.Key != key {
 		t.Fatalf("repeat initiate did not reuse object key: %v", err)
 	}
+	t.Run("expired same-byte reservation renews", func(t *testing.T) {
+		exec(`update sync_whiteboard_files set expires_at = now() - interval '1 minute' where tenant_id = $1 and file_id = $2`,
+			tenant.Bytes(), input.FileID)
+		if _, err := service.Initiate(ctx, input); err != nil || objects.signed.Key != key {
+			t.Fatalf("retry should renew the original immutable key: %v", err)
+		}
+	})
+	exec(`update sync_whiteboard_files set expires_at = now() + interval '5 minutes' where tenant_id = $1 and file_id = $2`,
+		tenant.Bytes(), input.FileID)
+	t.Run("header without pixels cannot finalize", func(t *testing.T) {
+		truncated := input
+		truncated.FileID = "header-only"
+		// PNG signature and IHDR including its CRC, but no pixel data.
+		objects.data = data[:33]
+		digest := sha256.Sum256(objects.data)
+		truncated.ByteLength = int64(len(objects.data))
+		truncated.SHA256 = hex.EncodeToString(digest[:])
+		if _, err := service.Initiate(ctx, truncated); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Finalize(ctx, truncated.FileRequest, truncated.SHA256); !errors.Is(err, whiteboardfiles.ErrFileTransferFailed) {
+			t.Fatalf("finalize must reject missing pixels: %v", err)
+		}
+	})
+	exec(`delete from sync_whiteboard_files where tenant_id = $1 and file_id = 'header-only'`, tenant.Bytes())
 	bogus := input
 	bogus.SHA256 = hex.EncodeToString(make([]byte, 32))
 	if _, err := service.Initiate(ctx, bogus); !errors.Is(err, whiteboardfiles.ErrFileConflict) {
@@ -146,6 +197,32 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	t.Run("legacy SVG cannot be opened inline", func(t *testing.T) {
+		exec(`update sync_whiteboard_files set mime_type = 'image/svg+xml' where tenant_id = $1 and file_id = $2`, tenant.Bytes(), input.FileID)
+		if _, err := service.Download(ctx, input.Subject, input.FileID); !errors.Is(err, whiteboardfiles.ErrFileNotFound) {
+			t.Fatalf("the API must not sign a browser-navigable legacy SVG: %v", err)
+		}
+	})
+	exec(`update sync_whiteboard_files set mime_type = 'image/png' where tenant_id = $1 and file_id = $2`, tenant.Bytes(), input.FileID)
+	t.Run("outstanding uploads have a participant quota", func(t *testing.T) {
+		for i := 0; i < 7; i++ {
+			upload := input
+			upload.FileID = fmt.Sprintf("quota-%d", i)
+			if _, err := service.Initiate(ctx, upload); err != nil {
+				t.Fatal(err)
+			}
+		}
+		upload := input
+		upload.FileID = "quota-extra"
+		if _, err := service.Initiate(ctx, upload); err == nil {
+			t.Fatal("ninth outstanding reservation succeeded")
+		}
+		if upload, err := service.Initiate(ctx, input); err != nil || !upload.Ready {
+			t.Fatalf("quota must not block idempotent retries: %v", err)
+		}
+	})
+	exec(`delete from sync_whiteboard_files where tenant_id = $1 and file_id like 'quota-%'`, tenant.Bytes())
+
 	pending := input
 	pending.FileID = "abandoned"
 	if _, err := service.Initiate(ctx, pending); err != nil {
@@ -160,12 +237,17 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 	if err := service.Finalize(ctx, referenced.FileRequest, referenced.SHA256); err != nil {
 		t.Fatal(err)
 	}
-	exec(`update sync_whiteboard_files set expires_at = now() - interval '30 minutes',
-		referenced_at = case when file_id = 'published' then now() end where tenant_id = $1`, tenant.Bytes())
+	// This is the previous Sync release's write, without reference bookkeeping.
+	exec(`insert into sync_whiteboard_elements (
+		tenant_id, space_id, episode_id, scene_id, element_id, element_type,
+		version, version_nonce, element_index, is_deleted, payload, encoded_bytes
+	) values ($1, $2, $3, $4, 'image', 'image', 1, 1, 'a0', false, '{"fileId":"published","status":"saved"}', 39)`,
+		tenant.Bytes(), space.Bytes(), episode.Bytes(), scene.Bytes())
+	exec(`update sync_whiteboard_files set expires_at = now() - interval '30 minutes' where tenant_id = $1`, tenant.Bytes())
 	if _, err := whiteboardfiles.NewCleanupWorker(repo, objects).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(objects.deleted, pendingKey) || !slices.Contains(objects.deleted, key) || slices.Contains(objects.deleted, objects.signed.Key) {
+	if !slices.Contains(objects.deleted, pendingKey) || !slices.Contains(objects.deleted, key) {
 		t.Fatal("cleanup should remove abandoned and unreferenced uploads, not a published image")
 	}
 	if _, err := service.Download(ctx, input.Subject, input.FileID); !errors.Is(err, whiteboardfiles.ErrFileNotFound) {

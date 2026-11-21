@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -58,6 +60,27 @@ func TestWhiteboardFileWriteRoutes(t *testing.T) {
 			}
 			if tc.want < 300 && service.digest != "digest" {
 				t.Fatalf("digest = %q", service.digest)
+			}
+		})
+	}
+}
+
+func TestWhiteboardFileAvailabilityDoesNotNeedParticipantToken(t *testing.T) {
+	for _, available := range []bool{false, true} {
+		t.Run(strconv.FormatBool(available), func(t *testing.T) {
+			var service WhiteboardFileService
+			if available {
+				service = &writeWhiteboardFileProbe{}
+			}
+			router := chi.NewRouter()
+			for _, endpoint := range whiteboardFileEndpoints(service, whiteboardParticipantProbe{}) {
+				endpoint.Mount(router, RateLimitOptions{})
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/whiteboard/files/availability", nil))
+			var result whiteboardFileAvailability
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || result.Available != available {
+				t.Fatalf("availability status = %d, body = %s", response.Code, response.Body.String())
 			}
 		})
 	}
