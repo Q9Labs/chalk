@@ -6,22 +6,6 @@ create table recording_screen_annotation_budgets (
     exhausted boolean not null default false
 );
 
--- Count existing capture facts without discarding in-flight recording data.
-insert into recording_screen_annotation_budgets (recording_id, retained_bytes, layer_count)
-select recording_id, sum(retained_bytes)::bigint, sum(layer_count)::bigint
-from (
-    select recording_id,
-        sum(octet_length(layer::text) + octet_length(initial_marks::text) + 256) as retained_bytes,
-        count(*) as layer_count
-    from recording_screen_annotation_layers
-    group by recording_id
-    union all
-    select recording_id, sum(octet_length(change::text) + 80), 0::bigint
-    from recording_screen_annotation_changes
-    group by recording_id
-) usage
-group by recording_id;
-
 -- +goose StatementBegin
 create function bound_recording_annotation() returns trigger language plpgsql as $$
 declare
@@ -91,6 +75,24 @@ create trigger bound_recording_annotation_layers
 create trigger bound_recording_annotation_changes
     before insert on recording_screen_annotation_changes
     for each row execute function bound_recording_annotation();
+
+-- Install both triggers before the backfill. Their table locks keep capture
+-- writes from slipping between the count and the start of enforcement.
+-- Count existing facts without discarding in-flight recording data.
+insert into recording_screen_annotation_budgets (recording_id, retained_bytes, layer_count)
+select recording_id, sum(retained_bytes)::bigint, sum(layer_count)::bigint
+from (
+    select recording_id,
+        sum(octet_length(layer::text) + octet_length(initial_marks::text) + 256) as retained_bytes,
+        count(*) as layer_count
+    from recording_screen_annotation_layers
+    group by recording_id
+    union all
+    select recording_id, sum(octet_length(change::text) + 80), 0::bigint
+    from recording_screen_annotation_changes
+    group by recording_id
+) usage
+group by recording_id;
 
 -- +goose Down
 drop trigger bound_recording_annotation_changes on recording_screen_annotation_changes;

@@ -324,6 +324,14 @@ with authority as (
 ), whiteboard_references as (
     select distinct scene_id, element->'payload'->>'fileId' as file_id
     from whiteboard_elements where element->'payload'->>'fileId' is not null
+), annotation_budget as (
+    -- The migration counted older, potentially oversized captures without
+    -- deleting them. Do not materialize those rows during media completion.
+    select exists (
+        select 1 from boundary
+        join recording_screen_annotation_budgets budget using (recording_id)
+        where budget.retained_bytes > 33554432 or budget.layer_count > 4096
+    ) as overflowing
 ), annotation_layers as materialized (
     select layer.*, least(
         layer.closed_at_ms,
@@ -332,7 +340,8 @@ with authority as (
     from boundary
     join recording_screen_annotation_layers layer using (tenant_id, space_id, episode_id, recording_id)
     join annotation_epochs epoch on epoch.capture_epoch = layer.capture_epoch
-    where layer.initial_at_ms < least(
+    where not (select overflowing from annotation_budget)
+      and layer.initial_at_ms < least(
         layer.closed_at_ms,
         floor(extract(epoch from boundary.capture_ready_at) * 1000)::bigint + epoch.end_millis
     )
@@ -348,7 +357,8 @@ with authority as (
     limit 262145
 ), annotation_size as (
     select
-        (select count(*) from annotation_layers) > 4096
+        (select overflowing from annotation_budget)
+        or (select count(*) from annotation_layers) > 4096
         or (select count(*) from annotation_changes) > 262144
         or coalesce((select sum(octet_length(layer.layer::text) + octet_length(layer.initial_marks::text) + 256)
                      from annotation_layers layer), 0)
