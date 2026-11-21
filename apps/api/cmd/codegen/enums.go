@@ -23,7 +23,7 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	case "media_plane_setting", "effective_media_plane":
 		return []string{"chalk_sfu"}
 	case "provider":
-		if schemaName == "accessGrantMediaResponse" || schemaName == "mediaPlaneResponse" {
+		if schemaName == "AccessGrant" || schemaName == "ParticipantLifecycle" {
 			return []string{"chalk_sfu"}
 		}
 	case "media_plane":

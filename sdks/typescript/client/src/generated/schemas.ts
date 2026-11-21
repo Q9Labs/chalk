@@ -96,7 +96,7 @@ export const AccessGrantSchema = /* @__PURE__ */ (() =>
     media: Schema.Struct({
       client_payload: Schema.Record(Schema.String, Schema.Unknown),
       expires_at: DateTimeStringSchema,
-      provider: Schema.String,
+      provider: Schema.Literal("chalk_sfu"),
       token: Schema.String,
     }),
     subject: Schema.Struct({
@@ -810,7 +810,7 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
       Schema.NullOr(
         Schema.Struct({
           client_payload: Schema.Record(Schema.String, Schema.Unknown),
-          provider: Schema.String,
+          provider: Schema.Literal("chalk_sfu"),
         }),
       ),
     ),

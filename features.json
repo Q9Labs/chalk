@@ -303,6 +303,7 @@
         "apps/api/internal/httpapi/memberships.go",
         "apps/api/internal/httpapi/request_credentials.go",
         "apps/api/internal/httpapi/tenant_limits.go",
+        "apps/api/internal/httpapi/tenant_response.go",
         "apps/api/internal/httpapi/tenants.go",
         "apps/api/internal/tenantpurge",
         "apps/sync/lib/chalk_sync/auth",

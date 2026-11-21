@@ -13087,6 +13087,7 @@
                 "$ref": "#/components/schemas/DateTimeString"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               },
               "token": {
@@ -14635,6 +14636,7 @@
                 "type": "object"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               }
             },

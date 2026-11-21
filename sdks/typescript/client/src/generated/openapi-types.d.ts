@@ -1269,7 +1269,8 @@ export interface components {
             | null;
         };
         expires_at: components["schemas"]["DateTimeString"];
-        provider: string;
+        /** @enum {string} */
+        provider: "chalk_sfu";
         token: string;
       };
       subject: {
@@ -1870,7 +1871,8 @@ export interface components {
             | boolean
             | null;
         };
-        provider: string;
+        /** @enum {string} */
+        provider: "chalk_sfu";
       } | null;
       participant: {
         capabilities: string[];

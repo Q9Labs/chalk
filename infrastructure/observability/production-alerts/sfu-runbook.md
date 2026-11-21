@@ -101,7 +101,7 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 ### Node down
 
-**Meaning.** The node does not answer ping from DigitalOcean's probes in Asia, Europe and the US for 2 minutes. Live classes on it have dropped or will drop. New classes overflow to Cloudflare while the API still has a Cloudflare application for the Tenant, or are refused.
+**Meaning.** The node does not answer ping from DigitalOcean's probes in Asia, Europe and the US for 2 minutes. Live classes on it have dropped or will drop. New classes start on a healthy fleet node, or are refused if none is ready.
 
 **Check.**
 
@@ -147,7 +147,7 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 **Check.** Search the API log dataset for the Episode id from the alert (`| search "<episode-id>"`). Two sets of events explain a join, and they have different names. The API writes `chalk_sfu.*` events (`chalk_sfu.client_refused`, `chalk_sfu.overflow`, `chalk_sfu.recovery`) with `service.name` of the API. The node writes `sfu.*` events with `service.name=chalk-sfu`, in the same dataset, joined by `episode_id` and `connection_id`. For a join that failed, read `sfu.session.refused`, `sfu.negotiation.failed` and `sfu.control.failed` first, then the `outcome` of `sfu.session.closed` (`never_connected` means the media path never opened, so the cause is the network or a blocked UDP port, not the node; see [Follow one Participant through the Chalk SFU](../../../docs/observability.md#follow-one-participant-through-the-chalk-sfu)). Read the node's `/readyz` for the same minute. The node's journal is still needed for error text, which the export leaves out.
 
-**Fix.** One participant with one report is usually the participant's network. Several Episodes in minutes is the node. Restart the service, and if joins keep failing, switch new Episodes to Cloudflare with the kill switch below; live Episodes stay on the node.
+**Fix.** One participant with one report is usually the participant's network. Several Episodes in minutes is the node. Restart the service, and if joins keep failing, pause new Episodes with the kill switch below; live Episodes stay on the node.
 
 ### Recording failed or stranded
 

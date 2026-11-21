@@ -69,9 +69,9 @@ Fixes 1 and 2 close P2. Fix 3 is what makes P4 hold when the link never drops.
 | `pubs`, `sess`, `sfuUp`                | the publication ledger behind the Go API (`apps/api/internal/adapters/chalksfu/adapter.go`) and the device's SFU session              |
 | `intent`, `reconnected`                | ghosts that exist only to state the properties                                                                                        |
 
-Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed SFU closes (Cloudflare only). Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
+Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed remote SFU closes. Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
 
-Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized Chalk SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The Chalk SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests, not by this model.
+The deployed Chalk SFU (`distributed`) runs apart from the API. A remote revoke or close call can fail or be lost, and a dead session's publications can linger. The SFU's source fence is atomic inside its own routing state; executable SFU tests check leases and revision ordering. The `atomic` comparison assumes Sync and the SFU share an authority: closes cannot fail, dead sessions leave no publications, and revocation removes a publication in the same step. That comparison does not prove the deployed service.
 
 ## What it proves and what it does not
 
@@ -90,7 +90,7 @@ Cloudflare today: a close is a separate call and can fail, a dead session's publ
 ```sh
 ./run.sh                 # default runs, a few minutes
 DEEP=1 ./run.sh          # plus the multi-source runs
-./run.sh cf-current-P2-1src   # one run
+./run.sh legacy-P2-1src   # one run
 node trace-diff.mjs results/cf-current-P2-1src.txt   # a counterexample, one line per step
 ```
 
@@ -108,7 +108,7 @@ Files:
 
 `MediaControl.tla` talks to the SFU only through `Sfu.tla` (`Pub`, `Admit`, `OnRevoke`, `OnSessionLost`, `Collectable`, `Closable`) and the actions `SfuAdmit`, `SyncCloseOk`, `SyncCloseFail`, `SfuGc`, `DropSfu` and `RebuildSfu`, which schedule those operators.
 
-- To switch between the SFUs already described, change the `sfu` column in `runs.txt` to `cloudflare`, `own` or `own-distributed`. `run.sh` maps that to the three constants `CloseCanFail`, `OrphansLinger` and `AtomicRevoke`.
+- The `authority` column in `runs.txt` picks the deployed `distributed` model or the `atomic` comparison. `run.sh` maps it to `CloseCanFail`, `OrphansLinger` and `AtomicRevoke`.
 - To model a different SFU, change the operators in `Sfu.tla`, or add constants to it. For example, an SFU that admits a publication without asking Sync for a grant is a change to the guard in `SfuAdmit`, and an SFU with its own session recovery is a change to `OnSessionLost` and `RebuildSfu`. Then rerun `./run.sh`; the properties do not mention the SFU.
 
 ## Variants and properties
@@ -173,7 +173,7 @@ Each removes one mechanism and runs the same property set; a full run writes the
 
 Default bounds: one listener, four publication ids, two user actions, each fault kind at most once, at most two faults together. The `deep-heal-*` rows add three faults together (one user action for liveness, so it fits in 8 GB), and two listeners (one fault, one user action, three publication ids). Two listeners at the default bounds (two faults, four publications, two user actions) did not finish: the run was stopped after 80 minutes on an 8 GB machine at over 7 million distinct states, so no result exists for that size. Liveness runs do not use symmetry. Not proved:
 
-- Time. Backoff, the 7 s stall window, 30 s Cloudflare expiry and pending-publication timing are counters or absent. The model says nothing about how long a listener waits.
+- Time. Backoff, the 7 s stall window, stale publication expiry and pending-publication timing are counters or absent. The model says nothing about how long a listener waits.
 - More than two (three on the deep rows) faults together, more than two listeners, more than one source, camera, screen and recording.
 - The planned dead path as built: the real thresholds and message formats are not known yet. Pulls in the real API do not check Sync's enabled state; the model's heal loop does (it pulls only what its roster lists as on).
 - That the SDK or Sync implement any rule above. The model is not executable against the code.
