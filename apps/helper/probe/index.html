@@ -52,7 +52,10 @@
     let receive;
     try {
       receive = new RTCPeerConnection();
-      receive.ontrack = ({ track: remoteTrack }) => { video.srcObject = new MediaStream([remoteTrack]); };
+      receive.ontrack = ({ track: remoteTrack }) => {
+        video.srcObject = new MediaStream([remoteTrack]);
+        void video.play().catch(() => {});
+      };
       if (handoff) {
         await receiveFilteredTrack(receive);
       } else {
@@ -92,9 +95,11 @@
         samples
       }, null, 2);
     } catch (error) {
+      const stats = await receive?.getStats();
+      const inbound = stats && [...stats.values()].find(report => report.type === "inbound-rtp" && report.kind === "video");
       result.textContent = JSON.stringify({
         browser: navigator.userAgent, error: error.message, ice: receive?.iceConnectionState,
-        connection: receive?.connectionState
+        connection: receive?.connectionState, packets: inbound?.packetsReceived, frames: inbound?.framesDecoded
       });
     } finally {
       track?.stop();
