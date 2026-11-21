@@ -30,16 +30,19 @@ export const deviceProfiles = {
 
 async function createCallThroughBrowser(page) {
   const deadline = Date.now() + 40_000;
+  let action = "Join call";
   for (;;) {
-    const created = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
-    await page.getByRole("button", { name: "Join call", exact: true }).click();
-    const response = await created;
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces"),
+      page.getByRole("button", { name: action, exact: true }).click(),
+    ]);
     if (response.status() === 201) return response.json();
     const body = await response.json().catch(() => null);
     const code = body?.error?.code;
     if (response.status() === 503 && code === "media.unavailable" && Date.now() < deadline) {
       // On a shared proof host, wait out brief SFU pressure without disabling admission protection.
       console.log("Start call: media temporarily unavailable; retrying through the browser in 5 seconds");
+      action = "Ask again";
       await delay(5000);
       continue;
     }
