@@ -244,6 +244,7 @@
         "sdks/typescript/react-native/src/sheets/people-chat",
         "sdks/typescript/react/src/components/composite/ChatPanel.tsx",
         "sdks/typescript/react/src/components/composite/MessageBubble.tsx",
+        "sdks/typescript/react/src/components/composite/UnavailableAttachment.tsx",
         "sdks/typescript/react/src/components/composite/chat-file-upload.ts",
         "sdks/typescript/react/src/components/composite/chat-panel-model.ts",
         "sdks/typescript/react/src/components/composite/chat-types.ts",
@@ -471,6 +472,8 @@
         "apps/web/src/routes/dashboard._app.call.$spaceId.session.$episodeId.tsx",
         "apps/web/src/routes/dashboard._app.sessions.tsx",
         "sdks/typescript/client/src/space-client/participants-controller.ts",
+        "sdks/typescript/client/src/space-client/participants-projection.ts",
+        "sdks/typescript/client/src/space-client/participant-types.ts",
         "sdks/typescript/client/src/space-client/participants-controller.test.ts",
         "sdks/typescript/react/src/components/admission-panel"
       ]
@@ -514,7 +517,7 @@
     {
       "name": "problem-reports",
       "summary": "Captures and routes diagnostic reports submitted by Participants.",
-      "paths": ["apps/api/internal/adapters/discordreports", "apps/api/internal/httpapi/problem_report_outcomes.go", "apps/api/internal/httpapi/problem_reports.go", "apps/api/internal/problemreports", "apps/web/src/lib/problem-reports.ts"]
+      "paths": ["apps/api/internal/adapters/discordreports", "apps/api/internal/httpapi/problem_report_outcomes.go", "apps/api/internal/httpapi/problem_reports.go", "apps/api/internal/problemreports", "apps/web/src/lib/problem-reports.test.ts", "apps/web/src/lib/problem-reports.ts"]
     },
     {
       "name": "notifications",
@@ -653,6 +656,7 @@
         "apps/sync/lib/chalk_sync/operations.ex",
         "apps/sync/lib/chalk_sync/postgres_types.ex",
         "apps/sync/lib/chalk_sync/protocol.ex",
+        "apps/sync/lib/chalk_sync/wire_reason.ex",
         "apps/sync/lib/chalk_sync/provider_call.ex",
         "apps/sync/lib/chalk_sync/retention",
         "apps/sync/lib/chalk_sync/stateholder",
