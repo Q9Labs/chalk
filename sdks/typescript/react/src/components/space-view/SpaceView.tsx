@@ -159,7 +159,6 @@ export function SpaceView({
   const live = connection.status === "live" && !limbo;
   const self = useHeldWhile(useSelf(), connectionLost);
   const participantsSlice = useHeldWhile(useParticipants(), connectionLost);
-  const callLink = useCallLink(participantsSlice.roster.length <= 1, live);
   const media = useHeldWhile(useMedia(), connectionLost);
   const microphoneNotice = useMicrophoneNotice(connection.status, media.local.microphone);
   const mediaRequest = media.incomingRequests[0];
@@ -172,6 +171,7 @@ export function SpaceView({
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageAdmission = useCan("manageAdmission");
+  const callLink = useCallLink(participantsSlice.roster.length <= 1, live, canManageAdmission);
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
   const deadline = connection.episode?.deadline;

@@ -68,6 +68,19 @@ it("moves focus to the dock's Leave button when the lost card closes", () => {
   expect(document.activeElement).toBe(frame.querySelector("[aria-label='Leave call']"));
 });
 
+it("moves focus to Leave when Rejoin was pressed without taking focus, as in Safari or on touch", () => {
+  const { frame, host, show } = mount();
+  show({ phase: "failed", since: null, onRejoin: () => undefined });
+  const rejoin = host.querySelector<HTMLButtonElement>(".chalk-connection-rejoin");
+  rejoin?.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: frame }));
+  rejoin?.blur();
+  expect(document.activeElement).toBe(document.body);
+  rejoin?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+
+  show({ phase: "reconnecting", since: Date.now() });
+  expect(document.activeElement).toBe(frame.querySelector("[aria-label='Leave call']"));
+});
+
 it("leaves focus alone when the lost card closes and focus was never inside it", () => {
   const { frame, host, show } = mount();
   show({ phase: "failed", since: null });

@@ -92,9 +92,12 @@ function FailedContent({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionSt
     const onFocusOut = (event: FocusEvent) => {
       if (event.relatedTarget instanceof Node && !card.contains(event.relatedTarget)) hadFocus = false;
     };
+    // Safari and touch don't focus a button on click or tap, so pressing inside the card counts as having had focus.
+    card.addEventListener("pointerdown", onFocusIn);
     card.addEventListener("focusin", onFocusIn);
     card.addEventListener("focusout", onFocusOut);
     return () => {
+      card.removeEventListener("pointerdown", onFocusIn);
       card.removeEventListener("focusin", onFocusIn);
       card.removeEventListener("focusout", onFocusOut);
       const active = document.activeElement;

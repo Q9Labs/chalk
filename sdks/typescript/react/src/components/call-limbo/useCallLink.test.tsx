@@ -9,12 +9,12 @@ afterEach(() => document.body.replaceChildren());
 function mount() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const seen: boolean[] = [];
-  function Probe({ alone, live }: { readonly alone: boolean; readonly live: boolean }) {
-    seen.push(useCallLink(alone, live).open);
+  function Probe({ alone, live, host }: { readonly alone: boolean; readonly live: boolean; readonly host: boolean }) {
+    seen.push(useCallLink(alone, live, host).open);
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
-  return { open: () => seen.at(-1), show: (alone: boolean, live: boolean) => act(() => root.render(<Probe alone={alone} live={live} />)) };
+  return { open: () => seen.at(-1), show: (alone: boolean, live: boolean, host = true) => act(() => root.render(<Probe alone={alone} live={live} host={host} />)) };
 }
 
 it("waits for the call to be live before opening the reveal for a host who is alone", () => {
@@ -44,4 +44,11 @@ it("keeps the reveal closed while the call is in limbo and brings it back when t
   expect(link.open()).toBe(false);
   link.show(true, true);
   expect(link.open()).toBe(true);
+});
+
+it("never opens the reveal for someone who can't manage the call, even when alone", () => {
+  const guest = mount();
+  guest.show(true, false, false);
+  guest.show(true, true, false);
+  expect(guest.open()).toBe(false);
 });
