@@ -115,12 +115,15 @@ describe("faults", () => {
 
   it("refreshes an expired credential once and retries the same batch", async () => {
     const test = createTestOutbox();
-    const refresh = vi.fn(async () => undefined);
+    let refreshes = 0;
+    const refresh = async () => {
+      refreshes += 1;
+    };
     test.outbox.bind({ current: () => credential(), refresh });
     test.answer({ status: 401, retryAfterMs: 0 });
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(2);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refreshes).toBe(1);
     expect(test.accepted.map((event) => event.seq)).toEqual([0]);
   });
 
