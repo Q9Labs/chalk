@@ -63,7 +63,7 @@ func TestListSpacesByActivityPutsTheMostRecentlyUsedFirst(t *testing.T) {
 	// The older Space had a call that began 90 minutes ago and ended 10 minutes ago.
 	mustExec(t, tx, `insert into episodes(id, status, space_id, tenant_id, config_snapshot, started_at, created_at) values($1, 'active', $2, $3, '{}'::jsonb, $4, $4)`,
 		ended.Bytes(), older.Bytes(), tenantID.Bytes(), now.Add(-90*time.Minute))
-	mustExec(t, tx, `update episodes set status = 'ended', end_reason = 'explicit', ended_at = $2 where id = $1`, ended.Bytes(), now.Add(-10*time.Minute))
+	mustExec(t, tx, `update episodes set status = 'ended', end_reason = 'ended_by_participant', ended_at = $2 where id = $1`, ended.Bytes(), now.Add(-10*time.Minute))
 
 	repository := NewSpaceRepository(sqlc.New(tx))
 	unarchived := false
@@ -93,6 +93,9 @@ func TestListSpacesByActivityPutsTheMostRecentlyUsedFirst(t *testing.T) {
 	if !first.Page.HasMore || first.Page.NextCursor == nil {
 		t.Fatalf("first page by activity = %+v, want a next page", first.Page)
 	}
+	if first.Page.NextCursor.Order != "active" {
+		t.Fatalf("a page by activity hands on a cursor of order %q, want %q so another order refuses it", first.Page.NextCursor.Order, "active")
+	}
 	rest := list(spaces.ListOrderActive, first.Page.NextCursor)
 	if rest.Page.HasMore {
 		t.Fatalf("second page by activity = %+v, want the last page", rest.Page)
@@ -102,6 +105,9 @@ func TestListSpacesByActivityPutsTheMostRecentlyUsedFirst(t *testing.T) {
 	}
 
 	byCreation := list(spaces.ListOrderCreated, nil)
+	if byCreation.Page.NextCursor.Order != "" {
+		t.Fatalf("a page by creation hands on a cursor of order %q, want the default", byCreation.Page.NextCursor.Order)
+	}
 	if got, want := ids(byCreation, list(spaces.ListOrderCreated, byCreation.Page.NextCursor)), []utilities.ID{newest, older, oldest}; !slices.Equal(got, want) {
 		t.Fatalf("by creation = %v, want %v", got, want)
 	}

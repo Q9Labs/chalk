@@ -142,6 +142,24 @@ const (
 	ListOrderActive ListOrder = "active"
 )
 
+// CursorOrder is what a page's cursor records of the order, so a cursor only continues the list it came from.
+// Created is the default order and records nothing, which keeps cursors issued before orders existed valid.
+func (o ListOrder) CursorOrder() string {
+	if o == ListOrderActive {
+		return string(ListOrderActive)
+	}
+	return ""
+}
+
+// checkCursor refuses a cursor taken from a list in another order: its position means something else here, so
+// continuing from it would skip or repeat Spaces without saying so.
+func checkCursor(page pagination.PageRequest, order ListOrder) error {
+	if cursor := page.Cursor(); cursor != nil && cursor.Order != order.CursorOrder() {
+		return pagination.ErrInvalidCursor
+	}
+	return nil
+}
+
 // ListOptions narrows and orders a list of Spaces. The zero value lists every Space, newest first.
 type ListOptions struct {
 	Archived *bool
@@ -414,6 +432,9 @@ func (s Service) ListSpaces(ctx context.Context, tenantID utilities.ID, page pag
 	if tenantID.IsZero() {
 		return SpaceList{}, ErrInvalidTenantID
 	}
+	if err := checkCursor(page, ListOrderCreated); err != nil {
+		return SpaceList{}, err
+	}
 
 	return s.repository.ListSpaces(ctx, tenantID, page)
 }
@@ -421,6 +442,9 @@ func (s Service) ListSpaces(ctx context.Context, tenantID utilities.ID, page pag
 func (s Service) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options ListOptions) (SpaceList, error) {
 	if tenantID.IsZero() {
 		return SpaceList{}, ErrInvalidTenantID
+	}
+	if err := checkCursor(page, options.Order); err != nil {
+		return SpaceList{}, err
 	}
 	filtered, ok := s.repository.(FilteredRepository)
 	if !ok || options == (ListOptions{}) {

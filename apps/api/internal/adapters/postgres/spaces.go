@@ -124,7 +124,7 @@ func (r SpaceRepository) ListSpacesFiltered(ctx context.Context, tenantID utilit
 	}
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
-		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.sortedAt, ID: utilities.IDFromBytes(last.space.ID.Bytes)}
+		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.sortedAt, ID: utilities.IDFromBytes(last.space.ID.Bytes), Order: options.Order.CursorOrder()}
 	}
 
 	return list, nil

@@ -378,6 +378,7 @@ func spaceWriteErrors(extra ...APIError) []APIError {
 
 var spaceRules = errorRules{
 	ruleFor(apiErrorInvalidTenantID, spaces.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidCursor, pagination.ErrInvalidCursor),
 	ruleFor(apiErrorInvalidSpaceID, spaces.ErrInvalidSpaceID),
 	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
 	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
