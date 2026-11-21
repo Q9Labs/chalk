@@ -781,9 +781,15 @@ importers:
       '@q9labsai/chalk-client':
         specifier: workspace:^
         version: link:../../sdks/typescript/client
+      '@q9labsai/chalk-screen-annotation':
+        specifier: workspace:^
+        version: link:../screen-annotation
       '@q9labsai/facehash':
         specifier: workspace:^
         version: link:../facehash
+      fractional-indexing:
+        specifier: 3.2.0
+        version: 3.2.0
       mathjax:
         specifier: 4.1.3
         version: 4.1.3

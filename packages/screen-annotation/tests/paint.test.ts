@@ -89,6 +89,7 @@ describe("annotation Canvas renderer", () => {
   it("clips cropped ink, restores caller state, and paints revisions before previews", () => {
     const ctx = createCanvas(400, 260).getContext("2d");
     ctx.globalAlpha = 0.23;
+    ctx.setLineDash([1, 5]);
     const shape = { kind: "line", from_point: point(0, 0.5), to_point: point(1, 0.5) } as const;
     const lower = mark(shape, { revision: 1 });
     const upper = mark(shape, { revision: 2, color: "#11dd00" });
@@ -98,6 +99,7 @@ describe("annotation Canvas renderer", () => {
     expect(ctx.getImageData(79, 130, 1, 1).data[3]).toBe(0);
     expect(ctx.getImageData(280, 130, 1, 1).data[3]).toBe(0);
     expect(ctx.globalAlpha).toBeCloseTo(0.23, 2);
+    expect(ctx.getLineDash()).toEqual([1, 5]);
   });
 
   it("uses the same visibility for paint and erasing; highlighter does not darken inside one stroke", () => {
@@ -130,6 +132,30 @@ describe("annotation Canvas renderer", () => {
     expect(hits({ kind: "arrow", from_point: point(0.15, 0.5), to_point: point(0.85, 0.5) }, 316, 137)).not.toBeNull();
     expect(hits({ kind: "text", at: point(0.15, 0.5), text: "Hello\nworld", note: true }, 52, 180)).not.toBeNull();
     expect(hits({ kind: "stamp", at: point(0.15, 0.5), stamp: "star" }, 86, 148)).not.toBeNull();
+  });
+
+  it("paints open geometry and a filled arrowhead at the projected coordinates", () => {
+    const ctx = createCanvas(400, 260).getContext("2d");
+    const marks = [
+      mark({ kind: "box", from_point: point(0.1, 0.2), to_point: point(0.35, 0.5) }, { revision: 1 }),
+      mark({ kind: "circle", from_point: point(0.5, 0.2), to_point: point(0.9, 0.5) }, { revision: 2 }),
+      mark({ kind: "arrow", from_point: point(0.15, 0.75), to_point: point(0.85, 0.75) }, { revision: 3 }),
+    ];
+    paintAnnotation(ctx, { rect, marks, nowMs: 1000 });
+    for (const [x, y] of [
+      [90, 52],
+      [280, 52],
+      [316, 203],
+    ] as const) {
+      expect(ctx.getImageData(x, y, 1, 1).data[3]).toBeGreaterThan(245);
+    }
+    for (const [x, y] of [
+      [40, 52],
+      [90, 91],
+      [280, 91],
+    ] as const) {
+      expect(ctx.getImageData(x, y, 1, 1).data[3]).toBe(0);
+    }
   });
 
   it("uses vector artwork for every stamp and the bundled font for literal text", () => {
