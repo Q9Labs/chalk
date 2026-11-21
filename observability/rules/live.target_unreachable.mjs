@@ -57,7 +57,7 @@ export function decide({ readings, window }) {
   for (const req of [...request.observations].sort((a, b) => a.window.from_ms - b.window.from_ms)) {
     const id = req.value.live_request_id;
     const decision = decisions.find((o) => o.value.live_request_id === id);
-    const active = req.value.participant_status === "active" && req.value.seat_left_ms === undefined && req.value.episode_status === "active";
+    const active = req.value.participant_status === "active" && req.value.seat_left_ms == null && req.value.episode_status === "active";
     if (!active) continue;
     const delivery = String(decision !== undefined ? (decision.value.delivery ?? decision.claim) : req.value.delivery);
     const reason = String(decision !== undefined ? (decision.value.unavailable_reason ?? delivery.match(/\((.*)\)/)?.[1]) : req.value.unavailable_reason);

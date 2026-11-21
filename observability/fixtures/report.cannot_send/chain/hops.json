@@ -1,0 +1,35 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/diagnostics/report.cannot_send.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/diagnostics/report.cannot_send.fault.test.ts",
+      "writes": [
+        "client-frames.report.cannot_send.positive.json",
+        "client-frames.report.cannot_send.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "apps/api/internal/httpapi/problem_reports_chain_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run TestProblemReportsChain -count=1 -args -scenario report.cannot_send",
+      "writes": [
+        "api-rows.report.cannot_send.positive.json",
+        "api-rows.report.cannot_send.healthy.json",
+        "db-rows.report.cannot_send.positive.json",
+        "db-rows.report.cannot_send.healthy.json",
+        "ledger.report.cannot_send.positive.json",
+        "ledger.report.cannot_send.healthy.json"
+      ]
+    },
+    {
+      "hop": "z",
+      "test": "scripts/diagnose-call/proof/report-live-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/report-live-chain.test.mjs --scenario report.cannot_send",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

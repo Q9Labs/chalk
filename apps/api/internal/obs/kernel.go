@@ -40,6 +40,12 @@ type Config struct {
 	SourceID string
 	// Trail adds the ID trail known from the context, such as the Episode and Participant.
 	Trail func(context.Context) []slog.Attr
+	// Clock, EventID and Seq pin the volatile envelope fields in tests: the
+	// chain harness fixes every record's time, id and sequence so replay
+	// compares bytes, the way the sync kernel's test hooks do. Nil means real.
+	Clock   func() time.Time
+	EventID func() string
+	Seq     func() int64
 }
 
 type state struct {
@@ -247,15 +253,25 @@ func send(ctx context.Context, st *state, kind, name string, attrs, own []slog.A
 		record = append(record, config.Trail(ctx)...)
 	}
 	record = append(record, attrs...)
+	eventID, sequence, at := newID(), seq.Add(1), time.Now().UnixMilli()
+	if config.EventID != nil {
+		eventID = config.EventID()
+	}
+	if config.Seq != nil {
+		sequence = config.Seq()
+	}
+	if config.Clock != nil {
+		at = config.Clock().UnixMilli()
+	}
 	record = append(record,
-		slog.String(FieldEventID, newID()),
-		slog.Int64(FieldSeq, seq.Add(1)),
+		slog.String(FieldEventID, eventID),
+		slog.Int64(FieldSeq, sequence),
 		slog.String(FieldSourceID, st.sourceID),
 		slog.String(FieldSchemaVer, SchemaVer),
 		slog.String(FieldModule, config.Module),
 		slog.String(FieldEnv, config.Env),
 		slog.String(FieldClockState, "server"),
-		slog.Int64(FieldEstServerMs, time.Now().UnixMilli()),
+		slog.Int64(FieldEstServerMs, at),
 	)
 	for _, optional := range [][2]string{{FieldPlatform, config.Platform}, {FieldReleaseSHA, config.ReleaseSHA}, {FieldFlagsHash, st.flagsHash}} {
 		if optional[1] != "" {

@@ -1,0 +1,26 @@
+{
+  "hops": [
+    {
+      "hop": "b",
+      "test": "apps/api/internal/httpapi/problem_reports_chain_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run TestProblemReportsChain -count=1 -args -scenario report.forward_failed",
+      "writes": [
+        "api-rows.report.forward_failed.positive.json",
+        "api-rows.report.forward_failed.healthy.json",
+        "db-rows.report.forward_failed.positive.json",
+        "db-rows.report.forward_failed.healthy.json",
+        "ledger.report.forward_failed.positive.json",
+        "ledger.report.forward_failed.healthy.json"
+      ]
+    },
+    {
+      "hop": "z",
+      "test": "scripts/diagnose-call/proof/report-live-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/report-live-chain.test.mjs --scenario report.forward_failed",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

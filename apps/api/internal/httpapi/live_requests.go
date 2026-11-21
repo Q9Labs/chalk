@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/liverequests"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -54,6 +56,7 @@ func handleLiveRequestPost(service LiveRequestService, tokenSHA256 []byte) http.
 			return
 		}
 		if !operatorDiagnoseAuthorized(r, tokenSHA256) {
+			obs.Decision(r.Context(), "live_request.create", "refused", "live.unauthenticated")
 			writeError(w, http.StatusUnauthorized, "auth.unauthorized", "Unauthorized")
 			return
 		}
@@ -80,12 +83,22 @@ func handleLiveRequestPost(service LiveRequestService, tokenSHA256 []byte) http.
 			EpisodeID:     episodeID,
 			ParticipantID: participantID,
 		})
+		subject := []slog.Attr{
+			obs.F("tenant_id", tenantID.String()),
+			obs.F("episode_id", episodeID.String()),
+			obs.F("participant_id", participantID.String()),
+			obs.F("live_request_id", requestID.String()),
+		}
+		refuse := func(err APIError, reason string) {
+			obs.Decision(r.Context(), "live_request.create", "refused", reason, subject...)
+			writeError(w, err.Status, err.Code, err.Message)
+		}
 		switch {
 		case errors.Is(err, liverequests.ErrPending):
-			writeError(w, apiErrorLiveRequestPending.Status, apiErrorLiveRequestPending.Code, apiErrorLiveRequestPending.Message)
+			refuse(apiErrorLiveRequestPending, "live.request_pending")
 			return
 		case errors.Is(err, liverequests.ErrRateLimited):
-			writeError(w, apiErrorLiveRequestRateLimit.Status, apiErrorLiveRequestRateLimit.Code, apiErrorLiveRequestRateLimit.Message)
+			refuse(apiErrorLiveRequestRateLimit, "live.rate_limited")
 			return
 		case errors.Is(err, liverequests.ErrEpisodeMissing):
 			writeError(w, apiErrorLiveRequestEpisode.Status, apiErrorLiveRequestEpisode.Code, apiErrorLiveRequestEpisode.Message)
@@ -94,6 +107,9 @@ func handleLiveRequestPost(service LiveRequestService, tokenSHA256 []byte) http.
 			writeError(w, http.StatusInternalServerError, "live.request_failed", "The live request could not be stored")
 			return
 		}
+		obs.Decision(r.Context(), "live_request.create", "created", "", append(subject,
+			obs.F("participant_status", request.ParticipantStatus),
+			obs.F("episode_status", request.EpisodeStatus))...)
 		writeJSON(w, http.StatusAccepted, map[string]string{
 			"request_id":         request.ID.String(),
 			"requested_at":       request.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z"),

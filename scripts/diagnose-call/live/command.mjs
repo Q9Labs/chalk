@@ -51,7 +51,7 @@ async function requestRow(databaseUrl, id) {
 }
 
 async function uploadRows(databaseUrl, requestId) {
-  return (await psql(databaseUrl, `select coalesce(json_agg(json_build_object('id',u.id,'state',u.state,'object_key',u.object_key,'participant_id',u.participant_id,'client_session_id',u.client_session_id,'bytes',u.bytes)), '[]'::json) from diagnostic_uploads u where u.live_request_id = ${q(requestId)}::uuid`)) ?? [];
+  return (await psql(databaseUrl, `select coalesce(json_agg(json_build_object('id',u.id,'state',u.state,'object_key',u.object_key,'participant_id',l.participant_id,'bytes',u.bytes)), '[]'::json) from diagnostic_uploads u left join live_introspection_requests l on l.id = u.live_request_id where u.live_request_id = ${q(requestId)}::uuid`)) ?? [];
 }
 
 /** Format the `live` view: one request line, one ack/delivery line, one upload line per bundle. */

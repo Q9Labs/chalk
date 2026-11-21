@@ -1,0 +1,17 @@
+[
+  {
+    "clock_state": "server",
+    "decision": "true",
+    "decision_id": "12000000-0000-4000-8000-000000000001",
+    "env": "test",
+    "est_server_ms": 1795599900000,
+    "event_id": "12000000-0000-4000-8000-000000000002",
+    "kind": "decision",
+    "module": "api",
+    "name": "problem_report.availability",
+    "platform": "server",
+    "release_sha": "chain",
+    "seq": 1,
+    "source_id": "12000000-0000-4000-8000-000000000003"
+  }
+]

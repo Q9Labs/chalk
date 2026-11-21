@@ -736,11 +736,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db\""
         }
       ]
@@ -764,11 +760,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db_participant\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db_participant\""
         }
       ]
@@ -819,11 +811,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db_upload\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db_upload\""
         }
       ]
@@ -874,11 +862,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"live.db_request\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"live.db_request\""
         }
       ]
@@ -914,7 +898,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/r2.mjs",
+          "path": "scripts/diagnose-call/live/stores.mjs",
           "literal": "\"report.r2_upload\""
         },
         {
@@ -945,11 +929,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"live.db_client_session\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"live.db_client_session\""
         }
       ]
@@ -1483,7 +1463,7 @@
     {
       "name": "report.readback",
       "kind": "event",
-      "per": "any",
+      "per": "item",
       "events": [
         {
           "event": "report.r2_upload",
@@ -1677,7 +1657,7 @@
           "doc": "The availability decisions for the tenant, for the reports_unavailable branch."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/report.cannot_send.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.cannot_send.fault.test.ts"
     },
     {
       "code": "report.send_failed",
@@ -1735,7 +1715,7 @@
           "doc": "The stored row for the send's journey, written by the same commit."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/report.send_failed.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.send_failed.fault.test.ts"
     },
     {
       "code": "report.forward_failed",
@@ -1774,7 +1754,7 @@
           "doc": "The boot fact saying whether forwarding is configured for the release."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/report.forward_failed.fault.test.mjs"
+      "fault_scenario": "apps/api/internal/httpapi/problem_reports_chain_test.go"
     },
     {
       "code": "report.upload_missing",
@@ -1840,7 +1820,7 @@
           "doc": "The checker's own GET, gunzip, parse and identity match."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/report.upload_missing.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.upload_missing.fault.test.ts"
     },
     {
       "code": "live.target_unreachable",
@@ -1879,7 +1859,7 @@
           "doc": "The seat's client sessions and SDK versions, for the live.old_client expected on not_negotiated."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/live.target_unreachable.fault.test.mjs"
+      "fault_scenario": "apps/api/internal/httpapi/problem_reports_chain_test.go"
     },
     {
       "code": "live.no_reply",
@@ -1945,7 +1925,7 @@
           "doc": "The upload row the issue wrote."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/live.no_reply.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/live.no_reply.fault.test.ts"
     },
     {
       "code": "live.upload_missing",
@@ -2020,7 +2000,7 @@
           "doc": "The checker's own readback of the bundle."
         }
       ],
-      "fault_scenario": "scripts/problem-reports/live.upload_missing.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/live.upload_missing.fault.test.ts"
     }
   ]
 }

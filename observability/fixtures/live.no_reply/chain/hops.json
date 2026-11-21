@@ -1,0 +1,44 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/diagnostics/live.no_reply.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/diagnostics/live.no_reply.fault.test.ts",
+      "writes": [
+        "client-frames.live.no_reply.positive.json",
+        "client-frames.live.no_reply.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "apps/api/internal/httpapi/problem_reports_chain_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run TestProblemReportsChain -count=1 -args -scenario live.no_reply",
+      "writes": [
+        "api-rows.live.no_reply.positive.json",
+        "api-rows.live.no_reply.healthy.json",
+        "db-rows.live.no_reply.positive.json",
+        "db-rows.live.no_reply.healthy.json",
+        "ledger.live.no_reply.positive.json",
+        "ledger.live.no_reply.healthy.json"
+      ]
+    },
+    {
+      "hop": "c",
+      "test": "apps/sync/test/chalk_sync/obs_live_chain_test.exs",
+      "command": "scripts/gates/with-postgres.sh -- bash -c 'cd apps/sync && CHALK_CHAIN_LIVE=1 mix test test/chalk_sync/obs_live_chain_test.exs'",
+      "writes": [
+        "sync-rows.live.no_reply.positive.json",
+        "sync-rows.live.no_reply.healthy.json"
+      ]
+    },
+    {
+      "hop": "z",
+      "test": "scripts/diagnose-call/proof/report-live-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/report-live-chain.test.mjs --scenario live.no_reply",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

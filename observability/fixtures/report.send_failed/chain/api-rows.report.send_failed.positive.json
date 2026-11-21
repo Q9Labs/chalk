@@ -1,0 +1,42 @@
+[
+  {
+    "chk_code": "CHK-0000",
+    "clock_state": "server",
+    "decision": "refused",
+    "decision_id": "12000000-0000-4000-8000-000000000001",
+    "env": "test",
+    "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
+    "est_server_ms": 1795599900000,
+    "event_id": "12000000-0000-4000-8000-000000000002",
+    "journey_id": "12000000-0000-4000-8000-000000000003",
+    "kind": "decision",
+    "module": "api",
+    "name": "problem_report.submit",
+    "participant_id": "a1000000-0000-4000-8000-000000000001",
+    "picked_symptom": "report.forward_failed",
+    "platform": "server",
+    "reason_code": "report.description_blank",
+    "release_sha": "chain",
+    "report_id": "12000000-0000-4000-8000-000000000003",
+    "seq": 1,
+    "source_id": "12000000-0000-4000-8000-000000000004",
+    "tenant_id": "c1000000-0000-4000-8000-000000000001"
+  },
+  {
+    "cause": "description_blank",
+    "clock_state": "server",
+    "env": "test",
+    "est_server_ms": 1795599900000,
+    "event_id": "12000000-0000-4000-8000-000000000005",
+    "http_status": 400,
+    "journey_id": "12000000-0000-4000-8000-000000000003",
+    "kind": "fact",
+    "module": "api",
+    "name": "problem_report.outcome",
+    "platform": "server",
+    "release_sha": "chain",
+    "report_id": "12000000-0000-4000-8000-000000000003",
+    "seq": 2,
+    "source_id": "12000000-0000-4000-8000-000000000004"
+  }
+]

@@ -67,12 +67,12 @@ defmodule ChalkSync.Live.Introspection do
           space_id: request.space_id,
           episode_id: episode_id,
           participant_id: request.participant_id,
-          delivery: delivery
+          delivery: decision_base(delivery)
         }
         |> put_present(:sockets, sockets)
         |> put_present(:unavailable_reason, unavailable_reason)
 
-      Obs.decision("live_request.deliver", delivery, fields)
+      Obs.decision("live_request.deliver", decision_base(delivery), fields)
     end
 
     :ok
@@ -92,14 +92,14 @@ defmodule ChalkSync.Live.Introspection do
         }
 
         case Coordinator.deliver_live_request(coordinator, request.participant_id, frame) do
-          {:ok, _seat, sent} when sent > 0 -> {"delivered", sent, nil}
-          {:ok, 0, _sent} -> {"target_unavailable", 0, "no_socket"}
-          {:ok, _seat, 0} -> {"target_unavailable", 0, "not_negotiated"}
-          {:error, _reason} -> {"target_unavailable", 0, "no_socket"}
+          {:ok, _seat, sent} when sent > 0 -> {"delivered(#{sent})", sent, nil}
+          {:ok, 0, _sent} -> {"target_unavailable(no_socket)", 0, "no_socket"}
+          {:ok, _seat, 0} -> {"target_unavailable(not_negotiated)", 0, "not_negotiated"}
+          {:error, _reason} -> {"target_unavailable(no_socket)", 0, "no_socket"}
         end
 
       _ ->
-        {"target_unavailable", 0, "no_socket"}
+        {"target_unavailable(no_socket)", 0, "no_socket"}
     end
   end
 
@@ -196,4 +196,10 @@ defmodule ChalkSync.Live.Introspection do
 
   defp put_present(fields, _key, nil), do: fields
   defp put_present(fields, key, value), do: Map.put(fields, key, value)
+
+  # The request row's delivery column carries the full string ("delivered(2)",
+  # "target_unavailable(no_socket)"); the registry's delivery enum and decision
+  # claim take only the base word, the detail living in sockets/unavailable_reason.
+  defp decision_base(delivery) when is_binary(delivery),
+    do: delivery |> String.split("(", parts: 2) |> hd()
 end

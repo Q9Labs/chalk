@@ -76,7 +76,7 @@ export function dbRows({ seats, uploads, requests, sessions, episode, tenant }, 
     obs.push(observation({
       id: eventId("ev", "report.db_upload", u.id),
       fact: "report.upload_row", source: "db", origin: origin.measured("db"),
-      subject: { tenant, episode },
+      subject: { tenant, episode, ...(u.participant_id ? { participant: u.participant_id } : {}) },
       window: { from_ms: issued, to_ms: readMs },
       claim: String(u.state),
       value: {

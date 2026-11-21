@@ -529,6 +529,23 @@ func run() error {
 	if reportAdapter != nil {
 		reportSender = reportAdapter
 	}
+	// The API is the first Go-kernel emitter: name its envelope and give every
+	// record the subject's trail, so a decision emitted inside a participant's
+	// request lands on that Episode's bundle without each call site restating it.
+	obs.Configure(obs.Config{
+		Module: "api", Env: cfg.Observability.Environment, Platform: "server", ReleaseSHA: cfg.Observability.Version,
+		Trail: func(ctx context.Context) []slog.Attr {
+			subject, ok := accessgrants.SubjectFromContext(ctx)
+			if !ok {
+				return nil
+			}
+			return []slog.Attr{
+				obs.F("tenant_id", subject.TenantID.String()),
+				obs.F("episode_id", subject.EpisodeID.String()),
+				obs.F("participant_id", subject.ParticipantID.String()),
+			}
+		},
+	})
 	// The forwarding flag is the one witness `report.forward_failed` reads for a
 	// `not_configured` outcome; the kernel stamps release_sha itself.
 	obs.Fact(context.Background(), "problem_reports.config", obs.F("forwarding", reportSender != nil))

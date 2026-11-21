@@ -1,5 +1,5 @@
 {
-  "schema_ver": "819112a6ec26",
+  "schema_ver": "0a633dc1cf08",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1909,11 +1909,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"live.db_client_session\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"live.db_client_session\""
         }
       ],
@@ -1964,11 +1960,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"live.db_request\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"live.db_request\""
         }
       ],
@@ -2202,11 +2194,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db\""
         }
       ],
@@ -2230,11 +2218,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db_participant\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db_participant\""
         }
       ],
@@ -2285,11 +2269,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/live/stores.mjs",
-          "literal": "\"report.db_upload\""
-        },
-        {
-          "path": "scripts/problem-reports/evidence.mjs",
+          "path": "scripts/diagnose-call/live/report-store.mjs",
           "literal": "\"report.db_upload\""
         }
       ],
@@ -2355,7 +2335,7 @@
       },
       "emit_sites": [
         {
-          "path": "scripts/diagnose-call/r2.mjs",
+          "path": "scripts/diagnose-call/live/stores.mjs",
           "literal": "\"report.r2_upload\""
         },
         {
@@ -2890,7 +2870,7 @@
       "name": "report.readback",
       "area": "report",
       "kind": "event",
-      "per": "any",
+      "per": "item",
       "events": [
         {
           "event": "report.r2_upload",
@@ -3276,7 +3256,7 @@
         "positive": "observability/fixtures/live.no_reply/positive.json",
         "healthy": "observability/fixtures/live.no_reply/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/live.no_reply.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/live.no_reply.fault.test.ts"
     },
     {
       "code": "live.target_unreachable",
@@ -3317,7 +3297,7 @@
         "positive": "observability/fixtures/live.target_unreachable/positive.json",
         "healthy": "observability/fixtures/live.target_unreachable/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/live.target_unreachable.fault.test.mjs"
+      "fault_scenario": "apps/api/internal/httpapi/problem_reports_chain_test.go"
     },
     {
       "code": "live.upload_missing",
@@ -3390,7 +3370,7 @@
         "positive": "observability/fixtures/live.upload_missing/positive.json",
         "healthy": "observability/fixtures/live.upload_missing/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/live.upload_missing.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/live.upload_missing.fault.test.ts"
     },
     {
       "code": "page.crashed",
@@ -3488,7 +3468,7 @@
         "positive": "observability/fixtures/report.cannot_send/positive.json",
         "healthy": "observability/fixtures/report.cannot_send/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/report.cannot_send.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.cannot_send.fault.test.ts"
     },
     {
       "code": "report.forward_failed",
@@ -3529,7 +3509,7 @@
         "positive": "observability/fixtures/report.forward_failed/positive.json",
         "healthy": "observability/fixtures/report.forward_failed/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/report.forward_failed.fault.test.mjs"
+      "fault_scenario": "apps/api/internal/httpapi/problem_reports_chain_test.go"
     },
     {
       "code": "report.send_failed",
@@ -3586,7 +3566,7 @@
         "positive": "observability/fixtures/report.send_failed/positive.json",
         "healthy": "observability/fixtures/report.send_failed/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/report.send_failed.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.send_failed.fault.test.ts"
     },
     {
       "code": "report.upload_missing",
@@ -3651,7 +3631,7 @@
         "positive": "observability/fixtures/report.upload_missing/positive.json",
         "healthy": "observability/fixtures/report.upload_missing/healthy.json"
       },
-      "fault_scenario": "scripts/problem-reports/report.upload_missing.fault.test.mjs"
+      "fault_scenario": "sdks/typescript/client/src/diagnostics/report.upload_missing.fault.test.ts"
     },
     {
       "code": "share.wont_stop",
