@@ -7,8 +7,11 @@ begin
     if exists (
         select 1 from episodes
         where status in ('active', 'ending')
-          and coalesce(config_snapshot #>> '{media_plane_binding,provider}',
-                       config_snapshot ->> 'media_plane') in ('cf_sfu', 'cf_rtk')
+          and (
+              -- No binding key means pre-binding Cloudflare, not an explicit no-media binding.
+              not (config_snapshot ? 'media_plane_binding')
+              or config_snapshot #>> '{media_plane_binding,provider}' in ('cf_sfu', 'cf_rtk')
+          )
     ) then
         raise exception 'End active or ending Cloudflare Episodes before retiring Cloudflare media';
     end if;

@@ -10,7 +10,8 @@ export const proofDescription = (name) => registry[name].description;
 
 export function proofPlan(name) {
   const { flags, proofs } = registry[name];
-  return { media: false, webhooks: false, ...flags, proofs };
+  const recordingRequired = proofs.includes("export") || proofs.includes("transcript");
+  return { media: false, webhooks: false, ...flags, proofs, recordingRequired };
 }
 
 export const dryRunNames = proofNames.filter((name) => registry[name].dryRun);

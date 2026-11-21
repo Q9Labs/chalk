@@ -1,6 +1,6 @@
 # Real-call proofs
 
-`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans, their media planes and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:latency`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
+`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:latency`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -8,7 +8,7 @@ pnpm --filter @q9labsai/chalk-client exec playwright install chromium
 pnpm prod:proof                              # all release proofs, including a forced camera layer switch
 pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
-CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts
+pnpm prod:proof call-artifacts
 pnpm prod:proof chat-upload                  # Node only: a chat upload from an origin on no list, through the storage bucket's CORS rule, and a check that the storage endpoint refuses an unsigned read (not a public r2.dev URL or custom domain: check those in the Cloudflare dashboard)
 ```
 

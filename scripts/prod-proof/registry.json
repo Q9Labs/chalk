@@ -30,7 +30,7 @@
     "proofs": ["transcript"]
   },
   "call-artifacts": {
-    "description": "Three guests with automatic Recording and Transcript, on the media plane CHALK_PROOF_MEDIA_PLANE selects. It has its own Space, so it runs beside the other nightly proofs.",
+    "description": "Three guests with automatic Recording and Transcript. It has its own Space, so it runs beside the other nightly proofs.",
     "ownSpace": true,
     "flags": { "callArtifacts": true },
     "proofs": ["export", "call-artifacts"]
