@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
+import { createSocket } from "node:dgram";
+import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ import { containerArguments, containerEnvironment } from "./containers.mjs";
 import { dashboardArtifactBindings } from "./dashboard-seed.mjs";
 import { previewAudio, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { executeDevCommand } from "./exec.mjs";
-import { resolveDevConfig } from "./config.mjs";
+import { preflight, resolveDevConfig } from "./config.mjs";
 import { startChalkSfu } from "./chalk-sfu.mjs";
 import { spawnCommand, killTree } from "../lib/platform.mjs";
 
@@ -43,6 +44,20 @@ test("dev SFU rejects announce addresses that cannot identify an IPv4 host", () 
   for (const address of ["chalk.example.test", "::1", "127.0.0.2", "0.0.0.0", "239.0.0.1"]) {
     assert.throws(() => resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: address } }), /CHALK_DEV_SFU_ANNOUNCE_IP must be a non-loopback unicast IPv4 address/);
   }
+});
+
+test("dev preflight rejects an occupied SFU UDP port before starting containers", async () => {
+  const listener = createSocket("udp4");
+  listener.bind(0, "127.0.0.1");
+  await once(listener, "listening");
+  const port = listener.address().port;
+  const dev = { ...resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: "192.0.2.42" } }), ports: { sfuMedia: port } };
+  try {
+    await assert.rejects(preflight(dev, { requiredTools: [] }), new RegExp(`ports already in use: sfuMedia:${port}/udp`));
+  } finally {
+    await new Promise((done) => listener.close(done));
+  }
+  assert.equal((await preflight(dev, { requiredTools: [] })).ok, true);
 });
 
 test("ownership accepts a real forward-slash Node invocation with Windows recorded separators", async () => {

@@ -1,4 +1,5 @@
 import { findExecutable } from "../lib/platform.mjs";
+import { createSocket } from "node:dgram";
 import { createServer, isIPv4 } from "node:net";
 import { homedir } from "node:os";
 import { access } from "node:fs/promises";
@@ -221,8 +222,17 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   };
 }
 
-export function probePort(port, host = "127.0.0.1") {
+export function probePort(port, host = "127.0.0.1", transport = "tcp") {
   return new Promise((resolveProbe) => {
+    if (transport === "udp") {
+      const socket = createSocket("udp4");
+      socket.once("error", (error) => {
+        socket.close();
+        resolveProbe({ available: error.code !== "EADDRINUSE", error });
+      });
+      socket.bind(port, host, () => socket.close(() => resolveProbe({ available: true })));
+      return;
+    }
     const server = createServer();
     server.once("error", (error) => resolveProbe({ available: error.code !== "EADDRINUSE", error }));
     server.listen({ port, host }, () => server.close(() => resolveProbe({ available: true })));
@@ -239,8 +249,10 @@ export async function preflight(config, { which = async (tool) => commandExists(
   const busy = [];
   for (const [name, port] of Object.entries(config.ports)) {
     if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
-    const result = await probe(port, name === "sfuMedia" ? config.sfuMedia?.bindIP : undefined);
+    const host = name === "sfuMedia" ? config.sfuMedia?.bindIP : undefined;
+    const result = await probe(port, host);
     if (!result.available) busy.push(`${name}:${port}`);
+    if (name === "sfuMedia" && !(await probe(port, host, "udp")).available) busy.push(`${name}:${port}/udp`);
   }
   if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });
   try {
