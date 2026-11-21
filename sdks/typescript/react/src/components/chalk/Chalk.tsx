@@ -1,12 +1,12 @@
 "use client";
 import { commandFailure, type MediaCommandAction, type MediaCommandSource } from "../control-bar/command-failure";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, screenAnnotationFor, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -14,6 +14,7 @@ import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
 import { CallDialog } from "../space-header/CallDialog";
+import type { ScreenAnnotationSetup } from "../screen-annotation/model";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
@@ -55,6 +56,8 @@ export type ChalkProps = SpaceIntegration &
     readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
+    /** Enables annotation UI only on an exactly matched, negotiated screen publication. */
+    readonly screenAnnotation?: ScreenAnnotationSetup;
     readonly theme?: ChalkTheme;
     readonly shareUrl?: string;
     readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
@@ -276,6 +279,33 @@ function SpaceSurface(
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCanDrawWhiteboard();
+  const self = useSelf();
+  const { roster } = useParticipants();
+  const setup = props.screenAnnotation;
+  const screenAnnotation = useMemo(() => {
+    if (!setup || !self.participantId || connection.status !== "live") return undefined;
+    const context = {
+      actorId: self.participantId,
+      actorName: self.displayName ?? "You",
+      grants: whiteboardState.access.policy === null ? undefined : whiteboardState.access.permissions,
+      people: roster.map((person) => ({
+        id: person.participantId,
+        name: person.displayName,
+        roleCanDraw: person.capabilities.includes("drawWhiteboard"),
+        managesPolicy: person.capabilities.includes("manageWhiteboard"),
+      })),
+    };
+    return {
+      ...setup,
+      client: screenAnnotationFor(client),
+      context,
+      publicationForTrack: (track: MediaStreamTrack) => media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId ?? setup.localPublicationForTrack?.(track),
+      actions: {
+        saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? setup.actions?.saveToWhiteboard : undefined,
+        downloadPng: setup.actions?.downloadPng,
+      },
+    };
+  }, [setup, self.participantId, self.displayName, connection.status, whiteboardState.access, roster, client, media.remote, canDrawWhiteboard, props.features?.whiteboard]);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -346,6 +376,7 @@ function SpaceSurface(
       onLayoutChange={props.onLayoutChange}
       features={props.features}
       whiteboard={whiteboard}
+      screenAnnotation={screenAnnotation}
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}

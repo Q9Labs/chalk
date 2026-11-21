@@ -1,27 +1,6 @@
-import type { ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
+import type { ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 
-export type AnnotationRect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
-export type AnnotationFit = "fit" | "fill";
 export type AnnotationAuthor = ScreenAnnotationMark["author"];
-
-export interface ScreenAnnotationRenderer {
-  contentRect(frame: ScreenAnnotationFrameSize, viewport: AnnotationRect, fit: AnnotationFit): AnnotationRect | null;
-  framePoint(rect: AnnotationRect, point: ScreenAnnotationPoint): ScreenAnnotationPoint | null;
-  simplifyStroke(points: readonly ScreenAnnotationPoint[]): readonly ScreenAnnotationPoint[];
-  hitTest(input: { readonly state: ScreenAnnotationState; readonly point: ScreenAnnotationPoint; readonly frame: ScreenAnnotationFrameSize; readonly actorId: string; readonly nowMs: number }): ScreenAnnotationMark | undefined;
-  paintAnnotation(
-    ctx: CanvasRenderingContext2D,
-    input: {
-      readonly rect: AnnotationRect;
-      readonly clip: AnnotationRect;
-      readonly sharerId: string;
-      readonly paused: boolean;
-      readonly marks: readonly ScreenAnnotationMark[];
-      readonly presence: readonly ScreenAnnotationPresence[];
-      readonly nowMs: number;
-    },
-  ): void;
-}
 
 /** A detached, pristine copy of the decoded frame and its accepted ink at action time. */
 export interface ScreenAnnotationFrame {
@@ -41,7 +20,13 @@ export interface ScreenAnnotationOptions {
   readonly client: ScreenAnnotationClient;
   readonly publicationId: string;
   readonly actions?: ScreenAnnotationActions;
-  readonly renderer?: ScreenAnnotationRenderer;
+  readonly fontUrl?: string;
+  readonly helper?: ScreenAnnotationHelper;
+}
+
+export interface ScreenAnnotationSetup extends Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper"> {
+  /** Returns the confirmed publication for this exact local track, not the last projection for its participant. */
+  readonly localPublicationForTrack?: (track: MediaStreamTrack) => string | undefined;
 }
 
 export type AnnotationTool = ScreenAnnotationDraft["shape"]["kind"] | "pointer" | "eraser";
@@ -87,6 +72,33 @@ export function freezeFrame(video: HTMLVideoElement, state: ScreenAnnotationStat
   return { publicationId: state.layer.publication_id, size, video: frame, marks: structuredClone(visibleMarks(state, nowMs)), nowMs };
 }
 
+export function videoMatchesTrack(video: HTMLVideoElement, track: MediaStreamTrack): boolean {
+  const stream = video.srcObject;
+  return track.readyState === "live" && !track.muted && stream instanceof MediaStream && stream.getVideoTracks().includes(track);
+}
+
 export function decodedSize(video: HTMLVideoElement | null): ScreenAnnotationFrameSize | null {
   return video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0 ? { width: video.videoWidth, height: video.videoHeight } : null;
+}
+
+export interface ScreenAnnotationHelperShare {
+  readonly client: ScreenAnnotationClient;
+  readonly layer: ScreenAnnotationState["layer"];
+  readonly participantId: string;
+  readonly surface: "browser" | "window" | "monitor" | null;
+}
+
+export type ScreenAnnotationHelperStatus = "unbound" | "calibrating" | "ready" | "unsupported_surface" | "update_required" | "disconnected";
+
+export interface ScreenAnnotationHelper {
+  readonly installUrl?: string;
+  readonly challenge?: (share: ScreenAnnotationHelperShare, signal: AbortSignal) => Promise<{ readonly kind: "update_required" } | { readonly kind: "approval"; readonly fingerprint: string; readonly attach: (onStatus: (status: ScreenAnnotationHelperStatus) => void) => Promise<void> }>;
+  readonly lookupCode?: (
+    code: string,
+    share: ScreenAnnotationHelperShare,
+    signal: AbortSignal,
+  ) => Promise<{
+    readonly deviceName: string;
+    readonly approve: (onStatus: (status: ScreenAnnotationHelperStatus) => void) => Promise<void>;
+  }>;
 }

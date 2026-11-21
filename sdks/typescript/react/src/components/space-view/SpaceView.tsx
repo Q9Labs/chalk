@@ -404,6 +404,7 @@ export function SpaceView({
                   onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
                   buttons={buttons}
                   microphonePicker={microphoneNotice.picker}
+                  helperInstallUrl={screenAnnotation?.helper?.installUrl}
                   activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                   onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                   onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}

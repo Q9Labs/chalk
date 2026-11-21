@@ -1,5 +1,6 @@
 import type { ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
-import type { AnnotationBrush, AnnotationRect, ScreenAnnotationRenderer } from "./model";
+import { simplifyStroke, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
+import type { AnnotationBrush } from "./model";
 
 type DrawingTool = Exclude<AnnotationBrush["tool"], "text" | "eraser" | "pointer">;
 
@@ -14,23 +15,23 @@ export type Gesture = {
   points: readonly [ScreenAnnotationPoint, ...ScreenAnnotationPoint[]];
 };
 
-export function addGesturePoint(gesture: Gesture, point: ScreenAnnotationPoint, renderer: ScreenAnnotationRenderer): void {
+export function addGesturePoint(gesture: Gesture, point: ScreenAnnotationPoint): void {
   const last = gesture.points.at(-1);
   if (last?.x === point.x && last.y === point.y) return;
   if (gesture.tool !== "pen" && gesture.tool !== "highlighter") {
     gesture.points = [gesture.points[0], point];
     return;
   }
-  const points = gesture.points.length >= 384 ? renderer.simplifyStroke(gesture.points) : gesture.points;
+  const points = gesture.points.length >= 384 ? simplifyStroke(gesture.points) : gesture.points;
   gesture.points = [gesture.points[0], ...points.slice(1, 383), point];
 }
 
-export function gestureDraft(gesture: Gesture, renderer: ScreenAnnotationRenderer): ScreenAnnotationDraft {
+export function gestureDraft(gesture: Gesture): ScreenAnnotationDraft {
   const { tool, points, style } = gesture;
   const first = points[0];
   if (tool === "stamp") return { ...style, shape: { kind: tool, at: first, stamp: gesture.stamp } };
   if (tool === "pen" || tool === "highlighter") {
-    const simplified = renderer.simplifyStroke(points);
+    const simplified = simplifyStroke(points);
     const path = simplified.length > 1 ? simplified : [first, first];
     return { ...style, shape: { kind: tool, points: path } };
   }

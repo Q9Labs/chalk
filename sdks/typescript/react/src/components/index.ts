@@ -46,4 +46,4 @@ export { ScreenAnnotationLayer } from "./screen-annotation/ScreenAnnotationLayer
 export type { ScreenAnnotationLayerProps } from "./screen-annotation/ScreenAnnotationLayer";
 export { ScreenAnnotationToolbar } from "./screen-annotation/ScreenAnnotationToolbar";
 export type { ScreenAnnotationToolbarProps } from "./screen-annotation/ScreenAnnotationToolbar";
-export type { AnnotationBrush, AnnotationTool, ScreenAnnotationActions, ScreenAnnotationFrame, ScreenAnnotationOptions, ScreenAnnotationRenderer } from "./screen-annotation/model";
+export type { AnnotationBrush, AnnotationTool, ScreenAnnotationActions, ScreenAnnotationFrame, ScreenAnnotationOptions, ScreenAnnotationSetup, ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./screen-annotation/model";

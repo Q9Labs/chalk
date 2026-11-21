@@ -77,4 +77,18 @@ export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from 
 export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";
 
 export { ScreenShareView, ScreenShareViewSurface, ScreenAnnotationLayer, ScreenAnnotationToolbar } from "./components";
-export type { ScreenShareViewProps, ScreenShareViewSurfaceProps, ScreenAnnotationLayerProps, ScreenAnnotationToolbarProps, ScreenAnnotationOptions, ScreenAnnotationActions, ScreenAnnotationFrame, ScreenAnnotationRenderer, AnnotationBrush, AnnotationTool } from "./components";
+export type {
+  ScreenShareViewProps,
+  ScreenShareViewSurfaceProps,
+  ScreenAnnotationLayerProps,
+  ScreenAnnotationToolbarProps,
+  ScreenAnnotationOptions,
+  ScreenAnnotationSetup,
+  ScreenAnnotationHelper,
+  ScreenAnnotationHelperShare,
+  ScreenAnnotationHelperStatus,
+  ScreenAnnotationActions,
+  ScreenAnnotationFrame,
+  AnnotationBrush,
+  AnnotationTool,
+} from "./components";

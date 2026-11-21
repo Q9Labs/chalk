@@ -9,6 +9,7 @@
     "paths": {
       "@q9labsai/recording-presentation": ["../../../packages/recording-presentation/src/index.ts"],
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
+      "@q9labsai/chalk-screen-annotation": ["../../../packages/screen-annotation/src/index.ts"],
       "@q9labsai/chalk-assets": ["../../../packages/assets/src/index.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.ts"],
       "@q9labsai/facehash/react": ["../../../packages/facehash/src/react.ts"],

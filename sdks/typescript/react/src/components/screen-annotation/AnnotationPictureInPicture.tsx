@@ -12,7 +12,7 @@ function hasDocumentPiP(window: Window): window is Window & { documentPictureInP
   return "documentPictureInPicture" in window && typeof window.documentPictureInPicture === "object" && window.documentPictureInPicture !== null && "requestWindow" in window.documentPictureInPicture && typeof window.documentPictureInPicture.requestWindow === "function";
 }
 
-type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "renderer"> & { readonly track: MediaStreamTrack };
+type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "fontUrl"> & { readonly track: MediaStreamTrack };
 
 export function AnnotationPictureInPicture(props: PictureProps): React.JSX.Element {
   const [popup, setPopup] = useState<Window | null>(null);
@@ -25,7 +25,9 @@ export function AnnotationPictureInPicture(props: PictureProps): React.JSX.Eleme
   useEffect(
     () => () => {
       pending.current?.abort();
-      current.current?.close();
+      const view = current.current;
+      current.current = null;
+      view?.close();
     },
     [],
   );
@@ -91,7 +93,7 @@ function Picture({ track, ...props }: PictureProps): React.JSX.Element {
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
       <video ref={video} muted autoPlay playsInline aria-label="Shared screen" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} />
-      <ScreenAnnotationLayer {...props} videoRef={video} fit="fit" />
+      <ScreenAnnotationLayer {...props} videoRef={video} track={track} fit="fit" />
       <span style={{ position: "absolute", bottom: 8, left: 8, borderRadius: 10, background: "#101116", color: "white", padding: "5px 9px", font: "12px system-ui" }}>Chalk · Live marks</span>
     </div>
   );
