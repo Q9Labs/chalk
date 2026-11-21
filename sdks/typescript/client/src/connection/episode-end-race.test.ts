@@ -29,6 +29,35 @@ describe("Episode end wins media rejection", () => {
     }
   });
 
+  // Sanitized production ordering: the scheduled access refresh answers 409 episode.not_active once the Episode is over.
+  it("ends cleanly when a scheduled access refresh finds the Episode no longer active", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const base = createCoreTestPlatform();
+      let grants = 0;
+      const getAccess = async () => {
+        if (grants++ === 0) return opaqueAccessGrant(1);
+        throw { status: 409, error: { code: "episode.not_active", message: "Episode is not active" } };
+      };
+      const platform = { ...base, dependencies: { ...base.dependencies, getEpisodeStatus: async () => "ended" as const } };
+      const client = createSpaceClientForPlatform({ space: "test", getAccess }, platform);
+      const ended: unknown[] = [];
+      client.on("episodeEnded", (event) => ended.push(event));
+      try {
+        await client.join({ microphone: false, camera: false });
+        platform.emitSync({ ...platform.sync.getSnapshot(), control });
+        await vi.advanceTimersByTimeAsync(300_000);
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
+        expect(ended).toHaveLength(1);
+        expect(client.getSnapshot().connection.lastError).toBeNull();
+      } finally {
+        client.dispose();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects a revoked credential while the Episode is still active", async () => {
     const test = fixture();
     try {

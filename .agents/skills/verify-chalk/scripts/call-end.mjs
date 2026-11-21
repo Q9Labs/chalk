@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Drives the end of a call for every Participant: the host starts a call, two guests join by its link (one with camera and
-// microphone off, as a class often has), the Episode's deadline moves to a few seconds away, and the Episode reaches its
-// time limit while all three are in it. Each Participant must see "The call reached its time limit" and never see
+// Drives the end of a call for every Participant: the host starts a call, three guests join by its link (one with camera and
+// microphone off, as a class often has, and one whose Sync notices stop arriving), the Episode's deadline moves to a few
+// seconds away, and the Episode reaches its time limit while all four are in it. Each Participant must see "The call reached its time limit" and never see
 // "Reconnecting" or "Connection lost".
 //
 //   node .agents/skills/verify-chalk/scripts/call-end.mjs <run-id> [--web <origin>]
@@ -16,13 +16,28 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   const host = await person("EndHost", 1);
   const quiet = await person("EndGuestQuiet", 2);
   const loud = await person("EndGuestLoud", 3);
+  // A guest whose Sync notices stop arriving learns the call is over only from its media and access calls.
+  const deaf = await person("EndGuestNoSync", 1);
+  let syncDeaf = false;
+  await deaf.context.routeWebSocket(/\/v1\/sync/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (!syncDeaf) ws.send(message);
+    });
+    server.onClose((code, reason) => {
+      if (!syncDeaf) ws.close({ code, reason });
+    });
+    ws.onClose((code, reason) => server.close({ code, reason }));
+  });
   let call;
   let episode;
 
-  await step("the host starts a call and two guests join by its link", async () => {
+  await step("the host starts a call and three guests join by its link", async () => {
     call = await startCall(host);
     await joinByLink(quiet, call.link);
     await joinByLink(loud, call.link);
+    await joinByLink(deaf, call.link);
     for (const { page } of people) for (const { name } of people) await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).waitFor({ timeout: wait });
     for (const who of [host, loud]) {
       await who.page.getByRole("region", { name: "Space stage", exact: true }).hover();
@@ -30,10 +45,11 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
     }
   });
 
-  await step("the Episode reaches its time limit while all three are in it", async () => {
+  await step("the Episode reaches its time limit while all four are in it", async () => {
     const { episodes } = await system("GET", `/v1/tenants/${call.tenantId}/spaces/${call.spaceId}/episodes`);
     episode = episodes.at(0);
     if (!episode) throw new Error("the Space has no Episode");
+    syncDeaf = true;
     const at = Math.max(Date.now() + 15_000, Date.parse(episode.created_at) + 62_000);
     const response = await fetch(new URL(`/v1/tenants/${call.tenantId}/spaces/${call.spaceId}/episodes/${episode.id}/deadline`, web), {
       method: "POST",
