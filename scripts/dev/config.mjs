@@ -150,6 +150,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
   };
   const publicOrigin = publicOriginFromEnv(env);
+  const publicHost = publicOrigin ? new URL(publicOrigin).hostname : "";
+  const orb = publicHost.endsWith(".instabox.tech") || publicHost.endsWith(".trycloudflare.com");
   const hasEnvSfuCredential = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
@@ -189,6 +191,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     metro: { port: numberFromEnv(env, "RCT_METRO_PORT", metroPort) },
     ports,
     publicOrigin,
+    orb,
+    mediaPlane: orb ? "chalk_sfu" : "cf_sfu",
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
@@ -197,7 +201,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || (hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile]),
+    requiredTools: requiredTools || (orb || hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile]),
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),

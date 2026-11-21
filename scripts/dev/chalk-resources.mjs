@@ -96,6 +96,25 @@ export function createResourceManager(config, { runner = runChecked, docker = do
         await runResource("docker", containerArguments(config, "api", { image: imageName("api", state.versions), command: ["openssl", ...containerArgs] }), { cwd: config.root }, "identity");
       });
       state.identity = { ...identity, generatedAt: new Date().toISOString() };
+      if (config.orb) {
+        const name = containerNames(config).sfu;
+        const image = name + ":local";
+        await runResource("docker", ["build", "--tag", image, "--file", "infrastructure/sfu/Dockerfile", "features/media/sfu"], { cwd: config.root }, "sfu");
+        await runResource("docker", [
+          "run", "--detach", "--rm", "--name", name, "--network", network, "--network-alias", "sfu",
+          "--user", "0:0", "--cap-drop", "ALL",
+          "--publish", "127.0.0.1:50000:50000/udp", "--publish", "127.0.0.1:50000:50000/tcp",
+          "--mount", `type=bind,source=${config.identity.caCertificate},target=/ca.pem,readonly`,
+          "--mount", `type=bind,source=${config.identity.sfuCertificate},target=/server.pem,readonly`,
+          "--mount", `type=bind,source=${config.identity.sfuKey},target=/server-key.pem,readonly`,
+          "--env", "SFU_CONTROL_ADDR=:8443", "--env", "SFU_UDP_ADDR=:50000", "--env", "SFU_TCP_ADDR=:50000",
+          "--env", "SFU_ANNOUNCE_IPS=127.0.0.1", "--env", "SFU_ICE_LOOPBACK=true",
+          "--env", "SFU_TLS_CERT_FILE=/server.pem", "--env", "SFU_TLS_KEY_FILE=/server-key.pem",
+          "--env", "SFU_CLIENT_CA_FILE=/ca.pem", "--env", `SFU_CLIENT_IDENTITY=${orbAPIIdentity(config)}`,
+          "--env", "SFU_NODE_SIZE=s-2vcpu-2gb", "--env", "SFU_ENVIRONMENT=local",
+          image,
+        ], { cwd: config.root }, "sfu");
+      }
     },
     async stop() {
       await stopContainers();
@@ -133,7 +152,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
   }
 
   async function stopContainers() {
-    for (const name of [containerNames(config).sync, containerNames(config).api]) {
+    for (const name of [containerNames(config).sync, containerNames(config).api, containerNames(config).sfu]) {
       if (await docker(name)) await runResource("docker", ["rm", "--force", name], { cwd: config.root }, "containers");
     }
   }
@@ -201,6 +220,10 @@ function adoptable(name, container) {
   return true;
 }
 
+function orbAPIIdentity(config) {
+  return `spiffe://${config.auth.trustDomain}/environment/${config.auth.environment}/api/orb`;
+}
+
 async function prepareIdentity(config, identityGenerator = generateSigningIdentity, runtimeId, openssl) {
   if (!openssl) throw new Error("TLS identity generation requires the dev API container");
   const signing = await identityGenerator({ paths: config.identity, kid: config.auth.keyId });
@@ -209,14 +232,21 @@ async function prepareIdentity(config, identityGenerator = generateSigningIdenti
   const serial = join(extRoot, "local-ca.srl");
   const apiExt = join(extRoot, "api.ext");
   const syncExt = join(extRoot, "sync.ext");
-  await writeFile(apiExt, "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,DNS:api,IP:127.0.0.1\n", { mode: 0o600 });
+  const sfuExt = join(extRoot, "sfu.ext");
+  const apiUsage = config.orb ? "serverAuth,clientAuth" : "serverAuth";
+  const apiSANs = config.orb ? `,URI:${orbAPIIdentity(config)}` : "";
+  await writeFile(apiExt, `basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=${apiUsage}\nsubjectAltName=DNS:localhost,DNS:api,IP:127.0.0.1${apiSANs}\n`, { mode: 0o600 });
   await writeFile(syncExt, `basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=clientAuth\nsubjectAltName=URI:spiffe://${config.auth.trustDomain || "chalk.local"}/environment/${config.auth.environment || "local"}/sync/${runtimeId}\n`, { mode: 0o600 });
   try {
     await openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", config.identity.caKey, "-out", config.identity.caCertificate, "-subj", "/CN=chalk-local-ca", "-days", "2", "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign"]);
     await makeLeaf(config.identity.apiKey, config.identity.apiCertificate, "/CN=chalk-api-provider-bridge", apiExt, config.identity.caCertificate, config.identity.caKey, serial, openssl, true);
     await makeLeaf(config.identity.syncKey, config.identity.syncCertificate, "/CN=chalk-sync-provider-bridge", syncExt, config.identity.caCertificate, config.identity.caKey, serial, openssl);
+    if (config.orb) {
+      await writeFile(sfuExt, "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:sfu\n", { mode: 0o600 });
+      await makeLeaf(config.identity.sfuKey, config.identity.sfuCertificate, "/CN=chalk-sfu", sfuExt, config.identity.caCertificate, config.identity.caKey, serial, openssl);
+    }
   } finally {
-    await Promise.all([unlink(apiExt).catch(() => {}), unlink(syncExt).catch(() => {}), unlink(serial).catch(() => {})]);
+    await Promise.all([unlink(sfuExt).catch(() => {}), unlink(apiExt).catch(() => {}), unlink(syncExt).catch(() => {}), unlink(serial).catch(() => {})]);
   }
   return { signing, paths: config.identity };
 }

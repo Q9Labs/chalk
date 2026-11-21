@@ -51,7 +51,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       { kind: "generated", path: config.runtimeRoot },
     ],
     resolveSecrets: async (context) => {
-      provider = await resolver();
+      provider = config.orb ? { appId: "orb-unused", appSecret: "orb-unused" } : await resolver();
       if (provider?.source) await writeJsonAtomic(`${config.runtimeRoot}/sfu-source.json`, provider.source, { redacted: false });
       return provider;
     },
@@ -104,10 +104,10 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs, fetchImpl: adapters.fetchImpl });
       if (spec.id === "api") {
         const runtimeId = context.runtime.runtimeId || "local";
-        const stableMarker = stableFixtureMarker(config.root);
+        const stableMarker = stableFixtureMarker(config.orb ? `${config.root}:chalk_sfu` : config.root);
         if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
         const fixtureMarker = stableMarker;
-        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
+        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, mediaPlane: config.mediaPlane, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
         invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
         await seedDashboard({ config, serviceToken: dashboardToken });
         // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
@@ -152,7 +152,22 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
-        CHALK_DEFAULT_MEDIA_PLANE: "cf_sfu",
+        CHALK_DEFAULT_MEDIA_PLANE: config.mediaPlane,
+        ...(config.orb ? {
+          CHALK_NEW_SPACE_MEDIA_PLANE: config.mediaPlane,
+          CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
+          CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
+          CHALK_SFU_ENABLED: "true",
+          CHALK_SFU_CAPTURE_ENABLED: "true",
+          CHALK_SFU_ALLOWED_SPACES: "*",
+          CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
+          CHALK_SFU_APPLICATION_ID: "chalk-orb",
+          CHALK_SFU_NODES: "orb=https://sfu:8443",
+          CHALK_SFU_SERVER_NAME: "sfu",
+          CHALK_SFU_CA_FILE: config.identity.caCertificate,
+          CHALK_SFU_CLIENT_CERT_FILE: config.identity.apiCertificate,
+          CHALK_SFU_CLIENT_KEY_FILE: config.identity.apiKey,
+        } : {}),
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,
@@ -204,7 +219,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         VITE_API_URL: config.publicOrigin ?? config.urls.api,
         VITE_CHALK_SYNC_URL: browserSync,
         VITE_CHALK_DEV_SYNC_URL: browserSync,
-        VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu",
+        VITE_CHALK_DEV_MEDIA_PLANE: config.mediaPlane,
       };
     }
     if (serviceId === "mobile") return { ...base, RCT_METRO_PORT: String(config.metro.port) };
@@ -240,12 +255,12 @@ function formatReadySummary(config, bindings) {
     `Web       ${config.urls.public}`,
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
-    "Media     Cloudflare SFU, real provider path",
+    `Media     ${config.mediaPlane}, real provider path`,
     `Dashboard ${config.urls.public}/dashboard/sign-in (Google or Apple, then Ada; Malik is empty)`,
     `Logs      ${config.aggregateLog}`,
     "Proof     pnpm dev:smoke",
     bindings ? `Runtime   ${bindings.marker}` : "",
-    bindings ? `Space     ${bindings.spaceId} (Tenant ${bindings.tenantId}, media plane cf_sfu)` : "",
+    bindings ? `Space     ${bindings.spaceId} (Tenant ${bindings.tenantId}, media plane ${config.mediaPlane})` : "",
   ]
     .filter(Boolean)
     .join("\n");

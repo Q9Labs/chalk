@@ -36,18 +36,19 @@ export async function seedDashboard({ config, serviceToken }) {
   async function sql(statement) {
     await runChecked("docker", ["exec", "-e", "PGOPTIONS=-c chalk.entry_writer=1", config.postgres.container, "psql", "-U", "postgres", "-d", config.databaseName || "chalk_dev", "-v", "ON_ERROR_STOP=1", "-c", statement], { cwd: config.root });
   }
+  const mediaPlane = config.mediaPlane;
   const owner = await api("/tenants", {
     name: "Ada's workspace",
     external_id: "google:local:fixture_ada",
     cors_allowed_origins: [...new Set([config.urls.web, config.publicOrigin || config.urls.web])],
-    default_media_plane: "cf_sfu",
-    media_plane_provider_config: { enabled: true, provider: "cf_sfu", mode: "chalk_managed" },
+    default_media_plane: mediaPlane,
+    ...(mediaPlane === "cf_sfu" ? { media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
   });
   const artifacts = {};
   const spaces = await api(`/tenants/${owner.id}/spaces?page_size=100`);
   for (const [index, name] of ["Product planning", "Design review", "Weekly catch-up"].entries()) {
-    const slug = `local-dashboard-${index}`;
-    const space = spaces.spaces.find((item) => item.slug === slug) || (await api(`/tenants/${owner.id}/spaces`, { name, slug, media_plane: "cf_sfu", recording_policy: "disabled", transcription_policy: "disabled" }));
+    const slug = config.orb ? `local-dashboard-chalk-sfu-${index}` : `local-dashboard-${index}`;
+    const space = spaces.spaces.find((item) => item.slug === slug) || (await api(`/tenants/${owner.id}/spaces`, { name, slug, media_plane: mediaPlane, recording_policy: "disabled", transcription_policy: "disabled" }));
     const episodes = await api(`/tenants/${owner.id}/spaces/${space.id}/episodes?page_size=1`);
     let episode = episodes.episodes[0];
     if (!episode || episode.status !== "ended") {
