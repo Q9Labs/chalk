@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "2edf314eaab6",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -604,6 +604,31 @@
       "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel."
     },
     {
+      "name": "can_play_mp4",
+      "type": "enum",
+      "values": ["", "maybe", "probably"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "What canPlayType(video/mp4) answered in the reporting browser."
+    },
+    {
+      "name": "capture_packet_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Media packets a capture attempt counted itself: the recorder's own number, not the SFU's."
+    },
+    {
+      "name": "capture_track_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Tracks a capture attempt held when it finished."
+    },
+    {
       "name": "client_mono_ms",
       "type": "number",
       "required": false,
@@ -824,6 +849,14 @@
       "doc": "The user-visible attempt this record belongs to."
     },
     {
+      "name": "journey_name",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The observability_journey_events name a durable journey row carries, such as recording.claimed."
+    },
+    {
       "name": "jump_ms",
       "type": "int",
       "required": false,
@@ -857,6 +890,22 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "Chalk's media connection."
+    },
+    {
+      "name": "media_error_code",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The MediaError.code a <video> element raised: 1 aborted, 2 network, 3 decode, 4 src_not_supported."
+    },
+    {
+      "name": "mint_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "How many URLs the reporting player minted for this Recording."
     },
     {
       "name": "module",
@@ -938,6 +987,46 @@
       "doc": "Where the program runs."
     },
     {
+      "name": "playback_download",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether the minted URL carries the download disposition."
+    },
+    {
+      "name": "playback_expires_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds the URL expires."
+    },
+    {
+      "name": "playback_progress_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "How far into the Recording the dashboard player had reached at the report."
+    },
+    {
+      "name": "playback_signed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds the URL was minted."
+    },
+    {
+      "name": "player_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "An opaque id minted per dashboard playback so one viewer's facts are one session's."
+    },
+    {
       "name": "provider_media_id",
       "type": "id",
       "id_kind": "provider_media",
@@ -956,6 +1045,201 @@
       "doc": "A registry reason code. Required when the outcome is expected or error, and on a decision that refuses, times out, closes or limits."
     },
     {
+      "name": "recording_artifact_set",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether the item's durable artifact row or storage key exists."
+    },
+    {
+      "name": "recording_attempt",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The attempt number an attempt-failure row names."
+    },
+    {
+      "name": "recording_attempt_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Attempts a recording job has spent."
+    },
+    {
+      "name": "recording_attempt_limit",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The most attempts a recording job may spend."
+    },
+    {
+      "name": "recording_available_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of a job's available_at."
+    },
+    {
+      "name": "recording_bundle_sequence",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A committed bundle's sequence_number within its Recording."
+    },
+    {
+      "name": "recording_capture_completed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the pipeline's capture_completed_at."
+    },
+    {
+      "name": "recording_capture_completeness",
+      "type": "enum",
+      "values": ["complete", "partial"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether the capture's bundle account is whole or has proven gaps."
+    },
+    {
+      "name": "recording_capture_outcome",
+      "type": "enum",
+      "values": ["stopped", "stopped_without_media", "failed", "stopped_before_claim", "canceled"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "How a capture attempt or its recovered lease ended, from the recorder's summary or the API's recovery line."
+    },
+    {
+      "name": "recording_claim_lag_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Milliseconds between a capture job's available_at and its recording.claimed row, as the claim transaction journaled it."
+    },
+    {
+      "name": "recording_committed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the pipeline's committed_at or the artifact's committed_at."
+    },
+    {
+      "name": "recording_completed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the Recording's completed_at."
+    },
+    {
+      "name": "recording_created_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of a row's created_at."
+    },
+    {
+      "name": "recording_duration_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The committed media duration of a Recording or its artifact."
+    },
+    {
+      "name": "recording_episode_ended_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the Episode's ended_at, from its durable row."
+    },
+    {
+      "name": "recording_error_code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The bounded error code a job, Recording or Sync recording failure carries, sanitized upstream."
+    },
+    {
+      "name": "recording_error_detail",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The bounded diagnostic detail a failed attempt logged, already sanitized upstream."
+    },
+    {
+      "name": "recording_exists",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether the item's Recording row exists at all."
+    },
+    {
+      "name": "recording_expires_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the artifact row's expires_at, when retention applies."
+    },
+    {
+      "name": "recording_failed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of an attempt failure's failed_at or a Recording's failed_at."
+    },
+    {
+      "name": "recording_final",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether a journaled SFU or recorder row is the terminal one for its session or attempt."
+    },
+    {
+      "name": "recording_fleet_operation",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The recorder-fleet controller operation a failure row names, such as bootstrap or issue."
+    },
+    {
+      "name": "recording_gap_bundles",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Gap bundle count the capture committed to the pipeline."
+    },
+    {
+      "name": "recording_head_result",
+      "type": "enum",
+      "values": ["ok", "not_found", "error"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The outcome of a HEAD on one committed bundle object."
+    },
+    {
       "name": "recording_id",
       "type": "id",
       "id_kind": "recording",
@@ -963,6 +1247,266 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The recording."
+    },
+    {
+      "name": "recording_job_kind",
+      "type": "enum",
+      "values": ["capture", "render", "transcription"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Which kind of recording job the row is."
+    },
+    {
+      "name": "recording_job_state",
+      "type": "enum",
+      "values": ["pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A recording_jobs row's state."
+    },
+    {
+      "name": "recording_lease_expiry_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of a job's lease_expires_at, when it was leased."
+    },
+    {
+      "name": "recording_media_action",
+      "type": "enum",
+      "values": ["publish", "subscribe", "unpublish"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Which media action a client media_result row reports."
+    },
+    {
+      "name": "recording_media_bundles",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Media bundle count the capture committed to the pipeline."
+    },
+    {
+      "name": "recording_media_kind",
+      "type": "enum",
+      "values": ["audio", "video"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Which medium a publication, ingress or egress row counts."
+    },
+    {
+      "name": "recording_media_outcome",
+      "type": "enum",
+      "values": ["succeeded", "failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The outcome a client media_result row reports."
+    },
+    {
+      "name": "recording_media_plane",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The media plane the Episode's config snapshot names, such as chalk_sfu."
+    },
+    {
+      "name": "recording_media_source",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The published track's source name as the SFU journaled it, such as microphone or screen."
+    },
+    {
+      "name": "recording_packets",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Packets the SFU counted on a session's ingress since it connected."
+    },
+    {
+      "name": "recording_pipeline_state",
+      "type": "enum",
+      "values": ["requested", "reserved", "capture_leased", "capturing_segmented", "capture_complete", "render_queued", "rendering", "verifying", "committed", "retryable_failure", "terminal_failure", "deleted"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A recording_pipelines row's state."
+    },
+    {
+      "name": "recording_placement",
+      "type": "enum",
+      "values": ["colocated", "fleet"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Where a claimed capture job was placed: the colocated recorder or the recorder fleet."
+    },
+    {
+      "name": "recording_probe_duration_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The media duration ffprobe measured on the stored object."
+    },
+    {
+      "name": "recording_r2_result",
+      "type": "enum",
+      "values": ["ok", "not_found", "error", "key_mismatch", "size_mismatch", "checksum_absent", "checksum_mismatch", "no_video", "duration_mismatch", "decode_failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The outcome of the checker's object readback: key, size, checksum, probe and decode against the committed row."
+    },
+    {
+      "name": "recording_reservation_ends_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the reservation's ends_at."
+    },
+    {
+      "name": "recording_reservation_starts_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the reservation's starts_at, when capture actually began."
+    },
+    {
+      "name": "recording_reservation_state",
+      "type": "enum",
+      "values": ["reserved", "released", "expired"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A recording_reservations row's state."
+    },
+    {
+      "name": "recording_sent_audio",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Audio packets the SFU sent on a session's downlink since it connected."
+    },
+    {
+      "name": "recording_sent_video",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Video packets the SFU sent on a session's downlink since it connected."
+    },
+    {
+      "name": "recording_session_cause",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The SFU node's own word for why a session closed, such as closed or connection_failed."
+    },
+    {
+      "name": "recording_session_outcome",
+      "type": "enum",
+      "values": ["connected", "completed", "dropped", "failed", "never_connected", "closed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The SFU session's closing outcome, as the node journaled it."
+    },
+    {
+      "name": "recording_sha_match",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether a stored object's measured checksum matches its committed one."
+    },
+    {
+      "name": "recording_sha_set",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether a checksum is committed for a stored object."
+    },
+    {
+      "name": "recording_size_bytes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A stored object's byte size, durable or measured."
+    },
+    {
+      "name": "recording_stage",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The render stage a stage op measured, such as download_capture or upload."
+    },
+    {
+      "name": "recording_state",
+      "type": "enum",
+      "values": ["pending", "processing", "completed", "failed", "deleted"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A recordings row's status."
+    },
+    {
+      "name": "recording_stop_requested_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of the pipeline's stop_requested_at."
+    },
+    {
+      "name": "recording_storage_match",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Whether the artifact row's object key is the one the Recording row names."
+    },
+    {
+      "name": "recording_sync_status",
+      "type": "enum",
+      "values": ["starting", "recording", "stopping", "stopped", "failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "A sync_recordings row's status: what Sync believes the Recording's lifecycle is."
+    },
+    {
+      "name": "recording_terminal_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of a job's terminal_at."
+    },
+    {
+      "name": "recording_updated_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Unix epoch milliseconds of a row's updated_at."
     },
     {
       "name": "release_sha",
@@ -1006,6 +1550,15 @@
       "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
     },
     {
+      "name": "session_kind",
+      "type": "enum",
+      "values": ["participant", "capture"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "What an SFU session is for: a Participant's connection or the recorder's receive-only capture connection."
+    },
+    {
       "name": "shown_ms",
       "type": "int",
       "required": false,
@@ -1038,6 +1591,15 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The W3C span."
+    },
+    {
+      "name": "stop_cause",
+      "type": "enum",
+      "values": ["media_stopped", "deadline", "canceled", "explicit", "error"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The bounded word a capture attempt gives for why it stopped."
     },
     {
       "name": "surface_state",
@@ -1092,6 +1654,22 @@
       "doc": "What caused a transition, from the machine's trigger list."
     },
     {
+      "name": "url_age_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "Milliseconds between the URL's mint and the playback fact that cites it."
+    },
+    {
+      "name": "url_lifetime_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/recording",
+      "doc": "The signed lifetime the URL was minted with."
+    },
+    {
       "name": "user_id",
       "type": "id",
       "id_kind": "user",
@@ -1124,6 +1702,83 @@
       "area": "end",
       "test_only": false,
       "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+    },
+    {
+      "code": "playback.unsupported_browser",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The browser answered that it cannot play MP4: a src_not_supported error is expected there."
+    },
+    {
+      "code": "recording.capture",
+      "outcome": "error",
+      "area": "recording",
+      "test_only": false,
+      "doc": "A capture attempt failed for a cause the recorder could not narrow further."
+    },
+    {
+      "code": "recording.connect",
+      "outcome": "error",
+      "area": "recording",
+      "test_only": false,
+      "doc": "A capture attempt failed connecting or holding its SFU session."
+    },
+    {
+      "code": "recording.deadline",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The capture ended because its deadline expired."
+    },
+    {
+      "code": "recording.lease",
+      "outcome": "error",
+      "area": "recording",
+      "test_only": false,
+      "doc": "An attempt failed against its lease or fencing."
+    },
+    {
+      "code": "recording.media_stopped",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The capture ended because the Episode's media stopped: the recorder's own stop cause."
+    },
+    {
+      "code": "recording.no_publication",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "Nobody published media for the window, so an empty Recording is expected."
+    },
+    {
+      "code": "recording.retention_expired",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The Recording was deleted by retention: a 404 or absent readback is expected."
+    },
+    {
+      "code": "recording.stopped_before_claim",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The Episode ended or a stop landed before the reservation was ever claimed: nobody is at fault."
+    },
+    {
+      "code": "recording.storage",
+      "outcome": "error",
+      "area": "recording",
+      "test_only": false,
+      "doc": "A capture or render attempt failed against object storage."
+    },
+    {
+      "code": "render.source_expired",
+      "outcome": "expected",
+      "area": "recording",
+      "test_only": false,
+      "doc": "The render could not download a capture bundle because its retention expired before the render ran."
     },
     {
       "code": "selftest.broken",
@@ -1212,6 +1867,1035 @@
       "doc": "The full flags map behind the flags_hash the kernel stamps on this and every later record. Logged at boot, at join and whenever the flags change."
     },
     {
+      "name": "playback.media_error",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["web"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "player_id": {
+          "required": true
+        },
+        "media_error_code": {
+          "required": true
+        },
+        "url_age_ms": {
+          "required": true
+        },
+        "url_lifetime_ms": {
+          "required": true
+        },
+        "mint_count": {
+          "required": true
+        },
+        "can_play_mp4": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/server/past-session.ts",
+          "literal": "\"playback.media_error\""
+        }
+      ],
+      "doc": "The dashboard player's report of a MediaError on one playback session, with the URL's age and the browser's MP4 answer. Emitted only after the server's ownership check."
+    },
+    {
+      "name": "playback.player_error_note",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["web"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "player_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/dashboard/SessionPlayer.tsx",
+          "literal": "playback.player_error_note"
+        }
+      ],
+      "doc": "The error note the dashboard player shows a viewer when playback fails."
+    },
+    {
+      "name": "playback.progressed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["web"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "player_id": {
+          "required": true
+        },
+        "playback_progress_ms": {
+          "required": false
+        },
+        "url_age_ms": {
+          "required": false
+        },
+        "url_lifetime_ms": {
+          "required": false
+        },
+        "mint_count": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/server/past-session.ts",
+          "literal": "\"playback.progressed\""
+        }
+      ],
+      "doc": "The dashboard player's report that one playback session actually advanced past two seconds while playing. Emitted only after the server's ownership check."
+    },
+    {
+      "name": "playback.url_minted",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "playback_signed_ms": {
+          "required": true
+        },
+        "playback_expires_ms": {
+          "required": true
+        },
+        "url_lifetime_ms": {
+          "required": true
+        },
+        "playback_download": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/recordings.go",
+          "literal": "obs.EventPlaybackURLMinted"
+        }
+      ],
+      "doc": "The API's mint of one download URL for a committed Recording: its signed and expiry times, never the signed URL itself."
+    },
+    {
+      "name": "recorder_fleet.operation_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_fleet_operation": {
+          "required": true
+        },
+        "recording_error_code": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/recorder_fleet_controller.go",
+          "literal": "\"recorder_fleet.operation_failed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recorder_fleet.operation_failed"
+        }
+      },
+      "doc": "A recorder-fleet controller operation that failed, journaled by the API: bootstrap, issue or heartbeat."
+    },
+    {
+      "name": "recording.artifact_readback",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_r2_result": {
+          "required": true
+        },
+        "recording_size_bytes": {
+          "required": false
+        },
+        "recording_sha_match": {
+          "required": false
+        },
+        "recording_probe_duration_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/readback.mjs",
+          "literal": "\"recording.artifact_readback\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.artifact_readback"
+        }
+      },
+      "doc": "The checker's R2 readback of the item's committed object: HEAD, ffprobe and a null-muxer decode, with results and measured fields only. The object key, signed URL and headers are never emitted."
+    },
+    {
+      "name": "recording.capture_attempt",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["recorder_capture"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": true
+        },
+        "recording_attempt_count": {
+          "required": false
+        },
+        "recording_attempt_limit": {
+          "required": false
+        },
+        "capture_packet_count": {
+          "required": false
+        },
+        "capture_track_count": {
+          "required": false
+        },
+        "stop_cause": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/recorderworker/capture_attempt.go",
+          "literal": "obs.EventRecordingCaptureAttempt"
+        }
+      ],
+      "doc": "One capture attempt's Run from claim to terminal: ok, expected(recording.media_stopped|recording.deadline) or error(recording.<code>)."
+    },
+    {
+      "name": "recording.capture_attempt_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": false
+        },
+        "recording_attempt_count": {
+          "required": false
+        },
+        "recording_error_code": {
+          "required": true
+        },
+        "recording_error_detail": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/observability/recording_capture.go",
+          "literal": "\"recording.capture_attempt_failed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.capture_attempt_failed"
+        }
+      },
+      "doc": "The API's journal of one failed capture attempt, with its bounded error code, when the worker's Fail report commits."
+    },
+    {
+      "name": "recording.capture_claim",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "decisions": ["claimed"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": true
+        },
+        "recording_attempt_count": {
+          "required": true
+        },
+        "recording_claim_lag_ms": {
+          "required": false
+        },
+        "recording_placement": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/recording_pipeline.go",
+          "literal": "obs.EventRecordingCaptureClaim"
+        }
+      ],
+      "doc": "The API's capture claim, after the lease commits: who the job went to, its attempt and the claim lag the journey row carried."
+    },
+    {
+      "name": "recording.capture_empty",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "decisions": ["empty"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": true
+        },
+        "recording_media_bundles": {
+          "required": true
+        },
+        "recording_gap_bundles": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/recording_pipeline_capture.go",
+          "literal": "obs.EventRecordingCaptureEmpty"
+        }
+      ],
+      "doc": "The API's terminal empty-capture decision: the attempt finished reporting success but committed no media bundles."
+    },
+    {
+      "name": "recording.capture_finished",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["recorder_capture"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": false
+        },
+        "recording_capture_outcome": {
+          "required": true
+        },
+        "capture_packet_count": {
+          "required": true
+        },
+        "capture_track_count": {
+          "required": true
+        },
+        "stop_cause": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/recorderworker/capture_summary.go",
+          "literal": "\"recording.capture_finished\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.capture_finished"
+        }
+      },
+      "doc": "The recorder's own summary of what a capture saw: outcome, track count, packet count and the stop cause."
+    },
+    {
+      "name": "recording.db.artifact",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_artifact_set": {
+          "required": true
+        },
+        "recording_size_bytes": {
+          "required": false
+        },
+        "recording_sha_set": {
+          "required": false
+        },
+        "recording_storage_match": {
+          "required": false
+        },
+        "recording_duration_ms": {
+          "required": false
+        },
+        "recording_expires_ms": {
+          "required": false
+        },
+        "recording_committed_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.artifact\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.artifact"
+        }
+      },
+      "doc": "The checker's read of the item's recording_artifacts row, plus whether its object key is the Recording's storage key."
+    },
+    {
+      "name": "recording.db.attempt",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_attempt": {
+          "required": true
+        },
+        "recording_job_kind": {
+          "required": true
+        },
+        "recording_error_code": {
+          "required": true
+        },
+        "recording_failed_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.attempt\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.attempt"
+        }
+      },
+      "doc": "The checker's read of one recording_job_attempt_failures row: the durable account of an attempt that failed."
+    },
+    {
+      "name": "recording.db.episode",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_episode_ended_ms": {
+          "required": false
+        },
+        "recording_media_plane": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.episode\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.episode"
+        }
+      },
+      "doc": "The checker's read of the item's Episode row: when it ended and the media plane its config snapshot names."
+    },
+    {
+      "name": "recording.db.job",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": true
+        },
+        "recording_job_state": {
+          "required": true
+        },
+        "recording_job_kind": {
+          "required": true
+        },
+        "recording_error_code": {
+          "required": false
+        },
+        "recording_attempt_count": {
+          "required": true
+        },
+        "recording_attempt_limit": {
+          "required": true
+        },
+        "recording_available_ms": {
+          "required": true
+        },
+        "recording_lease_expiry_ms": {
+          "required": false
+        },
+        "recording_created_ms": {
+          "required": true
+        },
+        "recording_updated_ms": {
+          "required": true
+        },
+        "recording_terminal_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.job\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.job"
+        }
+      },
+      "doc": "The checker's read of the item's recording_jobs row. Emitted by the evidence reader, never a program."
+    },
+    {
+      "name": "recording.db.journey",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": false
+        },
+        "recording_id": {
+          "required": true
+        },
+        "journey_name": {
+          "required": true
+        },
+        "recording_claim_lag_ms": {
+          "required": false
+        },
+        "recording_placement": {
+          "required": false
+        },
+        "recording_error_code": {
+          "required": false
+        },
+        "recording_capture_outcome": {
+          "required": false
+        },
+        "recording_created_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.journey\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.journey"
+        }
+      },
+      "doc": "The checker's read of the item's durable journey rows for recording.claimed, recording.capture.salvaged and recording.failed, with the attributes the transaction wrote."
+    },
+    {
+      "name": "recording.db.pipeline",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_pipeline_state": {
+          "required": true
+        },
+        "recording_stop_requested_ms": {
+          "required": false
+        },
+        "recording_capture_completed_ms": {
+          "required": false
+        },
+        "recording_committed_ms": {
+          "required": false
+        },
+        "recording_media_bundles": {
+          "required": false
+        },
+        "recording_gap_bundles": {
+          "required": false
+        },
+        "capture_track_count": {
+          "required": false
+        },
+        "capture_packet_count": {
+          "required": false
+        },
+        "recording_capture_completeness": {
+          "required": false
+        },
+        "recording_created_ms": {
+          "required": true
+        },
+        "recording_updated_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.pipeline\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.pipeline"
+        }
+      },
+      "doc": "The checker's read of the item's recording_pipelines row: state, capture counters, completeness and its clock fields."
+    },
+    {
+      "name": "recording.db.recording",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_exists": {
+          "required": true
+        },
+        "recording_state": {
+          "required": false
+        },
+        "recording_error_code": {
+          "required": false
+        },
+        "recording_artifact_set": {
+          "required": false
+        },
+        "recording_size_bytes": {
+          "required": false
+        },
+        "recording_sha_set": {
+          "required": false
+        },
+        "recording_duration_ms": {
+          "required": false
+        },
+        "recording_created_ms": {
+          "required": false
+        },
+        "recording_completed_ms": {
+          "required": false
+        },
+        "recording_failed_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.recording\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.recording"
+        }
+      },
+      "doc": "The checker's read of the item's recordings row: status, failure code, storage presence and its clock fields. recording_exists false means no row."
+    },
+    {
+      "name": "recording.db.reservation",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_reservation_state": {
+          "required": true
+        },
+        "recording_reservation_starts_ms": {
+          "required": false
+        },
+        "recording_reservation_ends_ms": {
+          "required": false
+        },
+        "recording_created_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.reservation\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.reservation"
+        }
+      },
+      "doc": "The checker's read of the item's recording_reservations row: its state and window."
+    },
+    {
+      "name": "recording.db.sync_recording",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_sync_status": {
+          "required": true
+        },
+        "recording_created_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/recording-pipeline/evidence.mjs",
+          "literal": "\"recording.db.sync_recording\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.db.sync_recording"
+        }
+      },
+      "doc": "The checker's read of the item's sync_recordings row: what Sync believes the Recording's lifecycle is."
+    },
+    {
+      "name": "recording.job_recovered",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": false
+        },
+        "recording_job_kind": {
+          "required": false
+        },
+        "recording_job_state": {
+          "required": false
+        },
+        "recording_error_code": {
+          "required": false
+        },
+        "recording_capture_outcome": {
+          "required": false
+        },
+        "recording_attempt_count": {
+          "required": false
+        },
+        "recording_attempt_limit": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/recording_pipeline_diagnostics.go",
+          "literal": "\"recording.job_recovered\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.job_recovered"
+        }
+      },
+      "doc": "The API's recovery decision for one leased job whose worker went silent: requeued or terminal with its error code."
+    },
+    {
+      "name": "recording.media_publish",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_media_action": {
+          "required": true
+        },
+        "recording_media_outcome": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "docs/observability.md",
+          "literal": "media_result"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "type": "media_result"
+        }
+      },
+      "doc": "A client's media_result publish row: the Participant's own account that it published media."
+    },
+    {
+      "name": "recording.r2.bundle_head",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_bundle_sequence": {
+          "required": true
+        },
+        "recording_head_result": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/readback.mjs",
+          "literal": "\"recording.r2.bundle_head\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.r2.bundle_head"
+        }
+      },
+      "doc": "The checker's HEAD on one committed bundle object, for the render download stage. The object key is never emitted."
+    },
+    {
+      "name": "recording.render_attempt_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": false
+        },
+        "recording_attempt_count": {
+          "required": false
+        },
+        "recording_error_code": {
+          "required": true
+        },
+        "recording_error_detail": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/observability/recording_render.go",
+          "literal": "\"recording.render_attempt_failed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "recording.render_attempt_failed"
+        }
+      },
+      "doc": "The API's journal of one failed render attempt, with its stage-scoped error code, when the worker's Fail report commits."
+    },
+    {
+      "name": "recording.render_stage",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["recorder_render"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "recording_id": {
+          "required": false
+        },
+        "recording_stage": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/recorderworker/render_stage.go",
+          "literal": "obs.EventRecordingRenderStage"
+        }
+      ],
+      "doc": "One measured render stage per RecordingRenderAttempt.measure call; the stage name is the hop the stage code names."
+    },
+    {
+      "name": "recording.reservation_expired",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "recording",
+      "test_only": false,
+      "decisions": ["expired"],
+      "fields": {
+        "recording_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/recording_pipeline.go",
+          "literal": "obs.EventRecordingReservationExpired"
+        }
+      ],
+      "doc": "The API's reservation-expiry decision: the Recording's capacity window lapsed before a claim. The existing log line stays."
+    },
+    {
+      "name": "recording.start",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sync"],
+      "area": "recording",
+      "test_only": false,
+      "decisions": ["accepted"],
+      "fields": {
+        "recording_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/recording_outcome.ex",
+          "literal": "\"recording.start\""
+        }
+      ],
+      "doc": "Sync's durable acceptance of a Participant's recording request for the Episode."
+    },
+    {
+      "name": "recording.status_failed",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sync"],
+      "area": "recording",
+      "test_only": false,
+      "decisions": ["failed"],
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "recording_error_code": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/recording_outcome.ex",
+          "literal": "\"recording.status_failed\""
+        }
+      ],
+      "doc": "Sync's durable write of the Recording's status=failed with its bounded failure code."
+    },
+    {
       "name": "selftest.admit",
       "kind": "decision",
       "dataset": "lifecycle",
@@ -1272,6 +2956,199 @@
       },
       "emit_sites": [],
       "doc": "A self-test op."
+    },
+    {
+      "name": "sfu.media.ingress",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "session_kind": {
+          "required": true
+        },
+        "participant_id": {
+          "required": false
+        },
+        "recording_media_source": {
+          "required": true
+        },
+        "recording_media_kind": {
+          "required": true
+        },
+        "recording_packets": {
+          "required": true
+        },
+        "recording_final": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/stats.go",
+          "literal": "EventMediaIngress"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.ingress"
+        }
+      },
+      "doc": "The SFU node's periodic or final count of packets received on one session's publication."
+    },
+    {
+      "name": "sfu.media.transport",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "session_kind": {
+          "required": true
+        },
+        "participant_id": {
+          "required": false
+        },
+        "recording_sent_audio": {
+          "required": true
+        },
+        "recording_sent_video": {
+          "required": true
+        },
+        "recording_final": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/stats.go",
+          "literal": "EventMediaTransport"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.transport"
+        }
+      },
+      "doc": "The SFU node's periodic or final count of packets it sent on one session's downlink; on a capture session this is the media the recorder was handed."
+    },
+    {
+      "name": "sfu.publication.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "session_kind": {
+          "required": true
+        },
+        "participant_id": {
+          "required": true
+        },
+        "generation": {
+          "required": false
+        },
+        "recording_media_source": {
+          "required": true
+        },
+        "recording_media_kind": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "EventPublicationStarted"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.publication.started"
+        }
+      },
+      "doc": "The SFU node's journal of one track's publication on a participant session."
+    },
+    {
+      "name": "sfu.session.closed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "session_kind": {
+          "required": true
+        },
+        "media_connection_id": {
+          "required": true
+        },
+        "recording_session_outcome": {
+          "required": true
+        },
+        "recording_session_cause": {
+          "required": false
+        },
+        "participant_id": {
+          "required": false
+        },
+        "generation": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "EventSessionClosed"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.session.closed"
+        }
+      },
+      "doc": "The SFU node's journal of one session's close: its outcome, cause and lifetime."
+    },
+    {
+      "name": "sfu.session.registered",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "recording",
+      "test_only": false,
+      "fields": {
+        "session_kind": {
+          "required": true
+        },
+        "media_connection_id": {
+          "required": true
+        },
+        "participant_id": {
+          "required": false
+        },
+        "generation": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "EventSessionRegistered"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.session.registered"
+        }
+      },
+      "doc": "The SFU node's journal of one session's registration, capture or participant, with its connection."
     },
     {
       "name": "sync.episode.ended",
@@ -1338,6 +3215,28 @@
       ],
       "triggers": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"],
       "doc": "The Episode row's status in Postgres (episodes.status)."
+    },
+    {
+      "name": "recording.job",
+      "area": "recording",
+      "test_only": false,
+      "states": ["pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled"],
+      "initial": "pending",
+      "edges": [
+        ["pending", "leased"],
+        ["pending", "terminal_failure"],
+        ["pending", "cancelled"],
+        ["leased", "pending"],
+        ["leased", "succeeded"],
+        ["leased", "retryable_failure"],
+        ["leased", "terminal_failure"],
+        ["leased", "cancelled"],
+        ["retryable_failure", "pending"],
+        ["retryable_failure", "terminal_failure"],
+        ["retryable_failure", "cancelled"]
+      ],
+      "triggers": ["claim", "complete", "fail", "recover", "expire", "cancel"],
+      "doc": "One recording_jobs row's lifecycle. The API writes its transitions after the SQL commits."
     },
     {
       "name": "selftest.door",
@@ -1437,12 +3336,428 @@
       "doc": "A seat's leave request and its outcome. A failed leave is a failure every finding must account for."
     },
     {
+      "name": "playback.error",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "playback.media_error",
+          "source": "api",
+          "claim": "media_error_code",
+          "failure_claims": [],
+          "fields": ["player_id", "media_error_code", "url_age_ms", "url_lifetime_ms", "mint_count", "can_play_mp4"]
+        }
+      ],
+      "doc": "One dashboard player's report of a MediaError on the item's Recording."
+    },
+    {
+      "name": "playback.note",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "playback.player_error_note",
+          "source": "api",
+          "claim": "player_id",
+          "failure_claims": [],
+          "fields": ["player_id"]
+        }
+      ],
+      "doc": "The error note the dashboard player showed a viewer on the item's Recording."
+    },
+    {
+      "name": "playback.progress",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "playback.progressed",
+          "source": "api",
+          "claim": "player_id",
+          "failure_claims": [],
+          "fields": ["player_id"]
+        }
+      ],
+      "doc": "One dashboard player's report that playback actually advanced on the item's Recording."
+    },
+    {
+      "name": "playback.url",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "playback.url_minted",
+          "source": "api",
+          "claim": "playback_expires_ms",
+          "failure_claims": [],
+          "fields": ["playback_signed_ms", "playback_expires_ms", "url_lifetime_ms", "playback_download"]
+        }
+      ],
+      "doc": "One download URL the API minted for the item's Recording."
+    },
+    {
+      "name": "recording.artifact",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.artifact",
+          "source": "db",
+          "claim": "recording_artifact_set",
+          "failure_claims": [],
+          "fields": ["recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_storage_match", "recording_duration_ms", "recording_expires_ms", "recording_committed_ms"]
+        }
+      ],
+      "doc": "The item's recording_artifacts row and whether its object key is the Recording's storage key."
+    },
+    {
+      "name": "recording.attempts",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.attempt",
+          "source": "db",
+          "claim": "recording_error_code",
+          "failure_claims": [],
+          "fields": ["recording_attempt", "recording_job_kind", "recording_error_code", "recording_failed_ms"]
+        },
+        {
+          "event": "recording.capture_attempt_failed",
+          "source": "api",
+          "claim": "recording_error_code",
+          "failure_claims": [],
+          "fields": ["recording_attempt_count", "recording_error_code", "recording_error_detail"]
+        }
+      ],
+      "doc": "One durable attempt-failure row or API attempt-failure journal line for the item."
+    },
+    {
+      "name": "recording.bundle_head",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.r2.bundle_head",
+          "source": "r2",
+          "claim": "recording_head_result",
+          "failure_claims": [],
+          "fields": ["recording_bundle_sequence", "recording_head_result"]
+        }
+      ],
+      "doc": "The checker's HEAD on one committed bundle object, for the render download stage."
+    },
+    {
+      "name": "recording.capture_result",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.capture_finished",
+          "source": "recorder",
+          "claim": "recording_capture_outcome",
+          "failure_claims": [],
+          "fields": ["recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"]
+        },
+        {
+          "event": "recording.capture_attempt",
+          "source": "recorder",
+          "claim": "recording_attempt_count",
+          "failure_claims": [],
+          "fields": ["recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"]
+        }
+      ],
+      "doc": "The recorder's own account of the item's capture: its summary line or the attempt op's terminal."
+    },
+    {
+      "name": "recording.capture_transport",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.media.transport",
+          "source": "sfu",
+          "claim": "recording_sent_audio",
+          "failure_claims": [],
+          "fields": ["session_kind", "participant_id", "recording_sent_audio", "recording_sent_video", "recording_final"]
+        }
+      ],
+      "doc": "One SFU transport count for the item's capture session; sent_audio + sent_video is the media the node handed the recorder."
+    },
+    {
+      "name": "recording.claim",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.journey",
+          "source": "db",
+          "claim": "journey_name",
+          "failure_claims": [],
+          "fields": ["journey_name", "job_id", "recording_claim_lag_ms", "recording_placement", "recording_error_code", "recording_capture_outcome", "recording_created_ms"]
+        },
+        {
+          "event": "recording.capture_claim",
+          "source": "api",
+          "claim": "recording_attempt_count",
+          "failure_claims": [],
+          "fields": ["recording_attempt_count", "recording_claim_lag_ms", "recording_placement"]
+        }
+      ],
+      "doc": "One claim, salvage or terminal-failure durable journey row for the item, or the API's claim decision. Claim: the journey name, or claimed."
+    },
+    {
+      "name": "recording.episode",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.episode",
+          "source": "db",
+          "claim": "recording_media_plane",
+          "failure_claims": [],
+          "fields": ["recording_episode_ended_ms", "recording_media_plane"]
+        }
+      ],
+      "doc": "The item's Episode row: when it ended and the media plane its config snapshot names."
+    },
+    {
+      "name": "recording.fleet",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recorder_fleet.operation_failed",
+          "source": "api",
+          "claim": "recording_fleet_operation",
+          "failure_claims": [],
+          "fields": ["recording_fleet_operation", "recording_error_code"]
+        }
+      ],
+      "doc": "The API's journal of a recorder-fleet operation failure in the item's window."
+    },
+    {
       "name": "recording.job_state",
       "area": "recording",
       "kind": "once",
       "per": "item",
-      "events": [],
-      "doc": "The terminal state of a post-call job, read from its Postgres row. Claim: succeeded or the failure state."
+      "events": [
+        {
+          "event": "recording.db.job",
+          "source": "db",
+          "claim": "recording_job_state",
+          "failure_claims": [],
+          "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+        }
+      ],
+      "doc": "The item's recording_jobs row: its state, error code, attempts, lease and clock fields. Claim: its state."
+    },
+    {
+      "name": "recording.media_publish",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.media_publish",
+          "source": "client",
+          "claim": "recording_media_outcome",
+          "failure_claims": [],
+          "fields": ["recording_media_action", "recording_media_outcome"]
+        }
+      ],
+      "doc": "A client's media_result publish row in the item's Episode: a Participant's own account that it published."
+    },
+    {
+      "name": "recording.object",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.artifact_readback",
+          "source": "r2",
+          "claim": "recording_r2_result",
+          "failure_claims": [],
+          "fields": ["recording_r2_result", "recording_size_bytes", "recording_sha_match", "recording_probe_duration_ms"]
+        }
+      ],
+      "doc": "The checker's R2 readback of the item's committed object: key, size, checksum, probe and decode. Claim: its result."
+    },
+    {
+      "name": "recording.participant_ingress",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.media.ingress",
+          "source": "sfu",
+          "claim": "recording_packets",
+          "failure_claims": [],
+          "fields": ["session_kind", "participant_id", "recording_media_source", "recording_media_kind", "recording_packets", "recording_final"]
+        }
+      ],
+      "doc": "One SFU ingress count for a participant session's publication in the item's Episode."
+    },
+    {
+      "name": "recording.pipeline",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.pipeline",
+          "source": "db",
+          "claim": "recording_pipeline_state",
+          "failure_claims": [],
+          "fields": [
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ]
+        }
+      ],
+      "doc": "The item's recording_pipelines row: pipeline state, capture counters, completeness and clock fields."
+    },
+    {
+      "name": "recording.publication",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.publication.started",
+          "source": "sfu",
+          "claim": "recording_media_source",
+          "failure_claims": [],
+          "fields": ["session_kind", "participant_id", "generation", "recording_media_source", "recording_media_kind"]
+        }
+      ],
+      "doc": "One SFU publication-start journal row in the item's Episode."
+    },
+    {
+      "name": "recording.render_result",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.render_stage",
+          "source": "recorder",
+          "claim": "recording_stage",
+          "failure_claims": [],
+          "fields": ["recording_stage"]
+        },
+        {
+          "event": "recording.render_attempt_failed",
+          "source": "api",
+          "claim": "recording_error_code",
+          "failure_claims": [],
+          "fields": ["recording_attempt_count", "recording_error_code", "recording_error_detail"]
+        }
+      ],
+      "doc": "One render stage op for the item, or the API's journal of a failed render attempt."
+    },
+    {
+      "name": "recording.reservation",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.reservation",
+          "source": "db",
+          "claim": "recording_reservation_state",
+          "failure_claims": [],
+          "fields": ["recording_reservation_state", "recording_reservation_starts_ms", "recording_reservation_ends_ms", "recording_created_ms"]
+        }
+      ],
+      "doc": "The item's recording_reservations row: its state and the window it reserved."
+    },
+    {
+      "name": "recording.row",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.recording",
+          "source": "db",
+          "claim": "recording_state",
+          "failure_claims": [],
+          "fields": ["recording_exists", "recording_state", "recording_error_code", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_duration_ms", "recording_created_ms", "recording_completed_ms", "recording_failed_ms"]
+        }
+      ],
+      "doc": "The item's recordings row: status, failure code, storage presence and clock fields; recording_exists false means none."
+    },
+    {
+      "name": "recording.session_close",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.session.closed",
+          "source": "sfu",
+          "claim": "recording_session_outcome",
+          "failure_claims": [],
+          "fields": ["session_kind", "media_connection_id", "recording_session_outcome", "recording_session_cause", "participant_id", "generation", "duration_ms"]
+        }
+      ],
+      "doc": "One SFU session-close journal row in the item's Episode."
+    },
+    {
+      "name": "recording.session_register",
+      "area": "recording",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.session.registered",
+          "source": "sfu",
+          "claim": "session_kind",
+          "failure_claims": [],
+          "fields": ["session_kind", "media_connection_id", "participant_id", "generation"]
+        }
+      ],
+      "doc": "One SFU session-registration journal row in the item's Episode; the node reporting every participant session is what makes 'no publications' proven."
+    },
+    {
+      "name": "recording.sync",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "recording.db.sync_recording",
+          "source": "db",
+          "claim": "recording_sync_status",
+          "failure_claims": [],
+          "fields": ["recording_sync_status", "recording_created_ms"]
+        }
+      ],
+      "doc": "The item's sync_recordings row: what Sync believes the Recording's lifecycle is."
     },
     {
       "name": "report.problem",
@@ -1668,12 +3983,427 @@
       "fault_scenario": null
     },
     {
+      "code": "playback.decode_failed",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A dashboard playback failed inside the URL's lifetime: decode when the browser can play MP4, or a network abort past expiry.",
+      "user_words": ["the recording won't play"],
+      "witnesses": [
+        {
+          "fact": "playback.error",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep playback.media_error api rows | grep {job}",
+          "doc": "The player's MediaError report."
+        },
+        {
+          "fact": "playback.note",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "grep playback.player_error_note api rows | grep {job}",
+          "doc": "The note the player showed the viewer."
+        },
+        {
+          "fact": "recording.object",
+          "from": ["r2"],
+          "required": true,
+          "independent": 1,
+          "query": "readback '{job}' via CHALK_R2_READ_*",
+          "doc": "The readback decides whether the player or the object is at fault."
+        }
+      ],
+      "rule": "observability/rules/playback.decode_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/playback.decode_failed/positive.json",
+        "healthy": "observability/fixtures/playback.decode_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/playback.decode_failed.fault.test.mjs"
+    },
+    {
+      "code": "playback.url_expired",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A dashboard playback failed on a URL older than its signed lifetime.",
+      "user_words": ["the recording link stopped working"],
+      "witnesses": [
+        {
+          "fact": "playback.url",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep playback.url_minted api.log | grep {job}",
+          "doc": "The API's mint of the URL and its signed lifetime."
+        },
+        {
+          "fact": "playback.error",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "grep playback.media_error api rows | grep {job}",
+          "doc": "The player's report with the URL's age at failure."
+        }
+      ],
+      "rule": "observability/rules/playback.url_expired.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/playback.url_expired/positive.json",
+        "healthy": "observability/fixtures/playback.url_expired/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/playback.url_expired.fault.test.mjs"
+    },
+    {
+      "code": "recording.artifact_unreadable",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A committed export whose stored object cannot be read back: wrong key, 404, wrong size or checksum, no video, bad duration or undecodable.",
+      "user_words": ["the recording won't play"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "The export job's committed outcome."
+        },
+        {
+          "fact": "recording.artifact",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_artifacts where recording_id = '{job}'",
+          "doc": "The durable object account: key match, size, checksum, duration and expiry."
+        },
+        {
+          "fact": "recording.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recordings where id = '{job}'",
+          "doc": "The Recording's storage key, status and completed_at."
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_pipelines where recording_id = '{job}'",
+          "doc": "A deleted pipeline means retention, which expects the absence."
+        },
+        {
+          "fact": "recording.object",
+          "from": ["r2"],
+          "required": true,
+          "independent": 1,
+          "query": "readback '{job}' via CHALK_R2_READ_*",
+          "doc": "The object read back and measured; the only proof it is readable."
+        }
+      ],
+      "rule": "observability/rules/recording.artifact_unreadable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.artifact_unreadable/positive.json",
+        "healthy": "observability/fixtures/recording.artifact_unreadable/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.artifact_unreadable.fault.test.mjs"
+    },
+    {
+      "code": "recording.capture_failed",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A capture job that spent at least one attempt and ended terminal_failure for any cause but capture_empty.",
+      "user_words": ["the recording failed"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "Terminal failure, its error code and the attempts spent."
+        },
+        {
+          "fact": "recording.attempts",
+          "from": ["db"],
+          "required": false,
+          "independent": 1,
+          "query": "postgres: select * from recording_job_attempt_failures where job_id = '{job}'",
+          "doc": "The durable per-attempt failure account."
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": true,
+          "independent": 1,
+          "query": "grep recording.capture_finished recorder.log | grep {job}",
+          "doc": "The recorder's own account; a lease that expired with no capture_finished names a worker that disappeared."
+        },
+        {
+          "fact": "recording.session_close",
+          "from": ["sfu"],
+          "required": false,
+          "independent": 1,
+          "query": "grep sfu.session.closed journal | grep capture | grep {episode}",
+          "doc": "The capture session's close cause corroborates."
+        }
+      ],
+      "rule": "observability/rules/recording.capture_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.capture_failed/positive.json",
+        "healthy": "observability/fixtures/recording.capture_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.capture_failed.fault.test.mjs"
+    },
+    {
+      "code": "recording.empty",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A capture that reported success with no media committed. Broken unless the SFU and the clients prove nobody published.",
+      "user_words": ["the recording has nothing in it"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "capture_empty error code and the attempt count."
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_pipelines where recording_id = '{job}'",
+          "doc": "Media and gap bundle counts."
+        },
+        {
+          "fact": "recording.capture_transport",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "grep sfu.media.transport journal | grep capture | grep {episode}",
+          "doc": "Whether the node handed the recorder media."
+        },
+        {
+          "fact": "recording.participant_ingress",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "grep sfu.media.ingress journal | grep {episode}",
+          "doc": "Whether the node ever received media."
+        },
+        {
+          "fact": "recording.session_register",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "grep sfu.session.registered journal | grep {episode}",
+          "doc": "The node reporting every participant session makes absent publications proven."
+        },
+        {
+          "fact": "recording.publication",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "grep sfu.publication.started journal | grep {episode}",
+          "doc": "Any participant publication, or its proven absence."
+        },
+        {
+          "fact": "recording.media_publish",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "grep media_result api rows | grep publish",
+          "doc": "A Participant's own account that it published."
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": false,
+          "independent": 1,
+          "query": "grep recording.capture_finished recorder.log | grep {job}",
+          "doc": "The recorder's packet count corroborates."
+        }
+      ],
+      "rule": "observability/rules/recording.empty.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.empty/positive.json",
+        "healthy": "observability/fixtures/recording.empty/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.empty.fault.test.mjs"
+    },
+    {
+      "code": "recording.missing_span",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A capture the db says was claimed, with a provably missing span: claim lag past the bound, a failed attempt followed by a later claim, or capture completeness partial.",
+      "user_words": ["the recording has a hole"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "Attempts and the job's clock fields."
+        },
+        {
+          "fact": "recording.claim",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from observability_journey_events where name = 'recording.claimed' and attributes->>'job_id' = '{job}'",
+          "doc": "The durable claim rows and their claim lag."
+        },
+        {
+          "fact": "recording.attempts",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_job_attempt_failures where job_id = '{job}'",
+          "doc": "The durable account of attempts that failed."
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_pipelines where recording_id = '{job}'",
+          "doc": "Completeness and the capture counters."
+        },
+        {
+          "fact": "recording.capture_transport",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "grep sfu.media.transport journal | grep capture | grep {episode}",
+          "doc": "The capture session's sent counters bound the span."
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": true,
+          "independent": 1,
+          "query": "grep recording.capture_finished recorder.log | grep {job}",
+          "doc": "The recorder's own account bounds the span too."
+        }
+      ],
+      "rule": "observability/rules/recording.missing_span.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.missing_span/positive.json",
+        "healthy": "observability/fixtures/recording.missing_span/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.missing_span.fault.test.mjs"
+    },
+    {
+      "code": "recording.never_captured",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A capture job nobody ever ran: attempt_count=0, no claim row, and it died of reservation expiry or stop-before-completion.",
+      "user_words": ["the recording never started"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "The job row: state, error code, attempt count and clock fields."
+        },
+        {
+          "fact": "recording.claim",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from observability_journey_events where name = 'recording.claimed' and attributes->>'job_id' = '{job}'",
+          "doc": "The durable claim row, or its proven absence."
+        },
+        {
+          "fact": "recording.reservation",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_reservations where recording_id = '{job}'",
+          "doc": "The reservation: expired or released, and its window."
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_pipelines where recording_id = '{job}'",
+          "doc": "Stop request and capture progress the pipeline recorded."
+        },
+        {
+          "fact": "recording.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recordings where id = '{job}'",
+          "doc": "The Recording row's status, failure code and created_at."
+        },
+        {
+          "fact": "recording.episode",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select ended_at, config_snapshot from episodes where id = '{episode}'",
+          "doc": "When the Episode ended."
+        },
+        {
+          "fact": "recording.sync",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from sync_recordings where recording_id = '{job}'",
+          "doc": "What Sync believes happened."
+        },
+        {
+          "fact": "recording.fleet",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "grep recorder_fleet.operation_failed api.log",
+          "doc": "A fleet operation failure near the job names recorder.fleet instead of api.recording_pipeline."
+        },
+        {
+          "fact": "recording.session_close",
+          "from": ["sfu"],
+          "required": false,
+          "independent": 1,
+          "query": "grep sfu.session.closed journal | grep {episode}",
+          "doc": "An SFU close before the claim names the cause."
+        }
+      ],
+      "rule": "observability/rules/recording.never_captured.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.never_captured/positive.json",
+        "healthy": "observability/fixtures/recording.never_captured/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.never_captured.fault.test.mjs"
+    },
+    {
       "code": "recording.not_ready",
       "area": "recording",
       "slice": 10,
       "item": "job",
       "per": "item",
-      "doc": "An ended Episode's recording never became ready to watch.",
+      "doc": "An ended Episode's Recording never became ready to watch.",
       "user_words": ["the recording isn't there"],
       "witnesses": [
         {
@@ -1682,7 +4412,7 @@
           "required": true,
           "independent": 1,
           "query": "postgres: select state, updated_at from recording_jobs where id = '{job}'",
-          "doc": "Whether and how the job ended."
+          "doc": "Whether and how the export job ended."
         }
       ],
       "rule": "observability/rules/recording.not_ready.mjs",
@@ -1690,7 +4420,48 @@
         "positive": "observability/fixtures/recording.not_ready/positive.json",
         "healthy": "observability/fixtures/recording.not_ready/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "scripts/recording-pipeline/recording.not_ready.fault.test.mjs"
+    },
+    {
+      "code": "recording.stuck",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A capture job pending 15 minutes after availability, or a capture or export state unmoving past its bound.",
+      "user_words": ["the recording is stuck"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "State, lease expiry, attempts and clock fields."
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_pipelines where recording_id = '{job}'",
+          "doc": "The pipeline state and when it last moved."
+        },
+        {
+          "fact": "recording.episode",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select ended_at from episodes where id = '{episode}'",
+          "doc": "The Episode's end bounds every stuck window."
+        }
+      ],
+      "rule": "observability/rules/recording.stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.stuck/positive.json",
+        "healthy": "observability/fixtures/recording.stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.stuck.fault.test.mjs"
     },
     {
       "code": "rejoin.refused",
@@ -1707,6 +4478,47 @@
         "healthy": "observability/fixtures/rejoin.refused/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "render.failed",
+      "area": "recording",
+      "slice": 10,
+      "item": "job",
+      "per": "item",
+      "doc": "A render attempt that failed: the stage code names the hop, and a bundle 404 on download_capture names storage.r2.",
+      "user_words": ["the recording never finished rendering"],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select * from recording_jobs where id = '{job}'",
+          "doc": "The terminal failure and its stage-scoped error code."
+        },
+        {
+          "fact": "recording.render_result",
+          "from": ["recorder"],
+          "required": true,
+          "independent": 1,
+          "query": "grep recording.render_stage recorder.log | grep {job}",
+          "doc": "The render stage rows name the failing stage themselves."
+        },
+        {
+          "fact": "recording.bundle_head",
+          "from": ["r2"],
+          "required": false,
+          "independent": 1,
+          "query": "HEAD each recording_bundles.object_key for '{job}'",
+          "doc": "A bundle 404 during download_capture names storage.r2; without it the stage says where it failed."
+        }
+      ],
+      "rule": "observability/rules/render.failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/render.failed/positive.json",
+        "healthy": "observability/fixtures/render.failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/render.failed.fault.test.mjs"
     },
     {
       "code": "share.wont_stop",
@@ -1773,10 +4585,6 @@
     {
       "code": "page.crashed",
       "slice": 9
-    },
-    {
-      "code": "recording.not_ready",
-      "slice": 10
     },
     {
       "code": "rejoin.refused",

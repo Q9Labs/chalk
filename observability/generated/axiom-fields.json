@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "2edf314eaab6",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 128,
       "fields": [
         {
           "name": "admission_request_id",
@@ -30,6 +30,18 @@
         {
           "name": "batch_id",
           "type": "string"
+        },
+        {
+          "name": "can_play_mp4",
+          "type": "string"
+        },
+        {
+          "name": "capture_packet_count",
+          "type": "integer"
+        },
+        {
+          "name": "capture_track_count",
+          "type": "integer"
         },
         {
           "name": "client_mono_ms",
@@ -128,6 +140,10 @@
           "type": "string"
         },
         {
+          "name": "journey_name",
+          "type": "string"
+        },
+        {
           "name": "jump_ms",
           "type": "integer"
         },
@@ -142,6 +158,14 @@
         {
           "name": "media_connection_id",
           "type": "string"
+        },
+        {
+          "name": "media_error_code",
+          "type": "integer"
+        },
+        {
+          "name": "mint_count",
+          "type": "integer"
         },
         {
           "name": "module",
@@ -176,6 +200,26 @@
           "type": "string"
         },
         {
+          "name": "playback_download",
+          "type": "boolean"
+        },
+        {
+          "name": "playback_expires_ms",
+          "type": "integer"
+        },
+        {
+          "name": "playback_progress_ms",
+          "type": "integer"
+        },
+        {
+          "name": "playback_signed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "player_id",
+          "type": "string"
+        },
+        {
           "name": "provider_media_id",
           "type": "string"
         },
@@ -184,8 +228,212 @@
           "type": "string"
         },
         {
+          "name": "recording_artifact_set",
+          "type": "boolean"
+        },
+        {
+          "name": "recording_attempt",
+          "type": "integer"
+        },
+        {
+          "name": "recording_attempt_count",
+          "type": "integer"
+        },
+        {
+          "name": "recording_attempt_limit",
+          "type": "integer"
+        },
+        {
+          "name": "recording_available_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_bundle_sequence",
+          "type": "integer"
+        },
+        {
+          "name": "recording_capture_completed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_capture_completeness",
+          "type": "string"
+        },
+        {
+          "name": "recording_capture_outcome",
+          "type": "string"
+        },
+        {
+          "name": "recording_claim_lag_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_committed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_completed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_created_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_episode_ended_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_error_code",
+          "type": "string"
+        },
+        {
+          "name": "recording_error_detail",
+          "type": "string"
+        },
+        {
+          "name": "recording_exists",
+          "type": "boolean"
+        },
+        {
+          "name": "recording_expires_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_failed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_fleet_operation",
+          "type": "string"
+        },
+        {
+          "name": "recording_gap_bundles",
+          "type": "integer"
+        },
+        {
+          "name": "recording_head_result",
+          "type": "string"
+        },
+        {
           "name": "recording_id",
           "type": "string"
+        },
+        {
+          "name": "recording_job_kind",
+          "type": "string"
+        },
+        {
+          "name": "recording_job_state",
+          "type": "string"
+        },
+        {
+          "name": "recording_lease_expiry_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_media_action",
+          "type": "string"
+        },
+        {
+          "name": "recording_media_bundles",
+          "type": "integer"
+        },
+        {
+          "name": "recording_media_kind",
+          "type": "string"
+        },
+        {
+          "name": "recording_media_outcome",
+          "type": "string"
+        },
+        {
+          "name": "recording_media_plane",
+          "type": "string"
+        },
+        {
+          "name": "recording_media_source",
+          "type": "string"
+        },
+        {
+          "name": "recording_pipeline_state",
+          "type": "string"
+        },
+        {
+          "name": "recording_placement",
+          "type": "string"
+        },
+        {
+          "name": "recording_probe_duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_r2_result",
+          "type": "string"
+        },
+        {
+          "name": "recording_reservation_ends_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_reservation_starts_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_reservation_state",
+          "type": "string"
+        },
+        {
+          "name": "recording_session_cause",
+          "type": "string"
+        },
+        {
+          "name": "recording_session_outcome",
+          "type": "string"
+        },
+        {
+          "name": "recording_sha_match",
+          "type": "boolean"
+        },
+        {
+          "name": "recording_sha_set",
+          "type": "boolean"
+        },
+        {
+          "name": "recording_size_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "recording_stage",
+          "type": "string"
+        },
+        {
+          "name": "recording_state",
+          "type": "string"
+        },
+        {
+          "name": "recording_stop_requested_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_storage_match",
+          "type": "boolean"
+        },
+        {
+          "name": "recording_sync_status",
+          "type": "string"
+        },
+        {
+          "name": "recording_terminal_ms",
+          "type": "integer"
+        },
+        {
+          "name": "recording_updated_ms",
+          "type": "integer"
         },
         {
           "name": "release_sha",
@@ -208,6 +456,10 @@
           "type": "integer"
         },
         {
+          "name": "session_kind",
+          "type": "string"
+        },
+        {
           "name": "shown_ms",
           "type": "integer"
         },
@@ -221,6 +473,10 @@
         },
         {
           "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "stop_cause",
           "type": "string"
         },
         {
@@ -246,6 +502,14 @@
         {
           "name": "trigger",
           "type": "string"
+        },
+        {
+          "name": "url_age_ms",
+          "type": "integer"
+        },
+        {
+          "name": "url_lifetime_ms",
+          "type": "integer"
         },
         {
           "name": "user_id",
@@ -507,7 +771,7 @@
     {
       "dataset": "media-stats",
       "budget": 256,
-      "used": 60,
+      "used": 67,
       "fields": [
         {
           "name": "admission_request_id",
@@ -678,8 +942,32 @@
           "type": "string"
         },
         {
+          "name": "recording_final",
+          "type": "boolean"
+        },
+        {
           "name": "recording_id",
           "type": "string"
+        },
+        {
+          "name": "recording_media_kind",
+          "type": "string"
+        },
+        {
+          "name": "recording_media_source",
+          "type": "string"
+        },
+        {
+          "name": "recording_packets",
+          "type": "integer"
+        },
+        {
+          "name": "recording_sent_audio",
+          "type": "integer"
+        },
+        {
+          "name": "recording_sent_video",
+          "type": "integer"
         },
         {
           "name": "release_sha",
@@ -700,6 +988,10 @@
         {
           "name": "seq",
           "type": "integer"
+        },
+        {
+          "name": "session_kind",
+          "type": "string"
         },
         {
           "name": "shown_ms",

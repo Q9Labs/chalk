@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "2edf314eaab6",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -250,10 +250,156 @@
       "fault_scenario": null
     },
     {
-      "code": "recording.not_ready",
+      "code": "playback.decode_failed",
       "area": "recording",
       "slice": 10,
-      "allowlisted": true,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "playback.error",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "playback.media_error",
+              "source": "api",
+              "fields": ["player_id", "media_error_code", "url_age_ms", "url_lifetime_ms", "mint_count", "can_play_mp4"]
+            }
+          ]
+        },
+        {
+          "fact": "playback.note",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "playback.player_error_note",
+              "source": "api",
+              "fields": ["player_id"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.object",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.artifact_readback",
+              "source": "r2",
+              "fields": ["recording_r2_result", "recording_size_bytes", "recording_sha_match", "recording_probe_duration_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "playback.media_error",
+          "fields": ["recording_id", "player_id", "media_error_code", "url_age_ms", "url_lifetime_ms", "mint_count", "can_play_mp4"],
+          "emit_sites": [
+            {
+              "path": "apps/web/server/past-session.ts",
+              "literal": "\"playback.media_error\""
+            }
+          ]
+        },
+        {
+          "name": "playback.player_error_note",
+          "fields": ["player_id"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/dashboard/SessionPlayer.tsx",
+              "literal": "playback.player_error_note"
+            }
+          ]
+        },
+        {
+          "name": "recording.artifact_readback",
+          "fields": ["recording_id", "recording_r2_result", "recording_size_bytes", "recording_sha_match", "recording_probe_duration_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/readback.mjs",
+              "literal": "\"recording.artifact_readback\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/playback.decode_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/playback.decode_failed/positive.json",
+        "healthy": "observability/fixtures/playback.decode_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/playback.decode_failed.fault.test.mjs"
+    },
+    {
+      "code": "playback.url_expired",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "playback.url",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "playback.url_minted",
+              "source": "api",
+              "fields": ["playback_signed_ms", "playback_expires_ms", "url_lifetime_ms", "playback_download"]
+            }
+          ]
+        },
+        {
+          "fact": "playback.error",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "playback.media_error",
+              "source": "api",
+              "fields": ["player_id", "media_error_code", "url_age_ms", "url_lifetime_ms", "mint_count", "can_play_mp4"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "playback.url_minted",
+          "fields": ["recording_id", "playback_signed_ms", "playback_expires_ms", "url_lifetime_ms", "playback_download"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/recordings.go",
+              "literal": "obs.EventPlaybackURLMinted"
+            }
+          ]
+        },
+        {
+          "name": "playback.media_error",
+          "fields": ["recording_id", "player_id", "media_error_code", "url_age_ms", "url_lifetime_ms", "mint_count", "can_play_mp4"],
+          "emit_sites": [
+            {
+              "path": "apps/web/server/past-session.ts",
+              "literal": "\"playback.media_error\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/playback.url_expired.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/playback.url_expired/positive.json",
+        "healthy": "observability/fixtures/playback.url_expired/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/playback.url_expired.fault.test.mjs"
+    },
+    {
+      "code": "recording.artifact_unreadable",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -261,16 +407,1141 @@
           "fact": "recording.job_state",
           "from": ["db"],
           "required": true,
-          "events": []
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.artifact",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.artifact",
+              "source": "db",
+              "fields": ["recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_storage_match", "recording_duration_ms", "recording_expires_ms", "recording_committed_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.recording",
+              "source": "db",
+              "fields": ["recording_exists", "recording_state", "recording_error_code", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_duration_ms", "recording_created_ms", "recording_completed_ms", "recording_failed_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.pipeline",
+              "source": "db",
+              "fields": [
+                "recording_pipeline_state",
+                "recording_stop_requested_ms",
+                "recording_capture_completed_ms",
+                "recording_committed_ms",
+                "recording_media_bundles",
+                "recording_gap_bundles",
+                "capture_track_count",
+                "capture_packet_count",
+                "recording_capture_completeness",
+                "recording_created_ms",
+                "recording_updated_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "recording.object",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.artifact_readback",
+              "source": "r2",
+              "fields": ["recording_r2_result", "recording_size_bytes", "recording_sha_match", "recording_probe_duration_ms"]
+            }
+          ]
         }
       ],
-      "events": [],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.artifact",
+          "fields": ["recording_id", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_storage_match", "recording_duration_ms", "recording_expires_ms", "recording_committed_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.artifact\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.recording",
+          "fields": ["recording_id", "recording_exists", "recording_state", "recording_error_code", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_duration_ms", "recording_created_ms", "recording_completed_ms", "recording_failed_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.recording\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.pipeline",
+          "fields": [
+            "recording_id",
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.pipeline\""
+            }
+          ]
+        },
+        {
+          "name": "recording.artifact_readback",
+          "fields": ["recording_id", "recording_r2_result", "recording_size_bytes", "recording_sha_match", "recording_probe_duration_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/readback.mjs",
+              "literal": "\"recording.artifact_readback\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.artifact_unreadable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.artifact_unreadable/positive.json",
+        "healthy": "observability/fixtures/recording.artifact_unreadable/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.artifact_unreadable.fault.test.mjs"
+    },
+    {
+      "code": "recording.capture_failed",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.attempts",
+          "from": ["db"],
+          "required": false,
+          "events": [
+            {
+              "event": "recording.db.attempt",
+              "source": "db",
+              "fields": ["recording_attempt", "recording_job_kind", "recording_error_code", "recording_failed_ms"]
+            },
+            {
+              "event": "recording.capture_attempt_failed",
+              "source": "api",
+              "fields": ["recording_attempt_count", "recording_error_code", "recording_error_detail"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.capture_finished",
+              "source": "recorder",
+              "fields": ["recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"]
+            },
+            {
+              "event": "recording.capture_attempt",
+              "source": "recorder",
+              "fields": ["recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.session_close",
+          "from": ["sfu"],
+          "required": false,
+          "events": [
+            {
+              "event": "sfu.session.closed",
+              "source": "sfu",
+              "fields": ["session_kind", "media_connection_id", "recording_session_outcome", "recording_session_cause", "participant_id", "generation", "duration_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.attempt",
+          "fields": ["job_id", "recording_attempt", "recording_job_kind", "recording_error_code", "recording_failed_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.attempt\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_attempt_failed",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_error_code", "recording_error_detail"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/observability/recording_capture.go",
+              "literal": "\"recording.capture_attempt_failed\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_finished",
+          "fields": ["job_id", "recording_id", "recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_summary.go",
+              "literal": "\"recording.capture_finished\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_attempt",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_attempt.go",
+              "literal": "obs.EventRecordingCaptureAttempt"
+            }
+          ]
+        },
+        {
+          "name": "sfu.session.closed",
+          "fields": ["session_kind", "media_connection_id", "recording_session_outcome", "recording_session_cause", "participant_id", "generation"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventSessionClosed"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.capture_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.capture_failed/positive.json",
+        "healthy": "observability/fixtures/recording.capture_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.capture_failed.fault.test.mjs"
+    },
+    {
+      "code": "recording.empty",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.pipeline",
+              "source": "db",
+              "fields": [
+                "recording_pipeline_state",
+                "recording_stop_requested_ms",
+                "recording_capture_completed_ms",
+                "recording_committed_ms",
+                "recording_media_bundles",
+                "recording_gap_bundles",
+                "capture_track_count",
+                "capture_packet_count",
+                "recording_capture_completeness",
+                "recording_created_ms",
+                "recording_updated_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "recording.capture_transport",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.media.transport",
+              "source": "sfu",
+              "fields": ["session_kind", "participant_id", "recording_sent_audio", "recording_sent_video", "recording_final"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.participant_ingress",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.media.ingress",
+              "source": "sfu",
+              "fields": ["session_kind", "participant_id", "recording_media_source", "recording_media_kind", "recording_packets", "recording_final"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.session_register",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.session.registered",
+              "source": "sfu",
+              "fields": ["session_kind", "media_connection_id", "participant_id", "generation"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.publication",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.publication.started",
+              "source": "sfu",
+              "fields": ["session_kind", "participant_id", "generation", "recording_media_source", "recording_media_kind"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.media_publish",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "recording.media_publish",
+              "source": "client",
+              "fields": ["recording_media_action", "recording_media_outcome"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": false,
+          "events": [
+            {
+              "event": "recording.capture_finished",
+              "source": "recorder",
+              "fields": ["recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"]
+            },
+            {
+              "event": "recording.capture_attempt",
+              "source": "recorder",
+              "fields": ["recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.pipeline",
+          "fields": [
+            "recording_id",
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.pipeline\""
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.transport",
+          "fields": ["session_kind", "participant_id", "recording_sent_audio", "recording_sent_video", "recording_final"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaTransport"
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.ingress",
+          "fields": ["session_kind", "participant_id", "recording_media_source", "recording_media_kind", "recording_packets", "recording_final"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaIngress"
+            }
+          ]
+        },
+        {
+          "name": "sfu.session.registered",
+          "fields": ["session_kind", "media_connection_id", "participant_id", "generation"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventSessionRegistered"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.started",
+          "fields": ["session_kind", "participant_id", "generation", "recording_media_source", "recording_media_kind"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventPublicationStarted"
+            }
+          ]
+        },
+        {
+          "name": "recording.media_publish",
+          "fields": ["recording_media_action", "recording_media_outcome"],
+          "emit_sites": [
+            {
+              "path": "docs/observability.md",
+              "literal": "media_result"
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_finished",
+          "fields": ["job_id", "recording_id", "recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_summary.go",
+              "literal": "\"recording.capture_finished\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_attempt",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_attempt.go",
+              "literal": "obs.EventRecordingCaptureAttempt"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.empty.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.empty/positive.json",
+        "healthy": "observability/fixtures/recording.empty/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.empty.fault.test.mjs"
+    },
+    {
+      "code": "recording.missing_span",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.claim",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.journey",
+              "source": "db",
+              "fields": ["journey_name", "job_id", "recording_claim_lag_ms", "recording_placement", "recording_error_code", "recording_capture_outcome", "recording_created_ms"]
+            },
+            {
+              "event": "recording.capture_claim",
+              "source": "api",
+              "fields": ["recording_attempt_count", "recording_claim_lag_ms", "recording_placement"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.attempts",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.attempt",
+              "source": "db",
+              "fields": ["recording_attempt", "recording_job_kind", "recording_error_code", "recording_failed_ms"]
+            },
+            {
+              "event": "recording.capture_attempt_failed",
+              "source": "api",
+              "fields": ["recording_attempt_count", "recording_error_code", "recording_error_detail"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.pipeline",
+              "source": "db",
+              "fields": [
+                "recording_pipeline_state",
+                "recording_stop_requested_ms",
+                "recording_capture_completed_ms",
+                "recording_committed_ms",
+                "recording_media_bundles",
+                "recording_gap_bundles",
+                "capture_track_count",
+                "capture_packet_count",
+                "recording_capture_completeness",
+                "recording_created_ms",
+                "recording_updated_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "recording.capture_transport",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.media.transport",
+              "source": "sfu",
+              "fields": ["session_kind", "participant_id", "recording_sent_audio", "recording_sent_video", "recording_final"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.capture_result",
+          "from": ["recorder"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.capture_finished",
+              "source": "recorder",
+              "fields": ["recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"]
+            },
+            {
+              "event": "recording.capture_attempt",
+              "source": "recorder",
+              "fields": ["recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.journey",
+          "fields": ["job_id", "recording_id", "journey_name", "recording_claim_lag_ms", "recording_placement", "recording_error_code", "recording_capture_outcome", "recording_created_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.journey\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_claim",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_claim_lag_ms", "recording_placement"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/recording_pipeline.go",
+              "literal": "obs.EventRecordingCaptureClaim"
+            }
+          ]
+        },
+        {
+          "name": "recording.db.attempt",
+          "fields": ["job_id", "recording_attempt", "recording_job_kind", "recording_error_code", "recording_failed_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.attempt\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_attempt_failed",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_error_code", "recording_error_detail"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/observability/recording_capture.go",
+              "literal": "\"recording.capture_attempt_failed\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.pipeline",
+          "fields": [
+            "recording_id",
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.pipeline\""
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.transport",
+          "fields": ["session_kind", "participant_id", "recording_sent_audio", "recording_sent_video", "recording_final"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaTransport"
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_finished",
+          "fields": ["job_id", "recording_id", "recording_capture_outcome", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_summary.go",
+              "literal": "\"recording.capture_finished\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_attempt",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_attempt_limit", "capture_packet_count", "capture_track_count", "stop_cause"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/capture_attempt.go",
+              "literal": "obs.EventRecordingCaptureAttempt"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.missing_span.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.missing_span/positive.json",
+        "healthy": "observability/fixtures/recording.missing_span/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.missing_span.fault.test.mjs"
+    },
+    {
+      "code": "recording.never_captured",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.claim",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.journey",
+              "source": "db",
+              "fields": ["journey_name", "job_id", "recording_claim_lag_ms", "recording_placement", "recording_error_code", "recording_capture_outcome", "recording_created_ms"]
+            },
+            {
+              "event": "recording.capture_claim",
+              "source": "api",
+              "fields": ["recording_attempt_count", "recording_claim_lag_ms", "recording_placement"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.reservation",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.reservation",
+              "source": "db",
+              "fields": ["recording_reservation_state", "recording_reservation_starts_ms", "recording_reservation_ends_ms", "recording_created_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.pipeline",
+              "source": "db",
+              "fields": [
+                "recording_pipeline_state",
+                "recording_stop_requested_ms",
+                "recording_capture_completed_ms",
+                "recording_committed_ms",
+                "recording_media_bundles",
+                "recording_gap_bundles",
+                "capture_track_count",
+                "capture_packet_count",
+                "recording_capture_completeness",
+                "recording_created_ms",
+                "recording_updated_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "recording.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.recording",
+              "source": "db",
+              "fields": ["recording_exists", "recording_state", "recording_error_code", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_duration_ms", "recording_created_ms", "recording_completed_ms", "recording_failed_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.episode",
+              "source": "db",
+              "fields": ["recording_episode_ended_ms", "recording_media_plane"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.sync",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.sync_recording",
+              "source": "db",
+              "fields": ["recording_sync_status", "recording_created_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.fleet",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "recorder_fleet.operation_failed",
+              "source": "api",
+              "fields": ["recording_fleet_operation", "recording_error_code"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.session_close",
+          "from": ["sfu"],
+          "required": false,
+          "events": [
+            {
+              "event": "sfu.session.closed",
+              "source": "sfu",
+              "fields": ["session_kind", "media_connection_id", "recording_session_outcome", "recording_session_cause", "participant_id", "generation", "duration_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.journey",
+          "fields": ["job_id", "recording_id", "journey_name", "recording_claim_lag_ms", "recording_placement", "recording_error_code", "recording_capture_outcome", "recording_created_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.journey\""
+            }
+          ]
+        },
+        {
+          "name": "recording.capture_claim",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_claim_lag_ms", "recording_placement"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/recording_pipeline.go",
+              "literal": "obs.EventRecordingCaptureClaim"
+            }
+          ]
+        },
+        {
+          "name": "recording.db.reservation",
+          "fields": ["recording_id", "recording_reservation_state", "recording_reservation_starts_ms", "recording_reservation_ends_ms", "recording_created_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.reservation\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.pipeline",
+          "fields": [
+            "recording_id",
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.pipeline\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.recording",
+          "fields": ["recording_id", "recording_exists", "recording_state", "recording_error_code", "recording_artifact_set", "recording_size_bytes", "recording_sha_set", "recording_duration_ms", "recording_created_ms", "recording_completed_ms", "recording_failed_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.recording\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.episode",
+          "fields": ["recording_id", "recording_episode_ended_ms", "recording_media_plane"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.episode\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.sync_recording",
+          "fields": ["recording_id", "recording_sync_status", "recording_created_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.sync_recording\""
+            }
+          ]
+        },
+        {
+          "name": "recorder_fleet.operation_failed",
+          "fields": ["recording_fleet_operation", "recording_error_code"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/recorder_fleet_controller.go",
+              "literal": "\"recorder_fleet.operation_failed\""
+            }
+          ]
+        },
+        {
+          "name": "sfu.session.closed",
+          "fields": ["session_kind", "media_connection_id", "recording_session_outcome", "recording_session_cause", "participant_id", "generation"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventSessionClosed"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.never_captured.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.never_captured/positive.json",
+        "healthy": "observability/fixtures/recording.never_captured/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.never_captured.fault.test.mjs"
+    },
+    {
+      "code": "recording.not_ready",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/recording.not_ready.mjs",
       "fixtures": {
         "positive": "observability/fixtures/recording.not_ready/positive.json",
         "healthy": "observability/fixtures/recording.not_ready/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "scripts/recording-pipeline/recording.not_ready.fault.test.mjs"
+    },
+    {
+      "code": "recording.stuck",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.pipeline",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.pipeline",
+              "source": "db",
+              "fields": [
+                "recording_pipeline_state",
+                "recording_stop_requested_ms",
+                "recording_capture_completed_ms",
+                "recording_committed_ms",
+                "recording_media_bundles",
+                "recording_gap_bundles",
+                "capture_track_count",
+                "capture_packet_count",
+                "recording_capture_completeness",
+                "recording_created_ms",
+                "recording_updated_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "recording.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.episode",
+              "source": "db",
+              "fields": ["recording_episode_ended_ms", "recording_media_plane"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.pipeline",
+          "fields": [
+            "recording_id",
+            "recording_pipeline_state",
+            "recording_stop_requested_ms",
+            "recording_capture_completed_ms",
+            "recording_committed_ms",
+            "recording_media_bundles",
+            "recording_gap_bundles",
+            "capture_track_count",
+            "capture_packet_count",
+            "recording_capture_completeness",
+            "recording_created_ms",
+            "recording_updated_ms"
+          ],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.pipeline\""
+            }
+          ]
+        },
+        {
+          "name": "recording.db.episode",
+          "fields": ["recording_id", "recording_episode_ended_ms", "recording_media_plane"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.episode\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/recording.stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.stuck/positive.json",
+        "healthy": "observability/fixtures/recording.stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/recording.stuck.fault.test.mjs"
     },
     {
       "code": "rejoin.refused",
@@ -287,6 +1558,105 @@
         "healthy": "observability/fixtures/rejoin.refused/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "render.failed",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.db.job",
+              "source": "db",
+              "fields": ["recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.render_result",
+          "from": ["recorder"],
+          "required": true,
+          "events": [
+            {
+              "event": "recording.render_stage",
+              "source": "recorder",
+              "fields": ["recording_stage"]
+            },
+            {
+              "event": "recording.render_attempt_failed",
+              "source": "api",
+              "fields": ["recording_attempt_count", "recording_error_code", "recording_error_detail"]
+            }
+          ]
+        },
+        {
+          "fact": "recording.bundle_head",
+          "from": ["r2"],
+          "required": false,
+          "events": [
+            {
+              "event": "recording.r2.bundle_head",
+              "source": "r2",
+              "fields": ["recording_bundle_sequence", "recording_head_result"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "recording.db.job",
+          "fields": ["job_id", "recording_id", "recording_job_state", "recording_job_kind", "recording_error_code", "recording_attempt_count", "recording_attempt_limit", "recording_available_ms", "recording_lease_expiry_ms", "recording_created_ms", "recording_updated_ms", "recording_terminal_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/recording-pipeline/evidence.mjs",
+              "literal": "\"recording.db.job\""
+            }
+          ]
+        },
+        {
+          "name": "recording.render_stage",
+          "fields": ["job_id", "recording_id", "recording_stage"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/recorderworker/render_stage.go",
+              "literal": "obs.EventRecordingRenderStage"
+            }
+          ]
+        },
+        {
+          "name": "recording.render_attempt_failed",
+          "fields": ["job_id", "recording_id", "recording_attempt_count", "recording_error_code", "recording_error_detail"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/observability/recording_render.go",
+              "literal": "\"recording.render_attempt_failed\""
+            }
+          ]
+        },
+        {
+          "name": "recording.r2.bundle_head",
+          "fields": ["recording_id", "recording_bundle_sequence", "recording_head_result"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/readback.mjs",
+              "literal": "\"recording.r2.bundle_head\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/render.failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/render.failed/positive.json",
+        "healthy": "observability/fixtures/render.failed/healthy.json"
+      },
+      "fault_scenario": "scripts/recording-pipeline/render.failed.fault.test.mjs"
     },
     {
       "code": "share.wont_stop",
