@@ -35,8 +35,7 @@ const (
 )
 
 // EpisodeProviders reads the provider and node frozen into an Episode's binding.
-// It returns an empty provider for an Episode that predates the binding, which ran
-// for a historical Episode without a node binding.
+// An empty provider marks a historical Episode without a binding.
 type EpisodeProviders interface {
 	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, generation int64, err error)
 }

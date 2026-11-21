@@ -1,6 +1,6 @@
 // Reads TURN egress from Cloudflare GraphQL analytics and posts
 // to the Oncall webhook when a limit is crossed. Cloudflare's own usage alert
-// cannot watch these products, and they share one monthly free allowance.
+// does not cover Realtime TURN.
 
 import { postToOncall } from "../oncall-alert.mjs";
 
@@ -95,7 +95,7 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   let incidents = [{ key: key("24h"), detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }];
   if (!drill) {
     const usage = await readEgress({ fetchImpl, accountId: CLOUDFLARE_ACCOUNT_ID, token: CLOUDFLARE_ANALYTICS_TOKEN, now });
-    log(`SFU+TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
+    log(`TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
     incidents = evaluate(usage);
   }
   if (incidents.length === 0) return 0;

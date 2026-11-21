@@ -11,7 +11,7 @@ outcomes:
     area: media
     state: planned
     summary: >-
-      The Usage type has egress and Participant-minute fields, but both the Chalk SFU
+      The Usage type has egress and Participant-minute fields, but the Chalk SFU
       adapter returns only metadata, so media cost cannot be measured or limited.
     size: M
     remaining:

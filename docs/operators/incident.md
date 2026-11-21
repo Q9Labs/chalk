@@ -51,12 +51,12 @@ It skips the nightly record, latency and long-call proofs, the scorecard and npm
 
 ## Kill switches and media plane settings
 
-| Switch                                                                      | Effect                                             | How fast                                    |
-| --------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------- |
-| `media-settings new-episodes --state off --operator <name> --reason <text>` | Every new Episode uses Cloudflare. Audit row kept. | Next new Episode, no deploy and no restart. |
-| `media-settings set --tenant <id>` for a Tenant default                     | Next Episodes of that Tenant follow it.            | Seconds, no deploy.                         |
+| Switch                                                                      | Effect                                                                           | How fast                                    |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------- |
+| `media-settings new-episodes --state off --operator <name> --reason <text>` | New Episodes are refused. Live Episodes stay on their SFU nodes. Audit row kept. | Next new Episode, no deploy and no restart. |
+| `media-settings set --tenant <id>` for a Tenant default                     | Next Episodes of that Tenant follow it.                                          | Seconds, no deploy.                         |
 
-The first row is an emergency stop for new Episodes, not the normal failover: a live call never moves to Cloudflare, and a new Episode that no Chalk SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.
+The first row is an emergency stop for new Episodes, not the normal failover: a live call keeps its binding, and a new Episode that no Chalk SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../plans/sfu-production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 

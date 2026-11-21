@@ -11,8 +11,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 ## Media
 
 1. **Measure media usage per Tenant and Episode** (Not started · size M)
-    The Usage type has egress and Participant-minute fields, but both the Chalk SFU
-    adapter returns only metadata, so media cost cannot be measured or limited.
+    The Usage type has egress and Participant-minute fields, but the Chalk SFU adapter
+    returns only metadata, so media cost cannot be measured or limited.
     - Collect usage in the Chalk SFU adapter and attribute it to Tenant and Episode.
     - Expose usage to policy limits.
 

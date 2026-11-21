@@ -17,19 +17,10 @@ func fieldEnum(schemaName string, fieldName string) []string {
 			return values
 		}
 	}
+	if values := mediaPlaneFieldEnum(schemaName, fieldName); values != nil {
+		return values
+	}
 	switch fieldName {
-	case "default_media_plane":
-		return []string{"chalk_sfu"}
-	case "media_plane_setting", "effective_media_plane":
-		return []string{"chalk_sfu"}
-	case "provider":
-		if schemaName == "AccessGrant" || schemaName == "ParticipantLifecycle" {
-			return []string{"chalk_sfu"}
-		}
-	case "media_plane":
-		if schemaName == "Space" || schemaName == "CreateSpaceRequest" || schemaName == "UpdateSpaceRequest" {
-			return []string{"chalk_sfu"}
-		}
 	case "transcript_language":
 		return artifactpolicy.TranscriptLanguageValues()
 	case "recording_render_mode":
@@ -50,17 +41,40 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	case "storage_provider":
 		return []string{"r2"}
 	case "status":
-		switch schemaName {
-		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest", "ParticipantEpisodeStatus":
-			return []string{"active", "ending", "ended"}
-		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
-			return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
-		case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
-			return []string{
-				transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
-				transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
-				transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
-			}
+		return resourceStatusEnum(schemaName)
+	}
+	return nil
+}
+
+func mediaPlaneFieldEnum(schemaName string, fieldName string) []string {
+	switch fieldName {
+	case "default_media_plane":
+		return []string{"chalk_sfu"}
+	case "media_plane_setting", "effective_media_plane":
+		return []string{"chalk_sfu"}
+	case "provider":
+		if schemaName == "AccessGrant" || schemaName == "ParticipantLifecycle" {
+			return []string{"chalk_sfu"}
+		}
+	case "media_plane":
+		if schemaName == "Space" || schemaName == "CreateSpaceRequest" || schemaName == "UpdateSpaceRequest" {
+			return []string{"chalk_sfu"}
+		}
+	}
+	return nil
+}
+
+func resourceStatusEnum(schemaName string) []string {
+	switch schemaName {
+	case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest", "ParticipantEpisodeStatus":
+		return []string{"active", "ending", "ended"}
+	case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
+		return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
+	case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
+		return []string{
+			transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
+			transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
+			transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
 		}
 	}
 	return nil
