@@ -1,5 +1,5 @@
 import { captureAnnotationVideoFrame, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
-import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
+import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { StageIcon } from "../stage/StageIcon";
@@ -9,7 +9,7 @@ import { AnnotationTabCue } from "./AnnotationTabCue";
 import { AnnotationHelperOffer } from "./AnnotationHelperOffer";
 import { ScreenAnnotationLayer } from "./ScreenAnnotationLayer";
 import { ScreenAnnotationToolbar } from "./ScreenAnnotationToolbar";
-import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
+import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationFrame, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
 
 export interface AnnotationPresentationContext {
   readonly actorId: string;
@@ -75,6 +75,7 @@ function ActiveAnnotationSurface({
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  const boardRetry = useRef<{ frame: ScreenAnnotationFrame; target: ScreenAnnotationTarget; action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]> } | null>(null);
   const target = targetOf(state);
   const { saveToWhiteboard, downloadPng } = actions ?? {};
   const editable = canDraw(state, actorId);
@@ -93,7 +94,7 @@ function ActiveAnnotationSurface({
       if (matchesTarget(client, target)) onError("The annotation action could not be applied.");
     }
   };
-  const exportFrame = async (action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]>, success: string) => {
+  const exportFrame = async (action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]>, toBoard: boolean) => {
     if (saving.current) return;
     const live = matchesTarget(client, target);
     const video = videoRef.current;
@@ -102,15 +103,20 @@ function ActiveAnnotationSurface({
     setBusy(true);
     setFeedback(null);
     try {
-      const frame = captureAnnotationVideoFrame(video, {
-        publicationId: live.layer.publication_id,
-        marks: live.marks,
-        paused: live.paused,
-        sharerId: live.layer.sharer_id,
-        nowMs: client.serverNowMs(),
-      });
+      const retry = toBoard && boardRetry.current?.action === action && boardRetry.current.target.fence === target.fence ? boardRetry.current : null;
+      const frame =
+        retry?.frame ??
+        captureAnnotationVideoFrame(video, {
+          publicationId: live.layer.publication_id,
+          marks: live.marks,
+          paused: live.paused,
+          sharerId: live.layer.sharer_id,
+          nowMs: client.serverNowMs(),
+        });
+      if (toBoard) boardRetry.current = { frame, action, target };
       await action(frame);
-      setFeedback({ message: success, error: false });
+      if (toBoard) boardRetry.current = null;
+      setFeedback({ message: toBoard ? "Frame saved to the board." : "PNG downloaded.", error: false });
     } catch {
       onError("The annotated frame could not be saved.");
     } finally {
@@ -158,8 +164,8 @@ function ActiveAnnotationSurface({
                 busy={busy}
                 onBrushChange={setBrush}
                 onCommand={(action) => void command(action)}
-                onSave={editable && safePreview && saveToWhiteboard ? () => void exportFrame(saveToWhiteboard, "Frame saved to the board.") : undefined}
-                onDownload={editable && safePreview && downloadPng ? () => void exportFrame(downloadPng, "PNG downloaded.") : undefined}
+                onSave={editable && safePreview && saveToWhiteboard ? () => void exportFrame(saveToWhiteboard, true) : undefined}
+                onDownload={editable && safePreview && downloadPng ? () => void exportFrame(downloadPng, false) : undefined}
               />
             </div>
           ) : null}

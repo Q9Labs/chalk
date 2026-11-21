@@ -1,4 +1,4 @@
-import { ArrowUpRight01Icon, Camera01Icon, CircleIcon, Cursor01Icon, Delete02Icon, Download01Icon, Eraser01Icon, HighlighterIcon, LineIcon, PencilEdit02Icon, Redo02Icon, SquareIcon, StarIcon, TextFontIcon, Undo02Icon } from "@hugeicons/core-free-icons";
+import { ArrowUpRight01Icon, Camera01Icon, CircleIcon, Cursor01Icon, Delete02Icon, Download01Icon, Eraser01Icon, HighlighterIcon, MinusSignIcon, PencilEdit02Icon, Redo02Icon, SquareIcon, StarIcon, TextFontIcon, Undo02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ScreenAnnotationCommand } from "@q9labsai/chalk-client";
 import { useId, type ComponentProps, type ReactNode } from "react";
@@ -9,7 +9,7 @@ const tools = [
   { tool: "pointer", label: "Laser pointer", icon: Cursor01Icon },
   { tool: "pen", label: "Pen", icon: PencilEdit02Icon },
   { tool: "highlighter", label: "Highlighter", icon: HighlighterIcon },
-  { tool: "line", label: "Line", icon: LineIcon },
+  { tool: "line", label: "Line", icon: MinusSignIcon },
   { tool: "arrow", label: "Arrow", icon: ArrowUpRight01Icon },
   { tool: "box", label: "Box", icon: SquareIcon },
   { tool: "circle", label: "Circle", icon: CircleIcon },

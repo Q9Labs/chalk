@@ -19,6 +19,21 @@ function hasInk() {
   );
 }
 
+function inkCenterY() {
+  const canvas = document.querySelector('[data-part="screen-annotation-layer"]');
+  if (!(canvas instanceof HTMLCanvasElement)) return -1;
+  const pixels = canvas.getContext("2d")?.getImageData(0, 0, canvas.width, canvas.height).data;
+  if (!pixels) return -1;
+  let weight = 0;
+  let sum = 0;
+  for (let pixel = 0; pixel < canvas.width * canvas.height; pixel += 1) {
+    const alpha = pixels[pixel * 4 + 3] ?? 0;
+    weight += alpha;
+    sum += alpha * Math.floor(pixel / canvas.width);
+  }
+  return weight > 0 ? sum / weight / canvas.height : -1;
+}
+
 async function stroke(browser: Browser, portion = 0.38) {
   const box = await browser.evaluate(bounds);
   if (!box) throw new Error("Annotation canvas did not mount");
@@ -33,12 +48,21 @@ async function stroke(browser: Browser, portion = 0.38) {
 test("draw, fade, keep, undo, redo, save, download and clear a matched publication", async ({ app, browser, screen }) => {
   await browser.goto("/call-states.html?state=screen-annotation");
   await screen.getByRole("button", "Annotate", { exact: true }).click();
+  const box = await browser.evaluate(bounds);
+  if (!box) throw new Error("Annotation canvas did not mount");
+  const frameAspect = 1600 / 900;
+  const fitHeight = Math.min(box.height, box.width / frameAspect);
+  const fillHeight = Math.max(box.height, box.width / frameAspect);
+  expect((box.height - fitHeight) / 2).toBeGreaterThan(10);
+  await stroke(browser, (box.height - fitHeight) / 4 / box.height);
+  await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
   await stroke(browser);
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 1500 }).toBe(true);
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 3500 }).toBe(false);
 
   await screen.getByRole("button", "Keep new marks", { exact: true }).click();
-  await stroke(browser, 0.54);
+  const fitY = 0.34;
+  await stroke(browser, fitY);
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
   await screen.getByRole("button", "Undo mark", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
@@ -48,9 +72,11 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
   await expect(browser.locator('[role="status"]').filter({ hasText: "1 accepted marks sent to board" })).toBeVisible();
   const png = await browser.waitForDownload(() => screen.getByRole("button", "Download annotated PNG", { exact: true }).click());
   expect(png.suggestedFilename).toBe("chalk-annotated-screen.png");
+  await expect.poll(async () => Math.abs((await browser.evaluate(inkCenterY)) - fitY)).toBeLessThan(0.012);
   await app.screenshot("viewer-kept-fit");
   await screen.getByRole("button", "Fill the tile", { exact: true }).click();
-  await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
+  const fillY = 0.5 + ((fitY - 0.5) * fillHeight) / fitHeight;
+  await expect.poll(async () => Math.abs((await browser.evaluate(inkCenterY)) - fillY)).toBeLessThan(0.012);
   await app.screenshot("viewer-kept-fill");
   await screen.getByRole("button", "Clear my marks", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);

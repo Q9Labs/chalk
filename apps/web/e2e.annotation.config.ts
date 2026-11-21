@@ -6,7 +6,7 @@ export default {
   targets: [
     {
       name: "annotation-web",
-      engine: web({ viewport: { width: 1260, height: 820 } }),
+      engine: web({ viewport: { width: 1050, height: 880 } }),
       app: { url: process.env.CHALK_ANNOTATION_WEB_URL ?? "http://127.0.0.1:3071" },
     },
   ],

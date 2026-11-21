@@ -15,6 +15,7 @@ import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
 import { CallDialog } from "../space-header/CallDialog";
 import type { ScreenAnnotationSetup } from "../screen-annotation/model";
+import { saveAnnotationToBoard } from "../screen-annotation/save-to-board";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
@@ -282,6 +283,10 @@ function SpaceSurface(
   const self = useSelf();
   const { roster } = useParticipants();
   const setup = props.screenAnnotation;
+  const whiteboardTransport = client.whiteboard.transport();
+  const uploadBoardFrame = setup?.uploadBoardFrame;
+  const annotationFontUrl = setup?.fontUrl;
+  const saveAnnotation = useMemo(() => (whiteboardTransport && uploadBoardFrame ? saveAnnotationToBoard(client, whiteboardTransport, uploadBoardFrame, annotationFontUrl) : undefined), [client, whiteboardTransport, uploadBoardFrame, annotationFontUrl]);
   const screenAnnotation = useMemo(() => {
     if (!setup || !self.participantId || connection.status !== "live") return undefined;
     const context = {
@@ -301,11 +306,11 @@ function SpaceSurface(
       context,
       publicationForTrack: (track: MediaStreamTrack) => media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId ?? setup.localPublicationForTrack?.(track),
       actions: {
-        saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? setup.actions?.saveToWhiteboard : undefined,
+        saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? (setup.actions?.saveToWhiteboard ?? saveAnnotation) : undefined,
         downloadPng: setup.actions?.downloadPng,
       },
     };
-  }, [setup, self.participantId, self.displayName, connection.status, whiteboardState.access, roster, client, media.remote, canDrawWhiteboard, props.features?.whiteboard]);
+  }, [setup, self.participantId, self.displayName, connection.status, whiteboardState.access, roster, client, media.remote, canDrawWhiteboard, saveAnnotation, props.features?.whiteboard]);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -321,7 +326,6 @@ function SpaceSurface(
       setCommandAction(action);
     }
   }, []);
-  const whiteboardTransport = client.whiteboard.transport();
   const whiteboardAvailable = props.features?.whiteboard !== false;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Preload the whiteboard stylesheet only when the committed call supports a board.
   useEffect(() => {

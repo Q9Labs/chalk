@@ -5,6 +5,7 @@ export const sourceAliases = [
   { find: /^@q9labsai\/chalk-screen-annotation$/, replacement: fileURLToPath(new URL("../../packages/screen-annotation/src/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-client\/invites$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/public-invites/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-whiteboard\/embedded$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/embedded/index.ts", import.meta.url)) },
+  { find: /^@q9labsai\/chalk-whiteboard\/annotation$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/annotation/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-whiteboard\/assets$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/assets.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-client\/camera-effects$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/camera-effects.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-client\/effect$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/effect.ts", import.meta.url)) },

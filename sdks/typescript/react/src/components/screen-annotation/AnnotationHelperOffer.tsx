@@ -4,7 +4,8 @@ import { annotationControl } from "./AnnotationAccess";
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./model";
 
 type HelperScreen =
-  | { readonly kind: "idle" | "looking" | "attaching" }
+  | { readonly kind: "idle" | "looking" }
+  | { readonly kind: "attaching"; readonly fingerprint?: string }
   | { readonly kind: "code"; readonly error?: string }
   | { readonly kind: "fingerprint"; readonly value: string; readonly approve: () => Promise<void> }
   | { readonly kind: "device"; readonly name: string; readonly approve: () => Promise<void> }
@@ -55,9 +56,9 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     attempt.current = controller;
     return controller;
   };
-  const attach = async (controller: AbortController, work: (status: (status: ScreenAnnotationHelperStatus) => void) => Promise<void>) => {
+  const attach = async (controller: AbortController, work: (status: (status: ScreenAnnotationHelperStatus) => void) => Promise<void>, fingerprint?: string) => {
     if (controller.signal.aborted) return;
-    setScreen({ kind: "attaching" });
+    setScreen({ kind: "attaching", fingerprint });
     try {
       await work((status) => {
         if (!controller.signal.aborted) setScreen({ kind: "status", status });
@@ -77,7 +78,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       const response = await helper.challenge(share, controller.signal);
       if (controller.signal.aborted) return;
       if (response.kind === "update_required") setScreen({ kind: "status", status: "update_required" });
-      else setScreen({ kind: "fingerprint", value: response.fingerprint, approve: () => attach(controller, response.attach) });
+      else setScreen({ kind: "fingerprint", value: response.fingerprint, approve: () => attach(controller, response.attach, response.fingerprint) });
     } catch {
       if (!controller.signal.aborted) setScreen({ kind: "code", error: "Couldn’t reach Chalk Helper on this device." });
     }
@@ -115,16 +116,22 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
           ) : null}
         </>
       ) : null}
-      {screen.kind === "looking" || screen.kind === "attaching" ? <p role="status">Connecting to Chalk Helper…</p> : null}
+      {screen.kind === "looking" || (screen.kind === "attaching" && !screen.fingerprint) ? <p role="status">Connecting to Chalk Helper…</p> : null}
       {screen.kind === "fingerprint" ? (
         <>
-          <p>Match this fingerprint in Chalk Helper before allowing it.</p>
+          <p>Chalk Helper will ask you to match this fingerprint.</p>
           <code className="break-all" dir="ltr">
             {screen.value}
           </code>
           <button type="button" className={annotationControl} onClick={() => void screen.approve()}>
-            Fingerprint matches
+            Open approval in Chalk Helper
           </button>
+        </>
+      ) : null}
+      {screen.kind === "attaching" && screen.fingerprint ? (
+        <>
+          <p role="status">Approve in Chalk Helper only if its fingerprint matches.</p>
+          <code dir="ltr">{screen.fingerprint}</code>
         </>
       ) : null}
       {screen.kind === "code" ? (
