@@ -1,5 +1,5 @@
 {
-  "schema_ver": "208f5d9b7bc6",
+  "schema_ver": "dc0adcc6e7cf",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1949,7 +1949,7 @@
     {
       "name": "source",
       "type": "enum",
-      "values": ["camera", "screen"],
+      "values": ["camera", "screen", "microphone"],
       "required": false,
       "sensitivity": null,
       "owner": "areas/video",
@@ -3377,6 +3377,11 @@
           "literal": "video.subscription_forwarded"
         }
       ],
+      "legacy": {
+        "match": {
+          "event": "video.subscription_forwarded"
+        }
+      },
       "doc": "Cumulative forwarded counters for one camera subscription, plus the publication's ingress counters copied onto the viewer's row so a viewer check can see upstream without reading another seat's facts. Rows land while counters grow and once when they stop; a final row is preserved on close."
     },
     {
@@ -3411,6 +3416,11 @@
           "literal": "video.subscription_select"
         }
       ],
+      "legacy": {
+        "match": {
+          "event": "video.subscription_select"
+        }
+      },
       "doc": "The SFU's subscription decision for a camera publication: paused (with reason) or forwarding (with target_layer)."
     },
     {
@@ -3456,7 +3466,7 @@
           "required": true
         },
         "source": {
-          "required": true
+          "required": false
         },
         "publication_id": {
           "required": false
@@ -3708,8 +3718,6 @@
           "failure_claims": [],
           "fields": [
             "window_ms",
-            "gap",
-            "gap_ms",
             "recv_bitrate_bps",
             "recv_height",
             "recv_paused_videos",
@@ -3726,8 +3734,7 @@
             "connection_type",
             "local_candidate_type",
             "remote_candidate_type",
-            "relay_protocol",
-            "quality_limitation_reason"
+            "relay_protocol"
           ]
         }
       ],
@@ -3943,7 +3950,7 @@
           "source": "client",
           "claim": "on_screen",
           "failure_claims": [],
-          "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"]
+          "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean"]
         }
       ],
       "doc": "A rendered-tile probe for a seat's camera tile. Claim: on_screen."
@@ -4090,7 +4097,7 @@
           "source": "sfu",
           "claim": "decision",
           "failure_claims": [],
-          "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "reason_code"]
+          "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "pause_reason"]
         },
         {
           "event": "video.call_stats",
@@ -4857,10 +4864,6 @@
     {
       "code": "share.wont_stop",
       "slice": 5
-    },
-    {
-      "code": "video.frozen",
-      "slice": 4
     }
   ]
 }

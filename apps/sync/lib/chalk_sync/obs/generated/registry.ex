@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "208f5d9b7bc6"
+  @schema_ver "dc0adcc6e7cf"
 
   @events %{
     "client.call_ended" => %{
@@ -807,7 +807,7 @@ defmodule ChalkSync.Obs.Registry do
           "required" => true
         },
         "source" => %{
-          "required" => true
+          "required" => false
         },
         "publication_id" => %{
           "required" => false
@@ -1877,7 +1877,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["camera", "screen"]
+      "values" => ["camera", "screen", "microphone"]
     },
     "source_id" => %{
       "type" => "string",

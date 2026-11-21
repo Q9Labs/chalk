@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "208f5d9b7bc6"
+const SchemaVer = "dc0adcc6e7cf"
 
 // Event names.
 const (
@@ -439,7 +439,7 @@ var registryFields = map[string]fieldSpec{
 	"sent_video":                {typ: "int", group: "event", required: false},
 	"seq":                       {typ: "int", group: "delivery", required: true},
 	"shown_ms":                  {typ: "int", group: "record", required: false},
-	"source":                    {typ: "enum", group: "event", required: false, values: []string{"camera", "screen"}},
+	"source":                    {typ: "enum", group: "event", required: false, values: []string{"camera", "screen", "microphone"}},
 	"source_id":                 {typ: "string", group: "delivery", required: true},
 	"space_id":                  {typ: "id", group: "trail", required: false},
 	"span_id":                   {typ: "id", group: "trail", required: false},
@@ -496,7 +496,7 @@ var registryEvents = map[string]eventSpec{
 	"video.subscription_forwarded": {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "forwarded_packets": {required: true}, "forwarded_keyframes": {required: false}, "layer": {required: false}, "requested_layer": {required: false}, "pause_reason": {required: false}, "ingress_packets": {required: false}, "ingress_lost": {required: false}, "ingress_repaired": {required: false}, "ingress_jitter_ms": {required: false}, "ingress_bitrate_bps": {required: false}, "ingress_layers_active": {required: false}, "plan": {required: false}, "final": {required: false}}},
 	"video.subscription_select":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"paused", "forwarding"}, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "target_layer": {required: false}, "pause_reason": {required: false}}},
 	"video.tile":                   {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"tile_state": {required: false}, "status_shown": {required: false}, "tile_reason": {required: false}, "publication_id": {required: false}}},
-	"video.track_window":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "source": {required: true}, "publication_id": {required: false}, "packets": {required: true}, "lost": {required: false}, "bytes": {required: false}, "frames_received": {required: false}, "frames_decoded": {required: false}, "frames_dropped": {required: false}, "key_frames_decoded": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "pli_sent": {required: false}, "nack_sent": {required: false}, "frame_height": {required: false}, "playout": {required: false}, "window_ms": {required: true}}},
+	"video.track_window":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "source": {required: false}, "publication_id": {required: false}, "packets": {required: true}, "lost": {required: false}, "bytes": {required: false}, "frames_received": {required: false}, "frames_decoded": {required: false}, "frames_dropped": {required: false}, "key_frames_decoded": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "pli_sent": {required: false}, "nack_sent": {required: false}, "frame_height": {required: false}, "playout": {required: false}, "window_ms": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{

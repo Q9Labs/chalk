@@ -1,0 +1,49 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/media/client.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/media/client.fault.test.ts",
+      "writes": [
+        "client-stats.positive.json",
+        "client-stats.healthy.json"
+      ]
+    },
+    {
+      "hop": "a2",
+      "test": "sdks/typescript/client/src/space-client/media-controller.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/space-client/media-controller.fault.test.ts",
+      "writes": [
+        "client-frames.healthy.json"
+      ]
+    },
+    {
+      "hop": "sfu",
+      "test": "features/media/sfu/internal/media/video_chain_test.go",
+      "command": "cd features/media/sfu && go test ./internal/media/ -run TestVideoChainFixtures -count=1",
+      "writes": [
+        "sfu-rows.positive.json",
+        "sfu-rows.healthy.json"
+      ]
+    },
+    {
+      "hop": "s",
+      "test": "apps/sync/test/chalk_sync/obs_video_chain_test.exs",
+      "command": "CHALK_SYNC_TEST_DATABASE_URL=<isolated postgres> mix test test/chalk_sync/obs_video_chain_test.exs",
+      "writes": [
+        "sync-rows.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/diagnose-call/proof/video-media-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/video-media-chain.test.mjs",
+      "writes": [
+        "rows.positive.json",
+        "rows.healthy.json",
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

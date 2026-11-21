@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "208f5d9b7bc6",
+  "schema_ver": "dc0adcc6e7cf",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -594,7 +594,7 @@
       "code": "video.frozen",
       "area": "video",
       "slice": 4,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
       "witnesses": [
@@ -606,7 +606,7 @@
             {
               "event": "video.render_probe",
               "source": "client",
-              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"]
+              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean"]
             }
           ]
         },
@@ -644,8 +644,6 @@
               "source": "client",
               "fields": [
                 "window_ms",
-                "gap",
-                "gap_ms",
                 "recv_bitrate_bps",
                 "recv_height",
                 "recv_paused_videos",
@@ -662,8 +660,7 @@
                 "connection_type",
                 "local_candidate_type",
                 "remote_candidate_type",
-                "relay_protocol",
-                "quality_limitation_reason"
+                "relay_protocol"
               ]
             }
           ]
@@ -708,7 +705,7 @@
             {
               "event": "video.subscription_select",
               "source": "sfu",
-              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "reason_code"]
+              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "pause_reason"]
             },
             {
               "event": "video.call_stats",
@@ -887,7 +884,7 @@
             {
               "event": "video.render_probe",
               "source": "client",
-              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"]
+              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean"]
             }
           ]
         },
@@ -925,8 +922,6 @@
               "source": "client",
               "fields": [
                 "window_ms",
-                "gap",
-                "gap_ms",
                 "recv_bitrate_bps",
                 "recv_height",
                 "recv_paused_videos",
@@ -943,8 +938,7 @@
                 "connection_type",
                 "local_candidate_type",
                 "remote_candidate_type",
-                "relay_protocol",
-                "quality_limitation_reason"
+                "relay_protocol"
               ]
             }
           ]
@@ -989,7 +983,7 @@
             {
               "event": "video.subscription_select",
               "source": "sfu",
-              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "reason_code"]
+              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "pause_reason"]
             },
             {
               "event": "video.call_stats",
@@ -1289,8 +1283,6 @@
               "source": "client",
               "fields": [
                 "window_ms",
-                "gap",
-                "gap_ms",
                 "recv_bitrate_bps",
                 "recv_height",
                 "recv_paused_videos",
@@ -1307,8 +1299,7 @@
                 "connection_type",
                 "local_candidate_type",
                 "remote_candidate_type",
-                "relay_protocol",
-                "quality_limitation_reason"
+                "relay_protocol"
               ]
             }
           ]
@@ -1502,7 +1493,7 @@
             {
               "event": "video.render_probe",
               "source": "client",
-              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"]
+              "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean"]
             }
           ]
         },
@@ -1540,8 +1531,6 @@
               "source": "client",
               "fields": [
                 "window_ms",
-                "gap",
-                "gap_ms",
                 "recv_bitrate_bps",
                 "recv_height",
                 "recv_paused_videos",
@@ -1558,8 +1547,7 @@
                 "connection_type",
                 "local_candidate_type",
                 "remote_candidate_type",
-                "relay_protocol",
-                "quality_limitation_reason"
+                "relay_protocol"
               ]
             }
           ]
@@ -1604,7 +1592,7 @@
             {
               "event": "video.subscription_select",
               "source": "sfu",
-              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "reason_code"]
+              "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "pause_reason"]
             },
             {
               "event": "video.call_stats",

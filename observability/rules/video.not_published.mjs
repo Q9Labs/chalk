@@ -71,10 +71,18 @@ export function decide({ readings }) {
   if (camera.kind !== "present" || send.kind !== "present" || ingress.kind !== "present" || publication.kind !== "present") {
     return { status: "unknown", reason: "a required witness for the publish path is missing" };
   }
-  const cameraRows = [...camera.observations].sort(byTime);
-  const liveRow = [...cameraRows].reverse().find((o) => o.claim === "live" && o.value.camera_bound === true);
-  if (!liveRow) return { status: "pass" };
-  const at = liveRow.window.from_ms;
+  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim:
+  // camera_bound). Bound rows follow their transition's emit, so ordering is by seq, not wall time.
+  const bySeq = (a, b) => (a.value.seq ?? 0) - (b.value.seq ?? 0);
+  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(bySeq);
+  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(bySeq);
+  const boundBefore = (/** @type {number} */ limit) => {
+    const b = bounds.filter((o) => (o.value.seq ?? 0) < limit).at(-1);
+    return b !== undefined && b.claim === "true";
+  };
+  const liveBound = transitions.some((o, i) => o.claim === "live" && boundBefore(i + 1 < transitions.length ? (transitions[i + 1].value.seq ?? 0) : Number.MAX_SAFE_INTEGER));
+  if (!liveBound) return { status: "pass" };
+  const at = [...transitions].reverse().find((o) => o.claim === "live")?.window.from_ms ?? 0;
 
   const conn = connection.kind === "present" ? [...connection.observations].sort(byTime).at(-1) : null;
   if (conn && ["reconnecting", "leaving", "left", "failed"].includes(conn.claim)) return { status: "unknown", reason: `the seat is ${conn.claim}` };
@@ -102,7 +110,7 @@ export function decide({ readings }) {
     hop,
     module,
     reason: null,
-    upstream: liveBound ? "witnessed" : "unknown",
+    upstream: "witnessed",
     observed: !published
       ? "the camera is live+bound but the SFU never registered the publication"
       : `the SFU sees the publication but ingress packets never flowed (${cameraIngress.length} rows)`,
