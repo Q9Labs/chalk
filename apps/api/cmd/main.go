@@ -38,12 +38,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 
+	"github.com/q9labs/chalk/apps/api/internal/diagnosticuploads"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
@@ -527,6 +529,9 @@ func run() error {
 	if reportAdapter != nil {
 		reportSender = reportAdapter
 	}
+	// The forwarding flag is the one witness `report.forward_failed` reads for a
+	// `not_configured` outcome; the kernel stamps release_sha itself.
+	obs.Fact(context.Background(), "problem_reports.config", obs.F("forwarding", reportSender != nil))
 	routerOptions := httpapi.Options{
 		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
@@ -610,6 +615,17 @@ func run() error {
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
 		PublicInvites:          publicInviteService,
+	}
+	{
+		// Diagnostic bundles share the recording object store. Without R2 the
+		// service stays unavailable and issue refuses with the refused decision.
+		var diagnosticObjects diagnosticuploads.Objects
+		if recordingStorage != nil {
+			diagnosticObjects = recordingStorage
+		}
+		routerOptions.DiagnosticUploads = diagnosticuploads.NewService(postgres.NewDiagnosticUploadRepository(pool), diagnosticObjects)
+		routerOptions.LiveRequests = postgres.NewLiveIntrospectionRepository(pool)
+		routerOptions.OperatorDiagnoseTokenSHA256 = config.OperatorDiagnoseTokenSHA256()
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)

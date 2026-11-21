@@ -68,6 +68,9 @@ var outcomeCauses = [...]string{
 func (o Outcome) Cause() string { return outcomeCauses[o] }
 
 type Result struct {
-	Outcome  Outcome
-	ReportID utilities.ID
+	Outcome    Outcome
+	ReportID   utilities.ID
+	JourneyID  utilities.ID
+	Code       string
+	DecisionID string
 }

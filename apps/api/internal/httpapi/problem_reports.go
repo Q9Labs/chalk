@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
@@ -22,7 +23,9 @@ type problemReportAvailability struct {
 	Available bool `json:"available"`
 }
 type problemReportSent struct {
-	Sent bool `json:"sent"`
+	Sent     bool   `json:"sent"`
+	ReportID string `json:"report_id"`
+	Code     string `json:"code"`
 }
 
 // A code point can require two six-byte JSON surrogate escapes; field names and framing get a fixed allowance.
@@ -30,6 +33,7 @@ const reportBodyLimitBytes = 12*(problemreports.MaxDescriptionCodePoints+problem
 
 var (
 	apiErrorReportsUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "reports.unavailable", Message: "Problem reports are unavailable"}
+	apiErrorReportNotStored    = APIError{Status: http.StatusServiceUnavailable, Code: "reports.not_stored", Message: "Your report could not be stored. Try again"}
 	apiErrorReportDelivery     = APIError{Status: http.StatusBadGateway, Code: "reports.delivery_failed", Message: "Your report could not be sent. Try again"}
 	reportParticipantLimit     = ratelimit.Policy{Name: "problem_reports.participant", Limit: 3, Window: time.Hour}
 	reportIPLimit              = ratelimit.Policy{Name: "problem_reports.ip", Limit: 30, Window: time.Hour}
@@ -40,8 +44,14 @@ var (
 func problemReportEndpoints(service ProblemReportService, verifier ParticipantMediaVerifier, limits RateLimitOptions) []RouteEndpoint {
 	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
 		func(r *http.Request) (struct{}, error) { _, err := tenantIDRequest(r); return struct{}{}, err },
-		func(context.Context, struct{}) (problemReportAvailability, error) {
-			return problemReportAvailability{Available: service != nil && service.Available()}, nil
+		func(ctx context.Context, _ struct{}) (problemReportAvailability, error) {
+			available := service != nil && service.Available()
+			decision := "false"
+			if available {
+				decision = "true"
+			}
+			obs.Decision(ctx, "problem_report.availability", decision, "")
+			return problemReportAvailability{Available: available}, nil
 		},
 	).Parameters(tenantIDParameter()).Responds(http.StatusOK, "ProblemReportAvailability", problemReportAvailability{}).Errors(apiErrorInvalidTenantID)
 	submit := Post("/v1/tenants/{tenant_id}/problem-reports", "sendProblemReport",
@@ -73,7 +83,7 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 				return problemReportSent{}, err
 			}
 
-			return problemReportSent{Sent: true}, nil
+			return problemReportSent{Sent: true, ReportID: result.ReportID.String(), Code: result.Code}, nil
 		},
 	).Auth(APIAuthParticipantMedia).
 		Parameters(tenantIDParameter()).
@@ -82,11 +92,12 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 		AfterRateLimit(limitReportAccount(limits), limitReportEpisode(limits)).
 		RequestBodyWithLimit("ProblemReportRequest", problemreports.Report{}, reportBodyLimitBytes).
 		Responds(http.StatusOK, "ProblemReportSent", problemReportSent{}).
-		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorInternal).
+		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportNotStored, apiErrorReportDelivery, apiErrorInternal).
 		ErrorRules(errorRules{
 			ruleFor(apiErrorInvalidRequest, problemreports.ErrInvalid),
 			ruleFor(apiErrorForbidden, problemreports.ErrForbidden),
 			ruleFor(apiErrorReportsUnavailable, problemreports.ErrUnavailable),
+			ruleFor(apiErrorReportNotStored, problemreports.ErrNotStored),
 			ruleFor(apiErrorReportDelivery, problemreports.ErrDelivery),
 		})
 	return []RouteEndpoint{availability, submit}

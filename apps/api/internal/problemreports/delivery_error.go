@@ -20,24 +20,28 @@ type DeliveryError struct {
 	Transport  TransportFailure
 }
 
+// TransportCategory is the bounded class the row and the forward op record.
+func (e DeliveryError) TransportCategory() string {
+	switch e.Transport {
+	case TransportCanceled:
+		return "canceled"
+	case TransportTimeout:
+		return "timeout"
+	case TransportDNS:
+		return "dns"
+	case TransportTLS:
+		return "tls"
+	case TransportConnection:
+		return "connection"
+	}
+	return "failed"
+}
+
 func (e DeliveryError) Error() string {
 	if e.HTTPStatus >= 100 && e.HTTPStatus <= 599 {
 		return fmt.Sprintf("%s: Discord HTTP %d", ErrDelivery, e.HTTPStatus)
 	}
-	category := "transport"
-	switch e.Transport {
-	case TransportCanceled:
-		category = "canceled"
-	case TransportTimeout:
-		category = "timeout"
-	case TransportDNS:
-		category = "dns"
-	case TransportTLS:
-		category = "tls"
-	case TransportConnection:
-		category = "connection"
-	}
-	return fmt.Sprintf("%s: %s", ErrDelivery, category)
+	return fmt.Sprintf("%s: %s", ErrDelivery, e.TransportCategory())
 }
 
 func (DeliveryError) Unwrap() error { return ErrDelivery }

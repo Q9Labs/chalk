@@ -56,6 +56,9 @@ func v1RouteGroups(options Options) []routeGroup {
 			}, problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit)...),
 		},
 		{
+			endpoints: diagnosticUploadEndpoints(options.DiagnosticUploads, options.ParticipantMediaVerify),
+		},
+		{
 			middleware: []func(http.Handler) http.Handler{requireParticipantMedia(options.ParticipantMediaVerify, options.ParticipantMediaActive)},
 			endpoints:  sfuSignalingEndpoints(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications),
 		},

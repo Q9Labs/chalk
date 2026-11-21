@@ -106,6 +106,23 @@ type AutomaticTranscriptTenantPolicyBackup struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DiagnosticUpload struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ReportID      pgtype.UUID        `json:"report_id"`
+	LiveRequestID pgtype.UUID        `json:"live_request_id"`
+	Trigger       string             `json:"trigger"`
+	State         string             `json:"state"`
+	Bytes         pgtype.Int8        `json:"bytes"`
+	Sha256        pgtype.Text        `json:"sha256"`
+	ObjectKey     string             `json:"object_key"`
+	IssuedAt      pgtype.Timestamptz `json:"issued_at"`
+	StoredAt      pgtype.Timestamptz `json:"stored_at"`
+	FailedAt      pgtype.Timestamptz `json:"failed_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
 type Episode struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Status             string             `json:"status"`
@@ -148,6 +165,22 @@ type Identity struct {
 	Metadata    []byte             `json:"metadata"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type LiveIntrospectionRequest struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	EpisodeID         pgtype.UUID        `json:"episode_id"`
+	ParticipantID     pgtype.UUID        `json:"participant_id"`
+	RequestedAt       pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ParticipantStatus pgtype.Text        `json:"participant_status"`
+	SeatLeftAt        pgtype.Timestamptz `json:"seat_left_at"`
+	EpisodeStatus     pgtype.Text        `json:"episode_status"`
+	Delivery          pgtype.Text        `json:"delivery"`
+	DeliveredAt       pgtype.Timestamptz `json:"delivered_at"`
+	Sockets           pgtype.Int4        `json:"sockets"`
+	UnavailableReason pgtype.Text        `json:"unavailable_reason"`
 }
 
 type LoginSession struct {
@@ -356,6 +389,29 @@ type ParticipantPresenceLease struct {
 	ParticipantID pgtype.UUID        `json:"participant_id"`
 	Generation    int64              `json:"generation"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+type ProblemReport struct {
+	ID pgtype.UUID `json:"id"`
+	// CHK-XXXX diagnostic code of the reporting client session
+	ChkCode       string      `json:"chk_code"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+	Generation    pgtype.Int8 `json:"generation"`
+	// Telemetry outbox session id (cs_), not the baggage session.id
+	ClientSessionID pgtype.UUID `json:"client_session_id"`
+	SdkVersion      pgtype.Text `json:"sdk_version"`
+	JourneyID       pgtype.UUID `json:"journey_id"`
+	// Registry symptom code the reporter picked, or a bounded placeholder
+	PickedSymptom string      `json:"picked_symptom"`
+	Description   string      `json:"description"`
+	Diagnostics   pgtype.Text `json:"diagnostics"`
+	// Bounded forward class: pending, ok, not_configured, http_<status> or transport_<category>
+	ForwardOutcome string             `json:"forward_outcome"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProviderOperationObservation struct {

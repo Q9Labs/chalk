@@ -122,6 +122,11 @@ type Options struct {
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
 	ProblemReports         ProblemReportService
+	DiagnosticUploads      DiagnosticUploadService
+	// LiveRequests creates operator live-introspection requests; with no
+	// OperatorDiagnoseTokenSHA256 the route stays closed (404).
+	LiveRequests                LiveRequestService
+	OperatorDiagnoseTokenSHA256 []byte
 }
 
 func NewRouter(options Options) http.Handler {
@@ -159,6 +164,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
 	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog, options.OperatorReadTokenSHA256))
+	r.Post("/operator/diagnostics/live-requests", handleLiveRequestPost(options.LiveRequests, options.OperatorDiagnoseTokenSHA256))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}

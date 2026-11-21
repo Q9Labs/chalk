@@ -13,15 +13,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type reportOutcomeContextKey struct{}
 type reportOutcomeState struct {
 	subject   *accessgrants.Subject
 	result    *problemreports.Result
+	journeyID utilities.ID
 	verifying bool
 }
 
@@ -42,6 +45,9 @@ func observeReportOutcomes() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			state := &reportOutcomeState{}
+			// Every answered request gets a journey so the outcome fact can
+			// name one even when middleware refused before the service ran.
+			state.journeyID, _ = utilities.NewID()
 			ctx := context.WithValue(r.Context(), reportOutcomeContextKey{}, state)
 			r = r.WithContext(ctx)
 			response := &reportOutcomeWriter{ResponseWriter: w, status: http.StatusOK}
@@ -58,6 +64,18 @@ func observeReportOutcomes() func(http.Handler) http.Handler {
 			if state.result != nil && !state.result.ReportID.IsZero() {
 				fields = append(fields, "report_id", state.result.ReportID.String())
 			}
+			if state.result != nil && state.result.DecisionID != "" {
+				fields = append(fields, "decision_id", state.result.DecisionID)
+			}
+			journeyID := state.journeyID
+			if state.result != nil && !state.result.JourneyID.IsZero() {
+				journeyID = state.result.JourneyID
+			}
+			kernelFields := []slog.Attr{obs.F("journey_id", journeyID.String()), obs.F("cause", cause), obs.F("http_status", int64(response.status))}
+			if state.result != nil && !state.result.ReportID.IsZero() {
+				kernelFields = append(kernelFields, obs.F("report_id", state.result.ReportID.String()))
+			}
+			obs.Fact(ctx, "problem_report.outcome", kernelFields...)
 			level := slog.LevelWarn
 			if outcome == problemreports.OutcomeAccepted {
 				level = slog.LevelInfo

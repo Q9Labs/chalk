@@ -11,6 +11,195 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completeDiagnosticUpload = `-- name: CompleteDiagnosticUpload :exec
+update diagnostic_uploads
+set state = 'stored', stored_at = now(), bytes = $1, sha256 = $2
+where tenant_id = $3 and id = $4 and state = 'issued'
+`
+
+type CompleteDiagnosticUploadParams struct {
+	Bytes    pgtype.Int8 `json:"bytes"`
+	Sha256   pgtype.Text `json:"sha256"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Commits stored only for an issued row whose read-back object is the right size.
+func (q *Queries) CompleteDiagnosticUpload(ctx context.Context, arg CompleteDiagnosticUploadParams) error {
+	_, err := q.db.Exec(ctx, completeDiagnosticUpload,
+		arg.Bytes,
+		arg.Sha256,
+		arg.TenantID,
+		arg.ID,
+	)
+	return err
+}
+
+const countEpisodeLiveIntrospectionRequests = `-- name: CountEpisodeLiveIntrospectionRequests :one
+select count(*)::bigint from live_introspection_requests
+where tenant_id = $1 and episode_id = $2
+    and requested_at > now() - interval '1 hour'
+`
+
+type CountEpisodeLiveIntrospectionRequestsParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) CountEpisodeLiveIntrospectionRequests(ctx context.Context, arg CountEpisodeLiveIntrospectionRequestsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEpisodeLiveIntrospectionRequests, arg.TenantID, arg.EpisodeID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countPendingLiveIntrospectionRequests = `-- name: CountPendingLiveIntrospectionRequests :one
+select count(*)::bigint from live_introspection_requests
+where tenant_id = $1 and episode_id = $2
+    and participant_id = $3 and expires_at > now()
+`
+
+type CountPendingLiveIntrospectionRequestsParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+func (q *Queries) CountPendingLiveIntrospectionRequests(ctx context.Context, arg CountPendingLiveIntrospectionRequestsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingLiveIntrospectionRequests, arg.TenantID, arg.EpisodeID, arg.ParticipantID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const expireDiagnosticUpload = `-- name: ExpireDiagnosticUpload :exec
+update diagnostic_uploads
+set state = 'expired'
+where tenant_id = $1 and id = $2 and state = 'issued'
+`
+
+type ExpireDiagnosticUploadParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) ExpireDiagnosticUpload(ctx context.Context, arg ExpireDiagnosticUploadParams) error {
+	_, err := q.db.Exec(ctx, expireDiagnosticUpload, arg.TenantID, arg.ID)
+	return err
+}
+
+const failDiagnosticUpload = `-- name: FailDiagnosticUpload :exec
+update diagnostic_uploads
+set state = 'failed', failed_at = now()
+where tenant_id = $1 and id = $2 and state = 'issued'
+`
+
+type FailDiagnosticUploadParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) FailDiagnosticUpload(ctx context.Context, arg FailDiagnosticUploadParams) error {
+	_, err := q.db.Exec(ctx, failDiagnosticUpload, arg.TenantID, arg.ID)
+	return err
+}
+
+const getDiagnosticUpload = `-- name: GetDiagnosticUpload :one
+select id, tenant_id, episode_id, report_id, live_request_id, trigger, state,
+    bytes, sha256, object_key, issued_at, stored_at, failed_at, expires_at
+from diagnostic_uploads
+where tenant_id = $1 and id = $2
+`
+
+type GetDiagnosticUploadParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) GetDiagnosticUpload(ctx context.Context, arg GetDiagnosticUploadParams) (DiagnosticUpload, error) {
+	row := q.db.QueryRow(ctx, getDiagnosticUpload, arg.TenantID, arg.ID)
+	var i DiagnosticUpload
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.ReportID,
+		&i.LiveRequestID,
+		&i.Trigger,
+		&i.State,
+		&i.Bytes,
+		&i.Sha256,
+		&i.ObjectKey,
+		&i.IssuedAt,
+		&i.StoredAt,
+		&i.FailedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getLiveIntrospectionRequest = `-- name: GetLiveIntrospectionRequest :one
+select id, tenant_id, episode_id, participant_id, requested_at, expires_at,
+    participant_status, seat_left_at, episode_status, delivery, delivered_at, sockets, unavailable_reason
+from live_introspection_requests
+where tenant_id = $1 and id = $2
+`
+
+type GetLiveIntrospectionRequestParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) GetLiveIntrospectionRequest(ctx context.Context, arg GetLiveIntrospectionRequestParams) (LiveIntrospectionRequest, error) {
+	row := q.db.QueryRow(ctx, getLiveIntrospectionRequest, arg.TenantID, arg.ID)
+	var i LiveIntrospectionRequest
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.ParticipantID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.ParticipantStatus,
+		&i.SeatLeftAt,
+		&i.EpisodeStatus,
+		&i.Delivery,
+		&i.DeliveredAt,
+		&i.Sockets,
+		&i.UnavailableReason,
+	)
+	return i, err
+}
+
+const getProblemReport = `-- name: GetProblemReport :one
+select id, tenant_id, episode_id, participant_id from problem_reports
+where tenant_id = $1 and id = $2
+`
+
+type GetProblemReportParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type GetProblemReportRow struct {
+	ID            pgtype.UUID `json:"id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+func (q *Queries) GetProblemReport(ctx context.Context, arg GetProblemReportParams) (GetProblemReportRow, error) {
+	row := q.db.QueryRow(ctx, getProblemReport, arg.TenantID, arg.ID)
+	var i GetProblemReportRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.ParticipantID,
+	)
+	return i, err
+}
+
 const getProblemReportAttribution = `-- name: GetProblemReportAttribution :one
 select s.name as space_name,
     coalesce(case when p.name ~ '[^[:space:]@<>]+@[^[:space:]@<>]+' then
@@ -49,4 +238,218 @@ func (q *Queries) GetProblemReportAttribution(ctx context.Context, arg GetProble
 	var i GetProblemReportAttributionRow
 	err := row.Scan(&i.SpaceName, &i.ReporterName, &i.ReporterRole)
 	return i, err
+}
+
+const insertDiagnosticUpload = `-- name: InsertDiagnosticUpload :one
+insert into diagnostic_uploads (
+    id, tenant_id, episode_id, report_id, live_request_id, trigger,
+    state, object_key, expires_at
+) values (
+    $1, $2, $3, $4,
+    $5, $6, 'issued', $7, $8
+)
+returning id, expires_at
+`
+
+type InsertDiagnosticUploadParams struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ReportID      pgtype.UUID        `json:"report_id"`
+	LiveRequestID pgtype.UUID        `json:"live_request_id"`
+	Trigger       string             `json:"trigger"`
+	ObjectKey     string             `json:"object_key"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+type InsertDiagnosticUploadRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertDiagnosticUpload(ctx context.Context, arg InsertDiagnosticUploadParams) (InsertDiagnosticUploadRow, error) {
+	row := q.db.QueryRow(ctx, insertDiagnosticUpload,
+		arg.ID,
+		arg.TenantID,
+		arg.EpisodeID,
+		arg.ReportID,
+		arg.LiveRequestID,
+		arg.Trigger,
+		arg.ObjectKey,
+		arg.ExpiresAt,
+	)
+	var i InsertDiagnosticUploadRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
+	return i, err
+}
+
+const insertLiveIntrospectionRequest = `-- name: InsertLiveIntrospectionRequest :one
+insert into live_introspection_requests (
+    id, tenant_id, episode_id, participant_id, expires_at,
+    participant_status, seat_left_at, episode_status
+)
+select
+    $1, $2, $3, p.id,
+    now() + interval '60 seconds',
+    p.status, p.left_at, e.status
+from episodes e
+left join participants p
+    on p.tenant_id = e.tenant_id and p.episode_id = e.id and p.id = $4
+where e.tenant_id = $2 and e.id = $3
+returning id, participant_id, requested_at, expires_at, participant_status, seat_left_at, episode_status
+`
+
+type InsertLiveIntrospectionRequestParams struct {
+	ID            pgtype.UUID `json:"id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+type InsertLiveIntrospectionRequestRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ParticipantID     pgtype.UUID        `json:"participant_id"`
+	RequestedAt       pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ParticipantStatus pgtype.Text        `json:"participant_status"`
+	SeatLeftAt        pgtype.Timestamptz `json:"seat_left_at"`
+	EpisodeStatus     pgtype.Text        `json:"episode_status"`
+}
+
+// Snapshots the seat and Episode status in the same statement, so the row is the
+// evidence for whether the seat could have answered.
+func (q *Queries) InsertLiveIntrospectionRequest(ctx context.Context, arg InsertLiveIntrospectionRequestParams) (InsertLiveIntrospectionRequestRow, error) {
+	row := q.db.QueryRow(ctx, insertLiveIntrospectionRequest,
+		arg.ID,
+		arg.TenantID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+	)
+	var i InsertLiveIntrospectionRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.ParticipantID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.ParticipantStatus,
+		&i.SeatLeftAt,
+		&i.EpisodeStatus,
+	)
+	return i, err
+}
+
+const insertProblemReport = `-- name: InsertProblemReport :exec
+insert into problem_reports (
+    id, chk_code, tenant_id, space_id, episode_id, participant_id, generation,
+    client_session_id, sdk_version, journey_id, picked_symptom, description,
+    diagnostics, forward_outcome
+) values (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11, $12, $13,
+    $14
+)
+`
+
+type InsertProblemReportParams struct {
+	ID              pgtype.UUID `json:"id"`
+	ChkCode         string      `json:"chk_code"`
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	SpaceID         pgtype.UUID `json:"space_id"`
+	EpisodeID       pgtype.UUID `json:"episode_id"`
+	ParticipantID   pgtype.UUID `json:"participant_id"`
+	Generation      pgtype.Int8 `json:"generation"`
+	ClientSessionID pgtype.UUID `json:"client_session_id"`
+	SdkVersion      pgtype.Text `json:"sdk_version"`
+	JourneyID       pgtype.UUID `json:"journey_id"`
+	PickedSymptom   string      `json:"picked_symptom"`
+	Description     string      `json:"description"`
+	Diagnostics     pgtype.Text `json:"diagnostics"`
+	ForwardOutcome  string      `json:"forward_outcome"`
+}
+
+// Commits the durable report row; the ledger event shares the transaction.
+func (q *Queries) InsertProblemReport(ctx context.Context, arg InsertProblemReportParams) error {
+	_, err := q.db.Exec(ctx, insertProblemReport,
+		arg.ID,
+		arg.ChkCode,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.Generation,
+		arg.ClientSessionID,
+		arg.SdkVersion,
+		arg.JourneyID,
+		arg.PickedSymptom,
+		arg.Description,
+		arg.Diagnostics,
+		arg.ForwardOutcome,
+	)
+	return err
+}
+
+const lockLiveRequestEpisode = `-- name: LockLiveRequestEpisode :one
+select id from episodes
+where tenant_id = $1 and id = $2
+for update
+`
+
+type LockLiveRequestEpisodeParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+// Serializes live-request creation per Episode so the pending and hourly checks cannot race.
+func (q *Queries) LockLiveRequestEpisode(ctx context.Context, arg LockLiveRequestEpisodeParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveRequestEpisode, arg.TenantID, arg.EpisodeID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setLiveIntrospectionRequestDelivery = `-- name: SetLiveIntrospectionRequestDelivery :exec
+update live_introspection_requests
+set delivery = $1, delivered_at = $2,
+    sockets = $3, unavailable_reason = $4
+where tenant_id = $5 and id = $6 and expires_at > now()
+`
+
+type SetLiveIntrospectionRequestDeliveryParams struct {
+	Delivery          pgtype.Text        `json:"delivery"`
+	DeliveredAt       pgtype.Timestamptz `json:"delivered_at"`
+	Sockets           pgtype.Int4        `json:"sockets"`
+	UnavailableReason pgtype.Text        `json:"unavailable_reason"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ID                pgtype.UUID        `json:"id"`
+}
+
+// Sync writes the deliver decision once; expired rows keep pending evidence.
+func (q *Queries) SetLiveIntrospectionRequestDelivery(ctx context.Context, arg SetLiveIntrospectionRequestDeliveryParams) error {
+	_, err := q.db.Exec(ctx, setLiveIntrospectionRequestDelivery,
+		arg.Delivery,
+		arg.DeliveredAt,
+		arg.Sockets,
+		arg.UnavailableReason,
+		arg.TenantID,
+		arg.ID,
+	)
+	return err
+}
+
+const setProblemReportForwardOutcome = `-- name: SetProblemReportForwardOutcome :exec
+update problem_reports
+set forward_outcome = $1, updated_at = now()
+where tenant_id = $2 and id = $3
+`
+
+type SetProblemReportForwardOutcomeParams struct {
+	ForwardOutcome string      `json:"forward_outcome"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	ID             pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetProblemReportForwardOutcome(ctx context.Context, arg SetProblemReportForwardOutcomeParams) error {
+	_, err := q.db.Exec(ctx, setProblemReportForwardOutcome, arg.ForwardOutcome, arg.TenantID, arg.ID)
+	return err
 }

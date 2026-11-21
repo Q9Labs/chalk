@@ -67,6 +67,8 @@ type Querier interface {
 	CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error)
 	CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error)
 	CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error)
+	// Commits stored only for an issued row whose read-back object is the right size.
+	CompleteDiagnosticUpload(ctx context.Context, arg CompleteDiagnosticUploadParams) error
 	CompleteRecordingCaptureCommand(ctx context.Context, arg CompleteRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	CompleteRecordingJob(ctx context.Context, arg CompleteRecordingJobParams) (RecordingJob, error)
 	CompleteRecordingRender(ctx context.Context, arg CompleteRecordingRenderParams) (CompleteRecordingRenderRow, error)
@@ -77,7 +79,9 @@ type Querier interface {
 	ConsumeMCPOAuthRefreshToken(ctx context.Context, arg ConsumeMCPOAuthRefreshTokenParams) (ConsumeMCPOAuthRefreshTokenRow, error)
 	// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
 	CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error)
+	CountEpisodeLiveIntrospectionRequests(ctx context.Context, arg CountEpisodeLiveIntrospectionRequestsParams) (int64, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
+	CountPendingLiveIntrospectionRequests(ctx context.Context, arg CountPendingLiveIntrospectionRequestsParams) (int64, error)
 	CountTelemetryParticipantSources(ctx context.Context, arg CountTelemetryParticipantSourcesParams) (int64, error)
 	CountTenantLiveEpisodes(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountWebhookEndpoints(ctx context.Context, tenantID pgtype.UUID) (int32, error)
@@ -136,10 +140,12 @@ type Querier interface {
 	// admission use that same lock, so an earlier reconnect cancels the old window.
 	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	ExpireDiagnosticUpload(ctx context.Context, arg ExpireDiagnosticUploadParams) error
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
 	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
+	FailDiagnosticUpload(ctx context.Context, arg FailDiagnosticUploadParams) error
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)
 	FailRecordingCaptureCommand(ctx context.Context, arg FailRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	FailRecordingJob(ctx context.Context, arg FailRecordingJobParams) (FailRecordingJobRow, error)
@@ -160,16 +166,19 @@ type Querier interface {
 	GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAttachmentByUploadIDParams) (GetChatAttachmentByUploadIDRow, error)
 	// A capture that ended without media is settled too: a retry whose answer was lost gets the same terminal job.
 	GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error)
+	GetDiagnosticUpload(ctx context.Context, arg GetDiagnosticUploadParams) (DiagnosticUpload, error)
 	GetEpisodeAttendance(ctx context.Context, arg GetEpisodeAttendanceParams) ([]GetEpisodeAttendanceRow, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error)
+	GetLiveIntrospectionRequest(ctx context.Context, arg GetLiveIntrospectionRequestParams) (LiveIntrospectionRequest, error)
 	GetMCPOAuthClientByPublicID(ctx context.Context, clientID string) (McpOauthClient, error)
 	GetMCPOAuthCodeGrant(ctx context.Context, codeHash string) (GetMCPOAuthCodeGrantRow, error)
 	GetMCPOAuthGrant(ctx context.Context, id pgtype.UUID) (GetMCPOAuthGrantRow, error)
 	GetMCPOAuthRefreshToken(ctx context.Context, tokenHash string) (GetMCPOAuthRefreshTokenRow, error)
 	GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error)
+	GetProblemReport(ctx context.Context, arg GetProblemReportParams) (GetProblemReportRow, error)
 	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
@@ -252,6 +261,12 @@ type Querier interface {
 	HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifactJobParams) (ArtifactJob, error)
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
+	InsertDiagnosticUpload(ctx context.Context, arg InsertDiagnosticUploadParams) (InsertDiagnosticUploadRow, error)
+	// Snapshots the seat and Episode status in the same statement, so the row is the
+	// evidence for whether the seat could have answered.
+	InsertLiveIntrospectionRequest(ctx context.Context, arg InsertLiveIntrospectionRequestParams) (InsertLiveIntrospectionRequestRow, error)
+	// Commits the durable report row; the ledger event shares the transaction.
+	InsertProblemReport(ctx context.Context, arg InsertProblemReportParams) error
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (InsertRecordingBundleRow, error)
 	InsertRecordingBundleAllocation(ctx context.Context, arg InsertRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	InsertRecordingCaptureCommand(ctx context.Context, arg InsertRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
@@ -343,6 +358,8 @@ type Querier interface {
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleParticipantForUpdate(ctx context.Context, arg LockLifecycleParticipantForUpdateParams) (Participant, error)
 	LockLiveEpisodeForUpdate(ctx context.Context, arg LockLiveEpisodeForUpdateParams) (Episode, error)
+	// Serializes live-request creation per Episode so the pending and hourly checks cannot race.
+	LockLiveRequestEpisode(ctx context.Context, arg LockLiveRequestEpisodeParams) (pgtype.UUID, error)
 	LockMediaPlaneKillSwitchForEpisode(ctx context.Context) (bool, error)
 	LockMediaPlaneKillSwitchForUpdate(ctx context.Context) (bool, error)
 	LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error)
@@ -458,7 +475,10 @@ type Querier interface {
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
 	RotateWebhookEndpointSecret(ctx context.Context, arg RotateWebhookEndpointSecretParams) (RotateWebhookEndpointSecretRow, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
+	// Sync writes the deliver decision once; expired rows keep pending evidence.
+	SetLiveIntrospectionRequestDelivery(ctx context.Context, arg SetLiveIntrospectionRequestDeliveryParams) error
 	SetMediaPlaneKillSwitch(ctx context.Context, paused bool) error
+	SetProblemReportForwardOutcome(ctx context.Context, arg SetProblemReportForwardOutcomeParams) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
