@@ -15,6 +15,7 @@ type Sample = Wire["ClientPresence"];
 
 const limits = screenAnnotationV1.limits;
 const maxPending = 32;
+const sampleIntervalMs = Math.ceil(1_000 / limits.previewPerSecond);
 const unknown = { kind: "delivery_unknown" } as const;
 const unavailable = { kind: "unavailable" } as const;
 
@@ -28,6 +29,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   #retryAfterReconnect = false;
   #sample: Sample | null = null;
   #sampleTimer: ReturnType<typeof setTimeout> | undefined;
+  #lastSampleSentAt = -Infinity;
   #stateExpiryTimer: ReturnType<typeof setTimeout> | undefined;
   #expiryTimer: ReturnType<typeof setTimeout> | undefined;
   #stateRequestedAt: number | undefined;
@@ -111,18 +113,18 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     if (!this.#live || state?.layer.layer_id !== target.layerId || state.fence !== target.fence || !state.access.can_draw) return;
 
     this.#sample = { type: "annotation_presence", layer_id: target.layerId, fence: target.fence, cursor, draft };
-    this.#sampleTimer ??= setTimeout(
-      () => {
-        const sample = this.#sample;
-        this.#sample = null;
-        this.#sampleTimer = undefined;
-        if (sample) {
-          const wire = encodeAnnotationFrame(sample);
-          if (wire) this.#send(wire);
-        }
-      },
-      Math.ceil(1_000 / limits.previewPerSecond),
-    );
+    if (this.#sampleTimer !== undefined) return;
+    const delay = this.#lastSampleSentAt + sampleIntervalMs - performance.now();
+    if (delay <= 0) this.#flushSample();
+    else this.#sampleTimer = setTimeout(() => this.#flushSample(), Math.ceil(delay));
+  }
+
+  #flushSample(): void {
+    const sample = this.#sample;
+    this.#sample = null;
+    this.#sampleTimer = undefined;
+    const wire = sample && encodeAnnotationFrame(sample);
+    if (wire && this.#send(wire)) this.#lastSampleSentAt = performance.now();
   }
 
   #command(target: Target | null, command: Wire["Command"] | Wire["Bind"]): Promise<Result> {
