@@ -16,9 +16,7 @@
         "name": "Seat A",
         "role": "participant",
         "can_publish": true,
-        "generations": [
-          1
-        ],
+        "generations": [1],
         "connections": [],
         "window": {
           "from_ms": 1795596400000,
@@ -32,10 +30,7 @@
       }
     ]
   },
-  "chain": [
-    "observability/fixtures/end.wrong_screen/chain/sync-rows.json",
-    "observability/fixtures/end.wrong_screen/chain/api-rows.healthy.json"
-  ],
+  "chain": ["observability/fixtures/end.wrong_screen/chain/sync-rows.json", "observability/fixtures/end.wrong_screen/chain/api-rows.healthy.json"],
   "rows": [
     {
       "clock_state": "server",
