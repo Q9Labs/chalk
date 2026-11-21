@@ -20,7 +20,6 @@ export type AnnotationMarkGeometry = { readonly color: string; readonly width: n
 );
 
 export function annotationMarkOpacity(mark: ScreenAnnotationMark, nowMs: number): number {
-  if (nowMs < mark.committed_at_ms) return 0;
   if (mark.expires_at_ms === null) return 1;
   return Math.max(0, Math.min(1, (mark.expires_at_ms - nowMs) / FADE_MS));
 }

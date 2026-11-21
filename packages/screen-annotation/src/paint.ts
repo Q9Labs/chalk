@@ -27,6 +27,7 @@ export interface AnnotationCanvasContext {
   ellipse(x: number, y: number, rx: number, ry: number, rotation: number, start: number, end: number): void;
   moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
+  setLineDash(segments: number[]): void;
   clip(): void;
   fill(): void;
   stroke(): void;
@@ -67,6 +68,7 @@ export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rec
   try {
     ctx.globalCompositeOperation = "source-over";
     ctx.lineJoin = "round";
+    ctx.setLineDash([]);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.shadowBlur = 0;
