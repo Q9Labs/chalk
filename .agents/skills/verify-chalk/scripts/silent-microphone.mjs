@@ -23,6 +23,7 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
           original.stop();
         }
         const deviceId = constraints.audio.deviceId?.exact ?? "silent-mic";
+        window.micCaptures = [...(window.micCaptures ?? []), deviceId];
         const audio = new AudioContext();
         const destination = audio.createMediaStreamDestination();
         const oscillator = audio.createOscillator();
@@ -77,6 +78,7 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
     await page.keyboard.press("Escape");
     await notice.waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Mute microphone", exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.micCaptures.at(-1)), "quiet-mic");
     // Nonzero input well below the meter's first visible bar is not a dead input.
     await page.evaluate(() => window.setMicGain(0.001));
     await page.waitForTimeout(13_000);
@@ -84,10 +86,17 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
     await shot(guest, "call-input-restored");
   });
 
-  await step("a muted microphone does not show a notice", async () => {
+  await step("choosing a device while muted does not start capture or show a notice", async () => {
     await control(guest, "Mute microphone");
     await page.getByRole("button", { name: "Unmute microphone", exact: true }).waitFor();
+    const before = await page.evaluate(() => window.micCaptures.length);
+    await control(guest, "Select microphone");
+    await page.getByRole("menuitemradio", { name: "Silent microphone", checked: false }).click();
+    await page.getByRole("menuitemradio", { name: "Silent microphone", checked: true }).waitFor();
+    await page.keyboard.press("Escape");
     await page.waitForTimeout(13_000);
+    assert.equal(await page.evaluate(() => window.micCaptures.length), before);
+    await page.getByRole("button", { name: "Unmute microphone", exact: true }).waitFor();
     assert.equal(await notice.count(), 0);
   });
 });
