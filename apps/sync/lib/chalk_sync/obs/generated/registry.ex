@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "06a4092b8fb7"
+  @schema_ver "819112a6ec26"
 
   @events %{
     "client.call_ended" => %{
@@ -17,6 +17,143 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      }
+    },
+    "client.problem_reported" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "journey_id" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "chk_code" => %{
+          "required" => false
+        },
+        "picked_symptom" => %{
+          "required" => false
+        }
+      }
+    },
+    "live_request.ack" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "live_request_id" => %{
+          "required" => true
+        }
+      }
+    },
+    "live_request.create" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["created", "refused"],
+      "fields" => %{
+        "live_request_id" => %{
+          "required" => true
+        },
+        "participant_status" => %{
+          "required" => false
+        },
+        "episode_status" => %{
+          "required" => false
+        }
+      }
+    },
+    "live_request.deliver" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["delivered", "target_unavailable"],
+      "fields" => %{
+        "live_request_id" => %{
+          "required" => true
+        },
+        "delivery" => %{
+          "required" => true
+        },
+        "sockets" => %{
+          "required" => false
+        },
+        "unavailable_reason" => %{
+          "required" => false
+        }
+      }
+    },
+    "live_request.received" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "live_request_id" => %{
+          "required" => true
+        }
+      }
+    },
+    "live.db_client_session" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "client_session_id" => %{
+          "required" => true
+        },
+        "sdk_version" => %{
+          "required" => false
+        },
+        "requested_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "live.db_request" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "live_request_id" => %{
+          "required" => true
+        },
+        "request_status" => %{
+          "required" => true
+        },
+        "requested_ms" => %{
+          "required" => true
+        },
+        "expires_ms" => %{
+          "required" => true
+        },
+        "participant_status" => %{
+          "required" => true
+        },
+        "episode_status" => %{
+          "required" => true
+        },
+        "seat_left_ms" => %{
+          "required" => false
+        },
+        "delivery" => %{
+          "required" => false
+        },
+        "delivered_ms" => %{
+          "required" => false
+        },
+        "sockets" => %{
+          "required" => false
+        },
+        "unavailable_reason" => %{
+          "required" => false
         }
       }
     },
@@ -38,6 +175,303 @@ defmodule ChalkSync.Obs.Registry do
       "decisions" => [],
       "fields" => %{
         "flags" => %{
+          "required" => true
+        }
+      }
+    },
+    "problem_report.availability" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["true", "false"],
+      "fields" => %{}
+    },
+    "problem_report.forward" => %{
+      "kind" => "op",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "journey_id" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => true
+        },
+        "forward_outcome" => %{
+          "required" => true
+        }
+      }
+    },
+    "problem_report.outcome" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "journey_id" => %{
+          "required" => true
+        },
+        "cause" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "http_status" => %{
+          "required" => false
+        }
+      }
+    },
+    "problem_report.send" => %{
+      "kind" => "op",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "journey_id" => %{
+          "required" => true
+        },
+        "picked_symptom" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "chk_code" => %{
+          "required" => false
+        },
+        "http_status" => %{
+          "required" => false
+        }
+      }
+    },
+    "problem_report.submit" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["stored", "refused"],
+      "fields" => %{
+        "journey_id" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "picked_symptom" => %{
+          "required" => false
+        },
+        "chk_code" => %{
+          "required" => false
+        }
+      }
+    },
+    "problem_reports.config" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "forwarding" => %{
+          "required" => true
+        }
+      }
+    },
+    "report.db" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "report_id" => %{
+          "required" => true
+        },
+        "journey_id" => %{
+          "required" => true
+        },
+        "chk_code" => %{
+          "required" => true
+        },
+        "picked_symptom" => %{
+          "required" => true
+        },
+        "forward_outcome" => %{
+          "required" => true
+        },
+        "sdk_version" => %{
+          "required" => false
+        },
+        "created_ms" => %{
+          "required" => true
+        },
+        "generation" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.db_participant" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "participant_status" => %{
+          "required" => true
+        },
+        "seat_left_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.db_upload" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "diagnostic_upload_id" => %{
+          "required" => true
+        },
+        "upload_trigger" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "live_request_id" => %{
+          "required" => false
+        },
+        "upload_state" => %{
+          "required" => true
+        },
+        "issued_ms" => %{
+          "required" => true
+        },
+        "stored_ms" => %{
+          "required" => false
+        },
+        "failed_ms" => %{
+          "required" => false
+        },
+        "expires_ms" => %{
+          "required" => false
+        },
+        "bytes" => %{
+          "required" => false
+        },
+        "sha256" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.dialog" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "dialog_state" => %{
+          "required" => true
+        },
+        "blocked_reason" => %{
+          "required" => false
+        },
+        "journey_id" => %{
+          "required" => false
+        },
+        "picked_symptom" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.r2_upload" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "diagnostic_upload_id" => %{
+          "required" => true
+        },
+        "readback" => %{
+          "required" => true
+        },
+        "bytes" => %{
+          "required" => false
+        },
+        "state_part" => %{
+          "required" => false
+        },
+        "surface_tree_part" => %{
+          "required" => false
+        },
+        "flight_recorder_part" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.upload" => %{
+      "kind" => "op",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "upload_trigger" => %{
+          "required" => true
+        },
+        "diagnostic_upload_id" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "live_request_id" => %{
+          "required" => false
+        },
+        "http_status" => %{
+          "required" => false
+        },
+        "bytes" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.upload.complete" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["stored", "refused"],
+      "fields" => %{
+        "diagnostic_upload_id" => %{
+          "required" => true
+        },
+        "bytes" => %{
+          "required" => false
+        },
+        "sha256" => %{
+          "required" => false
+        }
+      }
+    },
+    "report.upload.issue" => %{
+      "kind" => "decision",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => ["issued", "refused"],
+      "fields" => %{
+        "diagnostic_upload_id" => %{
+          "required" => true
+        },
+        "upload_trigger" => %{
+          "required" => true
+        },
+        "report_id" => %{
+          "required" => false
+        },
+        "live_request_id" => %{
+          "required" => false
+        },
+        "expires_ms" => %{
           "required" => true
         }
       }
@@ -143,6 +577,30 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "blocked_reason" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["credential_expired", "reports_unavailable"]
+    },
+    "bytes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "cause" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "chk_code" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "client_mono_ms" => %{
       "type" => "number",
       "group" => "clock",
@@ -179,6 +637,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => ["server", "synced", "unsynced"]
     },
+    "created_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "decision" => %{
       "type" => "string",
       "group" => "record",
@@ -191,6 +655,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "delivered_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "delivery" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["delivered", "target_unavailable"]
+    },
     "device_ephemeral" => %{
       "type" => "bool",
       "group" => "trail",
@@ -202,6 +678,18 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "diagnostic_upload_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "dialog_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["form", "sent", "send_failed", "blocked"]
     },
     "drop_reason" => %{
       "type" => "enum",
@@ -245,6 +733,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "episode_status" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "est_server_ms" => %{
       "type" => "int",
       "group" => "clock",
@@ -255,6 +749,18 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "id",
       "group" => "delivery",
       "required" => true,
+      "values" => nil
+    },
+    "expires_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "failed_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
       "values" => nil
     },
     "flags" => %{
@@ -269,6 +775,24 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "flight_recorder_part" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "forward_outcome" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "forwarding" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "from_state" => %{
       "type" => "string",
       "group" => "record",
@@ -278,6 +802,18 @@ defmodule ChalkSync.Obs.Registry do
     "generation" => %{
       "type" => "int",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "http_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "issued_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -310,6 +846,18 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "record",
       "required" => true,
       "values" => ["op", "transition", "decision", "surface", "fact"]
+    },
+    "left_at_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "live_request_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "machine" => %{
       "type" => "string",
@@ -371,6 +919,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "participant_status" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "picked_symptom" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "platform" => %{
       "type" => "enum",
       "group" => "build",
@@ -382,6 +942,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "readback" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "missing", "read_failed", "parse_failed", "identity_mismatch"]
     },
     "reason_code" => %{
       "type" => "string",
@@ -401,9 +967,27 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "report_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "request_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "request_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["pending", "delivered", "target_unavailable"]
+    },
+    "requested_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -419,15 +1003,33 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "seat_left_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "seq" => %{
       "type" => "int",
       "group" => "delivery",
       "required" => true,
       "values" => nil
     },
+    "sha256" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "shown_ms" => %{
       "type" => "int",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "sockets" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -449,11 +1051,29 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "state_part" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "stored_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "surface_state" => %{
       "type" => "enum",
       "group" => "record",
       "required" => false,
       "values" => ["shown", "dismissed"]
+    },
+    "surface_tree_part" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "sync_connection_id" => %{
       "type" => "id",
@@ -484,6 +1104,24 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "record",
       "required" => false,
       "values" => nil
+    },
+    "unavailable_reason" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["no_socket", "not_negotiated"]
+    },
+    "upload_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["issued", "stored", "failed", "expired"]
+    },
+    "upload_trigger" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["report", "live"]
     },
     "user_id" => %{
       "type" => "id",
@@ -529,6 +1167,15 @@ defmodule ChalkSync.Obs.Registry do
       ],
       "triggers" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
     },
+    "report.upload_state" => %{
+      "states" => ["issued", "stored", "failed", "expired"],
+      "edges" => [
+        ["issued", "stored"],
+        ["issued", "failed"],
+        ["issued", "expired"]
+      ],
+      "triggers" => ["complete", "size_mismatch", "object_missing", "request_expired"]
+    },
     "selftest.door" => %{
       "states" => ["closed", "open", "locked"],
       "edges" => [
@@ -544,6 +1191,46 @@ defmodule ChalkSync.Obs.Registry do
   @reasons %{
     "cancelled" => "expected",
     "end.time_limit" => "expected",
+    "live.old_client" => "expected",
+    "live.page_hidden" => "expected",
+    "live.rate_limited" => "error",
+    "live.request_pending" => "error",
+    "live.tab_frozen" => "expected",
+    "live.unauthenticated" => "error",
+    "report.account_quota" => "error",
+    "report.after_leave_window" => "expected",
+    "report.attribution_failed" => "error",
+    "report.description_blank" => "error",
+    "report.description_too_long" => "error",
+    "report.diagnostics_too_long" => "error",
+    "report.disabled" => "error",
+    "report.episode_quota" => "expected",
+    "report.forward_http" => "error",
+    "report.forward_not_configured" => "expected",
+    "report.forward_transport" => "error",
+    "report.id_generation_failed" => "error",
+    "report.ip_quota" => "error",
+    "report.journey_canceled" => "error",
+    "report.journey_constraint" => "error",
+    "report.journey_internal" => "error",
+    "report.journey_permission" => "error",
+    "report.journey_timeout" => "error",
+    "report.journey_unavailable" => "error",
+    "report.limiter_unavailable" => "error",
+    "report.network" => "error",
+    "report.no_credential" => "error",
+    "report.not_stored" => "error",
+    "report.page_hidden" => "expected",
+    "report.participant_binding_mismatch" => "error",
+    "report.participant_quota" => "expected",
+    "report.send_refused" => "error",
+    "report.timeout" => "error",
+    "report.unauthenticated" => "error",
+    "report.upload_expired" => "error",
+    "report.upload_mismatch" => "error",
+    "report.upload_missing" => "error",
+    "report.upload_refused" => "error",
+    "report.verifier_unavailable" => "error",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
     "unclassified" => "error"
@@ -723,6 +1410,13 @@ defmodule ChalkSync.Obs.Registry do
       "prefix" => "fl",
       "field" => "flags_hash",
       "canonical" => "hex16",
+      "legacy_hash_field" => nil
+    },
+    %{
+      "kind" => "problem_report",
+      "prefix" => "pr",
+      "field" => "report_id",
+      "canonical" => "uuid",
       "legacy_hash_field" => nil
     },
     %{

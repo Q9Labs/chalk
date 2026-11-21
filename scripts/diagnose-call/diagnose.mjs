@@ -49,6 +49,16 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
     const { main } = await import("./index.mjs");
     return { code: await main([...argv.slice(1)]), out: "", err: "" };
   }
+  if (argv[0] === "live") {
+    try {
+      const { liveCommand } = await import("./live/command.mjs");
+      return await liveCommand(argv[1] ?? "", process.env, { now });
+    } catch (error) {
+      const { LiveError } = await import("./live/command.mjs");
+      if (error instanceof LiveError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
+      throw error;
+    }
+  }
   try {
     const { live, rest } = liveTarget(argv);
     const query = parseQuery(rest);

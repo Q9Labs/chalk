@@ -3,34 +3,96 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "819112a6ec26"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded           = "client.call_ended"
+	EventClientProblemReported     = "client.problem_reported"
+	EventLiveRequestAck            = "live_request.ack"
+	EventLiveRequestCreate         = "live_request.create"
+	EventLiveRequestDeliver        = "live_request.deliver"
+	EventLiveRequestReceived       = "live_request.received"
+	EventLiveDbClientSession       = "live.db_client_session"
+	EventLiveDbRequest             = "live.db_request"
+	EventObsClockJump              = "obs.clock_jump"
+	EventObsFlagsSnapshot          = "obs.flags_snapshot"
+	EventProblemReportAvailability = "problem_report.availability"
+	EventProblemReportForward      = "problem_report.forward"
+	EventProblemReportOutcome      = "problem_report.outcome"
+	EventProblemReportSend         = "problem_report.send"
+	EventProblemReportSubmit       = "problem_report.submit"
+	EventProblemReportsConfig      = "problem_reports.config"
+	EventReportDb                  = "report.db"
+	EventReportDbParticipant       = "report.db_participant"
+	EventReportDbUpload            = "report.db_upload"
+	EventReportDialog              = "report.dialog"
+	EventReportR2Upload            = "report.r2_upload"
+	EventReportUpload              = "report.upload"
+	EventReportUploadComplete      = "report.upload.complete"
+	EventReportUploadIssue         = "report.upload.issue"
+	EventSelftestAdmit             = "selftest.admit"
+	EventSelftestBanner            = "selftest.banner"
+	EventSelftestNote              = "selftest.note"
+	EventSelftestWork              = "selftest.work"
+	EventSyncEpisodeEnded          = "sync.episode.ended"
 )
 
 // Machine names.
 const (
-	MachineClientConnection = "client.connection"
-	MachineEpisodeLifecycle = "episode.lifecycle"
-	MachineSelftestDoor     = "selftest.door"
+	MachineClientConnection  = "client.connection"
+	MachineEpisodeLifecycle  = "episode.lifecycle"
+	MachineReportUploadState = "report.upload_state"
+	MachineSelftestDoor      = "selftest.door"
 )
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled                        = "cancelled"
+	ReasonEndTimeLimit                     = "end.time_limit"
+	ReasonLiveOldClient                    = "live.old_client"
+	ReasonLivePageHidden                   = "live.page_hidden"
+	ReasonLiveRateLimited                  = "live.rate_limited"
+	ReasonLiveRequestPending               = "live.request_pending"
+	ReasonLiveTabFrozen                    = "live.tab_frozen"
+	ReasonLiveUnauthenticated              = "live.unauthenticated"
+	ReasonReportAccountQuota               = "report.account_quota"
+	ReasonReportAfterLeaveWindow           = "report.after_leave_window"
+	ReasonReportAttributionFailed          = "report.attribution_failed"
+	ReasonReportDescriptionBlank           = "report.description_blank"
+	ReasonReportDescriptionTooLong         = "report.description_too_long"
+	ReasonReportDiagnosticsTooLong         = "report.diagnostics_too_long"
+	ReasonReportDisabled                   = "report.disabled"
+	ReasonReportEpisodeQuota               = "report.episode_quota"
+	ReasonReportForwardHTTP                = "report.forward_http"
+	ReasonReportForwardNotConfigured       = "report.forward_not_configured"
+	ReasonReportForwardTransport           = "report.forward_transport"
+	ReasonReportIDGenerationFailed         = "report.id_generation_failed"
+	ReasonReportIpQuota                    = "report.ip_quota"
+	ReasonReportJourneyCanceled            = "report.journey_canceled"
+	ReasonReportJourneyConstraint          = "report.journey_constraint"
+	ReasonReportJourneyInternal            = "report.journey_internal"
+	ReasonReportJourneyPermission          = "report.journey_permission"
+	ReasonReportJourneyTimeout             = "report.journey_timeout"
+	ReasonReportJourneyUnavailable         = "report.journey_unavailable"
+	ReasonReportLimiterUnavailable         = "report.limiter_unavailable"
+	ReasonReportNetwork                    = "report.network"
+	ReasonReportNoCredential               = "report.no_credential"
+	ReasonReportNotStored                  = "report.not_stored"
+	ReasonReportPageHidden                 = "report.page_hidden"
+	ReasonReportParticipantBindingMismatch = "report.participant_binding_mismatch"
+	ReasonReportParticipantQuota           = "report.participant_quota"
+	ReasonReportSendRefused                = "report.send_refused"
+	ReasonReportTimeout                    = "report.timeout"
+	ReasonReportUnauthenticated            = "report.unauthenticated"
+	ReasonReportUploadExpired              = "report.upload_expired"
+	ReasonReportUploadMismatch             = "report.upload_mismatch"
+	ReasonReportUploadMissing              = "report.upload_missing"
+	ReasonReportUploadRefused              = "report.upload_refused"
+	ReasonReportVerifierUnavailable        = "report.verifier_unavailable"
+	ReasonSelftestBroken                   = "selftest.broken"
+	ReasonSelftestBusy                     = "selftest.busy"
+	ReasonUnclassified                     = "unclassified"
 )
 
 // Field names.
@@ -42,16 +104,25 @@ const (
 	FieldAttempt            = "attempt"
 	FieldBannerKind         = "banner_kind"
 	FieldBatchID            = "batch_id"
+	FieldBlockedReason      = "blocked_reason"
+	FieldBytes              = "bytes"
+	FieldCause              = "cause"
+	FieldChkCode            = "chk_code"
 	FieldClientMonoMs       = "client_mono_ms"
 	FieldClientSessionID    = "client_session_id"
 	FieldClientWallMs       = "client_wall_ms"
 	FieldClockEpoch         = "clock_epoch"
 	FieldClockErrMs         = "clock_err_ms"
 	FieldClockState         = "clock_state"
+	FieldCreatedMs          = "created_ms"
 	FieldDecision           = "decision"
 	FieldDecisionID         = "decision_id"
+	FieldDeliveredMs        = "delivered_ms"
+	FieldDelivery           = "delivery"
 	FieldDeviceEphemeral    = "device_ephemeral"
 	FieldDeviceID           = "device_id"
+	FieldDiagnosticUploadID = "diagnostic_upload_id"
+	FieldDialogState        = "dialog_state"
 	FieldDropReason         = "drop_reason"
 	FieldDroppedSeqs        = "dropped_seqs"
 	FieldDurationMs         = "duration_ms"
@@ -59,17 +130,27 @@ const (
 	FieldEndReason          = "end_reason"
 	FieldEnv                = "env"
 	FieldEpisodeID          = "episode_id"
+	FieldEpisodeStatus      = "episode_status"
 	FieldEstServerMs        = "est_server_ms"
 	FieldEventID            = "event_id"
+	FieldExpiresMs          = "expires_ms"
+	FieldFailedMs           = "failed_ms"
 	FieldFlags              = "flags"
 	FieldFlagsHash          = "flags_hash"
+	FieldFlightRecorderPart = "flight_recorder_part"
+	FieldForwardOutcome     = "forward_outcome"
+	FieldForwarding         = "forwarding"
 	FieldFromState          = "from_state"
 	FieldGeneration         = "generation"
+	FieldHTTPStatus         = "http_status"
+	FieldIssuedMs           = "issued_ms"
 	FieldItemCount          = "item_count"
 	FieldJobID              = "job_id"
 	FieldJourneyID          = "journey_id"
 	FieldJumpMs             = "jump_ms"
 	FieldKind               = "kind"
+	FieldLeftAtMs           = "left_at_ms"
+	FieldLiveRequestID      = "live_request_id"
 	FieldMachine            = "machine"
 	FieldMediaConnectionID  = "media_connection_id"
 	FieldModule             = "module"
@@ -80,25 +161,40 @@ const (
 	FieldOutcome            = "outcome"
 	FieldParentOpID         = "parent_op_id"
 	FieldParticipantID      = "participant_id"
+	FieldParticipantStatus  = "participant_status"
+	FieldPickedSymptom      = "picked_symptom"
 	FieldPlatform           = "platform"
 	FieldProviderMediaID    = "provider_media_id"
+	FieldReadback           = "readback"
 	FieldReasonCode         = "reason_code"
 	FieldRecordingID        = "recording_id"
 	FieldReleaseSHA         = "release_sha"
+	FieldReportID           = "report_id"
 	FieldRequestID          = "request_id"
+	FieldRequestStatus      = "request_status"
+	FieldRequestedMs        = "requested_ms"
 	FieldSchemaVer          = "schema_ver"
 	FieldSDKVersion         = "sdk_version"
+	FieldSeatLeftMs         = "seat_left_ms"
 	FieldSeq                = "seq"
+	FieldSha256             = "sha256"
 	FieldShownMs            = "shown_ms"
+	FieldSockets            = "sockets"
 	FieldSourceID           = "source_id"
 	FieldSpaceID            = "space_id"
 	FieldSpanID             = "span_id"
+	FieldStatePart          = "state_part"
+	FieldStoredMs           = "stored_ms"
 	FieldSurfaceState       = "surface_state"
+	FieldSurfaceTreePart    = "surface_tree_part"
 	FieldSyncConnectionID   = "sync_connection_id"
 	FieldTenantID           = "tenant_id"
 	FieldToState            = "to_state"
 	FieldTraceID            = "trace_id"
 	FieldTrigger            = "trigger"
+	FieldUnavailableReason  = "unavailable_reason"
+	FieldUploadState        = "upload_state"
+	FieldUploadTrigger      = "upload_trigger"
 	FieldUserID             = "user_id"
 	FieldWebhookDeliveryID  = "webhook_delivery_id"
 )
@@ -111,16 +207,25 @@ var registryFields = map[string]fieldSpec{
 	"attempt":              {typ: "int", group: "trail", required: false},
 	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
 	"batch_id":             {typ: "id", group: "delivery", required: false},
+	"blocked_reason":       {typ: "enum", group: "event", required: false, values: []string{"credential_expired", "reports_unavailable"}},
+	"bytes":                {typ: "int", group: "event", required: false},
+	"cause":                {typ: "string", group: "event", required: false},
+	"chk_code":             {typ: "string", group: "event", required: false},
 	"client_mono_ms":       {typ: "number", group: "clock", required: false},
 	"client_session_id":    {typ: "id", group: "trail", required: false},
 	"client_wall_ms":       {typ: "int", group: "clock", required: false},
 	"clock_epoch":          {typ: "int", group: "clock", required: false},
 	"clock_err_ms":         {typ: "int", group: "clock", required: false},
 	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"created_ms":           {typ: "int", group: "event", required: false},
 	"decision":             {typ: "string", group: "record", required: false},
 	"decision_id":          {typ: "id", group: "record", required: false},
+	"delivered_ms":         {typ: "int", group: "event", required: false},
+	"delivery":             {typ: "enum", group: "event", required: false, values: []string{"delivered", "target_unavailable"}},
 	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
 	"device_id":            {typ: "id", group: "trail", required: false},
+	"diagnostic_upload_id": {typ: "id", group: "event", required: false},
+	"dialog_state":         {typ: "enum", group: "event", required: false, values: []string{"form", "sent", "send_failed", "blocked"}},
 	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
 	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
 	"duration_ms":          {typ: "int", group: "record", required: false},
@@ -128,17 +233,27 @@ var registryFields = map[string]fieldSpec{
 	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
 	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
 	"episode_id":           {typ: "id", group: "trail", required: false},
+	"episode_status":       {typ: "string", group: "event", required: false},
 	"est_server_ms":        {typ: "int", group: "clock", required: false},
 	"event_id":             {typ: "id", group: "delivery", required: true},
+	"expires_ms":           {typ: "int", group: "event", required: false},
+	"failed_ms":            {typ: "int", group: "event", required: false},
 	"flags":                {typ: "map", group: "event", required: false},
 	"flags_hash":           {typ: "string", group: "flags", required: false},
+	"flight_recorder_part": {typ: "string", group: "event", required: false},
+	"forward_outcome":      {typ: "string", group: "event", required: false},
+	"forwarding":           {typ: "bool", group: "event", required: false},
 	"from_state":           {typ: "string", group: "record", required: false},
 	"generation":           {typ: "int", group: "trail", required: false},
+	"http_status":          {typ: "int", group: "event", required: false},
+	"issued_ms":            {typ: "int", group: "event", required: false},
 	"item_count":           {typ: "int", group: "event", required: false},
 	"job_id":               {typ: "id", group: "trail", required: false},
 	"journey_id":           {typ: "id", group: "trail", required: false},
 	"jump_ms":              {typ: "int", group: "event", required: false},
 	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"left_at_ms":           {typ: "int", group: "event", required: false},
+	"live_request_id":      {typ: "id", group: "event", required: false},
 	"machine":              {typ: "string", group: "record", required: false},
 	"media_connection_id":  {typ: "id", group: "trail", required: false},
 	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
@@ -149,52 +264,129 @@ var registryFields = map[string]fieldSpec{
 	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
 	"parent_op_id":         {typ: "id", group: "record", required: false},
 	"participant_id":       {typ: "id", group: "trail", required: false},
+	"participant_status":   {typ: "string", group: "event", required: false},
+	"picked_symptom":       {typ: "string", group: "event", required: false},
 	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
 	"provider_media_id":    {typ: "id", group: "trail", required: false},
+	"readback":             {typ: "enum", group: "event", required: false, values: []string{"ok", "missing", "read_failed", "parse_failed", "identity_mismatch"}},
 	"reason_code":          {typ: "string", group: "record", required: false},
 	"recording_id":         {typ: "id", group: "trail", required: false},
 	"release_sha":          {typ: "string", group: "build", required: false},
+	"report_id":            {typ: "id", group: "event", required: false},
 	"request_id":           {typ: "id", group: "trail", required: false},
+	"request_status":       {typ: "enum", group: "event", required: false, values: []string{"pending", "delivered", "target_unavailable"}},
+	"requested_ms":         {typ: "int", group: "event", required: false},
 	"schema_ver":           {typ: "string", group: "build", required: true},
 	"sdk_version":          {typ: "string", group: "build", required: false},
+	"seat_left_ms":         {typ: "int", group: "event", required: false},
 	"seq":                  {typ: "int", group: "delivery", required: true},
+	"sha256":               {typ: "string", group: "event", required: false},
 	"shown_ms":             {typ: "int", group: "record", required: false},
+	"sockets":              {typ: "int", group: "event", required: false},
 	"source_id":            {typ: "string", group: "delivery", required: true},
 	"space_id":             {typ: "id", group: "trail", required: false},
 	"span_id":              {typ: "id", group: "trail", required: false},
+	"state_part":           {typ: "string", group: "event", required: false},
+	"stored_ms":            {typ: "int", group: "event", required: false},
 	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"surface_tree_part":    {typ: "string", group: "event", required: false},
 	"sync_connection_id":   {typ: "id", group: "trail", required: false},
 	"tenant_id":            {typ: "id", group: "trail", required: false},
 	"to_state":             {typ: "string", group: "record", required: false},
 	"trace_id":             {typ: "id", group: "trail", required: false},
 	"trigger":              {typ: "string", group: "record", required: false},
+	"unavailable_reason":   {typ: "enum", group: "event", required: false, values: []string{"no_socket", "not_negotiated"}},
+	"upload_state":         {typ: "enum", group: "event", required: false, values: []string{"issued", "stored", "failed", "expired"}},
+	"upload_trigger":       {typ: "enum", group: "event", required: false, values: []string{"report", "live"}},
 	"user_id":              {typ: "id", group: "trail", required: false},
 	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"client.problem_reported":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"journey_id": {required: true}, "report_id": {required: false}, "chk_code": {required: false}, "picked_symptom": {required: false}}},
+	"live_request.ack":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"live_request_id": {required: true}}},
+	"live_request.create":         {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"created", "refused"}, fields: map[string]fieldRule{"live_request_id": {required: true}, "participant_status": {required: false}, "episode_status": {required: false}}},
+	"live_request.deliver":        {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"delivered", "target_unavailable"}, fields: map[string]fieldRule{"live_request_id": {required: true}, "delivery": {required: true}, "sockets": {required: false}, "unavailable_reason": {required: false}}},
+	"live_request.received":       {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"live_request_id": {required: true}}},
+	"live.db_client_session":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "sdk_version": {required: false}, "requested_ms": {required: false}}},
+	"live.db_request":             {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"live_request_id": {required: true}, "request_status": {required: true}, "requested_ms": {required: true}, "expires_ms": {required: true}, "participant_status": {required: true}, "episode_status": {required: true}, "seat_left_ms": {required: false}, "delivery": {required: false}, "delivered_ms": {required: false}, "sockets": {required: false}, "unavailable_reason": {required: false}}},
+	"obs.clock_jump":              {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":          {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"problem_report.availability": {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"true", "false"}, fields: map[string]fieldRule{}},
+	"problem_report.forward":      {kind: "op", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"journey_id": {required: true}, "report_id": {required: true}, "forward_outcome": {required: true}}},
+	"problem_report.outcome":      {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"journey_id": {required: true}, "cause": {required: true}, "report_id": {required: false}, "http_status": {required: false}}},
+	"problem_report.send":         {kind: "op", dataset: "requests", side: "client", testOnly: false, fields: map[string]fieldRule{"journey_id": {required: true}, "picked_symptom": {required: true}, "report_id": {required: false}, "chk_code": {required: false}, "http_status": {required: false}}},
+	"problem_report.submit":       {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"stored", "refused"}, fields: map[string]fieldRule{"journey_id": {required: true}, "report_id": {required: false}, "picked_symptom": {required: false}, "chk_code": {required: false}}},
+	"problem_reports.config":      {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"forwarding": {required: true}}},
+	"report.db":                   {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"report_id": {required: true}, "journey_id": {required: true}, "chk_code": {required: true}, "picked_symptom": {required: true}, "forward_outcome": {required: true}, "sdk_version": {required: false}, "created_ms": {required: true}, "generation": {required: false}}},
+	"report.db_participant":       {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_status": {required: true}, "seat_left_ms": {required: false}}},
+	"report.db_upload":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"diagnostic_upload_id": {required: true}, "upload_trigger": {required: true}, "report_id": {required: false}, "live_request_id": {required: false}, "upload_state": {required: true}, "issued_ms": {required: true}, "stored_ms": {required: false}, "failed_ms": {required: false}, "expires_ms": {required: false}, "bytes": {required: false}, "sha256": {required: false}}},
+	"report.dialog":               {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"dialog_state": {required: true}, "blocked_reason": {required: false}, "journey_id": {required: false}, "picked_symptom": {required: false}}},
+	"report.r2_upload":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"diagnostic_upload_id": {required: true}, "readback": {required: true}, "bytes": {required: false}, "state_part": {required: false}, "surface_tree_part": {required: false}, "flight_recorder_part": {required: false}}},
+	"report.upload":               {kind: "op", dataset: "requests", side: "client", testOnly: false, fields: map[string]fieldRule{"upload_trigger": {required: true}, "diagnostic_upload_id": {required: true}, "report_id": {required: false}, "live_request_id": {required: false}, "http_status": {required: false}, "bytes": {required: false}}},
+	"report.upload.complete":      {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"stored", "refused"}, fields: map[string]fieldRule{"diagnostic_upload_id": {required: true}, "bytes": {required: false}, "sha256": {required: false}}},
+	"report.upload.issue":         {kind: "decision", dataset: "requests", side: "server", testOnly: false, decisions: []string{"issued", "refused"}, fields: map[string]fieldRule{"diagnostic_upload_id": {required: true}, "upload_trigger": {required: true}, "report_id": {required: false}, "live_request_id": {required: false}, "expires_ms": {required: true}}},
+	"selftest.admit":              {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":             {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":               {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":               {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":          {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
 }
 
 var registryMachines = map[string]machineSpec{
-	"client.connection": {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
-	"episode.lifecycle": {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
-	"selftest.door":     {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
+	"client.connection":   {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
+	"episode.lifecycle":   {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
+	"report.upload_state": {states: []string{"issued", "stored", "failed", "expired"}, edges: [][2]string{{"issued", "stored"}, {"issued", "failed"}, {"issued", "expired"}}, triggers: []string{"complete", "size_mismatch", "object_missing", "request_expired"}},
+	"selftest.door":       {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":                           "expected",
+	"end.time_limit":                      "expected",
+	"live.old_client":                     "expected",
+	"live.page_hidden":                    "expected",
+	"live.rate_limited":                   "error",
+	"live.request_pending":                "error",
+	"live.tab_frozen":                     "expected",
+	"live.unauthenticated":                "error",
+	"report.account_quota":                "error",
+	"report.after_leave_window":           "expected",
+	"report.attribution_failed":           "error",
+	"report.description_blank":            "error",
+	"report.description_too_long":         "error",
+	"report.diagnostics_too_long":         "error",
+	"report.disabled":                     "error",
+	"report.episode_quota":                "expected",
+	"report.forward_http":                 "error",
+	"report.forward_not_configured":       "expected",
+	"report.forward_transport":            "error",
+	"report.id_generation_failed":         "error",
+	"report.ip_quota":                     "error",
+	"report.journey_canceled":             "error",
+	"report.journey_constraint":           "error",
+	"report.journey_internal":             "error",
+	"report.journey_permission":           "error",
+	"report.journey_timeout":              "error",
+	"report.journey_unavailable":          "error",
+	"report.limiter_unavailable":          "error",
+	"report.network":                      "error",
+	"report.no_credential":                "error",
+	"report.not_stored":                   "error",
+	"report.page_hidden":                  "expected",
+	"report.participant_binding_mismatch": "error",
+	"report.participant_quota":            "expected",
+	"report.send_refused":                 "error",
+	"report.timeout":                      "error",
+	"report.unauthenticated":              "error",
+	"report.upload_expired":               "error",
+	"report.upload_mismatch":              "error",
+	"report.upload_missing":               "error",
+	"report.upload_refused":               "error",
+	"report.verifier_unavailable":         "error",
+	"selftest.broken":                     "error",
+	"selftest.busy":                       "expected",
+	"unclassified":                        "error",
 }
 
 var registryIDKinds = []idKind{
@@ -223,6 +415,7 @@ var registryIDKinds = []idKind{
 	{kind: "batch", prefix: "bt", field: "batch_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "finding", prefix: "f", field: "finding_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "flags", prefix: "fl", field: "flags_hash", canonical: "hex16", legacyHashField: ""},
+	{kind: "problem_report", prefix: "pr", field: "report_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "diagnostic_upload", prefix: "dg", field: "diagnostic_upload_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "api_key", prefix: "ak", field: "api_key_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "webhook_endpoint", prefix: "wh", field: "webhook_endpoint_id", canonical: "uuid", legacyHashField: ""},

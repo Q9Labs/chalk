@@ -14,6 +14,9 @@ import { fileURLToPath } from "node:url";
 import { axiom, quote } from "../axiom.mjs";
 import { connectionEnv } from "../database.mjs";
 import { liveWorld } from "./world.mjs";
+import { r2Readback } from "../r2.mjs";
+import { observation, origin } from "../proof/evidence.mjs";
+import { eventId } from "./report-store.mjs";
 
 /** @typedef {import("./world.mjs").DbEpisode} DbEpisode */
 /** @typedef {import("./world.mjs").Ledger} Ledger */
@@ -37,17 +40,45 @@ export class StoreError extends Error {}
  * Opens the World of one Episode.
  * @param {Target} target
  * @param {Stores} stores
- * @param {{ now?: number }} options
+ * @param {{ now?: number, env?: NodeJS.ProcessEnv }} options
  */
-export async function openLive(target, stores, { now = Date.now() }) {
+export async function openLive(target, stores, { now = Date.now(), env = process.env }) {
   for (const [name, id] of Object.entries(target)) if (!UUID.test(id)) throw new StoreError(`--live needs --${name} <uuid>, got ${JSON.stringify(id.slice(0, 40))}`);
   const db = await stores.declaration(target);
   if (db === null) throw new StoreError(`no Episode ${target.episode} in tenant ${target.tenant}`);
   // Query by ingest time through now, so late uploads can fill seqs. The
   // proof rules select witnesses by their event intervals, including clock error.
   const window = { from_ms: Date.parse(db.episode.created_at), to_ms: now };
-  const [ledger, rows] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window)]);
-  return liveWorld({ db, ledger, rows, asof_ms: now });
+  const [ledger, rows, readbacks] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window), readbacksOf(db, env)]);
+  return liveWorld({ db, ledger, rows, readbacks, r2_read: readbacks !== null, asof_ms: now });
+}
+
+/**
+ * The checker's own r2 GET for every `stored` upload row of the Episode, or `null` when no r2 read is configured — an
+ * unread r2 is a watermark gap, never a missing bundle.
+ * @param {DbEpisode} db
+ * @param {NodeJS.ProcessEnv | undefined} env
+ */
+async function readbacksOf(db, env) {
+  const have = env && (env.CHALK_DIAGNOSE_R2_DIR || (env.CHALK_R2_ENDPOINT && env.CHALK_R2_BUCKET && env.CHALK_R2_ACCESS_KEY_ID && env.CHALK_R2_SECRET_ACCESS_KEY));
+  if (!have) return null;
+  const stored = (db.uploads ?? []).filter((u) => u.state === "stored" && typeof u.object_key === "string");
+  /** @type {readonly import("../proof/evidence.mjs").Observation[]} */
+  const obs = [];
+  for (const u of stored) {
+    const back = await r2Readback({ key: u.object_key, expect: { episode_id: db.episode.id, participant_id: u.participant_id, client_session_id: u.client_session_id }, env });
+    obs.push(observation({
+      id: eventId("ev", "report.r2_upload", u.id),
+      fact: "report.readback", source: "r2", origin: origin.measured("r2"),
+      subject: { tenant: db.tenant.id, episode: db.episode.id },
+      window: { from_ms: back.at_ms, to_ms: back.at_ms },
+      claim: back.readback,
+      value: { diagnostic_upload_id: u.id, readback: back.readback, ...(back.bytes != null ? { bytes: back.bytes } : {}), ...back.parts },
+      failure: back.readback !== "ok",
+      query: `r2 get ${u.object_key}`,
+    }));
+  }
+  return obs;
 }
 
 /**
@@ -138,10 +169,14 @@ select json_build_object(
   'episode', (select json_build_object('id', ep.id, 'tenant', ep.tenant_id, 'space', ep.space_id, 'created_at', ep.created_at, 'started_at', ep.started_at, 'ended_at', ep.ended_at, 'end_reason', ep.end_reason) from ep),
   'tenant', (select json_build_object('id', t.id, 'name', t.name) from tenants t join ep on ep.tenant_id = t.id),
   'seats', coalesce((select json_agg(json_build_object(
-      'participant', p.id, 'name', p.name, 'role', p.role, 'capabilities', p.capabilities, 'generation', p.generation, 'connection', p.media_connection_id,
+      'participant', p.id, 'name', p.name, 'role', p.role, 'capabilities', p.capabilities, 'generation', p.generation, 'connection', p.media_connection_id, 'status', p.status,
       'created_at', p.created_at, 'joined_at', p.joined_at, 'left_at', p.left_at, 'account', p.account_id,
       'identity', case when i.id is null then null else json_build_object('id', i.id, 'kind', i.kind, 'name', i.display_name) end
     ) order by p.created_at, p.id)
     from ep join participants p on p.episode_id = ep.id and p.tenant_id = ep.tenant_id
-    left join identities i on i.id = p.identity_id and i.tenant_id = p.tenant_id), '[]'::json))`;
+    left join identities i on i.id = p.identity_id and i.tenant_id = p.tenant_id), '[]'::json)),
+  'reports', coalesce((select json_agg(json_build_object('id',r.id,'chk_code',r.chk_code,'journey_id',r.journey_id,'participant_id',r.participant_id,'client_session_id',r.client_session_id,'sdk_version',r.sdk_version,'picked_symptom',r.picked_symptom,'forward_outcome',r.forward_outcome,'created_at',r.created_at)) from problem_reports r where r.episode_id = ${quote(episode)}::uuid and r.tenant_id = ${quote(tenant)}::uuid), '[]'::json),
+  'uploads', coalesce((select json_agg(json_build_object('id',u.id,'report_id',u.report_id,'live_request_id',u.live_request_id,'trigger',u.trigger,'state',u.state,'bytes',u.bytes,'sha256',u.sha256,'object_key',u.object_key,'issued_at',u.issued_at,'stored_at',u.stored_at,'failed_at',u.failed_at,'expires_at',u.expires_at,'participant_id',u.participant_id,'client_session_id',u.client_session_id)) from diagnostic_uploads u where u.episode_id = ${quote(episode)}::uuid and u.tenant_id = ${quote(tenant)}::uuid), '[]'::json),
+  'requests', coalesce((select json_agg(json_build_object('id',l.id,'participant_id',l.participant_id,'requested_at',l.requested_at,'expires_at',l.expires_at,'participant_status',l.participant_status,'seat_left_at',l.seat_left_at,'episode_status',l.episode_status,'delivery',l.delivery,'delivered_at',l.delivered_at,'sockets',l.sockets,'unavailable_reason',l.unavailable_reason)) from live_introspection_requests l where l.episode_id = ${quote(episode)}::uuid and l.tenant_id = ${quote(tenant)}::uuid), '[]'::json),
+  'sessions', coalesce((select json_agg(json_build_object('source_id',t.source_id,'participant_id',t.participant_id,'ranges',t.ranges,'reported_next_seq',t.reported_next_seq,'end_state',t.end_state,'end_next_seq',t.end_next_seq,'first_received_at',t.first_received_at,'last_received_at',t.last_received_at)) from telemetry_sources t where t.episode_id = ${quote(episode)}::uuid and t.tenant_id = ${quote(tenant)}::uuid), '[]'::json))`;
 }

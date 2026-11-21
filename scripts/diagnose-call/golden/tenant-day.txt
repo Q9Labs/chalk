@@ -1,4 +1,4 @@
-tenant ten_1f0c 2026-11-18 outcome=unknown coverage=unchecked checked=0/0 asof=2026-11-19T01:00Z rules=b35345f2
+tenant ten_1f0c 2026-11-18 outcome=unknown coverage=unchecked checked=0/0 asof=2026-11-19T01:00Z rules=b7c2a010
 anchor=2026-11-18T00:00Z local=05:00+05:00 tz=Asia/Karachi
 gap: unchecked: no verdict yet
 next: diagnose check ten_1f0c --fixture nov18

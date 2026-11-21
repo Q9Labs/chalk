@@ -64,7 +64,7 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen", "report.dialog", "report.send", "report.upload", "live.received"]);
 
 /**
  * @param {string} participant
@@ -113,10 +113,12 @@ const endScreen = (episode, participant, id, when, claim) =>
  * @returns {Watermark[]}
  */
 const episodeWatermarks = (participants, complete_to_ms) => [
-  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
+  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision", "report.submit", "report.outcome", "report.availability", "report.forward", "report.config", "report.upload_issued", "report.upload_completed"], build: "api 2026.11.18" },
   { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
-  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
+  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "live.deliver", "live.ack"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
+  { source: "db", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.upload_row", "report.seat", "live.request", "live.client_presence"], build: "postgres" },
+  { source: "r2", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.readback"], build: "checker readback" },
   ...participants.map((participant) => ({ source: "client", subject: `pt:${participant}`, complete_to_ms, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD })),
 ];
 
@@ -135,6 +137,7 @@ function quietEpisode(id, tenant, from, minutes, people) {
     mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
     ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
     endScreen(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000e${index + 1}`, to + 1_500, "episode_ended"),
+    row(`${id.slice(0, 8)}-0000-4000-8000-0000000000d${index + 1}`, { fact: "report.seat", source: "db", origin: origin.measured("db"), subject: { tenant, episode: id, participant: s.participant, connection: connectionOf(s.participant) }, window: { from_ms: from, to_ms: ASOF }, claim: "left", value: { participant_status: "left", seat_left_ms: to }, failure: false }),
   ]);
   observations.push(ended(id, `${id.slice(0, 8)}-0000-4000-8000-0000000000e0`, to, "ended_by_participant"));
   return {
@@ -143,7 +146,7 @@ function quietEpisode(id, tenant, from, minutes, people) {
       observations,
       watermarks: episodeWatermarks(
         seats.map((s) => s.participant),
-        to + 130_000,
+        ASOF,
       ),
     },
   };
@@ -208,7 +211,7 @@ export function nov18() {
       observations,
       watermarks: episodeWatermarks(
         seats.map((s) => s.participant),
-        end + 130_000,
+        ASOF,
       ),
     },
   };
