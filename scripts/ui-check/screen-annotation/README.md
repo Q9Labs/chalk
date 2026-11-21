@@ -49,7 +49,7 @@ The report gives nearest-rank p95 Euclidean alignment error divided by mapped fr
 
 ## Journey ledger and trace redaction
 
-In a new test Episode, try to bind as an unauthorized viewer, bind as the active sharer, send the same bind again, attempt a denied write, and end the Episode while the layer is live. Collect the actual response and the latest visible layer revision after each step. Set a known valid trace ID for the accepted open. Record the expected trace on closure: the current producer retains the opening context for a layer closed by a database trigger. Collect the parent screen publication event ID, or the Episode event ID if it has no publication journey. Exercise one accepted native bridge attach and one refused attach.
+In a new test Episode, try to bind as an unauthorized viewer, bind as the active sharer, send the same bind again, attempt a denied write, and end the Episode while the layer is live. Collect the actual response and the latest visible layer revision after each step. Set a known valid trace ID for the accepted open. Record the expected trace on closure: the producer uses the Episode-end operation's trace when available, otherwise the opening trace. Collect the parent screen publication event ID, or the Episode event ID if it has no publication journey. Exercise one accepted native bridge attach and one refused attach.
 
 Write `probe.json` with:
 

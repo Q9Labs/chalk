@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -230,7 +229,10 @@ func (r RecordingObjectRepository) CommitAllocation(ctx context.Context, allocat
 	if err != nil {
 		return recordingobjects.Bundle{}, err
 	}
-	checksum := objectChecksum(facts)
+	checksum, err := objectstorage.ObjectSHA256(facts)
+	if err != nil {
+		return recordingobjects.Bundle{}, recordingobjects.ErrObjectFactsMismatch
+	}
 	row, err := r.queries.CommitRecordingBundleAllocation(ctx, sqlc.CommitRecordingBundleAllocationParams{
 		ObjectVersion: requiredTextValue(facts.VersionID), ObjectEtag: requiredTextValue(facts.ETag), ObjectChecksum: checksum, ManifestDigest: manifestDigest, CommittedAt: timestamptzValue(committedAt), ID: uuidString(allocation.ID),
 		TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), RecordingID: uuid(recordingID), JobID: uuid(jobID), ObjectHandle: uuid(objectHandle),
@@ -326,14 +328,6 @@ func authorityIDs(authority recordingobjects.Authority) (utilities.ID, utilities
 		return utilities.ID{}, utilities.ID{}, utilities.ID{}, utilities.ID{}, utilities.ID{}, recordingobjects.ErrInvalidRequest
 	}
 	return tenantID, episodeID, recordingID, jobID, objectHandle, nil
-}
-
-func objectChecksum(facts objectstorage.ObjectFacts) []byte {
-	if facts.ChecksumSHA256 == "" {
-		return nil
-	}
-	decoded, _ := base64.StdEncoding.Strict().DecodeString(facts.ChecksumSHA256)
-	return decoded
 }
 
 func sameFinalizedAllocation(left, right recordingobjects.Allocation) bool {
