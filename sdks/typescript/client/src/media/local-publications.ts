@@ -135,10 +135,9 @@ export class LocalPublicationLedger {
     const bundleTag = bundleTagOf(publication.connection);
     return !bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag);
   }
-  // A section that carries the BUNDLE tag is never stopped while its connection lives: Chrome cannot offer once every section is
-  // stopped (a screen share alone is that section) and the SFU expires the session when the tag goes.
-  keepBundle(publication: OwnedLocalPublication, closed: boolean): boolean {
-    return !closed && publication.lifecycle.kind === "retiring" && this.carriesBundle(publication);
+  keepBundleOnUserPause(publication: OwnedLocalPublication, closed: boolean): boolean {
+    const { lifecycle, state } = publication;
+    return !closed && lifecycle.kind === "retiring" && lifecycle.cause === "user_pause" && (state.source === "microphone" || state.source === "camera") && this.carriesBundle(publication);
   }
   // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
   // session_error; closing MID 1 kept MID 0 and the session working.

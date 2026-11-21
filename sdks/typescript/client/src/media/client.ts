@@ -791,7 +791,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     )
       return true;
     // The close offer carries every closed section. Past the size budget it could reach the node's cap, so close without SDP and let the next pull or publish replace the connection.
-    const keep = this.#locals.keepBundle(publication, connectionIsClosed(publication.connection)) || (!connectionIsClosed(publication.connection) && shouldReplaceForOfferSize(await this.#measureLocalOffer(publication.connection)));
+    const keep = this.#locals.keepBundleOnUserPause(publication, connectionIsClosed(publication.connection)) || (!connectionIsClosed(publication.connection) && shouldReplaceForOfferSize(await this.#measureLocalOffer(publication.connection)));
     if (keep) await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
     return keep;
   }
@@ -805,15 +805,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       if (await this.#retireWithoutRenegotiation(publication, phase, handle)) return;
       this.#locals.markBundledRetiring(publication);
+      // Chrome cannot offer once the BUNDLE tag section is stopped, and the SFU expires the session when its tag goes, so that section is closed by force without SDP and its connection is replaced.
+      const carriesBundle = this.#locals.carriesBundle(publication);
       let closed = connectionIsClosed(connection);
       if (!phase.detached && !closed) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
         closed = connectionIsClosed(connection);
-        if (!closed) transceiver.stop();
+        if (!closed && !carriesBundle) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const withoutSdp = closed || carriesBundle;
+      const sessionDescription = withoutSdp ? undefined : await this.#createLocalOffer(connection, "close");
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: withoutSdp }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#locals.owned.delete(publication);

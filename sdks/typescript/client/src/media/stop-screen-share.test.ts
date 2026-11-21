@@ -260,6 +260,10 @@ it("stops a screen share that is the only section and so carries the BUNDLE tag,
   const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`) });
   await h.client.start(fakeStream());
   await startScreen(h);
+  const close = vi.spyOn(h.transport, "closeTracks");
+  await stopScreenAsTheController(h);
+  expect(close).toHaveBeenCalledWith(expect.objectContaining({ force: true, sessionDescription: undefined }));
+  await shareAgain(h);
   await stopScreenAsTheController(h);
   await shareAgain(h);
 });
