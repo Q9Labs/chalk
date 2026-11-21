@@ -1,0 +1,52 @@
+[
+ {
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_r2_result": "ok",
+  "recording_size_bytes": 53734,
+  "recording_sha_match": true,
+  "recording_probe_duration_ms": 2000,
+  "kind": "fact",
+  "name": "recording.artifact_readback",
+  "event_id": "syn_e99bddb527f7b06a46ac1dcefce0560a",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb",
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a"
+ },
+ {
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a",
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_job_state": "terminal_failure",
+  "recording_job_kind": "render",
+  "recording_error_code": "render_probe",
+  "recording_attempt_count": 4,
+  "recording_attempt_limit": 4,
+  "recording_available_ms": 1772452800000,
+  "recording_lease_expiry_ms": 1772452800000,
+  "recording_created_ms": 1772452800000,
+  "recording_updated_ms": 1772452800000,
+  "recording_terminal_ms": 1772452800000,
+  "kind": "fact",
+  "name": "recording.db.job",
+  "event_id": "syn_810e2d0eca6f5e77cca5936c2d8b4098",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb"
+ },
+ {
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_exists": true,
+  "recording_state": "failed",
+  "recording_error_code": "capture_lost",
+  "recording_artifact_set": false,
+  "recording_created_ms": 1772452800000,
+  "recording_failed_ms": 1772452800000,
+  "kind": "fact",
+  "name": "recording.db.recording",
+  "event_id": "syn_730498c9e986726c43abc39baf9eff20",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb",
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a"
+ }
+]

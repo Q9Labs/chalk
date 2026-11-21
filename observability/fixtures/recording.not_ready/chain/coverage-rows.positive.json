@@ -1,0 +1,20 @@
+[
+ {
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a",
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_job_state": "leased",
+  "recording_job_kind": "capture",
+  "recording_attempt_count": 1,
+  "recording_attempt_limit": 4,
+  "recording_available_ms": 1772452800000,
+  "recording_lease_expiry_ms": 1772452800000,
+  "recording_created_ms": 1772452800000,
+  "recording_updated_ms": 1772452800000,
+  "kind": "fact",
+  "name": "recording.db.job",
+  "event_id": "syn_19904cf78f0f95c0f0d1742ca11210bb",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb"
+ }
+]

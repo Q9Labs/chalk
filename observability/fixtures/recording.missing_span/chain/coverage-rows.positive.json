@@ -1,0 +1,42 @@
+[
+ {
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a",
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_job_state": "terminal_failure",
+  "recording_job_kind": "capture",
+  "recording_error_code": "media_io",
+  "recording_attempt_count": 4,
+  "recording_attempt_limit": 4,
+  "recording_available_ms": 1772452800000,
+  "recording_created_ms": 1772452800000,
+  "recording_updated_ms": 1772452800000,
+  "recording_terminal_ms": 1772452800000,
+  "kind": "fact",
+  "name": "recording.db.job",
+  "event_id": "syn_810e2d0eca6f5e77cca5936c2d8b4098",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb"
+ },
+ {
+  "recording_id": "f597d3ed-ce7c-4521-845c-ea9ff90bc9c2",
+  "recording_pipeline_state": "committed",
+  "recording_stop_requested_ms": 1772452800000,
+  "recording_capture_completed_ms": 1772452800000,
+  "recording_committed_ms": 1772452800000,
+  "recording_media_bundles": 3,
+  "recording_gap_bundles": 0,
+  "capture_track_count": 2,
+  "capture_packet_count": 1200,
+  "recording_capture_completeness": "complete",
+  "recording_created_ms": 1772452800000,
+  "recording_updated_ms": 1772452800000,
+  "kind": "fact",
+  "name": "recording.db.pipeline",
+  "event_id": "syn_f8c63c1bd06b60cb6cac19463c5f09c0",
+  "est_server_ms": 1772452800000,
+  "tenant_id": "0e6e776e-2879-400c-8f33-d8949baa7f82",
+  "episode_id": "a891a29b-ce8b-485d-836f-e023938474fb",
+  "job_id": "58892c69-f47c-402f-8818-5f914084089a"
+ }
+]

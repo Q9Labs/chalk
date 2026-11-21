@@ -1,0 +1,38 @@
+[
+ {
+  "event": "playback.progressed",
+  "recording_id": "44444444-4444-4444-8444-444444444444",
+  "player_id": "pl1",
+  "playback_progress_ms": 1500,
+  "url_age_ms": 30000,
+  "url_lifetime_ms": 3600000,
+  "mint_count": 1,
+  "est_server_ms": 1772367250000,
+  "kind": "fact",
+  "name": "playback.progressed",
+  "event_id": "playback.progressed|9",
+  "duration_ms": 85550000,
+  "tenant_id": "11111111-1111-4111-8111-111111111111",
+  "episode_id": "33333333-3333-4333-8333-333333333333",
+  "job_id": "77777777-7777-4777-8777-777777777777",
+  "space_id": "22222222-2222-4222-8222-222222222222"
+ },
+ {
+  "event": "playback.url_minted",
+  "recording_id": "44444444-4444-4444-8444-444444444444",
+  "playback_signed_ms": 1772367200000,
+  "playback_expires_ms": 1772370800000,
+  "url_lifetime_ms": 3600000,
+  "playback_download": true,
+  "mint_count": 1,
+  "est_server_ms": 1772367200000,
+  "kind": "fact",
+  "name": "playback.url_minted",
+  "event_id": "playback.url_minted|7",
+  "duration_ms": 85600000,
+  "tenant_id": "11111111-1111-4111-8111-111111111111",
+  "episode_id": "33333333-3333-4333-8333-333333333333",
+  "job_id": "77777777-7777-4777-8777-777777777777",
+  "space_id": "22222222-2222-4222-8222-222222222222"
+ }
+]

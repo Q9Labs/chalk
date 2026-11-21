@@ -1,0 +1,27 @@
+{
+ "hops": [
+  {
+   "hop": "a",
+   "test": "scripts/recording-pipeline/recording.artifact_unreadable.fault.test.mjs",
+   "command": "node --test scripts/recording-pipeline/recording.artifact_unreadable.fault.test.mjs",
+   "writes": [
+    "db-rows.positive.json",
+    "r2-rows.positive.json",
+    "coverage-rows.positive.json",
+    "db-rows.healthy.json",
+    "api-rows.healthy.json",
+    "recorder-rows.healthy.json",
+    "r2-rows.healthy.json"
+   ]
+  },
+  {
+   "hop": "b",
+   "test": "scripts/recording-pipeline/recording-fixtures-chain.test.mjs",
+   "command": "node --test scripts/recording-pipeline/recording-fixtures-chain.test.mjs",
+   "writes": [
+    "../positive.json",
+    "../healthy.json"
+   ]
+  }
+ ]
+}

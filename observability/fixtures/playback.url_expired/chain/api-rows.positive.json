@@ -1,0 +1,39 @@
+[
+ {
+  "event": "playback.media_error",
+  "recording_id": "44444444-4444-4444-8444-444444444444",
+  "player_id": "pl1",
+  "media_error_code": 2,
+  "url_age_ms": 660000,
+  "url_lifetime_ms": 600000,
+  "mint_count": 1,
+  "can_play_mp4": "probably",
+  "est_server_ms": 1772367180000,
+  "kind": "fact",
+  "name": "playback.media_error",
+  "event_id": "playback.media_error|8",
+  "duration_ms": 85620000,
+  "tenant_id": "11111111-1111-4111-8111-111111111111",
+  "episode_id": "33333333-3333-4333-8333-333333333333",
+  "job_id": "77777777-7777-4777-8777-777777777777",
+  "space_id": "22222222-2222-4222-8222-222222222222"
+ },
+ {
+  "event": "playback.url_minted",
+  "recording_id": "44444444-4444-4444-8444-444444444444",
+  "playback_signed_ms": 1772366520000,
+  "playback_expires_ms": 1772367120000,
+  "url_lifetime_ms": 600000,
+  "playback_download": true,
+  "mint_count": 1,
+  "est_server_ms": 1772366520000,
+  "kind": "fact",
+  "name": "playback.url_minted",
+  "event_id": "playback.url_minted|7",
+  "duration_ms": 86280000,
+  "tenant_id": "11111111-1111-4111-8111-111111111111",
+  "episode_id": "33333333-3333-4333-8333-333333333333",
+  "job_id": "77777777-7777-4777-8777-777777777777",
+  "space_id": "22222222-2222-4222-8222-222222222222"
+ }
+]
