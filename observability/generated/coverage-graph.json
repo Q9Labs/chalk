@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "420c1e5c0c7a",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -40,6 +40,427 @@
         "healthy": "observability/fixtures/admission.unresolved/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "app.crashed",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "previous_run.read",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.websocket.closed",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id_hash", "close_reason", "close_kind", "heartbeat_gap_ms", "socket_age_ms", "protocol", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.previous_run",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "previous_client_session_id",
+                "phase",
+                "visibility",
+                "app_state",
+                "clean_exit",
+                "last_elapsed_ms",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "js_ready",
+                "was_discarded",
+                "pid",
+                "launch_id",
+                "launched_at_ms",
+                "will_terminate",
+                "platform",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "app.js_fatal",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.app_js_fatal",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "error_name", "error_class", "error_fingerprint", "app_state", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.render_crashed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "render_cause", "error_name", "error_class", "error_fingerprint", "platform", "est_server_ms", "clock_err_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.app_exit_info",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "exit_reason", "pid", "launch_id", "launched_at_ms", "platform", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "previous_run.read",
+          "fields": ["dead_markers"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"previous_run.read\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"previous_run.read\""
+            }
+          ]
+        },
+        {
+          "name": "sync.websocket.closed",
+          "fields": ["close_reason", "close_kind", "heartbeat_gap_ms", "participant_id_hash", "socket_age_ms", "protocol"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+              "literal": "\"sync.websocket.closed\""
+            }
+          ]
+        },
+        {
+          "name": "client.previous_run",
+          "fields": ["previous_client_session_id", "phase", "visibility", "app_state", "clean_exit", "last_elapsed_ms", "heap_used_mib", "heap_limit_mib", "js_ready", "was_discarded", "pid", "launch_id", "launched_at_ms", "will_terminate"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"client.previous_run\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.previous_run\""
+            }
+          ]
+        },
+        {
+          "name": "client.app_js_fatal",
+          "fields": ["error_name", "error_class", "error_fingerprint", "app_state"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react-native/src/app-health/global-handler.ts",
+              "literal": "\"client.app_js_fatal\""
+            }
+          ]
+        },
+        {
+          "name": "client.render_crashed",
+          "fields": ["render_cause", "error_name", "error_class", "error_fingerprint"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/app.ts",
+              "literal": "\"client.render_crashed\""
+            }
+          ]
+        },
+        {
+          "name": "client.app_exit_info",
+          "fields": ["exit_reason", "pid", "launched_at_ms", "launch_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.app_exit_info\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/app.crashed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.crashed/positive.json",
+        "healthy": "observability/fixtures/app.crashed/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-crashed.fault.test.ts"
+    },
+    {
+      "code": "app.crashed_at_launch",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "previous_run.read",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.app_exit_info",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "exit_reason", "pid", "launch_id", "launched_at_ms", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.previous_run",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "previous_client_session_id",
+                "phase",
+                "visibility",
+                "app_state",
+                "clean_exit",
+                "last_elapsed_ms",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "js_ready",
+                "was_discarded",
+                "pid",
+                "launch_id",
+                "launched_at_ms",
+                "will_terminate",
+                "platform",
+                "est_server_ms"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "previous_run.read",
+          "fields": ["dead_markers"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"previous_run.read\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"previous_run.read\""
+            }
+          ]
+        },
+        {
+          "name": "client.app_exit_info",
+          "fields": ["exit_reason", "pid", "launched_at_ms", "launch_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.app_exit_info\""
+            }
+          ]
+        },
+        {
+          "name": "client.previous_run",
+          "fields": ["previous_client_session_id", "phase", "visibility", "app_state", "clean_exit", "last_elapsed_ms", "heap_used_mib", "heap_limit_mib", "js_ready", "was_discarded", "pid", "launch_id", "launched_at_ms", "will_terminate"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"client.previous_run\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.previous_run\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/app.crashed_at_launch.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.crashed_at_launch/positive.json",
+        "healthy": "observability/fixtures/app.crashed_at_launch/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-crashed-at-launch.fault.test.ts"
+    },
+    {
+      "code": "app.killed_in_background",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "previous_run.read",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.websocket.closed",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id_hash", "close_reason", "close_kind", "heartbeat_gap_ms", "socket_age_ms", "protocol", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.previous_run",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "previous_client_session_id",
+                "phase",
+                "visibility",
+                "app_state",
+                "clean_exit",
+                "last_elapsed_ms",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "js_ready",
+                "was_discarded",
+                "pid",
+                "launch_id",
+                "launched_at_ms",
+                "will_terminate",
+                "platform",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.app_exit_info",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "exit_reason", "pid", "launch_id", "launched_at_ms", "platform", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "previous_run.read",
+          "fields": ["dead_markers"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"previous_run.read\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"previous_run.read\""
+            }
+          ]
+        },
+        {
+          "name": "sync.websocket.closed",
+          "fields": ["close_reason", "close_kind", "heartbeat_gap_ms", "participant_id_hash", "socket_age_ms", "protocol"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+              "literal": "\"sync.websocket.closed\""
+            }
+          ]
+        },
+        {
+          "name": "client.previous_run",
+          "fields": ["previous_client_session_id", "phase", "visibility", "app_state", "clean_exit", "last_elapsed_ms", "heap_used_mib", "heap_limit_mib", "js_ready", "was_discarded", "pid", "launch_id", "launched_at_ms", "will_terminate"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"client.previous_run\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.previous_run\""
+            }
+          ]
+        },
+        {
+          "name": "client.app_exit_info",
+          "fields": ["exit_reason", "pid", "launched_at_ms", "launch_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.app_exit_info\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/app.killed_in_background.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.killed_in_background/positive.json",
+        "healthy": "observability/fixtures/app.killed_in_background/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-killed-in-background.fault.test.ts"
     },
     {
       "code": "audio.cant_hear",
@@ -240,14 +661,539 @@
       "allowlisted": true,
       "item": "episode",
       "per": "seat",
-      "witnesses": [],
-      "events": [],
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.perf_heartbeat",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "window_ms",
+                "visibility",
+                "app_state",
+                "long_task_max_ms_30s",
+                "long_task_total_ms_30s",
+                "main_ping_max_ms_30s",
+                "worker_late_max_ms_30s",
+                "js_lag_max_ms_30s",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "heap_probe",
+                "memory_state",
+                "low_memory",
+                "platform",
+                "est_server_ms",
+                "clock_err_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.render_crashed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "render_cause", "error_name", "error_class", "error_fingerprint", "platform", "est_server_ms", "clock_err_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "page.crash_surface",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.call_crashed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "surface_state", "platform", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.perf_heartbeat",
+          "fields": ["window_ms", "visibility", "app_state", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "js_lag_max_ms_30s", "heap_used_mib", "heap_limit_mib", "heap_probe", "memory_state", "low_memory"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/heartbeat.ts",
+              "literal": "\"client.perf_heartbeat\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.perf_heartbeat\""
+            }
+          ]
+        },
+        {
+          "name": "client.render_crashed",
+          "fields": ["render_cause", "error_name", "error_class", "error_fingerprint"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/app.ts",
+              "literal": "\"client.render_crashed\""
+            }
+          ]
+        },
+        {
+          "name": "client.call_crashed",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/space/CallErrorBoundary.tsx",
+              "literal": "\"client.call_crashed\""
+            },
+            {
+              "path": "apps/mobile/src/call/CallErrorBoundary.tsx",
+              "literal": "\"client.call_crashed\""
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/page.crashed.mjs",
       "fixtures": {
         "positive": "observability/fixtures/page.crashed/positive.json",
         "healthy": "observability/fixtures/page.crashed/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "apps/web/src/components/space/page-crashed.fault.test.tsx"
+    },
+    {
+      "code": "page.tab_died",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "previous_run.read",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.websocket.closed",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id_hash", "close_reason", "close_kind", "heartbeat_gap_ms", "socket_age_ms", "protocol", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.previous_run",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "previous_client_session_id",
+                "phase",
+                "visibility",
+                "app_state",
+                "clean_exit",
+                "last_elapsed_ms",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "js_ready",
+                "was_discarded",
+                "pid",
+                "launch_id",
+                "launched_at_ms",
+                "will_terminate",
+                "platform",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "page.media_close",
+          "from": ["sfu", "db"],
+          "required": false,
+          "events": [
+            {
+              "event": "sfu.session.closed",
+              "source": "sfu",
+              "fields": ["episode_id", "connection_id", "sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "est_server_ms"]
+            },
+            {
+              "event": "db.participant_media_sessions",
+              "source": "db",
+              "fields": ["episode_id", "participant_id", "connection_id", "sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "ended_at_ms", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "previous_run.read",
+          "fields": ["dead_markers"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"previous_run.read\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"previous_run.read\""
+            }
+          ]
+        },
+        {
+          "name": "sync.websocket.closed",
+          "fields": ["close_reason", "close_kind", "heartbeat_gap_ms", "participant_id_hash", "socket_age_ms", "protocol"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+              "literal": "\"sync.websocket.closed\""
+            }
+          ]
+        },
+        {
+          "name": "client.previous_run",
+          "fields": ["previous_client_session_id", "phase", "visibility", "app_state", "clean_exit", "last_elapsed_ms", "heap_used_mib", "heap_limit_mib", "js_ready", "was_discarded", "pid", "launch_id", "launched_at_ms", "will_terminate"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+              "literal": "\"client.previous_run\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+              "literal": "\"client.previous_run\""
+            }
+          ]
+        },
+        {
+          "name": "sfu.session.closed",
+          "fields": ["sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "connection_id"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "\"sfu.session.closed\""
+            }
+          ]
+        },
+        {
+          "name": "db.participant_media_sessions",
+          "fields": ["sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "connection_id", "participant_id", "ended_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/crash-check/evidence.mjs",
+              "literal": "\"db.participant_media_sessions\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/page.tab_died.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/page.tab_died/positive.json",
+        "healthy": "observability/fixtures/page.tab_died/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/page-tab-died.fault.test.ts"
+    },
+    {
+      "code": "page.uncaught_error",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.perf_heartbeat",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "window_ms",
+                "visibility",
+                "app_state",
+                "long_task_max_ms_30s",
+                "long_task_total_ms_30s",
+                "main_ping_max_ms_30s",
+                "worker_late_max_ms_30s",
+                "js_lag_max_ms_30s",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "heap_probe",
+                "memory_state",
+                "low_memory",
+                "platform",
+                "est_server_ms",
+                "clock_err_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.render_crashed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "render_cause", "error_name", "error_class", "error_fingerprint", "platform", "est_server_ms", "clock_err_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.perf_heartbeat",
+          "fields": ["window_ms", "visibility", "app_state", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "js_lag_max_ms_30s", "heap_used_mib", "heap_limit_mib", "heap_probe", "memory_state", "low_memory"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/heartbeat.ts",
+              "literal": "\"client.perf_heartbeat\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.perf_heartbeat\""
+            }
+          ]
+        },
+        {
+          "name": "client.render_crashed",
+          "fields": ["render_cause", "error_name", "error_class", "error_fingerprint"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/app.ts",
+              "literal": "\"client.render_crashed\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/page.uncaught_error.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/page.uncaught_error/positive.json",
+        "healthy": "observability/fixtures/page.uncaught_error/healthy.json"
+      },
+      "fault_scenario": "apps/web/src/components/space/page-uncaught-error.fault.test.tsx"
+    },
+    {
+      "code": "perf.device_overloaded",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "perf.thermal",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.thermal_changed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "probe_state", "thermal_state", "cpu_pressure", "app_state", "visibility", "platform", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.thermal_changed",
+          "fields": ["probe_state", "thermal_state", "cpu_pressure", "app_state", "visibility"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/perf-probes.ts",
+              "literal": "\"client.thermal_changed\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.thermal_changed\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/perf.device_overloaded.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.device_overloaded/positive.json",
+        "healthy": "observability/fixtures/perf.device_overloaded/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-device-overloaded.fault.test.ts"
+    },
+    {
+      "code": "perf.memory_pressure",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "perf.memory",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.perf_heartbeat",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "memory_state", "heap_used_mib", "heap_limit_mib", "heap_probe", "low_memory", "platform", "est_server_ms"]
+            },
+            {
+              "event": "client.memory_warning",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "app_state", "low_memory", "platform", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.perf_heartbeat",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "window_ms",
+                "visibility",
+                "app_state",
+                "long_task_max_ms_30s",
+                "long_task_total_ms_30s",
+                "main_ping_max_ms_30s",
+                "worker_late_max_ms_30s",
+                "js_lag_max_ms_30s",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "heap_probe",
+                "memory_state",
+                "low_memory",
+                "platform",
+                "est_server_ms",
+                "clock_err_ms"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.perf_heartbeat",
+          "fields": ["window_ms", "visibility", "app_state", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "js_lag_max_ms_30s", "heap_used_mib", "heap_limit_mib", "heap_probe", "memory_state", "low_memory"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/heartbeat.ts",
+              "literal": "\"client.perf_heartbeat\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.perf_heartbeat\""
+            }
+          ]
+        },
+        {
+          "name": "client.memory_warning",
+          "fields": ["app_state", "low_memory"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.memory_warning\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/perf.memory_pressure.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.memory_pressure/positive.json",
+        "healthy": "observability/fixtures/perf.memory_pressure/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-memory-pressure.fault.test.ts"
+    },
+    {
+      "code": "perf.ui_unresponsive",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.perf_heartbeat",
+              "source": "client",
+              "fields": [
+                "participant_id",
+                "client_session_id",
+                "window_ms",
+                "visibility",
+                "app_state",
+                "long_task_max_ms_30s",
+                "long_task_total_ms_30s",
+                "main_ping_max_ms_30s",
+                "worker_late_max_ms_30s",
+                "js_lag_max_ms_30s",
+                "heap_used_mib",
+                "heap_limit_mib",
+                "heap_probe",
+                "memory_state",
+                "low_memory",
+                "platform",
+                "est_server_ms",
+                "clock_err_ms"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.perf_heartbeat",
+          "fields": ["window_ms", "visibility", "app_state", "long_task_max_ms_30s", "long_task_total_ms_30s", "main_ping_max_ms_30s", "worker_late_max_ms_30s", "js_lag_max_ms_30s", "heap_used_mib", "heap_limit_mib", "heap_probe", "memory_state", "low_memory"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/telemetry/heartbeat.ts",
+              "literal": "\"client.perf_heartbeat\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+              "literal": "\"client.perf_heartbeat\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/perf.ui_unresponsive.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.ui_unresponsive/positive.json",
+        "healthy": "observability/fixtures/perf.ui_unresponsive/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-ui-unresponsive.fault.test.ts"
     },
     {
       "code": "recording.not_ready",

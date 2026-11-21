@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "420c1e5c0c7a",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -544,6 +544,14 @@
   ],
   "fields": [
     {
+      "name": "actual_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The interval the timer actually got."
+    },
+    {
       "name": "admission_request_id",
       "type": "id",
       "id_kind": "admission_request",
@@ -568,6 +576,15 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "The host app's build number."
+    },
+    {
+      "name": "app_state",
+      "type": "enum",
+      "values": ["active", "inactive", "background"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The native app's AppState when the row was recorded."
     },
     {
       "name": "app_version",
@@ -602,6 +619,15 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel."
+    },
+    {
+      "name": "clean_exit",
+      "type": "enum",
+      "values": ["pagehide", "call_ended"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The last clean exit the run marker saw: pagehide on web, call_ended on either platform. Absent means the run never exited cleanly."
     },
     {
       "name": "client_mono_ms",
@@ -652,6 +678,65 @@
       "sensitivity": null,
       "owner": "envelope.clock",
       "doc": "Whether est_server_ms can be trusted."
+    },
+    {
+      "name": "close_code",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The websocket close code the server sent, when one was sent."
+    },
+    {
+      "name": "close_kind",
+      "type": "enum",
+      "values": ["normal", "drain", "abnormal"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The sync close's shape: a clean normal or server drain, or an abnormal transport end."
+    },
+    {
+      "name": "close_reason",
+      "type": "enum",
+      "values": ["normal", "client_closed", "server_shutdown", "timeout", "transport_error"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Why Sync closed the seat's websocket, as SocketClose.transport_reason names it."
+    },
+    {
+      "name": "connected",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Whether the media session ever connected."
+    },
+    {
+      "name": "connection_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The media connection (pm_) a session or DB row names."
+    },
+    {
+      "name": "cpu_pressure",
+      "type": "enum",
+      "values": ["nominal", "fair", "serious", "critical", "unsupported"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The web PressureObserver cpu state. unsupported means the browser has no PressureObserver."
+    },
+    {
+      "name": "dead_markers",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How many dead run markers the previous_run.read scan found and recorded."
     },
     {
       "name": "decision",
@@ -731,6 +816,14 @@
       "doc": "Why a call or an Episode ended. The server and the client use different values, so each event narrows the list."
     },
     {
+      "name": "ended_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "When a DB row says the thing ended, in epoch milliseconds."
+    },
+    {
       "name": "env",
       "type": "enum",
       "values": ["local", "test", "nightly", "staging", "production"],
@@ -749,6 +842,32 @@
       "doc": "The Episode."
     },
     {
+      "name": "error_class",
+      "type": "enum",
+      "values": ["chunk_load", "other"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "chunk_load when the message matches a lazy chunk-load failure, else other."
+    },
+    {
+      "name": "error_fingerprint",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "First 12 hex of SHA-256 over the top 5 stack frames as file:line:col. Never the message or stack text."
+    },
+    {
+      "name": "error_name",
+      "type": "enum",
+      "values": ["Error", "TypeError", "RangeError", "ReferenceError", "SyntaxError", "DOMException", "other", "none"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The caught error's constructor name, never its message. none means an error event whose error was null; a rejection is never none, and a non-Error reason is other."
+    },
+    {
       "name": "est_server_ms",
       "type": "int",
       "required": false,
@@ -764,6 +883,45 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "One record. Minted by the kernel when the record is made."
+    },
+    {
+      "name": "exit_reason",
+      "type": "enum",
+      "values": [
+        "REASON_USER_REQUESTED",
+        "REASON_USER_STOPPED",
+        "REASON_CRASH",
+        "REASON_CRASH_NATIVE",
+        "REASON_ANR",
+        "REASON_LOW_MEMORY",
+        "REASON_SIGNALED",
+        "REASON_EXCESSIVE_RESOURCE_USAGE",
+        "REASON_FREEZER",
+        "REASON_OTHER",
+        "REASON_INITIALIZATION_FAILURE",
+        "REASON_PERMISSION_CHANGE",
+        "REASON_DEPENDENCY_DIED",
+        "REASON_EXIT_SELF",
+        "REASON_STATE_CHANGE",
+        "REASON_SYSTEM_STATE_CHANGE",
+        "REASON_UNKNOWN",
+        "MX_CRASH",
+        "no_record",
+        "no_exit_reason",
+        "unsupported"
+      ],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Why the OS says the app last exited: Android ApplicationExitInfo reasons, iOS MX_CRASH for a MetricKit crash diagnostic, or the unavailability codes no_record, no_exit_reason and unsupported."
+    },
+    {
+      "name": "expected_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The heartbeat interval the timer asked for."
     },
     {
       "name": "flags",
@@ -798,6 +956,47 @@
       "doc": "Which join of the Participant seat this is."
     },
     {
+      "name": "heap_limit_mib",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "performance.memory jsHeapSizeLimit in MiB. Absent where the browser does not expose the heap."
+    },
+    {
+      "name": "heap_probe",
+      "type": "enum",
+      "values": ["measured", "unsupported"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Whether the heap numbers were measured. unsupported means performance.memory does not exist; it is never 0."
+    },
+    {
+      "name": "heap_used_mib",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "performance.memory usedJSHeapSize in MiB. Absent where the browser does not expose the heap."
+    },
+    {
+      "name": "heartbeat_gap_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How long Sync had heard nothing from the seat when its socket closed."
+    },
+    {
+      "name": "hidden_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How much of the missed heartbeat interval the page spent hidden."
+    },
+    {
       "name": "item_count",
       "type": "int",
       "required": false,
@@ -824,6 +1023,22 @@
       "doc": "The user-visible attempt this record belongs to."
     },
     {
+      "name": "js_lag_max_ms_30s",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "React Native: how late the JS 1 s interval ran at its worst in the window, the JS-thread stall."
+    },
+    {
+      "name": "js_ready",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Whether the app's JS ran during the marked run. false on a launch marker written natively before React Native loaded."
+    },
+    {
       "name": "jump_ms",
       "type": "int",
       "required": false,
@@ -841,12 +1056,76 @@
       "doc": "op, transition, decision, surface or fact."
     },
     {
+      "name": "last_elapsed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The dead run's outbox clock when it last wrote its marker: the last time it was provably alive."
+    },
+    {
+      "name": "launch_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The dead native run's launch id, minted by the native marker at process start."
+    },
+    {
+      "name": "launched_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "When the dead native run launched, on the device clock."
+    },
+    {
+      "name": "lifetime_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How long the media session lived."
+    },
+    {
+      "name": "long_task_max_ms_30s",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The longest main-thread long task in the 30 s heartbeat window."
+    },
+    {
+      "name": "long_task_total_ms_30s",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Total long-task time on the main thread in the 30 s heartbeat window."
+    },
+    {
+      "name": "low_memory",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Android ActivityManager.MemoryInfo.lowMemory at read time."
+    },
+    {
       "name": "machine",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "A transition's machine."
+    },
+    {
+      "name": "main_ping_max_ms_30s",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The worker's ping to the main thread: the worst round-trip in the 30 s window."
     },
     {
       "name": "media_connection_id",
@@ -857,6 +1136,15 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "Chalk's media connection."
+    },
+    {
+      "name": "memory_state",
+      "type": "enum",
+      "values": ["ok", "low", "measured", "unsupported"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The run's memory reading for its window: web heap_probe mapped to measured/unsupported, native ActivityManager lowMemory to ok/low."
     },
     {
       "name": "module",
@@ -929,6 +1217,31 @@
       "doc": "The Participant seat in the Episode."
     },
     {
+      "name": "participant_id_hash",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "SHA-256 of the seat's participant id: how server rows name a seat without its id."
+    },
+    {
+      "name": "phase",
+      "type": "enum",
+      "values": ["launch", "boot", "joining", "live", "reconnecting"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How far the run got when the marker was last written: launch before JS ran, live once the call was up."
+    },
+    {
+      "name": "pid",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The dead native run's process id, as its marker wrote it."
+    },
+    {
       "name": "platform",
       "type": "enum",
       "values": ["web", "ios", "android", "server", "lambda", "node"],
@@ -936,6 +1249,32 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "Where the program runs."
+    },
+    {
+      "name": "previous_client_session_id",
+      "type": "id",
+      "id_kind": "client_session",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The dead run's client session, as its run marker named it. Empty on a launch marker, which was written before JS minted a cs_."
+    },
+    {
+      "name": "probe_state",
+      "type": "enum",
+      "values": ["measured", "unsupported"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Whether the thermal or pressure probe could measure. unsupported means the OS or browser has no such probe; it is never 0 or healthy."
+    },
+    {
+      "name": "protocol",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The sync wire protocol version of a socket row."
     },
     {
       "name": "provider_media_id",
@@ -973,6 +1312,15 @@
       "doc": "The git commit the program was built from."
     },
     {
+      "name": "render_cause",
+      "type": "enum",
+      "values": ["render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Which kind of page failure a render_crashed record reports. Only render_error is a crash: chunk_reload is the page reloading itself after a failed lazy chunk."
+    },
+    {
       "name": "request_id",
       "type": "id",
       "id_kind": "request",
@@ -1006,12 +1354,36 @@
       "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
     },
     {
+      "name": "sfu_cause",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The SFU node's close cause token."
+    },
+    {
+      "name": "sfu_outcome",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How the SFU session ended, as the node records it."
+    },
+    {
       "name": "shown_ms",
       "type": "int",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "How long a dismissed surface was on screen."
+    },
+    {
+      "name": "socket_age_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How old the socket was when it closed."
     },
     {
       "name": "source_id",
@@ -1067,6 +1439,15 @@
       "doc": "The tenant."
     },
     {
+      "name": "thermal_state",
+      "type": "enum",
+      "values": ["nominal", "fair", "serious", "critical", "light", "moderate", "severe", "emergency", "shutdown", "unsupported"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The OS thermal state: iOS nominal/fair/serious/critical, Android light/moderate/severe/critical/emergency/shutdown. unsupported means no probe exists."
+    },
+    {
       "name": "to_state",
       "type": "string",
       "required": false,
@@ -1101,6 +1482,23 @@
       "doc": "The tenant's identifier for the person."
     },
     {
+      "name": "visibility",
+      "type": "enum",
+      "values": ["visible", "hidden"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "The web page's visibility when the row was recorded."
+    },
+    {
+      "name": "was_discarded",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "document.wasDiscarded of the run that found the marker: the browser discarded and restored this tab."
+    },
+    {
       "name": "webhook_delivery_id",
       "type": "id",
       "id_kind": "webhook_delivery",
@@ -1108,9 +1506,61 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The webhook delivery."
+    },
+    {
+      "name": "will_terminate",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "Whether iOS fired willTerminateNotification for the dead run. The system also fires it when ending a running background app, so it never means the user closed the app."
+    },
+    {
+      "name": "window_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How long the measurement window lasted."
+    },
+    {
+      "name": "worker_late_max_ms_30s",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/crash",
+      "doc": "How late the worker's own 1 s tick ran at its worst in the window: process or worker suspension, not main-thread work."
     }
   ],
   "reasons": [
+    {
+      "code": "app.no_marker",
+      "outcome": "expected",
+      "area": "crash",
+      "test_only": false,
+      "doc": "The previous_run.read scan found no dead run marker: the last run left cleanly or this is the first."
+    },
+    {
+      "code": "app.os_ended_launch",
+      "outcome": "expected",
+      "area": "crash",
+      "test_only": false,
+      "doc": "The OS ended a launch that never ran JS for a reason that is not a crash: a background-started process the system reclaimed."
+    },
+    {
+      "code": "app.storage_unreadable",
+      "outcome": "error",
+      "area": "crash",
+      "test_only": false,
+      "doc": "The run-marker store (localStorage or the native file) could not be read, so a dead previous run may be unwitnessed."
+    },
+    {
+      "code": "app.user_closed_app",
+      "outcome": "expected",
+      "area": "crash",
+      "test_only": false,
+      "doc": "The person ended the app themselves (swipe from recents, force-stop): REASON_USER_REQUESTED or REASON_USER_STOPPED."
+    },
     {
       "code": "cancelled",
       "outcome": "expected",
@@ -1124,6 +1574,13 @@
       "area": "end",
       "test_only": false,
       "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+    },
+    {
+      "code": "perf.process_suspended",
+      "outcome": "expected",
+      "area": "crash",
+      "test_only": false,
+      "doc": "The whole process was paused: the worker froze as long as the main thread, which a main-thread bug cannot cause. Web only."
     },
     {
       "code": "selftest.broken",
@@ -1148,6 +1605,99 @@
     }
   ],
   "events": [
+    {
+      "name": "client.app_exit_info",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "exit_reason": {
+          "required": true
+        },
+        "pid": {
+          "required": false
+        },
+        "launched_at_ms": {
+          "required": false
+        },
+        "launch_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+          "literal": "\"client.app_exit_info\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "app_exit_info"
+        }
+      },
+      "doc": "What the OS says about the app's last exit: Android ApplicationExitInfo (API 30+, read once at launch for the marker's pid) or iOS MXCrashDiagnostic (iOS 15+). no_record means an empty exit list for that pid, no_exit_reason means the platform has no answer, unsupported means the API level can't ask."
+    },
+    {
+      "name": "client.app_js_fatal",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "error_name": {
+          "required": false
+        },
+        "error_class": {
+          "required": false
+        },
+        "error_fingerprint": {
+          "required": false
+        },
+        "app_state": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react-native/src/app-health/global-handler.ts",
+          "literal": "\"client.app_js_fatal\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "app_js_fatal"
+        }
+      },
+      "doc": "React Native's global error handler saw a fatal JS error: the app is about to die. Written synchronously to the native marker first, then recorded and flushed, then the previous handler runs."
+    },
+    {
+      "name": "client.call_crashed",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk", "web", "mobile"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/CallErrorBoundary.tsx",
+          "literal": "\"client.call_crashed\""
+        },
+        {
+          "path": "apps/mobile/src/call/CallErrorBoundary.tsx",
+          "literal": "\"client.call_crashed\""
+        }
+      ],
+      "doc": "The call crash fallback ('Something went wrong with the call.') was shown. shown is recorded only after the fallback commits and while it is visible, so a rendered fallback nobody could see never counts."
+    },
     {
       "name": "client.call_ended",
       "kind": "fact",
@@ -1180,6 +1730,327 @@
       "doc": "The SDK decided which end screen the call gets. The client kernel records it where the connection chooses the end screen, and the API logs it as a kernel row. An SDK release before the client kernel sent it as an sdk.telemetry row of type call_ended, which the legacy match still reads."
     },
     {
+      "name": "client.memory_warning",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "app_state": {
+          "required": true
+        },
+        "low_memory": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+          "literal": "\"client.memory_warning\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "memory_warning"
+        }
+      },
+      "doc": "The OS warned the app about memory: iOS AppState memoryWarning, or Android lowMemory read on the heartbeat."
+    },
+    {
+      "name": "client.perf_heartbeat",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "window_ms": {
+          "required": true
+        },
+        "visibility": {
+          "required": false
+        },
+        "app_state": {
+          "required": false
+        },
+        "long_task_max_ms_30s": {
+          "required": false
+        },
+        "long_task_total_ms_30s": {
+          "required": false
+        },
+        "main_ping_max_ms_30s": {
+          "required": false
+        },
+        "worker_late_max_ms_30s": {
+          "required": false
+        },
+        "js_lag_max_ms_30s": {
+          "required": false
+        },
+        "heap_used_mib": {
+          "required": false
+        },
+        "heap_limit_mib": {
+          "required": false
+        },
+        "heap_probe": {
+          "required": false
+        },
+        "memory_state": {
+          "required": false
+        },
+        "low_memory": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/heartbeat.ts",
+          "literal": "\"client.perf_heartbeat\""
+        },
+        {
+          "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+          "literal": "\"client.perf_heartbeat\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "perf_heartbeat"
+        }
+      },
+      "doc": "One 30 s window of the run's health: long tasks, worker-to-main ping, JS lag, heap and memory state, visibility or app_state. It is a window of evidence, not a claim of health: no heartbeats is a gap, never 'no stalls'."
+    },
+    {
+      "name": "client.previous_run",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "previous_client_session_id": {
+          "required": false
+        },
+        "phase": {
+          "required": true
+        },
+        "visibility": {
+          "required": false
+        },
+        "app_state": {
+          "required": false
+        },
+        "clean_exit": {
+          "required": false
+        },
+        "last_elapsed_ms": {
+          "required": false
+        },
+        "heap_used_mib": {
+          "required": false
+        },
+        "heap_limit_mib": {
+          "required": false
+        },
+        "js_ready": {
+          "required": false
+        },
+        "was_discarded": {
+          "required": false
+        },
+        "pid": {
+          "required": false
+        },
+        "launch_id": {
+          "required": false
+        },
+        "launched_at_ms": {
+          "required": false
+        },
+        "will_terminate": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+          "literal": "\"client.previous_run\""
+        },
+        {
+          "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+          "literal": "\"client.previous_run\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "previous_run"
+        }
+      },
+      "doc": "A run marker of a dead previous run, found by the next run's previous_run.read scan and sent under that run's credential. It describes the dead run, never the new seat: no pt_, ep_ or ten_ in the body. P0, because the next kill can take the marker too."
+    },
+    {
+      "name": "client.render_crashed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "render_cause": {
+          "required": true
+        },
+        "error_name": {
+          "required": false
+        },
+        "error_class": {
+          "required": false
+        },
+        "error_fingerprint": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/app.ts",
+          "literal": "\"client.render_crashed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "render_crashed"
+        }
+      },
+      "doc": "The call UI failed: a React render threw, a lazy chunk reload, an uncaught error or rejection. The API logs the SDK's render_cause under the established cause log column on legacy rows; kernel rows carry render_cause. Message and stack text never leave the client, only error_name, error_class and error_fingerprint."
+    },
+    {
+      "name": "client.thermal_changed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "probe_state": {
+          "required": true
+        },
+        "thermal_state": {
+          "required": false
+        },
+        "cpu_pressure": {
+          "required": false
+        },
+        "app_state": {
+          "required": false
+        },
+        "visibility": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/perf-probes.ts",
+          "literal": "\"client.thermal_changed\""
+        },
+        {
+          "path": "sdks/typescript/react-native/src/app-health/probes.ts",
+          "literal": "\"client.thermal_changed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "thermal_changed"
+        }
+      },
+      "doc": "The OS or browser thermal/pressure probe's current state, emitted once at join and then on every change: iOS ProcessInfo.thermalState, Android PowerManager thermal status (API 29+), web PressureObserver cpu. probe_state=unsupported is itself the row, never absence."
+    },
+    {
+      "name": "client.timer_throttled",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "expected_ms": {
+          "required": true
+        },
+        "actual_ms": {
+          "required": true
+        },
+        "hidden_ms": {
+          "required": false
+        },
+        "visibility": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/heartbeat-worker.ts",
+          "literal": "\"client.timer_throttled\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "timer_throttled"
+        }
+      },
+      "doc": "The heartbeat worker's tick ran more than 45 s late: the tab or process was suspended, not merely busy. Slice 7 reads it for hidden-tab throttling."
+    },
+    {
+      "name": "db.participant_media_sessions",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "sfu_cause": {
+          "required": false
+        },
+        "sfu_outcome": {
+          "required": true
+        },
+        "connected": {
+          "required": true
+        },
+        "lifetime_ms": {
+          "required": true
+        },
+        "connection_id": {
+          "required": true
+        },
+        "participant_id": {
+          "required": true
+        },
+        "ended_at_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/crash-check/evidence.mjs",
+          "literal": "\"db.participant_media_sessions\""
+        }
+      ],
+      "doc": "The checker's read of the seat's participant_media_sessions row: the node's own outcome, saved durably. Emitted by the evidence reader, never a program."
+    },
+    {
       "name": "obs.clock_jump",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1210,6 +2081,31 @@
       },
       "emit_sites": [],
       "doc": "The full flags map behind the flags_hash the kernel stamps on this and every later record. Logged at boot, at join and whenever the flags change."
+    },
+    {
+      "name": "previous_run.read",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "dead_markers": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/previous-run.ts",
+          "literal": "\"previous_run.read\""
+        },
+        {
+          "path": "sdks/typescript/react-native/src/app-health/run-marker.ts",
+          "literal": "\"previous_run.read\""
+        }
+      ],
+      "doc": "The once-per-boot scan of run markers of dead previous runs: ok when it scanned, expected(app.no_marker) when none were dead, error(app.storage_unreadable) when the marker store could not be read. Its record is also the proof the client could have reported a dead marker."
     },
     {
       "name": "selftest.admit",
@@ -1274,6 +2170,44 @@
       "doc": "A self-test op."
     },
     {
+      "name": "sfu.session.closed",
+      "kind": "fact",
+      "dataset": "logs",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "sfu_cause": {
+          "required": false
+        },
+        "sfu_outcome": {
+          "required": false
+        },
+        "connected": {
+          "required": false
+        },
+        "lifetime_ms": {
+          "required": false
+        },
+        "connection_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "\"sfu.session.closed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "name": "sfu.session.closed"
+        }
+      },
+      "doc": "The SFU node's own outcome for the seat's media session: the same outcome the participant_media_sessions row saves, so the two are one witness of the close."
+    },
+    {
       "name": "sync.episode.ended",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1297,6 +2231,47 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "sync.websocket.closed",
+      "kind": "fact",
+      "dataset": "logs",
+      "side": "server",
+      "modules": ["sync"],
+      "area": "crash",
+      "test_only": false,
+      "fields": {
+        "close_reason": {
+          "required": true
+        },
+        "close_kind": {
+          "required": true
+        },
+        "heartbeat_gap_ms": {
+          "required": false
+        },
+        "participant_id_hash": {
+          "required": true
+        },
+        "socket_age_ms": {
+          "required": false
+        },
+        "protocol": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+          "literal": "\"sync.websocket.closed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "name": "sync.websocket.closed"
+        }
+      },
+      "doc": "Sync's terminal log for the seat's websocket: the reason the socket closed, its kind, how long the heartbeat had been silent and which seat it was (participant_id_hash)."
     }
   ],
   "machines": [
@@ -1363,6 +2338,89 @@
       "per": "item",
       "events": [],
       "doc": "The API's admission decision for a join attempt. Claim: admitted, or the refusal reason."
+    },
+    {
+      "name": "app.js_fatal",
+      "area": "crash",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "client.app_js_fatal",
+          "source": "client",
+          "claim": "error_class",
+          "failure_claims": ["other"],
+          "fields": ["participant_id", "client_session_id", "error_name", "error_class", "error_fingerprint", "app_state", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "A fatal JS error the native app recorded before dying. Claim: the error class; a fatal of class other is a failure some finding must explain."
+    },
+    {
+      "name": "app.marker_scan",
+      "area": "crash",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "previous_run.read",
+          "source": "client",
+          "claim": "outcome",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "outcome", "reason_code", "dead_markers", "duration_ms", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "The boot-time scan for dead run markers. Claim: the op's outcome; ok or expected means the scan ran, error means it could not read the store. Its presence proves this client reports dead runs."
+    },
+    {
+      "name": "app.previous_run",
+      "area": "crash",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "client.previous_run",
+          "source": "client",
+          "claim": "phase",
+          "failure_claims": [],
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "previous_client_session_id",
+            "phase",
+            "visibility",
+            "app_state",
+            "clean_exit",
+            "last_elapsed_ms",
+            "heap_used_mib",
+            "heap_limit_mib",
+            "js_ready",
+            "was_discarded",
+            "pid",
+            "launch_id",
+            "launched_at_ms",
+            "will_terminate",
+            "platform",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "A dead run's marker, reported by the next run under its own credential. Claim: the phase the dead run reached. The reporting seat's row names the dead cs_, which is what identifies whose run died."
+    },
+    {
+      "name": "app.process_exit",
+      "area": "crash",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "client.app_exit_info",
+          "source": "client",
+          "claim": "exit_reason",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "exit_reason", "pid", "launch_id", "launched_at_ms", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "What the OS says about a native run's end: the exit reason for a pid (Android) or a MetricKit crash (iOS). The rule compares it with the marker's clean_exit; the vocabularies differ (clean_exit vs REASON_*), so it is an event fact, not a once-fact disagreement pair."
     },
     {
       "name": "audio.capture",
@@ -1437,6 +2495,151 @@
       "doc": "A seat's leave request and its outcome. A failed leave is a failure every finding must account for."
     },
     {
+      "name": "page.crash_surface",
+      "area": "crash",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.call_crashed",
+          "source": "client",
+          "claim": "surface_state",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "surface_state", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "The crash fallback the seat's client showed. Claim: the surface state; only `shown` proves the person saw it."
+    },
+    {
+      "name": "page.media_close",
+      "area": "crash",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sfu.session.closed",
+          "source": "sfu",
+          "claim": "sfu_outcome",
+          "failure_claims": [],
+          "fields": ["episode_id", "connection_id", "sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "est_server_ms"]
+        },
+        {
+          "event": "db.participant_media_sessions",
+          "source": "db",
+          "claim": "sfu_outcome",
+          "failure_claims": [],
+          "fields": ["episode_id", "participant_id", "connection_id", "sfu_cause", "sfu_outcome", "connected", "lifetime_ms", "ended_at_ms", "est_server_ms"]
+        }
+      ],
+      "doc": "The media session's end for a seat, as the SFU node logged it and Postgres saved it: one outcome in two stores, so the rows share an origin and count as one witness."
+    },
+    {
+      "name": "page.render_crash",
+      "area": "crash",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.render_crashed",
+          "source": "client",
+          "claim": "render_cause",
+          "failure_claims": ["render_error", "unhandled_error", "unhandled_rejection"],
+          "fields": ["participant_id", "client_session_id", "render_cause", "error_name", "error_class", "error_fingerprint", "platform", "est_server_ms", "clock_err_ms"]
+        }
+      ],
+      "doc": "A page failure the seat's client reported. Claim: the render_cause; render_error and the unhandled causes are failures some finding must explain."
+    },
+    {
+      "name": "page.tab_close",
+      "area": "crash",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "sync.websocket.closed",
+          "source": "sync",
+          "claim": "close_reason",
+          "failure_claims": [],
+          "fields": ["episode_id", "participant_id_hash", "close_reason", "close_kind", "heartbeat_gap_ms", "socket_age_ms", "protocol", "est_server_ms"]
+        }
+      ],
+      "doc": "Sync's close of a seat's websocket. Claim: the transport reason. It names the seat by participant_id_hash, which the rule resolves through the declaration."
+    },
+    {
+      "name": "perf.heartbeat",
+      "area": "crash",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.perf_heartbeat",
+          "source": "client",
+          "claim": "window_ms",
+          "failure_claims": [],
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "window_ms",
+            "visibility",
+            "app_state",
+            "long_task_max_ms_30s",
+            "long_task_total_ms_30s",
+            "main_ping_max_ms_30s",
+            "worker_late_max_ms_30s",
+            "js_lag_max_ms_30s",
+            "heap_used_mib",
+            "heap_limit_mib",
+            "heap_probe",
+            "memory_state",
+            "low_memory",
+            "platform",
+            "est_server_ms",
+            "clock_err_ms"
+          ]
+        }
+      ],
+      "doc": "One 30 s health window the seat's client measured. Claim: the window's length; the measurement fields are in the value. Its delivery also proves this build can report slice 9 evidence, and its absence marks an open tail."
+    },
+    {
+      "name": "perf.memory",
+      "area": "crash",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.perf_heartbeat",
+          "source": "client",
+          "claim": "memory_state",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "memory_state", "heap_used_mib", "heap_limit_mib", "heap_probe", "low_memory", "platform", "est_server_ms"]
+        },
+        {
+          "event": "client.memory_warning",
+          "source": "client",
+          "claim": "app_state",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "app_state", "low_memory", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "A memory reading for the seat: the web heap probe's state on each heartbeat, or the OS memory warning. Claim: the memory reading (measured/unsupported/ok/low, or the warning's app_state)."
+    },
+    {
+      "name": "perf.thermal",
+      "area": "crash",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.thermal_changed",
+          "source": "client",
+          "claim": "probe_state",
+          "failure_claims": [],
+          "fields": ["participant_id", "client_session_id", "probe_state", "thermal_state", "cpu_pressure", "app_state", "visibility", "platform", "est_server_ms"]
+        }
+      ],
+      "doc": "The seat's OS or browser thermal/pressure probe state. Claim: whether the probe measured; unsupported is itself a reading, never absence."
+    },
+    {
       "name": "recording.job_state",
       "area": "recording",
       "kind": "once",
@@ -1494,6 +2697,161 @@
         "healthy": "observability/fixtures/admission.unresolved/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "app.crashed",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The native app died in the foreground during a live call: JS fatal, render error, native crash, ANR or foreground OOM kill.",
+      "user_words": ["the app closed itself", "the app crashed"],
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'previous_run.read'",
+          "doc": "The seat's scan for dead markers, which proves this client reports dead runs."
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.websocket.closed'",
+          "doc": "Sync's close of the dead seat's socket."
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.previous_run'",
+          "doc": "The dead run's marker."
+        },
+        {
+          "fact": "app.js_fatal",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.app_js_fatal'",
+          "doc": "A fatal JS error the dying run recorded itself."
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.render_crashed'",
+          "doc": "A native render crash the dying run recorded itself."
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.app_exit_info'",
+          "doc": "The OS's reason for the dead run's exit, plus the marker's own clean_exit claim for the same end."
+        }
+      ],
+      "rule": "observability/rules/app.crashed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.crashed/positive.json",
+        "healthy": "observability/fixtures/app.crashed/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-crashed.fault.test.ts"
+    },
+    {
+      "code": "app.crashed_at_launch",
+      "area": "crash",
+      "slice": 9,
+      "item": "attempt",
+      "per": "item",
+      "doc": "The native app died at launch before its JS ran, found on a later launch from the launch marker.",
+      "user_words": ["the app won't open", "the app dies when I open it"],
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where name == 'previous_run.read'",
+          "doc": "The reporting run's scan, which proves it reads launch markers."
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where name == 'client.app_exit_info'",
+          "doc": "The OS's reason for the dead launch's exit; no reason is unknown, never healthy."
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where name == 'client.previous_run'",
+          "doc": "The dead launch's marker: phase=launch, js_ready=false."
+        }
+      ],
+      "rule": "observability/rules/app.crashed_at_launch.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.crashed_at_launch/positive.json",
+        "healthy": "observability/fixtures/app.crashed_at_launch/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-crashed-at-launch.fault.test.ts"
+    },
+    {
+      "code": "app.killed_in_background",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The OS or the user ended the native app while it was backgrounded or inactive during a live call.",
+      "user_words": ["the app died when I switched apps", "I came back and the call was gone"],
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'previous_run.read'",
+          "doc": "The seat's scan for dead markers."
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.websocket.closed'",
+          "doc": "Sync's close of the dead seat's socket."
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.previous_run'",
+          "doc": "The dead run's marker with its last app_state."
+        },
+        {
+          "fact": "app.process_exit",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.app_exit_info'",
+          "doc": "The OS's reason for the dead run's exit."
+        }
+      ],
+      "rule": "observability/rules/app.killed_in_background.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/app.killed_in_background/positive.json",
+        "healthy": "observability/fixtures/app.killed_in_background/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react-native/src/app-health/app-killed-in-background.fault.test.ts"
     },
     {
       "code": "audio.cant_hear",
@@ -1657,15 +3015,205 @@
       "slice": 9,
       "item": "episode",
       "per": "seat",
-      "doc": "The call page crashed or rendered an error boundary.",
-      "user_words": ["the page went blank", "the app crashed"],
-      "witnesses": [],
+      "doc": "The web call page threw during render and showed the crash fallback, including a lazy chunk that failed mid-call.",
+      "user_words": ["the call page went blank", "the page said something went wrong"],
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.perf_heartbeat'",
+          "doc": "The seat's health windows, which also prove this build reports slice 9 evidence and that the client stream covers the live span."
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.render_crashed' or (event == 'sdk.telemetry' and type == 'render_crashed'))",
+          "doc": "The crash the seat's client reported."
+        },
+        {
+          "fact": "page.crash_surface",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.call_crashed'",
+          "doc": "Whether the fallback was visibly shown; impact, never a second witness of the crash."
+        }
+      ],
       "rule": "observability/rules/page.crashed.mjs",
       "fixtures": {
         "positive": "observability/fixtures/page.crashed/positive.json",
         "healthy": "observability/fixtures/page.crashed/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "apps/web/src/components/space/page-crashed.fault.test.tsx"
+    },
+    {
+      "code": "page.tab_died",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The browser tab died during a live call without pagehide (renderer crash, out of memory, tab killed while hung, discard), found on the next run from its run marker.",
+      "user_words": ["the call just dropped", "my tab died mid-call"],
+      "witnesses": [
+        {
+          "fact": "app.marker_scan",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'previous_run.read'",
+          "doc": "The seat's scan for dead markers, which proves this client reports dead runs."
+        },
+        {
+          "fact": "page.tab_close",
+          "from": ["sync"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.websocket.closed'",
+          "doc": "Sync's close of the dead seat's socket; the dead run cannot report its own end."
+        },
+        {
+          "fact": "app.previous_run",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'client.previous_run'",
+          "doc": "The dead run's marker, reported by a later run of the same profile."
+        },
+        {
+          "fact": "page.media_close",
+          "from": ["sfu", "db"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sfu.session.closed'",
+          "doc": "The media session's end for the dead seat; the SFU row and its Postgres row are one witness."
+        }
+      ],
+      "rule": "observability/rules/page.tab_died.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/page.tab_died/positive.json",
+        "healthy": "observability/fixtures/page.tab_died/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/page-tab-died.fault.test.ts"
+    },
+    {
+      "code": "page.uncaught_error",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "An uncaught error or rejection hit the call page during a live call, and the page kept running.",
+      "user_words": [],
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.perf_heartbeat'",
+          "doc": "The seat's health windows, proving this build reports slice 9 evidence across the live span."
+        },
+        {
+          "fact": "page.render_crash",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.render_crashed' or (event == 'sdk.telemetry' and type == 'render_crashed'))",
+          "doc": "Uncaught errors and rejections the page reported and survived."
+        }
+      ],
+      "rule": "observability/rules/page.uncaught_error.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/page.uncaught_error/positive.json",
+        "healthy": "observability/fixtures/page.uncaught_error/healthy.json"
+      },
+      "fault_scenario": "apps/web/src/components/space/page-uncaught-error.fault.test.tsx"
+    },
+    {
+      "code": "perf.device_overloaded",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The OS reported serious thermal state or CPU pressure for 60 s or more during a live call.",
+      "user_words": ["the phone got hot and choppy", "audio and video stuttered"],
+      "witnesses": [
+        {
+          "fact": "perf.thermal",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.thermal_changed'",
+          "doc": "The seat's thermal or CPU-pressure probe, emitted at join and on change; unsupported is itself a reading."
+        }
+      ],
+      "rule": "observability/rules/perf.device_overloaded.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.device_overloaded/positive.json",
+        "healthy": "observability/fixtures/perf.device_overloaded/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-device-overloaded.fault.test.ts"
+    },
+    {
+      "code": "perf.memory_pressure",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The web heap grew 300 MiB over baseline or reached 90% of its limit, or the OS reported low memory, during a live call.",
+      "user_words": ["the call got stuttery then died", "everything slowed down"],
+      "witnesses": [
+        {
+          "fact": "perf.memory",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.perf_heartbeat' or name == 'client.memory_warning')",
+          "doc": "The seat's memory readings: web heap probe state each heartbeat, native memory warnings."
+        },
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.perf_heartbeat'",
+          "doc": "The seat's 30 s windows, which carry the heap numbers the baseline and growth test read."
+        }
+      ],
+      "rule": "observability/rules/perf.memory_pressure.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.memory_pressure/positive.json",
+        "healthy": "observability/fixtures/perf.memory_pressure/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-memory-pressure.fault.test.ts"
+    },
+    {
+      "code": "perf.ui_unresponsive",
+      "area": "crash",
+      "slice": 9,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The web main thread or the React Native JS thread was blocked for 1000 ms or more while the call was on screen.",
+      "user_words": ["the call froze", "taps did nothing"],
+      "witnesses": [
+        {
+          "fact": "perf.heartbeat",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'client.perf_heartbeat'",
+          "doc": "The seat's 30 s health windows. Missing windows are a gap, never 'no stalls'."
+        }
+      ],
+      "rule": "observability/rules/perf.ui_unresponsive.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/perf.ui_unresponsive/positive.json",
+        "healthy": "observability/fixtures/perf.ui_unresponsive/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/telemetry/perf-ui-unresponsive.fault.test.ts"
     },
     {
       "code": "recording.not_ready",

@@ -29,6 +29,8 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // The launch marker goes down before React Native loads, so a death before JS ran still leaves it.
+    ai.q9labs.chalk.reactnative.ChalkAppHealthModule.markLaunch(this)
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {

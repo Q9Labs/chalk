@@ -29,16 +29,16 @@ function reloadLatest(): void {
 }
 
 export type PageFailure = "chunk_reload" | "unhandled_error" | "unhandled_rejection";
-const failureListeners = new Set<(cause: PageFailure) => void>();
+const failureListeners = new Set<(cause: PageFailure, error?: unknown) => void>();
 
 /** Tells `listener` about each failure that loses the page's work, before the page reloads. Returns the way to stop. */
-export function onPageFailure(listener: (cause: PageFailure) => void): () => void {
+export function onPageFailure(listener: (cause: PageFailure, error?: unknown) => void): () => void {
   failureListeners.add(listener);
   return () => failureListeners.delete(listener);
 }
 
-function announce(cause: PageFailure): void {
-  for (const listener of failureListeners) listener(cause);
+function announce(cause: PageFailure, error?: unknown): void {
+  for (const listener of failureListeners) listener(cause, error);
 }
 
 /** Reloads once for a handled chunk-load failure. Returns whether the page is reloading. */
@@ -53,10 +53,10 @@ export function installChunkLoadAutoReload() {
   if (typeof window === "undefined") return;
 
   window.addEventListener("unhandledrejection", (event) => {
-    if (!reloadAfterChunkLoadFailure(event.reason)) announce("unhandled_rejection");
+    if (!reloadAfterChunkLoadFailure(event.reason)) announce("unhandled_rejection", event.reason);
   });
 
   window.addEventListener("error", (event) => {
-    if (!reloadAfterChunkLoadFailure(typeof event.message === "string" ? event.message : "")) announce("unhandled_error");
+    if (!reloadAfterChunkLoadFailure(typeof event.message === "string" ? event.message : "")) announce("unhandled_error", event.error);
   });
 }

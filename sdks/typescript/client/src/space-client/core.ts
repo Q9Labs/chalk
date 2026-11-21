@@ -9,6 +9,7 @@ import * as apiUrls from "../api-urls";
 import { appTelemetry, type AppTelemetry } from "../telemetry/app";
 import { TelemetryOutbox } from "../telemetry/outbox";
 import { createWebTelemetryPlatform } from "../telemetry/web-platform";
+import { installWebRunHealth } from "../telemetry/web-health";
 import { callEvents } from "./call-events";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
 import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
@@ -41,6 +42,8 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
   const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
   const telemetry = platform.dependencies?.telemetry ?? new TelemetryOutbox({ platform: createWebTelemetryPlatform(platform.fetch), endpoint: (tenantId) => apiUrls.telemetry(apiBaseUrl, tenantId) });
+  // The web run marker, dead-run report, heartbeat and probes live on the SDK's own web outbox; an injected telemetry is the platform's own wiring.
+  if (platform.dependencies?.telemetry === undefined) installWebRunHealth(telemetry);
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), telemetry, ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({

@@ -1,12 +1,16 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "420c1e5c0c7a",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 103,
       "fields": [
+        {
+          "name": "actual_ms",
+          "type": "float"
+        },
         {
           "name": "admission_request_id",
           "type": "string"
@@ -20,6 +24,10 @@
           "type": "string"
         },
         {
+          "name": "app_state",
+          "type": "string"
+        },
+        {
           "name": "app_version",
           "type": "string"
         },
@@ -29,6 +37,10 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "clean_exit",
           "type": "string"
         },
         {
@@ -54,6 +66,22 @@
         {
           "name": "clock_state",
           "type": "string"
+        },
+        {
+          "name": "connected",
+          "type": "boolean"
+        },
+        {
+          "name": "connection_id",
+          "type": "string"
+        },
+        {
+          "name": "cpu_pressure",
+          "type": "string"
+        },
+        {
+          "name": "dead_markers",
+          "type": "integer"
         },
         {
           "name": "decision",
@@ -92,11 +120,27 @@
           "type": "string"
         },
         {
+          "name": "ended_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "env",
           "type": "string"
         },
         {
           "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "error_class",
+          "type": "string"
+        },
+        {
+          "name": "error_fingerprint",
+          "type": "string"
+        },
+        {
+          "name": "error_name",
           "type": "string"
         },
         {
@@ -106,6 +150,14 @@
         {
           "name": "event_id",
           "type": "string"
+        },
+        {
+          "name": "exit_reason",
+          "type": "string"
+        },
+        {
+          "name": "expected_ms",
+          "type": "float"
         },
         {
           "name": "flags_hash",
@@ -120,12 +172,36 @@
           "type": "integer"
         },
         {
+          "name": "heap_limit_mib",
+          "type": "float"
+        },
+        {
+          "name": "heap_probe",
+          "type": "string"
+        },
+        {
+          "name": "heap_used_mib",
+          "type": "float"
+        },
+        {
+          "name": "hidden_ms",
+          "type": "float"
+        },
+        {
           "name": "job_id",
           "type": "string"
         },
         {
           "name": "journey_id",
           "type": "string"
+        },
+        {
+          "name": "js_lag_max_ms_30s",
+          "type": "float"
+        },
+        {
+          "name": "js_ready",
+          "type": "boolean"
         },
         {
           "name": "jump_ms",
@@ -136,11 +212,47 @@
           "type": "string"
         },
         {
+          "name": "last_elapsed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "launch_id",
+          "type": "string"
+        },
+        {
+          "name": "launched_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "lifetime_ms",
+          "type": "integer"
+        },
+        {
+          "name": "long_task_max_ms_30s",
+          "type": "float"
+        },
+        {
+          "name": "long_task_total_ms_30s",
+          "type": "float"
+        },
+        {
+          "name": "low_memory",
+          "type": "boolean"
+        },
+        {
           "name": "machine",
           "type": "string"
         },
         {
+          "name": "main_ping_max_ms_30s",
+          "type": "float"
+        },
+        {
           "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "memory_state",
           "type": "string"
         },
         {
@@ -172,7 +284,23 @@
           "type": "string"
         },
         {
+          "name": "phase",
+          "type": "string"
+        },
+        {
+          "name": "pid",
+          "type": "integer"
+        },
+        {
           "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "previous_client_session_id",
+          "type": "string"
+        },
+        {
+          "name": "probe_state",
           "type": "string"
         },
         {
@@ -192,6 +320,10 @@
           "type": "string"
         },
         {
+          "name": "render_cause",
+          "type": "string"
+        },
+        {
           "name": "request_id",
           "type": "string"
         },
@@ -206,6 +338,14 @@
         {
           "name": "seq",
           "type": "integer"
+        },
+        {
+          "name": "sfu_cause",
+          "type": "string"
+        },
+        {
+          "name": "sfu_outcome",
+          "type": "string"
         },
         {
           "name": "shown_ms",
@@ -236,6 +376,10 @@
           "type": "string"
         },
         {
+          "name": "thermal_state",
+          "type": "string"
+        },
+        {
           "name": "to_state",
           "type": "string"
         },
@@ -252,8 +396,28 @@
           "type": "string"
         },
         {
+          "name": "visibility",
+          "type": "string"
+        },
+        {
+          "name": "was_discarded",
+          "type": "boolean"
+        },
+        {
           "name": "webhook_delivery_id",
           "type": "string"
+        },
+        {
+          "name": "will_terminate",
+          "type": "boolean"
+        },
+        {
+          "name": "window_ms",
+          "type": "integer"
+        },
+        {
+          "name": "worker_late_max_ms_30s",
+          "type": "float"
         }
       ]
     },
@@ -1005,7 +1169,7 @@
     {
       "dataset": "logs",
       "budget": 256,
-      "used": 60,
+      "used": 71,
       "fields": [
         {
           "name": "admission_request_id",
@@ -1053,6 +1217,22 @@
         },
         {
           "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "close_kind",
+          "type": "string"
+        },
+        {
+          "name": "close_reason",
+          "type": "string"
+        },
+        {
+          "name": "connected",
+          "type": "boolean"
+        },
+        {
+          "name": "connection_id",
           "type": "string"
         },
         {
@@ -1116,6 +1296,10 @@
           "type": "integer"
         },
         {
+          "name": "heartbeat_gap_ms",
+          "type": "integer"
+        },
+        {
           "name": "job_id",
           "type": "string"
         },
@@ -1126,6 +1310,10 @@
         {
           "name": "kind",
           "type": "string"
+        },
+        {
+          "name": "lifetime_ms",
+          "type": "integer"
         },
         {
           "name": "machine",
@@ -1164,8 +1352,16 @@
           "type": "string"
         },
         {
+          "name": "participant_id_hash",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
+        },
+        {
+          "name": "protocol",
+          "type": "integer"
         },
         {
           "name": "provider_media_id",
@@ -1200,7 +1396,19 @@
           "type": "integer"
         },
         {
+          "name": "sfu_cause",
+          "type": "string"
+        },
+        {
+          "name": "sfu_outcome",
+          "type": "string"
+        },
+        {
           "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "socket_age_ms",
           "type": "integer"
         },
         {

@@ -22,6 +22,7 @@ import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
 import { releaseNativeTrack } from "../media/native-release-track";
+import { installAppHealth } from "../app-health/install";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
 import { ensureRandomUUID } from "./random-uuid";
@@ -64,6 +65,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
   const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
   const telemetry = new TelemetryOutbox({ platform: createNativeTelemetryPlatform({ appState: AppState, fetch }), endpoint: (tenantId) => apiUrls.telemetry(apiBaseURL, tenantId) });
+  installAppHealth(telemetry);
   const dependencies: PlatformDependencies = {
     telemetry,
     clock: {

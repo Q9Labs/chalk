@@ -13,6 +13,18 @@ import type { EndedCall, ExitPhase } from "./entrance-machine";
 // The call UI and media stack, which SpacePage loads only once the participant asks to join.
 export { ReportProblemDialog, StatusSurface } from "@q9labsai/chalk-react";
 
+/** Dev-fault child: throws when devFaults.ts dispatches its render-throw event, so the boundary sees a real render error. Never fires outside DEV. */
+function DevFaultThrow() {
+  const [throwNow, setThrowNow] = useState(false);
+  useEffect(() => {
+    const fire = () => setThrowNow(true);
+    globalThis.addEventListener("chalk:dev-fault:render-throw", fire);
+    return () => globalThis.removeEventListener("chalk:dev-fault:render-throw", fire);
+  }, []);
+  if (throwNow) throw new Error("dev fault");
+  return null;
+}
+
 export function LocalSpace({
   admission,
   reportsAvailable,
@@ -112,16 +124,18 @@ export function LocalSpace({
     globalThis.addEventListener("pagehide", releaseOnPageHide);
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
   }, [client, credential.space, displayName, session]);
-  useEffect(() => onPageFailure((cause) => client.telemetry.renderCrashed(cause)), [client]);
+  useEffect(() => onPageFailure((cause, error) => client.telemetry.renderCrashed(cause, error)), [client]);
   return (
     <main className="h-full min-h-0 w-full overflow-hidden">
       <CallErrorBoundary
-        onCrash={() => {
-          client.telemetry.renderCrashed("render_error");
+        onCrash={(error) => {
+          client.telemetry.renderCrashed("render_error", error);
           void release().catch(() => undefined);
         }}
+        onFallbackShown={() => client.telemetry.crashFallbackShown()}
       >
         {homeError ? <p role="alert">{homeError}</p> : null}
+        <DevFaultThrow />
         <Chalk
           timeLimit={{
             message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",

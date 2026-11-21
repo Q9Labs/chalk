@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
+import { armDevFault } from "../lib/devFaults";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
@@ -8,6 +9,7 @@ import appCss from "../styles.css?url";
 
 installChunkLoadAutoReload();
 installWhiteboardAssets();
+if (import.meta.env.DEV) armDevFault(import.meta.env.VITE_CHALK_DEV_FAULT);
 
 export const Route = createRootRoute({
   head: () => ({

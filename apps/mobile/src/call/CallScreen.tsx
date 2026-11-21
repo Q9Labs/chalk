@@ -5,6 +5,7 @@ import type { ArrivedCall } from "../lib/arrived-call";
 import { cleanupSpaceArrival, createGuestAccessGetter, retireSpaceArrival } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { createMobileSpaceClient } from "../space/mobile-space-client";
+import { CallErrorBoundary } from "./CallErrorBoundary";
 import { ReadySheet } from "./ReadySheet";
 
 type CallScreenProps = {
@@ -53,7 +54,7 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
   }, [call.started, client]);
 
   return (
-    <>
+    <CallErrorBoundary telemetry={client.telemetry} onLeft={onClose}>
       <Chalk
         callName={arrival.spaceName}
         client={client}
@@ -75,6 +76,6 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
         soundsEnabled={preferences.soundsEnabled}
       />
       <ReadySheet link={route.inviteLink} onClose={() => setReadyOpen(false)} open={readyOpen} />
-    </>
+    </CallErrorBoundary>
   );
 }
