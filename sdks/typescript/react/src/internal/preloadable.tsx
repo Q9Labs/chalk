@@ -3,13 +3,20 @@ import { lazy, useState, type ComponentType } from "react";
 /**
  * A code-split component whose chunk can start downloading on intent (hover, focus, press). Once the
  * chunk is in, a new mount renders it directly, so a menu opened after a hover shows its content on
- * the first frame instead of an empty popup while React suspends.
+ * the first frame instead of an empty popup while React suspends. A failed download is forgotten, so the next
+ * hover, focus or mount tries again; callers that fire a preload and walk away catch the rejection themselves.
  */
 export function preloadable<P extends object>(load: () => Promise<ComponentType<P>>) {
   let loaded: ComponentType<P> | undefined;
   let pending: Promise<ComponentType<P>> | undefined;
   const preload = () => {
-    pending ??= load().then((component) => (loaded = component));
+    pending ??= load().then(
+      (component) => (loaded = component),
+      (cause: unknown) => {
+        pending = undefined;
+        throw cause;
+      },
+    );
     return pending;
   };
   const Lazy = lazy(() => preload().then((component) => ({ default: component })));

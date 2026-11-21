@@ -156,9 +156,10 @@ export function SpaceView({
   // A lost connection clears the roster and the tracks, so the call behind the failure card keeps what it last showed.
   const connectionLost = connectionPhase.kind === "failed";
   const limbo = useTrueFor(connectionPhase.kind === "reconnecting", RECONNECT_NOTICE_MS) || connectionLost;
+  const live = connection.status === "live" && !limbo;
   const self = useHeldWhile(useSelf(), connectionLost);
   const participantsSlice = useHeldWhile(useParticipants(), connectionLost);
-  const callLink = useCallLink(participantsSlice.roster.length <= 1);
+  const callLink = useCallLink(participantsSlice.roster.length <= 1, live);
   const media = useHeldWhile(useMedia(), connectionLost);
   const microphoneNotice = useMicrophoneNotice(connection.status, media.local.microphone);
   const mediaRequest = media.incomingRequests[0];
@@ -363,7 +364,7 @@ export function SpaceView({
                 onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
                 knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
                 shareUrl: effectiveShareUrl,
-                callLinkOpen: callLinkOpen ?? callLink.open,
+                callLinkOpen: (callLinkOpen ?? callLink.open) && live,
                 onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
                 onReportProblem,
                 onOpenReportProblem,
@@ -502,7 +503,7 @@ export function SpaceView({
               }
               overlays={
                 <>
-                  <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onOpenReportProblem} />
+                  <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />
                   {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
                     <Suspense fallback={null}>
                       <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />

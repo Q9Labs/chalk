@@ -67,7 +67,7 @@ export function CallDetails({
           </svg>
         </ChalkIconButton>
       </div>
-      <InviteLinkButton link={link} variant="menu" />
+      <InviteLinkButton link={link} />
       {qr ? (
         <>
           <button type="button" className="chalk-shell-detail-action" aria-expanded={qrOpen} aria-controls="chalk-details-qr" onClick={() => setQrOpen(!qrOpen)}>
@@ -83,7 +83,9 @@ export function CallDetails({
             {qrOpen ? <InviteQR value={link} /> : null}
           </div>
         </>
-      ) : null}
+      ) : (
+        <p className="chalk-shell-detail-helper">This link is too long for a QR code. Copy the link to share it.</p>
+      )}
       {network && quality ? (
         <>
           <div className="chalk-shell-sep" />

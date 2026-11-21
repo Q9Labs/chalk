@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { preloadable } from "../../internal/preloadable";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
@@ -16,6 +16,7 @@ export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 // The menu body downloads on the first hover, focus or press of the trigger, so it opens with its content on the first frame and a call that never reaches for it never downloads it.
 const { Component: CallDetails, preload: preloadDetails } = preloadable(() => import("./CallDetails").then((module) => module.CallDetails));
+const warmDetails = () => void preloadDetails().catch(() => undefined);
 // The chip loads the first time the link turns weak, so a call on a good link never downloads it.
 const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
@@ -30,6 +31,12 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   // A host alone at call start sees the menu open with the QR code expanded; it closes when someone joins or the host closes it.
   const inviteOpen = props.callLinkOpen ?? false;
   const open = menuOpen || inviteOpen;
+  // The reveal opens the moment the call goes live, so its body is downloaded by then and the menu has content on its first frame.
+  const live = props.network?.live === true;
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Start the menu body's download when the call goes live.
+  useEffect(() => {
+    if (live) warmDetails();
+  }, [live]);
   // The chip opens the menu with the connection charts showing; the plain trigger opens it closed.
   const [revealConnection, setRevealConnection] = useState(false);
   const link = props.network?.live ? props.network.link : undefined;
@@ -58,7 +65,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </svg>
   );
   const trigger = (
-    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
+    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name" onPointerEnter={() => warmDetails()} onFocus={() => warmDetails()}>
       <span dir="auto">{spaceName}</span>
       <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
         {timer}
@@ -117,7 +124,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               aria-label="Call details"
               aria-haspopup="dialog"
               aria-expanded={open}
-              onPointerDown={() => void preloadDetails()}
+              onPointerDown={() => warmDetails()}
               onClick={() => changeOpen(true)}
             >
               <span dir="auto">{spaceName}</span>
