@@ -74,3 +74,4 @@ export type { SpaceHeaderProps } from "./components/space-header/SpaceHeader";
 export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";
 
 export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";
+export { reportDiagnostics } from "./components/chalk/report-diagnostics";

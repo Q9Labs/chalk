@@ -79,7 +79,7 @@ export async function submit(c, tab, { name, diagnostics = true, failure = false
   assert.deepEqual(report.allowed_mentions, { parse: [] });
   assert(report.content.length <= 2000);
   assert(!report.content.includes("@example.com"));
-  if (diagnostics) for (const field of ["Connection:", "Last error:", "Browser:", "App version:"]) assert(report.content.includes(field), field);
+  if (diagnostics) for (const field of ["Connection:", "Browser:", "App version:"]) assert(report.content.includes(field), field);
   else assert(!report.content.includes("Diagnostics:"));
   await tab.getByRole("button", { name: "Done", exact: true }).click();
 }

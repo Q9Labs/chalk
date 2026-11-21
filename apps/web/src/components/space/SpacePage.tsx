@@ -388,7 +388,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {sendReport && callSurface ? (
         <callSurface.ReportProblemDialog
           unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
-          diagnostics={ended ? `Connection: ${ended.phase}\nLast error: ${ended.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
+          diagnostics={ended ? callSurface.reportDiagnostics(ended.callName ?? "Call", { status: ended.phase, lastError: ended.failure }) : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}
           onClose={() => setReportOpen(false)}
