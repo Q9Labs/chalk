@@ -17,7 +17,8 @@ export interface ChalkSheetProps {
  * The details sheet can open on its own at call start, so it focuses itself, not its close button: no ring shows, and Tab reaches the first control.
  */
 export function ChalkSheet({ open: requested, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
-  const open = requested && !useContext(CallLimboContext);
+  const inLimbo = useContext(CallLimboContext);
+  const open = requested && !inLimbo;
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const popup = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
