@@ -240,9 +240,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
   captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
-    Effect.sync(() => {
+    Effect.suspend(() => {
+      const snapshot = this.#store.getSnapshot();
       this.#selection.selectCapture("microphone", deviceId);
       this.#store.select("microphone", deviceId);
+      if (snapshot.media.selection.microphone === deviceId) return Effect.void;
+
+      const consent = this.#hasConsent("microphone");
+      const switching = snapshot.connection.status === "live" && consent && (snapshot.media.local.microphone.state === "enabled" || this.#pendingSources.has("microphone"));
+      if (!switching && consent) return Effect.void;
+      const oldTrack = this.#track("microphone");
+      if (oldTrack) this.#selection.releaseTrack(oldTrack);
+      if (!switching) return Effect.void;
+
+      const state = this.#sources.microphone;
+      // The old device is gone. Handle a failed acquire like a failed turn-on, not like an edit to a live source.
+      state.localEnabled = false;
+      return this.#act("microphone", true, undefined, state.desired.revision);
     }).pipe(Effect.mapError(normalizeMediaError));
   selectCamera = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
@@ -510,9 +524,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     for (const check of this.#readinessChecks) check();
     return desired;
   }
-  #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
+  #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions, onlyIfRevision?: number): ClientEffect<void> {
     return Effect.suspend(() => {
       if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
+      if (onlyIfRevision !== undefined && (this.#sources[source].desired.revision !== onlyIfRevision || !this.#hasConsent(source))) return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
       if (!enabled) this.#sources[source].offDebt = "owed";
       else this.#cancelOffRetry(source);

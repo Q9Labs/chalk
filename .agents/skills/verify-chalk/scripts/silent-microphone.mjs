@@ -70,11 +70,13 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
     const action = notice.getByRole("button", chooser);
     await action.focus();
     await page.keyboard.press("Enter");
-    const picker = page.getByRole("dialog").filter({ has: page.getByRole("radio", { name: "Quiet microphone" }) });
-    await picker.getByRole("radio", { name: "Quiet microphone" }).click();
+    const picker = page.getByRole("dialog", { name: "Audio" });
+    await picker.getByRole("radio", { name: "Quiet microphone", checked: false }).click();
+    await picker.getByRole("radio", { name: "Quiet microphone", checked: true }).waitFor();
     await shot(guest, "call-pick-mic");
     await page.keyboard.press("Escape");
     await notice.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Mute microphone", exact: true }).waitFor();
     // Nonzero input well below the meter's first visible bar is not a dead input.
     await page.evaluate(() => window.setMicGain(0.001));
     await page.waitForTimeout(13_000);
