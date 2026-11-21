@@ -30,6 +30,9 @@ export async function calibrateMonitor(options: {
   video.muted = true;
   video.playsInline = true;
   video.srcObject = new MediaStream([preview]);
+  video.setAttribute("aria-hidden", "true");
+  Object.assign(video.style, { position: "fixed", width: "1px", height: "1px", opacity: "0.01", pointerEvents: "none" });
+  document.body.appendChild(video);
   const sample = probeReader(video);
   let probing = false;
   let completed = false;
@@ -45,7 +48,7 @@ export async function calibrateMonitor(options: {
     while (frames < 2) {
       await nextFrame(video, deadline);
       const observed = sample(probe);
-      frames = observed.every((mark) => mark && mark.offset < 0.005) ? frames + 1 : 0;
+      frames = observed.every((mark) => mark.aligned) ? frames + 1 : 0;
     }
     await options.protect(probe.nonce, deadline);
     protectedAt = performance.now();
@@ -53,7 +56,7 @@ export async function calibrateMonitor(options: {
     while (frames < 4) {
       await nextFrame(video, deadline);
       const observed = sample(probe);
-      frames = observed.every((mark) => mark === null) ? frames + 1 : 0;
+      frames = observed.every((mark) => mark.matches === 0) ? frames + 1 : 0;
     }
     // Ensure we sampled genuinely new frames, not several duplicate callbacks.
     if (performance.now() - protectedAt < 60) await pause(60);
@@ -72,6 +75,7 @@ export async function calibrateMonitor(options: {
     if (probing && track.readyState === "live") track.enabled = true;
     preview.stop();
     video.srcObject = null;
+    video.remove();
   }
 }
 
@@ -93,17 +97,23 @@ function probeReader(video: HTMLVideoElement) {
       let count = 0;
       let sumX = 0;
       let sumY = 0;
+      let matches = 0;
       for (let i = 0; i < data.length; i += 4) {
         const distance = Math.hypot((data[i] ?? 0) - rgb[0], (data[i + 1] ?? 0) - rgb[1], (data[i + 2] ?? 0) - rgb[2]);
         if (distance > 65) continue;
         const pixel = i / 4;
+        const px = left + (pixel % size) + 0.5;
+        const py = top + Math.floor(pixel / size) + 0.5;
         count++;
-        sumX += left + (pixel % size) + 0.5;
-        sumY += top + Math.floor(pixel / size) + 0.5;
+        sumX += px;
+        sumY += py;
+        if (Math.hypot(px - x * width, py - y * height) < Math.min(width, height) * 0.025) matches++;
       }
       const expectedSquare = (Math.min(width, height) * 0.04) ** 2;
-      if (count < expectedSquare / 8 || count > expectedSquare * 2) return null;
-      return { offset: Math.hypot(sumX / count - x * width, sumY / count - y * height) / width };
+      return {
+        matches,
+        aligned: count >= expectedSquare / 8 && count <= expectedSquare * 2 && Math.hypot(sumX / count - x * width, sumY / count - y * height) / width < 0.005,
+      };
     });
   };
 }

@@ -1,6 +1,6 @@
 # Run Chalk Helper for development
 
-This build keeps live native ink off. The fixture does not join a Space or accept browser pairing. Use the in-call preview for a real share while capture exclusion and publication binding remain unverified.
+The fixture runs without a call or browser pairing. The managed integration is opt-in and supports Chromium monitor shares only. Use the annotated preview or Document Picture-in-Picture when pairing or calibration fails. Window and tab projection and device-code sign-in are not available.
 
 ## Build and run
 
@@ -35,6 +35,14 @@ Open the one-use local URL printed by the receiver. Click **Receive filtered scr
 
 ## Configure a local pairing build
 
-Set `CHALK_HELPER_WEB_ORIGIN` to an exact HTTPS origin and `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY` to its pinned base64url Ed25519 verification key at build time. Run the app without `--fixture`. The proof listener binds only `127.0.0.1:47361`. It accepts a signed ticket and local approval, returns a short-lived session secret, and only reports `unbound`. No managed API issuer, device-code fallback, attachment refresh, or annotation input is wired in this build.
+Set these build-time values before you build Helper:
+
+- `CHALK_HELPER_WEB_ORIGIN`: the exact Chalk HTTPS Origin, also allowed by the managed API.
+- `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY`: the base64url, unpadded Ed25519 public key for the managed Sync token issuer. Do not copy its private key to a Helper machine.
+- `CHALK_HELPER_SYNC_ORIGIN`: the exact WSS Origin for Sync, without a path or query.
+
+Set `VITE_CHALK_HELPER_INSTALL_URL` in the web app to enable the Helper offer. Run Helper without `--fixture`. In a call, share your monitor, compare the codes shown in the browser and Helper, and select the actual shared display in Helper. The browser briefly disables the outgoing track while it reads three landmarks from a local clone. Helper enables ink only after it verifies the OS protection setting and the browser confirms that the landmarks disappeared. If you see **Draw one mark**, click it to draw a fading mark on the selected display. Helper sends that mark through the same call and returns to click-through mode.
+
+The local listener binds only `127.0.0.1:47361`. It requires the exact Origin and Host, a signed single-use pair ticket, and native consent. It renews the lease with fresh tickets while its browser and publication stay current. The remote Sync ticket has a separate audience and uses an Ed25519 proof bound to the server socket nonce.
 
 The updater is off unless you set both `CHALK_HELPER_UPDATE_ENDPOINT` and `CHALK_HELPER_UPDATE_PUBLIC_KEY` at build time. Use an HTTPS manifest and the Tauri artifact verification key for that release channel. The development installer workflow publishes no releases.

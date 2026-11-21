@@ -198,7 +198,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn show_settings(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn show_settings(app: &AppHandle) -> tauri::Result<()> {
     let window = if let Some(window) = app.get_webview_window("settings") {
         window
     } else {

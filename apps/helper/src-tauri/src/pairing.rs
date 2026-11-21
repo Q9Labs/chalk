@@ -388,7 +388,14 @@ impl Pairing {
         let pairing = self.clone();
         let owner = app.clone();
         let (respond, receive) = oneshot::channel();
+        let queued_at = Instant::now();
         app.run_on_main_thread(move || {
+            if matches!(action, Exchange::ProbeStart)
+                && (queued_at.elapsed() > Duration::from_millis(200) || respond.is_closed())
+            {
+                let _ = respond.send(Err(StatusCode::CONFLICT));
+                return;
+            }
             let mut state = pairing.0.state.lock().expect("pairing state");
             let response = state
                 .session
@@ -731,6 +738,12 @@ async fn attach(
         });
         (receive, until)
     };
+    if let Some(app) = pairing.0.app.lock().expect("app handle").clone() {
+        let owner = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _ = crate::desktop::show_settings(&owner);
+        });
+    }
     let Ok(Ok(Some(secret))) = tokio::time::timeout_at(until.into(), receive).await else {
         return Err(StatusCode::UNAUTHORIZED);
     };

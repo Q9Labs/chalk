@@ -310,7 +310,10 @@ impl Capture {
         }
         self.drawing = false;
         self.draft = None;
-        window.set_ignore_cursor_events(!active).map_err(|_| ())?;
+        if window.set_ignore_cursor_events(!active).is_err() {
+            self.fail(app);
+            return Err(());
+        }
         self.drawing = active;
         Ok(())
     }

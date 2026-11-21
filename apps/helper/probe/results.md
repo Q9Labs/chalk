@@ -1,18 +1,16 @@
 # Capture exclusion results
 
-No desktop capture mode is approved for native ink. These probes did not establish a clean outgoing track.
+The independent feasibility probe established browser monitor capture exclusion with the platform settings below. This is not a real Chalk call or a measurement of the Helper's end-to-end latency.
 
-| OS | Browser or capture path | Monitor capture | Window capture | Tab capture |
-| --- | --- | --- | --- | --- |
-| macOS 27.0.1 | Chrome 157.0.8103.80 | Picker did not return a track | Picker did not return a track | Picker did not return a track |
-| macOS 27.0.1 | Safari 27.0.1 | Not run | Not run | Not run |
-| macOS 27.0.1 | Edge | Not installed on the probe Mac | Not run | Not run |
-| macOS 27.0.1 | Firefox | Not installed on the probe Mac | Not run | Not run |
-| macOS 27.0.1 | ScreenCaptureKit filtered capture | Screen Recording consent was unavailable | Not applicable | Not applicable |
-| Windows | Browser with `WDA_EXCLUDEFROMCAPTURE` marker | No runner | No runner | No runner |
+| Operating system | Browser | Monitor capture |
+| --- | --- | --- |
+| macOS 26.6.2 | Helium (Chromium 158) | Zero marker pixels with `NSWindow.sharingType = .none`. |
+| macOS 15.8.2 | Chrome 158 | Zero marker pixels with `NSWindow.sharingType = .none`. |
+| Windows Server 2025 and 2022 | Chrome 157 | Zero marker pixels with `WDA_EXCLUDEFROMCAPTURE`. |
+| macOS 27.0.1 | Chrome 157 | Screen Recording consent was unavailable. No track returned from the picker. |
 
-The Chrome trials used the shipping browser and a native click-through marker. The picker did not complete even with the unprotected marker, so there is no positive control. The local Mac session did not have Screen Recording consent. The native UI automation service did not start. The Windows box provider rejected the configured free mode before creating a box.
+The independent probe's unprotected controls showed 47,000–192,000 magenta pixels. Window and tab captures did not include the separate overlay. Safari, Firefox, and consumer Windows were not tested.
 
-The ScreenCaptureKit and local WebRTC probe sources build on arm64 macOS. A synthetic VP8 run established ICE and DTLS with Chrome in the local loopback test profile. See the development instructions for the separate real-display proof. A connected peer without decoded frames does not pass the handoff or capture exclusion checks.
+A second [hosted Windows test](https://github.com/Q9Labs/chalk/actions/runs/44919347699) captured a native marker over a 1024 × 768 monitor and decoded the result over WebRTC. Its six unprotected samples contained 24,888–25,000 marker pixels at 640-pixel analysis width. All six protected samples contained zero. That run did not report an alignment score because its PowerShell fixture did not record the expected marker position.
 
-Keep all live Helper overlays disabled. A working browser-only path remains the in-call preview or Document Picture-in-Picture, where available.
+The monitor-only Chalk integration runs its own two-part check. It must see three landmarks at their expected positions in the local capture and then see them disappear after applying and reading back the platform setting. Failure leaves the browser preview path available. Real-call alignment, viewer-to-sharer overlay latency, and mixed-DPI projection are not yet verified.
