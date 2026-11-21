@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "819112a6ec26",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 92,
       "fields": [
         {
           "name": "admission_request_id",
@@ -29,6 +29,18 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "blocked_reason",
+          "type": "string"
+        },
+        {
+          "name": "bytes",
+          "type": "integer"
+        },
+        {
+          "name": "chk_code",
           "type": "string"
         },
         {
@@ -56,6 +68,10 @@
           "type": "string"
         },
         {
+          "name": "created_ms",
+          "type": "integer"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
@@ -64,11 +80,27 @@
           "type": "string"
         },
         {
+          "name": "delivered_ms",
+          "type": "integer"
+        },
+        {
+          "name": "delivery",
+          "type": "string"
+        },
+        {
           "name": "device_ephemeral",
           "type": "boolean"
         },
         {
           "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "diagnostic_upload_id",
+          "type": "string"
+        },
+        {
+          "name": "dialog_state",
           "type": "string"
         },
         {
@@ -100,6 +132,10 @@
           "type": "string"
         },
         {
+          "name": "episode_status",
+          "type": "string"
+        },
+        {
           "name": "est_server_ms",
           "type": "integer"
         },
@@ -108,7 +144,23 @@
           "type": "string"
         },
         {
+          "name": "expires_ms",
+          "type": "integer"
+        },
+        {
+          "name": "failed_ms",
+          "type": "integer"
+        },
+        {
           "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "flight_recorder_part",
+          "type": "string"
+        },
+        {
+          "name": "forward_outcome",
           "type": "string"
         },
         {
@@ -117,6 +169,10 @@
         },
         {
           "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "issued_ms",
           "type": "integer"
         },
         {
@@ -133,6 +189,10 @@
         },
         {
           "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "live_request_id",
           "type": "string"
         },
         {
@@ -172,11 +232,23 @@
           "type": "string"
         },
         {
+          "name": "participant_status",
+          "type": "string"
+        },
+        {
+          "name": "picked_symptom",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
         {
           "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "readback",
           "type": "string"
         },
         {
@@ -192,8 +264,20 @@
           "type": "string"
         },
         {
+          "name": "report_id",
+          "type": "string"
+        },
+        {
           "name": "request_id",
           "type": "string"
+        },
+        {
+          "name": "request_status",
+          "type": "string"
+        },
+        {
+          "name": "requested_ms",
+          "type": "integer"
         },
         {
           "name": "schema_ver",
@@ -204,11 +288,23 @@
           "type": "string"
         },
         {
+          "name": "seat_left_ms",
+          "type": "integer"
+        },
+        {
           "name": "seq",
           "type": "integer"
         },
         {
+          "name": "sha256",
+          "type": "string"
+        },
+        {
           "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "sockets",
           "type": "integer"
         },
         {
@@ -224,7 +320,19 @@
           "type": "string"
         },
         {
+          "name": "state_part",
+          "type": "string"
+        },
+        {
+          "name": "stored_ms",
+          "type": "integer"
+        },
+        {
           "name": "surface_state",
+          "type": "string"
+        },
+        {
+          "name": "surface_tree_part",
           "type": "string"
         },
         {
@@ -248,6 +356,18 @@
           "type": "string"
         },
         {
+          "name": "unavailable_reason",
+          "type": "string"
+        },
+        {
+          "name": "upload_state",
+          "type": "string"
+        },
+        {
+          "name": "upload_trigger",
+          "type": "string"
+        },
+        {
           "name": "user_id",
           "type": "string"
         },
@@ -260,7 +380,7 @@
     {
       "dataset": "requests",
       "budget": 256,
-      "used": 60,
+      "used": 77,
       "fields": [
         {
           "name": "admission_request_id",
@@ -284,6 +404,18 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "bytes",
+          "type": "integer"
+        },
+        {
+          "name": "cause",
+          "type": "string"
+        },
+        {
+          "name": "chk_code",
           "type": "string"
         },
         {
@@ -319,11 +451,19 @@
           "type": "string"
         },
         {
+          "name": "delivery",
+          "type": "string"
+        },
+        {
           "name": "device_ephemeral",
           "type": "boolean"
         },
         {
           "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "diagnostic_upload_id",
           "type": "string"
         },
         {
@@ -351,6 +491,10 @@
           "type": "string"
         },
         {
+          "name": "episode_status",
+          "type": "string"
+        },
+        {
           "name": "est_server_ms",
           "type": "integer"
         },
@@ -359,7 +503,15 @@
           "type": "string"
         },
         {
+          "name": "expires_ms",
+          "type": "integer"
+        },
+        {
           "name": "flags_hash",
+          "type": "string"
+        },
+        {
+          "name": "forward_outcome",
           "type": "string"
         },
         {
@@ -368,6 +520,10 @@
         },
         {
           "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "http_status",
           "type": "integer"
         },
         {
@@ -380,6 +536,10 @@
         },
         {
           "name": "kind",
+          "type": "string"
+        },
+        {
+          "name": "live_request_id",
           "type": "string"
         },
         {
@@ -419,6 +579,14 @@
           "type": "string"
         },
         {
+          "name": "participant_status",
+          "type": "string"
+        },
+        {
+          "name": "picked_symptom",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
@@ -439,6 +607,10 @@
           "type": "string"
         },
         {
+          "name": "report_id",
+          "type": "string"
+        },
+        {
           "name": "request_id",
           "type": "string"
         },
@@ -455,7 +627,15 @@
           "type": "integer"
         },
         {
+          "name": "sha256",
+          "type": "string"
+        },
+        {
           "name": "shown_ms",
+          "type": "integer"
+        },
+        {
+          "name": "sockets",
           "type": "integer"
         },
         {
@@ -492,6 +672,14 @@
         },
         {
           "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "unavailable_reason",
+          "type": "string"
+        },
+        {
+          "name": "upload_trigger",
           "type": "string"
         },
         {
@@ -754,7 +942,7 @@
     {
       "dataset": "infra",
       "budget": 256,
-      "used": 61,
+      "used": 62,
       "fields": [
         {
           "name": "admission_request_id",
@@ -859,6 +1047,10 @@
         {
           "name": "flags_hash",
           "type": "string"
+        },
+        {
+          "name": "forwarding",
+          "type": "boolean"
         },
         {
           "name": "from_state",

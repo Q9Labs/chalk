@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "819112a6ec26",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -234,6 +234,440 @@
       "fault_scenario": null
     },
     {
+      "code": "live.no_reply",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "live.db_request",
+              "source": "db",
+              "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.deliver",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "live_request.deliver",
+              "source": "sync",
+              "fields": ["live_request_id", "decision", "delivery", "sockets", "unavailable_reason", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.ack",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "live_request.ack",
+              "source": "sync",
+              "fields": ["live_request_id", "participant_id", "sync_connection_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.received",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "live_request.received",
+              "source": "client",
+              "fields": ["live_request_id", "participant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload.issue",
+              "source": "api",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db_upload",
+              "source": "db",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "live.db_request",
+          "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"live.db_request\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"live.db_request\""
+            }
+          ]
+        },
+        {
+          "name": "live_request.deliver",
+          "fields": ["live_request_id", "delivery", "sockets", "unavailable_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/introspection.ex",
+              "literal": "\"live_request.deliver\""
+            }
+          ]
+        },
+        {
+          "name": "live_request.ack",
+          "fields": ["live_request_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+              "literal": "\"live_request.ack\""
+            }
+          ]
+        },
+        {
+          "name": "live_request.received",
+          "fields": ["live_request_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-client.ts",
+              "literal": "\"live_request.received\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload.issue",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/diagnosticuploads/service.go",
+              "literal": "\"report.upload.issue\""
+            }
+          ]
+        },
+        {
+          "name": "report.db_upload",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db_upload\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db_upload\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/live.no_reply.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/live.no_reply/positive.json",
+        "healthy": "observability/fixtures/live.no_reply/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/live.no_reply.fault.test.mjs"
+    },
+    {
+      "code": "live.target_unreachable",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "live.db_request",
+              "source": "db",
+              "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.deliver",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "live_request.deliver",
+              "source": "sync",
+              "fields": ["live_request_id", "decision", "delivery", "sockets", "unavailable_reason", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.client_presence",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "live.db_client_session",
+              "source": "db",
+              "fields": ["client_session_id", "sdk_version", "participant_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "live.db_request",
+          "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"live.db_request\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"live.db_request\""
+            }
+          ]
+        },
+        {
+          "name": "live_request.deliver",
+          "fields": ["live_request_id", "delivery", "sockets", "unavailable_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/introspection.ex",
+              "literal": "\"live_request.deliver\""
+            }
+          ]
+        },
+        {
+          "name": "live.db_client_session",
+          "fields": ["client_session_id", "sdk_version", "requested_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"live.db_client_session\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"live.db_client_session\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/live.target_unreachable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/live.target_unreachable/positive.json",
+        "healthy": "observability/fixtures/live.target_unreachable/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/live.target_unreachable.fault.test.mjs"
+    },
+    {
+      "code": "live.upload_missing",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "live.db_request",
+              "source": "db",
+              "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "live.ack",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "live_request.ack",
+              "source": "sync",
+              "fields": ["live_request_id", "participant_id", "sync_connection_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload.issue",
+              "source": "api",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_completed",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload.complete",
+              "source": "api",
+              "fields": ["diagnostic_upload_id", "bytes", "sha256", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db_upload",
+              "source": "db",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload",
+              "source": "client",
+              "fields": ["upload_trigger", "diagnostic_upload_id", "report_id", "live_request_id", "http_status", "bytes", "outcome", "reason_code", "participant_id", "client_session_id", "est_server_ms", "duration_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.readback",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.r2_upload",
+              "source": "r2",
+              "fields": ["diagnostic_upload_id", "readback", "bytes", "state_part", "surface_tree_part", "flight_recorder_part", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "live.db_request",
+          "fields": ["live_request_id", "request_status", "requested_ms", "expires_ms", "participant_status", "episode_status", "seat_left_ms", "delivery", "delivered_ms", "sockets", "unavailable_reason"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"live.db_request\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"live.db_request\""
+            }
+          ]
+        },
+        {
+          "name": "live_request.ack",
+          "fields": ["live_request_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+              "literal": "\"live_request.ack\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload.issue",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/diagnosticuploads/service.go",
+              "literal": "\"report.upload.issue\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload.complete",
+          "fields": ["diagnostic_upload_id", "bytes", "sha256"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/diagnosticuploads/service.go",
+              "literal": "\"report.upload.complete\""
+            }
+          ]
+        },
+        {
+          "name": "report.db_upload",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db_upload\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db_upload\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload",
+          "fields": ["upload_trigger", "diagnostic_upload_id", "report_id", "live_request_id", "http_status", "bytes"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/diagnostics/upload.ts",
+              "literal": "\"report.upload\""
+            }
+          ]
+        },
+        {
+          "name": "report.r2_upload",
+          "fields": ["diagnostic_upload_id", "readback", "bytes", "state_part", "surface_tree_part", "flight_recorder_part"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/r2.mjs",
+              "literal": "\"report.r2_upload\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.r2_upload\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/live.upload_missing.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/live.upload_missing/positive.json",
+        "healthy": "observability/fixtures/live.upload_missing/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/live.upload_missing.fault.test.mjs"
+    },
+    {
       "code": "page.crashed",
       "area": "crash",
       "slice": 9,
@@ -287,6 +721,476 @@
         "healthy": "observability/fixtures/rejoin.refused/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "report.cannot_send",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "report.dialog",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.dialog",
+              "source": "client",
+              "fields": ["dialog_state", "blocked_reason", "journey_id", "picked_symptom", "participant_id", "client_session_id", "est_server_ms", "shown_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.seat",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db_participant",
+              "source": "db",
+              "fields": ["participant_status", "seat_left_ms", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.availability",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_report.availability",
+              "source": "api",
+              "fields": ["decision", "tenant_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "report.dialog",
+          "fields": ["dialog_state", "blocked_reason", "journey_id", "picked_symptom"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/space-header/CallDialogContent.tsx",
+              "literal": "\"report.dialog\""
+            }
+          ]
+        },
+        {
+          "name": "report.db_participant",
+          "fields": ["participant_status", "seat_left_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db_participant\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db_participant\""
+            }
+          ]
+        },
+        {
+          "name": "problem_report.availability",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/problem_reports.go",
+              "literal": "\"problem_report.availability\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/report.cannot_send.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/report.cannot_send/positive.json",
+        "healthy": "observability/fixtures/report.cannot_send/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/report.cannot_send.fault.test.mjs"
+    },
+    {
+      "code": "report.forward_failed",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "report.problem",
+          "from": ["report"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db",
+              "source": "report",
+              "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "participant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.forward",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_report.forward",
+              "source": "api",
+              "fields": ["journey_id", "report_id", "forward_outcome", "outcome", "reason_code", "est_server_ms", "duration_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.config",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_reports.config",
+              "source": "api",
+              "fields": ["forwarding", "release_sha", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "report.db",
+          "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "generation"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db\""
+            }
+          ]
+        },
+        {
+          "name": "problem_report.forward",
+          "fields": ["journey_id", "report_id", "forward_outcome"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/problemreports/service.go",
+              "literal": "\"problem_report.forward\""
+            }
+          ]
+        },
+        {
+          "name": "problem_reports.config",
+          "fields": ["forwarding"],
+          "emit_sites": [
+            {
+              "path": "apps/api/cmd/main.go",
+              "literal": "\"problem_reports.config\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/report.forward_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/report.forward_failed/positive.json",
+        "healthy": "observability/fixtures/report.forward_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/report.forward_failed.fault.test.mjs"
+    },
+    {
+      "code": "report.send_failed",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "report.dialog",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.dialog",
+              "source": "client",
+              "fields": ["dialog_state", "blocked_reason", "journey_id", "picked_symptom", "participant_id", "client_session_id", "est_server_ms", "shown_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.send",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_report.send",
+              "source": "client",
+              "fields": ["journey_id", "picked_symptom", "report_id", "chk_code", "http_status", "outcome", "reason_code", "participant_id", "client_session_id", "est_server_ms", "duration_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.submit",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_report.submit",
+              "source": "api",
+              "fields": ["journey_id", "report_id", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.outcome",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "problem_report.outcome",
+              "source": "api",
+              "fields": ["journey_id", "cause", "report_id", "http_status", "decision_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.problem",
+          "from": ["report"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db",
+              "source": "report",
+              "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "participant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "report.dialog",
+          "fields": ["dialog_state", "blocked_reason", "journey_id", "picked_symptom"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/space-header/CallDialogContent.tsx",
+              "literal": "\"report.dialog\""
+            }
+          ]
+        },
+        {
+          "name": "problem_report.send",
+          "fields": ["journey_id", "picked_symptom", "report_id", "chk_code", "http_status"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/problem-reports.ts",
+              "literal": "\"problem_report.send\""
+            }
+          ]
+        },
+        {
+          "name": "problem_report.submit",
+          "fields": ["journey_id", "report_id", "picked_symptom", "chk_code"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/problemreports/service.go",
+              "literal": "\"problem_report.submit\""
+            }
+          ]
+        },
+        {
+          "name": "problem_report.outcome",
+          "fields": ["journey_id", "cause", "report_id", "http_status"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/problem_report_outcomes.go",
+              "literal": "\"problem_report.outcome\""
+            }
+          ]
+        },
+        {
+          "name": "report.db",
+          "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "generation"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/report.send_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/report.send_failed/positive.json",
+        "healthy": "observability/fixtures/report.send_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/report.send_failed.fault.test.mjs"
+    },
+    {
+      "code": "report.upload_missing",
+      "area": "report",
+      "slice": 13,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "report.problem",
+          "from": ["report"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db",
+              "source": "report",
+              "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "participant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload.issue",
+              "source": "api",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_completed",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload.complete",
+              "source": "api",
+              "fields": ["diagnostic_upload_id", "bytes", "sha256", "decision", "reason_code", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload_row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.db_upload",
+              "source": "db",
+              "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.upload",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.upload",
+              "source": "client",
+              "fields": ["upload_trigger", "diagnostic_upload_id", "report_id", "live_request_id", "http_status", "bytes", "outcome", "reason_code", "participant_id", "client_session_id", "est_server_ms", "duration_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "report.readback",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "report.r2_upload",
+              "source": "r2",
+              "fields": ["diagnostic_upload_id", "readback", "bytes", "state_part", "surface_tree_part", "flight_recorder_part", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "report.db",
+          "fields": ["report_id", "journey_id", "chk_code", "picked_symptom", "forward_outcome", "sdk_version", "created_ms", "generation"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload.issue",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "expires_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/diagnosticuploads/service.go",
+              "literal": "\"report.upload.issue\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload.complete",
+          "fields": ["diagnostic_upload_id", "bytes", "sha256"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/diagnosticuploads/service.go",
+              "literal": "\"report.upload.complete\""
+            }
+          ]
+        },
+        {
+          "name": "report.db_upload",
+          "fields": ["diagnostic_upload_id", "upload_trigger", "report_id", "live_request_id", "upload_state", "issued_ms", "stored_ms", "failed_ms", "expires_ms", "bytes", "sha256"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/stores.mjs",
+              "literal": "\"report.db_upload\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.db_upload\""
+            }
+          ]
+        },
+        {
+          "name": "report.upload",
+          "fields": ["upload_trigger", "diagnostic_upload_id", "report_id", "live_request_id", "http_status", "bytes"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/diagnostics/upload.ts",
+              "literal": "\"report.upload\""
+            }
+          ]
+        },
+        {
+          "name": "report.r2_upload",
+          "fields": ["diagnostic_upload_id", "readback", "bytes", "state_part", "surface_tree_part", "flight_recorder_part"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/r2.mjs",
+              "literal": "\"report.r2_upload\""
+            },
+            {
+              "path": "scripts/problem-reports/evidence.mjs",
+              "literal": "\"report.r2_upload\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/report.upload_missing.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/report.upload_missing/positive.json",
+        "healthy": "observability/fixtures/report.upload_missing/healthy.json"
+      },
+      "fault_scenario": "scripts/problem-reports/report.upload_missing.fault.test.mjs"
     },
     {
       "code": "share.wont_stop",

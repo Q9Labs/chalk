@@ -2,19 +2,2025 @@
   "area": "report",
   "slice": 13,
   "title": "Report a problem and live introspection",
-  "prefixes": ["report", "live"],
-  "fields": [],
-  "events": [],
-  "reasons": [],
-  "machines": [],
+  "prefixes": [
+    "report",
+    "live"
+  ],
+  "fields": [
+    {
+      "name": "report_id",
+      "type": "id",
+      "id_kind": "problem_report",
+      "sensitivity": null,
+      "doc": "The stored problem_reports row this record is about."
+    },
+    {
+      "name": "chk_code",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The reporting client session's CHK-XXXX diagnostic code (diagnostic_code in ids.json). A scoped lookup, never an authority."
+    },
+    {
+      "name": "picked_symptom",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The symptom the person picked in the report dialog, not_applicable, or unavailable(not_picked) when they never chose. The picker offers codes other slices own; the web build pins the list."
+    },
+    {
+      "name": "forward_outcome",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "What the Discord forward left on the row: pending, ok, not_configured, http_<status> or transport_<category>."
+    },
+    {
+      "name": "http_status",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The HTTP status a request answered, when one answered."
+    },
+    {
+      "name": "dialog_state",
+      "type": "enum",
+      "values": [
+        "form",
+        "sent",
+        "send_failed",
+        "blocked"
+      ],
+      "sensitivity": null,
+      "doc": "Which report-dialog branch was committed to the screen."
+    },
+    {
+      "name": "blocked_reason",
+      "type": "enum",
+      "values": [
+        "credential_expired",
+        "reports_unavailable"
+      ],
+      "sensitivity": null,
+      "doc": "Why the dialog blocked sending, machine-readable from the unavailableCode prop, never parsed from text."
+    },
+    {
+      "name": "upload_trigger",
+      "type": "enum",
+      "values": [
+        "report",
+        "live"
+      ],
+      "sensitivity": null,
+      "doc": "Whether a diagnostic upload belongs to a problem report or a live introspection request."
+    },
+    {
+      "name": "diagnostic_upload_id",
+      "type": "id",
+      "id_kind": "diagnostic_upload",
+      "sensitivity": null,
+      "doc": "The diagnostic_uploads row and the R2 object key it names."
+    },
+    {
+      "name": "live_request_id",
+      "type": "id",
+      "id_kind": "request",
+      "sensitivity": null,
+      "doc": "The live_introspection_requests row this record is about."
+    },
+    {
+      "name": "upload_state",
+      "type": "enum",
+      "values": [
+        "issued",
+        "stored",
+        "failed",
+        "expired"
+      ],
+      "sensitivity": null,
+      "doc": "The diagnostic_uploads.state of an upload (machine report.upload_state)."
+    },
+    {
+      "name": "delivery",
+      "type": "enum",
+      "values": [
+        "delivered",
+        "target_unavailable"
+      ],
+      "sensitivity": null,
+      "doc": "What Sync did with a live request: delivered to sockets, or the target was unavailable."
+    },
+    {
+      "name": "unavailable_reason",
+      "type": "enum",
+      "values": [
+        "no_socket",
+        "not_negotiated"
+      ],
+      "sensitivity": null,
+      "doc": "Why a live request's target was unavailable: the seat has no live sockets, or none opted in to introspection."
+    },
+    {
+      "name": "sockets",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "How many of the seat's sockets a live request was delivered to."
+    },
+    {
+      "name": "request_status",
+      "type": "enum",
+      "values": [
+        "pending",
+        "delivered",
+        "target_unavailable"
+      ],
+      "sensitivity": null,
+      "doc": "The live_introspection_requests row's delivery state as the checker reads it: no delivery yet, delivered, or target_unavailable."
+    },
+    {
+      "name": "participant_status",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The participants.status a live request snapshot or seat read carries."
+    },
+    {
+      "name": "episode_status",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The episodes.status a live request snapshot or Episode read carries."
+    },
+    {
+      "name": "left_at_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a seat's participants.left_at committed, in server milliseconds; absent while the seat is still in the Episode."
+    },
+    {
+      "name": "requested_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a live request row committed, in server milliseconds."
+    },
+    {
+      "name": "delivered_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When Sync's live-request delivery committed, in server milliseconds."
+    },
+    {
+      "name": "expires_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a live request or an upload request stops accepting answers, in server milliseconds."
+    },
+    {
+      "name": "issued_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a diagnostic upload row was issued, in server milliseconds."
+    },
+    {
+      "name": "stored_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a diagnostic upload row reached stored, in server milliseconds."
+    },
+    {
+      "name": "failed_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a diagnostic upload row reached failed, in server milliseconds."
+    },
+    {
+      "name": "bytes",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The compressed size of a stored diagnostic bundle."
+    },
+    {
+      "name": "sha256",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The compressed bundle's SHA-256, hex."
+    },
+    {
+      "name": "readback",
+      "type": "enum",
+      "values": [
+        "ok",
+        "missing",
+        "read_failed",
+        "parse_failed",
+        "identity_mismatch"
+      ],
+      "sensitivity": null,
+      "doc": "What the checker's own GET of a diagnostic bundle found: it downloads, gunzips and parses with matching ids (ok), the object is not there (missing), the read failed (read_failed), gunzip or JSON failed (parse_failed), or the bundle's ids differ from the row's (identity_mismatch)."
+    },
+    {
+      "name": "state_part",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The state part of a read-back bundle: observed(bytes) or unavailable(<reason>)."
+    },
+    {
+      "name": "surface_tree_part",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The surface_tree part of a read-back bundle: observed(bytes) or unavailable(<reason>)."
+    },
+    {
+      "name": "flight_recorder_part",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The flight_recorder part of a read-back bundle: observed(bytes) or unavailable(<reason>)."
+    },
+    {
+      "name": "cause",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The machine-readable cause a refusal left, copied from the route's Result."
+    },
+    {
+      "name": "forwarding",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "Whether the API booted with a Discord forward configured."
+    },
+    {
+      "name": "seat_left_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "A seat's participants.left_at in server milliseconds, on a db seat read."
+    },
+    {
+      "name": "created_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a problem_reports row committed, in server milliseconds."
+    }
+  ],
+  "events": [
+    {
+      "name": "problem_report.send",
+      "kind": "op",
+      "dataset": "requests",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The web client's POST /problem-reports, from click to response. Ends ok only on a parsed {sent: true, code}; the 12 s abort is error(timeout), a rejected fetch error(network) and a missing credential error(no_credential).",
+      "fields": {
+        "journey_id": {
+          "required": true
+        },
+        "picked_symptom": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "chk_code": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/lib/problem-reports.ts",
+          "literal": "\"problem_report.send\""
+        }
+      ]
+    },
+    {
+      "name": "report.dialog",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "One branch of the report dialog committed to the screen through <ObservedSurface>: the form, the sent state with its CHK code, a send_failed error, or blocked with a machine-readable blocked_reason.",
+      "fields": {
+        "dialog_state": {
+          "required": true
+        },
+        "blocked_reason": {
+          "required": false
+        },
+        "journey_id": {
+          "required": false
+        },
+        "picked_symptom": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/space-header/CallDialogContent.tsx",
+          "literal": "\"report.dialog\""
+        }
+      ]
+    },
+    {
+      "name": "client.problem_reported",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The app telemetry event after a report answer: it copies the API's decision, with the report id and CHK code, so it is not proof of storage. An SDK release before the client kernel sent it as an sdk.telemetry row of type problem_reported, which the legacy match still reads.",
+      "fields": {
+        "journey_id": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "chk_code": {
+          "required": false
+        },
+        "picked_symptom": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/app.ts",
+          "literal": "\"problem_reported\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "problem_reported"
+        }
+      }
+    },
+    {
+      "name": "report.upload",
+      "kind": "op",
+      "dataset": "requests",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The client diagnostic upload: issue, PUT the gzip bundle, complete. Ends ok only when complete answers stored; a refused issue or complete is error(report.upload_refused), a rejected fetch error(network), a timed-out fetch error(timeout) and a page hide during the op expected(report.page_hidden).",
+      "fields": {
+        "upload_trigger": {
+          "required": true
+        },
+        "diagnostic_upload_id": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "live_request_id": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        },
+        "bytes": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/diagnostics/upload.ts",
+          "literal": "\"report.upload\""
+        }
+      ]
+    },
+    {
+      "name": "live_request.received",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The client handled one live_request frame. It is emitted when the handler runs, so a stalled tab that never scheduled it can't claim it.",
+      "fields": {
+        "live_request_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/sync/v1-client.ts",
+          "literal": "\"live_request.received\""
+        }
+      ]
+    },
+    {
+      "name": "problem_report.submit",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The API's commit of the problem_reports row and its journey ledger event in one transaction, before any Discord forward. Stored, or refused with the commit's journey_* cause.",
+      "decisions": [
+        "stored",
+        "refused"
+      ],
+      "fields": {
+        "journey_id": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "picked_symptom": {
+          "required": false
+        },
+        "chk_code": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/problemreports/service.go",
+          "literal": "\"problem_report.submit\""
+        }
+      ]
+    },
+    {
+      "name": "problem_report.outcome",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The problem-report route's outcome line, as a kernel row: the Result's machine-readable cause and the submit decision's id, for every answer the route gives including middleware refusals.",
+      "fields": {
+        "journey_id": {
+          "required": true
+        },
+        "cause": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/problem_report_outcomes.go",
+          "literal": "\"problem_report.outcome\""
+        }
+      ]
+    },
+    {
+      "name": "problem_report.availability",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "Whether the availability route answered that reports are on for the tenant: true or false.",
+      "decisions": [
+        "true",
+        "false"
+      ],
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/problem_reports.go",
+          "literal": "\"problem_report.availability\""
+        }
+      ]
+    },
+    {
+      "name": "problem_report.forward",
+      "kind": "op",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The Discord forward of a stored report, typed from DeliveryError. Ends ok, error(report.forward_http) or error(report.forward_transport); expected(report.forward_not_configured) when no webhook is configured. The forward_outcome field carries the bounded class written to the row, never the webhook URL.",
+      "fields": {
+        "journey_id": {
+          "required": true
+        },
+        "report_id": {
+          "required": true
+        },
+        "forward_outcome": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/problemreports/service.go",
+          "literal": "\"problem_report.forward\""
+        }
+      ]
+    },
+    {
+      "name": "problem_reports.config",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "Once at boot, whether the API configured a Discord forward for problem reports. Its release_sha is the build group.",
+      "fields": {
+        "forwarding": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/cmd/main.go",
+          "literal": "\"problem_reports.config\""
+        }
+      ]
+    },
+    {
+      "name": "report.upload.issue",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The diagnostic-uploads service issued one presigned PUT for a report or live request, or refused it.",
+      "decisions": [
+        "issued",
+        "refused"
+      ],
+      "fields": {
+        "diagnostic_upload_id": {
+          "required": true
+        },
+        "upload_trigger": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "live_request_id": {
+          "required": false
+        },
+        "expires_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/diagnosticuploads/service.go",
+          "literal": "\"report.upload.issue\""
+        }
+      ]
+    },
+    {
+      "name": "report.upload.complete",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The diagnostic-uploads service's complete call: InspectObject matched the client's bytes and the row committed stored, or it refused.",
+      "decisions": [
+        "stored",
+        "refused"
+      ],
+      "fields": {
+        "diagnostic_upload_id": {
+          "required": true
+        },
+        "bytes": {
+          "required": false
+        },
+        "sha256": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/diagnosticuploads/service.go",
+          "literal": "\"report.upload.complete\""
+        }
+      ]
+    },
+    {
+      "name": "live_request.create",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The operator live-requests route inserted its row with the seat and Episode status snapshot, or refused with live.request_pending or live.rate_limited.",
+      "decisions": [
+        "created",
+        "refused"
+      ],
+      "fields": {
+        "live_request_id": {
+          "required": true
+        },
+        "participant_status": {
+          "required": false
+        },
+        "episode_status": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/live_requests.go",
+          "literal": "\"live_request.create\""
+        }
+      ]
+    },
+    {
+      "name": "live_request.deliver",
+      "kind": "decision",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "Sync's delivery of a live request to the seat's opted-in sockets: delivered with a socket count, or target_unavailable with no_socket or not_negotiated. The request row's delivery column copies this decision.",
+      "decisions": [
+        "delivered",
+        "target_unavailable"
+      ],
+      "fields": {
+        "live_request_id": {
+          "required": true
+        },
+        "delivery": {
+          "required": true
+        },
+        "sockets": {
+          "required": false
+        },
+        "unavailable_reason": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/live/introspection.ex",
+          "literal": "\"live_request.deliver\""
+        }
+      ]
+    },
+    {
+      "name": "live_request.ack",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "One socket answered live_request_ack for a live request before its expires_at; an ack after it is dropped.",
+      "fields": {
+        "live_request_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket.ex",
+          "literal": "\"live_request.ack\""
+        }
+      ]
+    },
+    {
+      "name": "report.db",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's read of one problem_reports row, from the report source. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "report_id": {
+          "required": true
+        },
+        "journey_id": {
+          "required": true
+        },
+        "chk_code": {
+          "required": true
+        },
+        "picked_symptom": {
+          "required": true
+        },
+        "forward_outcome": {
+          "required": true
+        },
+        "sdk_version": {
+          "required": false
+        },
+        "created_ms": {
+          "required": true
+        },
+        "generation": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/stores.mjs",
+          "literal": "\"report.db\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"report.db\""
+        }
+      ]
+    },
+    {
+      "name": "report.db_participant",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's read of a seat's participants row: its status and left_at, independent of anything the client reported. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "participant_status": {
+          "required": true
+        },
+        "seat_left_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/stores.mjs",
+          "literal": "\"report.db_participant\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"report.db_participant\""
+        }
+      ]
+    },
+    {
+      "name": "report.db_upload",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's read of one diagnostic_uploads row. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "diagnostic_upload_id": {
+          "required": true
+        },
+        "upload_trigger": {
+          "required": true
+        },
+        "report_id": {
+          "required": false
+        },
+        "live_request_id": {
+          "required": false
+        },
+        "upload_state": {
+          "required": true
+        },
+        "issued_ms": {
+          "required": true
+        },
+        "stored_ms": {
+          "required": false
+        },
+        "failed_ms": {
+          "required": false
+        },
+        "expires_ms": {
+          "required": false
+        },
+        "bytes": {
+          "required": false
+        },
+        "sha256": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/stores.mjs",
+          "literal": "\"report.db_upload\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"report.db_upload\""
+        }
+      ]
+    },
+    {
+      "name": "live.db_request",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's read of one live_introspection_requests row, including the participant and Episode status snapshot taken at insert. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "live_request_id": {
+          "required": true
+        },
+        "request_status": {
+          "required": true
+        },
+        "requested_ms": {
+          "required": true
+        },
+        "expires_ms": {
+          "required": true
+        },
+        "participant_status": {
+          "required": true
+        },
+        "episode_status": {
+          "required": true
+        },
+        "seat_left_ms": {
+          "required": false
+        },
+        "delivery": {
+          "required": false
+        },
+        "delivered_ms": {
+          "required": false
+        },
+        "sockets": {
+          "required": false
+        },
+        "unavailable_reason": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/stores.mjs",
+          "literal": "\"live.db_request\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"live.db_request\""
+        }
+      ]
+    },
+    {
+      "name": "report.r2_upload",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's own readback of a diagnostic bundle: the GET, gunzip, JSON parse and identity match. A HEAD is not a readback. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "diagnostic_upload_id": {
+          "required": true
+        },
+        "readback": {
+          "required": true
+        },
+        "bytes": {
+          "required": false
+        },
+        "state_part": {
+          "required": false
+        },
+        "surface_tree_part": {
+          "required": false
+        },
+        "flight_recorder_part": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/r2.mjs",
+          "literal": "\"report.r2_upload\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"report.r2_upload\""
+        }
+      ]
+    },
+    {
+      "name": "live.db_client_session",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "The checker's read of one of the seat's telemetry_sources rows with the SDK version its latest delivered record carried. Emitted by the evidence reader, never a program.",
+      "fields": {
+        "client_session_id": {
+          "required": true
+        },
+        "sdk_version": {
+          "required": false
+        },
+        "requested_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/stores.mjs",
+          "literal": "\"live.db_client_session\""
+        },
+        {
+          "path": "scripts/problem-reports/evidence.mjs",
+          "literal": "\"live.db_client_session\""
+        }
+      ]
+    }
+  ],
+  "reasons": [
+    {
+      "code": "report.after_leave_window",
+      "outcome": "expected",
+      "doc": "The dialog blocked on an expired credential more than 24 h after the seat left: the report window closed."
+    },
+    {
+      "code": "report.participant_quota",
+      "outcome": "expected",
+      "doc": "The seat filed enough reports in the hour that the per-Participant quota refused this one."
+    },
+    {
+      "code": "report.episode_quota",
+      "outcome": "expected",
+      "doc": "The Episode filed enough reports in the hour that the per-Episode quota refused this one."
+    },
+    {
+      "code": "report.page_hidden",
+      "outcome": "expected",
+      "doc": "The tab was frozen mid-send or mid-upload and never came back, so the client op legitimately never finished."
+    },
+    {
+      "code": "report.timeout",
+      "outcome": "error",
+      "doc": "The client's request hit its own deadline with no answer."
+    },
+    {
+      "code": "report.network",
+      "outcome": "error",
+      "doc": "The client's request never got a response: blocked or failed below HTTP."
+    },
+    {
+      "code": "report.no_credential",
+      "outcome": "error",
+      "doc": "The client had no usable credential to send with."
+    },
+    {
+      "code": "report.send_refused",
+      "outcome": "error",
+      "doc": "The report send was answered with a non-2xx status; http_status says which."
+    },
+    {
+      "code": "report.forward_http",
+      "outcome": "error",
+      "doc": "Discord answered the forward with an HTTP status; forward_outcome names it."
+    },
+    {
+      "code": "report.forward_transport",
+      "outcome": "error",
+      "doc": "The Discord forward failed below HTTP; forward_outcome names the transport class."
+    },
+    {
+      "code": "report.forward_not_configured",
+      "outcome": "expected",
+      "doc": "No Discord forward is configured, so the forward legitimately did nothing."
+    },
+    {
+      "code": "report.not_stored",
+      "outcome": "error",
+      "doc": "The problem_reports commit failed; the report was never stored."
+    },
+    {
+      "code": "report.description_blank",
+      "outcome": "error",
+      "doc": "The report description was empty."
+    },
+    {
+      "code": "report.description_too_long",
+      "outcome": "error",
+      "doc": "The report description was over the limit."
+    },
+    {
+      "code": "report.diagnostics_too_long",
+      "outcome": "error",
+      "doc": "The report diagnostics text was over the limit."
+    },
+    {
+      "code": "report.participant_binding_mismatch",
+      "outcome": "error",
+      "doc": "The credential's Participant binding did not match the requested one."
+    },
+    {
+      "code": "report.attribution_failed",
+      "outcome": "error",
+      "doc": "The report's person attribution could not be resolved."
+    },
+    {
+      "code": "report.id_generation_failed",
+      "outcome": "error",
+      "doc": "The report id could not be minted."
+    },
+    {
+      "code": "report.journey_timeout",
+      "outcome": "error",
+      "doc": "The commit timed out at Postgres."
+    },
+    {
+      "code": "report.journey_canceled",
+      "outcome": "error",
+      "doc": "The commit's context was canceled."
+    },
+    {
+      "code": "report.journey_permission",
+      "outcome": "error",
+      "doc": "Postgres refused the commit on permissions."
+    },
+    {
+      "code": "report.journey_constraint",
+      "outcome": "error",
+      "doc": "Postgres refused the commit on a constraint."
+    },
+    {
+      "code": "report.journey_unavailable",
+      "outcome": "error",
+      "doc": "Postgres was unreachable or lost the connection mid-commit."
+    },
+    {
+      "code": "report.journey_internal",
+      "outcome": "error",
+      "doc": "The commit failed for an unclassified internal reason."
+    },
+    {
+      "code": "report.ip_quota",
+      "outcome": "error",
+      "doc": "The IP quota refused the report. Never an expected outcome."
+    },
+    {
+      "code": "report.account_quota",
+      "outcome": "error",
+      "doc": "The account quota refused the report. Never an expected outcome."
+    },
+    {
+      "code": "report.disabled",
+      "outcome": "error",
+      "doc": "Problem reports are disabled for the tenant."
+    },
+    {
+      "code": "report.limiter_unavailable",
+      "outcome": "error",
+      "doc": "The rate limiter could not be read, so the route refused."
+    },
+    {
+      "code": "report.verifier_unavailable",
+      "outcome": "error",
+      "doc": "The credential verifier could not run, so the route refused."
+    },
+    {
+      "code": "report.unauthenticated",
+      "outcome": "error",
+      "doc": "The request carried no usable credential."
+    },
+    {
+      "code": "report.upload_refused",
+      "outcome": "error",
+      "doc": "The upload's issue or complete call was refused."
+    },
+    {
+      "code": "report.upload_expired",
+      "outcome": "error",
+      "doc": "The upload request's expires_at passed before it was used."
+    },
+    {
+      "code": "report.upload_mismatch",
+      "outcome": "error",
+      "doc": "The stored object's size differs from the bytes the complete call claimed."
+    },
+    {
+      "code": "report.upload_missing",
+      "outcome": "error",
+      "doc": "The complete call found no object at the upload's key."
+    },
+    {
+      "code": "live.request_pending",
+      "outcome": "error",
+      "doc": "The seat already has an unexpired live request."
+    },
+    {
+      "code": "live.rate_limited",
+      "outcome": "error",
+      "doc": "The Episode is past ten live requests in the hour."
+    },
+    {
+      "code": "live.unauthenticated",
+      "outcome": "error",
+      "doc": "The operator live-requests route was called without the diagnose token."
+    },
+    {
+      "code": "live.old_client",
+      "outcome": "expected",
+      "doc": "The seat's sockets never negotiated live introspection because every client session runs an SDK below the live minimum."
+    },
+    {
+      "code": "live.tab_frozen",
+      "outcome": "expected",
+      "doc": "Every delivered client session was frozen before the request and never resumed inside the window."
+    },
+    {
+      "code": "live.page_hidden",
+      "outcome": "expected",
+      "doc": "The live request's upload never ran because the tab was hidden and never returned."
+    }
+  ],
+  "machines": [
+    {
+      "name": "report.upload_state",
+      "doc": "The diagnostic_uploads.state of one upload, committed by the diagnostic-uploads service.",
+      "states": [
+        "issued",
+        "stored",
+        "failed",
+        "expired"
+      ],
+      "initial": "issued",
+      "edges": [
+        [
+          "issued",
+          "stored"
+        ],
+        [
+          "issued",
+          "failed"
+        ],
+        [
+          "issued",
+          "expired"
+        ]
+      ],
+      "triggers": [
+        "complete",
+        "size_mismatch",
+        "object_missing",
+        "request_expired"
+      ]
+    }
+  ],
   "facts": [
     {
       "name": "report.problem",
       "kind": "event",
       "per": "any",
-      "events": [],
-      "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+      "events": [
+        {
+          "event": "report.db",
+          "source": "report",
+          "claim": "picked_symptom",
+          "fields": [
+            "report_id",
+            "journey_id",
+            "chk_code",
+            "picked_symptom",
+            "forward_outcome",
+            "sdk_version",
+            "created_ms",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind. The stored Postgres row is the event; the report line and BLIND_SPOT read this fact."
+    },
+    {
+      "name": "report.dialog",
+      "kind": "state",
+      "per": "seat",
+      "events": [
+        {
+          "event": "report.dialog",
+          "source": "client",
+          "claim": "dialog_state",
+          "fields": [
+            "dialog_state",
+            "blocked_reason",
+            "journey_id",
+            "picked_symptom",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "shown_ms"
+          ]
+        }
+      ],
+      "doc": "The report dialog state a seat's client committed to the screen, with its shown window."
+    },
+    {
+      "name": "report.send",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "problem_report.send",
+          "source": "client",
+          "claim": "outcome",
+          "failure_claims": [
+            "error"
+          ],
+          "fields": [
+            "journey_id",
+            "picked_symptom",
+            "report_id",
+            "chk_code",
+            "http_status",
+            "outcome",
+            "reason_code",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "duration_ms"
+          ]
+        }
+      ],
+      "doc": "The client's own report of its send op. Its error(http_<status>) copies the API's answer, so it is not an api witness."
+    },
+    {
+      "name": "report.submit",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "problem_report.submit",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [
+            "refused"
+          ],
+          "fields": [
+            "journey_id",
+            "report_id",
+            "decision",
+            "reason_code",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The API's commit decision for a send: stored, or refused with the commit's cause."
+    },
+    {
+      "name": "report.outcome",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "problem_report.outcome",
+          "source": "api",
+          "claim": "cause",
+          "fields": [
+            "journey_id",
+            "cause",
+            "report_id",
+            "http_status",
+            "decision_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The route's outcome line: every answer's cause, including middleware refusals the commit never saw."
+    },
+    {
+      "name": "report.availability",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "problem_report.availability",
+          "source": "api",
+          "claim": "decision",
+          "fields": [
+            "decision",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The availability route's answer for the tenant, true or false."
+    },
+    {
+      "name": "report.forward",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "problem_report.forward",
+          "source": "api",
+          "claim": "outcome",
+          "failure_claims": [
+            "error"
+          ],
+          "fields": [
+            "journey_id",
+            "report_id",
+            "forward_outcome",
+            "outcome",
+            "reason_code",
+            "est_server_ms",
+            "duration_ms"
+          ]
+        }
+      ],
+      "doc": "The API's Discord forward op for a stored report. Together with the row's forward_outcome it is a single witness."
+    },
+    {
+      "name": "report.config",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "problem_reports.config",
+          "source": "api",
+          "claim": "forwarding",
+          "fields": [
+            "forwarding",
+            "release_sha",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The API boot fact saying whether a Discord forward is configured for that release_sha."
+    },
+    {
+      "name": "report.upload",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "report.upload",
+          "source": "client",
+          "claim": "outcome",
+          "failure_claims": [
+            "error"
+          ],
+          "fields": [
+            "upload_trigger",
+            "diagnostic_upload_id",
+            "report_id",
+            "live_request_id",
+            "http_status",
+            "bytes",
+            "outcome",
+            "reason_code",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "duration_ms"
+          ]
+        }
+      ],
+      "doc": "The client's diagnostic upload op, keyed by upload id and trigger."
+    },
+    {
+      "name": "report.upload_issued",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "report.upload.issue",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [
+            "refused"
+          ],
+          "fields": [
+            "diagnostic_upload_id",
+            "upload_trigger",
+            "report_id",
+            "live_request_id",
+            "expires_ms",
+            "decision",
+            "reason_code",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The API's issue decision for a diagnostic upload."
+    },
+    {
+      "name": "report.upload_completed",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "report.upload.complete",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [
+            "refused"
+          ],
+          "fields": [
+            "diagnostic_upload_id",
+            "bytes",
+            "sha256",
+            "decision",
+            "reason_code",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The API's complete decision for a diagnostic upload."
+    },
+    {
+      "name": "report.upload_row",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "report.db_upload",
+          "source": "db",
+          "claim": "upload_state",
+          "fields": [
+            "diagnostic_upload_id",
+            "upload_trigger",
+            "report_id",
+            "live_request_id",
+            "upload_state",
+            "issued_ms",
+            "stored_ms",
+            "failed_ms",
+            "expires_ms",
+            "bytes",
+            "sha256",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The diagnostic_uploads row, read by the checker. With the issue and complete decisions it is one witness."
+    },
+    {
+      "name": "report.readback",
+      "kind": "event",
+      "per": "any",
+      "events": [
+        {
+          "event": "report.r2_upload",
+          "source": "r2",
+          "claim": "readback",
+          "failure_claims": [
+            "missing",
+            "read_failed",
+            "parse_failed",
+            "identity_mismatch"
+          ],
+          "fields": [
+            "diagnostic_upload_id",
+            "readback",
+            "bytes",
+            "state_part",
+            "surface_tree_part",
+            "flight_recorder_part",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The checker's own GET, gunzip, parse and identity match of a stored bundle."
+    },
+    {
+      "name": "report.seat",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "report.db_participant",
+          "source": "db",
+          "claim": "participant_status",
+          "fields": [
+            "participant_status",
+            "seat_left_ms",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The seat's participants row, independent of the client: status and left_at."
+    },
+    {
+      "name": "live.request",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "live.db_request",
+          "source": "db",
+          "claim": "request_status",
+          "fields": [
+            "live_request_id",
+            "request_status",
+            "requested_ms",
+            "expires_ms",
+            "participant_status",
+            "episode_status",
+            "seat_left_ms",
+            "delivery",
+            "delivered_ms",
+            "sockets",
+            "unavailable_reason",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The live_introspection_requests row: the population, the request time and the seat/Episode status snapshot."
+    },
+    {
+      "name": "live.deliver",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "live_request.deliver",
+          "source": "sync",
+          "claim": "decision",
+          "failure_claims": [
+            "target_unavailable"
+          ],
+          "fields": [
+            "live_request_id",
+            "decision",
+            "delivery",
+            "sockets",
+            "unavailable_reason",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "Sync's delivery decision for a live request. The request row's delivery column copies it; either copy witnesses."
+    },
+    {
+      "name": "live.ack",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "live_request.ack",
+          "source": "sync",
+          "claim": "live_request_id",
+          "fields": [
+            "live_request_id",
+            "participant_id",
+            "sync_connection_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "A socket answered live_request_ack before expires_at."
+    },
+    {
+      "name": "live.received",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "live_request.received",
+          "source": "client",
+          "claim": "live_request_id",
+          "fields": [
+            "live_request_id",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The client's handler ran for the live_request frame."
+    },
+    {
+      "name": "live.client_presence",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "live.db_client_session",
+          "source": "db",
+          "claim": "client_session_id",
+          "fields": [
+            "client_session_id",
+            "sdk_version",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The seat's client sessions the ledger stored, with their SDK versions: the population live.old_client checks."
     }
   ],
-  "symptoms": []
+  "symptoms": [
+    {
+      "code": "report.cannot_send",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The dialog was open but blocked sending for at least a second: an expired credential or reports unavailable.",
+      "user_words": [
+        "it won't let me report the problem",
+        "the report button is greyed out"
+      ],
+      "witnesses": [
+        {
+          "fact": "report.dialog",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'report.dialog'",
+          "doc": "The dialog branches the seat's client committed, with blocked reasons."
+        },
+        {
+          "fact": "report.seat",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select status, left_at from participants where id = '{participant}'\"",
+          "doc": "The seat's left_at, independent of the client."
+        },
+        {
+          "fact": "report.availability",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"problem_report.availability\"' api.log | grep {tenant}",
+          "doc": "The availability decisions for the tenant, for the reports_unavailable branch."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/report.cannot_send.fault.test.mjs"
+    },
+    {
+      "code": "report.send_failed",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The person pressed Send report and saw an error instead of a CHK code.",
+      "user_words": [
+        "my report wouldn't send",
+        "it said the report could not be sent"
+      ],
+      "witnesses": [
+        {
+          "fact": "report.dialog",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'report.dialog'",
+          "doc": "The send_failed surface, the client's own observation."
+        },
+        {
+          "fact": "report.send",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'problem_report.send'",
+          "doc": "The send op's outcome and error class. One witness with the surface."
+        },
+        {
+          "fact": "report.submit",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"problem_report.submit\"' api.log | grep {episode}",
+          "doc": "The commit decision for the send's journey."
+        },
+        {
+          "fact": "report.outcome",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"problem_report.outcome\"' api.log | grep {episode}",
+          "doc": "The route outcome's cause, including middleware refusals."
+        },
+        {
+          "fact": "report.problem",
+          "from": [
+            "report"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from problem_reports where journey_id = '{participant}'\"",
+          "doc": "The stored row for the send's journey, written by the same commit."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/report.send_failed.fault.test.mjs"
+    },
+    {
+      "code": "report.forward_failed",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The report is stored, but the Discord forward failed or never finished.",
+      "user_words": [
+        "your report didn't reach the team"
+      ],
+      "witnesses": [
+        {
+          "fact": "report.problem",
+          "from": [
+            "report"
+          ],
+          "required": true,
+          "query": "psql -c \"select id, forward_outcome, created_at from problem_reports where episode_id = '{episode}'\"",
+          "doc": "The row's forward_outcome and created_at."
+        },
+        {
+          "fact": "report.forward",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"problem_report.forward\"' api.log | grep {episode}",
+          "doc": "The forward op's typed outcome. Single witness with the row."
+        },
+        {
+          "fact": "report.config",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"problem_reports.config\"' api.log | head -5",
+          "doc": "The boot fact saying whether forwarding is configured for the release."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/report.forward_failed.fault.test.mjs"
+    },
+    {
+      "code": "report.upload_missing",
+      "item": "episode",
+      "per": "seat",
+      "doc": "A stored report has no diagnostic bundle that downloads and parses from R2.",
+      "user_words": [
+        "the report's diagnostics never arrived"
+      ],
+      "witnesses": [
+        {
+          "fact": "report.problem",
+          "from": [
+            "report"
+          ],
+          "required": true,
+          "query": "psql -c \"select id, client_session_id, sdk_version, created_at from problem_reports where episode_id = '{episode}'\"",
+          "doc": "The stored reports: the expected population."
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"report.upload.issue\"' api.log | grep {episode}",
+          "doc": "The issue decisions for the reports' uploads."
+        },
+        {
+          "fact": "report.upload_completed",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"report.upload.complete\"' api.log | grep {episode}",
+          "doc": "The complete decisions for the reports' uploads."
+        },
+        {
+          "fact": "report.upload_row",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from diagnostic_uploads where report_id in (select id from problem_reports where episode_id = '{episode}')\"",
+          "doc": "The diagnostic_uploads rows the decisions wrote. One witness with them."
+        },
+        {
+          "fact": "report.upload",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'report.upload'",
+          "doc": "The client's upload op and its error class."
+        },
+        {
+          "fact": "report.readback",
+          "from": [
+            "r2"
+          ],
+          "required": true,
+          "query": "r2 get diagnostics/{tenant}/{episode}/{episode}.json.gz",
+          "doc": "The checker's own GET, gunzip, parse and identity match."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/report.upload_missing.fault.test.mjs"
+    },
+    {
+      "code": "live.target_unreachable",
+      "item": "episode",
+      "per": "seat",
+      "doc": "A live request for an active seat in an active Episode reached no socket.",
+      "user_words": [
+        "the live check couldn't reach them"
+      ],
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from live_introspection_requests where participant_id = '{participant}'\"",
+          "doc": "The request row: population, requested_at and the status snapshot."
+        },
+        {
+          "fact": "live.deliver",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'live_request.deliver'",
+          "doc": "Sync's delivery decision; the row's delivery column copies it, either copy witnesses."
+        },
+        {
+          "fact": "live.client_presence",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select source_id from telemetry_sources where participant_id = '{participant}'\"",
+          "doc": "The seat's client sessions and SDK versions, for the live.old_client expected on not_negotiated."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/live.target_unreachable.fault.test.mjs"
+    },
+    {
+      "code": "live.no_reply",
+      "item": "episode",
+      "per": "seat",
+      "doc": "Delivered, but no ack in 10 s and no upload issued in 30 s.",
+      "user_words": [
+        "the live check reached them but they never answered"
+      ],
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from live_introspection_requests where participant_id = '{participant}'\"",
+          "doc": "The request row and its delivery copy."
+        },
+        {
+          "fact": "live.deliver",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'live_request.deliver'",
+          "doc": "Sync's delivery decision."
+        },
+        {
+          "fact": "live.ack",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'live_request.ack'",
+          "doc": "The acks Sync accepted. Independent of the delivery decision."
+        },
+        {
+          "fact": "live.received",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'live_request.received'",
+          "doc": "The client's handler-run fact. A stalled tab never writes it."
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"report.upload.issue\"' api.log | grep {episode}",
+          "doc": "Whether the API issued an upload for the live request."
+        },
+        {
+          "fact": "report.upload_row",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from diagnostic_uploads where live_request_id = '{participant}'\"",
+          "doc": "The upload row the issue wrote."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/live.no_reply.fault.test.mjs"
+    },
+    {
+      "code": "live.upload_missing",
+      "item": "episode",
+      "per": "seat",
+      "doc": "Acked, but no bundle downloads and parses from R2 within 60 s of delivery.",
+      "user_words": [
+        "the live check's diagnostics never arrived"
+      ],
+      "witnesses": [
+        {
+          "fact": "live.request",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from live_introspection_requests where participant_id = '{participant}'\"",
+          "doc": "The request row and its delivery copy."
+        },
+        {
+          "fact": "live.ack",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'live_request.ack'",
+          "doc": "The ack that starts the upload window."
+        },
+        {
+          "fact": "report.upload_issued",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"report.upload.issue\"' api.log | grep {episode}",
+          "doc": "The issue decision for the live request's upload."
+        },
+        {
+          "fact": "report.upload_completed",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "grep '\"name\":\"report.upload.complete\"' api.log | grep {episode}",
+          "doc": "The complete decision for the live request's upload."
+        },
+        {
+          "fact": "report.upload_row",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "psql -c \"select * from diagnostic_uploads where live_request_id = '{participant}'\"",
+          "doc": "The upload row the decisions wrote."
+        },
+        {
+          "fact": "report.upload",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'report.upload'",
+          "doc": "The client's upload op and its error class."
+        },
+        {
+          "fact": "report.readback",
+          "from": [
+            "r2"
+          ],
+          "required": true,
+          "query": "r2 get diagnostics/{tenant}/{episode}/{episode}.json.gz",
+          "doc": "The checker's own readback of the bundle."
+        }
+      ],
+      "fault_scenario": "scripts/problem-reports/live.upload_missing.fault.test.mjs"
+    }
+  ]
 }
