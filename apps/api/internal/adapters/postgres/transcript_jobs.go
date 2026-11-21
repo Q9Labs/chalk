@@ -124,6 +124,12 @@ func (r TranscriptRepository) Retry(ctx context.Context, input transcripts.Retry
 	return mapJob(row), nil
 }
 
+func (r TranscriptRepository) Release(ctx context.Context, input transcripts.LeaseInput) (transcripts.Job, error) {
+	return r.mutateLease(ctx, input, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
+		return q.ReleaseArtifactJob(ctx, sqlc.ReleaseArtifactJobParams{ID: uuid(input.JobID), Attempt: int32(input.Attempt), LeaseOwner: text(&input.LeaseOwner), LeaseTokenHash: hash, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
+	})
+}
+
 func (r TranscriptRepository) Complete(ctx context.Context, input transcripts.LeaseInput) (transcripts.Job, error) {
 	return r.mutateLease(ctx, input, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
 		return q.CompleteArtifactJob(ctx, sqlc.CompleteArtifactJobParams{ID: uuid(input.JobID), Attempt: int32(input.Attempt), LeaseOwner: text(&input.LeaseOwner), LeaseTokenHash: hash, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})

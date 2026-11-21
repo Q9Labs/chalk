@@ -44,19 +44,29 @@ function Unmeasured({ kind }: { readonly kind: Exclude<TalkTimeDTO["kind"], "ava
 
 function Measured({ talk, playback }: { readonly talk: MeasuredTalk; readonly playback: Playback | null }) {
   const speakers = talk.speakers.filter((speaker) => speaker.talkMs > 0);
-  if (speakers.length === 0) return <Unmeasured kind="no-transcript" />;
+  const totals = (
+    <dl className="tts">
+      <div>
+        <dt>Talked at once</dt>
+        <dd>{talkLength(talk.overlapMs)}</dd>
+      </div>
+      <div>
+        <dt>Silent</dt>
+        <dd>{talkLength(talk.silenceMs)}</dd>
+      </div>
+    </dl>
+  );
+  if (speakers.length === 0) {
+    return (
+      <>
+        {totals}
+        <p className="sub">Nobody was heard talking in this session.</p>
+      </>
+    );
+  }
   return (
     <>
-      <dl className="tts">
-        <div>
-          <dt>Talked at once</dt>
-          <dd>{talkLength(talk.overlapMs)}</dd>
-        </div>
-        <div>
-          <dt>Silent</dt>
-          <dd>{talkLength(talk.silenceMs)}</dd>
-        </div>
-      </dl>
+      {totals}
       <div className="ttt">
         <div className="ttr head" aria-hidden="true">
           <div>Person</div>

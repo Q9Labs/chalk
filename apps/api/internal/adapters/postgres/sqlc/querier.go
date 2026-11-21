@@ -397,6 +397,9 @@ type Querier interface {
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)
 	RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg RecoverExpiredTranscriptionCleanupJobsParams) ([]TranscriptionCleanupJob, error)
+	// Hands back a lease the worker never used. The claim's attempt is refunded
+	// because no work ran, and the job is claimable again at once.
+	ReleaseArtifactJob(ctx context.Context, arg ReleaseArtifactJobParams) (ArtifactJob, error)
 	ReleaseChatAttachmentUploadFinalize(ctx context.Context, arg ReleaseChatAttachmentUploadFinalizeParams) (int64, error)
 	ReleaseRecordingCaptureCommand(ctx context.Context, arg ReleaseRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ReleaseRecordingReservation(ctx context.Context, arg ReleaseRecordingReservationParams) (ReleaseRecordingReservationRow, error)

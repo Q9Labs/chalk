@@ -48,7 +48,6 @@ var (
 	errWorkloadExpired       = errors.New("expired workload signature")
 	errWorkloadNonce         = errors.New("invalid workload nonce")
 	errWorkloadEnvironment   = errors.New("workload environment mismatch")
-	errWorkloadRelease       = errors.New("workload release mismatch")
 	errWorkloadRole          = errors.New("workload role mismatch")
 	errWorkloadAudience      = errors.New("workload audience mismatch")
 	errWorkloadBody          = errors.New("read workload body")
@@ -59,8 +58,11 @@ var (
 	errWorkloadAuthorization = errors.New("invalid workload authorization")
 )
 
+// errWorkloadSuperseded means a correctly signed request names an older release. It is routine after a deploy and is not logged as a rejection.
+var errWorkloadSuperseded = errors.New("workload release superseded")
+
 var workloadRejectionReasons = []error{
-	errWorkloadUnavailable, errWorkloadTimestamp, errWorkloadExpired, errWorkloadNonce, errWorkloadEnvironment, errWorkloadRelease,
+	errWorkloadUnavailable, errWorkloadTimestamp, errWorkloadExpired, errWorkloadNonce, errWorkloadEnvironment,
 	errWorkloadRole, errWorkloadAudience, errWorkloadBody, errWorkloadChecksum, errWorkloadSignature, errWorkloadNonceStore,
 	errWorkloadNonceReplay, errWorkloadAuthorization,
 }
@@ -95,13 +97,12 @@ func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *
 	switch {
 	case request.Header.Get(workloadEnvironmentHeader) != a.config.Environment:
 		return errWorkloadEnvironment
-	case request.Header.Get(workloadReleaseHeader) != a.config.ReleaseID:
-		return errWorkloadRelease
 	case request.Header.Get(workloadRoleHeader) != role:
 		return errWorkloadRole
 	case request.Header.Get(workloadAudienceHeader) != a.config.Audience:
 		return errWorkloadAudience
 	}
+	release := request.Header.Get(workloadReleaseHeader)
 	body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
 	if err != nil {
 		return errWorkloadBody
@@ -113,13 +114,17 @@ func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *
 	if !strings.EqualFold(strings.TrimSpace(request.Header.Get(workloadBodySHAHeader)), bodySHA) {
 		return errWorkloadChecksum
 	}
-	canonical := strings.Join([]string{strings.ToUpper(request.Method), request.URL.EscapedPath(), bodySHA, strconv.FormatInt(timestamp, 10), nonce, a.config.Environment, a.config.ReleaseID, role, request.Header.Get(workloadJourneyHeader), request.Header.Get(workloadTraceparentHeader), request.Header.Get(workloadTracestateHeader), a.config.Audience}, "\n")
+	canonical := strings.Join([]string{strings.ToUpper(request.Method), request.URL.EscapedPath(), bodySHA, strconv.FormatInt(timestamp, 10), nonce, a.config.Environment, release, role, request.Header.Get(workloadJourneyHeader), request.Header.Get(workloadTraceparentHeader), request.Header.Get(workloadTracestateHeader), a.config.Audience}, "\n")
 	mac := hmac.New(sha256.New, a.config.Secret)
 	_, _ = mac.Write([]byte(canonical))
 	expected := mac.Sum(nil)
 	supplied, err := decodeAuthorization(request.Header.Get(workloadAuthorizationHeader))
 	if err != nil || !hmac.Equal(expected, supplied) {
 		return errWorkloadSignature
+	}
+	// Only a caller that holds the secret and signed for another release learns it was superseded, so a guessed release header reveals nothing.
+	if release != a.config.ReleaseID {
+		return errWorkloadSuperseded
 	}
 	consumed, err := a.config.Nonces.Consume(ctx, nonce, a.config.Window)
 	if err != nil {

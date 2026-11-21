@@ -45,6 +45,7 @@ type transcriptArtifactQuerier interface {
 	ClaimTranscriptionFinalizerJob(context.Context, sqlc.ClaimTranscriptionFinalizerJobParams) (sqlc.ArtifactJob, error)
 	HeartbeatArtifactJob(context.Context, sqlc.HeartbeatArtifactJobParams) (sqlc.ArtifactJob, error)
 	RetryArtifactJob(context.Context, sqlc.RetryArtifactJobParams) (sqlc.ArtifactJob, error)
+	ReleaseArtifactJob(context.Context, sqlc.ReleaseArtifactJobParams) (sqlc.ArtifactJob, error)
 	CompleteArtifactJob(context.Context, sqlc.CompleteArtifactJobParams) (sqlc.ArtifactJob, error)
 	CancelArtifactJob(context.Context, sqlc.CancelArtifactJobParams) (sqlc.ArtifactJob, error)
 	RequeueArtifactJob(context.Context, sqlc.RequeueArtifactJobParams) (sqlc.ArtifactJob, error)

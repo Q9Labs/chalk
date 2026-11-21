@@ -8,6 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -34,8 +35,7 @@ type Objects interface {
 
 // Recording is one Recording of an Episode and the transcript made from it.
 type Recording struct {
-	ID     utilities.ID
-	Status string
+	ID utilities.ID
 	// StartedAt is when the Recording's timeline began.
 	StartedAt time.Time
 	// Transcript is nil when no transcript was ever requested for the Recording.
@@ -43,6 +43,10 @@ type Recording struct {
 	// AutomaticTranscription is true when the Episode's policy transcribes every
 	// Recording on its own.
 	AutomaticTranscription bool
+	// TranscriptionPreparation is where the Recording's transcription source
+	// stands. It is what tells a Recording whose transcript is still coming
+	// from one that will never get a transcript row.
+	TranscriptionPreparation recordingpipeline.TranscriptionPreparationStatus
 }
 
 // Outcome is what talk time can say about an Episode: exactly one of
@@ -171,20 +175,21 @@ func (s Service) readDocument(ctx context.Context, transcript transcripts.Transc
 }
 
 // transcriptInProgress reports whether a transcript for the Recording is
-// being made or is about to be: a transcription that is not finished or
-// failed for good, or a Recording that automatic transcription has not
-// reached yet.
+// being made or is about to be. A transcript row says so itself. Without one,
+// automatic transcription will make it only while the Recording's transcription
+// source is still being prepared: a preparation that failed, expired or ended
+// without a source leaves no transcript row to wait for.
 func transcriptInProgress(recording Recording) bool {
 	if transcript := recording.Transcript; transcript != nil {
 		switch transcript.Status {
 		case transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying, transcripts.StatusRetryableFailure:
 			return transcript.DeletedAt == nil
 		case transcripts.StatusNotRequested:
-			return recording.AutomaticTranscription && recording.Status != "failed"
+		default:
+			return false
 		}
-		return false
 	}
-	return recording.AutomaticTranscription && recording.Status != "failed"
+	return recording.AutomaticTranscription && recording.TranscriptionPreparation == recordingpipeline.TranscriptionPreparationPending
 }
 
 // recordingOffsetMS is how far into the Episode a Recording's timeline begins.

@@ -911,6 +911,66 @@ func (q *Queries) RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExp
 	return items, nil
 }
 
+const releaseArtifactJob = `-- name: ReleaseArtifactJob :one
+update artifact_jobs
+set state = 'retryable', attempt_count = attempt_count - 1,
+    available_at = $1::timestamptz, lease_token_hash = null, lease_owner = null,
+    lease_expires_at = null, updated_at = now()
+where id = $2 and state = 'leased' and attempt_count = $3
+  and lease_owner = $4 and lease_token_hash = $5
+returning transcript_language, id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+`
+
+type ReleaseArtifactJobParams struct {
+	Now            pgtype.Timestamptz `json:"now"`
+	ID             pgtype.UUID        `json:"id"`
+	Attempt        int32              `json:"attempt"`
+	LeaseOwner     pgtype.Text        `json:"lease_owner"`
+	LeaseTokenHash []byte             `json:"lease_token_hash"`
+}
+
+// Hands back a lease the worker never used. The claim's attempt is refunded
+// because no work ran, and the job is claimable again at once.
+func (q *Queries) ReleaseArtifactJob(ctx context.Context, arg ReleaseArtifactJobParams) (ArtifactJob, error) {
+	row := q.db.QueryRow(ctx, releaseArtifactJob,
+		arg.Now,
+		arg.ID,
+		arg.Attempt,
+		arg.LeaseOwner,
+		arg.LeaseTokenHash,
+	)
+	var i ArtifactJob
+	err := row.Scan(
+		&i.TranscriptLanguage,
+		&i.ID,
+		&i.IdempotencyKey,
+		&i.TenantID,
+		&i.EpisodeID,
+		&i.RecordingID,
+		&i.TranscriptID,
+		&i.ChunkID,
+		&i.ArtifactKind,
+		&i.PayloadSchemaVersion,
+		&i.State,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.AttemptCount,
+		&i.AttemptLimit,
+		&i.LeaseTokenHash,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.JourneyID,
+		&i.Traceparent,
+		&i.Tracestate,
+		&i.TerminalAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const requeueArtifactJob = `-- name: RequeueArtifactJob :one
 update artifact_jobs
 set state = 'retryable', available_at = $1, error_code = null,
