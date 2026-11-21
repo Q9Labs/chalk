@@ -29,30 +29,50 @@
     }
     return { markerPixels, targetPixels };
   };
+  const handoff = new URL(location.href).searchParams.has("handoff");
+  if (handoff) button.textContent = "Receive filtered screen track";
+  async function receiveFilteredTrack(receive) {
+    receive.addTransceiver("video", { direction: "recvonly" });
+    const gathered = new Promise(resolve => receive.addEventListener("icegatheringstatechange", () => {
+      if (receive.iceGatheringState === "complete") resolve();
+    }));
+    await receive.setLocalDescription(await receive.createOffer());
+    if (receive.iceGatheringState !== "complete") await gathered;
+    const response = await fetch("offer", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(receive.localDescription)
+    });
+    if (!response.ok) throw Error(`Handoff offer was rejected (${response.status})`);
+    await receive.setRemoteDescription(await response.json());
+  }
   button.onclick = async () => {
     button.disabled = true;
     let track;
     let send;
     let receive;
     try {
-      const media = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      [track] = media.getVideoTracks();
-      send = new RTCPeerConnection();
       receive = new RTCPeerConnection();
-      const sendCandidates = [];
-      const receiveCandidates = [];
-      send.onicecandidate = ({ candidate }) => candidate && sendCandidates.push(candidate);
-      receive.onicecandidate = ({ candidate }) => candidate && receiveCandidates.push(candidate);
       receive.ontrack = ({ track: remoteTrack }) => { video.srcObject = new MediaStream([remoteTrack]); };
-      send.addTrack(track, media);
-      await send.setLocalDescription(await send.createOffer());
-      await receive.setRemoteDescription(send.localDescription);
-      await receive.setLocalDescription(await receive.createAnswer());
-      await send.setRemoteDescription(receive.localDescription);
-      send.onicecandidate = ({ candidate }) => candidate && receive.addIceCandidate(candidate).catch(() => {});
-      receive.onicecandidate = ({ candidate }) => candidate && send.addIceCandidate(candidate).catch(() => {});
-      for (const candidate of sendCandidates) await receive.addIceCandidate(candidate);
-      for (const candidate of receiveCandidates) await send.addIceCandidate(candidate);
+      if (handoff) {
+        await receiveFilteredTrack(receive);
+      } else {
+        const media = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        [track] = media.getVideoTracks();
+        send = new RTCPeerConnection();
+        const sendCandidates = [];
+        const receiveCandidates = [];
+        send.onicecandidate = ({ candidate }) => candidate && sendCandidates.push(candidate);
+        receive.onicecandidate = ({ candidate }) => candidate && receiveCandidates.push(candidate);
+        send.addTrack(track, media);
+        await send.setLocalDescription(await send.createOffer());
+        await receive.setRemoteDescription(send.localDescription);
+        await receive.setLocalDescription(await receive.createAnswer());
+        await send.setRemoteDescription(receive.localDescription);
+        send.onicecandidate = ({ candidate }) => candidate && receive.addIceCandidate(candidate).catch(() => {});
+        receive.onicecandidate = ({ candidate }) => candidate && send.addIceCandidate(candidate).catch(() => {});
+        for (const candidate of sendCandidates) await receive.addIceCandidate(candidate);
+        for (const candidate of receiveCandidates) await send.addIceCandidate(candidate);
+      }
       await Promise.race([
         new Promise(resolve => video.addEventListener("playing", resolve, { once: true })),
         new Promise((_, reject) => setTimeout(() => reject(Error("No remote playback")), 10000))
@@ -66,7 +86,7 @@
         browser: navigator.userAgent,
         width: video.videoWidth,
         height: video.videoHeight,
-        surface: track.getSettings().displaySurface ?? "not_reported",
+        surface: handoff ? "sck_handoff" : track.getSettings().displaySurface ?? "not_reported",
         samples
       }, null, 2);
     } catch (error) {
