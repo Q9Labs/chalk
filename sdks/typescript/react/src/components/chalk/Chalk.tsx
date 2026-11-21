@@ -304,13 +304,13 @@ function SpaceSurface(
       ...setup,
       client: screenAnnotationFor(client),
       context,
-      publicationForTrack: (track: MediaStreamTrack) => media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId ?? setup.localPublicationForTrack?.(track),
+      publicationForTrack: (track: MediaStreamTrack) => media.screenShare.track === track ? media.screenShare.publicationId : media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId,
       actions: {
         saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? (setup.actions?.saveToWhiteboard ?? saveAnnotation) : undefined,
         downloadPng: setup.actions?.downloadPng,
       },
     };
-  }, [setup, self.participantId, self.displayName, connection.status, whiteboardState.access, roster, client, media.remote, canDrawWhiteboard, saveAnnotation, props.features?.whiteboard]);
+  }, [setup, self.participantId, self.displayName, connection.status, whiteboardState.access, roster, client, media.remote, media.screenShare, canDrawWhiteboard, saveAnnotation, props.features?.whiteboard]);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -354,6 +354,7 @@ function SpaceSurface(
               requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
               onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
               clear: () => whiteboardSubscription.transport.clear(),
+              uploadFile: whiteboardSubscription.transport.files.uploadFile,
               presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },

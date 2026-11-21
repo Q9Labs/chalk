@@ -12,7 +12,7 @@ import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
-import { MEDIA_SOURCES, confirmedLocalMediaState, livePublication, pausedPublicationIds, sameMediaSlice, screenLocalMedia } from "./media-snapshot";
+import { MEDIA_SOURCES, confirmedLocalMediaState, confirmedScreenPublication, livePublication, pausedPublicationIds, sameMediaSlice, screenLocalMedia } from "./media-snapshot";
 import { makeScopedFork, type ScopedFork } from "./scoped-fork";
 import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -1723,6 +1723,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const remote = Object.freeze(
       (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
     );
+    const localScreen = snapshot?.localTracks.find((publication) => publication.source === "screen" && publication.track === local.screen.track);
+    const screenPublicationId = this.#syncLive && local.screen.state === "enabled" ? confirmedScreenPublication(localScreen, this.#ports?.sync.getSnapshot()) : undefined;
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
@@ -1731,6 +1733,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       screenShare: {
         ...local.screen,
         hasAudio: this.#screenShareHasAudio(snapshot),
+        ...(screenPublicationId ? { publicationId: screenPublicationId } : {}),
         ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}),
       },
       incomingRequests: this.#requests,

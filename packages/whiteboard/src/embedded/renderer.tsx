@@ -181,6 +181,7 @@ export function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboar
     sendCursor: ({ x, y }: { readonly x: number; readonly y: number }) => rendererBridge.post({ type: "cursor", payload: { x, y } }),
     requestSnapshot: () => rendererBridge.requestSnapshot(),
     clear: () => rendererBridge.clear(),
+    uploadFile: rendererBridge.uploadFile.bind(rendererBridge),
     fileTransfer: {
       download: (fileId: string) => rendererBridge.downloadFile(fileId),
     },

@@ -680,6 +680,12 @@ export const ErrorResponseSchema = /* @__PURE__ */ (() =>
   }))();
 export type ErrorResponse = typeof ErrorResponseSchema.Type;
 
+export const FinalizeWhiteboardFileUploadRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    sha256: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type FinalizeWhiteboardFileUploadRequest = typeof FinalizeWhiteboardFileUploadRequestSchema.Type;
+
 export const InitiateChatAttachmentUploadRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     byteLength: Schema.Number,
@@ -689,6 +695,14 @@ export const InitiateChatAttachmentUploadRequestSchema = /* @__PURE__ */ (() =>
     sha256: Schema.String.check(Schema.isMinLength(1)),
   }))();
 export type InitiateChatAttachmentUploadRequest = typeof InitiateChatAttachmentUploadRequestSchema.Type;
+
+export const InitiateWhiteboardFileUploadRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    byteLength: Schema.Number,
+    mimeType: Schema.String.check(Schema.isMinLength(1)),
+    sha256: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type InitiateWhiteboardFileUploadRequest = typeof InitiateWhiteboardFileUploadRequestSchema.Type;
 
 export const IntegrationActionIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId")))();
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
@@ -2251,6 +2265,15 @@ export const WhiteboardFileDownloadSchema = /* @__PURE__ */ (() =>
   }))();
 export type WhiteboardFileDownload = typeof WhiteboardFileDownloadSchema.Type;
 
+export const WhiteboardFileUploadSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expiresAt: Schema.optional(Schema.String),
+    headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    ready: Schema.Boolean,
+    uploadUrl: Schema.optional(Schema.String),
+  }))();
+export type WhiteboardFileUpload = typeof WhiteboardFileUploadSchema.Type;
+
 export const RateLimitLimitHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)))();
 export type RateLimitLimitHeader = typeof RateLimitLimitHeaderSchema.Type;
 
@@ -2722,6 +2745,24 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__
   }))();
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
 
+export const FinalizeWhiteboardFileUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+    sceneId: Schema.String,
+  }))();
+export type FinalizeWhiteboardFileUploadPathParams = typeof FinalizeWhiteboardFileUploadPathParamsSchema.Type;
+
+export const FinalizeWhiteboardFileUploadRequestBodySchema = /* @__PURE__ */ (() => FinalizeWhiteboardFileUploadRequestSchema)();
+export type FinalizeWhiteboardFileUploadRequestBody = typeof FinalizeWhiteboardFileUploadRequestBodySchema.Type;
+
+export const FinalizeWhiteboardFileUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type FinalizeWhiteboardFileUpload429ResponseHeaders = typeof FinalizeWhiteboardFileUpload429ResponseHeadersSchema.Type;
+
 export const FindTenantByExternalIDQueryParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
@@ -3029,6 +3070,27 @@ export const InitiateChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
+
+export const InitiateWhiteboardFileUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+    sceneId: Schema.String,
+  }))();
+export type InitiateWhiteboardFileUploadPathParams = typeof InitiateWhiteboardFileUploadPathParamsSchema.Type;
+
+export const InitiateWhiteboardFileUploadRequestBodySchema = /* @__PURE__ */ (() => InitiateWhiteboardFileUploadRequestSchema)();
+export type InitiateWhiteboardFileUploadRequestBody = typeof InitiateWhiteboardFileUploadRequestBodySchema.Type;
+
+export const InitiateWhiteboardFileUploadResponseSchema = /* @__PURE__ */ (() => WhiteboardFileUploadSchema)();
+export type InitiateWhiteboardFileUploadResponse = typeof InitiateWhiteboardFileUploadResponseSchema.Type;
+
+export const InitiateWhiteboardFileUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type InitiateWhiteboardFileUpload429ResponseHeaders = typeof InitiateWhiteboardFileUpload429ResponseHeadersSchema.Type;
 
 export const InspectMCPConsentRequestRequestBodySchema = /* @__PURE__ */ (() => MCPConsentLookupSchema)();
 export type InspectMCPConsentRequestRequestBody = typeof InspectMCPConsentRequestRequestBodySchema.Type;
@@ -6155,6 +6217,25 @@ export const WebhookUnsafeUrlErrorSchema = WebhookUnsafeUrlErrorWireSchema.pipe(
   }),
 );
 
+export class WhiteboardFileConflictError extends Schema.TaggedErrorClass<WhiteboardFileConflictError>()("WhiteboardFileConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("whiteboard.file_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const WhiteboardFileConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("whiteboard.file_conflict"),
+    message: Schema.String,
+  }),
+});
+export const WhiteboardFileConflictErrorSchema = WhiteboardFileConflictErrorWireSchema.pipe(
+  Schema.decodeTo(WhiteboardFileConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardFileConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class WhiteboardFileNotFoundError extends Schema.TaggedErrorClass<WhiteboardFileNotFoundError>()("WhiteboardFileNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("whiteboard.file_not_found"),
@@ -6593,6 +6674,20 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
 
+export const FinalizeWhiteboardFileUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  WhiteboardFileConflictErrorSchema,
+  WhiteboardFileNotFoundErrorSchema,
+  WhiteboardFileTransferFailedErrorSchema,
+  WhiteboardInvalidFileErrorSchema,
+  WhiteboardStorageUnavailableErrorSchema,
+]);
+export type FinalizeWhiteboardFileUploadError = typeof FinalizeWhiteboardFileUploadErrorSchema.Type;
+
 export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
 export type FindTenantByExternalIDError = typeof FindTenantByExternalIDErrorSchema.Type;
 
@@ -6820,6 +6915,20 @@ export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type InitiateChatAttachmentUploadError = typeof InitiateChatAttachmentUploadErrorSchema.Type;
+
+export const InitiateWhiteboardFileUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  WhiteboardFileConflictErrorSchema,
+  WhiteboardFileNotFoundErrorSchema,
+  WhiteboardFileTransferFailedErrorSchema,
+  WhiteboardInvalidFileErrorSchema,
+  WhiteboardStorageUnavailableErrorSchema,
+]);
+export type InitiateWhiteboardFileUploadError = typeof InitiateWhiteboardFileUploadErrorSchema.Type;
 
 export const InspectMCPConsentRequestErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthRequestNotFoundErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type InspectMCPConsentRequestError = typeof InspectMCPConsentRequestErrorSchema.Type;
@@ -7447,6 +7556,7 @@ export const ChalkOperationPolicies = {
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  finalizeWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
@@ -7458,6 +7568,7 @@ export const ChalkOperationPolicies = {
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   inspectMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

@@ -23,3 +23,5 @@ export const chatUploads = (base: string) => route(base, "chat", "attachments", 
 export const chatUploadFinalize = (base: string, uploadId: string) => route(base, "chat", "attachments", "uploads", uploadId, "finalize");
 export const chatAttachmentDownload = (base: string, attachmentId: string) => route(base, "chat", "attachments", attachmentId, "download");
 export const whiteboardFileDownload = (base: string, fileId: string) => route(base, "whiteboard", "files", fileId, "download");
+export const whiteboardFileUpload = (base: string, sceneId: string, fileId: string) => route(base, "whiteboard", "scenes", sceneId, "files", fileId, "upload");
+export const whiteboardFileFinalize = (base: string, sceneId: string, fileId: string) => route(base, "whiteboard", "scenes", sceneId, "files", fileId, "finalize");

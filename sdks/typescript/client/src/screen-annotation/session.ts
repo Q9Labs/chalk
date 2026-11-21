@@ -1,5 +1,6 @@
 import type { ConnectionPorts } from "../connection";
 import type { ConnectionLifecycleCapability } from "../connection/lifecycle";
+import { confirmedScreenPublication } from "../space-client/media-snapshot";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
 import type { AnnotationReplica } from "./replica";
 
@@ -50,14 +51,9 @@ export class AnnotationSession implements ScreenAnnotationClient {
 
       const sync = ports.sync.getSnapshot();
       const screen = ports.media.getSnapshot().localTracks.find((track) => track.source === "screen" && track.enabled);
-      if (!screen?.publicationId || screen.track.readyState !== "live") return;
-      const { publicationId } = screen;
-      if (annotation.state?.layer.publication_id === publicationId) return;
-
-      // A locally prepared track or a remote subscription cannot create a layer.
-      // Wait until the authoritative Sync media stream sees this exact publication.
-      const observed = sync.media?.items.some((item) => item.participantId === sync.participantId && item.source === "screen" && item.enabled && item.publicationId === publicationId);
-      if (!observed) return;
+      // Wait for Sync to observe this exact locally published track.
+      const publicationId = confirmedScreenPublication(screen, sync);
+      if (!screen || !publicationId || annotation.state?.layer.publication_id === publicationId) return;
       const { width, height } = screen.track.getSettings?.() ?? {};
       if (!width || !height) {
         schedule();

@@ -345,6 +345,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
           requestSnapshot: collab.requestSnapshot,
           clear: collab.clear,
           fileTransfer: collab.fileTransfer,
+          uploadFile: collab.uploadFile,
           presignDownload: collab.presignDownload,
           subscribe: collab.subscribe,
           onFileSyncStateChange: collab.onFileSyncStateChange,
@@ -517,7 +518,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
     isReady,
     math,
     resolvedLoadError,
-    uiOptions: UI_OPTIONS,
+    uiOptions: props.collab?.uploadFile ? { ...UI_OPTIONS, tools: { image: true } } : UI_OPTIONS,
     ...engine,
   };
 }

@@ -1,3 +1,4 @@
+import { decodeWhiteboardImageDataURL, WHITEBOARD_MAX_FILE_BYTES } from "../collab/file-data";
 import type { WhiteboardView } from "../collab/view";
 import type { ChalkEmbeddedBoardContext, ChalkEmbeddedBoardNotice } from "./protocol";
 import type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardWireElement } from "../collab/wire";
@@ -15,7 +16,7 @@ import {
   type ChalkEmbeddedWhiteboardViewport,
 } from "./protocol";
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = WHITEBOARD_MAX_FILE_BYTES;
 const MAX_IMAGE_DIMENSION = 16_384;
 const MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024;
 const permittedMimeTypes = new Set(["application/octet-stream", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp"]);
@@ -67,6 +68,7 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
     });
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
+  readonly uploadFile?: (input: { readonly sceneId: string; readonly fileId: string; readonly bytes: Uint8Array<ArrayBuffer>; readonly mimeType: string; readonly sha256: string; readonly signal: AbortSignal }) => Promise<void>;
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string }>;
 }
 
@@ -376,7 +378,24 @@ export class ChalkWhiteboardController {
   async #writeFile(message: ChalkEmbeddedWhiteboardRendererEnvelope): Promise<void> {
     const payload = requireFileWrite(message.payload);
     await this.#operation(payload.requestId, async () => {
-      throw new Error("Board uploads are unavailable.");
+      const upload = this.options.transport.files.uploadFile;
+      if (!upload || !this.#effectiveCanDraw()) throw new Error("Whiteboard image upload is not available.");
+      if (payload.sceneId !== this.#sceneId || payload.sceneGeneration !== this.#sceneGeneration) {
+        throw new Error("The whiteboard scene changed.");
+      }
+      const transfer = this.#beginFileTransfer(payload.requestId);
+      try {
+        const { bytes, mimeType } = decodeWhiteboardImageDataURL(payload.dataURL);
+        if (bytes.byteLength !== payload.byteLength || mimeType !== payload.mimeType || detectFileMimeType(bytes) !== mimeType) {
+          throw new Error("Whiteboard image metadata does not match.");
+        }
+        const dimensions = imageDimensions(bytes, mimeType);
+        if (!dimensions) throw new Error("Whiteboard image dimensions are invalid.");
+        validateImageDimensions(dimensions);
+        await upload({ sceneId: payload.sceneId, fileId: payload.fileId, bytes, mimeType, sha256: payload.sha256, signal: transfer.signal });
+      } finally {
+        this.#finishFileTransfer(payload.requestId, transfer);
+      }
     });
   }
 
@@ -635,7 +654,7 @@ function requireRequest(value: unknown) {
 }
 
 function requireFileWrite(value: unknown) {
-  const record = requireRecord(value, ["requestId", "fileId", "mimeType", "byteLength", "sha256", "dataURL"]);
+  const record = requireRecord(value, ["requestId", "sceneId", "sceneGeneration", "fileId", "mimeType", "byteLength", "sha256", "dataURL"]);
   const byteLength = record.byteLength;
   const sha256 = requireString(record.sha256, "file digest");
   if (!Number.isSafeInteger(byteLength) || Number(byteLength) <= 0 || Number(byteLength) > MAX_FILE_BYTES || !/^[\da-f]{64}$/iu.test(sha256)) {
@@ -643,6 +662,8 @@ function requireFileWrite(value: unknown) {
   }
   return {
     requestId: requireString(record.requestId, "request ID"),
+    sceneId: requireString(record.sceneId, "scene ID"),
+    sceneGeneration: requireString(record.sceneGeneration, "scene generation"),
     fileId: requireString(record.fileId, "file ID"),
     mimeType: normalizeMimeType(requireString(record.mimeType, "MIME type")),
     byteLength: Number(byteLength),

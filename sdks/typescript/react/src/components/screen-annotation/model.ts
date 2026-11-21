@@ -15,8 +15,6 @@ export interface ScreenAnnotationOptions {
 }
 
 export interface ScreenAnnotationSetup extends Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper"> {
-  /** Returns the confirmed publication for this exact local track, not the last projection for its participant. */
-  readonly localPublicationForTrack?: (track: MediaStreamTrack) => string | undefined;
   /** Publish an immutable file to this board scene. An identical retry with the same ID must succeed. */
   readonly uploadBoardFrame?: (input: { readonly sceneId: string; readonly fileId: string; readonly png: Blob }) => Promise<void>;
 }

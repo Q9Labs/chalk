@@ -1,3 +1,4 @@
+import { blobToDataURL, type WhiteboardFileUpload } from "../collab/files";
 import type { DrawPolicy } from "../collab/draw-policy";
 import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
@@ -99,6 +100,16 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
 
   clear(): Promise<WhiteboardCommit> {
     return this.#request<WhiteboardCommit>("clear", {});
+  }
+
+  async uploadFile(input: WhiteboardFileUpload): Promise<void> {
+    const { sceneId, sceneGeneration, fileId, blob, signal } = input;
+    if (!sceneGeneration) throw new Error("The whiteboard scene is unavailable.");
+    const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+    const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const dataURL = await blobToDataURL(blob);
+    if (signal.aborted) return;
+    await this.#request<void>("file_write", { sceneId, sceneGeneration, fileId, mimeType: blob.type, byteLength: blob.size, sha256, dataURL }, 90_000);
   }
 
   downloadFile(fileId: string): Promise<{ readonly mimeType: string; readonly dataURL: string }> {
