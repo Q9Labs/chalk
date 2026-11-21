@@ -1,5 +1,5 @@
 import type { Toast } from "../toast-stack/ToastStack";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConnectionRing } from "./ConnectionRing";
 import { RECONNECT_NOTICE_MS } from "./use-connection-phase";
 import { useElapsedSeconds, useTrueFor } from "../../internal/useTrueFor";
@@ -39,43 +39,63 @@ export function reconnectedToast(awayMs: number): Toast {
  */
 export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onReportProblem }: ConnectionStatusProps) {
   const waiting = phase === "reconnecting" || phase === "offline";
+  const failed = phase === "failed";
   const cardDue = useTrueFor(waiting, RECONNECT_NOTICE_MS);
   const seconds = useElapsedSeconds(waiting ? since : null);
   const [veiled, setVeiled] = useState(false);
-  if (waiting && cardDue && !veiled) setVeiled(true);
-  if (!waiting && phase !== "reconnected" && veiled) setVeiled(false);
+  if ((failed || (waiting && cardDue)) && !veiled) setVeiled(true);
+  if (!waiting && !failed && phase !== "reconnected" && veiled) setVeiled(false);
   const copy = waiting ? reconnectingCopy(phase, seconds, pending) : null;
+  const showCard = failed || (copy !== null && (cardDue || veiled));
+  // Reconnecting, offline and lost are one veil and one card that change in place, so losing the call never replays the fade or the entrance.
   return (
     <>
       <style href="chalk-connection-status" precedence="default">
         {STATUS_CSS}
       </style>
-      {veiled && phase !== "failed" ? <div aria-hidden="true" data-lifting={phase === "reconnected" || undefined} className="chalk-connection-dim" /> : null}
-      {copy && cardDue ? (
-        <div role="status" data-part="connection-status" className="chalk-connection-card">
-          <h3>
-            <ConnectionRing />
-            {copy.title}
-            <span aria-hidden="true" className="chalk-connection-time">
-              {formatElapsed(seconds)}
-            </span>
-          </h3>
-          <p>{copy.detail}</p>
+      {veiled ? <div aria-hidden="true" data-lifting={phase === "reconnected" || undefined} className="chalk-connection-dim" /> : null}
+      {showCard ? (
+        <div
+          role={failed ? "alertdialog" : "status"}
+          aria-labelledby={failed ? "chalk-connection-lost-title" : undefined}
+          aria-describedby={failed ? "chalk-connection-lost-detail" : undefined}
+          data-part="connection-status"
+          className={failed ? "chalk-connection-card chalk-connection-card-lost" : "chalk-connection-card"}
+        >
+          {failed ? (
+            <FailedContent onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
+          ) : copy ? (
+            <>
+              <h3>
+                <ConnectionRing />
+                {copy.title}
+                <span aria-hidden="true" className="chalk-connection-time">
+                  {formatElapsed(seconds)}
+                </span>
+              </h3>
+              <p>{copy.detail}</p>
+            </>
+          ) : null}
         </div>
-      ) : null}
-      {phase === "failed" ? (
-        <>
-          <div aria-hidden="true" className="chalk-connection-dim" />
-          <FailedCard onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
-        </>
       ) : null}
     </>
   );
 }
 
-function FailedCard({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatusProps, "onRejoin" | "onLeave" | "onReportProblem">) {
+function FailedContent({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatusProps, "onRejoin" | "onLeave" | "onReportProblem">) {
+  const content = useRef<HTMLDivElement>(null);
+  // The card's own button is what holds focus, so when it goes (Rejoin pressed, or the call returned) focus moves to the dock's Leave button instead of dropping to the page.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Hand focus to a stable call control when the focused button leaves the page.
+  useEffect(() => {
+    const frame = content.current?.closest(".chalk-frame");
+    return () => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      frame?.querySelector<HTMLElement>('[data-part="dock-region"] button[aria-label="Leave call"]')?.focus();
+    };
+  }, []);
   return (
-    <div role="alertdialog" aria-labelledby="chalk-connection-lost-title" aria-describedby="chalk-connection-lost-detail" data-part="connection-status" className="chalk-connection-card chalk-connection-card-lost">
+    <div ref={content} style={{ display: "contents" }}>
       <h3 id="chalk-connection-lost-title">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
