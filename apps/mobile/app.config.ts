@@ -20,6 +20,7 @@ const ANDROID_PERMISSIONS = [
   "android.permission.MODIFY_AUDIO_SETTINGS",
   "android.permission.POST_NOTIFICATIONS",
   "android.permission.RECORD_AUDIO",
+  "android.permission.SYSTEM_ALERT_WINDOW",
   "android.permission.VIBRATE",
   "android.permission.WAKE_LOCK",
 ];
@@ -88,7 +89,7 @@ export default {
       versionCode: release.android.version_code,
       adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
       intentFilters: androidIntentFilters(nightly ? [...origins.webHosts, origins.nightlyWebHost] : origins.webHosts),
-      blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+      blockedPermissions: ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
       permissions: ANDROID_PERMISSIONS,
     },
     extra: { buildProfile, ...(nightly ? { apiBaseURL: origins.nightlyApiBaseURL } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } },

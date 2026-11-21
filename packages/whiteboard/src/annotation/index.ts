@@ -5,21 +5,22 @@ import type { AnnotationTextMeasure, ScreenAnnotationFrame } from "@q9labsai/cha
 import { toFittedWireElement } from "../collab/wire";
 import { annotationBoardElements, type AnnotationWhiteboardPlacement } from "./elements";
 
+export { fromWireElement } from "../collab/wire";
 export { annotationWhiteboardPlacement } from "./elements";
 export type { AnnotationWhiteboardPlacement } from "./elements";
 
-export type AnnotationWhiteboardImportOptions<Image> = {
+export type AnnotationWhiteboardImportOptions<Image, Png = Blob> = {
   readonly frame: ScreenAnnotationFrame<Image>;
   readonly sceneId: string;
   readonly placement: AnnotationWhiteboardPlacement;
   readonly measureText: AnnotationTextMeasure;
   readonly transport: Pick<ChalkWhiteboardV1Transport, "submitUpdate">;
-  readonly encodeFrame: (image: Image) => Promise<Blob>;
+  readonly encodeFrame: (image: Image) => Promise<Png>;
   /**
    * Publish a ready asset under the supplied ID in this exact board scene. Repeating the same
    * request after an uncertain upload must succeed without replacing a different asset.
    */
-  readonly uploadFrame: (input: { readonly sceneId: string; readonly fileId: string; readonly png: Blob }) => Promise<void>;
+  readonly uploadFrame: (input: { readonly sceneId: string; readonly fileId: string; readonly png: Png }) => Promise<void>;
   readonly importId?: string;
 };
 
@@ -29,7 +30,7 @@ export type AnnotationWhiteboardImport = {
   save(): Promise<ChalkWhiteboardV1Commit>;
 };
 
-export function createAnnotationWhiteboardImport<Image>(options: AnnotationWhiteboardImportOptions<Image>): AnnotationWhiteboardImport {
+export function createAnnotationWhiteboardImport<Image, Png>(options: AnnotationWhiteboardImportOptions<Image, Png>): AnnotationWhiteboardImport {
   const { frame, sceneId, placement, measureText, transport, encodeFrame, uploadFrame } = options;
   const importId = options.importId ?? crypto.randomUUID();
   if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/.test(importId)) throw new TypeError("Expected a lowercase annotation import UUID");
@@ -39,7 +40,7 @@ export function createAnnotationWhiteboardImport<Image>(options: AnnotationWhite
     return { id, type, version, index, versionNonce: version_nonce, isDeleted: is_deleted, payload };
   });
 
-  let png: Blob | undefined;
+  let png: Png | undefined;
   let uploaded = false;
   let committed: ChalkWhiteboardV1Commit | undefined;
   let pending: Promise<ChalkWhiteboardV1Commit> | undefined;

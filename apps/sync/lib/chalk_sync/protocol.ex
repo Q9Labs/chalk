@@ -46,7 +46,13 @@ defmodule ChalkSync.ProtocolV1 do
   defp drop_invalid_baggage(frame), do: frame
 
   # Each negotiated extension shows up in the welcome as `<name>: true`.
-  @welcome_flags [:entry_confirmation, :media_off_reason, :connection_quality, :screen_annotation]
+  @welcome_flags [
+    :entry_confirmation,
+    :media_off_reason,
+    :connection_quality,
+    :screen_annotation,
+    :screen_annotation_burn_in
+  ]
 
   def recovery_id, do: UUID.generate()
 

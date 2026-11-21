@@ -23,7 +23,7 @@ interface LayerCursor {
 export function createAnnotationTimeline(layers: readonly BoundAnnotationLayer[], fps: number) {
   const bySource = new Map<string, LayerCursor[]>();
   for (const layer of layers) {
-    if (!layer.initial.marks.length && !layer.changes.some(({ change }) => change.kind === "upsert")) continue;
+    if (layer.layer.burned_in || (!layer.initial.marks.length && !layer.changes.some(({ change }) => change.kind === "upsert"))) continue;
     const cursor = createLayerCursor(layer);
     for (const sourceId of layer.sourceIds) {
       const entries = bySource.get(sourceId) ?? [];

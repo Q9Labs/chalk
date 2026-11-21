@@ -23,6 +23,8 @@ export type ConnectionMediaDevices = {
   /** The signal cancels post-capture preparation; native permission prompts may still resolve late. */
   readonly getUserMedia: (constraints: MediaStreamConstraints, signal?: AbortSignal) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
+  /** Intrinsic frame size witnessed on this exact native capture before publishing. */
+  readonly verifiedAnnotationCapture?: (track: MediaStreamTrack) => import("../screen-annotation").ScreenAnnotationFrameSize | undefined;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**
    * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls

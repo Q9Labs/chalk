@@ -443,6 +443,12 @@
       "value": true,
       "description": "Present only on a connection that negotiated screen_annotation=1. Enables the separate screen annotation v1 extension after recovery."
     },
+    "screenAnnotationBurnIn": {
+      "wireName": "screen_annotation_burn_in",
+      "optional": true,
+      "value": true,
+      "description": "Present when both ends support annotation in screen video. Only a negotiated sharer may bind a baked publication, and only negotiated viewers receive its annotation layer."
+    },
     "entryGeneration": {
       "wireName": "entry_generation",
       "optional": true,

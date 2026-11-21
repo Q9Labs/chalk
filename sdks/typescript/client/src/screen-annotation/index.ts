@@ -32,6 +32,8 @@ export type ScreenAnnotationResult = Wire["ServerReceipt"]["result"] | { readonl
 export interface ScreenAnnotationClient {
   getSnapshot(): ScreenAnnotationSnapshot;
   subscribe(listener: () => void): () => void;
+  /** True only after this connection negotiated the baked-video extension. */
+  supportsBurnIn?(): boolean;
   /** A monotonic estimate on Sync's clock. Use it to interpret expiry times, not for command authority. */
   serverNowMs(): number;
   /** Capture the target at gesture start. Never replace a stale fence on retry. */

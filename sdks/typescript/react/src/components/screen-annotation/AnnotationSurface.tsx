@@ -39,14 +39,24 @@ export function AnnotationSurface({ annotation, ...props }: SurfaceProps): React
     () => client.getSnapshot(),
     () => client.getSnapshot(),
   );
-  const state = snapshot.status === "ready" ? snapshot.state : null;
-  if (snapshot.status !== "ready" || !state || state.layer.publication_id !== publicationId || !props.live) return null;
-  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={actions} state={state} presence={snapshot.presence} />;
+  const [last, setLast] = useState<{ readonly track: MediaStreamTrack; readonly state: ScreenAnnotationState } | null>(null);
+  const live = snapshot.status === "ready" && props.live && snapshot.state?.layer.publication_id === publicationId ? snapshot.state : null;
+  if (live && live.layer.burned_in && (last?.state !== live || last.track !== props.track)) {
+    setLast({ track: props.track, state: live });
+  } else if (last && !live?.layer.burned_in && snapshot.status !== "connecting") {
+    setLast(null);
+  }
+  // Keep observing the same video through a Sync-only disconnect, without permitting stale interactions.
+  const recovering = snapshot.status === "connecting" && props.live && last?.track === props.track && last.state.layer.publication_id === publicationId;
+  const state = live ?? (recovering ? last.state : null);
+  if (!state) return null;
+  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={actions} state={state} presence={snapshot.status === "ready" ? snapshot.presence : []} connected={Boolean(live)} />;
 }
 
 function ActiveAnnotationSurface({
   client,
   state,
+  connected,
   presence,
   fontUrl,
   helper,
@@ -64,6 +74,7 @@ function ActiveAnnotationSurface({
   grants,
 }: Omit<SurfaceProps, "annotation" | "live"> & {
   readonly client: ScreenAnnotationClient;
+  readonly connected: boolean;
   readonly state: ScreenAnnotationState;
   readonly presence: readonly ScreenAnnotationPresence[];
   readonly fontUrl?: string;
@@ -82,7 +93,7 @@ function ActiveAnnotationSurface({
   // A window share may be this browser window. Only an excluded call tab can host ink in-tab.
   const safePreview = !isLocal || capture?.surface === "browser";
   const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
-  const showToolbar = toolsOpen && editable && safePreview;
+  const showToolbar = connected && toolsOpen && editable && safePreview;
   const showOwnClear = state.marks.some((mark) => mark.author.participant_id === actorId);
   const onError = (message: string) => setFeedback({ message, error: true });
 
@@ -109,7 +120,7 @@ function ActiveAnnotationSurface({
         retry?.frame ??
         captureAnnotationVideoFrame(video, {
           publicationId: live.layer.publication_id,
-          marks: live.marks,
+          marks: live.layer.burned_in ? [] : live.marks,
           paused: live.paused,
           sharerId: live.layer.sharer_id,
           nowMs: client.serverNowMs(),
@@ -135,7 +146,7 @@ function ActiveAnnotationSurface({
             canvasHost,
           )
         : null}
-      {primary ? (
+      {primary && connected ? (
         <div data-part="screen-annotation-controls" className="pointer-events-none absolute inset-x-2 bottom-12 z-30 grid justify-items-center gap-1.5">
           <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5">
             {editable && safePreview ? (

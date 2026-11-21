@@ -1,0 +1,38 @@
+diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/GetUserMediaImpl.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/GetUserMediaImpl.java
+index f3d6dfb2f7e647d6614afbf645333977da114c89..4e1c8115eb406ce2e0813d0d11723ed9689ee3b4 100644
+--- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/GetUserMediaImpl.java
++++ b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/GetUserMediaImpl.java
+@@ -393,6 +393,15 @@ class GetUserMediaImpl {
+      * @param trackId TrackPrivate id
+      * @param name VideoEffectProcessor name
+      */
++    boolean setChalkScreenVideoProcessor(String id, realtimekit.org.webrtc.VideoProcessor processor) {
++        TrackPrivate track = tracks.get(id);
++        if (track == null || !(track.videoCaptureController instanceof ScreenCaptureController)) {
++            return false;
++        }
++        ((VideoSource) track.mediaSource).setVideoProcessor(processor);
++        return true;
++    }
++
+     void setVideoEffect(String trackId, String name) {
+         TrackPrivate track = tracks.get(trackId);
+ 
+diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java
+index 681eec369c573b08a9981001e2199421e0eec429..25bcc1960583171cd6defd5de9656fd65b74fc75 100644
+--- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java
++++ b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java
+@@ -481,6 +481,13 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+         return getUserMediaImpl.getTrack(trackId);
+     }
+ 
++    public void setChalkScreenVideoProcessor(
++            String id, realtimekit.org.webrtc.VideoProcessor processor,
++            java.util.function.Consumer<Boolean> completion) {
++        ThreadUtils.runOnExecutor(() ->
++                completion.accept(getUserMediaImpl.setChalkScreenVideoProcessor(id, processor)));
++    }
++
+     public VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {
+         return getUserMediaImpl.createVideoTrack(videoCaptureController);
+     }

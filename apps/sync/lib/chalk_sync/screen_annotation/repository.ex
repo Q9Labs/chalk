@@ -109,6 +109,7 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
           Store.uuid(actor.id),
           actor.generation,
           bind["frame"],
+          bind["burned_in"] == true,
           trace.producing_trace_id,
           trace.producing_span_id
         ],

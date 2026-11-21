@@ -1025,12 +1025,16 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         else: base
     valid_annotation = not Map.has_key?(frame, "screen_annotation") or
         frame["screen_annotation"] == true
+    base = if Map.has_key?(frame, "screen_annotation_burn_in"),
+        do: base ++ ["screen_annotation_burn_in"], else: base
+    valid_burn_in = not Map.has_key?(frame, "screen_annotation_burn_in") or
+        (frame["screen_annotation_burn_in"] == true and frame["screen_annotation"] == true)
     valid_quality = not Map.has_key?(frame, "connection_quality") or
         frame["connection_quality"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_off_reason and valid_quality and valid_annotation and valid_generation and
-        valid_identity
+        valid_off_reason and valid_quality and valid_annotation and valid_burn_in and
+        valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,

@@ -116,9 +116,12 @@ function parseSidecar(value: unknown): AnnotationSidecar {
 }
 
 function parseLayer(value: unknown): ScreenAnnotationLayer {
-  const layer = record(value, ["layer_id", "publication_id", "sharer_id", "frame"]);
+  const burned = typeof value === "object" && value !== null && "burned_in" in value;
+  const layer = record(value, burned ? ["layer_id", "publication_id", "sharer_id", "frame", "burned_in"] : ["layer_id", "publication_id", "sharer_id", "frame"]);
+  if (burned && !booleanField(layer, "burned_in")) throw invalid("has an invalid capture mode");
   const frame = record(field(layer, "frame"), ["width", "height"]);
   return {
+    ...(burned ? { burned_in: true } : {}),
     layer_id: uuid(layer, "layer_id"),
     publication_id: stringField(layer, "publication_id", LABEL, 256),
     sharer_id: uuid(layer, "sharer_id"),

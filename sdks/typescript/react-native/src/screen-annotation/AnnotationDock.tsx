@@ -1,5 +1,5 @@
 import type { ScreenAnnotationCommand } from "@q9labsai/chalk-client";
-import { useCallback, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
@@ -18,7 +18,7 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
   </Portal>;
 }
 
-/** MediaProjection may capture Chalk itself. Without exclusion proof, expose controls but no ink. */
+/** Controls live in Chalk, not in the system ink window. */
 export function AndroidShareAnnotationControls({ annotation, publicationId, participantId }: {
   readonly annotation: StageAnnotation;
   readonly publicationId: string;
@@ -26,6 +26,7 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
 }): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
+  const [showPolicy, setShowPolicy] = useState(false);
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
   const get = useCallback(() => matchLayer(client, publicationId), [client, publicationId]);
   const state = useSyncExternalStore(subscribe, get, get);
@@ -48,7 +49,15 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
     <View style={styles.controls}>
       <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
       <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
+      {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
     </View>
+    {showPolicy && state.access.can_manage_policy ? <View style={styles.controls}>
+      {([["Everyone", "everyone"], ["Only hosts", "hosts"], ["Picked people", "picked"]] as const).map(([label, policy]) =>
+        <ToolButton key={policy} label={label} selected={state.access.draw_policy === policy} onPress={() => {
+          setShowPolicy(false);
+          void run({ kind: "set_policy", policy });
+        }} />)}
+    </View> : null}
   </AnnotationDock>;
 }
 

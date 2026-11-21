@@ -6,6 +6,7 @@ import type {
   ScreenAnnotationState,
   ScreenAnnotationTarget,
 } from "@q9labsai/chalk-client";
+import { LASER_TRAIL_MS } from "@q9labsai/chalk-screen-annotation";
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
 import type { Frame } from "../motion/MovingFrame";
@@ -17,6 +18,7 @@ import {
   boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame,
   type Ink, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationSource,
 } from "./model";
+import { saveNativeAnnotationToBoard, type NativeAnnotationBoard } from "./save-to-board";
 import { shareAnnotationPng } from "./export-native-png";
 import { useAnnotationInput, type TextAnchor } from "./use-annotation-input";
 
@@ -26,6 +28,7 @@ export type ScreenAnnotationLayerProps = ScreenAnnotationOptions & {
   readonly person: { readonly id: string; readonly name: string };
   readonly people?: ScreenAnnotationToolbarProps["people"];
   readonly canSave?: boolean;
+  readonly boardSave?: NativeAnnotationBoard;
   readonly source: ScreenAnnotationSource | null;
   readonly viewport: Frame;
   /** Render the video in exactly this native view rectangle, without another transform. */
@@ -61,7 +64,7 @@ type MatchedProps = ScreenAnnotationLayerProps & {
   readonly state: ScreenAnnotationState;
 };
 
-function MatchedLayer({ actions, canSave, client, controls, people, person, presence, publicationId, rendererUrl, reportError, source, state, video, viewport }: MatchedProps): React.JSX.Element {
+function MatchedLayer({ actions, boardSave, canSave, client, controls, people, person, presence, publicationId, rendererUrl, reportError, source, state, video, viewport }: MatchedProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [style, setStyle] = useState<Omit<Ink, "color"> & { readonly color: string | null }>({ tool: "pen", lifetime: "fade", width: 193, stamp: "check", color: null });
@@ -128,6 +131,10 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
   });
 
   const local = input.local?.fence === target.fence && allowed && open ? input.local : null;
+  const localTouch = state.layer.burned_in && local?.cursor
+    ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS }
+    : undefined;
+  const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
   const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
   const pending: ScreenAnnotationPresence | null = waiting && allowed ? {
     type: "annotation_presence",
@@ -140,11 +147,13 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
     draft: committing.draft,
   } : null;
 
+  const exporting = useRef(false);
   async function exportFrame(action: ExportAction) {
     const live = matchLayer(client, publicationId);
-    if (!source.captureFrame || !hasTarget(live, target)) return;
+    if (exporting.current || !source.captureFrame || !hasTarget(live, target)) return;
+    exporting.current = true;
     const at = client.serverNowMs();
-    const marks = visibleCommittedMarks(live, at);
+    const marks = live.layer.burned_in ? [] : visibleCommittedMarks(live, at);
     try {
       const frame = await source.captureFrame();
       if (frame === null) {
@@ -152,16 +161,23 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
         return;
       }
       try {
+        if (!hasTarget(matchLayer(client, publicationId), target)) return;
         await action({ publicationId, size: source.size, image: frame.image, marks, nowMs: at });
       } finally {
         frame.release?.();
       }
     } catch {
       reportError?.("Couldn’t save the marked frame.");
+    } finally {
+      exporting.current = false;
     }
   }
 
-  const save = canSave && actions?.saveToWhiteboard && source.captureFrame ? actions.saveToWhiteboard : null;
+  const save: ExportAction | null = canSave && source.captureFrame ? actions?.saveToWhiteboard ?? (boardSave ? async ({ image, ...frame }) => {
+    if (typeof image !== "string" || !canvas.current) throw new Error("No native frame");
+    const measureText = await canvas.current.measure({ ...frame, image });
+    await saveNativeAnnotationToBoard(boardSave, { ...frame, image }, measureText, () => hasTarget(matchLayer(client, publicationId), target));
+  } : null) : null;
   const download: ExportAction | null = source.captureFrame ? actions?.downloadPng ?? (async ({ image, ...frame }) => {
     if (!canvas.current || typeof image !== "string") throw new Error("No native frame");
     await shareAnnotationPng(await canvas.current.png({ ...frame, image }));
@@ -169,8 +185,8 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
   const scene = useMemo(() => ({
     rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     clip: { x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height },
-    marks: state.marks, paused: state.paused, sharerId: state.layer.sharer_id,
-  }), [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.paused, state.layer.sharer_id]);
+    marks: state.marks, burnedIn: state.layer.burned_in, paused: state.paused, sharerId: state.layer.sharer_id,
+  }), [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.layer.burned_in, state.paused, state.layer.sharer_id]);
   const tray = ready
     ? open ? <ScreenAnnotationToolbar
         state={state}
@@ -205,7 +221,8 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
       onHit={onHit}
       scene={scene}
       nowMs={nowMs}
-      presence={[...presence.filter(({ author }) => author.participant_id !== person.id), ...(pending ? [pending] : []), ...(local ? [local] : [])]}
+      localTouch={localTouch}
+      presence={[...(state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id)), ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])]}
     />
     {open && allowed ? <View
       accessible={false}

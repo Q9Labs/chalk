@@ -124,6 +124,7 @@ export class V1SyncClient implements V1CollaborationClient {
   /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
   #connectionQualityNegotiated = false;
   #annotationNegotiated = false;
+  #annotationBurnInNegotiated = false;
   readonly annotation = new AnnotationReplica((wire) => {
     if (!this.#socket || this.#phase.phase !== "live" || !this.#annotationNegotiated) return false;
     try {
@@ -450,6 +451,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#offReasonNegotiated = false;
     this.#connectionQualityNegotiated = false;
     this.#annotationNegotiated = false;
+    this.#annotationBurnInNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -699,6 +701,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#connectionQualityNegotiated = frame.connection_quality === true;
     this.#annotationNegotiated = frame.screen_annotation === true;
+    this.#annotationBurnInNegotiated = this.#annotationNegotiated && frame.screen_annotation_burn_in === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -828,7 +831,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
     if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
-    this.annotation.enterLive(this.#annotationNegotiated);
+    this.annotation.enterLive(this.#annotationNegotiated, this.#annotationBurnInNegotiated);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
