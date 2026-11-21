@@ -163,6 +163,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
               CHALK_SFU_CAPTURE_ENABLED: "true",
               CHALK_SFU_ALLOWED_SPACES: "*",
               CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
+              CHALK_SFU_CLIENT_SUNSET: "2000-01-01T00:00:00Z",
               CHALK_SFU_APPLICATION_ID: "chalk-orb",
               CHALK_SFU_NODES: "orb=https://sfu:8443",
               CHALK_SFU_SERVER_NAME: "sfu",
