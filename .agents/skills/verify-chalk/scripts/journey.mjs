@@ -5,13 +5,27 @@
 // Usage of a journey script: node <journey>.mjs <run-id> [--web <origin>]. Exit 0 means every step passed.
 // People are the real product path: the host starts a call from /space/ (the person who starts a call is its owner,
 // with every capability), and the second participant opens the host's invite link. Only camera and microphone are fakes.
-import { chromium, webkit } from "playwright";
+import { chromium, devices } from "playwright";
+import { createRequire } from "node:module";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
 import { collectPage } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
 
 const stage = { name: "Space stage", exact: true };
+
+// WebKit comes from the one `e2e-web install webkit` provides: the repo's own `playwright` ships an older WebKit that refuses TURN
+// URLs with `?transport=`, so a page opened from it cannot join a call.
+const engine = createRequire(createRequire(import.meta.url).resolve("@e2e-dev/web"))("playwright-core");
+const { webkit } = engine;
+
+// A person's device: the desktop default, or a phone or tablet with its real engine, viewport, user agent and touch.
+export const deviceProfiles = {
+  desktop: { engine: chromium, options: { viewport: { width: 1440, height: 960 } } },
+  ipad: { engine: webkit, options: engine.devices["iPad Pro 11"] },
+  iphone: { engine: webkit, options: engine.devices["iPhone 15"] },
+  android: { engine: chromium, options: devices["Pixel 7"] },
+};
 
 export async function runJourney(journey, body) {
   const runId = process.argv[2];
@@ -48,23 +62,26 @@ export async function runJourney(journey, body) {
   };
 
   const browsers = new Map();
+
   let failure;
   const shot = (person, label) => person.page.screenshot({ path: join(out, "screenshots", `${person.name}-${label}.png`) });
 
-  // Chromium by default. { engine: "webkit" } runs the person in WebKit; { display: true } lets Chromium's fake screen capture answer getDisplayMedia without a prompt.
-  const launch = (engine, display) => {
-    const key = `${engine}${display ? "+display" : ""}`;
+  const launch = (browserEngine, display) => {
+    const key = browserEngine === webkit ? "webkit" : display ? "chromium+display" : "chromium";
     if (!browsers.has(key)) {
       const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
-      browsers.set(key, engine === "webkit" ? webkit.launch({ headless: true }) : chromium.launch({ headless: true, args }));
+      browsers.set(key, browserEngine.launch({ headless: true, ...(browserEngine === chromium ? { args } : {}) }));
     }
     return browsers.get(key);
   };
 
-  const person = async (name, fixture, { engine = "chromium", display = false, permission } = {}) => {
-    const browser = await launch(engine, display);
-    const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, recordVideo: { dir: join(out, "video"), size: { width: 1440, height: 960 } } });
-    await context.addInitScript(webMediaFixture(fixture, permission ? { permission } : undefined));
+  const person = async (name, fixture, { device = "desktop", engine: requestedEngine, display = false, permission = "prompt", camera, encodings, record = true } = {}) => {
+    const profile = deviceProfiles[device];
+    if (!profile) throw new Error(`unknown device ${device}`);
+    const browser = await launch(requestedEngine === "webkit" ? webkit : profile.engine, display);
+    const { viewport } = profile.options;
+    const context = await browser.newContext({ ...profile.options, ...(record ? { recordVideo: { dir: join(out, "video"), size: viewport } } : {}) });
+    await context.addInitScript(webMediaFixture(fixture, { permission, camera, encodings }));
     const page = await context.newPage();
     page.on("console", (message) => logs.console.push({ who: name, type: message.type(), text: message.text().slice(0, 300), url: message.location().url.replace(/[?#].*/, "") }));
     page.on("pageerror", (error) => logs.console.push({ who: name, type: "pageerror", text: String(error.message).slice(0, 300) }));
@@ -77,7 +94,7 @@ export async function runJourney(journey, body) {
       const { pathname } = new URL(request.url());
       if (pathname.startsWith("/v1/")) logs.network.push({ who: name, method: request.method(), path: pathname, error: request.failure()?.errorText });
     });
-    const entry = { name, context, page };
+    const entry = { name, device, context, page };
     people.push(entry);
     return entry;
   };

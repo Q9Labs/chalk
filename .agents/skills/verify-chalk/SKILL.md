@@ -21,6 +21,7 @@ pnpm install --frozen-lockfile
 pnpm dev                                           # run it in tmux or another session that stays alive
 ```
 
+- The journeys drive browsers from two installs: Chromium from `pnpm exec playwright install chromium`, and WebKit (iPad, iPhone and the screen-share viewer) from `pnpm exec e2e-web install webkit chromium --with-deps`. The repo's own Playwright WebKit is older and cannot join a call.
 - With both SFU variables set the launcher does not call the 1Password CLI. With neither set it reads the item through `op` as before. Setting only one fails startup.
 - `PUBLIC_ORIGIN` is the origin a person or browser uses to reach the web app. It sets the Sync token issuer, the CORS list, the Vite host allow-list and the browser's Sync WebSocket URL. Unset, the issuer stays `http://chalk.local`.
 - Chalk's guest cookie is `__Host-chalk_space_guest_*` and is `Secure`. A browser only stores it on `https://` origins or on `localhost`. Use `http://localhost:3070` (or `http://<name>.localhost:3070`, which Chromium resolves to loopback) for a plain-HTTP run. A real remote origin needs HTTPS in front of port 3070. A name such as `http://chalk-orb.test` fails: the browser cannot resolve it.
