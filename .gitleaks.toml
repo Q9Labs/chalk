@@ -10,7 +10,7 @@ regexTarget = "secret"
 regexes = ['''^mcp-admission-deny-01$''']
 
 [[allowlists]]
-description = "Excalidraw 0.18.1 bundles this public Firebase client project identifier in the embedded renderer."
+description = "Excalidraw bundles this public Firebase client project identifier in the embedded renderer."
 targetRules = ["gcp-api-key", "generic-api-key"]
 regexTarget = "secret"
 regexes = ['''^[A]IzaSyAd15pYlMci_xIp9ko6wkEsDzAAA0Dn0RU$''']
