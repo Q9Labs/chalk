@@ -49,7 +49,14 @@ const unavailableClient: ScreenAnnotationClient = {
   setPresence: () => undefined,
 };
 
-/** Returns the annotation controller for the supplied SpaceClient once Sync supports the extension. */
-export function screenAnnotationFor(_client: SpaceClient): ScreenAnnotationClient {
-  return unavailableClient;
+const sessions = new WeakMap<SpaceClient, ScreenAnnotationClient>();
+
+/** @internal Registers the controller of a constructed SpaceClient. */
+export function registerAnnotationSession(client: SpaceClient, session: ScreenAnnotationClient): void {
+  sessions.set(client, session);
+}
+
+/** Returns a stable annotation controller; older Sync servers remain unavailable. */
+export function screenAnnotationFor(client: SpaceClient): ScreenAnnotationClient {
+  return sessions.get(client) ?? unavailableClient;
 }

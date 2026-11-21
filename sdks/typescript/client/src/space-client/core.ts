@@ -1,3 +1,4 @@
+import { AnnotationSession } from "../screen-annotation/session";
 import { Clock, Context, Duration, Effect, Layer } from "effect";
 import type { DirectPathMode } from "../direct-path";
 import { requireParsedAccessGrant, type AccessGrant } from "../access/grant";
@@ -95,6 +96,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
 const silentTelemetry: AppTelemetry = { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined };
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
+  readonly annotation: AnnotationSession;
   readonly telemetry: AppTelemetry;
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
@@ -109,6 +111,7 @@ export class SpaceClientCore {
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects, telemetry: AppTelemetry) {
     this.telemetry = telemetry;
     this.#connection = connection;
+    this.annotation = new AnnotationSession(connection);
     this.#store = store;
     this.controllers = controllers;
     this.#store.updateConnection(connection.getSnapshot());
@@ -167,6 +170,7 @@ export class SpaceClientCore {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.annotation.dispose();
     this.#unsubscribeConnection?.();
     this.#unsubscribeStore?.();
     this.#unsubscribeConnection = null;

@@ -8,6 +8,18 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
       "version" => 1,
       "welcome" => "screen_annotation"
     },
+    "helperAttachment" => %{
+      "path" => "/v1/screen-annotation/helper",
+      "audience" => "screen_annotation_helper_v1",
+      "version" => 1,
+      "leaseMs" => 60_000,
+      "proofDomain" => "chalk.screen_annotation.helper.v1",
+      "proof" => "Ed25519 over UTF-8 proofDomain + LF + nonce + LF + ticket hash",
+      "ticketHash" => "base64url(SHA-256(ticket)) without padding",
+      "proofEncoding" => "base64url without padding",
+      "confirmationKey" => "cnf.jwk (OKP Ed25519)",
+      "commands" => ["commit", "erase", "undo", "redo", "clear", "pause"]
+    },
     "limits" => %{
       "commandBytes" => 16_384,
       "presenceBytes" => 8192,
@@ -560,6 +572,27 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
         "draft" => %{"oneOf" => [%{"$ref" => "#/$defs/Draft"}, %{"type" => "null"}]}
       }
     },
+    "HelperChallenge" => %{
+      "type" => "object",
+      "additionalProperties" => false,
+      "required" => ["type", "version", "nonce"],
+      "properties" => %{
+        "type" => %{"enum" => ["annotation_helper_challenge"]},
+        "version" => %{"enum" => [1]},
+        "nonce" => %{"type" => "string", "minLength" => 43, "maxLength" => 43}
+      }
+    },
+    "HelperAttach" => %{
+      "type" => "object",
+      "additionalProperties" => false,
+      "required" => ["type", "version", "ticket", "proof"],
+      "properties" => %{
+        "type" => %{"enum" => ["annotation_helper_attach"]},
+        "version" => %{"enum" => [1]},
+        "ticket" => %{"type" => "string", "minLength" => 1, "maxLength" => 4096},
+        "proof" => %{"type" => "string", "minLength" => 86, "maxLength" => 86}
+      }
+    },
     "ClientFrame" => %{
       "oneOf" => [
         %{"$ref" => "#/$defs/ClientRequest"},
@@ -579,5 +612,6 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
   }
   def negotiation, do: @metadata["negotiation"]
   def limits, do: @metadata["limits"]
+  def helper_attachment, do: @metadata["helperAttachment"]
   def definitions, do: @definitions
 end
