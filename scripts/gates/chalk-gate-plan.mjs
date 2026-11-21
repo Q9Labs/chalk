@@ -337,13 +337,36 @@ function workspaceBuildCommand(workspaces) {
   return ["pnpm", "exec", "turbo", "run", "build", "--force", ...runnable.map((workspace) => `--filter=${workspace.name}...`)];
 }
 
-function task(id, label, selected, reason, plannedCommand, env = {}) {
+/** Longest joined argument text one command may carry. Windows stops a command line at 8191 characters. */
+const maxCommandArgumentLength = 6000;
+
+/** commandBatches splits a command whose last arguments are file paths into several commands that each fit one command line. `fixedCount` is how many leading entries (program and flags) every batch repeats. */
+export function commandBatches(command, fixedCount, limit = maxCommandArgumentLength) {
+  if (fixedCount >= command.length) return [command];
+  const fixed = command.slice(0, fixedCount);
+  const batches = [];
+  let batch = [];
+  let length = fixed.join(" ").length;
+  for (const argument of command.slice(fixedCount)) {
+    if (batch.length > 0 && length + argument.length + 1 > limit) {
+      batches.push([...fixed, ...batch]);
+      batch = [];
+      length = fixed.join(" ").length;
+    }
+    batch.push(argument);
+    length += argument.length + 1;
+  }
+  if (batch.length > 0) batches.push([...fixed, ...batch]);
+  return batches;
+}
+
+function task(id, label, selected, reason, plannedCommand, env = {}, fixedCount) {
   requireRegistered(id);
   // A lane that runs bash scripts or Linux services cannot start on Windows: it fails with one line that points to the Gate workflow.
   const command = plannedCommand && isWindows && plannedCommand[0] === "bash" ? ["node", "scripts/gates/needs-linux.mjs", id] : plannedCommand;
   // A demoted check still runs and reports; demoted.mjs turns its failure into a warning so it cannot fail a gate.
   const wrapped = command && demotion(id) ? ["node", "scripts/gates/demoted.mjs", `gate:${id}`, "--", ...command] : command;
-  return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env };
+  return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env, batches: wrapped ? commandBatches(wrapped, wrapped === plannedCommand ? (fixedCount ?? wrapped.length) : wrapped.length) : [] };
 }
 
 export function createGatePlan(files, options = {}) {
@@ -511,7 +534,7 @@ export function createGatePlan(files, options = {}) {
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["node", "scripts/gates/gitleaks.mjs"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
-    task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
+    task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand, {}, 4),
     task("oxlint", "JavaScript, TypeScript and test lint", true, "always required", ["pnpm", "run", "lint:oxlint"]),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity", ...ratchetArgs]),

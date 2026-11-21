@@ -55,9 +55,14 @@ const chalkLanes = taskIds.map((id) =>
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
       if (!task?.command) return { status: "skipped" };
-      const [command, ...args] = task.command;
       const env = laneEnvironment(id, task.env, context.allChangedFiles, explicitFiles);
-      return laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env }));
+      // A long file list runs as several commands so no single one overflows a Windows command line.
+      let result;
+      for (const [command, ...args] of task.batches) {
+        result = await context.exec(command, args, { cwd: context.repoRoot, env });
+        if (result.failed) break;
+      }
+      return laneResult(id, result);
     },
   }),
 );
