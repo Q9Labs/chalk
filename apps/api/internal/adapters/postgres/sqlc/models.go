@@ -139,6 +139,31 @@ type EpisodePresenceLease struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+type HelperDevice struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Name           string             `json:"name"`
+	PublicKey      string             `json:"public_key"`
+	CredentialHash []byte             `json:"credential_hash"`
+	RegisteredAt   pgtype.Timestamptz `json:"registered_at"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type HelperDeviceRequest struct {
+	ID                pgtype.UUID        `json:"id"`
+	CodeHash          []byte             `json:"code_hash"`
+	PollHash          []byte             `json:"poll_hash"`
+	Name              string             `json:"name"`
+	PublicKey         string             `json:"public_key"`
+	CredentialHash    []byte             `json:"credential_hash"`
+	DeviceID          pgtype.UUID        `json:"device_id"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	NextPollAt        pgtype.Timestamptz `json:"next_poll_at"`
+	ApprovedShare     []byte             `json:"approved_share"`
+	ApprovalExpiresAt pgtype.Timestamptz `json:"approval_expires_at"`
+	IntendedTenantID  pgtype.UUID        `json:"intended_tenant_id"`
+}
+
 type Identity struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
