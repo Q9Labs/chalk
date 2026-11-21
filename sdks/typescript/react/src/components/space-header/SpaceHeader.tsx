@@ -9,7 +9,7 @@ import { Avatar } from "../atomic/Avatar";
 import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
-import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+import { callTimerStyle, detailsTitle, formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
@@ -29,7 +29,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const focusScope = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   // A host alone at call start sees the menu open with the QR code expanded; it closes when someone joins or the host closes it.
-  const inviteOpen = props.callLinkOpen ?? false;
+  const inviteOpen = props.callLinkOpen === true;
   const open = menuOpen || inviteOpen;
   // The reveal opens the moment the call goes live, so its body is downloaded by then and the menu has content on its first frame.
   const live = props.network?.live === true;
@@ -58,7 +58,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const narrowWindow = useMediaQuery("(max-width: 640px)");
   const phone = useNarrowCall() || narrowWindow;
   // Desktop shows recording as the Rec pill beside the name; the pill is hidden on phones, so there the elapsed time turns red instead.
-  const timerStyle = (isRecording && phone) || (remaining !== null && remaining <= 60) ? { color: "var(--chalk-danger-text)" } : remaining === null ? undefined : { color: "var(--chalk-warning)" };
+  const timerStyle = callTimerStyle(remaining, isRecording && phone);
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />
@@ -133,7 +133,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               </span>
               {chevron}
             </button>
-            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={inviteOpen ? "Your call is ready" : spaceName} accessibleLabel="Call details">
+            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={detailsTitle(spaceName, inviteOpen)} accessibleLabel="Call details">
               {content(true)}
             </ChalkSheet>
           </>

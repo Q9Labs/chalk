@@ -150,30 +150,7 @@ export function ParticipantRow({
         {subLine ? <div className="call-person-sub">{subLine}</div> : null}
       </div>
 
-      <div className="call-person-state-slots">
-        {participant.isHandRaised ? (
-          <span className="call-hand" data-solo={handNumber === undefined || undefined} role="img" aria-label={`Hand raised${handNumber ? `, number ${handNumber}` : ""}`}>
-            <ShellIcon name="hand" size={14} />
-            {handNumber}
-          </span>
-        ) : null}
-        {participant.isSpeaking && !participant.isMuted ? (
-          <span className="call-person-state" role="img" aria-label="Speaking">
-            <span className="call-eq" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-          </span>
-        ) : (
-          <span className="call-person-state" data-off={participant.isMuted || undefined} role="img" aria-label={participant.isMuted ? "Microphone off" : "Microphone on"}>
-            <MediaGlyph kind="mic" slashed={participant.isMuted === true} busy={false} />
-          </span>
-        )}
-        <span className="call-person-state" role="img" aria-label={participant.isVideoEnabled ? "Camera on" : "Camera off"}>
-          <MediaGlyph kind="cam" slashed={participant.isVideoEnabled !== true} busy={false} />
-        </span>
-      </div>
+      <PersonStateSlots participant={participant} handNumber={handNumber} />
 
       {showMenuButton && !isEditing ? (
         phone ? (
@@ -255,4 +232,34 @@ export interface ParticipantRowProps {
   menuOpen: boolean;
   onMenuToggle: () => void;
   onMenuClose: () => void;
+}
+
+/** The hand, the speaking or microphone state, and the camera state at the right edge of a row. */
+function PersonStateSlots({ participant, handNumber }: { readonly participant: ParticipantListParticipant; readonly handNumber?: number }) {
+  return (
+    <div className="call-person-state-slots">
+      {participant.isHandRaised ? (
+        <span className="call-hand" data-solo={handNumber === undefined || undefined} role="img" aria-label={`Hand raised${handNumber ? `, number ${handNumber}` : ""}`}>
+          <ShellIcon name="hand" size={14} />
+          {handNumber}
+        </span>
+      ) : null}
+      {participant.isSpeaking && !participant.isMuted ? (
+        <span className="call-person-state" role="img" aria-label="Speaking">
+          <span className="call-eq" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        </span>
+      ) : (
+        <span className="call-person-state" data-off={participant.isMuted || undefined} role="img" aria-label={participant.isMuted ? "Microphone off" : "Microphone on"}>
+          <MediaGlyph kind="mic" slashed={participant.isMuted === true} busy={false} />
+        </span>
+      )}
+      <span className="call-person-state" role="img" aria-label={participant.isVideoEnabled ? "Camera on" : "Camera off"}>
+        <MediaGlyph kind="cam" slashed={participant.isVideoEnabled !== true} busy={false} />
+      </span>
+    </div>
+  );
 }

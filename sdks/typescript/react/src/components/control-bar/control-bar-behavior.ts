@@ -330,14 +330,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
-    onToggleRecording: () => {
-      const action = recordingStatus === "recording" ? "stop" : "start";
-      void run(() =>
-        (action === "stop" ? client.recording.stop() : client.recording.start()).catch((cause: unknown) => {
-          throw recordingFailure(cause, action);
-        }),
-      );
-    },
+    onToggleRecording: () => void run(() => toggleRecording(client.recording, recordingStatus === "recording")),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
@@ -349,7 +342,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   };
 
   const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess)?.message };
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNoticeMessage(media.local, deviceAccess) };
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. The notice names what failed in one line; turning the devices back on is its retry. */
@@ -358,4 +351,16 @@ export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local
   if (devices.length === 2) return { message: "Your microphone and camera didn’t reach the call.", devices };
   if (devices[0]) return { message: `Your ${devices[0]} didn’t reach the call.`, devices };
   return undefined;
+}
+
+function failedMediaNoticeMessage(media: Parameters<typeof failedMediaNotice>[0], cards: Parameters<typeof failedMediaNotice>[1]): string | undefined {
+  return failedMediaNotice(media, cards)?.message;
+}
+
+/** A failed start or stop is named for the recording, so it never reads as a device problem. */
+function toggleRecording(recording: ReturnType<typeof useSpaceClient>["recording"], isRecording: boolean): Promise<unknown> {
+  const action = isRecording ? "stop" : "start";
+  return (isRecording ? recording.stop() : recording.start()).catch((cause: unknown) => {
+    throw recordingFailure(cause, action);
+  });
 }

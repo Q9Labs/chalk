@@ -89,3 +89,24 @@ export function ToastFixture({ message, icon, action, error = false, light = fal
     </main>
   );
 }
+
+/** A person joining, as the stack announces it. */
+export function JoinToast() {
+  return (
+    <ToastStack
+      toasts={[
+        {
+          id: "join",
+          icon: <Avatar name="Nora Patel" size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
+          message: (
+            <>
+              <b style={{ fontWeight: 600 }}>Nora Patel</b> joined
+            </>
+          ),
+          duration: 60_000,
+        },
+      ]}
+      onDismiss={() => undefined}
+    />
+  );
+}

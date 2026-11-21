@@ -110,14 +110,7 @@ export function problemReporter({
                 reference,
                 ...(diagnostics === undefined
                   ? []
-                  : [
-                      `Connection: ${snapshot.status}`,
-                      `App version: ${__APP_VERSION__}`,
-                      `Session: ${currentSessionId() ?? "none"}`,
-                      `Client session: ${telemetry?.sessionId || "none"}`,
-                      `Last failed request: ${failedRequestLine()}`,
-                      `Browser: ${navigator.userAgent.slice(0, 400)}`,
-                    ]),
+                  : [`Connection: ${snapshot.status}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Client session: ${telemetry?.sessionId || "none"}`, `Last failed request: ${failedRequestLine()}`, `Browser: ${navigator.userAgent.slice(0, 400)}`]),
               ]
                 .filter(Boolean)
                 .join("\n"),

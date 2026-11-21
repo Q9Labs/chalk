@@ -388,16 +388,16 @@ A host who is alone at the start of a call sees the call details open with the Q
 
 Waiting states look like the call itself, blurred. A stand-in call (the header with the call name, one empty tile, the dock outline, and nothing real) sits under a static `18px` blur and a dim, with a centered message card on top. The card uses `surface`, a `16px` radius, and `22px` by `28px` padding.
 
-| State         | The card says                                                                                                           |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Joining       | A spinner and "Joining Q9 team…"                                                                                        |
-| Name needed   | A `320px` card with the label "Your name", a `44px` field, and "Join call", disabled until there is text; Enter submits |
-| Knocking      | "Asking to join Q9 team", "The host will let you in.", and Cancel                                                       |
-| Knock refused | "The host didn't let you in" with "Go to Chalk" (primary) and "Ask again" (secondary)                                  |
-| Knock expired | "Your request to join expired or is no longer available." with "Go to Chalk" (primary) and "Ask again" (secondary) |
-| Knock no longer active, or another failure that can be retried | The failure line (for example "Your request to join is no longer active.") with "Ask again" alone |
-| Reconnecting  | The real call under a `10px` blur and desaturation, with a spinner and "Reconnecting…"                                  |
-| Offline       | The same treatment, with "You're offline" and "You'll rejoin when your connection is back."                             |
+| State                                                          | The card says                                                                                                           |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Joining                                                        | A spinner and "Joining Q9 team…"                                                                                        |
+| Name needed                                                    | A `320px` card with the label "Your name", a `44px` field, and "Join call", disabled until there is text; Enter submits |
+| Knocking                                                       | "Asking to join Q9 team", "The host will let you in.", and Cancel                                                       |
+| Knock refused                                                  | "The host didn't let you in" with "Go to Chalk" (primary) and "Ask again" (secondary)                                   |
+| Knock expired                                                  | "Your request to join expired or is no longer available." with "Go to Chalk" (primary) and "Ask again" (secondary)      |
+| Knock no longer active, or another failure that can be retried | The failure line (for example "Your request to join is no longer active.") with "Ask again" alone                       |
+| Reconnecting                                                   | The real call under a `10px` blur and desaturation, with a spinner and "Reconnecting…"                                  |
+| Offline                                                        | The same treatment, with "You're offline" and "You'll rejoin when your connection is back."                             |
 
 Reconnecting, offline and connection lost share one treatment. The header and the stage take the blur, a `60%` veil in the canvas color sits over them, and the card is centered on the call, never on a tile. The dock stays above the veil, and the microphone works while reconnecting or offline. When the connection is lost only Leave stays active and the other dock buttons dim. Open sheets close under the card and come back as they were when the call returns. While reconnecting with a queued chat message, the card adds "1 message will send when you're back". Queued actions send on their own, with no dialog. When reconnecting fails, the veil and the card stay and change in place to "Connection lost", with a Rejoin button, "Leave call", and "Report a problem" when a report can be sent. The lost card is a fresh alert dialog named "Connection lost", so screen readers announce it, and its Rejoin button, when a Rejoin handler is passed, takes focus. When the card closes, focus moves to the dock's Leave button if focus was inside the card or the card was pressed.
 

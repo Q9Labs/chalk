@@ -42,9 +42,7 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
   const failed = phase === "failed";
   const cardDue = useTrueFor(waiting, RECONNECT_NOTICE_MS);
   const seconds = useElapsedSeconds(waiting ? since : null);
-  const [veiled, setVeiled] = useState(false);
-  if ((failed || (waiting && cardDue)) && !veiled) setVeiled(true);
-  if (!waiting && !failed && phase !== "reconnected" && veiled) setVeiled(false);
+  const veiled = useVeil(phase, cardDue);
   const copy = waiting ? reconnectingCopy(phase, seconds, pending) : null;
   const showCard = failed || (copy !== null && (cardDue || veiled));
   // Reconnecting, offline and lost are one veil and one card that change in place, so losing the call never replays the fade or the entrance.
@@ -54,28 +52,43 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
         {STATUS_CSS}
       </style>
       {veiled ? <div aria-hidden="true" data-lifting={phase === "reconnected" || undefined} className="chalk-connection-dim" /> : null}
-      {showCard ? (
-        <div data-part="connection-status" className={failed ? "chalk-connection-card chalk-connection-card-lost" : "chalk-connection-card"}>
-          {/* Keyed on the kind of card so the lost content mounts fresh: a role that changes on a live node is not announced, a new alertdialog is. */}
-          {failed ? (
-            <div key="lost" role="alertdialog" aria-labelledby="chalk-connection-lost-title" aria-describedby="chalk-connection-lost-detail" className="chalk-connection-body">
-              <FailedContent onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
-            </div>
-          ) : copy ? (
-            <div key="waiting" role="status" className="chalk-connection-body">
-              <h3>
-                <ConnectionRing />
-                {copy.title}
-                <span aria-hidden="true" className="chalk-connection-time">
-                  {formatElapsed(seconds)}
-                </span>
-              </h3>
-              <p>{copy.detail}</p>
-            </div>
-          ) : null}
+      {showCard ? <StatusCard phase={phase} copy={copy} seconds={seconds} onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} /> : null}
+    </>
+  );
+}
+
+/** The veil goes up with the lost card or once the reconnect card is due, stays through the return, and lifts after. */
+function useVeil(phase: ConnectionStatusProps["phase"], cardDue: boolean): boolean {
+  const waiting = phase === "reconnecting" || phase === "offline";
+  const failed = phase === "failed";
+  const [veiled, setVeiled] = useState(false);
+  if ((failed || (waiting && cardDue)) && !veiled) setVeiled(true);
+  if (!waiting && !failed && phase !== "reconnected" && veiled) setVeiled(false);
+  return veiled;
+}
+
+function StatusCard({ phase, copy, seconds, onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatusProps, "phase" | "onRejoin" | "onLeave" | "onReportProblem"> & { readonly copy: ReturnType<typeof reconnectingCopy> | null; readonly seconds: number }) {
+  const failed = phase === "failed";
+  return (
+    <div data-part="connection-status" className={failed ? "chalk-connection-card chalk-connection-card-lost" : "chalk-connection-card"}>
+      {/* Keyed on the kind of card so the lost content mounts fresh: a role that changes on a live node is not announced, a new alertdialog is. */}
+      {failed ? (
+        <div key="lost" role="alertdialog" aria-labelledby="chalk-connection-lost-title" aria-describedby="chalk-connection-lost-detail" className="chalk-connection-body">
+          <FailedContent onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
+        </div>
+      ) : copy ? (
+        <div key="waiting" role="status" className="chalk-connection-body">
+          <h3>
+            <ConnectionRing />
+            {copy.title}
+            <span aria-hidden="true" className="chalk-connection-time">
+              {formatElapsed(seconds)}
+            </span>
+          </h3>
+          <p>{copy.detail}</p>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

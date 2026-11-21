@@ -123,15 +123,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, seconda
             </span>
           </span>
         ) : null}
-        {/* The recording line arrives with the call details, so it opens its row instead of popping in. */}
-        <div aria-hidden={!recorded} className="grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: recorded ? "1fr" : "0fr", opacity: recorded ? 1 : 0 }}>
-          <p className="flex min-h-0 items-center gap-1.5 overflow-hidden pt-1 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
-            <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">
-              <CallEventIcon kind="recording" error />
-            </span>
-            This call is recorded. By joining, you agree to be recorded.
-          </p>
-        </div>
+        <RecordedNotice recorded={recorded} />
         {stacked === "waiting" ? (
           <span aria-hidden="true" className="mt-3 flex gap-1.5">
             {[0, 1, 2].map((dot) => (
@@ -140,20 +132,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, seconda
           </span>
         ) : null}
         {children}
-        {action && secondaryAction ? (
-          <span className={cn("mt-6 flex gap-2", stacked && "w-full")}>
-            <ChalkButton className="!h-11 flex-1" variant="outline" onClick={secondaryAction.onClick} disabled={secondaryAction.disabled}>
-              {secondaryAction.label}
-            </ChalkButton>
-            <ChalkButton className="!h-11 flex-1" variant="solid" onClick={action.onClick} disabled={action.disabled}>
-              {action.label}
-            </ChalkButton>
-          </span>
-        ) : action ? (
-          <ChalkButton className={cn("mt-6 !h-11", stacked && "w-full")} variant="outline" onClick={action.onClick} disabled={action.disabled}>
-            {action.label}
-          </ChalkButton>
-        ) : null}
+        <LimboActions action={action} secondaryAction={secondaryAction} stacked={Boolean(stacked)} />
       </div>
     </div>
   );
@@ -181,5 +160,41 @@ function StandInCall({ spaceName }: { readonly spaceName: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** The recording line arrives with the call details, so it opens its row instead of popping in. */
+function RecordedNotice({ recorded }: { readonly recorded: boolean }) {
+  return (
+    <div aria-hidden={!recorded} className="grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: recorded ? "1fr" : "0fr", opacity: recorded ? 1 : 0 }}>
+      <p className="flex min-h-0 items-center gap-1.5 overflow-hidden pt-1 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
+        <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">
+          <CallEventIcon kind="recording" error />
+        </span>
+        This call is recorded. By joining, you agree to be recorded.
+      </p>
+    </div>
+  );
+}
+
+/** The way forward under the message. With a second action, `action` is the solid button and the second sits beside it, quieter. */
+function LimboActions({ action, secondaryAction, stacked }: Pick<CallLimboProps, "action" | "secondaryAction"> & { readonly stacked: boolean }) {
+  if (!action) return null;
+  if (!secondaryAction) {
+    return (
+      <ChalkButton className={cn("mt-6 !h-11", stacked && "w-full")} variant="outline" onClick={action.onClick} disabled={action.disabled}>
+        {action.label}
+      </ChalkButton>
+    );
+  }
+  return (
+    <span className={cn("mt-6 flex gap-2", stacked && "w-full")}>
+      <ChalkButton className="!h-11 flex-1" variant="outline" onClick={secondaryAction.onClick} disabled={secondaryAction.disabled}>
+        {secondaryAction.label}
+      </ChalkButton>
+      <ChalkButton className="!h-11 flex-1" variant="solid" onClick={action.onClick} disabled={action.disabled}>
+        {action.label}
+      </ChalkButton>
+    </span>
   );
 }

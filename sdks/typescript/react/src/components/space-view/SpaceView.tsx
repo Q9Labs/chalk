@@ -25,13 +25,13 @@ import { failedMediaNotice } from "../control-bar/control-bar-behavior";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { reconnectedToast } from "../connection-status/ConnectionStatus";
 import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
-import { useConnectionPhase } from "../connection-status/use-connection-phase";
+import { RECONNECT_NOTICE_MS, useConnectionPhase } from "../connection-status/use-connection-phase";
 import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
 import { CallLimboContext } from "../../internal/call-limbo-context";
 import { useTrueFor } from "../../internal/useTrueFor";
-import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
 import { useHeldWhile } from "../../internal/useHeldWhile";
 import { useSeenConnected } from "../../internal/useSeenConnected";
+import { useMediaNotice } from "./useMediaNotice";
 import { useMicrophoneNotice } from "./useMicrophoneNotice";
 import { useBoardNotices } from "./useBoardNotices";
 import { useCallToasts } from "../toast-stack/useCallToasts";
@@ -302,34 +302,14 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
-  // A microphone or camera that failed without an access card gets one notice in the call's stack, above the dock, until it recovers or is dismissed.
-  const failedMedia = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
-  const mediaNotice = failedMedia?.message;
-  const [dismissedMediaNotice, setDismissedMediaNotice] = useState<string | undefined>(undefined);
-  const mediaToast: Toast[] =
-    mediaNotice && mediaNotice !== dismissedMediaNotice
-      ? [
-          {
-            id: "media-notice",
-            type: "error",
-            duration: Infinity,
-            message: mediaNotice,
-            action: {
-              label: "Try again",
-              onClick: () => {
-                for (const device of failedMedia?.devices ?? []) void runCommand(() => (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)), device, "start");
-              },
-            },
-          },
-        ]
-      : [];
+  const mediaNotice = useMediaNotice(failedMediaNotice(media.local, deviceAccessSnapshot.issues), (device) => void runCommand(() => (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)), device, "start"));
   const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: limitWarning.minutes === 1 ? "error" : "warning", duration: Infinity, message: `${callLimitMessage(limitWarning.minutes)} ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
   const toasts: Toast[] = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
-    ...mediaToast,
+    ...mediaNotice.toasts,
     ...(connectionPhase.kind === "reconnected" ? [reconnectedToast(connectionPhase.awayMs)] : []),
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
     ...microphoneNotice.toasts,
@@ -339,7 +319,7 @@ export function SpaceView({
     else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
     else if (id === microphoneNotice.id) microphoneNotice.dismiss();
-    else if (id === "media-notice") setDismissedMediaNotice(mediaNotice);
+    else if (id === mediaNotice.id) mediaNotice.dismiss();
     else if (id.startsWith("board-")) dismissBoardToast(id);
     else callToasts.dismiss(id);
   };

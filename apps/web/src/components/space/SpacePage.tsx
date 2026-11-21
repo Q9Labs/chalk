@@ -11,7 +11,7 @@ import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
-import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
+import { entryFailure, FailedEntry, neutralSpaceError, type EntryFailure } from "./entry-failure";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
@@ -348,17 +348,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           />
         );
       case "failed":
-        return (
-          <CallLimbo
-            theme={{ colorScheme: mode }}
-            spaceName={callName}
-            message={current.failure.message}
-            glyph={current.failure.reason}
-            // A refused or expired knock always offers a way home beside asking again.
-            action={current.failure.retryable && !current.failure.reason ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start(), disabled: current.restarting } : { label: "Go to Chalk", onClick: () => globalThis.location.assign("/") }}
-            secondaryAction={current.failure.retryable && current.failure.reason ? { label: "Ask again", onClick: () => start(), disabled: current.restarting } : undefined}
-          />
-        );
+        return <FailedEntry failure={current.failure} spaceName={callName} colorScheme={mode} restarting={current.restarting} onAskAgain={() => start()} />;
       case "idle":
       case "arriving":
       case "admitted":

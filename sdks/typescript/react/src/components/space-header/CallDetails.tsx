@@ -7,7 +7,7 @@ import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
 import { RowIcon } from "./RowIcon";
-import type { SpaceHeaderProps } from "./space-header-contract";
+import { detailsTitle, type SpaceHeaderProps } from "./space-header-contract";
 
 // The charts load when the connection section first opens, so a call that never looks at them never downloads them.
 const CallChartsView = lazy(() => import("./CallCharts").then((module) => ({ default: module.CallChartsView })));
@@ -28,7 +28,7 @@ export function CallDetails({
   onReportProblem,
   revealConnection = false,
   hideShortcuts = false,
-  revealQr = false,
+  revealQr,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
   readonly hideShortcuts?: boolean;
@@ -43,7 +43,7 @@ export function CallDetails({
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
-  const [qrOpen, setQrOpen] = useState(revealQr);
+  const [qrOpen, setQrOpen] = useState(revealQr === true);
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
@@ -53,7 +53,7 @@ export function CallDetails({
       <CallMenuStyles />
       <div className="chalk-shell-details-heading">
         <div>
-          <h2>{revealQr ? "Your call is ready" : spaceName}</h2>
+          <h2>{detailsTitle(spaceName, revealQr)}</h2>
           {summary ? (
             <p className="chalk-shell-details-sub">
               {isRecording ? <i aria-hidden="true" /> : null}

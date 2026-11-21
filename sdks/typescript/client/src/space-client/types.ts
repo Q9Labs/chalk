@@ -1,13 +1,15 @@
 import type { MediaSource, ScreenShareCapture } from "../media/plane";
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
+import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
-import type { V1AdmissionPolicy, V1AdmissionTarget, V1Capability } from "../sync/v1-types";
+import type { V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
 import type { CallEvent } from "./call-events";
 import type { MediaControllerEffects } from "./media-controller";
 import type { OfflineActionsControllerEffects } from "./offline-actions";
 import type { ParticipantsControllerEffects } from "./participants-controller";
+import type { Participant, ParticipantsSlice } from "./participant-types";
+export type { ParticipantPresence, Participant, AdmissionRequest, AdmissionPolicy, AdmissionPolicyTarget, ParticipantsSlice } from "./participant-types";
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
@@ -112,44 +114,6 @@ export type SelfSlice = {
   readonly capabilities: readonly Capability[];
   readonly handRaised: boolean;
   readonly can: (capability: Capability) => boolean;
-};
-export type ParticipantPresence = {
-  readonly state: "connected" | "disconnected" | "unknown";
-  readonly speaking: boolean;
-  readonly activeSpeaker: boolean;
-  /** How well this person's own link carries the call, as they rate it. Absent when unknown. */
-  readonly connectionQuality?: import("../media/link-quality").LinkTier;
-};
-export type Participant = {
-  /** Stable person identity, independent of the per-device participant ID. */
-  readonly identityId?: string;
-  readonly deviceType?: "phone" | "tablet" | "computer";
-  readonly participantId: string;
-  readonly displayName: string;
-  readonly role: string;
-  readonly eligibleRoles: readonly string[];
-  readonly capabilities: readonly Capability[];
-  readonly handRaised: boolean;
-  readonly media: ChalkParticipantMediaState;
-  readonly presence: ParticipantPresence;
-};
-export type AdmissionRequest = {
-  readonly requestId: string;
-  readonly participantId: string;
-  readonly displayName: string;
-  readonly initialRole: string;
-  readonly eligibleRoles: readonly string[];
-  readonly expiresAt: string;
-};
-/** Who can join without a host: "open" lets anyone with the link in, "knock" asks a host first, and "members_only" is set by the Space and cannot be changed from the call. */
-export type AdmissionPolicy = V1AdmissionPolicy;
-/** The policies a host can set from the call. */
-export type AdmissionPolicyTarget = V1AdmissionTarget;
-export type ParticipantsSlice = {
-  readonly roster: readonly Participant[];
-  readonly admissionQueue: readonly AdmissionRequest[];
-  /** Null until Sync has sent the call's control state. */
-  readonly admissionPolicy: AdmissionPolicy | null;
 };
 export type MediaDevice = {
   readonly deviceId: string;

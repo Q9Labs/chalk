@@ -7,7 +7,7 @@ import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { TileOptions, TileOptionsSheet, type TileAction } from "./TileOptions";
+import { TileOptionsSlot, tileActions } from "./TileOptions";
 import { TileShell } from "./TileShell";
 import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
@@ -123,7 +123,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const followLabel = following ? "Stop following" : "Follow";
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
-  const actions: readonly TileAction[] = [...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])];
+  const actions = tileActions({ label: actionLabel, run: onClick }, { label: followLabel, run: onFollow });
   // On a phone a tap on the tile opens its options, so no tile carries its own "..." button.
   const tapForOptions = phone && actions.length > 0;
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -152,12 +152,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               Video paused for network
             </span>
           ) : null}
-          {tapForOptions ? <TileOptionsSheet name={participant.displayName} actions={actions} open={optionsOpen} onOpenChange={setOptionsOpen} /> : null}
-          {actions.length && !tapForOptions ? (
-            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
-              <TileOptions name={participant.displayName} actions={actions} />
-            </span>
-          ) : null}
+          <TileOptionsSlot name={participant.displayName} actions={actions} tapForOptions={tapForOptions} open={optionsOpen} onOpenChange={setOptionsOpen} />
         </>
       }
       chip={

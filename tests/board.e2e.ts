@@ -4,6 +4,7 @@ import { withProofCall } from "../scripts/web-proof/guest.mjs";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { mkdir } from "node:fs/promises";
 import ports from "../scripts/dev/ports.json";
+import { chooseTileOption } from "./tile-options";
 
 const boardBox = () => {
   const box = document.querySelector(".chalk-board")?.getBoundingClientRect();
@@ -289,18 +290,6 @@ function trackProofZoom() {
 
 async function captureZoomProof(pages: Page[], directory: string, name: string) {
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${directory}/${name}-${index}.png` });
-}
-
-// A desktop tile has a More button and a menu; a phone has no button, so a tap on the tile opens its options sheet.
-async function chooseTileOption(page: Page, name: string, option: string) {
-  const more = page.getByLabel(`More options for ${name}`, { exact: true });
-  if (await more.count()) {
-    await more.click();
-    await page.getByRole("menuitem", { name: option, exact: true }).click();
-    return;
-  }
-  await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).click();
-  await page.getByRole("button", { name: option, exact: true }).click();
 }
 
 async function followEdgeStrokes(a: Page, b: Page, directory: string) {

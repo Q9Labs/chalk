@@ -122,6 +122,8 @@ export function DevicePopover({
     () => false,
   );
   const mic = type === "mic";
+  const noun = mic ? "microphone" : "camera";
+  const warmBackgrounds = mic ? undefined : preloadCameraBackgrounds;
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
   const pressOpensCard = access && !busy;
@@ -134,7 +136,7 @@ export function DevicePopover({
           <button
             type="button"
             className="chalk-shell-main"
-            aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label)}
+            aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${noun}` : label)}
             aria-pressed={isActive}
             aria-busy={busy}
             aria-haspopup={pressOpensCard ? "dialog" : undefined}
@@ -147,14 +149,14 @@ export function DevicePopover({
           </button>
         }
       >
-        {accessLabel ?? (warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label)}
+        {accessLabel ?? (warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${noun}…` : label)}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
         className="chalk-device-menu"
         onOpenChange={setOpen}
         trigger={
-          <button type="button" className="chalk-shell-caret" aria-label={`Select ${mic ? "microphone" : "camera"}`} disabled={disabled} onPointerEnter={mic ? undefined : preloadCameraBackgrounds} onFocus={mic ? undefined : preloadCameraBackgrounds}>
+          <button type="button" className="chalk-shell-caret" aria-label={`Select ${noun}`} disabled={disabled} onPointerEnter={warmBackgrounds} onFocus={warmBackgrounds}>
             <ShellIcon name="down" />
           </button>
         }

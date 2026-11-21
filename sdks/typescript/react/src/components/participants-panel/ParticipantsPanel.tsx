@@ -1,8 +1,7 @@
 import { deviceHint } from "../../selectors/device-hint";
-import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
 import React, { useMemo, useState } from "react";
 import type { AdmissionPolicyTarget } from "@q9labsai/chalk-client";
-import { ChalkButton, ChalkMenu, ChalkMenuItem, ChalkPopover } from "../chalk-ui";
+import { HostControls } from "./HostControls";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
@@ -84,11 +83,6 @@ interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly onAdmissionPolicyChange?: (policy: AdmissionPolicyTarget) => Promise<void>;
 }
 
-const WHO_CAN_JOIN = [
-  { value: "open", label: "Anyone with the link", helper: "People join right away" },
-  { value: "knock", label: "Ask to join", helper: "You let each person in" },
-] as const satisfies readonly { readonly value: AdmissionPolicyTarget; readonly label: string; readonly helper: string }[];
-
 function PeopleLabel({ text, count }: { readonly text: string; readonly count: number }) {
   return (
     <h3 className="call-people-section">
@@ -127,7 +121,6 @@ export const ParticipantsPanelSurface = React.memo(
   }: ParticipantsPanelSurfaceProps) => {
     const [query, setQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const [muting, setMuting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const searching = query.trim().length > 0;
     const found = matchParticipants(participants, query);
@@ -136,33 +129,6 @@ export const ParticipantsPanelSurface = React.memo(
     const waitingBlock = canManageAdmission && admissionEnabled && admissionCount > 0;
     const labelled = participants.length > 8 || waitingBlock;
     const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
-    const [policyPending, setPolicyPending] = useState(false);
-    const whoCanJoin = canManageAdmission && admissionEnabled && onAdmissionPolicyChange && admissionPolicy ? WHO_CAN_JOIN.find((option) => option.value === admissionPolicy) : undefined;
-    const canMuteEveryone = Boolean(onMuteEveryone) && participants.length > 1;
-    const changePolicy = async (policy: AdmissionPolicyTarget) => {
-      if (!onAdmissionPolicyChange || policyPending || policy === admissionPolicy) return;
-      setPolicyPending(true);
-      setError(null);
-      try {
-        await onAdmissionPolicyChange(policy);
-      } catch {
-        setError("Couldn’t change who can join. Try again.");
-      } finally {
-        setPolicyPending(false);
-      }
-    };
-    const muteEveryone = async () => {
-      if (!onMuteEveryone || muting) return;
-      setMuting(true);
-      setError(null);
-      try {
-        await onMuteEveryone();
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Couldn’t mute everyone.");
-      } finally {
-        setMuting(false);
-      }
-    };
     const row = (participant: ParticipantListParticipant) => (
       <ParticipantRow
         key={participant.id}
@@ -193,42 +159,7 @@ export const ParticipantsPanelSurface = React.memo(
     return (
       <section className={cn("call-people", className)} aria-label="People">
         <CallCardStyles />
-        {whoCanJoin || canMuteEveryone ? (
-          <div className="call-host-controls">
-            {whoCanJoin ? (
-              <ChalkMenu
-                trigger={
-                  <ChalkButton aria-label={`Who can join: ${whoCanJoin.label}`} disabled={policyPending}>
-                    {whoCanJoin.label}
-                  </ChalkButton>
-                }
-              >
-                {WHO_CAN_JOIN.map((option) => (
-                  <ChalkMenuItem key={option.value} checked={option.value === whoCanJoin.value} onClick={() => void changePolicy(option.value)}>
-                    <span className="call-who-option">
-                      {option.label}
-                      <small>{option.helper}</small>
-                    </span>
-                  </ChalkMenuItem>
-                ))}
-              </ChalkMenu>
-            ) : null}
-            {canMuteEveryone ? (
-              <ChalkPopover label="Mute everyone" trigger={<ChalkButton disabled={muting || unmutedCount === 0}>Mute everyone</ChalkButton>}>
-                <div className="call-mute-confirm">
-                  <b>Mute everyone?</b>
-                  <p>
-                    {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
-                  </p>
-                  <div className="call-mute-actions">
-                    <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
-                    <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : `Mute ${unmutedCount} ${unmutedCount === 1 ? "person" : "people"}`}</Popover.Close>
-                  </div>
-                </div>
-              </ChalkPopover>
-            ) : null}
-          </div>
-        ) : null}
+        <HostControls canChooseWhoCanJoin={canManageAdmission && admissionEnabled} admissionPolicy={admissionPolicy} onAdmissionPolicyChange={onAdmissionPolicyChange} onMuteEveryone={onMuteEveryone} participantCount={participants.length} unmutedCount={unmutedCount} onError={setError} />
         <div className="call-people-list">
           {error ? <p role="alert">{error}</p> : null}
           {searchable && (participants.length > 8 || query.length > 0) ? (
@@ -269,17 +200,7 @@ export const ParticipantsPanelSurface = React.memo(
   },
 );
 
-export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
-  const client = useSpaceClient();
-  const self = useSelf();
-  const participantsSlice = useParticipants();
-  const canAssignRoles = useCan("assignRoles");
-  const canStopScreenOthers = useCan("stopScreenOthers");
-  const canMuteOthers = useCan("muteOthers");
-  const canStopVideoOthers = useCan("stopVideoOthers");
-  const canRequestMedia = useCan("requestMediaOthers");
-  const canRemoveParticipants = useCan("removeParticipant");
-  const canManageAdmission = useCan("manageAdmission");
+function useParticipantVolumes(props: ParticipantsPanelProps) {
   const contextVolumeState = useParticipantVolumeContext();
   const [localVolumes, setLocalVolumes] = useState<ReadonlyMap<string, number>>(new Map());
   const isControlled = props.participantVolumes !== undefined && props.onParticipantVolumeChange !== undefined;
@@ -294,6 +215,21 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
           else next.set(participantId, volume);
           return next;
         })));
+  return { participantVolumes, onParticipantVolumeChange };
+}
+
+export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participantsSlice = useParticipants();
+  const canAssignRoles = useCan("assignRoles");
+  const canStopScreenOthers = useCan("stopScreenOthers");
+  const canMuteOthers = useCan("muteOthers");
+  const canStopVideoOthers = useCan("stopVideoOthers");
+  const canRequestMedia = useCan("requestMediaOthers");
+  const canRemoveParticipants = useCan("removeParticipant");
+  const canManageAdmission = useCan("manageAdmission");
+  const { participantVolumes, onParticipantVolumeChange } = useParticipantVolumes(props);
   const ownHandOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId), [participantsSlice.roster]));
   const handOrders = props.handOrders ?? ownHandOrders;
   const participants = useMemo(

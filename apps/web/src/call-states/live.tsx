@@ -49,3 +49,9 @@ export function Live({
     </main>
   );
 }
+
+/** Recording that has just started: the call opens with the start still pending, then the recording confirms. */
+export function RecordingStarts({ snapshot }: { readonly snapshot: SpaceSnapshot }) {
+  const starting = { ...snapshot, recording: { ...snapshot.recording, current: { recordingId: "rec-1", status: "starting" as const, failureCode: null } } };
+  return <Live snapshot={starting} step={(client) => client.updateSnapshot(() => snapshot)} />;
+}

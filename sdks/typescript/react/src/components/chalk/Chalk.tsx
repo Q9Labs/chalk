@@ -3,8 +3,7 @@ import { commandFailure, type MediaCommandAction, type MediaCommandSource } from
 import { CallLimbo } from "../call-limbo/CallLimbo";
 import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChalkProvider } from "../../bindings/context";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
@@ -84,7 +83,7 @@ export type ChalkProps = SpaceIntegration &
 /** A call that could not be recovered stays on screen, dimmed, with a card that offers a way back. */
 const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted";
 
-export function Chalk(props: ChalkProps): React.JSX.Element {
+export function Chalk(props: ChalkProps): JSX.Element {
   const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
   const colorScheme = props.theme?.colorScheme ?? localColorScheme;
   const changeColorScheme = (next: ChalkColorScheme) => {
@@ -150,7 +149,7 @@ function SpaceExperience(
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly onOpenReport?: () => void;
   },
-): React.JSX.Element {
+): JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const recorded = useRecording().current?.status === "recording";
@@ -270,7 +269,7 @@ function SpaceSurface(
     readonly onOpenReport?: () => void;
     readonly onRetry: () => void;
   },
-): React.JSX.Element {
+): JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const media = useMedia();

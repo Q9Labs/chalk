@@ -6,16 +6,16 @@ import { DEVICE_ACCESS_STATES } from "./device-access";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
-import { Live } from "./live";
+import { Live, RecordingStarts } from "./live";
+import { JoinToast } from "./toast-fixtures";
 import { STATES_LANE } from "./states-lane";
 import { CONNECTION_STATES } from "./connection";
 import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
-import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
-import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -74,21 +74,7 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Foundation toast announcement",
     render: () => (
       <main data-chalk className="h-dvh">
-        <ToastStack
-          toasts={[
-            {
-              id: "join",
-              icon: <Avatar name="Nora Patel" size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
-              message: (
-                <>
-                  <b style={{ fontWeight: 600 }}>Nora Patel</b> joined
-                </>
-              ),
-              duration: 60_000,
-            },
-          ]}
-          onDismiss={() => undefined}
-        />
+        <JoinToast />
       </main>
     ),
   },
@@ -140,15 +126,7 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "group-spotlight", title: "Ten people, spotlight", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} /> },
   { id: "group-grid", title: "Ten people, grid", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} layout="grid" /> },
   { id: "crowd-grid", title: "Thirty people, grid with pages", render: () => <Live snapshot={liveSnapshot({ others: crowd(29) })} layout="grid" /> },
-  {
-    id: "recording",
-    title: "Recording on",
-    render: () => {
-      const snapshot = liveSnapshot({ others: [nora], recording: true, capabilities: HOST });
-      const starting = { ...snapshot, recording: { ...snapshot.recording, current: { recordingId: "rec-1", status: "starting" as const, failureCode: null } } };
-      return <Live snapshot={starting} step={(client) => client.updateSnapshot(() => snapshot)} />;
-    },
-  },
+  { id: "recording", title: "Recording on", render: () => <RecordingStarts snapshot={liveSnapshot({ others: [nora], recording: true, capabilities: HOST })} /> },
 
   { id: "board", title: "Board open", render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
   { id: "board-grid", title: "Board open, grid picked", actions: [openLayout, { click: "Grid", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
