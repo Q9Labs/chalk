@@ -14,9 +14,9 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
-import org.webrtc.VideoFrame;
-import org.webrtc.VideoSink;
-import org.webrtc.VideoTrack;
+import realtimekit.org.webrtc.VideoFrame;
+import realtimekit.org.webrtc.VideoSink;
+import realtimekit.org.webrtc.VideoTrack;
 
 import java.io.File;
 import java.io.FileOutputStream;

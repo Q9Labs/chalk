@@ -1,6 +1,6 @@
 package com.cloudflare.realtimekit.WebRTCModule;
 
-import org.webrtc.VideoTrack;
+import realtimekit.org.webrtc.VideoTrack;
 
 /** One adapter for the react-native-webrtc stream URL used by the stock RTCView. */
 public final class ChalkAnnotationTracks {
