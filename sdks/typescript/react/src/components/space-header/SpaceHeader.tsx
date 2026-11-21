@@ -31,12 +31,11 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   // A host alone at call start sees the menu open with the QR code expanded; it closes when someone joins or the host closes it.
   const inviteOpen = props.callLinkOpen === true;
   const open = menuOpen || inviteOpen;
-  // The reveal opens the moment the call goes live, so its body is downloaded by then and the menu has content on its first frame.
-  const live = props.network?.live === true;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Start the menu body's download when the call goes live.
+  // Only a host who is alone at go-live gets the reveal, so only that call downloads the menu body before anyone reaches for it.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Start the menu body's download when the reveal opens.
   useEffect(() => {
-    if (live) warmDetails();
-  }, [live]);
+    if (inviteOpen) warmDetails();
+  }, [inviteOpen]);
   // The chip opens the menu with the connection charts showing; the plain trigger opens it closed.
   const [revealConnection, setRevealConnection] = useState(false);
   const link = props.network?.live ? props.network.link : undefined;
