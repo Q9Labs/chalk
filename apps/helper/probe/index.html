@@ -73,10 +73,12 @@
         for (const candidate of sendCandidates) await receive.addIceCandidate(candidate);
         for (const candidate of receiveCandidates) await send.addIceCandidate(candidate);
       }
-      await Promise.race([
-        new Promise(resolve => video.addEventListener("playing", resolve, { once: true })),
-        new Promise((_, reject) => setTimeout(() => reject(Error("No remote playback")), 10000))
-      ]);
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        await Promise.race([
+          new Promise(resolve => video.addEventListener("playing", resolve, { once: true })),
+          new Promise((_, reject) => setTimeout(() => reject(Error("No remote playback")), 10000))
+        ]);
+      }
       const samples = [];
       for (let frame = 0; frame < 6; frame += 1) {
         await new Promise(resolve => setTimeout(resolve, 250));
@@ -90,7 +92,10 @@
         samples
       }, null, 2);
     } catch (error) {
-      result.textContent = JSON.stringify({ browser: navigator.userAgent, error: error.message });
+      result.textContent = JSON.stringify({
+        browser: navigator.userAgent, error: error.message, ice: receive?.iceConnectionState,
+        connection: receive?.connectionState
+      });
     } finally {
       track?.stop();
       send?.close();

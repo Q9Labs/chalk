@@ -11,6 +11,8 @@ public class ChalkMarker : Form
     public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
     [DllImport("user32.dll", SetLastError=true)]
     public static extern bool GetWindowDisplayAffinity(IntPtr hwnd, out uint affinity);
+    [DllImport("user32.dll", SetLastError=true)]
+    public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
 
     protected override CreateParams CreateParams
     {
@@ -31,9 +33,12 @@ $form.FormBorderStyle = "None"
 $form.ShowInTaskbar = $false
 $form.TopMost = $true
 $form.StartPosition = "Manual"
-$form.Location = New-Object Drawing.Point(160, 190)
-$form.Size = New-Object Drawing.Size(320, 200)
+$form.Location = New-Object System.Drawing.Point -ArgumentList 160, 190
+$form.Size = New-Object System.Drawing.Size -ArgumentList 320, 200
 $form.BackColor = [Drawing.Color]::Magenta
+if (-not [ChalkMarker]::SetLayeredWindowAttributes($form.Handle, 0, 255, 2)) {
+    throw "Could not make the layered marker visible."
+}
 $expected = if ($Unprotected) { 0 } else { 0x11 }
 if (-not [ChalkMarker]::SetWindowDisplayAffinity($form.Handle, $expected)) {
     throw "SetWindowDisplayAffinity failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"

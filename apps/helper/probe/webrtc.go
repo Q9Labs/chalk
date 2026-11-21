@@ -111,6 +111,7 @@ func connect(ctx context.Context, offer webrtc.SessionDescription) (*webrtc.Sess
 	}()
 	var started atomic.Bool
 	connection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		log.Printf("WebRTC connection: %s", state)
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
 			if started.CompareAndSwap(false, true) {
