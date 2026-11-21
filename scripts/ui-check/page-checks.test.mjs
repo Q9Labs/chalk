@@ -63,6 +63,16 @@ test("a menu over a control is not an overlap, two controls inside the same menu
   assert.ok((await checksFor(menu(item("One", 0) + item("Two", 20)))).includes("control-overlap"));
 });
 
+test("a dialog over a control is still an overlap", async () => {
+  const found = await checksFor(`<button aria-label="Tile" style="position:absolute;left:0;top:0;width:200px;height:200px">t</button><div role="dialog" style="position:absolute;left:20px;top:20px;width:150px;height:100px"><button aria-label="Ok" style="width:100px;height:40px">ok</button></div>`);
+  assert.ok(found.includes("control-overlap"));
+});
+
+test("text cut off in a 1px box that is not screen-reader-only is still found", async () => {
+  const found = await checksFor(`<div style="width:1px;height:1px;overflow:visible;white-space:nowrap;overflow-x:clip">Options for Alex</div><p>Hi</p>`);
+  assert.ok(found.includes("text-clipped"));
+});
+
 test("a control with a layer over its center is found", async () => {
   const found = await checksFor(`<button aria-label="Chat">c</button><div style="position:fixed;left:0;top:0;width:100px;height:100px;background:#0004"></div>`);
   assert.ok(found.includes("control-covered"));
