@@ -373,6 +373,7 @@
         "infrastructure/cloudflare-egress-alert",
         "infrastructure/listener-audio-alert",
         "infrastructure/oncall-alert.mjs",
+        "infrastructure/oncall-alert.test.mjs",
         "infrastructure/observability",
         "infrastructure/uptime-worker",
         "scripts/diagnose-call",
