@@ -23,11 +23,15 @@ export const DASHBOARD_BOOT_SCRIPT = `(function(){var t=document.documentElement
 /**
  * Fades the opening frame out once every stylesheet the app added has loaded, so the app is never seen unstyled, then
  * removes it. It waits on the stylesheets' own load events, not on animation frames or timers alone, so a page whose
- * timers are held (a background tab, a test clock) still lets the frame go. Returns a cleanup for the effect that calls it.
+ * timers are held (a background tab, a test clock) still lets the frame go. `onGone` runs once the frame is gone, or at
+ * once when there is none. Returns a cleanup for the effect that calls it.
  */
-export function dismissDashboardBoot(): () => void {
+export function dismissDashboardBoot(onGone: () => void): () => void {
   const boot = document.getElementById(DASHBOARD_BOOT_ID);
-  if (!boot) return () => {};
+  if (!boot) {
+    onGone();
+    return () => {};
+  }
   const pending = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter((link) => link.sheet === null);
   let left = pending.length;
   let timer = 0;
@@ -42,8 +46,15 @@ export function dismissDashboardBoot(): () => void {
     stopWaiting();
     if (boot.hasAttribute("data-leaving")) return;
     boot.setAttribute("data-leaving", "");
-    boot.addEventListener("transitionend", () => boot.remove(), { once: true });
-    window.setTimeout(() => boot.remove(), 400);
+    let removed = false;
+    const gone = () => {
+      if (removed) return;
+      removed = true;
+      boot.remove();
+      onGone();
+    };
+    boot.addEventListener("transitionend", gone, { once: true });
+    window.setTimeout(gone, 400);
   };
   function settle() {
     left -= 1;
