@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "4b3c04077466",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -530,7 +530,7 @@
     {
       "area": "video",
       "slice": 4,
-      "title": "Video",
+      "title": "Camera video, from capture to the rendered tile",
       "prefixes": ["video"],
       "test_only": false
     },
@@ -543,6 +543,22 @@
     }
   ],
   "fields": [
+    {
+      "name": "acked_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The acked bitrate the estimator saw."
+    },
+    {
+      "name": "active",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The outbound encoding is active."
+    },
     {
       "name": "admission_request_id",
       "type": "id",
@@ -604,6 +620,56 @@
       "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel."
     },
     {
+      "name": "bitrate_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Instantaneous bitrate for the track window."
+    },
+    {
+      "name": "bytes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative payload bytes."
+    },
+    {
+      "name": "bytes_sent",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative bytes the sender handed to the transport for a video layer."
+    },
+    {
+      "name": "camera_bound",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The camera publication is neither null nor \"initial\"."
+    },
+    {
+      "name": "capture_error_name",
+      "type": "enum",
+      "values": ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The DOMException name of a camera capture failure; the message is never emitted."
+    },
+    {
+      "name": "cause",
+      "type": "enum",
+      "values": ["newer_allocation", "revoked", "closed", "caller"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why a lease or session closed."
+    },
+    {
       "name": "client_mono_ms",
       "type": "number",
       "required": false,
@@ -654,6 +720,22 @@
       "doc": "Whether est_server_ms can be trusted."
     },
     {
+      "name": "connection_type",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The transport the candidate pair uses."
+    },
+    {
+      "name": "covered",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "An elementFromPoint at the tile's center found a cover."
+    },
+    {
       "name": "decision",
       "type": "string",
       "required": false,
@@ -669,6 +751,54 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The decision."
+    },
+    {
+      "name": "decrease_acked_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The acked bitrate at the last fall."
+    },
+    {
+      "name": "decrease_ago_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How long ago the estimate last fell."
+    },
+    {
+      "name": "decrease_cause",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why the estimate last fell."
+    },
+    {
+      "name": "decrease_from_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The estimate before the last fall."
+    },
+    {
+      "name": "decrease_to_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The estimate after the last fall."
+    },
+    {
+      "name": "delivered_share",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Delivered share of the subscription's packets in the congestion window."
     },
     {
       "name": "device_ephemeral",
@@ -688,6 +818,23 @@
       "doc": "The persistent device."
     },
     {
+      "name": "device_kind",
+      "type": "enum",
+      "values": ["camera", "microphone", "screen"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The device kind a device_failed row names."
+    },
+    {
+      "name": "device_state",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The media_state detail."
+    },
+    {
       "name": "drop_reason",
       "type": "enum",
       "values": ["queue_full", "credential_expired", "refused"],
@@ -695,6 +842,14 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs."
+    },
+    {
+      "name": "dropped",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative packets the SFU dropped for congestion."
     },
     {
       "name": "dropped_seqs",
@@ -711,6 +866,14 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "An op's duration, or how long a state lasted."
+    },
+    {
+      "name": "enabled",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The media intent bit."
     },
     {
       "name": "end",
@@ -757,6 +920,14 @@
       "doc": "The estimated server time in Unix milliseconds. A server stamps its own clock."
     },
     {
+      "name": "estimate_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The congestion estimator's output for the transport."
+    },
+    {
       "name": "event_id",
       "type": "id",
       "id_kind": "event",
@@ -764,6 +935,30 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "One record. Minted by the kernel when the record is made."
+    },
+    {
+      "name": "feedback_age_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Age of the newest congestion feedback."
+    },
+    {
+      "name": "final",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The last row for this subscription or publication before it closed."
+    },
+    {
+      "name": "fir_received",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative FIRs the viewer's downlink received."
     },
     {
       "name": "flags",
@@ -782,12 +977,100 @@
       "doc": "16 hex characters of the SHA-256 of the canonical flags JSON. Resolve it with the obs.flags_snapshot fact that carries the same hash."
     },
     {
+      "name": "forwarded_keyframes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative keyframes the SFU forwarded on this subscription."
+    },
+    {
+      "name": "forwarded_packets",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative video packets the SFU forwarded on this subscription."
+    },
+    {
+      "name": "frame_height",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Frame height in px for the track or layer."
+    },
+    {
+      "name": "frames_decoded",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frames the viewer's decoder produced."
+    },
+    {
+      "name": "frames_dropped",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frames the decoder dropped."
+    },
+    {
+      "name": "frames_encoded",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frames the sender's encoder produced for a layer."
+    },
+    {
+      "name": "frames_received",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frames the viewer's decoder input saw."
+    },
+    {
+      "name": "freeze_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frame freezes the decoder reported."
+    },
+    {
+      "name": "freeze_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative frozen milliseconds the decoder reported."
+    },
+    {
       "name": "from_state",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The state before a transition."
+    },
+    {
+      "name": "gap",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The cause the window measured nothing (offline, hidden, or another); the row is not a zero."
+    },
+    {
+      "name": "gap_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How much of the window was a gap."
     },
     {
       "name": "generation",
@@ -798,12 +1081,92 @@
       "doc": "Which join of the Participant seat this is."
     },
     {
+      "name": "held",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "1 while the SFU holds a publication pending unmute."
+    },
+    {
+      "name": "high_layer",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative packets forwarded at high layer."
+    },
+    {
+      "name": "host_pressure",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "1 while the host's own load biases the estimate."
+    },
+    {
+      "name": "ingress_bitrate_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Ingress bitrate for the publication."
+    },
+    {
+      "name": "ingress_jitter_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Ingress jitter for the publication."
+    },
+    {
+      "name": "ingress_layers_active",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Ingress layers active for the publication."
+    },
+    {
+      "name": "ingress_lost",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative ingress lost packets for the publication."
+    },
+    {
+      "name": "ingress_packets",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative ingress packets for the publication this subscription forwards, copied onto the viewer's row."
+    },
+    {
+      "name": "ingress_repaired",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative ingress repaired packets for the publication."
+    },
+    {
       "name": "item_count",
       "type": "int",
       "required": false,
       "sensitivity": null,
       "owner": "areas/selftest",
       "doc": "How many items a self-test op handled."
+    },
+    {
+      "name": "jitter_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Interarrival jitter in milliseconds."
     },
     {
       "name": "job_id",
@@ -832,6 +1195,22 @@
       "doc": "How far the wall clock stepped against the monotonic clock."
     },
     {
+      "name": "key_frames_decoded",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative keyframes the viewer decoded."
+    },
+    {
+      "name": "keyframe_repairs",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative ingress keyframe repairs."
+    },
+    {
       "name": "kind",
       "type": "enum",
       "values": ["op", "transition", "decision", "surface", "fact"],
@@ -839,6 +1218,87 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "op, transition, decision, surface or fact."
+    },
+    {
+      "name": "layer",
+      "type": "enum",
+      "values": ["l", "m", "h"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The forwarded simulcast layer."
+    },
+    {
+      "name": "layers",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many simulcast layers the ingress carries."
+    },
+    {
+      "name": "layers_active",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many ingress layers grew this window."
+    },
+    {
+      "name": "local",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The probed tile renders the local camera."
+    },
+    {
+      "name": "local_candidate_type",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The local ICE candidate type."
+    },
+    {
+      "name": "loss_share",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Lost share of egress packets in the window."
+    },
+    {
+      "name": "lossy",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "1 while the estimator considers the link lossy."
+    },
+    {
+      "name": "lost",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative lost packets reported for a track."
+    },
+    {
+      "name": "low_layer",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative packets forwarded at low layer."
+    },
+    {
+      "name": "luma_mean",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Mean luma of a downscaled draw of the frame, 0-255."
     },
     {
       "name": "machine",
@@ -859,6 +1319,32 @@
       "doc": "Chalk's media connection."
     },
     {
+      "name": "media_kind",
+      "type": "enum",
+      "values": ["audio", "video"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The media kind of an SFU row."
+    },
+    {
+      "name": "media_state_code",
+      "type": "enum",
+      "values": ["media_capture_failed", "media_decode_failed", "connection_dropped"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The media_state error code."
+    },
+    {
+      "name": "mid",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The RTP mid of the camera track on a viewer's connection."
+    },
+    {
       "name": "module",
       "type": "enum",
       "values": ["api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"],
@@ -866,6 +1352,38 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "The emitting program."
+    },
+    {
+      "name": "muted",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The camera track's muted flag."
+    },
+    {
+      "name": "nack_received",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative NACKs the viewer's downlink received."
+    },
+    {
+      "name": "nack_requested",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative NACKs the SFU asked the publisher for on ingress."
+    },
+    {
+      "name": "nack_sent",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative NACKs sent for a track."
     },
     {
       "name": "name",
@@ -893,6 +1411,14 @@
       "doc": "Which self-test note."
     },
     {
+      "name": "on_screen",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The IntersectionObserver reported the tile intersecting."
+    },
+    {
       "name": "op_id",
       "type": "id",
       "id_kind": "operation",
@@ -902,6 +1428,15 @@
       "doc": "The op."
     },
     {
+      "name": "operation_id",
+      "type": "id",
+      "id_kind": "operation",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The live request the intent joins."
+    },
+    {
       "name": "outcome",
       "type": "enum",
       "values": ["ok", "expected", "error"],
@@ -909,6 +1444,22 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "An op's terminal outcome."
+    },
+    {
+      "name": "packets",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative packets on a track (sender encoded, viewer received, SFU ingress or forwarded)."
+    },
+    {
+      "name": "page_visible",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "document.visibilityState was visible at probe time."
     },
     {
       "name": "parent_op_id",
@@ -929,6 +1480,68 @@
       "doc": "The Participant seat in the Episode."
     },
     {
+      "name": "pause_reason",
+      "type": "enum",
+      "values": ["viewer", "congestion", "source_inactive", "source_unauthorized"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The active pause on the subscription at row time; absent when forwarding."
+    },
+    {
+      "name": "paused_subscriptions",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many subscriptions were paused in the egress window."
+    },
+    {
+      "name": "permission_after",
+      "type": "enum",
+      "values": ["granted", "denied", "prompt"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Permission state measured after the capture attempt; omitted when unavailable."
+    },
+    {
+      "name": "permission_before",
+      "type": "enum",
+      "values": ["granted", "denied", "prompt"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Permission state measured before the capture attempt; omitted when unavailable."
+    },
+    {
+      "name": "permission_probe",
+      "type": "enum",
+      "values": ["no_permissions_api"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why a permission field is absent."
+    },
+    {
+      "name": "permission_state",
+      "type": "enum",
+      "values": ["granted", "denied", "prompt", "unknown"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Permission state a legacy row carried."
+    },
+    {
+      "name": "plan",
+      "type": "enum",
+      "values": ["open", "lowest", "paused"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The SFU's camera plan level for this subscription."
+    },
+    {
       "name": "platform",
       "type": "enum",
       "values": ["web", "ios", "android", "server", "lambda", "node"],
@@ -936,6 +1549,81 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "Where the program runs."
+    },
+    {
+      "name": "playout",
+      "type": "enum",
+      "values": ["playing", "paused", "autoplay_blocked", "not_applicable", "unknown"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The audio playout state; video tracks carry not_applicable."
+    },
+    {
+      "name": "pli_received",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative PLIs the viewer's downlink asked for."
+    },
+    {
+      "name": "pli_sent",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative PLIs sent for a track."
+    },
+    {
+      "name": "policy_allows",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "document.featurePolicy.allowsFeature(\"camera\"); omitted when unavailable."
+    },
+    {
+      "name": "policy_probe",
+      "type": "enum",
+      "values": ["no_policy_api"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why policy_allows is absent."
+    },
+    {
+      "name": "presented_frames",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "requestVideoFrameCallback cumulative frame counter for a tile."
+    },
+    {
+      "name": "probe_unavailable",
+      "type": "enum",
+      "values": ["native_render"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The probe platform cannot supply a field; the unavailable fields are absent."
+    },
+    {
+      "name": "probing",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "1 while the transport is probing."
+    },
+    {
+      "name": "proven_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The highest estimate the transport has proven."
     },
     {
       "name": "provider_media_id",
@@ -946,6 +1634,56 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The media provider's session id."
+    },
+    {
+      "name": "publication_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The camera publication the row is about."
+    },
+    {
+      "name": "publisher_id",
+      "type": "id",
+      "id_kind": "participant",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The publishing participant a viewer-bound subscription row names."
+    },
+    {
+      "name": "quality_limitation_reason",
+      "type": "enum",
+      "values": ["none", "cpu", "bandwidth", "other"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why the encoder is not meeting the requested resolution."
+    },
+    {
+      "name": "queued_bytes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Bytes queued on the transport."
+    },
+    {
+      "name": "ready_state",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The video element's readyState at probe time."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Why a subscription stopped or is paused; the SFU's literal reason field."
     },
     {
       "name": "reason_code",
@@ -965,12 +1703,108 @@
       "doc": "The recording."
     },
     {
+      "name": "rect_h",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The tile's on-screen height in CSS px."
+    },
+    {
+      "name": "rect_w",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The tile's on-screen width in CSS px."
+    },
+    {
+      "name": "recv_bitrate_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Received video bitrate in bps (the row's kbps value is not read)."
+    },
+    {
+      "name": "recv_height",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Received video frame height."
+    },
+    {
+      "name": "recv_hidden_videos",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many inbound video tracks were paused because the viewer hid them."
+    },
+    {
+      "name": "recv_jitter_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Inbound jitter in milliseconds."
+    },
+    {
+      "name": "recv_loss_pct",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Inbound loss share in percent."
+    },
+    {
+      "name": "recv_paused_videos",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many inbound video tracks the viewer asked paused."
+    },
+    {
+      "name": "relay_protocol",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The relay protocol in use."
+    },
+    {
       "name": "release_sha",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "The git commit the program was built from."
+    },
+    {
+      "name": "remote_candidate_type",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The remote ICE candidate type."
+    },
+    {
+      "name": "repaired",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative packets repaired by NACK."
+    },
+    {
+      "name": "repairs_cut",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative repairs cut for congestion."
     },
     {
       "name": "request_id",
@@ -980,6 +1814,40 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The request attempt."
+    },
+    {
+      "name": "requested_layer",
+      "type": "enum",
+      "values": ["l", "m", "h"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The layer the viewer's selection asked for."
+    },
+    {
+      "name": "revision",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The source lease revision ordering."
+    },
+    {
+      "name": "rid",
+      "type": "enum",
+      "values": ["h", "m", "l"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Simulcast rid of an outbound encoded layer; empty when there is one layer."
+    },
+    {
+      "name": "rtt_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Round-trip time for the candidate pair."
     },
     {
       "name": "schema_ver",
@@ -998,6 +1866,71 @@
       "doc": "The Chalk SDK version inside the host app."
     },
     {
+      "name": "send_bitrate_bps",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Sent video bitrate in bps (the row's kbps value is not read)."
+    },
+    {
+      "name": "send_jitter_ms",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Outbound jitter in milliseconds."
+    },
+    {
+      "name": "send_layer",
+      "type": "enum",
+      "values": ["h", "m", "l"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The highest layer the sender is encoding."
+    },
+    {
+      "name": "send_loss_pct",
+      "type": "number",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Outbound loss share in percent."
+    },
+    {
+      "name": "sent_audio",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative audio packets sent."
+    },
+    {
+      "name": "sent_probe",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative probe packets sent."
+    },
+    {
+      "name": "sent_repair",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative repair packets sent."
+    },
+    {
+      "name": "sent_video",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "Cumulative video packets sent."
+    },
+    {
       "name": "seq",
       "type": "int",
       "required": true,
@@ -1012,6 +1945,15 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "How long a dismissed surface was on screen."
+    },
+    {
+      "name": "source",
+      "type": "enum",
+      "values": ["camera", "screen"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The media source; video checks read camera only."
     },
     {
       "name": "source_id",
@@ -1040,6 +1982,22 @@
       "doc": "The W3C span."
     },
     {
+      "name": "status_shown",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The VideoTrackStatus indicator is on screen."
+    },
+    {
+      "name": "subscriptions",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How many subscriptions the egress row covered."
+    },
+    {
       "name": "surface_state",
       "type": "enum",
       "values": ["shown", "dismissed"],
@@ -1058,6 +2016,15 @@
       "doc": "The Sync websocket."
     },
     {
+      "name": "target_layer",
+      "type": "enum",
+      "values": ["none", "l", "m", "h"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The layer the SFU is trying to forward, or none when paused."
+    },
+    {
       "name": "tenant_id",
       "type": "id",
       "id_kind": "tenant",
@@ -1065,6 +2032,23 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The tenant."
+    },
+    {
+      "name": "tile_reason",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The VideoTrackStatus a degraded tile names."
+    },
+    {
+      "name": "tile_state",
+      "type": "enum",
+      "values": ["picture", "avatar", "paused_for_network", "frozen_frame", "media_state"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The rendered state the tile surface is in."
     },
     {
       "name": "to_state",
@@ -1084,6 +2068,14 @@
       "doc": "The W3C trace."
     },
     {
+      "name": "trend",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The congestion trend the estimator reported."
+    },
+    {
       "name": "trigger",
       "type": "string",
       "required": false,
@@ -1101,6 +2093,31 @@
       "doc": "The tenant's identifier for the person."
     },
     {
+      "name": "video_height",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "videoHeight of the element at probe time."
+    },
+    {
+      "name": "video_width",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "videoWidth of the element at probe time."
+    },
+    {
+      "name": "was",
+      "type": "enum",
+      "values": ["viewer", "congestion", "source_inactive", "source_unauthorized"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "The pause a resume replaced."
+    },
+    {
       "name": "webhook_delivery_id",
       "type": "id",
       "id_kind": "webhook_delivery",
@@ -1108,6 +2125,14 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The webhook delivery."
+    },
+    {
+      "name": "window_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/video",
+      "doc": "How long the stats window measured."
     }
   ],
   "reasons": [
@@ -1145,6 +2170,111 @@
       "area": "core",
       "test_only": false,
       "doc": "An error that no classifier named. Counted as unexplained, so a rise is a gap in the catalogue."
+    },
+    {
+      "code": "video.backgrounded",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The app was backgrounded; the picture returned when it came back."
+    },
+    {
+      "code": "video.call_ended",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "A join.leave or end.episode near the stop."
+    },
+    {
+      "code": "video.capture_denied",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "A NotAllowedError the refusal conditions did not cover: a system block, a policy refusal, or no probe to attribute it."
+    },
+    {
+      "code": "video.device_busy",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "The camera device is busy."
+    },
+    {
+      "code": "video.device_constraint_invalid",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "The capture constraint is invalid for this device."
+    },
+    {
+      "code": "video.device_not_found",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "No camera device."
+    },
+    {
+      "code": "video.media_capture_failed",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "A capture failure not named by another code."
+    },
+    {
+      "code": "video.paused_congestion",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The SFU paused the subscription for congestion."
+    },
+    {
+      "code": "video.paused_source_inactive",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The SFU paused the subscription because the source was inactive."
+    },
+    {
+      "code": "video.paused_source_unauthorized",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The SFU paused the subscription because the source's lease was lost."
+    },
+    {
+      "code": "video.paused_viewer",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The SFU paused the subscription because the viewer asked."
+    },
+    {
+      "code": "video.permission_denied",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The Participant refused the camera prompt: permission_after=denied, and the denial is their choice, not a system block."
+    },
+    {
+      "code": "video.reconnecting",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "A reconnect or recovery stretch the picture matched within 10 s of the matching reconnected transition."
+    },
+    {
+      "code": "video.unsupported_environment",
+      "outcome": "error",
+      "area": "video",
+      "test_only": false,
+      "doc": "The browser cannot capture."
+    },
+    {
+      "code": "video.viewer_hidden",
+      "outcome": "expected",
+      "area": "video",
+      "test_only": false,
+      "doc": "The viewer's tile was off-screen, the page hidden, or the tile covered."
     }
   ],
   "events": [
@@ -1274,6 +2404,459 @@
       "doc": "A self-test op."
     },
     {
+      "name": "sfu.media.egress",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "media_kind": {
+          "required": true
+        },
+        "subscriptions": {
+          "required": false
+        },
+        "paused_subscriptions": {
+          "required": false
+        },
+        "high_layer": {
+          "required": false
+        },
+        "low_layer": {
+          "required": false
+        },
+        "pli_received": {
+          "required": false
+        },
+        "fir_received": {
+          "required": false
+        },
+        "nack_received": {
+          "required": false
+        },
+        "lost": {
+          "required": false
+        },
+        "jitter_ms": {
+          "required": false
+        },
+        "loss_share": {
+          "required": false
+        },
+        "rtt_ms": {
+          "required": false
+        },
+        "bitrate_bps": {
+          "required": false
+        },
+        "final": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.egress"
+        }
+      },
+      "doc": "Cumulative egress counters per viewer's downlink, one row per media kind."
+    },
+    {
+      "name": "sfu.media.ingress",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "packets": {
+          "required": true
+        },
+        "bytes": {
+          "required": false
+        },
+        "lost": {
+          "required": false
+        },
+        "repaired": {
+          "required": false
+        },
+        "nack_requested": {
+          "required": false
+        },
+        "keyframe_repairs": {
+          "required": false
+        },
+        "pli_sent": {
+          "required": false
+        },
+        "jitter_ms": {
+          "required": false
+        },
+        "bitrate_bps": {
+          "required": false
+        },
+        "layers": {
+          "required": false
+        },
+        "layers_active": {
+          "required": false
+        },
+        "held": {
+          "required": false
+        },
+        "final": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.ingress"
+        }
+      },
+      "doc": "Cumulative ingress counters for one publication. Rows land while counters grow and once when they stop; a final row is preserved on close. Packet growth ≥50 over ≤35 s between rows means flowing."
+    },
+    {
+      "name": "sfu.media.transport",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "estimate_bps": {
+          "required": false
+        },
+        "proven_bps": {
+          "required": false
+        },
+        "queued_bytes": {
+          "required": false
+        },
+        "probing": {
+          "required": false
+        },
+        "sent_audio": {
+          "required": false
+        },
+        "sent_video": {
+          "required": false
+        },
+        "sent_repair": {
+          "required": false
+        },
+        "sent_probe": {
+          "required": false
+        },
+        "dropped": {
+          "required": false
+        },
+        "repairs_cut": {
+          "required": false
+        },
+        "feedback_age_ms": {
+          "required": false
+        },
+        "final": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.transport"
+        }
+      },
+      "doc": "Cumulative transport counters for one session; never proves a node's liveness."
+    },
+    {
+      "name": "sfu.publication.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.publication.started"
+        }
+      },
+      "doc": "The SFU registered a publication from a publisher."
+    },
+    {
+      "name": "sfu.source.lease_lost",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "source": {
+          "required": true
+        },
+        "cause": {
+          "required": true
+        },
+        "revision": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.source.lease_lost"
+        }
+      },
+      "doc": "The publisher's source lease closed; a later lease_opened for the same source lifts the exclusion."
+    },
+    {
+      "name": "sfu.source.lease_opened",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "source": {
+          "required": true
+        },
+        "revision": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.source.lease_opened"
+        }
+      },
+      "doc": "The publisher's source lease opened; revision orders it."
+    },
+    {
+      "name": "sfu.subscription.congestion",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "mid": {
+          "required": true
+        },
+        "layer": {
+          "required": false
+        },
+        "reason": {
+          "required": false
+        },
+        "estimate_bps": {
+          "required": false
+        },
+        "proven_bps": {
+          "required": false
+        },
+        "delivered_share": {
+          "required": false
+        },
+        "probing": {
+          "required": false
+        },
+        "host_pressure": {
+          "required": false
+        },
+        "acked_bps": {
+          "required": false
+        },
+        "loss_share": {
+          "required": false
+        },
+        "lossy": {
+          "required": false
+        },
+        "trend": {
+          "required": false
+        },
+        "decrease_cause": {
+          "required": false
+        },
+        "decrease_ago_ms": {
+          "required": false
+        },
+        "decrease_from_bps": {
+          "required": false
+        },
+        "decrease_to_bps": {
+          "required": false
+        },
+        "decrease_acked_bps": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.congestion"
+        }
+      },
+      "doc": "The congestion controller's view of a subscription: estimate, proven, delivered share, host pressure, loss share, trend."
+    },
+    {
+      "name": "sfu.subscription.paused",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "reason": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.paused"
+        }
+      },
+      "doc": "The SFU paused a subscription."
+    },
+    {
+      "name": "sfu.subscription.resumed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "was": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.resumed"
+        }
+      },
+      "doc": "The SFU resumed a paused subscription; was names the replaced pause."
+    },
+    {
+      "name": "sfu.subscription.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.started"
+        }
+      },
+      "doc": "A viewer's subscription to a publication opened."
+    },
+    {
+      "name": "sfu.subscription.stopped",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "media_kind": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "reason": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.stopped"
+        }
+      },
+      "doc": "A subscription closed; pause_cause names why."
+    },
+    {
       "name": "sync.episode.ended",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1297,6 +2880,551 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "sync.media.intent",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sync"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "operation_id": {
+          "required": false
+        },
+        "source": {
+          "required": true
+        },
+        "enabled": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "event": "sync.media.intent"
+        }
+      },
+      "doc": "The Sync-stamped media intent the client's media_intent shares; operation_id joins it to the SFU's sfu.publication.held."
+    },
+    {
+      "name": "video.call_stats",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "window_ms": {
+          "required": true
+        },
+        "gap": {
+          "required": false
+        },
+        "gap_ms": {
+          "required": false
+        },
+        "recv_height": {
+          "required": false
+        },
+        "recv_paused_videos": {
+          "required": false
+        },
+        "recv_hidden_videos": {
+          "required": false
+        },
+        "freeze_count": {
+          "required": false
+        },
+        "freeze_ms": {
+          "required": false
+        },
+        "send_layer": {
+          "required": false
+        },
+        "send_loss_pct": {
+          "required": false
+        },
+        "send_jitter_ms": {
+          "required": false
+        },
+        "recv_loss_pct": {
+          "required": false
+        },
+        "recv_jitter_ms": {
+          "required": false
+        },
+        "rtt_ms": {
+          "required": false
+        },
+        "connection_type": {
+          "required": false
+        },
+        "local_candidate_type": {
+          "required": false
+        },
+        "remote_candidate_type": {
+          "required": false
+        },
+        "relay_protocol": {
+          "required": false
+        },
+        "quality_limitation_reason": {
+          "required": false
+        },
+        "recv_bitrate_bps": {
+          "required": false
+        },
+        "send_bitrate_bps": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "type": "call_stats"
+        }
+      },
+      "doc": "A legacy sdk.telemetry call_stats window: one 10 s sample. A window with gap measured nothing and is not a zero."
+    },
+    {
+      "name": "video.camera_capture",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "capture_error_name": {
+          "required": false
+        },
+        "permission_before": {
+          "required": false
+        },
+        "permission_after": {
+          "required": false
+        },
+        "permission_probe": {
+          "required": false
+        },
+        "policy_allows": {
+          "required": false
+        },
+        "policy_probe": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera_capture"
+        }
+      ],
+      "doc": "One camera capture attempt. Ends ok or error(video.*) with the DOMException name and permission/policy probes; expected(video.permission_denied) only when the probe shows the person refused."
+    },
+    {
+      "name": "video.camera_track_muted",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "muted": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera_track_muted"
+        }
+      ],
+      "doc": "The camera track's mute bit changed."
+    },
+    {
+      "name": "video.device_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "device_kind": {
+          "required": true
+        },
+        "capture_error_name": {
+          "required": false
+        },
+        "permission_state": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "type": "device_failed"
+        }
+      },
+      "doc": "A legacy sdk.telemetry device_failed row."
+    },
+    {
+      "name": "video.media_state",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "media_state_code": {
+          "required": true
+        },
+        "device_state": {
+          "required": false
+        },
+        "source": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "legacy": {
+        "match": {
+          "type": "media_state"
+        }
+      },
+      "doc": "A legacy sdk.telemetry media_state row; code=media_capture_failed marks a camera-effects path failure."
+    },
+    {
+      "name": "video.render_probe",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["web", "mobile"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publication_id": {
+          "required": false
+        },
+        "local": {
+          "required": false
+        },
+        "presented_frames": {
+          "required": false
+        },
+        "ready_state": {
+          "required": false
+        },
+        "video_width": {
+          "required": false
+        },
+        "video_height": {
+          "required": false
+        },
+        "rect_w": {
+          "required": false
+        },
+        "rect_h": {
+          "required": false
+        },
+        "on_screen": {
+          "required": false
+        },
+        "page_visible": {
+          "required": false
+        },
+        "covered": {
+          "required": false
+        },
+        "luma_mean": {
+          "required": false
+        },
+        "probe_unavailable": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
+          "literal": "video.render_probe"
+        },
+        {
+          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "literal": "video.render_probe"
+        }
+      ],
+      "doc": "A rendered-tile measurement every 2 s while a camera tile is up: presented frames, geometry, luma, visibility. On React Native the fields the platform cannot supply are absent and probe_unavailable names why."
+    },
+    {
+      "name": "video.send_window",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "rid": {
+          "required": true
+        },
+        "frames_encoded": {
+          "required": true
+        },
+        "bytes_sent": {
+          "required": true
+        },
+        "frame_height": {
+          "required": false
+        },
+        "quality_limitation_reason": {
+          "required": false
+        },
+        "active": {
+          "required": false
+        },
+        "window_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/client.ts",
+          "literal": "video.send_window"
+        },
+        {
+          "path": "sdks/typescript/client/src/media/call-stats.ts",
+          "literal": "video.send_window"
+        }
+      ],
+      "doc": "One outbound camera layer's stats for a window: frames encoded, bytes, height, quality reason, active bit."
+    },
+    {
+      "name": "video.stats_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "capture_error_name": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/client.ts",
+          "literal": "video.stats_failed"
+        }
+      ],
+      "doc": "A stats collection failed; error_name names the DOMException kind."
+    },
+    {
+      "name": "video.subscription_forwarded",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "forwarded_packets": {
+          "required": true
+        },
+        "forwarded_keyframes": {
+          "required": false
+        },
+        "layer": {
+          "required": false
+        },
+        "requested_layer": {
+          "required": false
+        },
+        "pause_reason": {
+          "required": false
+        },
+        "ingress_packets": {
+          "required": false
+        },
+        "ingress_lost": {
+          "required": false
+        },
+        "ingress_repaired": {
+          "required": false
+        },
+        "ingress_jitter_ms": {
+          "required": false
+        },
+        "ingress_bitrate_bps": {
+          "required": false
+        },
+        "ingress_layers_active": {
+          "required": false
+        },
+        "plan": {
+          "required": false
+        },
+        "final": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/stats.go",
+          "literal": "video.subscription_forwarded"
+        }
+      ],
+      "doc": "Cumulative forwarded counters for one camera subscription, plus the publication's ingress counters copied onto the viewer's row so a viewer check can see upstream without reading another seat's facts. Rows land while counters grow and once when they stop; a final row is preserved on close."
+    },
+    {
+      "name": "video.subscription_select",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "video",
+      "test_only": false,
+      "decisions": ["paused", "forwarding"],
+      "fields": {
+        "publisher_id": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "mid": {
+          "required": true
+        },
+        "target_layer": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/subscription.go",
+          "literal": "video.subscription_select"
+        }
+      ],
+      "doc": "The SFU's subscription decision for a camera publication: paused (with reason) or forwarding (with target_layer)."
+    },
+    {
+      "name": "video.tile",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["web", "mobile"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "tile_state": {
+          "required": false
+        },
+        "status_shown": {
+          "required": false
+        },
+        "tile_reason": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
+          "literal": "video.tile"
+        },
+        {
+          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "literal": "video.tile"
+        }
+      ],
+      "doc": "The tile's rendered state: picture, avatar, paused_for_network, frozen_frame, media_state."
+    },
+    {
+      "name": "video.track_window",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "mid": {
+          "required": true
+        },
+        "source": {
+          "required": true
+        },
+        "publication_id": {
+          "required": false
+        },
+        "packets": {
+          "required": true
+        },
+        "lost": {
+          "required": false
+        },
+        "bytes": {
+          "required": false
+        },
+        "frames_received": {
+          "required": false
+        },
+        "frames_decoded": {
+          "required": false
+        },
+        "frames_dropped": {
+          "required": false
+        },
+        "key_frames_decoded": {
+          "required": false
+        },
+        "freeze_count": {
+          "required": false
+        },
+        "freeze_ms": {
+          "required": false
+        },
+        "pli_sent": {
+          "required": false
+        },
+        "nack_sent": {
+          "required": false
+        },
+        "frame_height": {
+          "required": false
+        },
+        "playout": {
+          "required": false
+        },
+        "window_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/client.ts",
+          "literal": "video.track_window"
+        },
+        {
+          "path": "sdks/typescript/client/src/media/call-stats.ts",
+          "literal": "video.track_window"
+        }
+      ],
+      "doc": "One inbound camera track's stats for a window: cumulative packet/frame counters keyed by mid and publication."
     }
   ],
   "machines": [
@@ -1353,6 +3481,26 @@
       ],
       "triggers": ["push", "pull", "lock", "unlock"],
       "doc": "A self-test machine."
+    },
+    {
+      "name": "video.camera",
+      "area": "video",
+      "test_only": false,
+      "states": ["idle", "capturing", "live", "ended"],
+      "initial": "idle",
+      "edges": [
+        ["idle", "capturing"],
+        ["capturing", "live"],
+        ["capturing", "ended"],
+        ["capturing", "idle"],
+        ["live", "ended"],
+        ["live", "idle"],
+        ["ended", "capturing"],
+        ["ended", "idle"],
+        ["idle", "ended"]
+      ],
+      "triggers": ["capture_requested", "captured", "capture_not_live", "track_ended", "device_switched", "released", "unbound", "bound", "cleared", "cancelled"],
+      "doc": "The camera state machine in the space media controller. camera_bound is true while a real publication is bound."
     }
   ],
   "facts": [
@@ -1451,6 +3599,422 @@
       "per": "any",
       "events": [],
       "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+    },
+    {
+      "name": "video.call_window",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.call_stats",
+          "source": "client",
+          "claim": "window_ms",
+          "failure_claims": [],
+          "fields": [
+            "window_ms",
+            "gap",
+            "gap_ms",
+            "recv_bitrate_bps",
+            "recv_height",
+            "recv_paused_videos",
+            "recv_hidden_videos",
+            "freeze_count",
+            "freeze_ms",
+            "send_bitrate_bps",
+            "send_layer",
+            "send_loss_pct",
+            "send_jitter_ms",
+            "recv_loss_pct",
+            "recv_jitter_ms",
+            "rtt_ms",
+            "connection_type",
+            "local_candidate_type",
+            "remote_candidate_type",
+            "relay_protocol",
+            "quality_limitation_reason"
+          ]
+        }
+      ],
+      "doc": "One call_stats 10 s window for a seat. A row with gap is a non-measurement, never a zero. Claim: window_ms."
+    },
+    {
+      "name": "video.camera_capture",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.camera_capture",
+          "source": "client",
+          "claim": "outcome",
+          "failure_claims": ["error"],
+          "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "permission_probe", "policy_allows", "policy_probe", "duration_ms"]
+        }
+      ],
+      "doc": "The capture op's terminal outcome for a seat; only outcome=error is a failure. Claim: outcome."
+    },
+    {
+      "name": "video.camera_effects",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.media_state",
+          "source": "client",
+          "claim": "media_state_code",
+          "failure_claims": ["media_capture_failed"],
+          "fields": ["media_state_code", "device_state", "source"]
+        }
+      ],
+      "doc": "A camera-effects path failure; only code=media_capture_failed counts. Claim: media_state_code."
+    },
+    {
+      "name": "video.camera_state",
+      "area": "video",
+      "kind": "state",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.camera",
+          "source": "client",
+          "claim": "to_state",
+          "failure_claims": [],
+          "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+        }
+      ],
+      "doc": "The camera machine's transition rows for a seat. Claim: to_state."
+    },
+    {
+      "name": "video.camera_track_muted",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.camera_track_muted",
+          "source": "client",
+          "claim": "muted",
+          "failure_claims": [],
+          "fields": ["muted"]
+        }
+      ],
+      "doc": "The camera track's mute bit for a seat. Claim: muted."
+    },
+    {
+      "name": "video.capture_intent",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sync.media.intent",
+          "source": "sync",
+          "claim": "enabled",
+          "failure_claims": [],
+          "fields": ["enabled", "source", "operation_id"]
+        }
+      ],
+      "doc": "The Sync-stamped media intent for the seat's camera source. Claim: enabled."
+    },
+    {
+      "name": "video.congestion",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.subscription.congestion",
+          "source": "sfu",
+          "claim": "reason",
+          "failure_claims": [],
+          "fields": ["mid", "layer", "reason", "estimate_bps", "proven_bps", "delivered_share", "probing", "host_pressure", "acked_bps", "loss_share", "lossy", "trend", "decrease_cause"]
+        }
+      ],
+      "doc": "The congestion controller's per-subscription view on a seat's downlink. Claim: reason."
+    },
+    {
+      "name": "video.connection",
+      "area": "video",
+      "kind": "state",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.connection",
+          "source": "client",
+          "claim": "to_state",
+          "failure_claims": [],
+          "fields": ["to_state", "from_state", "trigger"]
+        }
+      ],
+      "doc": "Slice 2's client.connection transitions for a seat, read for the reconnect clause and the connected precondition. Claim: to_state."
+    },
+    {
+      "name": "video.device_failure",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.device_failed",
+          "source": "client",
+          "claim": "device_kind",
+          "failure_claims": ["camera"],
+          "fields": ["device_kind", "capture_error_name", "permission_state"]
+        }
+      ],
+      "doc": "A legacy device_failed row; only device_kind=camera is a failure for video. Claim: device_kind."
+    },
+    {
+      "name": "video.egress",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.media.egress",
+          "source": "sfu",
+          "claim": "media_kind",
+          "failure_claims": [],
+          "fields": ["media_kind", "subscriptions", "paused_subscriptions", "high_layer", "low_layer", "pli_received", "fir_received", "nack_received", "lost", "jitter_ms", "loss_share", "rtt_ms", "bitrate_bps", "final"]
+        }
+      ],
+      "doc": "Cumulative SFU egress counters for a seat's downlink. Claim: media_kind."
+    },
+    {
+      "name": "video.episode_ended",
+      "area": "video",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "sync.episode.ended",
+          "source": "sync",
+          "claim": "end_reason",
+          "failure_claims": [],
+          "fields": ["episode_id", "end_reason", "est_server_ms"]
+        }
+      ],
+      "doc": "The Episode's authoritative end; near a stop it makes a finding expected. Claim: end_reason."
+    },
+    {
+      "name": "video.forwarded",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.subscription_forwarded",
+          "source": "sfu",
+          "claim": "forwarded_packets",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "mid", "forwarded_packets", "forwarded_keyframes", "layer", "requested_layer", "pause_reason", "ingress_packets", "ingress_lost", "ingress_repaired", "ingress_jitter_ms", "ingress_bitrate_bps", "ingress_layers_active", "plan", "final"]
+        }
+      ],
+      "doc": "Cumulative forwarded counters for a viewer-bound camera subscription, with the publication's ingress counters copied on. Flowing means forwarded_packets growth ≥50 over ≤35 s. Claim: forwarded_packets."
+    },
+    {
+      "name": "video.ingress",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.media.ingress",
+          "source": "sfu",
+          "claim": "packets",
+          "failure_claims": [],
+          "fields": ["source", "media_kind", "mid", "packets", "bytes", "lost", "repaired", "nack_requested", "keyframe_repairs", "pli_sent", "jitter_ms", "bitrate_bps", "layers", "layers_active", "held", "final"]
+        }
+      ],
+      "doc": "Cumulative SFU ingress counters for a seat's camera publication. Flowing means packets growth ≥50 over ≤35 s; not flowing means growth below 50 or first-row packets=0 followed by no flowing row for 20 s. Claim: packets."
+    },
+    {
+      "name": "video.publication",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.publication.started",
+          "source": "sfu",
+          "claim": "source",
+          "failure_claims": [],
+          "fields": ["source", "media_kind"]
+        }
+      ],
+      "doc": "An SFU publication started row bound to its publisher's seat. Claim: source."
+    },
+    {
+      "name": "video.render_probe",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.render_probe",
+          "source": "client",
+          "claim": "on_screen",
+          "failure_claims": [],
+          "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"]
+        }
+      ],
+      "doc": "A rendered-tile probe for a seat's camera tile. Claim: on_screen."
+    },
+    {
+      "name": "video.send_window",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.send_window",
+          "source": "client",
+          "claim": "frames_encoded",
+          "failure_claims": [],
+          "fields": ["rid", "frames_encoded", "bytes_sent", "frame_height", "quality_limitation_reason", "active", "window_ms"]
+        }
+      ],
+      "doc": "One outbound camera layer's window counters for a seat. Claim: frames_encoded."
+    },
+    {
+      "name": "video.source_lease",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.source.lease_lost",
+          "source": "sfu",
+          "claim": "source",
+          "failure_claims": [],
+          "fields": ["source", "cause", "revision"]
+        },
+        {
+          "event": "sfu.source.lease_opened",
+          "source": "sfu",
+          "claim": "source",
+          "failure_claims": [],
+          "fields": ["source", "revision"]
+        }
+      ],
+      "doc": "Source lease rows bound to the publisher's seat; a later lease_opened lifts the source_unauthorized exclusion. Claim: source."
+    },
+    {
+      "name": "video.stats_failed",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.stats_failed",
+          "source": "client",
+          "claim": "capture_error_name",
+          "failure_claims": [],
+          "fields": ["capture_error_name"]
+        }
+      ],
+      "doc": "A stats collection failure for a seat. Claim: capture_error_name."
+    },
+    {
+      "name": "video.tile",
+      "area": "video",
+      "kind": "state",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.tile",
+          "source": "client",
+          "claim": "tile_state",
+          "failure_claims": [],
+          "fields": ["tile_state", "status_shown", "tile_reason"]
+        }
+      ],
+      "doc": "The rendered tile's surface state for a seat. Claim: tile_state."
+    },
+    {
+      "name": "video.track_window",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "video.track_window",
+          "source": "client",
+          "claim": "packets",
+          "failure_claims": [],
+          "fields": ["mid", "source", "publication_id", "packets", "lost", "bytes", "frames_received", "frames_decoded", "frames_dropped", "key_frames_decoded", "freeze_count", "freeze_ms", "pli_sent", "nack_sent", "frame_height", "playout", "window_ms"]
+        }
+      ],
+      "doc": "One inbound camera track's window counters for a seat, keyed by mid and publication. Claim: packets."
+    },
+    {
+      "name": "video.transport",
+      "area": "video",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.media.transport",
+          "source": "sfu",
+          "claim": "dropped",
+          "failure_claims": [],
+          "fields": ["estimate_bps", "proven_bps", "queued_bytes", "probing", "sent_audio", "sent_video", "sent_repair", "sent_probe", "dropped", "repairs_cut", "feedback_age_ms", "final"]
+        }
+      ],
+      "doc": "Cumulative SFU transport counters for a seat; never node liveness. Claim: dropped."
+    },
+    {
+      "name": "video.viewer_pause",
+      "area": "video",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sfu.subscription.started",
+          "source": "sfu",
+          "claim": "mid",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "media_kind", "mid"]
+        },
+        {
+          "event": "sfu.subscription.paused",
+          "source": "sfu",
+          "claim": "reason",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "media_kind", "mid", "reason"]
+        },
+        {
+          "event": "sfu.subscription.resumed",
+          "source": "sfu",
+          "claim": "was",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "media_kind", "mid", "was"]
+        },
+        {
+          "event": "sfu.subscription.stopped",
+          "source": "sfu",
+          "claim": "reason",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "media_kind", "mid", "reason"]
+        },
+        {
+          "event": "video.subscription_select",
+          "source": "sfu",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["publisher_id", "source", "mid", "decision", "target_layer", "reason_code"]
+        },
+        {
+          "event": "video.call_stats",
+          "source": "client",
+          "claim": "recv_hidden_videos",
+          "failure_claims": [],
+          "fields": ["recv_hidden_videos", "recv_paused_videos"]
+        }
+      ],
+      "doc": "The viewer-bound pause/select trail for a seat: subscription started/paused/resumed/stopped rows, the SFU's select decision, and the client's recv_hidden_videos copy. All copy the viewer's request, so they are one witness."
     }
   ],
   "symptoms": [
@@ -1725,20 +4289,482 @@
       "fault_scenario": null
     },
     {
+      "code": "video.camera_stopped",
+      "area": "video",
+      "slice": 4,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The publisher's camera left live with a bound publication and stayed ended without a cause.",
+      "user_words": ["my camera cut out", "my video went away"],
+      "witnesses": [
+        {
+          "fact": "video.camera_state",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "kernel video.camera transitions for {participant}",
+          "doc": "The live→ended path and its trigger."
+        },
+        {
+          "fact": "video.camera_track_muted",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.camera_track_muted rows for {participant}",
+          "doc": "A mute the trigger can't explain."
+        },
+        {
+          "fact": "video.camera_capture",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "kernel video.camera_capture rows for {participant}",
+          "doc": "A capture op that ended it."
+        },
+        {
+          "fact": "video.capture_intent",
+          "from": ["sync"],
+          "required": false,
+          "independent": 1,
+          "query": "sync.media.intent rows for {participant}",
+          "doc": "Whether the participant asked it off."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
+      "rule": "observability/rules/video.camera_stopped.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.camera_stopped/positive.json",
+        "healthy": "observability/fixtures/video.camera_stopped/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/space-client/media-controller.fault.test.ts"
+    },
+    {
+      "code": "video.camera_wont_start",
+      "area": "video",
+      "slice": 4,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The publisher's camera never reached live with a bound publication.",
+      "user_words": ["my camera won't turn on", "nobody can see me"],
+      "witnesses": [
+        {
+          "fact": "video.camera_capture",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "kernel video.camera_capture rows for {participant}",
+          "doc": "The capture op's terminal: ok, expected(video.permission_denied) or error(video.*)."
+        },
+        {
+          "fact": "video.camera_state",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "kernel video.camera transitions for {participant}",
+          "doc": "The camera state machine's path: capture_requested → captured → live/ended."
+        },
+        {
+          "fact": "video.device_failure",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "legacy device_failed rows for {participant}",
+          "doc": "Pre-kernel camera failures on the same seat."
+        },
+        {
+          "fact": "video.camera_effects",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "media_state rows for {participant}",
+          "doc": "A camera-effects path failure."
+        },
+        {
+          "fact": "video.capture_intent",
+          "from": ["sync"],
+          "required": false,
+          "independent": 1,
+          "query": "sync.media.intent rows for {participant}",
+          "doc": "Whether the participant actually asked for the camera."
+        },
+        {
+          "fact": "video.camera_track_muted",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.camera_track_muted rows for {participant}",
+          "doc": "A muted camera."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
+      "rule": "observability/rules/video.camera_wont_start.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.camera_wont_start/positive.json",
+        "healthy": "observability/fixtures/video.camera_wont_start/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/space-client/media-controller.fault.test.ts"
+    },
+    {
       "code": "video.frozen",
       "area": "video",
       "slice": 4,
       "item": "episode",
       "per": "seat",
-      "doc": "A video tile stopped updating while its publisher was still sending.",
-      "user_words": ["their video froze"],
-      "witnesses": [],
+      "doc": "A viewer's camera tile shows a picture but presented_frames stops growing while packets arrive.",
+      "user_words": ["their video froze", "the picture is stuck"],
+      "witnesses": [
+        {
+          "fact": "video.render_probe",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.render_probe rows for {participant}",
+          "doc": "Presented-frame growth per tile."
+        },
+        {
+          "fact": "video.tile",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.tile rows for {participant}",
+          "doc": "Whether the surface froze or switched to frozen_frame."
+        },
+        {
+          "fact": "video.track_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.track_window rows for {participant}",
+          "doc": "Packets and decoder counters."
+        },
+        {
+          "fact": "video.call_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "call_stats rows for {participant}",
+          "doc": "The freeze_ms and gap fields."
+        },
+        {
+          "fact": "video.forwarded",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "video.subscription_forwarded rows for {participant}",
+          "doc": "Whether the SFU kept forwarding."
+        },
+        {
+          "fact": "video.viewer_pause",
+          "from": ["sfu", "client"],
+          "required": true,
+          "independent": 1,
+          "query": "subscription and select rows for {participant}",
+          "doc": "A pause that stopped the flow."
+        },
+        {
+          "fact": "video.stats_failed",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.stats_failed rows for {participant}",
+          "doc": "A stats failure."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
       "rule": "observability/rules/video.frozen.mjs",
       "fixtures": {
         "positive": "observability/fixtures/video.frozen/positive.json",
         "healthy": "observability/fixtures/video.frozen/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.fault.test.tsx"
+    },
+    {
+      "code": "video.low_quality",
+      "area": "video",
+      "slice": 4,
+      "item": "episode",
+      "per": "seat",
+      "doc": "A viewer's camera tile is a picture but degraded: frozen-frame recovery, an inpainted canvas, or a sustained low bitrate with a capped send layer.",
+      "user_words": ["their video looks bad", "it's pixelated"],
+      "witnesses": [
+        {
+          "fact": "video.render_probe",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.render_probe rows for {participant}",
+          "doc": "Resolution and luma the tile sees."
+        },
+        {
+          "fact": "video.tile",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.tile rows for {participant}",
+          "doc": "The degraded surface state."
+        },
+        {
+          "fact": "video.track_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.track_window rows for {participant}",
+          "doc": "Packets and height the decoder sees."
+        },
+        {
+          "fact": "video.call_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "call_stats rows for {participant}",
+          "doc": "The bitrate and layer rollups."
+        },
+        {
+          "fact": "video.forwarded",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "video.subscription_forwarded rows for {participant}",
+          "doc": "What the SFU forwarded and the plan it ran."
+        },
+        {
+          "fact": "video.viewer_pause",
+          "from": ["sfu", "client"],
+          "required": true,
+          "independent": 1,
+          "query": "subscription and select rows for {participant}",
+          "doc": "A pause forcing a low layer."
+        },
+        {
+          "fact": "video.egress",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "sfu.media.egress rows for {participant}",
+          "doc": "Downlink packet view."
+        },
+        {
+          "fact": "video.transport",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "sfu.media.transport rows for {participant}",
+          "doc": "The transport's estimate and drops."
+        },
+        {
+          "fact": "video.congestion",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "sfu.subscription.congestion rows for {participant}",
+          "doc": "The congestion cause."
+        },
+        {
+          "fact": "video.stats_failed",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.stats_failed rows for {participant}",
+          "doc": "A stats failure."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
+      "rule": "observability/rules/video.low_quality.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.low_quality/positive.json",
+        "healthy": "observability/fixtures/video.low_quality/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/media/client.fault.test.ts"
+    },
+    {
+      "code": "video.not_published",
+      "area": "video",
+      "slice": 4,
+      "item": "episode",
+      "per": "seat",
+      "doc": "The publisher's camera reached live and bound, but the SFU never saw packets on its ingress.",
+      "user_words": ["my camera is on but nobody sees me"],
+      "witnesses": [
+        {
+          "fact": "video.camera_state",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "kernel video.camera transitions for {participant}",
+          "doc": "The camera reached live with camera_bound=true."
+        },
+        {
+          "fact": "video.send_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.send_window rows for {participant}",
+          "doc": "What the encoder produced per layer."
+        },
+        {
+          "fact": "video.ingress",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "sfu.media.ingress rows for {participant}",
+          "doc": "Whether packets reached the SFU for this publication."
+        },
+        {
+          "fact": "video.publication",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "sfu.publication.started rows for {participant}",
+          "doc": "Whether the SFU registered the publication."
+        },
+        {
+          "fact": "video.call_window",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "call_stats rows for {participant}",
+          "doc": "The sender's own view of its uplink."
+        },
+        {
+          "fact": "video.stats_failed",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.stats_failed rows for {participant}",
+          "doc": "A stats failure hiding the send path."
+        },
+        {
+          "fact": "video.source_lease",
+          "from": ["sfu"],
+          "required": false,
+          "independent": 1,
+          "query": "sfu.source.lease rows for {participant}",
+          "doc": "A lease_lost excluding the finding."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
+      "rule": "observability/rules/video.not_published.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.not_published/positive.json",
+        "healthy": "observability/fixtures/video.not_published/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/media/client.fault.test.ts"
+    },
+    {
+      "code": "video.not_shown",
+      "area": "video",
+      "slice": 4,
+      "item": "episode",
+      "per": "seat",
+      "doc": "A viewer's camera tile never showed a picture for a bound publisher.",
+      "user_words": ["I can't see them", "their video never appeared"],
+      "witnesses": [
+        {
+          "fact": "video.render_probe",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.render_probe rows for {participant}",
+          "doc": "Whether the tile's own measurement ever saw a frame."
+        },
+        {
+          "fact": "video.tile",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.tile rows for {participant}",
+          "doc": "What the surface reported."
+        },
+        {
+          "fact": "video.track_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "video.track_window rows for {participant}",
+          "doc": "Whether packets reached the viewer's decoder."
+        },
+        {
+          "fact": "video.call_window",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "call_stats rows for {participant}",
+          "doc": "The viewer's window rollups."
+        },
+        {
+          "fact": "video.forwarded",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "video.subscription_forwarded rows for {participant}",
+          "doc": "Whether the SFU forwarded the publisher's packets to this seat."
+        },
+        {
+          "fact": "video.viewer_pause",
+          "from": ["sfu", "client"],
+          "required": true,
+          "independent": 1,
+          "query": "subscription and select rows for {participant}",
+          "doc": "An open pause the viewer or SFU caused."
+        },
+        {
+          "fact": "video.stats_failed",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "video.stats_failed rows for {participant}",
+          "doc": "A stats failure hiding the track."
+        },
+        {
+          "fact": "video.connection",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "client.connection transitions for {participant}",
+          "doc": "Whether the seat was connected."
+        }
+      ],
+      "rule": "observability/rules/video.not_shown.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.not_shown/positive.json",
+        "healthy": "observability/fixtures/video.not_shown/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.fault.test.tsx"
     }
   ],
   "incomplete": [

@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "4b3c04077466",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 87,
       "fields": [
         {
           "name": "admission_request_id",
@@ -29,6 +29,14 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "capture_error_name",
+          "type": "string"
+        },
+        {
+          "name": "cause",
           "type": "string"
         },
         {
@@ -72,6 +80,14 @@
           "type": "string"
         },
         {
+          "name": "device_kind",
+          "type": "string"
+        },
+        {
+          "name": "device_state",
+          "type": "string"
+        },
+        {
           "name": "drop_reason",
           "type": "string"
         },
@@ -82,6 +98,10 @@
         {
           "name": "duration_ms",
           "type": "integer"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean"
         },
         {
           "name": "end",
@@ -144,8 +164,24 @@
           "type": "string"
         },
         {
+          "name": "media_kind",
+          "type": "string"
+        },
+        {
+          "name": "media_state_code",
+          "type": "string"
+        },
+        {
+          "name": "mid",
+          "type": "string"
+        },
+        {
           "name": "module",
           "type": "string"
+        },
+        {
+          "name": "muted",
+          "type": "boolean"
         },
         {
           "name": "name",
@@ -157,6 +193,10 @@
         },
         {
           "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "operation_id",
           "type": "string"
         },
         {
@@ -172,11 +212,43 @@
           "type": "string"
         },
         {
+          "name": "permission_after",
+          "type": "string"
+        },
+        {
+          "name": "permission_before",
+          "type": "string"
+        },
+        {
+          "name": "permission_probe",
+          "type": "string"
+        },
+        {
+          "name": "permission_state",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
         {
+          "name": "policy_allows",
+          "type": "boolean"
+        },
+        {
+          "name": "policy_probe",
+          "type": "string"
+        },
+        {
           "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "publisher_id",
+          "type": "string"
+        },
+        {
+          "name": "reason",
           "type": "string"
         },
         {
@@ -196,6 +268,10 @@
           "type": "string"
         },
         {
+          "name": "revision",
+          "type": "integer"
+        },
+        {
           "name": "schema_ver",
           "type": "string"
         },
@@ -212,6 +288,10 @@
           "type": "integer"
         },
         {
+          "name": "source",
+          "type": "string"
+        },
+        {
           "name": "source_id",
           "type": "string"
         },
@@ -224,6 +304,10 @@
           "type": "string"
         },
         {
+          "name": "status_shown",
+          "type": "boolean"
+        },
+        {
           "name": "surface_state",
           "type": "string"
         },
@@ -232,7 +316,19 @@
           "type": "string"
         },
         {
+          "name": "target_layer",
+          "type": "string"
+        },
+        {
           "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "tile_reason",
+          "type": "string"
+        },
+        {
+          "name": "tile_state",
           "type": "string"
         },
         {
@@ -249,6 +345,10 @@
         },
         {
           "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "was",
           "type": "string"
         },
         {
@@ -507,8 +607,16 @@
     {
       "dataset": "media-stats",
       "budget": 256,
-      "used": 60,
+      "used": 164,
       "fields": [
+        {
+          "name": "acked_bps",
+          "type": "integer"
+        },
+        {
+          "name": "active",
+          "type": "boolean"
+        },
         {
           "name": "admission_request_id",
           "type": "string"
@@ -532,6 +640,18 @@
         {
           "name": "batch_id",
           "type": "string"
+        },
+        {
+          "name": "bitrate_bps",
+          "type": "integer"
+        },
+        {
+          "name": "bytes",
+          "type": "integer"
+        },
+        {
+          "name": "bytes_sent",
+          "type": "integer"
         },
         {
           "name": "client_mono_ms",
@@ -558,12 +678,44 @@
           "type": "string"
         },
         {
+          "name": "connection_type",
+          "type": "string"
+        },
+        {
+          "name": "covered",
+          "type": "boolean"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
         {
           "name": "decision_id",
           "type": "string"
+        },
+        {
+          "name": "decrease_acked_bps",
+          "type": "integer"
+        },
+        {
+          "name": "decrease_ago_ms",
+          "type": "integer"
+        },
+        {
+          "name": "decrease_cause",
+          "type": "string"
+        },
+        {
+          "name": "decrease_from_bps",
+          "type": "integer"
+        },
+        {
+          "name": "decrease_to_bps",
+          "type": "integer"
+        },
+        {
+          "name": "delivered_share",
+          "type": "float"
         },
         {
           "name": "device_ephemeral",
@@ -576,6 +728,10 @@
         {
           "name": "drop_reason",
           "type": "string"
+        },
+        {
+          "name": "dropped",
+          "type": "integer"
         },
         {
           "name": "dropped_seqs",
@@ -602,20 +758,120 @@
           "type": "integer"
         },
         {
+          "name": "estimate_bps",
+          "type": "integer"
+        },
+        {
           "name": "event_id",
           "type": "string"
+        },
+        {
+          "name": "feedback_age_ms",
+          "type": "integer"
+        },
+        {
+          "name": "final",
+          "type": "boolean"
+        },
+        {
+          "name": "fir_received",
+          "type": "integer"
         },
         {
           "name": "flags_hash",
           "type": "string"
         },
         {
+          "name": "forwarded_keyframes",
+          "type": "integer"
+        },
+        {
+          "name": "forwarded_packets",
+          "type": "integer"
+        },
+        {
+          "name": "frame_height",
+          "type": "integer"
+        },
+        {
+          "name": "frames_decoded",
+          "type": "integer"
+        },
+        {
+          "name": "frames_dropped",
+          "type": "integer"
+        },
+        {
+          "name": "frames_encoded",
+          "type": "integer"
+        },
+        {
+          "name": "frames_received",
+          "type": "integer"
+        },
+        {
+          "name": "freeze_count",
+          "type": "integer"
+        },
+        {
+          "name": "freeze_ms",
+          "type": "integer"
+        },
+        {
           "name": "from_state",
           "type": "string"
         },
         {
+          "name": "gap",
+          "type": "string"
+        },
+        {
+          "name": "gap_ms",
+          "type": "integer"
+        },
+        {
           "name": "generation",
           "type": "integer"
+        },
+        {
+          "name": "held",
+          "type": "integer"
+        },
+        {
+          "name": "high_layer",
+          "type": "integer"
+        },
+        {
+          "name": "host_pressure",
+          "type": "integer"
+        },
+        {
+          "name": "ingress_bitrate_bps",
+          "type": "integer"
+        },
+        {
+          "name": "ingress_jitter_ms",
+          "type": "float"
+        },
+        {
+          "name": "ingress_layers_active",
+          "type": "integer"
+        },
+        {
+          "name": "ingress_lost",
+          "type": "integer"
+        },
+        {
+          "name": "ingress_packets",
+          "type": "integer"
+        },
+        {
+          "name": "ingress_repaired",
+          "type": "integer"
+        },
+        {
+          "name": "jitter_ms",
+          "type": "float"
         },
         {
           "name": "job_id",
@@ -626,8 +882,56 @@
           "type": "string"
         },
         {
+          "name": "key_frames_decoded",
+          "type": "integer"
+        },
+        {
+          "name": "keyframe_repairs",
+          "type": "integer"
+        },
+        {
           "name": "kind",
           "type": "string"
+        },
+        {
+          "name": "layer",
+          "type": "string"
+        },
+        {
+          "name": "layers",
+          "type": "integer"
+        },
+        {
+          "name": "layers_active",
+          "type": "integer"
+        },
+        {
+          "name": "local",
+          "type": "boolean"
+        },
+        {
+          "name": "local_candidate_type",
+          "type": "string"
+        },
+        {
+          "name": "loss_share",
+          "type": "float"
+        },
+        {
+          "name": "lossy",
+          "type": "integer"
+        },
+        {
+          "name": "lost",
+          "type": "integer"
+        },
+        {
+          "name": "low_layer",
+          "type": "integer"
+        },
+        {
+          "name": "luma_mean",
+          "type": "integer"
         },
         {
           "name": "machine",
@@ -638,8 +942,28 @@
           "type": "string"
         },
         {
+          "name": "media_kind",
+          "type": "string"
+        },
+        {
+          "name": "mid",
+          "type": "string"
+        },
+        {
           "name": "module",
           "type": "string"
+        },
+        {
+          "name": "nack_received",
+          "type": "integer"
+        },
+        {
+          "name": "nack_requested",
+          "type": "integer"
+        },
+        {
+          "name": "nack_sent",
+          "type": "integer"
         },
         {
           "name": "name",
@@ -650,12 +974,24 @@
           "type": "integer"
         },
         {
+          "name": "on_screen",
+          "type": "boolean"
+        },
+        {
           "name": "op_id",
           "type": "string"
         },
         {
           "name": "outcome",
           "type": "string"
+        },
+        {
+          "name": "packets",
+          "type": "integer"
+        },
+        {
+          "name": "page_visible",
+          "type": "boolean"
         },
         {
           "name": "parent_op_id",
@@ -666,11 +1002,75 @@
           "type": "string"
         },
         {
+          "name": "pause_reason",
+          "type": "string"
+        },
+        {
+          "name": "paused_subscriptions",
+          "type": "integer"
+        },
+        {
+          "name": "plan",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
         {
+          "name": "playout",
+          "type": "string"
+        },
+        {
+          "name": "pli_received",
+          "type": "integer"
+        },
+        {
+          "name": "pli_sent",
+          "type": "integer"
+        },
+        {
+          "name": "presented_frames",
+          "type": "integer"
+        },
+        {
+          "name": "probe_unavailable",
+          "type": "string"
+        },
+        {
+          "name": "probing",
+          "type": "integer"
+        },
+        {
+          "name": "proven_bps",
+          "type": "integer"
+        },
+        {
           "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "publication_id",
+          "type": "string"
+        },
+        {
+          "name": "publisher_id",
+          "type": "string"
+        },
+        {
+          "name": "quality_limitation_reason",
+          "type": "string"
+        },
+        {
+          "name": "queued_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "ready_state",
+          "type": "integer"
+        },
+        {
+          "name": "reason",
           "type": "string"
         },
         {
@@ -682,12 +1082,72 @@
           "type": "string"
         },
         {
+          "name": "rect_h",
+          "type": "integer"
+        },
+        {
+          "name": "rect_w",
+          "type": "integer"
+        },
+        {
+          "name": "recv_bitrate_bps",
+          "type": "integer"
+        },
+        {
+          "name": "recv_height",
+          "type": "integer"
+        },
+        {
+          "name": "recv_hidden_videos",
+          "type": "integer"
+        },
+        {
+          "name": "recv_jitter_ms",
+          "type": "float"
+        },
+        {
+          "name": "recv_loss_pct",
+          "type": "float"
+        },
+        {
+          "name": "recv_paused_videos",
+          "type": "integer"
+        },
+        {
+          "name": "relay_protocol",
+          "type": "string"
+        },
+        {
           "name": "release_sha",
           "type": "string"
         },
         {
+          "name": "remote_candidate_type",
+          "type": "string"
+        },
+        {
+          "name": "repaired",
+          "type": "integer"
+        },
+        {
+          "name": "repairs_cut",
+          "type": "integer"
+        },
+        {
           "name": "request_id",
           "type": "string"
+        },
+        {
+          "name": "requested_layer",
+          "type": "string"
+        },
+        {
+          "name": "rid",
+          "type": "string"
+        },
+        {
+          "name": "rtt_ms",
+          "type": "integer"
         },
         {
           "name": "schema_ver",
@@ -698,12 +1158,48 @@
           "type": "string"
         },
         {
+          "name": "send_bitrate_bps",
+          "type": "integer"
+        },
+        {
+          "name": "send_jitter_ms",
+          "type": "float"
+        },
+        {
+          "name": "send_layer",
+          "type": "string"
+        },
+        {
+          "name": "send_loss_pct",
+          "type": "float"
+        },
+        {
+          "name": "sent_audio",
+          "type": "integer"
+        },
+        {
+          "name": "sent_probe",
+          "type": "integer"
+        },
+        {
+          "name": "sent_repair",
+          "type": "integer"
+        },
+        {
+          "name": "sent_video",
+          "type": "integer"
+        },
+        {
           "name": "seq",
           "type": "integer"
         },
         {
           "name": "shown_ms",
           "type": "integer"
+        },
+        {
+          "name": "source",
+          "type": "string"
         },
         {
           "name": "source_id",
@@ -716,6 +1212,10 @@
         {
           "name": "span_id",
           "type": "string"
+        },
+        {
+          "name": "subscriptions",
+          "type": "integer"
         },
         {
           "name": "surface_state",
@@ -738,6 +1238,10 @@
           "type": "string"
         },
         {
+          "name": "trend",
+          "type": "string"
+        },
+        {
           "name": "trigger",
           "type": "string"
         },
@@ -746,8 +1250,20 @@
           "type": "string"
         },
         {
+          "name": "video_height",
+          "type": "integer"
+        },
+        {
+          "name": "video_width",
+          "type": "integer"
+        },
+        {
           "name": "webhook_delivery_id",
           "type": "string"
+        },
+        {
+          "name": "window_ms",
+          "type": "integer"
         }
       ]
     },

@@ -3,18 +3,42 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "4b3c04077466"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded            = "client.call_ended"
+	EventObsClockJump               = "obs.clock_jump"
+	EventObsFlagsSnapshot           = "obs.flags_snapshot"
+	EventSelftestAdmit              = "selftest.admit"
+	EventSelftestBanner             = "selftest.banner"
+	EventSelftestNote               = "selftest.note"
+	EventSelftestWork               = "selftest.work"
+	EventSfuMediaEgress             = "sfu.media.egress"
+	EventSfuMediaIngress            = "sfu.media.ingress"
+	EventSfuMediaTransport          = "sfu.media.transport"
+	EventSfuPublicationStarted      = "sfu.publication.started"
+	EventSfuSourceLeaseLost         = "sfu.source.lease_lost"
+	EventSfuSourceLeaseOpened       = "sfu.source.lease_opened"
+	EventSfuSubscriptionCongestion  = "sfu.subscription.congestion"
+	EventSfuSubscriptionPaused      = "sfu.subscription.paused"
+	EventSfuSubscriptionResumed     = "sfu.subscription.resumed"
+	EventSfuSubscriptionStarted     = "sfu.subscription.started"
+	EventSfuSubscriptionStopped     = "sfu.subscription.stopped"
+	EventSyncEpisodeEnded           = "sync.episode.ended"
+	EventSyncMediaIntent            = "sync.media.intent"
+	EventVideoCallStats             = "video.call_stats"
+	EventVideoCameraCapture         = "video.camera_capture"
+	EventVideoCameraTrackMuted      = "video.camera_track_muted"
+	EventVideoDeviceFailed          = "video.device_failed"
+	EventVideoMediaState            = "video.media_state"
+	EventVideoRenderProbe           = "video.render_probe"
+	EventVideoSendWindow            = "video.send_window"
+	EventVideoStatsFailed           = "video.stats_failed"
+	EventVideoSubscriptionForwarded = "video.subscription_forwarded"
+	EventVideoSubscriptionSelect    = "video.subscription_select"
+	EventVideoTile                  = "video.tile"
+	EventVideoTrackWindow           = "video.track_window"
 )
 
 // Machine names.
@@ -22,179 +46,485 @@ const (
 	MachineClientConnection = "client.connection"
 	MachineEpisodeLifecycle = "episode.lifecycle"
 	MachineSelftestDoor     = "selftest.door"
+	MachineVideoCamera      = "video.camera"
 )
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled                     = "cancelled"
+	ReasonEndTimeLimit                  = "end.time_limit"
+	ReasonSelftestBroken                = "selftest.broken"
+	ReasonSelftestBusy                  = "selftest.busy"
+	ReasonUnclassified                  = "unclassified"
+	ReasonVideoBackgrounded             = "video.backgrounded"
+	ReasonVideoCallEnded                = "video.call_ended"
+	ReasonVideoCaptureDenied            = "video.capture_denied"
+	ReasonVideoDeviceBusy               = "video.device_busy"
+	ReasonVideoDeviceConstraintInvalid  = "video.device_constraint_invalid"
+	ReasonVideoDeviceNotFound           = "video.device_not_found"
+	ReasonVideoMediaCaptureFailed       = "video.media_capture_failed"
+	ReasonVideoPausedCongestion         = "video.paused_congestion"
+	ReasonVideoPausedSourceInactive     = "video.paused_source_inactive"
+	ReasonVideoPausedSourceUnauthorized = "video.paused_source_unauthorized"
+	ReasonVideoPausedViewer             = "video.paused_viewer"
+	ReasonVideoPermissionDenied         = "video.permission_denied"
+	ReasonVideoReconnecting             = "video.reconnecting"
+	ReasonVideoUnsupportedEnvironment   = "video.unsupported_environment"
+	ReasonVideoViewerHidden             = "video.viewer_hidden"
 )
 
 // Field names.
 const (
-	FieldAdmissionRequestID = "admission_request_id"
-	FieldAgentID            = "agent_id"
-	FieldAppBuild           = "app_build"
-	FieldAppVersion         = "app_version"
-	FieldAttempt            = "attempt"
-	FieldBannerKind         = "banner_kind"
-	FieldBatchID            = "batch_id"
-	FieldClientMonoMs       = "client_mono_ms"
-	FieldClientSessionID    = "client_session_id"
-	FieldClientWallMs       = "client_wall_ms"
-	FieldClockEpoch         = "clock_epoch"
-	FieldClockErrMs         = "clock_err_ms"
-	FieldClockState         = "clock_state"
-	FieldDecision           = "decision"
-	FieldDecisionID         = "decision_id"
-	FieldDeviceEphemeral    = "device_ephemeral"
-	FieldDeviceID           = "device_id"
-	FieldDropReason         = "drop_reason"
-	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDurationMs         = "duration_ms"
-	FieldEnd                = "end"
-	FieldEndReason          = "end_reason"
-	FieldEnv                = "env"
-	FieldEpisodeID          = "episode_id"
-	FieldEstServerMs        = "est_server_ms"
-	FieldEventID            = "event_id"
-	FieldFlags              = "flags"
-	FieldFlagsHash          = "flags_hash"
-	FieldFromState          = "from_state"
-	FieldGeneration         = "generation"
-	FieldItemCount          = "item_count"
-	FieldJobID              = "job_id"
-	FieldJourneyID          = "journey_id"
-	FieldJumpMs             = "jump_ms"
-	FieldKind               = "kind"
-	FieldMachine            = "machine"
-	FieldMediaConnectionID  = "media_connection_id"
-	FieldModule             = "module"
-	FieldName               = "name"
-	FieldNextSeq            = "next_seq"
-	FieldNoteKind           = "note_kind"
-	FieldOpID               = "op_id"
-	FieldOutcome            = "outcome"
-	FieldParentOpID         = "parent_op_id"
-	FieldParticipantID      = "participant_id"
-	FieldPlatform           = "platform"
-	FieldProviderMediaID    = "provider_media_id"
-	FieldReasonCode         = "reason_code"
-	FieldRecordingID        = "recording_id"
-	FieldReleaseSHA         = "release_sha"
-	FieldRequestID          = "request_id"
-	FieldSchemaVer          = "schema_ver"
-	FieldSDKVersion         = "sdk_version"
-	FieldSeq                = "seq"
-	FieldShownMs            = "shown_ms"
-	FieldSourceID           = "source_id"
-	FieldSpaceID            = "space_id"
-	FieldSpanID             = "span_id"
-	FieldSurfaceState       = "surface_state"
-	FieldSyncConnectionID   = "sync_connection_id"
-	FieldTenantID           = "tenant_id"
-	FieldToState            = "to_state"
-	FieldTraceID            = "trace_id"
-	FieldTrigger            = "trigger"
-	FieldUserID             = "user_id"
-	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldAckedBps                = "acked_bps"
+	FieldActive                  = "active"
+	FieldAdmissionRequestID      = "admission_request_id"
+	FieldAgentID                 = "agent_id"
+	FieldAppBuild                = "app_build"
+	FieldAppVersion              = "app_version"
+	FieldAttempt                 = "attempt"
+	FieldBannerKind              = "banner_kind"
+	FieldBatchID                 = "batch_id"
+	FieldBitrateBps              = "bitrate_bps"
+	FieldBytes                   = "bytes"
+	FieldBytesSent               = "bytes_sent"
+	FieldCameraBound             = "camera_bound"
+	FieldCaptureErrorName        = "capture_error_name"
+	FieldCause                   = "cause"
+	FieldClientMonoMs            = "client_mono_ms"
+	FieldClientSessionID         = "client_session_id"
+	FieldClientWallMs            = "client_wall_ms"
+	FieldClockEpoch              = "clock_epoch"
+	FieldClockErrMs              = "clock_err_ms"
+	FieldClockState              = "clock_state"
+	FieldConnectionType          = "connection_type"
+	FieldCovered                 = "covered"
+	FieldDecision                = "decision"
+	FieldDecisionID              = "decision_id"
+	FieldDecreaseAckedBps        = "decrease_acked_bps"
+	FieldDecreaseAgoMs           = "decrease_ago_ms"
+	FieldDecreaseCause           = "decrease_cause"
+	FieldDecreaseFromBps         = "decrease_from_bps"
+	FieldDecreaseToBps           = "decrease_to_bps"
+	FieldDeliveredShare          = "delivered_share"
+	FieldDeviceEphemeral         = "device_ephemeral"
+	FieldDeviceID                = "device_id"
+	FieldDeviceKind              = "device_kind"
+	FieldDeviceState             = "device_state"
+	FieldDropReason              = "drop_reason"
+	FieldDropped                 = "dropped"
+	FieldDroppedSeqs             = "dropped_seqs"
+	FieldDurationMs              = "duration_ms"
+	FieldEnabled                 = "enabled"
+	FieldEnd                     = "end"
+	FieldEndReason               = "end_reason"
+	FieldEnv                     = "env"
+	FieldEpisodeID               = "episode_id"
+	FieldEstServerMs             = "est_server_ms"
+	FieldEstimateBps             = "estimate_bps"
+	FieldEventID                 = "event_id"
+	FieldFeedbackAgeMs           = "feedback_age_ms"
+	FieldFinal                   = "final"
+	FieldFirReceived             = "fir_received"
+	FieldFlags                   = "flags"
+	FieldFlagsHash               = "flags_hash"
+	FieldForwardedKeyframes      = "forwarded_keyframes"
+	FieldForwardedPackets        = "forwarded_packets"
+	FieldFrameHeight             = "frame_height"
+	FieldFramesDecoded           = "frames_decoded"
+	FieldFramesDropped           = "frames_dropped"
+	FieldFramesEncoded           = "frames_encoded"
+	FieldFramesReceived          = "frames_received"
+	FieldFreezeCount             = "freeze_count"
+	FieldFreezeMs                = "freeze_ms"
+	FieldFromState               = "from_state"
+	FieldGap                     = "gap"
+	FieldGapMs                   = "gap_ms"
+	FieldGeneration              = "generation"
+	FieldHeld                    = "held"
+	FieldHighLayer               = "high_layer"
+	FieldHostPressure            = "host_pressure"
+	FieldIngressBitrateBps       = "ingress_bitrate_bps"
+	FieldIngressJitterMs         = "ingress_jitter_ms"
+	FieldIngressLayersActive     = "ingress_layers_active"
+	FieldIngressLost             = "ingress_lost"
+	FieldIngressPackets          = "ingress_packets"
+	FieldIngressRepaired         = "ingress_repaired"
+	FieldItemCount               = "item_count"
+	FieldJitterMs                = "jitter_ms"
+	FieldJobID                   = "job_id"
+	FieldJourneyID               = "journey_id"
+	FieldJumpMs                  = "jump_ms"
+	FieldKeyFramesDecoded        = "key_frames_decoded"
+	FieldKeyframeRepairs         = "keyframe_repairs"
+	FieldKind                    = "kind"
+	FieldLayer                   = "layer"
+	FieldLayers                  = "layers"
+	FieldLayersActive            = "layers_active"
+	FieldLocal                   = "local"
+	FieldLocalCandidateType      = "local_candidate_type"
+	FieldLossShare               = "loss_share"
+	FieldLossy                   = "lossy"
+	FieldLost                    = "lost"
+	FieldLowLayer                = "low_layer"
+	FieldLumaMean                = "luma_mean"
+	FieldMachine                 = "machine"
+	FieldMediaConnectionID       = "media_connection_id"
+	FieldMediaKind               = "media_kind"
+	FieldMediaStateCode          = "media_state_code"
+	FieldMid                     = "mid"
+	FieldModule                  = "module"
+	FieldMuted                   = "muted"
+	FieldNackReceived            = "nack_received"
+	FieldNackRequested           = "nack_requested"
+	FieldNackSent                = "nack_sent"
+	FieldName                    = "name"
+	FieldNextSeq                 = "next_seq"
+	FieldNoteKind                = "note_kind"
+	FieldOnScreen                = "on_screen"
+	FieldOpID                    = "op_id"
+	FieldOperationID             = "operation_id"
+	FieldOutcome                 = "outcome"
+	FieldPackets                 = "packets"
+	FieldPageVisible             = "page_visible"
+	FieldParentOpID              = "parent_op_id"
+	FieldParticipantID           = "participant_id"
+	FieldPauseReason             = "pause_reason"
+	FieldPausedSubscriptions     = "paused_subscriptions"
+	FieldPermissionAfter         = "permission_after"
+	FieldPermissionBefore        = "permission_before"
+	FieldPermissionProbe         = "permission_probe"
+	FieldPermissionState         = "permission_state"
+	FieldPlan                    = "plan"
+	FieldPlatform                = "platform"
+	FieldPlayout                 = "playout"
+	FieldPliReceived             = "pli_received"
+	FieldPliSent                 = "pli_sent"
+	FieldPolicyAllows            = "policy_allows"
+	FieldPolicyProbe             = "policy_probe"
+	FieldPresentedFrames         = "presented_frames"
+	FieldProbeUnavailable        = "probe_unavailable"
+	FieldProbing                 = "probing"
+	FieldProvenBps               = "proven_bps"
+	FieldProviderMediaID         = "provider_media_id"
+	FieldPublicationID           = "publication_id"
+	FieldPublisherID             = "publisher_id"
+	FieldQualityLimitationReason = "quality_limitation_reason"
+	FieldQueuedBytes             = "queued_bytes"
+	FieldReadyState              = "ready_state"
+	FieldReason                  = "reason"
+	FieldReasonCode              = "reason_code"
+	FieldRecordingID             = "recording_id"
+	FieldRectH                   = "rect_h"
+	FieldRectW                   = "rect_w"
+	FieldRecvBitrateBps          = "recv_bitrate_bps"
+	FieldRecvHeight              = "recv_height"
+	FieldRecvHiddenVideos        = "recv_hidden_videos"
+	FieldRecvJitterMs            = "recv_jitter_ms"
+	FieldRecvLossPct             = "recv_loss_pct"
+	FieldRecvPausedVideos        = "recv_paused_videos"
+	FieldRelayProtocol           = "relay_protocol"
+	FieldReleaseSHA              = "release_sha"
+	FieldRemoteCandidateType     = "remote_candidate_type"
+	FieldRepaired                = "repaired"
+	FieldRepairsCut              = "repairs_cut"
+	FieldRequestID               = "request_id"
+	FieldRequestedLayer          = "requested_layer"
+	FieldRevision                = "revision"
+	FieldRid                     = "rid"
+	FieldRttMs                   = "rtt_ms"
+	FieldSchemaVer               = "schema_ver"
+	FieldSDKVersion              = "sdk_version"
+	FieldSendBitrateBps          = "send_bitrate_bps"
+	FieldSendJitterMs            = "send_jitter_ms"
+	FieldSendLayer               = "send_layer"
+	FieldSendLossPct             = "send_loss_pct"
+	FieldSentAudio               = "sent_audio"
+	FieldSentProbe               = "sent_probe"
+	FieldSentRepair              = "sent_repair"
+	FieldSentVideo               = "sent_video"
+	FieldSeq                     = "seq"
+	FieldShownMs                 = "shown_ms"
+	FieldSource                  = "source"
+	FieldSourceID                = "source_id"
+	FieldSpaceID                 = "space_id"
+	FieldSpanID                  = "span_id"
+	FieldStatusShown             = "status_shown"
+	FieldSubscriptions           = "subscriptions"
+	FieldSurfaceState            = "surface_state"
+	FieldSyncConnectionID        = "sync_connection_id"
+	FieldTargetLayer             = "target_layer"
+	FieldTenantID                = "tenant_id"
+	FieldTileReason              = "tile_reason"
+	FieldTileState               = "tile_state"
+	FieldToState                 = "to_state"
+	FieldTraceID                 = "trace_id"
+	FieldTrend                   = "trend"
+	FieldTrigger                 = "trigger"
+	FieldUserID                  = "user_id"
+	FieldVideoHeight             = "video_height"
+	FieldVideoWidth              = "video_width"
+	FieldWas                     = "was"
+	FieldWebhookDeliveryID       = "webhook_delivery_id"
+	FieldWindowMs                = "window_ms"
 )
 
 var registryFields = map[string]fieldSpec{
-	"admission_request_id": {typ: "id", group: "trail", required: false},
-	"agent_id":             {typ: "id", group: "trail", required: false},
-	"app_build":            {typ: "string", group: "build", required: false},
-	"app_version":          {typ: "string", group: "build", required: false},
-	"attempt":              {typ: "int", group: "trail", required: false},
-	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
-	"batch_id":             {typ: "id", group: "delivery", required: false},
-	"client_mono_ms":       {typ: "number", group: "clock", required: false},
-	"client_session_id":    {typ: "id", group: "trail", required: false},
-	"client_wall_ms":       {typ: "int", group: "clock", required: false},
-	"clock_epoch":          {typ: "int", group: "clock", required: false},
-	"clock_err_ms":         {typ: "int", group: "clock", required: false},
-	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
-	"decision":             {typ: "string", group: "record", required: false},
-	"decision_id":          {typ: "id", group: "record", required: false},
-	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
-	"device_id":            {typ: "id", group: "trail", required: false},
-	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
-	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"duration_ms":          {typ: "int", group: "record", required: false},
-	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
-	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
-	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
-	"episode_id":           {typ: "id", group: "trail", required: false},
-	"est_server_ms":        {typ: "int", group: "clock", required: false},
-	"event_id":             {typ: "id", group: "delivery", required: true},
-	"flags":                {typ: "map", group: "event", required: false},
-	"flags_hash":           {typ: "string", group: "flags", required: false},
-	"from_state":           {typ: "string", group: "record", required: false},
-	"generation":           {typ: "int", group: "trail", required: false},
-	"item_count":           {typ: "int", group: "event", required: false},
-	"job_id":               {typ: "id", group: "trail", required: false},
-	"journey_id":           {typ: "id", group: "trail", required: false},
-	"jump_ms":              {typ: "int", group: "event", required: false},
-	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"machine":              {typ: "string", group: "record", required: false},
-	"media_connection_id":  {typ: "id", group: "trail", required: false},
-	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
-	"name":                 {typ: "string", group: "record", required: true},
-	"next_seq":             {typ: "int", group: "delivery", required: false},
-	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
-	"op_id":                {typ: "id", group: "record", required: false},
-	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
-	"parent_op_id":         {typ: "id", group: "record", required: false},
-	"participant_id":       {typ: "id", group: "trail", required: false},
-	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
-	"provider_media_id":    {typ: "id", group: "trail", required: false},
-	"reason_code":          {typ: "string", group: "record", required: false},
-	"recording_id":         {typ: "id", group: "trail", required: false},
-	"release_sha":          {typ: "string", group: "build", required: false},
-	"request_id":           {typ: "id", group: "trail", required: false},
-	"schema_ver":           {typ: "string", group: "build", required: true},
-	"sdk_version":          {typ: "string", group: "build", required: false},
-	"seq":                  {typ: "int", group: "delivery", required: true},
-	"shown_ms":             {typ: "int", group: "record", required: false},
-	"source_id":            {typ: "string", group: "delivery", required: true},
-	"space_id":             {typ: "id", group: "trail", required: false},
-	"span_id":              {typ: "id", group: "trail", required: false},
-	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
-	"sync_connection_id":   {typ: "id", group: "trail", required: false},
-	"tenant_id":            {typ: "id", group: "trail", required: false},
-	"to_state":             {typ: "string", group: "record", required: false},
-	"trace_id":             {typ: "id", group: "trail", required: false},
-	"trigger":              {typ: "string", group: "record", required: false},
-	"user_id":              {typ: "id", group: "trail", required: false},
-	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"acked_bps":                 {typ: "int", group: "event", required: false},
+	"active":                    {typ: "bool", group: "event", required: false},
+	"admission_request_id":      {typ: "id", group: "trail", required: false},
+	"agent_id":                  {typ: "id", group: "trail", required: false},
+	"app_build":                 {typ: "string", group: "build", required: false},
+	"app_version":               {typ: "string", group: "build", required: false},
+	"attempt":                   {typ: "int", group: "trail", required: false},
+	"banner_kind":               {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
+	"batch_id":                  {typ: "id", group: "delivery", required: false},
+	"bitrate_bps":               {typ: "int", group: "event", required: false},
+	"bytes":                     {typ: "int", group: "event", required: false},
+	"bytes_sent":                {typ: "int", group: "event", required: false},
+	"camera_bound":              {typ: "bool", group: "event", required: false},
+	"capture_error_name":        {typ: "enum", group: "event", required: false, values: []string{"NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"}},
+	"cause":                     {typ: "enum", group: "event", required: false, values: []string{"newer_allocation", "revoked", "closed", "caller"}},
+	"client_mono_ms":            {typ: "number", group: "clock", required: false},
+	"client_session_id":         {typ: "id", group: "trail", required: false},
+	"client_wall_ms":            {typ: "int", group: "clock", required: false},
+	"clock_epoch":               {typ: "int", group: "clock", required: false},
+	"clock_err_ms":              {typ: "int", group: "clock", required: false},
+	"clock_state":               {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"connection_type":           {typ: "string", group: "event", required: false},
+	"covered":                   {typ: "bool", group: "event", required: false},
+	"decision":                  {typ: "string", group: "record", required: false},
+	"decision_id":               {typ: "id", group: "record", required: false},
+	"decrease_acked_bps":        {typ: "int", group: "event", required: false},
+	"decrease_ago_ms":           {typ: "int", group: "event", required: false},
+	"decrease_cause":            {typ: "string", group: "event", required: false},
+	"decrease_from_bps":         {typ: "int", group: "event", required: false},
+	"decrease_to_bps":           {typ: "int", group: "event", required: false},
+	"delivered_share":           {typ: "number", group: "event", required: false},
+	"device_ephemeral":          {typ: "bool", group: "trail", required: false},
+	"device_id":                 {typ: "id", group: "trail", required: false},
+	"device_kind":               {typ: "enum", group: "event", required: false, values: []string{"camera", "microphone", "screen"}},
+	"device_state":              {typ: "string", group: "event", required: false},
+	"drop_reason":               {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped":                   {typ: "int", group: "event", required: false},
+	"dropped_seqs":              {typ: "ranges", group: "delivery", required: false},
+	"duration_ms":               {typ: "int", group: "record", required: false},
+	"enabled":                   {typ: "bool", group: "event", required: false},
+	"end":                       {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
+	"end_reason":                {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"env":                       {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_id":                {typ: "id", group: "trail", required: false},
+	"est_server_ms":             {typ: "int", group: "clock", required: false},
+	"estimate_bps":              {typ: "int", group: "event", required: false},
+	"event_id":                  {typ: "id", group: "delivery", required: true},
+	"feedback_age_ms":           {typ: "int", group: "event", required: false},
+	"final":                     {typ: "bool", group: "event", required: false},
+	"fir_received":              {typ: "int", group: "event", required: false},
+	"flags":                     {typ: "map", group: "event", required: false},
+	"flags_hash":                {typ: "string", group: "flags", required: false},
+	"forwarded_keyframes":       {typ: "int", group: "event", required: false},
+	"forwarded_packets":         {typ: "int", group: "event", required: false},
+	"frame_height":              {typ: "int", group: "event", required: false},
+	"frames_decoded":            {typ: "int", group: "event", required: false},
+	"frames_dropped":            {typ: "int", group: "event", required: false},
+	"frames_encoded":            {typ: "int", group: "event", required: false},
+	"frames_received":           {typ: "int", group: "event", required: false},
+	"freeze_count":              {typ: "int", group: "event", required: false},
+	"freeze_ms":                 {typ: "int", group: "event", required: false},
+	"from_state":                {typ: "string", group: "record", required: false},
+	"gap":                       {typ: "string", group: "event", required: false},
+	"gap_ms":                    {typ: "int", group: "event", required: false},
+	"generation":                {typ: "int", group: "trail", required: false},
+	"held":                      {typ: "int", group: "event", required: false},
+	"high_layer":                {typ: "int", group: "event", required: false},
+	"host_pressure":             {typ: "int", group: "event", required: false},
+	"ingress_bitrate_bps":       {typ: "int", group: "event", required: false},
+	"ingress_jitter_ms":         {typ: "number", group: "event", required: false},
+	"ingress_layers_active":     {typ: "int", group: "event", required: false},
+	"ingress_lost":              {typ: "int", group: "event", required: false},
+	"ingress_packets":           {typ: "int", group: "event", required: false},
+	"ingress_repaired":          {typ: "int", group: "event", required: false},
+	"item_count":                {typ: "int", group: "event", required: false},
+	"jitter_ms":                 {typ: "number", group: "event", required: false},
+	"job_id":                    {typ: "id", group: "trail", required: false},
+	"journey_id":                {typ: "id", group: "trail", required: false},
+	"jump_ms":                   {typ: "int", group: "event", required: false},
+	"key_frames_decoded":        {typ: "int", group: "event", required: false},
+	"keyframe_repairs":          {typ: "int", group: "event", required: false},
+	"kind":                      {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"layer":                     {typ: "enum", group: "event", required: false, values: []string{"l", "m", "h"}},
+	"layers":                    {typ: "int", group: "event", required: false},
+	"layers_active":             {typ: "int", group: "event", required: false},
+	"local":                     {typ: "bool", group: "event", required: false},
+	"local_candidate_type":      {typ: "string", group: "event", required: false},
+	"loss_share":                {typ: "number", group: "event", required: false},
+	"lossy":                     {typ: "int", group: "event", required: false},
+	"lost":                      {typ: "int", group: "event", required: false},
+	"low_layer":                 {typ: "int", group: "event", required: false},
+	"luma_mean":                 {typ: "int", group: "event", required: false},
+	"machine":                   {typ: "string", group: "record", required: false},
+	"media_connection_id":       {typ: "id", group: "trail", required: false},
+	"media_kind":                {typ: "enum", group: "event", required: false, values: []string{"audio", "video"}},
+	"media_state_code":          {typ: "enum", group: "event", required: false, values: []string{"media_capture_failed", "media_decode_failed", "connection_dropped"}},
+	"mid":                       {typ: "string", group: "event", required: false},
+	"module":                    {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
+	"muted":                     {typ: "bool", group: "event", required: false},
+	"nack_received":             {typ: "int", group: "event", required: false},
+	"nack_requested":            {typ: "int", group: "event", required: false},
+	"nack_sent":                 {typ: "int", group: "event", required: false},
+	"name":                      {typ: "string", group: "record", required: true},
+	"next_seq":                  {typ: "int", group: "delivery", required: false},
+	"note_kind":                 {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
+	"on_screen":                 {typ: "bool", group: "event", required: false},
+	"op_id":                     {typ: "id", group: "record", required: false},
+	"operation_id":              {typ: "id", group: "event", required: false},
+	"outcome":                   {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"packets":                   {typ: "int", group: "event", required: false},
+	"page_visible":              {typ: "bool", group: "event", required: false},
+	"parent_op_id":              {typ: "id", group: "record", required: false},
+	"participant_id":            {typ: "id", group: "trail", required: false},
+	"pause_reason":              {typ: "enum", group: "event", required: false, values: []string{"viewer", "congestion", "source_inactive", "source_unauthorized"}},
+	"paused_subscriptions":      {typ: "int", group: "event", required: false},
+	"permission_after":          {typ: "enum", group: "event", required: false, values: []string{"granted", "denied", "prompt"}},
+	"permission_before":         {typ: "enum", group: "event", required: false, values: []string{"granted", "denied", "prompt"}},
+	"permission_probe":          {typ: "enum", group: "event", required: false, values: []string{"no_permissions_api"}},
+	"permission_state":          {typ: "enum", group: "event", required: false, values: []string{"granted", "denied", "prompt", "unknown"}},
+	"plan":                      {typ: "enum", group: "event", required: false, values: []string{"open", "lowest", "paused"}},
+	"platform":                  {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"playout":                   {typ: "enum", group: "event", required: false, values: []string{"playing", "paused", "autoplay_blocked", "not_applicable", "unknown"}},
+	"pli_received":              {typ: "int", group: "event", required: false},
+	"pli_sent":                  {typ: "int", group: "event", required: false},
+	"policy_allows":             {typ: "bool", group: "event", required: false},
+	"policy_probe":              {typ: "enum", group: "event", required: false, values: []string{"no_policy_api"}},
+	"presented_frames":          {typ: "int", group: "event", required: false},
+	"probe_unavailable":         {typ: "enum", group: "event", required: false, values: []string{"native_render"}},
+	"probing":                   {typ: "int", group: "event", required: false},
+	"proven_bps":                {typ: "int", group: "event", required: false},
+	"provider_media_id":         {typ: "id", group: "trail", required: false},
+	"publication_id":            {typ: "string", group: "event", required: false},
+	"publisher_id":              {typ: "id", group: "event", required: false},
+	"quality_limitation_reason": {typ: "enum", group: "event", required: false, values: []string{"none", "cpu", "bandwidth", "other"}},
+	"queued_bytes":              {typ: "int", group: "event", required: false},
+	"ready_state":               {typ: "int", group: "event", required: false},
+	"reason":                    {typ: "string", group: "event", required: false},
+	"reason_code":               {typ: "string", group: "record", required: false},
+	"recording_id":              {typ: "id", group: "trail", required: false},
+	"rect_h":                    {typ: "int", group: "event", required: false},
+	"rect_w":                    {typ: "int", group: "event", required: false},
+	"recv_bitrate_bps":          {typ: "int", group: "event", required: false},
+	"recv_height":               {typ: "int", group: "event", required: false},
+	"recv_hidden_videos":        {typ: "int", group: "event", required: false},
+	"recv_jitter_ms":            {typ: "number", group: "event", required: false},
+	"recv_loss_pct":             {typ: "number", group: "event", required: false},
+	"recv_paused_videos":        {typ: "int", group: "event", required: false},
+	"relay_protocol":            {typ: "string", group: "event", required: false},
+	"release_sha":               {typ: "string", group: "build", required: false},
+	"remote_candidate_type":     {typ: "string", group: "event", required: false},
+	"repaired":                  {typ: "int", group: "event", required: false},
+	"repairs_cut":               {typ: "int", group: "event", required: false},
+	"request_id":                {typ: "id", group: "trail", required: false},
+	"requested_layer":           {typ: "enum", group: "event", required: false, values: []string{"l", "m", "h"}},
+	"revision":                  {typ: "int", group: "event", required: false},
+	"rid":                       {typ: "enum", group: "event", required: false, values: []string{"h", "m", "l"}},
+	"rtt_ms":                    {typ: "int", group: "event", required: false},
+	"schema_ver":                {typ: "string", group: "build", required: true},
+	"sdk_version":               {typ: "string", group: "build", required: false},
+	"send_bitrate_bps":          {typ: "int", group: "event", required: false},
+	"send_jitter_ms":            {typ: "number", group: "event", required: false},
+	"send_layer":                {typ: "enum", group: "event", required: false, values: []string{"h", "m", "l"}},
+	"send_loss_pct":             {typ: "number", group: "event", required: false},
+	"sent_audio":                {typ: "int", group: "event", required: false},
+	"sent_probe":                {typ: "int", group: "event", required: false},
+	"sent_repair":               {typ: "int", group: "event", required: false},
+	"sent_video":                {typ: "int", group: "event", required: false},
+	"seq":                       {typ: "int", group: "delivery", required: true},
+	"shown_ms":                  {typ: "int", group: "record", required: false},
+	"source":                    {typ: "enum", group: "event", required: false, values: []string{"camera", "screen"}},
+	"source_id":                 {typ: "string", group: "delivery", required: true},
+	"space_id":                  {typ: "id", group: "trail", required: false},
+	"span_id":                   {typ: "id", group: "trail", required: false},
+	"status_shown":              {typ: "bool", group: "event", required: false},
+	"subscriptions":             {typ: "int", group: "event", required: false},
+	"surface_state":             {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"sync_connection_id":        {typ: "id", group: "trail", required: false},
+	"target_layer":              {typ: "enum", group: "event", required: false, values: []string{"none", "l", "m", "h"}},
+	"tenant_id":                 {typ: "id", group: "trail", required: false},
+	"tile_reason":               {typ: "string", group: "event", required: false},
+	"tile_state":                {typ: "enum", group: "event", required: false, values: []string{"picture", "avatar", "paused_for_network", "frozen_frame", "media_state"}},
+	"to_state":                  {typ: "string", group: "record", required: false},
+	"trace_id":                  {typ: "id", group: "trail", required: false},
+	"trend":                     {typ: "string", group: "event", required: false},
+	"trigger":                   {typ: "string", group: "record", required: false},
+	"user_id":                   {typ: "id", group: "trail", required: false},
+	"video_height":              {typ: "int", group: "event", required: false},
+	"video_width":               {typ: "int", group: "event", required: false},
+	"was":                       {typ: "enum", group: "event", required: false, values: []string{"viewer", "congestion", "source_inactive", "source_unauthorized"}},
+	"webhook_delivery_id":       {typ: "id", group: "trail", required: false},
+	"window_ms":                 {typ: "int", group: "event", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"obs.clock_jump":               {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":           {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":               {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":              {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":                {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":                {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sfu.media.egress":             {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"media_kind": {required: true}, "subscriptions": {required: false}, "paused_subscriptions": {required: false}, "high_layer": {required: false}, "low_layer": {required: false}, "pli_received": {required: false}, "fir_received": {required: false}, "nack_received": {required: false}, "lost": {required: false}, "jitter_ms": {required: false}, "loss_share": {required: false}, "rtt_ms": {required: false}, "bitrate_bps": {required: false}, "final": {required: false}}},
+	"sfu.media.ingress":            {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"source": {required: true}, "media_kind": {required: true}, "mid": {required: true}, "packets": {required: true}, "bytes": {required: false}, "lost": {required: false}, "repaired": {required: false}, "nack_requested": {required: false}, "keyframe_repairs": {required: false}, "pli_sent": {required: false}, "jitter_ms": {required: false}, "bitrate_bps": {required: false}, "layers": {required: false}, "layers_active": {required: false}, "held": {required: false}, "final": {required: false}}},
+	"sfu.media.transport":          {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"estimate_bps": {required: false}, "proven_bps": {required: false}, "queued_bytes": {required: false}, "probing": {required: false}, "sent_audio": {required: false}, "sent_video": {required: false}, "sent_repair": {required: false}, "sent_probe": {required: false}, "dropped": {required: false}, "repairs_cut": {required: false}, "feedback_age_ms": {required: false}, "final": {required: false}}},
+	"sfu.publication.started":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"source": {required: true}, "media_kind": {required: true}}},
+	"sfu.source.lease_lost":        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"source": {required: true}, "cause": {required: true}, "revision": {required: true}}},
+	"sfu.source.lease_opened":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"source": {required: true}, "revision": {required: true}}},
+	"sfu.subscription.congestion":  {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "layer": {required: false}, "reason": {required: false}, "estimate_bps": {required: false}, "proven_bps": {required: false}, "delivered_share": {required: false}, "probing": {required: false}, "host_pressure": {required: false}, "acked_bps": {required: false}, "loss_share": {required: false}, "lossy": {required: false}, "trend": {required: false}, "decrease_cause": {required: false}, "decrease_ago_ms": {required: false}, "decrease_from_bps": {required: false}, "decrease_to_bps": {required: false}, "decrease_acked_bps": {required: false}}},
+	"sfu.subscription.paused":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "media_kind": {required: true}, "mid": {required: true}, "reason": {required: true}}},
+	"sfu.subscription.resumed":     {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "media_kind": {required: true}, "mid": {required: true}, "was": {required: true}}},
+	"sfu.subscription.started":     {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "media_kind": {required: true}, "mid": {required: true}}},
+	"sfu.subscription.stopped":     {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "media_kind": {required: true}, "mid": {required: true}, "reason": {required: true}}},
+	"sync.episode.ended":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"sync.media.intent":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"operation_id": {required: false}, "source": {required: true}, "enabled": {required: true}}},
+	"video.call_stats":             {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"window_ms": {required: true}, "gap": {required: false}, "gap_ms": {required: false}, "recv_height": {required: false}, "recv_paused_videos": {required: false}, "recv_hidden_videos": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "send_layer": {required: false}, "send_loss_pct": {required: false}, "send_jitter_ms": {required: false}, "recv_loss_pct": {required: false}, "recv_jitter_ms": {required: false}, "rtt_ms": {required: false}, "connection_type": {required: false}, "local_candidate_type": {required: false}, "remote_candidate_type": {required: false}, "relay_protocol": {required: false}, "quality_limitation_reason": {required: false}, "recv_bitrate_bps": {required: false}, "send_bitrate_bps": {required: false}}},
+	"video.camera_capture":         {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: false}, "permission_before": {required: false}, "permission_after": {required: false}, "permission_probe": {required: false}, "policy_allows": {required: false}, "policy_probe": {required: false}}},
+	"video.camera_track_muted":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"muted": {required: true}}},
+	"video.device_failed":          {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"device_kind": {required: true}, "capture_error_name": {required: false}, "permission_state": {required: false}}},
+	"video.media_state":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"media_state_code": {required: true}, "device_state": {required: false}, "source": {required: false}}},
+	"video.render_probe":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"publication_id": {required: false}, "local": {required: false}, "presented_frames": {required: false}, "ready_state": {required: false}, "video_width": {required: false}, "video_height": {required: false}, "rect_w": {required: false}, "rect_h": {required: false}, "on_screen": {required: false}, "page_visible": {required: false}, "covered": {required: false}, "luma_mean": {required: false}, "probe_unavailable": {required: false}}},
+	"video.send_window":            {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"rid": {required: true}, "frames_encoded": {required: true}, "bytes_sent": {required: true}, "frame_height": {required: false}, "quality_limitation_reason": {required: false}, "active": {required: false}, "window_ms": {required: true}}},
+	"video.stats_failed":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: true}}},
+	"video.subscription_forwarded": {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "forwarded_packets": {required: true}, "forwarded_keyframes": {required: false}, "layer": {required: false}, "requested_layer": {required: false}, "pause_reason": {required: false}, "ingress_packets": {required: false}, "ingress_lost": {required: false}, "ingress_repaired": {required: false}, "ingress_jitter_ms": {required: false}, "ingress_bitrate_bps": {required: false}, "ingress_layers_active": {required: false}, "plan": {required: false}, "final": {required: false}}},
+	"video.subscription_select":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"paused", "forwarding"}, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "target_layer": {required: false}}},
+	"video.tile":                   {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"tile_state": {required: false}, "status_shown": {required: false}, "tile_reason": {required: false}}},
+	"video.track_window":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "source": {required: true}, "publication_id": {required: false}, "packets": {required: true}, "lost": {required: false}, "bytes": {required: false}, "frames_received": {required: false}, "frames_decoded": {required: false}, "frames_dropped": {required: false}, "key_frames_decoded": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "pli_sent": {required: false}, "nack_sent": {required: false}, "frame_height": {required: false}, "playout": {required: false}, "window_ms": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{
 	"client.connection": {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
 	"episode.lifecycle": {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
 	"selftest.door":     {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
+	"video.camera":      {states: []string{"idle", "capturing", "live", "ended"}, edges: [][2]string{{"idle", "capturing"}, {"capturing", "live"}, {"capturing", "ended"}, {"capturing", "idle"}, {"live", "ended"}, {"live", "idle"}, {"ended", "capturing"}, {"ended", "idle"}, {"idle", "ended"}}, triggers: []string{"capture_requested", "captured", "capture_not_live", "track_ended", "device_switched", "released", "unbound", "bound", "cleared", "cancelled"}},
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":                        "expected",
+	"end.time_limit":                   "expected",
+	"selftest.broken":                  "error",
+	"selftest.busy":                    "expected",
+	"unclassified":                     "error",
+	"video.backgrounded":               "expected",
+	"video.call_ended":                 "expected",
+	"video.capture_denied":             "error",
+	"video.device_busy":                "error",
+	"video.device_constraint_invalid":  "error",
+	"video.device_not_found":           "error",
+	"video.media_capture_failed":       "error",
+	"video.paused_congestion":          "expected",
+	"video.paused_source_inactive":     "expected",
+	"video.paused_source_unauthorized": "expected",
+	"video.paused_viewer":              "expected",
+	"video.permission_denied":          "expected",
+	"video.reconnecting":               "expected",
+	"video.unsupported_environment":    "error",
+	"video.viewer_hidden":              "expected",
 }
 
 var registryIDKinds = []idKind{

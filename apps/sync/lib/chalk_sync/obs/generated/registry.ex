@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "06a4092b8fb7"
+  @schema_ver "4b3c04077466"
 
   @events %{
     "client.call_ended" => %{
@@ -83,6 +83,349 @@ defmodule ChalkSync.Obs.Registry do
         }
       }
     },
+    "sfu.media.egress" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "media_kind" => %{
+          "required" => true
+        },
+        "subscriptions" => %{
+          "required" => false
+        },
+        "paused_subscriptions" => %{
+          "required" => false
+        },
+        "high_layer" => %{
+          "required" => false
+        },
+        "low_layer" => %{
+          "required" => false
+        },
+        "pli_received" => %{
+          "required" => false
+        },
+        "fir_received" => %{
+          "required" => false
+        },
+        "nack_received" => %{
+          "required" => false
+        },
+        "lost" => %{
+          "required" => false
+        },
+        "jitter_ms" => %{
+          "required" => false
+        },
+        "loss_share" => %{
+          "required" => false
+        },
+        "rtt_ms" => %{
+          "required" => false
+        },
+        "bitrate_bps" => %{
+          "required" => false
+        },
+        "final" => %{
+          "required" => false
+        }
+      }
+    },
+    "sfu.media.ingress" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "packets" => %{
+          "required" => true
+        },
+        "bytes" => %{
+          "required" => false
+        },
+        "lost" => %{
+          "required" => false
+        },
+        "repaired" => %{
+          "required" => false
+        },
+        "nack_requested" => %{
+          "required" => false
+        },
+        "keyframe_repairs" => %{
+          "required" => false
+        },
+        "pli_sent" => %{
+          "required" => false
+        },
+        "jitter_ms" => %{
+          "required" => false
+        },
+        "bitrate_bps" => %{
+          "required" => false
+        },
+        "layers" => %{
+          "required" => false
+        },
+        "layers_active" => %{
+          "required" => false
+        },
+        "held" => %{
+          "required" => false
+        },
+        "final" => %{
+          "required" => false
+        }
+      }
+    },
+    "sfu.media.transport" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "estimate_bps" => %{
+          "required" => false
+        },
+        "proven_bps" => %{
+          "required" => false
+        },
+        "queued_bytes" => %{
+          "required" => false
+        },
+        "probing" => %{
+          "required" => false
+        },
+        "sent_audio" => %{
+          "required" => false
+        },
+        "sent_video" => %{
+          "required" => false
+        },
+        "sent_repair" => %{
+          "required" => false
+        },
+        "sent_probe" => %{
+          "required" => false
+        },
+        "dropped" => %{
+          "required" => false
+        },
+        "repairs_cut" => %{
+          "required" => false
+        },
+        "feedback_age_ms" => %{
+          "required" => false
+        },
+        "final" => %{
+          "required" => false
+        }
+      }
+    },
+    "sfu.publication.started" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.source.lease_lost" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "source" => %{
+          "required" => true
+        },
+        "cause" => %{
+          "required" => true
+        },
+        "revision" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.source.lease_opened" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "source" => %{
+          "required" => true
+        },
+        "revision" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.subscription.congestion" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "mid" => %{
+          "required" => true
+        },
+        "layer" => %{
+          "required" => false
+        },
+        "reason" => %{
+          "required" => false
+        },
+        "estimate_bps" => %{
+          "required" => false
+        },
+        "proven_bps" => %{
+          "required" => false
+        },
+        "delivered_share" => %{
+          "required" => false
+        },
+        "probing" => %{
+          "required" => false
+        },
+        "host_pressure" => %{
+          "required" => false
+        },
+        "acked_bps" => %{
+          "required" => false
+        },
+        "loss_share" => %{
+          "required" => false
+        },
+        "lossy" => %{
+          "required" => false
+        },
+        "trend" => %{
+          "required" => false
+        },
+        "decrease_cause" => %{
+          "required" => false
+        },
+        "decrease_ago_ms" => %{
+          "required" => false
+        },
+        "decrease_from_bps" => %{
+          "required" => false
+        },
+        "decrease_to_bps" => %{
+          "required" => false
+        },
+        "decrease_acked_bps" => %{
+          "required" => false
+        }
+      }
+    },
+    "sfu.subscription.paused" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "reason" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.subscription.resumed" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "was" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.subscription.started" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        }
+      }
+    },
+    "sfu.subscription.stopped" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "media_kind" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "reason" => %{
+          "required" => true
+        }
+      }
+    },
     "sync.episode.ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -97,10 +440,420 @@ defmodule ChalkSync.Obs.Registry do
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
         }
       }
+    },
+    "sync.media.intent" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "operation_id" => %{
+          "required" => false
+        },
+        "source" => %{
+          "required" => true
+        },
+        "enabled" => %{
+          "required" => true
+        }
+      }
+    },
+    "video.call_stats" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "window_ms" => %{
+          "required" => true
+        },
+        "gap" => %{
+          "required" => false
+        },
+        "gap_ms" => %{
+          "required" => false
+        },
+        "recv_height" => %{
+          "required" => false
+        },
+        "recv_paused_videos" => %{
+          "required" => false
+        },
+        "recv_hidden_videos" => %{
+          "required" => false
+        },
+        "freeze_count" => %{
+          "required" => false
+        },
+        "freeze_ms" => %{
+          "required" => false
+        },
+        "send_layer" => %{
+          "required" => false
+        },
+        "send_loss_pct" => %{
+          "required" => false
+        },
+        "send_jitter_ms" => %{
+          "required" => false
+        },
+        "recv_loss_pct" => %{
+          "required" => false
+        },
+        "recv_jitter_ms" => %{
+          "required" => false
+        },
+        "rtt_ms" => %{
+          "required" => false
+        },
+        "connection_type" => %{
+          "required" => false
+        },
+        "local_candidate_type" => %{
+          "required" => false
+        },
+        "remote_candidate_type" => %{
+          "required" => false
+        },
+        "relay_protocol" => %{
+          "required" => false
+        },
+        "quality_limitation_reason" => %{
+          "required" => false
+        },
+        "recv_bitrate_bps" => %{
+          "required" => false
+        },
+        "send_bitrate_bps" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.camera_capture" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "capture_error_name" => %{
+          "required" => false
+        },
+        "permission_before" => %{
+          "required" => false
+        },
+        "permission_after" => %{
+          "required" => false
+        },
+        "permission_probe" => %{
+          "required" => false
+        },
+        "policy_allows" => %{
+          "required" => false
+        },
+        "policy_probe" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.camera_track_muted" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "muted" => %{
+          "required" => true
+        }
+      }
+    },
+    "video.device_failed" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "device_kind" => %{
+          "required" => true
+        },
+        "capture_error_name" => %{
+          "required" => false
+        },
+        "permission_state" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.media_state" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "media_state_code" => %{
+          "required" => true
+        },
+        "device_state" => %{
+          "required" => false
+        },
+        "source" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.render_probe" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publication_id" => %{
+          "required" => false
+        },
+        "local" => %{
+          "required" => false
+        },
+        "presented_frames" => %{
+          "required" => false
+        },
+        "ready_state" => %{
+          "required" => false
+        },
+        "video_width" => %{
+          "required" => false
+        },
+        "video_height" => %{
+          "required" => false
+        },
+        "rect_w" => %{
+          "required" => false
+        },
+        "rect_h" => %{
+          "required" => false
+        },
+        "on_screen" => %{
+          "required" => false
+        },
+        "page_visible" => %{
+          "required" => false
+        },
+        "covered" => %{
+          "required" => false
+        },
+        "luma_mean" => %{
+          "required" => false
+        },
+        "probe_unavailable" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.send_window" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "rid" => %{
+          "required" => true
+        },
+        "frames_encoded" => %{
+          "required" => true
+        },
+        "bytes_sent" => %{
+          "required" => true
+        },
+        "frame_height" => %{
+          "required" => false
+        },
+        "quality_limitation_reason" => %{
+          "required" => false
+        },
+        "active" => %{
+          "required" => false
+        },
+        "window_ms" => %{
+          "required" => true
+        }
+      }
+    },
+    "video.stats_failed" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "capture_error_name" => %{
+          "required" => true
+        }
+      }
+    },
+    "video.subscription_forwarded" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "forwarded_packets" => %{
+          "required" => true
+        },
+        "forwarded_keyframes" => %{
+          "required" => false
+        },
+        "layer" => %{
+          "required" => false
+        },
+        "requested_layer" => %{
+          "required" => false
+        },
+        "pause_reason" => %{
+          "required" => false
+        },
+        "ingress_packets" => %{
+          "required" => false
+        },
+        "ingress_lost" => %{
+          "required" => false
+        },
+        "ingress_repaired" => %{
+          "required" => false
+        },
+        "ingress_jitter_ms" => %{
+          "required" => false
+        },
+        "ingress_bitrate_bps" => %{
+          "required" => false
+        },
+        "ingress_layers_active" => %{
+          "required" => false
+        },
+        "plan" => %{
+          "required" => false
+        },
+        "final" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.subscription_select" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["paused", "forwarding"],
+      "fields" => %{
+        "publisher_id" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "mid" => %{
+          "required" => true
+        },
+        "target_layer" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.tile" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "tile_state" => %{
+          "required" => false
+        },
+        "status_shown" => %{
+          "required" => false
+        },
+        "tile_reason" => %{
+          "required" => false
+        }
+      }
+    },
+    "video.track_window" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "mid" => %{
+          "required" => true
+        },
+        "source" => %{
+          "required" => true
+        },
+        "publication_id" => %{
+          "required" => false
+        },
+        "packets" => %{
+          "required" => true
+        },
+        "lost" => %{
+          "required" => false
+        },
+        "bytes" => %{
+          "required" => false
+        },
+        "frames_received" => %{
+          "required" => false
+        },
+        "frames_decoded" => %{
+          "required" => false
+        },
+        "frames_dropped" => %{
+          "required" => false
+        },
+        "key_frames_decoded" => %{
+          "required" => false
+        },
+        "freeze_count" => %{
+          "required" => false
+        },
+        "freeze_ms" => %{
+          "required" => false
+        },
+        "pli_sent" => %{
+          "required" => false
+        },
+        "nack_sent" => %{
+          "required" => false
+        },
+        "frame_height" => %{
+          "required" => false
+        },
+        "playout" => %{
+          "required" => false
+        },
+        "window_ms" => %{
+          "required" => true
+        }
+      }
     }
   }
 
   @fields %{
+    "acked_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "active" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "admission_request_id" => %{
       "type" => "id",
       "group" => "trail",
@@ -143,6 +896,42 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "bitrate_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "bytes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "bytes_sent" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "camera_bound" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "capture_error_name" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"]
+    },
+    "cause" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["newer_allocation", "revoked", "closed", "caller"]
+    },
     "client_mono_ms" => %{
       "type" => "number",
       "group" => "clock",
@@ -179,6 +968,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => ["server", "synced", "unsynced"]
     },
+    "connection_type" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "covered" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "decision" => %{
       "type" => "string",
       "group" => "record",
@@ -188,6 +989,42 @@ defmodule ChalkSync.Obs.Registry do
     "decision_id" => %{
       "type" => "id",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "decrease_acked_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "decrease_ago_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "decrease_cause" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "decrease_from_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "decrease_to_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "delivered_share" => %{
+      "type" => "number",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -203,11 +1040,29 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "device_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["camera", "microphone", "screen"]
+    },
+    "device_state" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "drop_reason" => %{
       "type" => "enum",
       "group" => "delivery",
       "required" => false,
       "values" => ["queue_full", "credential_expired", "refused"]
+    },
+    "dropped" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "dropped_seqs" => %{
       "type" => "ranges",
@@ -218,6 +1073,12 @@ defmodule ChalkSync.Obs.Registry do
     "duration_ms" => %{
       "type" => "int",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "enabled" => %{
+      "type" => "bool",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -251,10 +1112,34 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "estimate_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "event_id" => %{
       "type" => "id",
       "group" => "delivery",
       "required" => true,
+      "values" => nil
+    },
+    "feedback_age_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "final" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "fir_received" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
       "values" => nil
     },
     "flags" => %{
@@ -269,9 +1154,75 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "forwarded_keyframes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "forwarded_packets" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "frame_height" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "frames_decoded" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "frames_dropped" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "frames_encoded" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "frames_received" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "freeze_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "freeze_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "from_state" => %{
       "type" => "string",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "gap" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "gap_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -281,8 +1232,68 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "held" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "high_layer" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "host_pressure" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_bitrate_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_jitter_ms" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_layers_active" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_lost" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_packets" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ingress_repaired" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "item_count" => %{
       "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "jitter_ms" => %{
+      "type" => "number",
       "group" => "event",
       "required" => false,
       "values" => nil
@@ -305,11 +1316,83 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "key_frames_decoded" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "keyframe_repairs" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "kind" => %{
       "type" => "enum",
       "group" => "record",
       "required" => true,
       "values" => ["op", "transition", "decision", "surface", "fact"]
+    },
+    "layer" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["l", "m", "h"]
+    },
+    "layers" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "layers_active" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "local" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "local_candidate_type" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "loss_share" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "lossy" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "lost" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "low_layer" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "luma_mean" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "machine" => %{
       "type" => "string",
@@ -323,11 +1406,53 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "media_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["audio", "video"]
+    },
+    "media_state_code" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["media_capture_failed", "media_decode_failed", "connection_dropped"]
+    },
+    "mid" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "module" => %{
       "type" => "enum",
       "group" => "build",
       "required" => true,
       "values" => ["api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"]
+    },
+    "muted" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "nack_received" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "nack_requested" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "nack_sent" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "name" => %{
       "type" => "string",
@@ -347,9 +1472,21 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => ["a", "b"]
     },
+    "on_screen" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "op_id" => %{
       "type" => "id",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "operation_id" => %{
+      "type" => "id",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -358,6 +1495,18 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "record",
       "required" => false,
       "values" => ["ok", "expected", "error"]
+    },
+    "packets" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "page_visible" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "parent_op_id" => %{
       "type" => "id",
@@ -371,15 +1520,147 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "pause_reason" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["viewer", "congestion", "source_inactive", "source_unauthorized"]
+    },
+    "paused_subscriptions" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "permission_after" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["granted", "denied", "prompt"]
+    },
+    "permission_before" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["granted", "denied", "prompt"]
+    },
+    "permission_probe" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["no_permissions_api"]
+    },
+    "permission_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["granted", "denied", "prompt", "unknown"]
+    },
+    "plan" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["open", "lowest", "paused"]
+    },
     "platform" => %{
       "type" => "enum",
       "group" => "build",
       "required" => false,
       "values" => ["web", "ios", "android", "server", "lambda", "node"]
     },
+    "playout" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["playing", "paused", "autoplay_blocked", "not_applicable", "unknown"]
+    },
+    "pli_received" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "pli_sent" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "policy_allows" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "policy_probe" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["no_policy_api"]
+    },
+    "presented_frames" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "probe_unavailable" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["native_render"]
+    },
+    "probing" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "proven_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "provider_media_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "publication_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "publisher_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "quality_limitation_reason" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["none", "cpu", "bandwidth", "other"]
+    },
+    "queued_bytes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "ready_state" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "reason" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -395,15 +1676,111 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "rect_h" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "rect_w" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_bitrate_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_height" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_hidden_videos" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_jitter_ms" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_loss_pct" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "recv_paused_videos" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "relay_protocol" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "release_sha" => %{
       "type" => "string",
       "group" => "build",
       "required" => false,
       "values" => nil
     },
+    "remote_candidate_type" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "repaired" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "repairs_cut" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "request_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "requested_layer" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["l", "m", "h"]
+    },
+    "revision" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "rid" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["h", "m", "l"]
+    },
+    "rtt_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -419,6 +1796,54 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "send_bitrate_bps" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "send_jitter_ms" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "send_layer" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["h", "m", "l"]
+    },
+    "send_loss_pct" => %{
+      "type" => "number",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "sent_audio" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "sent_probe" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "sent_repair" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "sent_video" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "seq" => %{
       "type" => "int",
       "group" => "delivery",
@@ -430,6 +1855,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "record",
       "required" => false,
       "values" => nil
+    },
+    "source" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["camera", "screen"]
     },
     "source_id" => %{
       "type" => "string",
@@ -449,6 +1880,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "status_shown" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "subscriptions" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "surface_state" => %{
       "type" => "enum",
       "group" => "record",
@@ -461,11 +1904,29 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "target_layer" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["none", "l", "m", "h"]
+    },
     "tenant_id" => %{
       "type" => "id",
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "tile_reason" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "tile_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["picture", "avatar", "paused_for_network", "frozen_frame", "media_state"]
     },
     "to_state" => %{
       "type" => "string",
@@ -476,6 +1937,12 @@ defmodule ChalkSync.Obs.Registry do
     "trace_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "trend" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -491,9 +1958,33 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "video_height" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "video_width" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "was" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["viewer", "congestion", "source_inactive", "source_unauthorized"]
+    },
     "webhook_delivery_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "window_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     }
@@ -538,6 +2029,21 @@ defmodule ChalkSync.Obs.Registry do
         ["locked", "closed"]
       ],
       "triggers" => ["push", "pull", "lock", "unlock"]
+    },
+    "video.camera" => %{
+      "states" => ["idle", "capturing", "live", "ended"],
+      "edges" => [
+        ["idle", "capturing"],
+        ["capturing", "live"],
+        ["capturing", "ended"],
+        ["capturing", "idle"],
+        ["live", "ended"],
+        ["live", "idle"],
+        ["ended", "capturing"],
+        ["ended", "idle"],
+        ["idle", "ended"]
+      ],
+      "triggers" => ["capture_requested", "captured", "capture_not_live", "track_ended", "device_switched", "released", "unbound", "bound", "cleared", "cancelled"]
     }
   }
 
@@ -546,7 +2052,22 @@ defmodule ChalkSync.Obs.Registry do
     "end.time_limit" => "expected",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
-    "unclassified" => "error"
+    "unclassified" => "error",
+    "video.backgrounded" => "expected",
+    "video.call_ended" => "expected",
+    "video.capture_denied" => "error",
+    "video.device_busy" => "error",
+    "video.device_constraint_invalid" => "error",
+    "video.device_not_found" => "error",
+    "video.media_capture_failed" => "error",
+    "video.paused_congestion" => "expected",
+    "video.paused_source_inactive" => "expected",
+    "video.paused_source_unauthorized" => "expected",
+    "video.paused_viewer" => "expected",
+    "video.permission_denied" => "expected",
+    "video.reconnecting" => "expected",
+    "video.unsupported_environment" => "error",
+    "video.viewer_hidden" => "expected"
   }
 
   @id_kinds [
