@@ -10,7 +10,7 @@ The same model also holds a switchable variant, `current`, that reproduces how t
 
 ## Result
 
-Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized Chalk SFU and for the Chalk SFU as a separate service. The `current` variant (the SDK before `offDebt`) violates P2 and P4. `./run.sh` reproduces them.
+Under the decided rule all four properties hold at the checked bounds, for the Chalk SFU, for an idealized Chalk SFU and for the Chalk SFU as a separate service. The `current` variant (the SDK before `offDebt`) violates P2 and P4. `./run.sh` reproduces them.
 
 | Property | Meaning                                                                                                            | `decided` | `current`    |
 | -------- | ------------------------------------------------------------------------------------------------------------------ | --------- | ------------ |

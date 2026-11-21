@@ -11,16 +11,15 @@ outcomes:
     area: media
     state: planned
     summary: >-
-      The Usage type has egress and Participant-minute fields, but both the Cloudflare and Chalk
-      SFU adapters return only metadata, so media cost cannot be measured or limited.
+      The Usage type has egress and Participant-minute fields, but both the Chalk SFU
+      adapter returns only metadata, so media cost cannot be measured or limited.
     size: M
     remaining:
-      - Collect usage in both adapters and attribute it to Tenant and Episode.
+      - Collect usage in the Chalk SFU adapter and attribute it to Tenant and Episode.
       - Expose usage to policy limits.
     theory: theory.md#constraints
     code:
       - apps/api/internal/mediaplane/service.go
-      - apps/api/internal/adapters/cloudflare/sfu/adapter.go
       - apps/api/internal/adapters/chalksfu/adapter.go
   - id: security_and_compliance.chat_retention
     title: Tenant-set chat retention

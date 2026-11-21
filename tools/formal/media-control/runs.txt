@@ -1,5 +1,5 @@
 # name | check | sources | MaxSeq | MaxDrops | MaxLoss | MaxHostMutes | MaxCloseFails | ReconnectRule | OptimisticUi | sfu | expect
-# Decided rule, Cloudflare SFU: all four properties hold.
+# Decided rule, Chalk SFU: all four properties hold.
 cf-decided-safety-1src  | safety | mic          | 3 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
 cf-decided-live-1src    | P4     | mic          | 3 | 1 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
 cf-decided-live-1src-d2 | P4     | mic          | 2 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass

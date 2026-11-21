@@ -36,7 +36,6 @@ The Oncall agent may roll production back to the previous release without asking
 
 A rollback that cannot find its baseline fails closed and prints the manual inputs. Use those inputs; do not rebuild.
 
-Before a binary rollback to a release older than `73c89bd5e` (the commit that made `chalk_sfu` an allowed platform default), restore `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` in the production API environment and move any Space that stored `chalk_sfu` back with `media-settings set --plane cf_sfu`. The older binary cannot start with a `chalk_sfu` default.
 
 Nobody restarts or stops the production node by hand during the day. The deploy path and the rollback path above are the only ways: they drain the services in order and leave a deploy record, while a hand restart cuts live calls and leaves no record. An alert pages Oncall when the node is stopped, started or rebooted, and when the API starts without a deploy record.
 
@@ -56,7 +55,6 @@ It skips the nightly record, latency and long-call proofs, the scorecard and npm
 | Switch                                                                      | Effect                                             | How fast                                            |
 | --------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
 | `media-settings new-episodes --state off --operator <name> --reason <text>` | Every new Episode uses Cloudflare. Audit row kept. | Next new Episode, no deploy and no restart.         |
-| `media-settings set --plane cf_sfu` for one Space                           | Next Episodes of that Space use Cloudflare.        | Seconds, no deploy. Live Episodes keep their plane. |
 | `media-settings set --tenant <id>` for a Tenant default                     | Next Episodes of that Tenant follow it.            | Seconds, no deploy.                                 |
 
 The first row is an emergency stop for new Episodes, not the normal failover: a live call never moves to Cloudflare, and a new Episode that no Chalk SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.

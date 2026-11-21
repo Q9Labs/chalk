@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Action latency per media plane, from real SDK clients in Chromium on one host.
 //
-//   pnpm prod:latency                                  # 20 cycles on each plane, chalk_sfu and cf_sfu interleaved
+//   pnpm prod:latency                                  # 20 cycles on the Chalk SFU
 //   pnpm prod:latency --samples 3 --planes chalk_sfu
 //   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # on loopback: no p95 budget and any ICE pair, still fails when a gated metric is missing
 //   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
@@ -30,7 +30,7 @@ import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 
-const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
+const providers = { chalk_sfu: "chalk_sfu" };
 const timeoutMs = 20_000;
 const settleMs = 1500;
 const disposeTimeoutMs = 15_000;
@@ -40,7 +40,7 @@ function options() {
   const { values } = parseArgs({
     options: {
       samples: { type: "string", default: "20" },
-      planes: { type: "string", default: "chalk_sfu,cf_sfu" },
+      planes: { type: "string", default: "chalk_sfu" },
       headed: { type: "boolean", default: false },
       tier: { type: "string", default: "manual" },
       environment: { type: "string" },

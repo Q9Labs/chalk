@@ -75,26 +75,6 @@ pnpm hooks:install
 
 The repository attributes keep text files as LF. `core.longpaths` helps Windows check out nested package paths. Keep the checkout outside OneDrive and other synced folders.
 
-## Set the non-production SFU credential
-
-Ask the Chalk lead for the shared non-production Cloudflare SFU credential. Do not create an account or use production keys. Set both variables in the terminal that runs Chalk.
-
-On macOS or Linux:
-
-```sh
-export CHALK_CLOUDFLARE_REALTIME_APP_ID='<shared app id>'
-export CHALK_CLOUDFLARE_REALTIME_APP_SECRET='<shared app secret>'
-```
-
-On PowerShell:
-
-```powershell
-$env:CHALK_CLOUDFLARE_REALTIME_APP_ID = '<shared app id>'
-$env:CHALK_CLOUDFLARE_REALTIME_APP_SECRET = '<shared app secret>'
-```
-
-Q9 staff with an authenticated 1Password CLI need no variables. Chalk selects the single non-production Chalk SFU API credential with `app_id` and `app_secret`. Missing or ambiguous credentials stop startup. Never commit the values.
-
 ## Start the stack
 
 Check the Docker engine, then start Chalk:

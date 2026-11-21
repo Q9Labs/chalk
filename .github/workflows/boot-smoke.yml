@@ -1,7 +1,7 @@
 name: Boot smoke
 
 # Starts the whole dev stack (web, API, Sync, Postgres, Redis) from an empty machine with `pnpm dev`, checks it with
-# `pnpm dev:doctor`, drives one call with fake media through the non-production Cloudflare SFU, and tears it down.
+# `pnpm dev:doctor`, drives one call with fake media through the Chalk SFU, and tears it down.
 # No Gate lane boots the dev stack or reaches the SFU with secrets, so this is the only check of both.
 # A merge group runs it when it changes any file in `the paths in the Select step` below, because `merge_group` has no path filter. A pull
 # request runs it only when it changes the dev stack itself (`scripts/dev`, the verify-chalk skill, this file, the tool
@@ -65,8 +65,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      CHALK_CLOUDFLARE_REALTIME_APP_ID: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_ID }}
-      CHALK_CLOUDFLARE_REALTIME_APP_SECRET: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_SECRET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,7 +123,7 @@ jobs:
           cp -r .logs .verify/ci/logs 2>/dev/null || true
           # The evidence is downloadable from a public repository, so drop any file that holds a credential.
           token=$(node -p 'require("./.private/chalk-dev/seed.json").systemToken' 2>/dev/null || true)
-          for secret in "$CHALK_CLOUDFLARE_REALTIME_APP_ID" "$CHALK_CLOUDFLARE_REALTIME_APP_SECRET" "$token"; do
+          for secret in "$token"; do
             [ -n "$secret" ] && grep -rlaF -- "$secret" .verify | xargs -r rm -f
           done
           node scripts/dev/verify-stack.mjs --teardown

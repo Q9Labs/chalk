@@ -41,8 +41,6 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
-// Recording runs only on Cloudflare, so the Chalk SFU proves the call without a Capture; CHALK_PROOF_RECORDING=off does too.
-export const onCloudflare = mediaPlane === "cf_sfu" && process.env.CHALK_PROOF_RECORDING !== "off";
 // A proof Space on `plane`. The public API refuses a request that names the Chalk SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
@@ -91,7 +89,7 @@ function pinnedSpaceVariable(plane, policy) {
 }
 function checkSpacePlane(space, plane, pinName) {
   const got = spacePlane(space);
-  check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or ${pinName ?? `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`} for a Space moved with media-settings)`, "media-plane-config");
+  check(got === plane, `A proof Space is on ${got}, not ${plane}: check the Chalk SFU deployment and selected proof Space`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
   let ended = false;
@@ -154,7 +152,7 @@ export async function createEpisode(run, space, policy = manualPolicy) {
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
-  if (!onCloudflare) return;
+  if (process.env.CHALK_PROOF_RECORDING === "off") return;
   const started = await pages[0].evaluate(() => window.proofClient.recording.start());
   check(started.recordingId, "Recording start returned no Recording");
   run.recordingId = started.recordingId;
@@ -272,7 +270,7 @@ export function availableSource(run) {
   );
 }
 async function finalizedSource(run) {
-  if (!onCloudflare) return null;
+  if (!run.recordingId) return null;
   const recording = await availableSource(run);
   check(recording.transcription_policy === "on_demand", "Recording effective transcription policy is disabled");
   return recording;
@@ -287,7 +285,7 @@ async function shortRecordingWindow(run, guests, rejoin) {
   if (rejoin) await recordingRejoinWindow(run, guests);
   else await run.wait(5000);
 }
-export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, rejoin = false) {
+export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, rejoin = false, recordingRequired = false) {
   const space = await createSpace(run);
   const { episode, end, useSDK } = await createEpisode(run, space);
   run.episodeId = episode.id;
@@ -301,7 +299,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await Promise.all(pages.map((page) => page.evaluate(playProofMedia)));
   await save(`${run.directory}/media-agreement.json`, await assertAgreement(pages));
   await save(`${run.directory}/audio-decode-initial.json`, await proveAudioDecoded(guests));
-  await startCapture(run, pages);
+  if (recordingRequired) await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };

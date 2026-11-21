@@ -25,7 +25,7 @@ if (import.meta.main) {
   if (command === "check") {
     const [plane, ...names] = args;
     const unknown = names.filter((name) => !registry[name]);
-    if (!["cf_sfu", "chalk_sfu"].includes(plane)) fail("Unsupported media plane");
+    if (plane !== "chalk_sfu") fail("Unsupported media plane");
     if (names.length === 0) fail("PROOF configuration: failed (empty-proof-list)");
     if (unknown.length > 0) fail(`Unsupported proof command: ${unknown.join(" ")}`);
     const unsupported = unsupportedOnPlane(plane, names);

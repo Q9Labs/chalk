@@ -141,7 +141,7 @@ call_proof() {
     [ "$SECONDS" -lt "$deadline" ] || fail "$api_origin did not answer through the tunnel ($leg)"
     sleep 5
   done
-  CHALK_SEED_PLANE=cf_sfu CHALK_SEED_WEB_URL="$web_origin" CHALK_SEED_TENANT_CORS_ORIGINS="$proof_origin" \
+  CHALK_SEED_WEB_URL="$web_origin" CHALK_SEED_TENANT_CORS_ORIGINS="$proof_origin" \
     node "$root/scripts/nightly-stack/seed.mjs" "$dir" "$api_origin" "$proof_origin" "$api_origin"
   (
     cd "$root"

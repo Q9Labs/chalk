@@ -155,7 +155,7 @@ export async function runJourney(journey, body) {
   }
 
   // Evidence must never carry a credential: scan every file we wrote for the values this run was given.
-  const secrets = [seed.systemToken, process.env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET, process.env.CHALK_CLOUDFLARE_REALTIME_APP_ID].filter(Boolean);
+  const secrets = [seed.systemToken].filter(Boolean);
   await writeFile(join(out, "console.json"), `${JSON.stringify(logs.console, null, 2)}\n`);
   await writeFile(join(out, "network.json"), `${JSON.stringify(logs.network, null, 2)}\n`);
   const result = { journey, runId, web, pass: !failure && steps.every((entry) => entry.pass), failure, steps };

@@ -1,5 +1,7 @@
 > **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
 
+> Historical rollout plan. Chalk SFU is now the only media provider; the Cloudflare fallback instructions below are not current.
+
 # Moving production to the Chalk SFU
 
 Judgment for running production on the Chalk SFU, and for undoing it. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git. Watch signals and alerts are in the [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md).

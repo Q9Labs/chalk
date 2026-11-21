@@ -8,10 +8,10 @@ on:
         default: production
         required: true
       media_plane:
-        description: Media provider of the proof Space; the nightly cut runs chalk_sfu, and cf_sfu stays for manual dispatch
+        description: Media provider of the proof Space
         type: choice
-        options: [cf_sfu, chalk_sfu]
-        default: cf_sfu
+        options: [chalk_sfu]
+        default: chalk_sfu
   workflow_call:
     inputs:
       environment:
@@ -20,7 +20,7 @@ on:
       media_plane:
         description: Media provider of the proof Space; the nightly cut runs chalk_sfu
         type: string
-        default: cf_sfu
+        default: chalk_sfu
     secrets:
       CHALK_PROOF_API_KEY:
         required: true
@@ -62,7 +62,7 @@ jobs:
     outputs:
       result: ${{ steps.result.outputs.result }}
     env:
-      CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+      CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'chalk_sfu' }}
       # A Space an operator moved to the Chalk SFU (media-settings), since the public API refuses to create one.
       CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
       CHALK_PROOF_CONFIG_SOURCE: env

@@ -1,5 +1,7 @@
 > **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
 
+> Historical rollout plan. Chalk SFU is now the only media provider; the Cloudflare fallback instructions below are not current.
+
 # Chalk SFU
 
 Why Chalk runs its Chalk SFU, and the constraints it must keep. The code under `features/media/sfu/` and `apps/api/internal/adapters/chalksfu/` is the source for behavior, routes and defaults. The [SFU README](../../features/media/sfu/README.md) covers the service. [Capacity calibration](sfu-capacity-calibration.md) explains the node budgets and [production rollout](sfu-production-rollout.md) the move of traffic.
