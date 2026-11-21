@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 axum = "0.8"
 base64 = "0.22"
 ring = "0.17"
+reqwest = { version = "0.13", features = ["json"] }
 subtle = "2.6"
 tokio = { version = "1", features = ["net", "sync", "time"] }
 tokio-stream = "0.1"
@@ -27,10 +28,11 @@ tauri-plugin-updater = "2"
 fixture = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSWindow"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }

@@ -46,6 +46,8 @@ func v1RouteGroups(options Options) []routeGroup {
 			endpoints:  append([]RouteEndpoint{publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, origin)}, publicInvitePublicEndpoints(options.PublicInvites, origin)...),
 		},
 		{middleware: tenantScoped, endpoints: tenantEndpointsList},
+		{middleware: []func(http.Handler) http.Handler{noStoreResponses, requireHelperDashboard}, endpoints: helperDashboardEndpoints(options.HelperAccess, options.ParticipantMediaVerify, options.TenantAuthz)},
+		{endpoints: helperNativeEndpoints(options.HelperAccess)},
 		{
 			endpoints: append([]RouteEndpoint{
 				participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify),

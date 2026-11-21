@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod attachment;
+mod credentials;
 mod desktop;
+mod device;
 mod geometry;
 mod live;
 mod pairing;

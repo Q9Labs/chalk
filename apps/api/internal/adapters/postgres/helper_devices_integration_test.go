@@ -1,0 +1,130 @@
+package postgres
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
+	"os"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/helperaccess"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+type activeHelperShare struct{}
+
+func (activeHelperShare) CurrentAnnotationShare(context.Context, accessgrants.Subject, utilities.ID, string) (bool, error) {
+	return true, nil
+}
+
+func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
+	url := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
+	if testing.Short() || url == "" {
+		t.Skip("requires a migrated test database")
+	}
+	ctx := t.Context()
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	tenants := [2]utilities.ID{accountTenantIntegrationID(t), accountTenantIntegrationID(t)}
+	for _, tenant := range tenants {
+		if _, err := pool.Exec(ctx, "insert into tenants(id, name) values($1, 'Helper device test')", uuid(tenant)); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			_, _ = pool.Exec(context.Background(), "delete from tenants where id = $1", uuid(tenant))
+		}()
+	}
+	_, signer, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewEpisodeLifecycleRepository(pool)
+	service := helperaccess.NewService(activeHelperShare{}, "test", "test", signer).WithDevices(store)
+	secret := func() string {
+		t.Helper()
+		var data [32]byte
+		if _, err := rand.Read(data[:]); err != nil {
+			t.Fatal(err)
+		}
+		return base64.RawURLEncoding.EncodeToString(data[:])
+	}
+	key, credential, poll := secret(), secret(), secret()
+	code, err := service.StartDevice(ctx, "Proof device", key, credential, poll, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := service.PollDevice(ctx, poll)
+	if err != nil || pending.Attachment != nil {
+		t.Fatalf("unapproved device received a ticket: %v", err)
+	}
+	offer, err := service.LookupDevice(ctx, tenants[0], code.Code)
+	if err != nil || offer.Name != "Proof device" {
+		t.Fatalf("lookup offer = %+v, %v", offer, err)
+	}
+	requestID, err := utilities.ParseID(offer.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject := accessgrants.Subject{
+		TenantID: tenants[0], SpaceID: accountTenantIntegrationID(t), EpisodeID: accountTenantIntegrationID(t),
+		ParticipantID: accountTenantIntegrationID(t), ParticipantGeneration: 3, ConnectionID: "helper-proof-connection",
+	}
+	layer := accountTenantIntegrationID(t)
+	publication := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"helper-proof-connection","m":"1","t":"screen","g":3}`))
+	if err := service.ApproveDevice(ctx, tenants[1], requestID, subject, layer, publication, false); !errors.Is(err, helperaccess.ErrShareNotCurrent) {
+		t.Fatalf("another signed-in tenant approved this participant: %v", err)
+	}
+	if err := service.ApproveDevice(ctx, tenants[0], requestID, subject, layer, publication, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.LookupDevice(ctx, tenants[0], code.Code); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("approval code can be read again: %v", err)
+	}
+	if err := service.ApproveDevice(ctx, tenants[0], requestID, subject, layer, publication, false); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("approval replay succeeded: %v", err)
+	}
+	if err := service.ApproveDevice(ctx, tenants[0], requestID, subject, accountTenantIntegrationID(t), publication, true); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("refresh switched the bound layer: %v", err)
+	}
+	resetPoll := func() {
+		t.Helper()
+		hash := sha256.Sum256([]byte(poll))
+		if _, err := pool.Exec(ctx, "update helper_device_requests set next_poll_at = now() where poll_hash = $1", hash[:]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resetPoll()
+	approved, err := service.PollDevice(ctx, poll)
+	if err != nil || approved.Attachment == nil {
+		t.Fatalf("approved device did not receive an attachment: %v", err)
+	}
+	if _, err := service.StartDevice(ctx, "Proof device", key, credential, secret(), true); err != nil {
+		t.Fatalf("reuse durable registration: %v", err)
+	}
+	if err := service.RevokeDevice(ctx, tenants[1], requestID); err != nil {
+		t.Fatal(err)
+	}
+	devices, err := service.ListDevices(ctx, tenants[0])
+	if err != nil || len(devices) != 1 {
+		t.Fatalf("another tenant revoked this device: %+v, %v", devices, err)
+	}
+	if err := service.RevokeDevice(ctx, tenants[0], requestID); err != nil {
+		t.Fatal(err)
+	}
+	resetPoll()
+	if _, err := service.PollDevice(ctx, poll); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("revoked device renewed its ticket: %v", err)
+	}
+	if _, err := service.StartDevice(ctx, "Proof device", key, credential, secret(), true); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("revoked registration began a new exchange: %v", err)
+	}
+}

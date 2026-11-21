@@ -89,7 +89,7 @@ func (w *apiWiring) wireParticipantAccess() error {
 		broker := synctokens.NewBroker(w.episodeRepository, service)
 		w.options.SyncTokens = broker
 		w.options.SyncTokenRefresh = broker
-		w.options.HelperAccess = helperaccess.NewService(w.episodeRepository, w.cfg.SyncToken.Issuer, w.cfg.SyncToken.KeyID, w.cfg.SyncToken.PrivateKey)
+		w.options.HelperAccess = helperaccess.NewService(w.episodeRepository, w.cfg.SyncToken.Issuer, w.cfg.SyncToken.KeyID, w.cfg.SyncToken.PrivateKey).WithDevices(w.episodeRepository)
 		w.syncParticipantVerifier, err = synctokens.NewVerifier(synctokens.VerifierConfig{
 			Issuer: w.cfg.SyncToken.Issuer, Audience: w.cfg.SyncToken.Audience,
 			VerificationKeys: w.cfg.SyncToken.VerificationKeys,

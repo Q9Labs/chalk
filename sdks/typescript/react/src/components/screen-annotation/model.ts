@@ -63,7 +63,7 @@ export interface ScreenAnnotationHelperShare {
   readonly surface: "browser" | "window" | "monitor" | null;
 }
 
-export type ScreenAnnotationHelperStatus = "unbound" | "calibrating" | "ready" | "unsupported_surface" | "update_required" | "disconnected";
+export type ScreenAnnotationHelperStatus = "unbound" | "calibrating" | "ready" | "unsupported_surface" | "device_approved" | "update_required" | "disconnected";
 
 export interface ScreenAnnotationHelper {
   readonly installUrl?: string;
@@ -74,6 +74,7 @@ export interface ScreenAnnotationHelper {
     signal: AbortSignal,
   ) => Promise<{
     readonly deviceName: string;
+    readonly fingerprint?: string;
     readonly approve: (onStatus: (status: ScreenAnnotationHelperStatus) => void) => Promise<void>;
   }>;
 }

@@ -22,7 +22,7 @@ function bindStyleButtons() {
 }
 
 function showError(error) {
-  const status = root.querySelector("[role=status]");
+  const status = root.querySelector("#status");
   if (status) status.textContent = error instanceof Error ? error.message : String(error);
 }
 
@@ -106,6 +106,13 @@ if (isOverlay) {
     </div>
     <button type="button" id="live-draw" hidden>Draw one mark</button>
     <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
+    <div id="device-code" hidden>
+      <button type="button" id="new-device-code">Get a device code</button>
+      <button type="button" id="forget-device">Remove local credential</button>
+      <p id="device-status" role="status"></p>
+      <p id="device-value"></p>
+      <p id="device-fingerprint"></p>
+    </div>
     <div class="setting"><span>Sharer control</span><div class="segment">${styleButtons()}</div></div>
     <div class="setting" id="shortcut" hidden><span>Draw shortcut</span><kbd>${navigator.platform.startsWith("Mac") ? "⌘ ⇧ 9" : "Ctrl Shift 9"}</kbd></div>
     <button type="button" id="update">Check for updates</button>
@@ -114,6 +121,8 @@ if (isOverlay) {
   bindStyleButtons();
   control("check_for_update", "#update");
   control("toggle_live_draw", "#live-draw");
+  control("start_device_code", "#new-device-code");
+  control("forget_device", "#forget-device");
   for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
     listen(id, "click", () => void run("decide_pairing", {
       fingerprint: root.querySelector("#fingerprint").textContent,
@@ -158,6 +167,11 @@ async function refresh() {
       }
       root.querySelector(".approval").hidden = !view.fingerprint;
       root.querySelector("#fingerprint").textContent = view.fingerprint ?? "";
+      root.querySelector("#device-code").hidden = !view.device?.available;
+      const deviceStatus = root.querySelector("#device-status");
+      if (deviceStatus.textContent !== (view.device?.status ?? "")) deviceStatus.textContent = view.device?.status ?? "";
+      root.querySelector("#device-value").textContent = view.device?.code ?? "";
+      root.querySelector("#device-fingerprint").textContent = view.device?.fingerprint ? `Fingerprint: ${view.device.fingerprint}` : "";
       if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
       root.querySelectorAll("[data-style]").forEach(button => {
         button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));

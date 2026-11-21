@@ -31,12 +31,20 @@ type Repository interface {
 }
 
 type Service struct {
+	devices    DeviceRepository
 	repository Repository
 	issuer     string
 	keyID      string
 	key        ed25519.PrivateKey
 	now        func() time.Time
 }
+
+func (s *Service) WithDevices(repository DeviceRepository) *Service {
+	s.devices = repository
+	return s
+}
+
+func (s *Service) DevicesEnabled() bool { return s != nil && s.devices != nil }
 
 func NewService(repository Repository, issuer, keyID string, key ed25519.PrivateKey) *Service {
 	return &Service{repository: repository, issuer: issuer, keyID: keyID, key: key, now: time.Now}
@@ -93,7 +101,14 @@ func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, 
 }
 
 func (s *Service) authorize(ctx context.Context, subject accessgrants.Subject, binding Binding) error {
-	if !validSecret(binding.DeviceKey) || binding.LayerID.IsZero() || len(binding.PublicationID) > 512 {
+	if !validSecret(binding.DeviceKey) {
+		return ErrInvalid
+	}
+	return s.authorizeShare(ctx, subject, binding)
+}
+
+func (s *Service) authorizeShare(ctx context.Context, subject accessgrants.Subject, binding Binding) error {
+	if binding.LayerID.IsZero() || len(binding.PublicationID) > 512 {
 		return ErrInvalid
 	}
 	reference, err := mediapublications.ParseReference(binding.PublicationID)
@@ -112,7 +127,10 @@ func (s *Service) authorize(ctx context.Context, subject accessgrants.Subject, b
 }
 
 func (s *Service) remoteTicket(subject accessgrants.Subject, binding Binding, now time.Time) (Ticket, error) {
-	expires := now.Truncate(time.Second).Add(lifetime)
+	return s.remoteTicketUntil(subject, binding, now, now.Truncate(time.Second).Add(lifetime))
+}
+
+func (s *Service) remoteTicketUntil(subject accessgrants.Subject, binding Binding, now, expires time.Time) (Ticket, error) {
 	return s.sign(map[string]string{"alg": "EdDSA", "kid": s.keyID, "typ": "JWT"}, map[string]any{
 		"iss": s.issuer, "aud": remoteAudience, "role": "sharer", "version": 1,
 		"sub": subject.ParticipantID.String(), "tenant_id": subject.TenantID.String(),

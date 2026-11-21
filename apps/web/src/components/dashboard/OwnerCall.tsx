@@ -152,6 +152,7 @@ function OwnerCallSurface({
     () =>
       callAnnotation({
         apiBaseUrl: baseURL,
+        signedIn: true,
         mediaProof: owner.reportCredential,
         screenShare: () => client.getSnapshot().media.screenShare,
       }),

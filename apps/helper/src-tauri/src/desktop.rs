@@ -16,6 +16,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::{
     check_for_update,
+    device::{DeviceConnection, DeviceView},
     geometry::{Dock, Point, Rect, Segment},
     live,
     pairing::Pairing,
@@ -57,6 +58,7 @@ struct Local {
     pairing: Option<Pairing>,
     hotkey: bool,
     update_status: Option<&'static str>,
+    device: DeviceConnection,
 }
 
 struct Fixture {
@@ -89,6 +91,7 @@ pub struct View {
     monitors: Vec<String>,
     overlay: Option<live::Overlay>,
     update_status: Option<&'static str>,
+    device: Option<DeviceView>,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +99,8 @@ pub struct View {
 pub enum Action {
     ChangeStyle { style: Style },
     CheckForUpdate,
+    StartDeviceCode,
+    ForgetDevice,
     DecidePairing { fingerprint: String, allowed: bool },
     SelectMonitor { index: usize },
     ToggleLiveDraw,
@@ -204,7 +209,7 @@ pub(crate) fn show_settings(app: &AppHandle) -> tauri::Result<()> {
     } else {
         let window = window(app, "settings")
             .title("Chalk Helper")
-            .inner_size(360.0, 284.0)
+            .inner_size(360.0, 410.0)
             .center()
             .content_protected(true)
             .visible(false)
@@ -587,6 +592,8 @@ fn allowed(label: &str, action: &Action) -> bool {
     match action {
         Action::ChangeStyle { .. } => matches!(label, "settings" | "hud"),
         Action::CheckForUpdate
+        | Action::StartDeviceCode
+        | Action::ForgetDevice
         | Action::DecidePairing { .. }
         | Action::SelectMonitor { .. }
         | Action::ToggleLiveDraw => label == "settings",
@@ -646,6 +653,7 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
             .then(|| local.pairing.as_ref()?.overlay())
             .flatten(),
         update_status: local.update_status,
+        device: (window.label() == "settings").then(|| local.device.view()),
     };
     if let Some(fixture) = local.fixture.as_mut() {
         view.drawing = fixture.drawing;
@@ -700,6 +708,8 @@ pub fn act(
             .map_err(|error| error.to_string());
     }
     match action {
+        Action::StartDeviceCode => return local.device.start().map_err(str::to_owned),
+        Action::ForgetDevice => return local.device.clear().map_err(str::to_owned),
         Action::DecidePairing {
             fingerprint,
             allowed,

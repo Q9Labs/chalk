@@ -8,7 +8,7 @@ type HelperScreen =
   | { readonly kind: "attaching"; readonly fingerprint?: string }
   | { readonly kind: "code"; readonly error?: string }
   | { readonly kind: "fingerprint"; readonly value: string; readonly approve: () => Promise<void> }
-  | { readonly kind: "device"; readonly name: string; readonly approve: () => Promise<void> }
+  | { readonly kind: "device"; readonly name: string; readonly fingerprint?: string; readonly approve: () => Promise<void> }
   | { readonly kind: "status"; readonly status: ScreenAnnotationHelperStatus };
 
 const statuses: Record<ScreenAnnotationHelperStatus, string> = {
@@ -16,6 +16,7 @@ const statuses: Record<ScreenAnnotationHelperStatus, string> = {
   calibrating: "Match the preview in Chalk Helper.",
   ready: "Marks show on your screen",
   unsupported_surface: "Chalk Helper can’t show marks on this source. Use the call preview instead.",
+  device_approved: "Device approved. Use the call preview for marks.",
   update_required: "Update Chalk Helper to connect.",
   disconnected: "Chalk Helper disconnected.",
 };
@@ -91,7 +92,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     setScreen({ kind: "looking" });
     try {
       const result = await helper.lookupCode(entered, share, controller.signal);
-      if (!controller.signal.aborted) setScreen({ kind: "device", name: result.deviceName, approve: () => attach(controller, result.approve) });
+      if (!controller.signal.aborted) setScreen({ kind: "device", name: result.deviceName, fingerprint: result.fingerprint, approve: () => attach(controller, result.approve) });
     } catch {
       if (!controller.signal.aborted) setScreen({ kind: "code", error: "Couldn’t verify this code. Check it in Chalk Helper and try again." });
     }
@@ -161,6 +162,11 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
           <p>
             Allow <bdi>{screen.name}</bdi> to show marks on this share?
           </p>
+          {screen.fingerprint ? (
+            <p>
+              Confirm this fingerprint in Chalk Helper: <code dir="ltr">{screen.fingerprint}</code>
+            </p>
+          ) : null}
           <button type="button" className={annotationControl} onClick={() => void screen.approve()}>
             Allow this device
           </button>
@@ -186,7 +192,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
           </button>
         ) : null}
         <button type="button" className="underline" onClick={dismiss}>
-          {screen.kind === "status" && screen.status === "ready" ? "Disconnect" : "Not now"}
+          {screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved") ? "Disconnect" : "Not now"}
         </button>
       </div>
     </div>

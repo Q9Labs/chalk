@@ -1,5 +1,6 @@
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "@q9labsai/chalk-react";
 import { z } from "zod";
+import { helperDeviceOffer, manageHelperDevice } from "./dashboard/helper-devices";
 import { calibrateMonitor, probeSchema } from "./screen-annotation-helper-calibration";
 
 const loopback = "http://127.0.0.1:47361";
@@ -117,7 +118,7 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
   };
 }
 
-export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack }): ScreenAnnotationHelper {
+export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly signedIn?: boolean }): ScreenAnnotationHelper {
   const api = new URL("/v1/screen-annotation/helper/pair-ticket", options.apiBaseUrl);
   if (api.protocol !== "https:" || api.username || api.password) throw new Error("Invalid Helper API.");
   return createBrowserAnnotationHelper({
@@ -125,6 +126,39 @@ export function createManagedAnnotationHelper(options: { readonly origin: string
     installUrl: options.installUrl,
     captureTrack: options.captureTrack,
     authority: {
+      lookupCode: options.signedIn
+        ? async (code, share, signal) => {
+            if (!activeShare(share)) throw new Error("The screen share is no longer authorized.");
+            const offer = await manageHelperDevice({ action: "lookup", code }, signal).then((response) => readJson(response, helperDeviceOffer));
+            return {
+              deviceName: offer.name,
+              fingerprint: offer.fingerprint,
+              async approve(onStatus) {
+                const approve = async (refresh: boolean) => {
+                  const mediaProof = options.mediaProof();
+                  if (!mediaProof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
+                  await manageHelperDevice(
+                    {
+                      action: "approve",
+                      requestId: offer.requestId,
+                      mediaProof,
+                      refresh,
+                      layerId: share.layer.layer_id,
+                      publicationId: share.layer.publication_id,
+                    },
+                    AbortSignal.any([signal, AbortSignal.timeout(networkTimeoutMs)]),
+                  );
+                };
+                await approve(false);
+                onStatus("device_approved");
+                while (!signal.aborted) {
+                  await delay(10_000, signal);
+                  if (!signal.aborted) await approve(true);
+                }
+              },
+            };
+          }
+        : undefined,
       async issueLocalTicket({ challenge, share, signal }) {
         const proof = options.mediaProof();
         if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
@@ -273,19 +307,24 @@ function liveProjection({
   };
 }
 
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
 async function renewLease({ attachmentSecret, expiresAtMs, signal, issue }: { readonly attachmentSecret: string; readonly expiresAtMs: number; readonly signal: AbortSignal; readonly issue: (signal: AbortSignal) => Promise<Tickets> }): Promise<void> {
   let expiry = expiresAtMs;
   while (!signal.aborted) {
-    const delay = Math.max(0, remaining(expiry) - 20_000);
-    await new Promise<void>((resolve) => {
-      function done() {
-        clearTimeout(timer);
-        signal.removeEventListener("abort", done);
-        resolve();
-      }
-      const timer = setTimeout(done, delay);
-      signal.addEventListener("abort", done, { once: true });
-    });
+    const delayMs = Math.max(0, remaining(expiry) - 20_000);
+    await delay(delayMs, signal);
     if (signal.aborted) return;
     const refresh = AbortSignal.any([signal, AbortSignal.timeout(Math.min(networkTimeoutMs, remaining(expiry)))]);
     const tickets = await issue(refresh);
