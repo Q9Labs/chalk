@@ -26,7 +26,7 @@ export async function seedDashboard({ config, serviceToken }) {
   async function api(path, body) {
     const response = await fetch(`${config.urls.api}/v1${path}`, {
       method: body ? "POST" : "GET",
-      headers: { Authorization: `Bearer ${serviceToken}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      headers: { Authorization: `Bearer ${serviceToken}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), ...(config.orb ? { "X-Chalk-Media-Providers": config.mediaPlane } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(15000),
     });

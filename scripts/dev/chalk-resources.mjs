@@ -97,23 +97,62 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       });
       state.identity = { ...identity, generatedAt: new Date().toISOString() };
       if (config.orb) {
+        const chmod = ["chmod", "0644", containerPath(config, config.identity.sfuKey)];
+        await runResource("docker", containerArguments(config, "api", { image: imageName("api", state.versions), command: chmod }), { cwd: config.root }, "identity");
         const name = containerNames(config).sfu;
         const image = name + ":local";
         await runResource("docker", ["build", "--tag", image, "--file", "infrastructure/sfu/Dockerfile", "features/media/sfu"], { cwd: config.root }, "sfu");
-        await runResource("docker", [
-          "run", "--detach", "--rm", "--name", name, "--network", network, "--network-alias", "sfu",
-          "--user", "0:0", "--cap-drop", "ALL",
-          "--publish", "127.0.0.1:50000:50000/udp", "--publish", "127.0.0.1:50000:50000/tcp",
-          "--mount", `type=bind,source=${config.identity.caCertificate},target=/ca.pem,readonly`,
-          "--mount", `type=bind,source=${config.identity.sfuCertificate},target=/server.pem,readonly`,
-          "--mount", `type=bind,source=${config.identity.sfuKey},target=/server-key.pem,readonly`,
-          "--env", "SFU_CONTROL_ADDR=:8443", "--env", "SFU_UDP_ADDR=:50000", "--env", "SFU_TCP_ADDR=:50000",
-          "--env", "SFU_ANNOUNCE_IPS=127.0.0.1", "--env", "SFU_ICE_LOOPBACK=true",
-          "--env", "SFU_TLS_CERT_FILE=/server.pem", "--env", "SFU_TLS_KEY_FILE=/server-key.pem",
-          "--env", "SFU_CLIENT_CA_FILE=/ca.pem", "--env", `SFU_CLIENT_IDENTITY=${orbAPIIdentity(config)}`,
-          "--env", "SFU_NODE_SIZE=s-2vcpu-2gb", "--env", "SFU_ENVIRONMENT=local",
-          image,
-        ], { cwd: config.root }, "sfu");
+        await runResource(
+          "docker",
+          [
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            name,
+            "--network",
+            network,
+            "--network-alias",
+            "sfu",
+            "--cap-drop",
+            "ALL",
+            "--publish",
+            "127.0.0.1:50000:50000/udp",
+            "--publish",
+            "127.0.0.1:50000:50000/tcp",
+            "--mount",
+            `type=bind,source=${config.identity.caCertificate},target=/ca.pem,readonly`,
+            "--mount",
+            `type=bind,source=${config.identity.sfuCertificate},target=/server.pem,readonly`,
+            "--mount",
+            `type=bind,source=${config.identity.sfuKey},target=/server-key.pem,readonly`,
+            "--env",
+            "SFU_CONTROL_ADDR=:8443",
+            "--env",
+            "SFU_UDP_ADDR=:50000",
+            "--env",
+            "SFU_TCP_ADDR=:50000",
+            "--env",
+            "SFU_ANNOUNCE_IPS=127.0.0.1",
+            "--env",
+            "SFU_ICE_LOOPBACK=true",
+            "--env",
+            "SFU_TLS_CERT_FILE=/server.pem",
+            "--env",
+            "SFU_TLS_KEY_FILE=/server-key.pem",
+            "--env",
+            "SFU_CLIENT_CA_FILE=/ca.pem",
+            "--env",
+            `SFU_CLIENT_IDENTITY=${orbAPIIdentity(config)}`,
+            "--env",
+            "SFU_NODE_SIZE=s-2vcpu-2gb",
+            "--env",
+            "SFU_ENVIRONMENT=local",
+            image,
+          ],
+          { cwd: config.root },
+          "sfu",
+        );
       }
     },
     async stop() {

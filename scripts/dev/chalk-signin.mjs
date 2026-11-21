@@ -21,7 +21,7 @@ export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, space
 }
 
 /** Loads the invite page, arrives as the seeded guest through `origin`, checks the guest is admitted, then leaves. */
-export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, attempts = 3, episodeAttempts = 31, retryDelayMs = 3000 } = {}) {
+export async function proveSeededSignIn({ origin, invite, mediaPlane, fetchImpl = fetch, attempts = 3, episodeAttempts = 31, retryDelayMs = 3000 } = {}) {
   const page = await fetchImpl(new URL(invite.path, origin), { headers: { accept: "text/html" } });
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
@@ -32,7 +32,7 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
   for (let attempt = 1; ; attempt += 1) {
     arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
       method: "POST",
-      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin },
+      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin, ...(mediaPlane ? { "X-Chalk-Media-Providers": mediaPlane } : {}) },
       body: JSON.stringify({ display_name: "Seeded guest", space_invite_token: invite.code }),
     });
     const endingEpisode =
@@ -61,5 +61,9 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
     },
   });
   if (!leave.ok) throw failure(FailureKind.STARTUP, `seeded guest could not leave (HTTP ${leave.status}): ${(await leave.text()).slice(0, 200)}`, { stage: "signin" });
+  const actual = body.access?.media?.provider;
+  if (mediaPlane && actual !== mediaPlane) {
+    throw failure(FailureKind.STARTUP, `seeded guest received ${actual || "no media provider"}; expected ${mediaPlane}`, { stage: "signin" });
+  }
   return { state: body.state };
 }

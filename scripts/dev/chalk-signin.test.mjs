@@ -47,3 +47,24 @@ test("a rejected invite is not retried as a transient Episode transition", async
     assert.equal(arrivals(), 1);
   });
 });
+
+test("an Orb admits the seeded guest on Chalk SFU, never on Cloudflare", async () => {
+  const calls = [];
+  const fetchImpl = async (_url, options) => {
+    calls.push(options);
+    if (!options.method) return new Response("<html></html>", { headers: { "content-type": "text/html" } });
+    if (options.method === "DELETE") return new Response(null, { status: 200 });
+    return Response.json({ state: "admitted", arrival_handle: "proof", access: { media: { provider: "cf_sfu" } } }, { status: 201 });
+  };
+  await assert.rejects(
+    proveSeededSignIn({
+      origin: "https://3070-example.instabox.tech",
+      invite: { path: "/seeded-invite", code: "seeded-invite" },
+      mediaPlane: "chalk_sfu",
+      fetchImpl,
+    }),
+    /expected chalk_sfu/,
+  );
+  assert.equal(calls[1].headers["X-Chalk-Media-Providers"], "chalk_sfu");
+  assert.equal(calls[2].method, "DELETE");
+});

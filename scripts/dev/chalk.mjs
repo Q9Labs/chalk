@@ -114,7 +114,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
       }
       // Ready means the seeded guest is admitted through the web origin, not that a port answers.
-      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, fetchImpl: adapters.fetchImpl });
+      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, mediaPlane: config.orb ? config.mediaPlane : undefined, fetchImpl: adapters.fetchImpl });
     },
     onReady: async ({ runtime }) => {
       output(runtime.state === RuntimeState.DEGRADED ? formatDegradedSummary(config, runtime.status()) : formatReadySummary(config, bindings));
@@ -153,21 +153,23 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
         CHALK_DEFAULT_MEDIA_PLANE: config.mediaPlane,
-        ...(config.orb ? {
-          CHALK_NEW_SPACE_MEDIA_PLANE: config.mediaPlane,
-          CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
-          CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
-          CHALK_SFU_ENABLED: "true",
-          CHALK_SFU_CAPTURE_ENABLED: "true",
-          CHALK_SFU_ALLOWED_SPACES: "*",
-          CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
-          CHALK_SFU_APPLICATION_ID: "chalk-orb",
-          CHALK_SFU_NODES: "orb=https://sfu:8443",
-          CHALK_SFU_SERVER_NAME: "sfu",
-          CHALK_SFU_CA_FILE: config.identity.caCertificate,
-          CHALK_SFU_CLIENT_CERT_FILE: config.identity.apiCertificate,
-          CHALK_SFU_CLIENT_KEY_FILE: config.identity.apiKey,
-        } : {}),
+        ...(config.orb
+          ? {
+              CHALK_NEW_SPACE_MEDIA_PLANE: config.mediaPlane,
+              CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
+              CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
+              CHALK_SFU_ENABLED: "true",
+              CHALK_SFU_CAPTURE_ENABLED: "true",
+              CHALK_SFU_ALLOWED_SPACES: "*",
+              CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
+              CHALK_SFU_APPLICATION_ID: "chalk-orb",
+              CHALK_SFU_NODES: "orb=https://sfu:8443",
+              CHALK_SFU_SERVER_NAME: "sfu",
+              CHALK_SFU_CA_FILE: config.identity.caCertificate,
+              CHALK_SFU_CLIENT_CERT_FILE: config.identity.apiCertificate,
+              CHALK_SFU_CLIENT_KEY_FILE: config.identity.apiKey,
+            }
+          : {}),
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,
