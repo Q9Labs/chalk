@@ -70,15 +70,23 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
       const heading = who.page.getByRole("heading", { name: who === deaf ? /^The call (ended|reached its time limit)$/ : "The call reached its time limit", exact: who !== deaf });
       const deadline = Date.now() + endWait;
       while (Date.now() < deadline) {
-        for (const text of ["Reconnecting", "Connection lost"])
-          if (
-            await who.page
-              .getByText(text, { exact: false })
-              .first()
-              .isVisible()
-              .catch(() => false)
-          )
-            seen.get(who.name).add(text);
+        // Only the Participant's own connection card counts; a remote Participant's row can say "Reconnecting" on a healthy call.
+        if (
+          await who.page
+            .locator('[data-part="connection-status"]')
+            .first()
+            .isVisible()
+            .catch(() => false)
+        )
+          seen.get(who.name).add("Reconnecting");
+        if (
+          await who.page
+            .getByText("Connection lost", { exact: false })
+            .first()
+            .isVisible()
+            .catch(() => false)
+        )
+          seen.get(who.name).add("Connection lost");
         if (await heading.isVisible().catch(() => false)) return true;
         await who.page.waitForTimeout(250);
       }

@@ -2,4 +2,4 @@
 "@q9labsai/chalk-client": patch
 ---
 
-A call that reaches its time limit now reports end reason `time_limit` and shows the ended screen. A guest whose access refresh or media credential refresh finds the Episode no longer active also ends the call, instead of showing "Reconnecting" and then "Connection lost".
+A call that reaches its time limit now reports end reason `time_limit` in connection telemetry. A guest whose access refresh or media credential refresh finds the Episode no longer active now ends the call with the ended screen, instead of showing "Reconnecting" and then "Connection lost".
