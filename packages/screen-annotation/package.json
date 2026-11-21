@@ -24,7 +24,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --platform neutral --out-dir ./dist && tsc --project tsconfig.build.json",
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --platform neutral --out-dir ./dist && tsc --project tsconfig.build.json && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check .",
     "test": "node ../../scripts/test/run.mjs pnpm exec vitest run"

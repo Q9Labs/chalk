@@ -8,3 +8,7 @@ export { annotationFont, canvasAnnotationTextMeasure, paintAnnotation } from "./
 export type { AnnotationCanvasContext, PaintAnnotationOptions } from "./paint";
 export { hitTestAnnotation } from "./hit-test";
 export type { HitTestAnnotationOptions } from "./hit-test";
+export { freezeAnnotationFrame } from "./frame";
+export type { FreezeAnnotationFrameInput, ScreenAnnotationActions, ScreenAnnotationFrame } from "./frame";
+export { captureAnnotationVideoFrame, encodeAnnotationCanvasPng, encodeAnnotationPng, renderAnnotationPng } from "./png";
+export type { AnnotationPngSurface } from "./png";
