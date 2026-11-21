@@ -5,7 +5,7 @@
 // Usage of a journey script: node <journey>.mjs <run-id> [--web <origin>]. Exit 0 means every step passed.
 // People are the real product path: the host starts a call from /space/ (the person who starts a call is its owner,
 // with every capability), and the second participant opens the host's invite link. Only camera and microphone are fakes.
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
@@ -47,13 +47,24 @@ export async function runJourney(journey, body) {
     return response.json();
   };
 
-  let browser;
+  const browsers = new Map();
   let failure;
   const shot = (person, label) => person.page.screenshot({ path: join(out, "screenshots", `${person.name}-${label}.png`) });
 
-  const person = async (name, fixture) => {
+  // Chromium by default. { engine: "webkit" } runs the person in WebKit; { display: true } lets Chromium's fake screen capture answer getDisplayMedia without a prompt.
+  const launch = (engine, display) => {
+    const key = `${engine}${display ? "+display" : ""}`;
+    if (!browsers.has(key)) {
+      const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
+      browsers.set(key, engine === "webkit" ? webkit.launch({ headless: true }) : chromium.launch({ headless: true, args }));
+    }
+    return browsers.get(key);
+  };
+
+  const person = async (name, fixture, { engine = "chromium", display = false, permission } = {}) => {
+    const browser = await launch(engine, display);
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, recordVideo: { dir: join(out, "video"), size: { width: 1440, height: 960 } } });
-    await context.addInitScript(webMediaFixture(fixture));
+    await context.addInitScript(webMediaFixture(fixture, permission ? { permission } : undefined));
     const page = await context.newPage();
     page.on("console", (message) => logs.console.push({ who: name, type: message.type(), text: message.text().slice(0, 300), url: message.location().url.replace(/[?#].*/, "") }));
     page.on("pageerror", (error) => logs.console.push({ who: name, type: "pageerror", text: String(error.message).slice(0, 300) }));
@@ -115,7 +126,6 @@ export async function runJourney(journey, body) {
   };
 
   try {
-    browser = await chromium.launch({ headless: true, args: ["--autoplay-policy=no-user-gesture-required"] });
     await body({ seed, web, out, step, person, startCall, enterLink, joinByLink, control, leave, shot, system, people });
   } catch (error) {
     failure = String(error.message ?? error);
@@ -124,7 +134,7 @@ export async function runJourney(journey, body) {
     for (const entry of people) await shot(entry, "failure").catch(() => undefined);
   } finally {
     for (const { context } of people) await context.close().catch(() => undefined);
-    await browser?.close().catch(() => undefined);
+    for (const pending of browsers.values()) await pending.then((browser) => browser.close()).catch(() => undefined);
   }
 
   // Evidence must never carry a credential: scan every file we wrote for the values this run was given.
