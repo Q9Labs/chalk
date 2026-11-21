@@ -60,7 +60,7 @@ defmodule ChalkSync.ScreenAnnotation.Protocol do
     is_map(value) and Enum.all?(required, &Map.has_key?(value, &1)) and
       Enum.all?(value, fn {key, field} ->
         case Map.fetch(fields, key) do
-          {:ok, property} -> valid?(field, property)
+          {:ok, property} -> valid_field?(key, field, property)
           :error -> false
         end
       end)
