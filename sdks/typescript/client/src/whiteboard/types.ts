@@ -72,7 +72,7 @@ export type ChalkWhiteboardV1Commit = {
   readonly revision: string;
 };
 
-export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" | "get_file_download";
+export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" | "get_file_download" | "upload_file";
 
 /** Who can draw in the call. Hosts, the people whose role can manage the board, can always draw under `hosts` and `picked`. */
 export type ChalkWhiteboardDrawPolicy = WhiteboardV1DrawPolicy;
@@ -106,7 +106,15 @@ export class ChalkWhiteboardV1Error extends Error {
   }
 }
 
+export type ChalkWhiteboardV1FileUpload = {
+  readonly sceneId: string;
+  readonly fileId: string;
+  readonly signal?: AbortSignal;
+} & ({ readonly blob: Blob } | { readonly bytes: Uint8Array<ArrayBuffer>; readonly mimeType: string; readonly sha256: string });
+
 export type ChalkWhiteboardV1FileTransport = {
+  /** Resolves only after this exact file is ready to reference in the scene. */
+  readonly uploadFile?: (input: ChalkWhiteboardV1FileUpload) => Promise<void>;
   readonly getDownloadUrl: (fileId: string) => Promise<{
     readonly downloadUrl: string;
     readonly expiresAt: string;
