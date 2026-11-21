@@ -23,6 +23,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
   @channel ControlSQL.head_channel()
   # Raised by an API migration, so this module is the only Sync reader of the name.
   @publication_channel "chalk_media_publications"
+  @live_request_channel "chalk_live_requests"
   @collaboration_channels [
     CollaborationNotifications.head_channel(),
     CollaborationNotifications.transient_channel()
@@ -51,6 +52,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
 
     listen_ref = Database.listen(notifications, @channel)
     publication_ref = Database.listen(notifications, @publication_channel)
+    live_request_ref = Database.listen(notifications, @live_request_channel)
 
     collaboration_refs =
       Map.new(@collaboration_channels, fn channel ->
@@ -62,6 +64,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
        notifications: notifications,
        listen_ref: listen_ref,
        publication_ref: publication_ref,
+       live_request_ref: live_request_ref,
        collaboration_refs: collaboration_refs,
        received_count: 0,
        malformed_count: 0,
@@ -94,6 +97,32 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
       :error ->
         Telemetry.execute([:fanout, :notification], %{}, %{outcome: :malformed})
         Logger.warning("discarded malformed media publication notification")
+        {:noreply, %{state | malformed_count: state.malformed_count + 1}}
+    end
+  end
+
+  def handle_info(
+        {:notification, notifications, live_request_ref, @live_request_channel, payload},
+        %{notifications: notifications, live_request_ref: live_request_ref} = state
+      ) do
+    case parse_live_request_payload(payload) do
+      {:ok, tenant_id, episode_id, request_id} ->
+        Telemetry.execute([:fanout, :notification], %{}, %{outcome: :valid})
+
+        Task.Supervisor.start_child(ChalkSync.CommandTaskSupervisor, fn ->
+          ChalkSync.Live.Introspection.deliver(tenant_id, episode_id, request_id)
+        end)
+
+        {:noreply,
+         %{
+           state
+           | received_count: state.received_count + 1,
+             last_received_at_ms: System.monotonic_time(:millisecond)
+         }}
+
+      :error ->
+        Telemetry.execute([:fanout, :notification], %{}, %{outcome: :malformed})
+        Logger.warning("discarded malformed live request notification")
         {:noreply, %{state | malformed_count: state.malformed_count + 1}}
     end
   end
@@ -154,6 +183,20 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
          space_id: String.downcase(space_id),
          episode_id: String.downcase(episode_id)
        }, revision}
+    else
+      _ -> :error
+    end
+  end
+
+  # The API notifies `<tenant>:<episode>:<request>`; the request row names its
+  # own space, so the payload carries no space.
+  defp parse_live_request_payload(payload) do
+    with [tenant_id, episode_id, request_id] <- String.split(payload, ":"),
+         {:ok, _tenant} <- UUID.dump(tenant_id),
+         {:ok, _episode} <- UUID.dump(episode_id),
+         {:ok, _request} <- UUID.dump(request_id) do
+      {:ok, String.downcase(tenant_id), String.downcase(episode_id),
+       String.downcase(request_id)}
     else
       _ -> :error
     end

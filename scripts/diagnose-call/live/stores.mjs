@@ -71,7 +71,9 @@ async function readbacksOf(db, env) {
       id: eventId("ev", "report.r2_upload", u.id),
       fact: "report.readback", source: "r2", origin: origin.measured("r2"),
       subject: { tenant: db.tenant.id, episode: db.episode.id },
-      window: { from_ms: back.at_ms, to_ms: back.at_ms },
+      // The row's stored_at says the object was in R2 then; the readback now says it still is and parses. The
+      // observation spans that whole claim, or it would land after every check window and read as unread.
+      window: { from_ms: Date.parse(u.stored_at ?? u.issued_at ?? "") || back.at_ms, to_ms: back.at_ms },
       claim: back.readback,
       value: { diagnostic_upload_id: u.id, readback: back.readback, ...(back.bytes != null ? { bytes: back.bytes } : {}), ...back.parts },
       failure: back.readback !== "ok",

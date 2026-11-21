@@ -118,6 +118,7 @@ function renderTypeScript(contract) {
     "    case 'live_target': return exactObject(value, " + JSON.stringify(contract.liveTargetFrames.request.exactFields) + ");",
     "    case 'directed_request': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.send.exactFields) + ");",
     "    case 'request_ack': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.acknowledge.exactFields) + ");",
+    "    case 'live_request_ack': return exactObject(value, " + JSON.stringify(contract.liveRequestFrames.acknowledge.exactFields) + ");",
     "    case 'reaction_send': return exactObject(value, " + JSON.stringify(contract.collaboration.clientFrames.sendReaction.exactFields) + ");",
     "    case 'chat_send': return exactObject(value, " + JSON.stringify(contract.collaboration.clientFrames.sendChat.exactFields) + ");",
     "    case 'chat_page_request': return exactObject(value, " + JSON.stringify(contract.collaboration.clientFrames.readChatPage.exactFields) + ");",
@@ -196,7 +197,8 @@ function renderTypeScript(contract) {
     "  if (Object.hasOwn(value, 'entry_confirmation') && value.entry_confirmation !== true) return false;",
     "  if (Object.hasOwn(value, 'media_off_reason') && value.media_off_reason !== true) return false;",
     "  if (Object.hasOwn(value, 'connection_quality') && value.connection_quality !== true) return false;",
-    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'media_off_reason') ? ['media_off_reason'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
+    "  if (Object.hasOwn(value, 'live_introspection') && value.live_introspection !== true) return false;",
+    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'media_off_reason') ? ['media_off_reason'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : []), ...(Object.hasOwn(value, 'live_introspection') ? ['live_introspection'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObjectWithCorrelation(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
     "  if (value.mode === 'terminal') return exactObjectWithCorrelation(value, [...fields, 'reason']);",
@@ -230,6 +232,7 @@ function renderTypeScript(contract) {
     "    case 'live_target_result': return exactObjectWithCorrelation(value, " + JSON.stringify(contract.liveTargetFrames.result.exactFields) + ");",
     "    case 'directed_request': return exactObjectWithCorrelation(value, " + JSON.stringify(contract.directedRequestFrames.deliver.exactFields) + ");",
     "    case 'directed_request_result': return exactObjectWithCorrelation(value, " + JSON.stringify(contract.directedRequestFrames.result.exactFields) + ");",
+    "    case 'live_request': return exactObjectWithCorrelation(value, " + JSON.stringify(contract.liveRequestFrames.deliver.exactFields) + ");",
     "    case 'reaction': return strictReaction(value);",
     "    case 'reaction_result': return value.outcome === 'accepted' ? exactObjectWithCorrelation(value, " +
       JSON.stringify(contract.collaboration.serverFrames.reactionResult.acceptedFields) +
@@ -336,6 +339,7 @@ function renderTypeScript(contract) {
   lines.push(`export const DirectedRequestNameSchema = ${renderLiteralUnion(contract.directedRequestFrames.send.name)};`);
   lines.push("export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request'), request_id: RequestIdSchema, name: DirectedRequestNameSchema, target_participant_id: UuidSchema });");
   lines.push("export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal('request_ack'), request_id: RequestIdSchema });");
+  lines.push("export const LiveRequestAckFrameSchema = Schema.Struct({ type: Schema.Literal('live_request_ack'), request_id: RequestIdSchema });");
   lines.push(`export const ReactionValues = ${JSON.stringify(contract.collaboration.reactions)} as const;`);
   lines.push(`export const ReactionSchema = ${renderLiteralUnion(contract.collaboration.reactions)};`);
   lines.push("export const ReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal('reaction_send'), operation_id: RequestIdSchema, reaction: ReactionSchema }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));");
@@ -389,7 +393,7 @@ function renderTypeScript(contract) {
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
   lines.push(
-    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), media_off_reason: Schema.optionalKey(Schema.Literal(true)), connection_quality: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
+    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), media_off_reason: Schema.optionalKey(Schema.Literal(true)), connection_quality: Schema.optionalKey(Schema.Literal(true)), live_introspection: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
   );
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
@@ -451,6 +455,7 @@ function renderTypeScript(contract) {
   lines.push("export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request'), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_id: UuidSchema, expires_at_ms: PositiveIntegerSchema, ...ServerCorrelationFields });");
   lines.push(`export const DirectedRequestResultSchema = ${renderLiteralUnion(contract.directedRequestFrames.result.result)};`);
   lines.push("export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request_result'), request_id: RequestIdSchema, result: DirectedRequestResultSchema, ...ServerCorrelationFields });");
+  lines.push("export const LiveRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal('live_request'), request_id: RequestIdSchema, expires_at_ms: PositiveIntegerSchema, ...ServerCorrelationFields });");
   lines.push(
     "export const ReactionEventFrameSchema = Schema.Struct({ type: Schema.Literal('reaction'), event_id: UuidSchema, participant_id: UuidSchema, display_name: boundedUtf8String(256, 1), reaction: ReactionSchema, occurred_at: boundedUtf8String(64, 1), expires_at: boundedUtf8String(64, 1), ...ServerCorrelationFields }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));",
   );
@@ -502,11 +507,11 @@ function renderTypeScript(contract) {
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong'), ...ServerCorrelationFields });");
   lines.push("");
   lines.push(
-    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, ConnectionQualitySetFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, LiveRequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, ConnectionQualitySetFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;");
   lines.push(
-    `export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, ReactionEventFrameSchema, ReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, ChatReadReceiptFrameSchema, ChatReadResultFrameSchema, ChatReactionsFrameSchema, ChatReactionResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, EnteredAckFrameSchema, PongFrameSchema]))).check(Schema.makeFilter((frame) => serverFrameWithinLimit(frame) ? undefined : { path: [], issue: 'must fit the encoded byte limit including correlation reserve' }));`,
+    `export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, LiveRequestDeliverFrameSchema, ReactionEventFrameSchema, ReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, ChatReadReceiptFrameSchema, ChatReadResultFrameSchema, ChatReactionsFrameSchema, ChatReactionResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, EnteredAckFrameSchema, PongFrameSchema]))).check(Schema.makeFilter((frame) => serverFrameWithinLimit(frame) ? undefined : { path: [], issue: 'must fit the encoded byte limit including correlation reserve' }));`,
   );
   lines.push("export type SyncV1ServerFrame = typeof SyncV1ServerFrameSchema.Type;");
   lines.push("export function encodeSyncFrame(frame: SyncV1ClientFrame | SyncV1ServerFrame): string { return JSON.stringify(frame); }");

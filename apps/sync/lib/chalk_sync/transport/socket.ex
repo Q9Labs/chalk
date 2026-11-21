@@ -7,9 +7,12 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.Live.Introspection
+  alias ChalkSync.Obs
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
   alias ChalkSync.Stateholder
+  alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.Socket.Acknowledgements
@@ -244,6 +247,19 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame({:delivery_ack, ack}, state), do: Acknowledgements.delivery_ack(ack, state)
   defp handle_frame({:recovery_ack, ack}, state), do: Acknowledgements.recovery_ack(ack, state)
   defp handle_frame({:request_ack, id}, state), do: Acknowledgements.request_ack(id, state)
+
+  # An ack for a seat's own unexpired live request is the client's half of the
+  # delivery evidence; an unknown, foreign, or late ack is dropped silently.
+  defp handle_frame({:live_request_ack, request_id}, state) do
+    with %Identity{} = identity <- state.identity,
+         {:ok, fields} <- Introspection.acknowledge(identity, request_id) do
+      Obs.fact("live_request.ack", fields)
+    else
+      _dropped -> :ok
+    end
+
+    {:ok, state}
+  end
 
   defp handle_frame({:command, command}, state), do: Commands.command(command, state)
   defp handle_frame({:operation, operation}, state), do: Commands.operation(operation, state)

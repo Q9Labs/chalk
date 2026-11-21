@@ -167,6 +167,30 @@ defmodule ChalkSync.Episodes.Coordinator.LiveFrames do
     end)
   end
 
+  @doc """
+  Sends an operator `live_request` frame to the seat's registered live sockets
+  that negotiated `live_introspection`, and answers `{:ok, seat_sockets, sent}`:
+  `seat_sockets` is the count of the seat's live sockets and `sent` how many of
+  them took the frame.
+  """
+  def deliver_live_request(state, participant_id, frame) do
+    seat =
+      state.live.requests.connections
+      |> Map.get(participant_id, MapSet.new())
+      |> Enum.filter(&Process.alive?/1)
+
+    negotiated =
+      Enum.filter(seat, fn socket ->
+        case Map.get(state.sockets, socket) do
+          %{mode: :live, protocol_options: %{live_introspection: true}} -> true
+          _subscriber -> false
+        end
+      end)
+
+    Enum.each(negotiated, &send(&1, {:sync_v1_live_frame, self(), frame}))
+    {:reply, {:ok, length(seat), length(negotiated)}, state}
+  end
+
   defp with_live_socket(state, socket, identity, handle) do
     case Map.get(state.sockets, socket) do
       %{mode: :live, identity: ^identity} -> handle.()

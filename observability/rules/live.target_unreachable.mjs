@@ -59,15 +59,15 @@ export function decide({ readings, window }) {
     const decision = decisions.find((o) => o.value.live_request_id === id);
     const active = req.value.participant_status === "active" && req.value.seat_left_ms === undefined && req.value.episode_status === "active";
     if (!active) continue;
-    const delivery = decision !== undefined ? decision.claim : req.value.delivery;
-    const reason = decision !== undefined ? decision.value.unavailable_reason : req.value.unavailable_reason;
+    const delivery = String(decision !== undefined ? (decision.value.delivery ?? decision.claim) : req.value.delivery);
+    const reason = String(decision !== undefined ? (decision.value.unavailable_reason ?? delivery.match(/\((.*)\)/)?.[1]) : req.value.unavailable_reason);
     const requested = typeof req.value.requested_ms === "number" ? req.value.requested_ms : req.window.from_ms;
     const expires = typeof req.value.expires_ms === "number" ? req.value.expires_ms : requested + EXPIRES_MS;
 
-    if (delivery === "target_unavailable" && reason === "no_socket") {
+    if (delivery.startsWith("target_unavailable") && reason === "no_socket") {
       return degraded(req, decision, "sync_socket", "unknown", `live_request.deliver target_unavailable(no_socket)`);
     }
-    if (delivery === "target_unavailable" && reason === "not_negotiated") {
+    if (delivery.startsWith("target_unavailable") && reason === "not_negotiated") {
       const presence = readings["live.client_presence"];
       if (presence.kind !== "present") return { status: "unknown", reason: "the seat's client sessions are not read" };
       const sessions = presence.observations.filter((o) => o.window.to_ms >= requested - PRESENCE_MS && o.window.from_ms <= requested);
@@ -92,7 +92,7 @@ export function decide({ readings, window }) {
       }
       return { status: "unknown", reason: "the seat has a client session that could take the request, yet none was negotiated" };
     }
-    if (delivery === undefined || req.value.request_status === "pending") {
+    if (req.value.delivery === undefined && decision === undefined || req.value.request_status === "pending" || delivery === "expired" || delivery === "pending") {
       if (window.to_ms < expires) return { status: "unknown", reason: "the request is still inside its expiry window" };
       if (deliver.kind !== "absent" && deliver.complete !== true) return { status: "unknown", reason: "sync is not complete to expires_at" };
       return degraded(req, decision, "sync_listener", "sync.live", "the request sat undelivered to its expires_at");

@@ -457,6 +457,7 @@ function validateSyncContractDocument(value) {
     "operationFrame",
     "liveTargetFrames",
     "directedRequestFrames",
+    "liveRequestFrames",
     "projectionFrames",
     "acks",
     "terminal",
@@ -481,6 +482,11 @@ function validateSyncContractDocument(value) {
   for (const property of ["send", "deliver", "acknowledge", "result"]) {
     const frame = requireObjectProperty(directedRequestFrames, property, `directedRequestFrames.${property} is required`);
     requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
+  }
+  const liveRequestFrames = /** @type {JsonObject} */ (value.liveRequestFrames);
+  for (const property of ["deliver", "acknowledge"]) {
+    const frame = requireObjectProperty(liveRequestFrames, property, `liveRequestFrames.${property} is required`);
+    requireArrayProperty(frame, "exactFields", `liveRequestFrames.${property}.exactFields are required`);
   }
   const collaboration = requireObjectProperty(value, "collaboration", "collaboration are required");
   if (

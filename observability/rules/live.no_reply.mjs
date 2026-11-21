@@ -51,8 +51,8 @@ export function decide({ readings, window }) {
   for (const req of [...request.observations].sort((a, b) => a.window.from_ms - b.window.from_ms)) {
     const id = req.value.live_request_id;
     const decision = delivers.find((o) => o.value.live_request_id === id);
-    const delivery = decision !== undefined ? decision.claim : req.value.delivery;
-    if (delivery !== "delivered") continue;
+    const delivery = String(decision !== undefined ? (decision.value.delivery ?? decision.claim) : req.value.delivery);
+    if (!delivery.startsWith("delivered")) continue;
     const deliveredAt = typeof req.value.delivered_ms === "number" ? req.value.delivered_ms : (decision?.window.from_ms ?? req.window.from_ms);
 
     const acked = acks.some((o) => o.value.live_request_id === id && o.window.from_ms <= deliveredAt + ACK_MS);
@@ -74,10 +74,10 @@ export function decide({ readings, window }) {
       hop: "client_handler",
       module: "sdk.diagnostics",
       reason: null,
-      upstream: "unknown",
+      upstream: "witnessed",
       observed: "delivered, but no ack within 10 s and no upload issued within 30 s",
       facts: [
-        { text: `live_request.deliver delivered ${decision?.value.sockets ?? "?"}/${decision?.value.sockets ?? "?"}`, evidence: [(decision ?? req).id], window: (decision ?? req).window, absent: null },
+        { text: `live_request.deliver delivered ${decision?.value.sockets ?? "?"} socket(s)`, evidence: [(decision ?? req).id], window: (decision ?? req).window, absent: null },
         { text: "no live_request.ack within 10 s", evidence: [], window: { from_ms: deliveredAt, to_ms: deliveredAt + ACK_MS }, absent: "live.ack" },
         { text: "no upload issued within 30 s", evidence: [], window: { from_ms: deliveredAt, to_ms: deliveredAt + ISSUE_MS }, absent: "report.upload_row" },
         ...(got !== undefined ? [{ text: "the client's handler ran for the frame", evidence: [got.id], window: got.window, absent: null }] : []),

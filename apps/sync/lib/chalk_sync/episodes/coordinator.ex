@@ -205,6 +205,21 @@ defmodule ChalkSync.Episodes.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
+  @doc """
+  Sends an operator `live_request` frame to the seat's registered live sockets
+  that negotiated `live_introspection`. Answers `{:ok, seat_sockets, sent}`:
+  `seat_sockets` is how many live sockets the seat has registered and `sent` how
+  many of them took the frame.
+  """
+  @spec deliver_live_request(pid(), String.t(), map()) ::
+          {:ok, non_neg_integer(), non_neg_integer()} | {:error, atom()}
+  def deliver_live_request(coordinator, participant_id, frame)
+      when is_binary(participant_id) and is_map(frame) do
+    GenServer.call(coordinator, {:live_request, participant_id, frame}, 1000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
   @spec set_connection_quality(pid(), Identity.t(), String.t(), pid()) :: :ok | {:error, atom()}
   def set_connection_quality(coordinator, %Identity{} = identity, quality, socket \\ self()) do
     GenServer.call(coordinator, {:set_connection_quality, socket, identity, quality}, 3000)

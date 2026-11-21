@@ -148,7 +148,7 @@
     },
     {
       "id": "live",
-      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
+      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "live_request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 5
@@ -436,6 +436,12 @@
       "optional": true,
       "value": true,
       "description": "Present on a connection that negotiated connection_quality=1: this Sync accepts connection_quality_set and sends connection_quality on presence items. A client that does not see it must not send the frame."
+    },
+    "liveIntrospection": {
+      "wireName": "live_introspection",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated live_introspection=1: this Sync may send live_request for operator diagnostics. A client that does not see it receives no live_request frames."
     },
     "entryGeneration": {
       "wireName": "entry_generation",
@@ -772,6 +778,24 @@
       "exactFields": ["type", "request_id", "result"],
       "requestId": "requestId",
       "result": ["delivered", "target_unavailable", "expired", "rejected", "rate_limited"]
+    }
+  },
+  "liveRequestFrames": {
+    "deliver": {
+      "direction": "server-to-client",
+      "type": "live_request",
+      "exactFields": ["type", "request_id", "expires_at_ms"],
+      "requestId": "requestId",
+      "expiresAtMs": {
+        "kind": "integer",
+        "minimum": 1
+      }
+    },
+    "acknowledge": {
+      "direction": "client-to-server",
+      "type": "live_request_ack",
+      "exactFields": ["type", "request_id"],
+      "requestId": "requestId"
     }
   },
   "collaboration": {

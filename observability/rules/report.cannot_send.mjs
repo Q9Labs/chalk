@@ -87,8 +87,9 @@ export function decide({ readings }) {
 
   const availability = readings["report.availability"];
   if (availability.kind === "present") {
-    const refused = availability.observations.some((o) => o.claim === "false" && o.window.to_ms >= shown_at - AVAIL_BEFORE_MS && o.window.from_ms <= shown_at);
-    if (refused) return broken(surface, shown_at, "api", "api.problemreports", `blocked reports_unavailable; the api availability decision was false`, availability.observations.filter((o) => o.claim === "false")[0]);
+    const denials = availability.observations.filter((o) => o.claim !== "allow" && o.claim !== "true");
+    const refused = denials.some((o) => o.window.to_ms >= shown_at - AVAIL_BEFORE_MS && o.window.from_ms <= shown_at);
+    if (refused) return broken(surface, shown_at, "api", "api.problemreports", `blocked reports_unavailable; the api availability decision was false`, denials[0]);
   }
   return broken(surface, shown_at, "client_ui", "web.problem_reports", `blocked ${reason} for ${Math.round((surface.window.to_ms - shown_at) / 1000)} s`);
 }

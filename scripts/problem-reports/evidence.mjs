@@ -105,7 +105,7 @@ async function r2Observations(uploads, { tenant, episode }, env) {
       id: eventId("ev", "report.r2_upload", u.id),
       fact: "report.readback", source: "r2", origin: origin.measured("r2"),
       subject: { tenant, episode },
-      window: { from_ms: back.at_ms, to_ms: back.at_ms },
+      window: { from_ms: Date.parse(u.stored_at ?? u.issued_at ?? "") || back.at_ms, to_ms: back.at_ms },
       claim: back.readback,
       value: { diagnostic_upload_id: u.id, readback: back.readback, ...(back.bytes != null ? { bytes: back.bytes } : {}), ...back.parts },
       failure: back.readback !== "ok",
