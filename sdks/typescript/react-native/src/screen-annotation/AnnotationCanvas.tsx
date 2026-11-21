@@ -25,6 +25,7 @@ export type AnnotationCanvasProps = {
   readonly scene: AnnotationScene;
   readonly presence: readonly ScreenAnnotationPresence[];
   readonly nowMs: number;
+  readonly localTouch?: { readonly point: ScreenAnnotationPoint; readonly untilMs: number };
   readonly onReady: (ready: boolean) => void;
   readonly onHit: (request: number, markId: string | null) => void;
 };
@@ -48,7 +49,7 @@ type MeasureJob = {
 const maxBase64Length = 16 * 1024 * 1024;
 const chunkSize = 32768;
 
-export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, onReady, onHit }, ref) {
+export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit }, ref) {
   const view = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const job = useRef<ExportJob | null>(null);
@@ -120,8 +121,8 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Transient samples don't resend the committed scene.
   useEffect(() => {
-    if (ready) view.current?.injectJavaScript(`window.chalkAnnotationPresence?.(${JSON.stringify(presence)},${nowMs});true;`);
-  }, [ready, presence, nowMs]);
+    if (ready) view.current?.injectJavaScript(`window.chalkAnnotationPresence?.(${JSON.stringify(presence)},${nowMs},${JSON.stringify(localTouch ?? null)});true;`);
+  }, [ready, presence, nowMs, localTouch]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Fail the pending export if the sandbox goes away before returning PNG data.
   useEffect(() => () => { failExport(); failMeasure(); }, []);

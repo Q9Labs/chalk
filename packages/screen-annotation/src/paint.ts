@@ -1,4 +1,4 @@
-import type { ScreenAnnotationMark } from "@q9labsai/chalk-client";
+import type { ScreenAnnotationMark, ScreenAnnotationPoint } from "@q9labsai/chalk-client";
 
 import { containsPoint, intersectRects, projectFramePoint, type AnnotationPoint, type AnnotationRect } from "./geometry";
 import { ANNOTATION_FONT_FAMILY, HIGHLIGHTER_OPACITY, NOTE_COLOR, NOTE_OPACITY, annotationMarkOpacity, compareAnnotationMarks, layoutAnnotationText, projectAnnotationMark, type AnnotationMarkGeometry, type AnnotationTextMeasure } from "./mark-geometry";
@@ -42,6 +42,7 @@ export type PaintAnnotationOptions = {
   readonly paused?: boolean;
   readonly marks: readonly ScreenAnnotationMark[];
   readonly presence?: readonly AnnotationPresence[];
+  readonly localTouch?: ScreenAnnotationPoint;
   readonly nowMs: number;
 };
 
@@ -61,7 +62,7 @@ export function canvasAnnotationTextMeasure(ctx: Pick<AnnotationCanvasContext, "
   };
 }
 
-export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rect, sharerId, paused, marks, presence = [], nowMs }: PaintAnnotationOptions): void {
+export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rect, sharerId, paused, marks, presence = [], localTouch, nowMs }: PaintAnnotationOptions): void {
   const visible = intersectRects(rect, clip);
   if (!visible) return;
   ctx.save();
@@ -91,6 +92,18 @@ export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rec
     }
     for (const sample of live) {
       paintCursor(ctx, rect, visible, sample, nowMs);
+    }
+    if (localTouch) {
+      const point = projectFramePoint(rect, localTouch);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 12, 0, Math.PI * 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#000a";
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#fff";
+      ctx.stroke();
     }
   } finally {
     ctx.restore();

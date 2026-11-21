@@ -1,4 +1,4 @@
-import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
+import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, LASER_TRAIL_MS, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { loadAnnotationFont } from "./font";
@@ -88,14 +88,16 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
                 author: actor,
                 server_at_ms: localPresenceAt.current,
                 expires_at_ms: nowMs + 1000,
-                cursor: cursor.current,
+                cursor: state.layer.burned_in ? null : cursor.current,
                 draft: ownDraft,
               } satisfies ScreenAnnotationPresence,
             ]
           : [];
-      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...local], nowMs), nowMs });
+      const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS
+        ? cursor.current?.point : undefined;
+      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...local], nowMs), localTouch, nowMs });
       const expiring = state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
-      if (expiring || optimistic.current || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < 380)) schedule();
+      if (expiring || optimistic.current || localTouch || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS)) schedule();
     };
     const schedule = () => {
       if (!raf) raf = window.requestAnimationFrame(paint);

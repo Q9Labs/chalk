@@ -6,6 +6,7 @@ import type {
   ScreenAnnotationState,
   ScreenAnnotationTarget,
 } from "@q9labsai/chalk-client";
+import { LASER_TRAIL_MS } from "@q9labsai/chalk-screen-annotation";
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
 import type { Frame } from "../motion/MovingFrame";
@@ -130,6 +131,10 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   });
 
   const local = input.local?.fence === target.fence && allowed && open ? input.local : null;
+  const localTouch = state.layer.burned_in && local?.cursor
+    ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS }
+    : undefined;
+  const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
   const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
   const pending: ScreenAnnotationPresence | null = waiting && allowed ? {
     type: "annotation_presence",
@@ -216,7 +221,8 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
       onHit={onHit}
       scene={scene}
       nowMs={nowMs}
-      presence={[...(state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id)), ...(pending ? [pending] : []), ...(local ? [local] : [])]}
+      localTouch={localTouch}
+      presence={[...(state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id)), ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])]}
     />
     {open && allowed ? <View
       accessible={false}

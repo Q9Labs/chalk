@@ -6,6 +6,7 @@ export function mount(engine) {
   const trackPresence = engine.createAnnotationPresenceTracker();
   let scene;
   let samples = [];
+  let localTouch = null;
   let serverNow = 0;
   let receivedAt = 0;
   let animation = 0;
@@ -22,8 +23,9 @@ export function mount(engine) {
     context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     const nowMs = serverNow + performance.now() - receivedAt;
     const presence = trackPresence.update(samples, nowMs);
-    engine.paintAnnotation(context, { ...scene, marks: scene.burnedIn ? [] : scene.marks, nowMs, presence });
-    if (presence.length || scene.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs)) {
+    const touch = localTouch?.untilMs > nowMs ? localTouch.point : undefined;
+    engine.paintAnnotation(context, { ...scene, marks: scene.burnedIn ? [] : scene.marks, nowMs, presence, localTouch: touch });
+    if (presence.length || touch || scene.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs)) {
       animation = requestAnimationFrame(paint);
     }
   }
@@ -36,8 +38,9 @@ export function mount(engine) {
     scene = next;
     requestPaint();
   };
-  window.chalkAnnotationPresence = (presence, nowMs) => {
+  window.chalkAnnotationPresence = (presence, nowMs, touch = null) => {
     samples = presence;
+    localTouch = touch;
     serverNow = nowMs;
     receivedAt = performance.now();
     requestPaint();
