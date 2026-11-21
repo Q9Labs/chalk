@@ -9,7 +9,7 @@ import { NoticeButton } from "../../../../sdks/typescript/react/src/components/t
 export function OfflineNoticeFixture() {
   const [client] = useState(() => {
     const snapshot = liveSnapshot();
-    return createCallStateClient({ ...snapshot, offline: { ...snapshot.offline, notice: "Your expired offline actions were not sent. Actions are kept for up to 24 hours." } });
+    return createCallStateClient({ ...snapshot, offline: { ...snapshot.offline, notice: "Some changes you made offline were too old to send." } });
   });
   useEffect(() => () => client.dispose(), [client]);
   return (
@@ -21,7 +21,7 @@ export function OfflineNoticeFixture() {
   );
 }
 
-/** SDK-sized notice stacks, including content longer than the call's available band. */
+/** SDK-sized notice stacks at the call's own cap of three, including content longer than the call's available band. `?all` shows ten at once to stress the band. */
 export function NoticeBandFixture() {
   const [client] = useState(() => createCallStateClient(liveSnapshot()));
   useEffect(() => () => client.dispose(), [client]);
@@ -45,8 +45,8 @@ export function NoticeBandFixture() {
           stageBackground
           header={{ spaceName: "Team", notices: <NoticeButton toasts={toasts.filter((toast) => folded.includes(toast.id))} onDismiss={dismiss} /> }}
           stage={<SpaceStage tiles={[]} layout="focus" whiteboard={{ isOpen: true, props: { canDraw: true, theme: "dark" } }} />}
-          controls={<button type="button">Call controls</button>}
-          toasts={<ToastStack toasts={toasts} maxVisible={long ? 3 : 10} onDismiss={dismiss} onFold={setFolded} />}
+          controls={<div role="toolbar" aria-label="Call controls" className="h-11" />}
+          toasts={<ToastStack toasts={toasts} maxVisible={params.has("all") ? 10 : 3} onDismiss={dismiss} onFold={setFolded} />}
         />
       </div>
     </ChalkProvider>

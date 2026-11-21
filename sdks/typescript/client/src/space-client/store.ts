@@ -10,7 +10,7 @@ const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({
   connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false }),
   self: empty({ participantId: null, displayName: null, role: null, capabilities: empty([]), handRaised: false, can: () => false }),
-  participants: empty({ roster: empty([]), admissionQueue: empty([]) }),
+  participants: empty({ roster: empty([]), admissionQueue: empty([]), admissionPolicy: null }),
   media: empty({
     devices: empty({ microphones: empty([]), cameras: empty([]), speakers: empty([]) }),
     selection: empty({ microphone: null, camera: null, speaker: null }),

@@ -2,10 +2,8 @@
    `[data-chalk]` scope, so every color below is a call token from the shared UI styles. */
 
 .site {
-  /* A field boundary that holds 3:1, and a destructive fill that keeps white text at 4.5:1. The call needs neither. */
+  /* A field boundary that holds 3:1 on every surface. The call needs none. */
   --edge: rgba(255, 255, 255, 0.4);
-  --redbtn: #c93d42;
-  --redbtn-hover: #d13438;
   --raise: none;
   --code-keyword: #f0997d;
   --code-string: #9cd39a;
@@ -31,8 +29,8 @@
   --site-paper-tint: rgba(241, 240, 234, 0.1);
   --site-gold: #dcb740;
   --site-on-gold: #16140c;
-  --site-danger: #e5484d;
-  --site-danger-hover: #ec5d61;
+  --site-danger: #c93d42;
+  --site-danger-hover: #d13438;
   --site-danger-text: #ff6b6b;
   --site-scrim: rgba(0, 0, 0, 0.55);
   --site-selection: rgba(217, 182, 65, 0.3);
@@ -48,12 +46,11 @@
   --site-shadow-hero-light: 0 50px 110px -40px rgba(27, 28, 31, 0.35);
   --site-glow-hero: 0 -20px 80px -20px rgba(80, 140, 255, 0.35);
   --site-shadow-key-edge: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  --site-shadow-hairline: inset 0 0 0 1px var(--chalk-line-strong);
 }
 
 .site[data-chalk-theme="light"] {
   --edge: rgba(0, 0, 0, 0.46);
-  --redbtn: #d93a3f;
-  --redbtn-hover: #c4373c;
   --raise: 0 0 0 1px var(--chalk-line), 0 12px 32px rgba(0, 0, 0, 0.12);
   --code-keyword: #a1442a;
   --code-string: #2b7a4b;
@@ -222,12 +219,12 @@ html:has(.site[data-chalk-theme="light"]) {
   }
 
   & .btn.dz {
-    background: var(--redbtn);
+    background: var(--chalk-danger);
     color: var(--site-white);
   }
 
   & .btn.dz:hover {
-    background: var(--redbtn-hover);
+    background: var(--chalk-danger-hover);
   }
 
   & .ib {
@@ -259,6 +256,29 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .ib.ok {
     color: var(--chalk-positive);
+  }
+
+  /* Copy and check share one cell and swap with the same 200ms morph as the call's copy button. */
+  & .ib.copy svg.site-icon {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--chalk-motion-copy),
+      transform var(--chalk-motion-copy);
+  }
+
+  & .ib.copy svg.site-icon + svg.site-icon,
+  & .ib.copy[data-copied] svg.site-icon:first-child {
+    opacity: 0;
+    transform: scale(0.4) rotate(-20deg);
+  }
+
+  & .ib.copy svg.site-icon + svg.site-icon {
+    color: var(--chalk-positive);
+  }
+
+  & .ib.copy[data-copied] svg.site-icon + svg.site-icon {
+    opacity: 1;
+    transform: none;
   }
 
   /* The theme button carries both icons, so the prerendered page shows the right one before hydration. */
@@ -353,6 +373,12 @@ html:has(.site[data-chalk-theme="light"]) {
     box-shadow: var(--site-shadow-key-edge);
     color: var(--chalk-text);
     font: 600 var(--type-caption)/1 var(--chalk-font-family);
+  }
+
+  /* Lowercase key names sit on the baseline, so they drop below the arrows' center and read heavier; this lifts and lightens them to match. */
+  & .kbd[data-word] {
+    padding-bottom: var(--space-0-5);
+    font-weight: 500;
   }
 
   & .dot {
@@ -528,6 +554,25 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .nav-menu {
     display: none;
+  }
+
+  /* While the page's own Start a call is on screen, the bar's is a ghost pill; it fills in once that button scrolls away. */
+  & .nav-start {
+    transition:
+      background-color 160ms ease-out,
+      color 160ms ease-out,
+      box-shadow 160ms ease-out,
+      transform 0.15s ease-out;
+  }
+
+  & .nav-start[data-quiet] {
+    background: none;
+    color: var(--chalk-text);
+    box-shadow: var(--site-shadow-hairline);
+  }
+
+  & .nav-start[data-quiet]:hover {
+    background: var(--chalk-raised);
   }
 
   & .navsheet {
@@ -1103,11 +1148,14 @@ html:has(.site[data-chalk-theme="light"]) {
     font-size: var(--type-body-lg);
   }
 
+  /* The clone command is one copyable line: it scrolls sideways before it ever wraps. */
   & .ghrow .mono {
     display: block;
     margin-top: var(--space-0-5);
     font-size: var(--type-caption);
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 }
 
@@ -1276,10 +1324,6 @@ html:has(.site[data-chalk-theme="light"]) {
 
     & .hostbar .when-wide {
       display: none;
-    }
-
-    & .ghrow .mono > span {
-      display: block;
     }
   }
 }

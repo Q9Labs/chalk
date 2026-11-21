@@ -28,6 +28,7 @@ export function CallDetails({
   onReportProblem,
   revealConnection = false,
   hideShortcuts = false,
+  revealQr = false,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
   readonly hideShortcuts?: boolean;
@@ -37,10 +38,12 @@ export function CallDetails({
   readonly onDialog: (kind: "shortcuts" | "report") => void;
   /** Opened from the connection chip: the Connection row starts expanded and ringed so the person sees where the chip led. */
   readonly revealConnection?: boolean;
+  /** Opened at call start for a host who is alone: the menu is titled "Your call is ready" and the QR code starts expanded so the invite is one glance away. */
+  readonly revealQr?: boolean;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
-  const [qrOpen, setQrOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(revealQr);
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
@@ -50,7 +53,7 @@ export function CallDetails({
       <CallMenuStyles />
       <div className="chalk-shell-details-heading">
         <div>
-          <h2>{spaceName}</h2>
+          <h2>{revealQr ? "Your call is ready" : spaceName}</h2>
           {summary ? (
             <p className="chalk-shell-details-sub">
               {isRecording ? <i aria-hidden="true" /> : null}

@@ -64,9 +64,9 @@ export const CARD_STATES: readonly CallState[] = [
   { id: "card-knocks", title: "Card: waiting requests", render: () => <CardState host knocks /> },
   { id: "card-knocks-many", title: "Card: three people waiting", render: () => <CardState host knocks={3} /> },
   { id: "card-chat-only", title: "Card: Chat without People", render: () => <CardState participants={false} /> },
-  { id: "card-people", title: "Card: People", actions: [{ click: "Participants" }], render: () => <CardState host /> },
+  { id: "card-people", title: "Card: People", actions: [{ click: "People" }], render: () => <CardState host /> },
   { id: "card-chat", title: "Card: Chat", actions: [{ click: "Chat" }], render: () => <CardState host /> },
-  { id: "card-guest", title: "Card: guest", actions: [{ click: "Participants" }], render: () => <CardState /> },
-  { id: "card-people-light", title: "Card: People Light", actions: [{ click: "Participants" }], render: () => <CardState host scheme="light" /> },
+  { id: "card-guest", title: "Card: guest", actions: [{ click: "People" }], render: () => <CardState /> },
+  { id: "card-people-light", title: "Card: People Light", actions: [{ click: "People" }], render: () => <CardState host scheme="light" /> },
   { id: "card-chat-light", title: "Card: Chat Light", actions: [{ click: "Chat" }], render: () => <CardState host scheme="light" /> },
 ];

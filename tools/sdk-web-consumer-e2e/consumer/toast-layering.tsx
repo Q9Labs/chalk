@@ -19,7 +19,7 @@ const client = createPreviewClient(
     ...base,
     connection: { ...base.connection, status: "live" },
     self: { ...base.self, participantId: "self", displayName: "You", role: "guest" },
-    participants: { roster: [participant("self", "You"), participant("peer", "Nora")], admissionQueue: [] },
+    participants: { roster: [participant("self", "You"), participant("peer", "Nora")], admissionQueue: [], admissionPolicy: null },
   },
   {
     onCommand: (command) => {

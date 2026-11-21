@@ -303,7 +303,7 @@ export const ChatPanelSurface = React.memo(
           {messages.length === 0 && pendingMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <h3 className="mb-1 font-medium">No messages yet</h3>
-              <p className="max-w-[220px] text-sm text-[var(--chalk-app-text-muted)]">Messages are seen by everyone in the call.</p>
+              <p className="max-w-[220px] text-sm text-balance text-[var(--chalk-app-text-muted)]">Messages are seen by everyone in the call.</p>
             </div>
           ) : (
             grouped.map((group) => (
@@ -406,7 +406,7 @@ export const ChatPanelSurface = React.memo(
           <div className="call-composer-field">
             {onUploadAttachment ? (
               <>
-                {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" accept={CHALK_CHAT_ATTACHMENT_MIME_TYPES.join(",")} onChange={(event) => selectFiles(event.target.files)} /> : null}
+                {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple tabIndex={-1} className="sr-only" aria-hidden="true" aria-label="Choose attachments" accept={CHALK_CHAT_ATTACHMENT_MIME_TYPES.join(",")} onChange={(event) => selectFiles(event.target.files)} /> : null}
                 <Button type="button" variant="ghost" size="icon" className="call-attach-button" disabled={disabled || sending || pickingFiles || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => void chooseFiles()} aria-label="Attach files">
                   <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M20.5 11.2l-8.4 8.4a5 5 0 0 1-7.1-7.1l8.4-8.4a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7" />

@@ -20,7 +20,8 @@ export function useCallToasts() {
     });
     const offCallEvent = client.on("callEvent", ({ event }) => {
       const toast = callEventToast(event);
-      if (toast) setToasts((current) => [...current, { ...toast, id: `call-event-${++sequence.current}` }].slice(-20));
+      // A repeated plain-text event replaces its earlier notice, so the same line never stacks.
+      if (toast) setToasts((current) => [...current.filter((existing) => typeof existing.message !== "string" || existing.message !== toast.message), { ...toast, id: `call-event-${++sequence.current}` }].slice(-20));
     });
     let disposed = false;
     const offError = client.on("error", ({ error }) => {

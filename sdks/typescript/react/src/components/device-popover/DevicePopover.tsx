@@ -1,7 +1,8 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { lazy, Suspense, useState, useSyncExternalStore } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
+import { preloadable } from "../../internal/preloadable";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -13,10 +14,15 @@ import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
+import { cameraBackgroundPicker, preloadCameraBackgrounds } from "./camera-background-loader";
 import { CameraPreview, InputLevel } from "./DevicePreview";
 
-const DeviceSheet = lazy(() => import("./DeviceSheet"));
-const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
+const deviceSheet = preloadable(() => import("./DeviceSheet").then((module) => module.default));
+
+/** Start the phone device sheet's chunk when the More sheet opens, so choosing Audio or Camera swaps sheets without an empty frame. */
+export function preloadDeviceSheet(): void {
+  void deviceSheet.preload().catch(() => undefined);
+}
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
 
 export interface DevicePopoverProps {
@@ -55,8 +61,10 @@ export interface DevicePopoverProps {
 }
 
 function DeviceSwitch({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
+  // A switch the app can't act on would read as on-but-disabled, so it isn't shown at all.
+  if (!onChange) return null;
   return (
-    <Menu.CheckboxItem className="chalk-menu-item" checked={checked} onCheckedChange={onChange} disabled={!onChange} closeOnClick={false}>
+    <Menu.CheckboxItem className="chalk-menu-item" checked={checked} onCheckedChange={onChange} closeOnClick={false}>
       <span>{label}</span>
       <span className="chalk-shell-menu-switch" aria-hidden="true">
         <span className="chalk-switch" aria-checked={checked}>
@@ -146,7 +154,7 @@ export function DevicePopover({
         className="chalk-device-menu"
         onOpenChange={setOpen}
         trigger={
-          <button type="button" className="chalk-shell-caret" aria-label={`Select ${mic ? "microphone" : "camera"}`} disabled={disabled}>
+          <button type="button" className="chalk-shell-caret" aria-label={`Select ${mic ? "microphone" : "camera"}`} disabled={disabled} onPointerEnter={mic ? undefined : preloadCameraBackgrounds} onFocus={mic ? undefined : preloadCameraBackgrounds}>
             <ShellIcon name="down" />
           </button>
         }
@@ -185,7 +193,7 @@ export function DevicePopover({
             <Menu.Separator className="chalk-shell-menu-separator" />
             {open && previewDeviceId ? (
               <Suspense fallback={null}>
-                <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} menu={backgroundMenu} />
+                <cameraBackgroundPicker.Component key={previewDeviceId} deviceId={previewDeviceId} menu={backgroundMenu} />
               </Suspense>
             ) : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
@@ -194,7 +202,7 @@ export function DevicePopover({
       </ChalkMenu>
       {sheetLoaded ? (
         <Suspense fallback={null}>
-          <DeviceSheet
+          <deviceSheet.Component
             type={type}
             open={sheetOpen}
             onOpenChange={onSheetOpenChange}

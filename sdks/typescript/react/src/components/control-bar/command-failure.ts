@@ -35,8 +35,8 @@ const operationCopy = {
 const generic: Rule = { copy: operationCopy, retry: true };
 const unavailable: Rule = { copy: operationCopy, retry: false };
 const specific = (copy: Copy): Rule => ({ copy: { ...operationCopy, start: copy, select: copy, request: copy, change: copy }, retry: false });
-const capture: Copy = (context) => `${settings(context)} Check that it is connected and available${context.recoverable ? ", then try again" : ""}.`;
-const captureStart: Copy = (context) => (context.source === "screen" ? `${start(context)}${again(context)}` : `Your ${device(context)} couldn’t start. Check that it is connected and available${context.recoverable ? ", then try again" : ""}.`);
+const capture: Copy = (context) => `${settings(context)} Check that it’s connected${context.recoverable ? ", then try again" : ""}.`;
+const captureStart: Copy = (context) => (context.source === "screen" ? `${start(context)}${again(context)}` : `Your ${device(context)} couldn’t start. Check that it’s connected${context.recoverable ? ", then try again" : ""}.`);
 
 /** Every client code has a media-context policy. Non-media commands are preserved at the boundary below. */
 export const MEDIA_FAILURE_POLICY = {
@@ -81,10 +81,12 @@ export const MEDIA_FAILURE_POLICY = {
   "episode.ended": { copy: { start: () => "This call has ended.", stop: () => "This call has ended.", select: () => "This call has ended.", test: () => "This call has ended.", request: () => "This call has ended.", change: () => "This call has ended." }, retry: false },
   "media.permission_denied": specific((context) =>
     context.source === "screen"
-      ? `Your screen couldn’t be shared. Allow screen recording for your browser in System Settings${context.recoverable ? ", then try again" : ""}.`
+      ? "Screen sharing is blocked. Allow it for your browser in System Settings."
       : context.source === "speaker"
-        ? "Chalk can’t use your speaker. Check your browser’s audio permissions and system sound settings."
-        : `Chalk can’t use your ${device(context)}. Click the camera icon in the address bar and allow ${context.source === "camera" ? "Camera" : context.source === "microphone" ? "Microphone" : "Camera and Microphone"}.`,
+        ? "Chalk can’t use your speaker. Check your browser’s sound permissions."
+        : context.source === "camera" || context.source === "microphone"
+          ? `Your ${context.source} is blocked. Allow it from the icon in the address bar.`
+          : "Your camera and microphone are blocked. Allow them from the address bar.",
   ),
   "media.device_not_found": specific((context) => `No ${device(context)} found. Connect one${context.recoverable ? ", then try again" : ""}.`),
   "media.device_busy": { ...specific((context) => `Your ${device(context)} is being used by another app. Close it there${context.recoverable ? ", then try again" : ""}.`), retry: true },
@@ -109,13 +111,24 @@ export const MEDIA_FAILURE_POLICY = {
   "whiteboard.unavailable": unavailable,
 } satisfies Record<ErrorCode, Rule>;
 
+const MACHINE_CODE = /^[a-z][a-z0-9_.]*$/;
+
 export function commandFailurePresentation(failure: ClientFailure, source?: MediaCommandSource, operation: Operation = "change", hasExactRetry = false): { readonly message: string; readonly retry: boolean } {
+  // A rejected Sync command carries its server reason (such as external_operation_failed) as the message, which isn't copy.
+  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: MACHINE_CODE.test(failure.message) ? "That didn’t work. Try again in a moment." : failure.message, retry: false };
   if (!Object.hasOwn(MEDIA_FAILURE_POLICY, failure.code)) return { message: "This media action couldn’t be completed.", retry: false };
-  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: failure.message, retry: false };
   const rule: Rule = MEDIA_FAILURE_POLICY[failure.code];
   const context = { source, recoverable: failure.recoverable };
   const message = rule.copy[operation](context);
   return { message, retry: failure.recoverable && rule.retry && hasExactRetry && source !== undefined && source !== "speaker" && (operation === "start" || operation === "stop") };
+}
+
+/** A recording command's failure, named for the task, so it never reads as a device problem or a bare "That didn’t work". */
+export function recordingFailure(cause: unknown, action: "start" | "stop"): ClientFailure {
+  const failure = commandFailure(cause);
+  // Sync answers capability_denied when the call's policy keeps recording off, so a retry can't help.
+  const message = failure.message === "capability_denied" ? "Recording is off for this call." : action === "start" ? "Couldn’t start recording. Try again in a moment." : "Couldn’t stop recording. Try again in a moment.";
+  return new SpaceClientError({ code: failure.code, recoverable: failure.recoverable, message });
 }
 
 export function commandFailureMessage(failure: ClientFailure, source?: MediaCommandSource, operation?: MediaCommandAction): string {
