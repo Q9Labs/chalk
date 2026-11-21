@@ -10,6 +10,8 @@ export { ChalkTextarea } from "./ChalkTextarea";
 export type { ChalkTextareaProps } from "./ChalkTextarea";
 export { ChalkToggle } from "./ChalkToggle";
 export type { ChalkToggleProps } from "./ChalkToggle";
+export { ChalkCheckbox } from "./ChalkCheckbox";
+export type { ChalkCheckboxProps } from "./ChalkCheckbox";
 export { ChalkBadge } from "./ChalkBadge";
 export type { ChalkBadgeProps } from "./ChalkBadge";
 export { ChalkDivider } from "./ChalkDivider";

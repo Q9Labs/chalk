@@ -13,6 +13,7 @@ export interface ChalkSheetProps {
 /**
  * Base UI owns the focus trap, Escape, outside press and return to the opener.
  * A drag that starts on the grabber or the heading closes the sheet, past 30% of its height or on a flick.
+ * The details sheet can open on its own at call start, so it focuses itself, not its close button: no ring shows, and Tab reaches the first control.
  */
 export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
   const [container, setContainer] = useState<HTMLElement | null>(null);
@@ -50,7 +51,7 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
             <Dialog.Popup
               ref={popup}
               {...(accessibleLabel ? { "aria-label": accessibleLabel, "aria-labelledby": undefined } : {})}
-              initialFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-part=ready-title]") : undefined}
+              initialFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-part=ready-title]") : variant === "details" ? popup : undefined}
               finalFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-call-link-trigger]") : undefined}
               data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
               data-variant={variant}

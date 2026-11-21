@@ -162,6 +162,12 @@ const PATHS = {
   arrowR: <path d="M5 12h14M13 6l6 6-6 6" />,
   ext: <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />,
   trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
+  archive: (
+    <>
+      <rect x="3" y="3.5" width="18" height="5" rx="1.5" />
+      <path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4" />
+    </>
+  ),
   send: <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />,
   info: (
     <>
