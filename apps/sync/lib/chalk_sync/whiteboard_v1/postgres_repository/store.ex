@@ -51,7 +51,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
         [uuid(identity.participant_id), identity.participant_generation]
 
     case Postgrex.query(connection, SQL.lock_authority(), params) do
-      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw, draw_policy]]}} ->
+      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw, draw_policy, _name, _grant]]}} ->
         role_capabilities =
           Enum.filter(capabilities, &(&1 in ["drawWhiteboard", "manageWhiteboard"]))
 

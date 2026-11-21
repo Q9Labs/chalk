@@ -4,6 +4,7 @@ defmodule ChalkSync.Transport.Socket.Outbound do
   """
 
   alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.Transport.Socket.Annotation
   alias ChalkSync.Transport.Socket.Frames
   alias ChalkSync.Transport.Socket.Lifecycle
 
@@ -22,6 +23,7 @@ defmodule ChalkSync.Transport.Socket.Outbound do
           |> Map.put(:phase, :live)
           |> Lifecycle.start_heartbeat()
           |> Lifecycle.start_entry_deadline()
+          |> Annotation.enter()
 
         send(self(), :collaboration_drain)
         {:push, {:text, Frames.encode_with_context(next, encoded)}, next}
