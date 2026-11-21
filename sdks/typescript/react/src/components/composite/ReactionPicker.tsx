@@ -24,11 +24,9 @@ export interface ReactionPickerProps {
   participantGradientPreference?: ParticipantGradientPreference;
   className?: string;
   size?: "default" | "compact" | "mini";
-  /** The emoji are unavailable while the call reconnects; the hand still works because it waits for the connection. */
-  emojiPaused?: boolean;
 }
 
-export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default", emojiPaused = false }: ReactionPickerProps) => {
+export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const phone = usePhoneCall();
   // The sheet loads on first open and stays mounted so it can slide away.
@@ -96,7 +94,7 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
     if (!sheetLoaded) return null;
     return (
       <Suspense fallback={null}>
-        <ReactionSheet open={isOpen} isHandRaised={isHandRaised} onToggleHandRaise={onToggleHandRaise} reactions={allowedReactions} emojiPaused={emojiPaused} onSelect={onSelect} onClose={onClose} />
+        <ReactionSheet open={isOpen} isHandRaised={isHandRaised} onToggleHandRaise={onToggleHandRaise} reactions={allowedReactions} onSelect={onSelect} onClose={onClose} />
       </Suspense>
     );
   }
@@ -109,7 +107,6 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
         isHandRaised={isHandRaised}
         onToggleHandRaise={onToggleHandRaise}
         reactions={allowedReactions}
-        emojiPaused={emojiPaused}
         position={position}
         className={className}
         onSelect={(emoji) => {

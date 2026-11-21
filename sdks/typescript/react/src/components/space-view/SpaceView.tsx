@@ -1,5 +1,5 @@
 "use client";
-import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
@@ -9,7 +9,6 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
-import { useRecordingSeconds } from "../../internal/useRecordingSeconds";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
@@ -174,7 +173,6 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
-  const recordingSeconds = useRecordingSeconds(recording.current?.status, episodeDuration);
   const deadline = connection.episode?.deadline;
   const [now, setNow] = useState(Date.now);
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
@@ -207,10 +205,8 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
-  // While reconnecting the tray stays usable: a raised hand waits for the connection, and only the emoji pause.
-  const reactionsReachable = connection.status === "live" || connection.status === "reconnecting";
   // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
-  if (isReactionPickerOpen && !reactionsReachable) setReactionPickerOpen(false);
+  if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -394,16 +390,6 @@ export function SpaceView({
                 duration: episodeDuration,
                 timeLeft: countdown.seconds,
                 isRecording: recording.current?.status === "recording",
-                recordingSeconds,
-                onStopRecording:
-                  feature("recording") && canManageRecording
-                    ? () =>
-                        void runCommand(() =>
-                          client.recording.stop().catch((cause: unknown) => {
-                            throw recordingFailure(cause, "stop");
-                          }),
-                        )
-                    : undefined,
                 layout: headerLayout,
                 onLayoutChange: updateLayout,
                 notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
@@ -459,7 +445,7 @@ export function SpaceView({
                 <>
                   {feature("reactions") ? <ReactionsOverlay /> : null}
                   {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
-                  {feature("reactions") && canSendReaction && reactionsReachable ? (
+                  {feature("reactions") && canSendReaction && connection.status === "live" ? (
                     <div className="absolute bottom-24 left-1/2 z-44">
                       <ReactionPicker
                         isHandRaised={self.handRaised}
@@ -467,7 +453,6 @@ export function SpaceView({
                         isOpen={isReactionPickerOpen}
                         onClose={() => setReactionPickerOpen(false)}
                         allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
-                        emojiPaused={connection.status !== "live"}
                         onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
                         size="compact"
                       />
