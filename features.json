@@ -807,6 +807,7 @@
         "sdks/typescript/client/src/space-client/startup-failures.test.ts",
         "sdks/typescript/client/src/space-client/store.ts",
         "sdks/typescript/client/src/space-client/structural-equal.ts",
+        "sdks/typescript/client/src/space-client/terminal.test.helpers.ts",
         "sdks/typescript/client/src/space-client/types.ts",
         "sdks/typescript/client/src/sync",
         "sdks/typescript/client/src/urls.ts",

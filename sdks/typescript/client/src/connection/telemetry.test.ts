@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
@@ -111,3 +112,7 @@ describe("a call tells the server how it ended", () => {
     expect(telemetry.accepted.map((event) => event.seq)).toEqual([...telemetry.accepted.keys()]);
   });
 });
+
+function lifecycleOf() {
+  return Effect.service(ConnectionLifecycleService);
+}
