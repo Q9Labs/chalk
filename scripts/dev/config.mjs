@@ -1,7 +1,7 @@
 import { findExecutable } from "../lib/platform.mjs";
 import { createSocket } from "node:dgram";
 import { createServer, isIPv4 } from "node:net";
-import { homedir } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
@@ -222,17 +222,35 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   };
 }
 
-export function probePort(port, host = "127.0.0.1", transport = "tcp") {
+function probeUdpPort(port, host) {
   return new Promise((resolveProbe) => {
-    if (transport === "udp") {
-      const socket = createSocket("udp4");
-      socket.once("error", (error) => {
-        socket.close();
-        resolveProbe({ available: error.code !== "EADDRINUSE", error });
-      });
-      socket.bind(port, host, () => socket.close(() => resolveProbe({ available: true })));
-      return;
+    const socket = createSocket("udp4");
+    socket.once("error", (error) => {
+      socket.close();
+      resolveProbe({ available: !["EADDRINUSE", "EACCES"].includes(error.code), error });
+    });
+    socket.bind(port, host, () => socket.close(() => resolveProbe({ available: true })));
+  });
+}
+
+export async function probePort(port, host = "127.0.0.1", transport = "tcp") {
+  if (transport === "udp") {
+    // Windows can bind a wildcard UDP socket even when a specific interface already owns that port.
+    const addresses = new Set([host]);
+    if (process.platform === "win32" && host === "0.0.0.0") {
+      for (const interfaces of Object.values(networkInterfaces())) {
+        for (const { address, family } of interfaces) {
+          if (family === "IPv4") addresses.add(address);
+        }
+      }
     }
+    for (const address of addresses) {
+      const result = await probeUdpPort(port, address);
+      if (!result.available) return result;
+    }
+    return { available: true };
+  }
+  return new Promise((resolveProbe) => {
     const server = createServer();
     server.once("error", (error) => resolveProbe({ available: error.code !== "EADDRINUSE", error }));
     server.listen({ port, host }, () => server.close(() => resolveProbe({ available: true })));
