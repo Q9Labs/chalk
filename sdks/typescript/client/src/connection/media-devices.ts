@@ -63,13 +63,13 @@ export function requireDisplayVideoTrack(stream: MediaStream): MediaStreamTrack 
 }
 
 /** Browser picker hints, not guarantees about the selected source. */
-export function displayMediaConstraints(options: ScreenShareOptions = {}): DisplayMediaStreamOptions & { selfBrowserSurface: "exclude"; surfaceSwitching: "include"; systemAudio: "exclude"; audio: boolean | (MediaTrackConstraints & { suppressLocalAudioPlayback: boolean }) } {
+export function displayMediaConstraints(options: ScreenShareOptions = {}): DisplayMediaStreamOptions & { selfBrowserSurface: "exclude"; surfaceSwitching: "exclude"; systemAudio: "exclude"; audio: boolean | (MediaTrackConstraints & { suppressLocalAudioPlayback: boolean }) } {
   return {
     video: options.surface ? { displaySurface: options.surface } : true,
     audio: options.audio ? { suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
     systemAudio: "exclude",
     selfBrowserSurface: "exclude",
-    surfaceSwitching: "include",
+    surfaceSwitching: "exclude",
   };
 }
 

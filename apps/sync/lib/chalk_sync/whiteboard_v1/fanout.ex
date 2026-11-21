@@ -14,6 +14,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   @head_channel SQL.head_channel()
   @cursor_channel GeneratedWhiteboardV1.metadata()["notifications"]["transientCursorChannel"]
   @access_channel SQL.access_channel()
+  @annotation_channel "chalk_screen_annotation"
   @server __MODULE__
 
   def start_link(options \\ []) do
@@ -21,6 +22,10 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   end
 
   def subscribe(%EpisodeKey{} = episode), do: :pg.join(group(episode), self())
+
+  def subscribe_annotation(%EpisodeKey{} = episode),
+    do: :pg.join(annotation_group(episode), self())
+
   def unsubscribe(%EpisodeKey{} = episode), do: :pg.leave(group(episode), self())
 
   def broadcast_local(%EpisodeKey{} = episode, frame) do
@@ -59,6 +64,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     head_ref = Database.listen(notifications, @head_channel)
     cursor_ref = Database.listen(notifications, @cursor_channel)
     access_ref = Database.listen(notifications, @access_channel)
+    annotation_ref = Database.listen(notifications, @annotation_channel)
     {:ok, publisher} = Postgrex.start_link(connection_options)
 
     {:ok,
@@ -67,6 +73,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
        head_ref: head_ref,
        cursor_ref: cursor_ref,
        access_ref: access_ref,
+       annotation_ref: annotation_ref,
        publisher: publisher,
        source_id: source_id
      }}
@@ -152,6 +159,25 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
     {:noreply, state}
   end
+
+  def handle_info(
+        {:notification, notifications, annotation_ref, @annotation_channel, payload},
+        %{notifications: notifications, annotation_ref: annotation_ref} = state
+      ) do
+    with [tenant_id, space_id, episode_id] <- String.split(payload, ":"),
+         {:ok, episode} <-
+           episode_key(%{
+             "tenant_id" => tenant_id,
+             "space_id" => space_id,
+             "episode_id" => episode_id
+           }) do
+      Enum.each(:pg.get_members(annotation_group(episode)), &send(&1, :annotation_changed))
+    end
+
+    {:noreply, state}
+  end
+
+  defp annotation_group(episode), do: {:screen_annotation, EpisodeKey.authority_key(episode)}
 
   defp parse_head(payload) do
     with [tenant_id, space_id, episode_id, scene_id, revision] <- String.split(payload, ":"),

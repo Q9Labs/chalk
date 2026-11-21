@@ -8,7 +8,9 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   # under everyone it overrides the role default, under picked a true row is
   # the pick, and under hosts it is kept but ignored. Unpicking under picked
   # deletes the row, so it can't turn into a hidden block under everyone.
-  def lock_authority do
+  def lock_authority, do: drawing_authority() <> " for update of participant"
+
+  def drawing_authority do
     """
     select
       participant.role,
@@ -19,7 +21,8 @@ defmodule ChalkSync.WhiteboardV1.SQL do
           or coalesce(permission.can_draw, false)
         else coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities))
       end as can_draw,
-      coalesce(policy.policy, 'everyone') as draw_policy
+      coalesce(policy.policy, 'everyone') as draw_policy,
+      participant.name, permission.can_draw as explicit_grant
     from participants participant
     join episodes episode
       on episode.tenant_id = participant.tenant_id
@@ -27,6 +30,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       and episode.id = participant.episode_id
     left join sync_whiteboard_permissions permission
       on permission.tenant_id = participant.tenant_id
+      and permission.space_id = participant.space_id
       and permission.episode_id = participant.episode_id
       and permission.participant_id = participant.id
     left join sync_whiteboard_draw_policies policy
@@ -40,7 +44,6 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       and participant.generation = $5
       and participant.status = 'active'
       and episode.status = 'active'
-    for update of participant
     """
   end
 

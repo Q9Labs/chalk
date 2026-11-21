@@ -17,6 +17,7 @@ defmodule ChalkSync.Application do
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
         {ChalkSync.Transport.DirectLimits, []},
+        {ChalkSync.ScreenAnnotation.Presence, []},
         whiteboard_authority_child(),
         whiteboard_views_child(),
         collaboration_fanout_child(),
