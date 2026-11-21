@@ -229,6 +229,24 @@ begin
               and operation.producing_trace_id is not null and operation.producing_span_id is not null
             order by ended.revision desc
             limit 1;
+        else
+            -- The media teardown can retire the share just before End settles.
+            select operation.producing_trace_id, operation.producing_span_id
+            into end_trace_id, end_span_id
+            from sync_external_operations operation
+            join provider_operation_receipts receipt
+              on receipt.tenant_id = operation.tenant_id and receipt.episode_id = operation.episode_id
+             and receipt.operation_id = operation.external_operation_id::text
+             and receipt.effect = 'media.end_episode'
+            where operation.tenant_id = old.tenant_id and operation.space_id = old.space_id
+              and operation.episode_id = old.episode_id and operation.fence_active
+              and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+              and (receipt.state = 'dispatching' or receipt.outcome in ('satisfied', 'confirmed'))
+            order by receipt.dispatching_at desc
+            limit 1;
+            if found then
+                cause := 'episode_ended';
+            end if;
         end if;
     end if;
 

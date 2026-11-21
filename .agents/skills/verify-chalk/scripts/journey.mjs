@@ -70,7 +70,7 @@ export async function runJourney(journey, body) {
     const tabTitle = typeof display === "string" ? display : undefined;
     const key = browserEngine === webkit ? "webkit" : display ? `chromium+display:${display}` : "chromium";
     if (!browsers.has(key)) {
-      const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
+      const args = ["--autoplay-policy=no-user-gesture-required", ...(display && !tabTitle ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
       if (tabTitle) args.push(`--auto-select-tab-capture-source-by-title=${tabTitle}`);
       browsers.set(key, browserEngine.launch({ headless: true, ...(browserEngine === chromium ? { args, ...(tabTitle ? { channel: "chromium" } : {}) } : {}) }));
     }
