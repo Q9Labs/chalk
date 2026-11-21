@@ -235,6 +235,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         const obs = options.telemetry instanceof TelemetryOutbox ? options.telemetry.obs : undefined;
         for (const row of rows) obs?.fact(row.event as never, row.fields as never);
       },
+      videoTracks: (trackIdentifier) => {
+        for (const publication of this.#remoteTracks.values()) {
+          if (publication.track.id === trackIdentifier) return { source: publication.source, publication_id: publication.publicationId };
+        }
+        return undefined;
+      },
     });
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;

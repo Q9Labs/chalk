@@ -12,7 +12,12 @@ import { captureClient, noCaptureDevices, stream, track } from "./capture.test.h
 
 type Run = "wont_start" | "stopped" | "healthy";
 
-const CODES = ["video.camera_wont_start", "video.camera_stopped"] as const;
+const CODES: Record<string, readonly Run[]> = {
+  "video.camera_wont_start": ["wont_start", "stopped", "healthy"],
+  "video.camera_stopped": ["wont_start", "stopped", "healthy"],
+  // video.not_published's story needs the camera live and bound: its publish path is the failing hop.
+  "video.not_published": ["healthy"],
+};
 const chainDir = (code: string) => new URL(`../../../../../observability/fixtures/${code}/chain/`, import.meta.url);
 const framesFile = (code: string, run: Run) => new URL(`client-frames.${run}.json`, chainDir(code));
 
@@ -89,7 +94,8 @@ describe("video camera chain, hop (a)", () => {
     }
     await outbox.dispose();
     const rows = strip(kernelRows(frames));
-    for (const code of CODES) {
+    for (const [code, runs] of Object.entries(CODES)) {
+      if (!runs.includes(run)) continue;
       const file = framesFile(code, run);
       const path = file.pathname;
       if (process.env.CHALK_CHAIN_WRITE === "1") writeFileSync(file, `${JSON.stringify(rows, null, 2)}\n`);

@@ -50,6 +50,8 @@ export type CallStatsOptions = {
   readonly now?: () => number;
   /** Kernel facts a closed window yields: one per camera encoding, one per received video track, and the window summary. */
   readonly videoFacts?: (rows: readonly { readonly event: string; readonly fields: Record<string, unknown> }[]) => void;
+  /** The pulled publication a remote MediaStreamTrack id belongs to; unknown stays absent rather than guessed. */
+  readonly videoTracks?: (trackIdentifier: string) => { readonly source?: string; readonly publication_id?: string } | undefined;
 };
 
 export function createCallStatsCollector(options: CallStatsOptions): CallStatsCollector {
@@ -76,7 +78,7 @@ export function createCallStatsCollector(options: CallStatsOptions): CallStatsCo
       options.videoFacts?.([{ event: "video.call_stats", fields: { window_ms: Math.min(MAX_MS, Math.round(windowMs)), gap: reason, gap_ms: Math.min(MAX_MS, Math.round(windowMs)) } }]);
       return gap(windowMs);
     }
-    options.videoFacts?.(videoWindows(latest, baseline, windowMs, sample));
+    options.videoFacts?.(videoWindows(latest, baseline, windowMs, sample, options.videoTracks));
     history = Object.freeze([...history, sample].slice(-CALL_STATS_HISTORY));
     options.record({ type: "call_stats", stats: sample });
   };
@@ -291,7 +293,7 @@ function audioWindow(stat: Stat, baseline: Baseline, delivery: CallStatsDelivery
 }
 
 /** The kernel rows one closed window yields: video.send_window per camera encoding, video.track_window per received video track, and one video.call_stats summary. */
-function videoWindows(report: RTCStatsReport, baseline: Baseline, windowMs: number, sample: CallStatsSample): { event: string; fields: Record<string, unknown> }[] {
+function videoWindows(report: RTCStatsReport, baseline: Baseline, windowMs: number, sample: CallStatsSample, videoTracks?: CallStatsOptions["videoTracks"]): { event: string; fields: Record<string, unknown> }[] {
   const rows: { event: string; fields: Record<string, unknown> }[] = [];
   const ms = Math.round(windowMs);
   for (const stat of stats(report, "outbound-rtp", "video")) {
@@ -310,6 +312,9 @@ function videoWindows(report: RTCStatsReport, baseline: Baseline, windowMs: numb
   for (const stat of stats(report, "inbound-rtp", "video")) {
     if (typeof stat.mid !== "string") continue;
     const fields: Record<string, unknown> = { mid: stat.mid, window_ms: ms, playout: "unknown" };
+    const context = typeof stat.trackIdentifier === "string" ? videoTracks?.(stat.trackIdentifier) : undefined;
+    if (context?.source !== undefined) fields.source = context.source;
+    if (context?.publication_id !== undefined) fields.publication_id = context.publication_id;
     const pairs: [string, string, number][] = [
       ["packets", "packetsReceived", 10_000_000], ["lost", "packetsLost", 10_000_000], ["bytes", "bytesReceived", MAX_MS],
       ["frames_received", "framesReceived", 10_000_000], ["frames_decoded", "framesDecoded", 10_000_000],
