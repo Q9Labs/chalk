@@ -13,6 +13,7 @@ import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./in
 import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
+import { arrivalErrorCode } from "../public-invites/entrance.js";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, mediaCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
@@ -139,7 +140,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
     (request) =>
       Effect.tryPromise({
         try: (signal) => Promise.resolve(options.access(request ? { ...request, signal } : undefined)),
-        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) ? "access.invalid" : "access.unavailable", cause })),
+        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) || arrivalErrorCode(cause) === "episode.not_active" ? "access.invalid" : "access.unavailable", cause })),
       }),
     options.accessRefreshWindowMs,
   );
