@@ -75,13 +75,14 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     const request = route.request();
     if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
     signals.tracksClose += 1;
+    const closing = JSON.stringify(request.postDataJSON()?.tracks ?? []).replace(/"(trackName|publicationId)":"[^"]*"/g, "").slice(0, 200);
     if (fault && signals.armed && signals.answered404 < faultCalls) {
       signals.answered404 += 1;
-      note("intercepted tracks_close #" + signals.tracksClose + ": answered 404 without forwarding");
+      note("intercepted tracks_close #" + signals.tracksClose + ": answered 404 without forwarding", { closing });
       return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "media.connection_not_found" }) });
     }
     signals.forwarded += 1;
-    note("tracks_close #" + signals.tracksClose + " forwarded to the API");
+    note("tracks_close #" + signals.tracksClose + " forwarded to the API", { closing });
     return route.continue();
   });
   // Every SFU signalling call the sharer makes, in order, with the API's answer.
