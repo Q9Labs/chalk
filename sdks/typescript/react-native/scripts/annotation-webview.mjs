@@ -101,5 +101,4 @@ export function mount(engine) {
   };
   window.addEventListener("resize", requestPaint);
   document.fonts.ready.then(requestPaint);
-  window.ReactNativeWebView?.postMessage("ready");
 }

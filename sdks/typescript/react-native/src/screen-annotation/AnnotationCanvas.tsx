@@ -86,7 +86,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   useEffect(() => failExport, []);
 
   const onMessage = ({ nativeEvent: { data } }: WebViewMessageEvent) => {
-    if (data === "ready") {
+    if (data === "annotation-loaded") {
       setReady(true);
       onReady(true);
       return;
@@ -144,6 +144,11 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
       javaScriptCanOpenWindowsAutomatically={false}
       onMessage={onMessage}
       onLoadStart={reset}
+      onLoad={(event) => {
+        if (event.nativeEvent.url !== rendererUrl) return;
+        // Android can drop bridge messages sent by the page while loading.
+        view.current?.injectJavaScript(`if (typeof window.chalkAnnotationScene === "function") window.ReactNativeWebView?.postMessage("annotation-loaded");true;`);
+      }}
       onError={reset}
       onContentProcessDidTerminate={reset}
       onRenderProcessGone={reset}
