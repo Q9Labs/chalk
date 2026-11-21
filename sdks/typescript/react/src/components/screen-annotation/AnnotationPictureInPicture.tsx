@@ -14,7 +14,7 @@ function hasDocumentPiP(window: Window): window is Window & { documentPictureInP
 
 type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "fontUrl"> & { readonly track: MediaStreamTrack };
 
-export function AnnotationPictureInPicture(props: PictureProps): React.JSX.Element {
+export function AnnotationPictureInPicture({ inTab, ...props }: PictureProps & { readonly inTab: boolean }): React.JSX.Element {
   const [popup, setPopup] = useState<Window | null>(null);
   const [opening, setOpening] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -32,7 +32,7 @@ export function AnnotationPictureInPicture(props: PictureProps): React.JSX.Eleme
     [],
   );
 
-  if (typeof window === "undefined" || !hasDocumentPiP(window)) return <span className={annotationControl}>Marks are visible in this tab</span>;
+  if (typeof window === "undefined" || !hasDocumentPiP(window)) return <span className={annotationControl}>{inTab ? "Marks are visible in this tab" : "Share a tab to see marks in this call"}</span>;
   const pip = window.documentPictureInPicture;
   const open = async () => {
     if (current.current) {
@@ -79,7 +79,7 @@ export function AnnotationPictureInPicture(props: PictureProps): React.JSX.Eleme
       </button>
       {denied ? (
         <span role="status" className={annotationControl}>
-          Couldn’t pop out. Marks are visible in this tab.
+          {inTab ? "Couldn’t pop out. Marks are visible in this tab." : "Couldn’t pop out. Share a tab to see marks in this call."}
         </span>
       ) : null}
       {popup ? createPortal(<Picture {...props} />, popup.document.body) : null}

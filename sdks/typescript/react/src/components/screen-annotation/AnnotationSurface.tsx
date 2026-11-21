@@ -79,8 +79,9 @@ function ActiveAnnotationSurface({
   const target = targetOf(state);
   const { saveToWhiteboard, downloadPng } = actions ?? {};
   const editable = canDraw(state, actorId);
-  // A webpage cannot exclude its own windows from monitor capture. Keep them clean by default.
-  const safePreview = !isLocal || capture?.surface === "browser" || capture?.surface === "window";
+  // A window share may be this browser window. Only an excluded call tab can host ink in-tab.
+  const safePreview = !isLocal || capture?.surface === "browser";
+  const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
   const showToolbar = toolsOpen && editable && safePreview;
   const showOwnClear = state.marks.some((mark) => mark.author.participant_id === actorId);
   const onError = (message: string) => setFeedback({ message, error: true });
@@ -143,9 +144,9 @@ function ActiveAnnotationSurface({
               </button>
             ) : null}
             <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} />
-            {isLocal && safePreview ? <AnnotationPictureInPicture {...annotationProps} track={track} /> : null}
+            {isLocal && canPopOut ? <AnnotationPictureInPicture {...annotationProps} track={track} inTab={safePreview} /> : null}
           </div>
-          {isLocal && !safePreview ? <p className={annotationControl}>Share a tab or window to see marks here.</p> : null}
+          {isLocal && !canPopOut ? <p className={annotationControl}>Share a tab or window for a marks preview.</p> : null}
           {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
           {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
           {showToolbar || showOwnClear || state.access.can_moderate ? (
