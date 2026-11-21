@@ -369,6 +369,10 @@ impl Capture {
             })
             .ok_or(())?;
         let _ = probe;
+        if self.window.is_some() && !self.projection_is_current(app) {
+            self.await_window(app);
+            return Err(());
+        }
         let window = app.get_webview_window(OVERLAY).ok_or(())?;
         if desktop::verify_capture_affinity(&window).is_err() {
             self.fail(app);
