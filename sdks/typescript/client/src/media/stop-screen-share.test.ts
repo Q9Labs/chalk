@@ -272,8 +272,13 @@ it("stops sharing when the SFU answers every close call with 404, then shares ag
   const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`) });
   await h.client.start(fakeStream(new FakeTrack("microphone", "audio")));
   await startScreen(h);
-  const close = vi.spyOn(h.transport, "closeTracks").mockRejectedValue(GONE());
+  const attempts: unknown[] = [];
+  const close = vi.spyOn(h.transport, "closeTracks").mockImplementation(async (input) => {
+    attempts.push(input);
+    throw GONE();
+  });
   await stopScreenAsTheController(h);
+  expect(attempts.length).toBeGreaterThan(0);
   expect(h.client.getSnapshot().localTracks.find((track) => track.source === "screen")?.enabled ?? false).toBe(false);
   close.mockRestore();
   await shareAgain(h);

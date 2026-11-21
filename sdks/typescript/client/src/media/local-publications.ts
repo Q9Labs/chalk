@@ -131,6 +131,18 @@ export class LocalPublicationLedger {
     this.owned.delete(publication);
     return true;
   }
+  /** Chrome cannot offer once the BUNDLE tag section is stopped, and the SFU expires the session when its tag goes, so that section is closed by force without SDP and its connection is replaced. Returns whether the close carries no SDP. */
+  async detachForClose(publication: OwnedLocalPublication, phase: { detached: boolean }, detachSender: () => Promise<void>): Promise<boolean> {
+    const carriesBundle = this.carriesBundle(publication);
+    let closed = connectionIsClosed(publication.connection);
+    if (!phase.detached && !closed) {
+      await detachSender();
+      closed = connectionIsClosed(publication.connection);
+      if (!closed && !carriesBundle) publication.transceiver.stop();
+    }
+    phase.detached = true;
+    return closed || carriesBundle;
+  }
   carriesBundle(publication: OwnedLocalPublication): boolean {
     const bundleTag = bundleTagOf(publication.connection);
     return !bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag);
