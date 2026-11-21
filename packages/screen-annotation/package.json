@@ -1,0 +1,39 @@
+{
+  "name": "@q9labsai/chalk-screen-annotation",
+  "version": "0.1.0",
+  "description": "Shared frame geometry and Canvas renderer for Chalk screen annotation.",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "fonts"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./fonts/*": "./fonts/*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --platform neutral --out-dir ./dist && tsc --project tsconfig.build.json",
+    "check-types": "tsc-rs --noEmit",
+    "lint": "pnpm exec oxfmt --check .",
+    "test": "node ../../scripts/test/run.mjs pnpm exec vitest run"
+  },
+  "dependencies": {
+    "@q9labsai/chalk-client": "workspace:^"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.0.9",
+    "typescript": "^7.0.2"
+  }
+}
