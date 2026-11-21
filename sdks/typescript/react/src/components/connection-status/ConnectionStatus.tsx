@@ -76,32 +76,31 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
 function FailedCard({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatusProps, "onRejoin" | "onLeave" | "onReportProblem">) {
   return (
     <div role="alertdialog" aria-labelledby="chalk-connection-lost-title" aria-describedby="chalk-connection-lost-detail" data-part="connection-status" className="chalk-connection-card chalk-connection-card-lost">
-      <div>
-        <h3 id="chalk-connection-lost-title">Connection lost</h3>
-        <p id="chalk-connection-lost-detail">We couldn’t get you back into the call. The call is still going, so you can rejoin.</p>
-      </div>
-      <div className="chalk-connection-actions">
-        {onRejoin ? (
-          <button type="button" autoFocus className="chalk-connection-rejoin" onClick={onRejoin}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
-            Rejoin
-          </button>
-        ) : null}
-        {onLeave ? (
-          <button type="button" className="chalk-connection-leave" onClick={onLeave}>
-            Leave
-          </button>
-        ) : null}
-      </div>
-      {/* The failure code goes into the report, never onto the card. */}
-      {onReportProblem ? (
+      <h3 id="chalk-connection-lost-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v5.5M12 16.5h.01" />
+        </svg>
+        Connection lost
+      </h3>
+      <p id="chalk-connection-lost-detail">We couldn’t get you back into the call. It’s still going, so you can rejoin.</p>
+      {onRejoin ? (
+        <button type="button" autoFocus className="chalk-connection-rejoin" onClick={onRejoin}>
+          Rejoin
+        </button>
+      ) : null}
+      {onLeave || onReportProblem ? (
         <div className="chalk-connection-links">
-          <button type="button" onClick={onReportProblem}>
-            Report a problem
-          </button>
+          {onLeave ? (
+            <button type="button" onClick={onLeave}>
+              Leave call
+            </button>
+          ) : null}
+          {onReportProblem ? (
+            <button type="button" onClick={onReportProblem}>
+              Report a problem
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -120,15 +119,14 @@ const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:70;
 .chalk-connection-card h3 .chalk-connection-ring {width:20px;height:20px;}
 .chalk-connection-time {color:var(--chalk-muted-text);font-weight:400;font-size:var(--type-body);font-variant-numeric:tabular-nums;}
 .chalk-connection-card p {color:var(--chalk-muted-text);font-size:var(--type-body-sm);line-height:1.45;text-wrap:balance;}
-.chalk-connection-card-lost {display:flex;flex-direction:column;align-items:stretch;gap:var(--space-3);width:min(360px, calc(100% - 32px));padding:var(--space-5);text-align:start;pointer-events:auto;}
-.chalk-connection-card-lost h3 {font-size:var(--type-lead);}
-.chalk-connection-card-lost p {margin-top:var(--space-0-5);text-wrap:pretty;}
-.chalk-connection-actions {display:flex;gap:var(--space-2);margin-top:var(--space-1);}
-.chalk-connection-actions button {height:40px;padding:0 var(--space-4);border-radius:var(--corner-pill);font-weight:600;font-size:var(--type-body);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);}
-.chalk-connection-rejoin {flex:1;background:var(--chalk-text);color:var(--chalk-canvas);}
-.chalk-connection-leave {background:var(--chalk-hover);}
-.chalk-connection-links {display:grid;justify-items:center;margin-top:var(--space-1);color:var(--chalk-muted-text);font-size:var(--type-caption);}
-.chalk-connection-links button {text-decoration:underline;text-underline-offset:3px;}
+.chalk-connection-card-lost {width:min(340px, calc(100% - 32px));gap:var(--space-2);pointer-events:auto;}
+.chalk-connection-card-lost h3 svg {flex:none;color:var(--chalk-muted-text);}
+.chalk-connection-rejoin {justify-self:stretch;height:44px;margin-top:var(--space-2);border-radius:var(--corner-pill);background:var(--chalk-text);color:var(--chalk-canvas);font-size:var(--type-body);font-weight:600;}
+.chalk-connection-links {display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-1) var(--space-2);}
+.chalk-connection-links button {min-height:36px;padding:0 var(--space-3);border-radius:var(--corner-pill);color:var(--chalk-muted-text);font-size:var(--type-body-sm);font-weight:500;}
+.chalk-connection-links button:hover {background:var(--chalk-hover);color:var(--chalk-text);}
+.chalk-connection-card-lost button {outline:none;box-shadow:none;}
+.chalk-connection-card-lost button:focus-visible {outline:2px solid var(--chalk-text);outline-offset:2px;}
 @media (prefers-reduced-motion: reduce) {.chalk-connection-dim,.chalk-connection-dim[data-lifting],.chalk-connection-card {animation-duration:.01s;}}
 [data-connection-lost] [data-part="dock-region"] button:not([aria-label="Leave call"]) {opacity:.38;pointer-events:none;}
 `;
