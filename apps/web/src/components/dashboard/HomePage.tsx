@@ -137,7 +137,7 @@ export function HomePage() {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
   const [dialog, setDialog] = useState<HomeDialog>(null);
-  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? shown(state.data)[0]?.id : undefined);
+  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? listed(state.data)[0]?.id : undefined);
   const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next));
 
   return (
