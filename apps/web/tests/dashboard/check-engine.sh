@@ -25,6 +25,9 @@ case "$proof" in
     export CHALK_DASHBOARD_SFU_PORT=$((refresh_port + 5))
     export CHALK_JOIN_WEB_PORT=$((refresh_port + 3)) CHALK_JOIN_SYNC_PORT=$((refresh_port + 4))
     export DASHBOARD_ENGINE_ARTIFACT_SUFFIX=-refresh DASHBOARD_ENGINE_DEADLINE_SECONDS=600
+    # Placement counts recent starts for 30 seconds, even after End releases their sessions.
+    # Budget for 60 sequential fixture Episodes at 3,480 packets/s each plus the live browser tabs.
+    export SFU_PACKET_BUDGET=250000
     bash apps/web/tests/dashboard/real-engine.sh node apps/web/tests/dashboard/owner-refresh.mjs
     ;;
   board)
