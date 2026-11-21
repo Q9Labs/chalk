@@ -3,6 +3,10 @@ defmodule ChalkSync.ScreenAnnotation.SQL do
 
   alias ChalkSync.WhiteboardV1.SQL, as: Whiteboard
 
+  def episode_status do
+    "select status from episodes where tenant_id = $1 and space_id = $2 and id = $3"
+  end
+
   def lock_episode do
     """
     select status from episodes
@@ -99,7 +103,7 @@ defmodule ChalkSync.ScreenAnnotation.SQL do
   def update_layer do
     """
     update sync_screen_annotation_layers
-    set revision = $4, fence = $5, paused = $6, marks = $7, requests = $8, history = $9, last_change = $10
+    set revision = $4, fence = $5, paused = $6, marks = $7, requests = $8, history = $9, last_change = $10, next_expiry_at_ms = $11
     where tenant_id = $1 and space_id = $2 and episode_id = $3
     """
   end

@@ -3,47 +3,12 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
 
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.ScreenAnnotation.{Proof, Repository}
-  alias ChalkSync.Stateholder.Postgres.ScreenShareLease
+  alias ChalkSync.ScreenAnnotation.{Housekeeping, Proof, Repository}
   alias ChalkSync.UUID
+  import Proof, only: [observe: 4, operation_id: 1, publication: 2]
 
   setup %{host: host, connection: connection} do
-    {:ok, _lease} =
-      ScreenShareLease.acquire(
-        connection,
-        host.episode,
-        host.participant_id,
-        host.participant_generation
-      )
-
-    publication = publication(host.participant_generation, "screen-1")
-    observe(connection, host, 1, publication)
-
-    on_exit(fn ->
-      params = [uuid(host.episode.tenant_id), uuid(host.episode.episode_id)]
-
-      Postgrex.query!(
-        connection,
-        "delete from sync_screen_annotation_layers where tenant_id = $1 and episode_id = $2",
-        params
-      )
-
-      Proof.cleanup_journey(connection, host.episode.episode_id)
-
-      Postgrex.query!(
-        connection,
-        "delete from provider_operation_observations where tenant_id = $1 and episode_id = $2",
-        params
-      )
-
-      Postgrex.query!(
-        connection,
-        "delete from provider_operation_observation_heads where tenant_id = $1 and episode_id = $2",
-        params
-      )
-    end)
-
-    %{publication: publication}
+    Proof.publish_screen(host, connection, &on_exit/1)
   end
 
   test "the active generation and video lease bind the layer, not client-asserted publication IDs",
@@ -186,6 +151,62 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
     assert {:ok, _, %{marks: %{}}, _, _} = Repository.read(host)
   end
 
+  test "elapsed ink, requests and receipts are pruned without a visible revision", ctx do
+    %{connection: connection, host: host, publication: publication} = ctx
+    assert {:ok, %{"layer_id" => layer}} = Repository.command(host, bind_frame(publication))
+    expired = %{draft() | "lifetime" => "fade"}
+
+    assert {:ok, _} =
+             Repository.command(
+               host,
+               command(layer, 1, %{"kind" => "commit", "draft" => expired})
+             )
+
+    assert {:ok, _} =
+             Repository.command(
+               host,
+               command(layer, 1, %{"kind" => "commit", "draft" => draft()})
+             )
+
+    id = [uuid(layer)]
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_screen_annotation_layers
+      set marks = jsonb_set(marks, $2::text[], '1'), next_expiry_at_ms = 1,
+          requests = '{"expired":{"expires_at_ms":1}}'
+      where layer_id = $1
+      """,
+      id ++ [[expired["mark_id"], "expires_at_ms"]]
+    )
+
+    Postgrex.query!(
+      connection,
+      "update sync_screen_annotation_receipts set expires_at_ms = 1 where layer_id = $1",
+      id
+    )
+
+    assert :ok = Housekeeping.sweep(connection)
+
+    assert %{rows: [[3, 1, 1, %{}, nil]]} =
+             Postgrex.query!(
+               connection,
+               """
+               select revision, fence, (select count(*) from jsonb_object_keys(marks)), requests, next_expiry_at_ms
+               from sync_screen_annotation_layers where layer_id = $1
+               """,
+               id
+             )
+
+    assert %{rows: [[0]]} =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_screen_annotation_receipts where layer_id = $1",
+               id
+             )
+  end
+
   test "strict framing validates correlation, operation age and text bytes", ctx do
     bind = bind_frame(ctx.publication)
 
@@ -218,49 +239,6 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
              )
   end
 
-  defp observe(connection, host, sequence, publication) do
-    params = [uuid(host.episode.tenant_id), uuid(host.episode.episode_id), sequence]
-
-    publications = [
-      %{
-        "participant_id" => host.participant_id,
-        "source" => "screen",
-        "enabled" => true,
-        "publication_id" => publication
-      }
-    ]
-
-    assert {:ok, _} =
-             Postgrex.transaction(connection, fn tx ->
-               Postgrex.query!(
-                 tx,
-                 """
-                 insert into provider_operation_observation_heads (tenant_id, episode_id, incarnation, sequence)
-                 values ($1, $2, 1, $3) on conflict (tenant_id, episode_id) do update set sequence = excluded.sequence
-                 """,
-                 params
-               )
-
-               Postgrex.query!(
-                 tx,
-                 """
-                 insert into provider_operation_observations
-                   (tenant_id, episode_id, incarnation, sequence, publications, observation_fingerprint)
-                 values ($1, $2, 1, $3, $4, decode(repeat('00', 32), 'hex'))
-                 """,
-                 params ++ [publications]
-               )
-             end)
-  end
-
-  defp publication(generation, track) do
-    "chalk_pub_v1." <>
-      Base.url_encode64(
-        JSON.encode!(%{"c" => "session", "t" => track, "g" => generation, "m" => "1"}),
-        padding: false
-      )
-  end
-
   defp bind_frame(publication),
     do:
       command(nil, nil, %{
@@ -277,12 +255,6 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
       "command" => command,
       "operation_id" => operation_id(System.system_time(:millisecond))
     }
-  end
-
-  defp operation_id(ms) do
-    <<entropy::74, _::6>> = :crypto.strong_rand_bytes(10)
-    <<a::12, b::62>> = <<entropy::74>>
-    UUID.load!(<<ms::48, 7::4, a::12, 2::2, b::62>>)
   end
 
   defp draft do

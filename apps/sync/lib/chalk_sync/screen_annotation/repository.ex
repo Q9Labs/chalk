@@ -22,6 +22,15 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
     end
   end
 
+  def closed_reason(identity) do
+    connection = Database.connection(identity.episode)
+
+    case Postgrex.query(connection, SQL.episode_status(), Store.context(identity), log: nil) do
+      {:ok, %{rows: [["ended"]]}} -> "episode_ended"
+      _ -> "share_ended"
+    end
+  end
+
   def command(identity, frame, context \\ nil, attachment \\ nil) do
     Store.transaction(identity, fn connection ->
       params = Store.context(identity)
@@ -151,7 +160,9 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
       Postgrex.query!(
         connection,
         SQL.store_receipt(),
-        op.key ++ [op.fingerprint, next.revision, op.expires], log: nil)
+        op.key ++ [op.fingerprint, next.revision, op.expires],
+        log: nil
+      )
 
       {:ok, accepted(next)}
     else
@@ -206,7 +217,8 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
                 next.marks,
                 next.requests,
                 next.history,
-                next.last_change
+                next.last_change,
+                Layer.next_expiry(next)
               ],
             log: nil
           )

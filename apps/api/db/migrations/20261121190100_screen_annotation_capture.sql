@@ -77,14 +77,21 @@ $$;
 create function recording_annotation_capture_plan() returns trigger language plpgsql as $$
 declare
     layer sync_screen_annotation_layers;
+    checkpoint_ms bigint;
 begin
     -- Serialize creation of either the annotation layer or the capture cut.
     -- Do not lock the live layer here: its writer can be waiting for this lock.
     perform pg_advisory_xact_lock(hashtextextended(concat_ws(':', 'annotation-capture', new.tenant_id, new.space_id, new.episode_id), 0));
+    checkpoint_ms := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+    update recording_screen_annotation_layers
+    set closed_at_ms = greatest(initial_at_ms, checkpoint_ms)
+    where tenant_id = new.tenant_id and space_id = new.space_id and episode_id = new.episode_id
+      and recording_id = new.recording_id and capture_epoch < new.capture_epoch and closed_at_ms is null;
+
     select live.* into layer from sync_screen_annotation_layers live
     where live.tenant_id = new.tenant_id and live.space_id = new.space_id and live.episode_id = new.episode_id;
     if found then
-        perform seed_recording_screen_annotation(layer, new, (extract(epoch from clock_timestamp()) * 1000)::bigint);
+        perform seed_recording_screen_annotation(layer, new, checkpoint_ms);
     end if;
     return null;
 end;
@@ -100,6 +107,7 @@ declare
     current_layer sync_screen_annotation_layers;
     plan recording_capture_plans;
     event_at_ms bigint;
+    lease_end_ms bigint;
 begin
     current_layer := case when tg_op = 'DELETE' then old else new end;
     if tg_op = 'UPDATE' and (new.last_change is null or new.revision = old.revision) then
@@ -121,6 +129,12 @@ begin
             perform seed_recording_screen_annotation(new, plan, event_at_ms);
         end loop;
     elsif tg_op = 'DELETE' then
+        select (extract(epoch from least(renewed_until, hard_expires_at)) * 1000)::bigint
+        into lease_end_ms from sync_screen_share_leases lease
+        where lease.tenant_id = old.tenant_id and lease.space_id = old.space_id and lease.episode_id = old.episode_id
+          and lease.owner_participant_id = old.sharer_id and lease.owner_generation = old.sharer_generation;
+
+        event_at_ms := least(event_at_ms, lease_end_ms);
         update recording_screen_annotation_layers captured set closed_at_ms = greatest(captured.initial_at_ms, event_at_ms)
         where captured.tenant_id = old.tenant_id and captured.space_id = old.space_id
             and captured.episode_id = old.episode_id and captured.layer_id = old.layer_id and captured.closed_at_ms is null;

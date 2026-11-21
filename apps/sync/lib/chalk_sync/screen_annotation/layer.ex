@@ -25,6 +25,13 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
     }
   end
 
+  def next_expiry(layer) do
+    (Map.values(layer.marks) ++ Map.values(layer.requests))
+    |> Enum.map(& &1["expires_at_ms"])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.min(fn -> nil end)
+  end
+
   defp expired?(%{"expires_at_ms" => expiry}, now), do: is_integer(expiry) and expiry <= now
 
   def access(layer, actor) do

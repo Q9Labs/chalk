@@ -132,7 +132,7 @@ defmodule ChalkSync.Transport.Socket.Annotation do
         end_attachment(state, epoch)
 
       {:error, "not_active"} ->
-        project(state, forced?, nil, nil, System.system_time(:millisecond), nil, epoch)
+        close_layer(state, forced?, System.system_time(:millisecond), nil, epoch, :lost_seat)
 
       _failure ->
         suspend(state, forced?, System.system_time(:millisecond), epoch)
@@ -145,24 +145,7 @@ defmodule ChalkSync.Transport.Socket.Annotation do
   end
 
   defp project(state, forced?, _actor, nil, now, share, epoch) do
-    _ = Presence.confirm(epoch, nil)
-
-    closing =
-      case state.annotation do
-        %{layer: id, publication: publication} ->
-          reason =
-            if share && share.publication != publication,
-              do: "share_replaced",
-              else: "share_ended"
-
-          [%{"type" => "annotation_closed", "layer_id" => id, "reason" => reason}]
-
-        _ ->
-          []
-      end
-
-    frames = if forced?, do: closing ++ [snapshot(nil, now)], else: closing
-    push(%{state | annotation: nil}, frames)
+    close_layer(state, forced?, now, share, epoch, :lost_publication)
   end
 
   defp project(state, forced?, actor, layer, now, share, epoch) do
@@ -188,6 +171,32 @@ defmodule ChalkSync.Transport.Socket.Annotation do
         suspend(state, forced?, now, epoch)
     end
   end
+
+  defp close_layer(state, forced?, now, share, epoch, cause) do
+    _ = Presence.confirm(epoch, nil)
+
+    closing =
+      case state.annotation do
+        %{layer: id, publication: publication} ->
+          reason = retirement_reason(state.identity, share, publication, cause)
+          [%{"type" => "annotation_closed", "layer_id" => id, "reason" => reason}]
+
+        _ ->
+          []
+      end
+
+    frames = if forced?, do: closing ++ [snapshot(nil, now)], else: closing
+    push(%{state | annotation: nil}, frames)
+  end
+
+  defp retirement_reason(identity, _share, _publication, :lost_seat),
+    do: Repository.closed_reason(identity)
+
+  defp retirement_reason(_identity, %{publication: observed}, publication, _cause)
+       when observed != publication,
+       do: "share_replaced"
+
+  defp retirement_reason(_identity, _share, _publication, _cause), do: "share_ended"
 
   # A read that raced an invalidation is not evidence that the layer closed.
   # Withdraw the projection until the next committed witness instead.

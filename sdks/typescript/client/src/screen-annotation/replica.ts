@@ -30,6 +30,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   #sampleTimer: ReturnType<typeof setTimeout> | undefined;
   #stateExpiryTimer: ReturnType<typeof setTimeout> | undefined;
   #expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  #stateRequestedAt: number | undefined;
   #clockOffset = Date.now() - performance.now();
 
   constructor(send: (wire: string) => boolean) {
@@ -54,6 +55,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
 
   disconnected(terminal = false): void {
     this.#live = false;
+    this.#stateRequestedAt = undefined;
     this.#reset(terminal ? "unavailable" : "connecting", terminal);
   }
 
@@ -205,13 +207,25 @@ export class AnnotationReplica implements ScreenAnnotationClient {
 
   #anchorClock(serverAt: number, reanchor: boolean): void {
     const receivedAt = performance.now();
-    const offset = serverAt - receivedAt;
-    this.#clockOffset = reanchor ? offset : Math.max(offset, this.#clockOffset);
+    const requestedAt = this.#stateRequestedAt;
+    if (reanchor) {
+      // Estimate the server clock at the midpoint of a recent state round trip.
+      // A delayed or unsolicited snapshot can only establish a lower bound.
+      const recent = requestedAt !== undefined && receivedAt - requestedAt <= 2_000;
+      const localAtSample = recent ? (requestedAt + receivedAt) / 2 : receivedAt;
+      this.#clockOffset = serverAt - localAtSample;
+      this.#stateRequestedAt = undefined;
+    } else {
+      this.#clockOffset = Math.max(serverAt - receivedAt, this.#clockOffset);
+    }
   }
 
   #requestState(): void {
     this.#reset("connecting", false);
-    this.#send(JSON.stringify({ type: "annotation_state_request" }));
+    this.#stateRequestedAt = performance.now();
+    if (!this.#send(JSON.stringify({ type: "annotation_state_request" }))) {
+      this.#stateRequestedAt = undefined;
+    }
   }
 
   #clearPresence(): void {

@@ -1,8 +1,8 @@
 defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
-  use ChalkSync.ServerCase, async: false
+  use ChalkSync.WhiteboardV1.PostgresRepositoryCase, async: false
 
   alias ChalkSync.Auth.JWTTokenVerifier
-  alias ChalkSync.ScreenAnnotation.Attachment
+  alias ChalkSync.ScreenAnnotation.{Attachment, Proof, Repository}
   alias ChalkSync.TestWSClient
   alias ChalkSync.UUID
 
@@ -10,6 +10,10 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
   @audience "screen_annotation_helper_v1"
 
   setup do
+    server =
+      start_supervised!({Bandit, plug: ChalkSync.Transport.Router, ip: {127, 0, 0, 1}, port: 0})
+
+    {:ok, {_ip, port}} = ThousandIsland.listener_info(server)
     {issuer_key, issuer_secret} = :crypto.generate_key(:eddsa, :ed25519)
     {device_key, device_secret} = :crypto.generate_key(:eddsa, :ed25519)
 
@@ -51,7 +55,7 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
       "cnf" => %{"jwk" => %{"kty" => "OKP", "crv" => "Ed25519", "x" => encode(device_key)}}
     }
 
-    %{issuer: issuer_secret, device: device_secret, claims: claims}
+    %{issuer: issuer_secret, device: device_secret, claims: claims, port: port}
   end
 
   test "accepts only a timely sharer ticket with proof of the bound key on this socket", ctx do
@@ -103,6 +107,69 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
     first = TestWSClient.send_json(first, %{"type" => "hello", "protocol_version" => 1})
 
     assert {:closed, 1008, "annotation attachment ended", _first} = TestWSClient.recv(first)
+  end
+
+  test "a current sharer can pause over the attachment but cannot change shared draw policy",
+       ctx do
+    %{publication: publication} = Proof.publish_screen(ctx.host, ctx.connection, &on_exit/1)
+
+    bind = %{
+      "kind" => "bind",
+      "publication_id" => publication,
+      "frame" => %{"width" => 1920, "height" => 1080}
+    }
+
+    assert {:ok, %{"layer_id" => layer}} = Repository.command(ctx.host, command(nil, nil, bind))
+
+    claims =
+      Map.merge(ctx.claims, %{
+        "sub" => ctx.host.participant_id,
+        "tenant_id" => ctx.host.episode.tenant_id,
+        "space_id" => ctx.host.episode.space_id,
+        "episode_id" => ctx.host.episode.episode_id,
+        "participant_id" => ctx.host.participant_id,
+        "publication_id" => publication,
+        "layer_id" => layer
+      })
+
+    assert {:ok, socket} = TestWSClient.connect(ctx.port, "/v1/screen-annotation/helper")
+
+    assert {:json, %{"type" => "annotation_helper_challenge", "nonce" => nonce}, socket} =
+             TestWSClient.recv(socket)
+
+    socket = TestWSClient.send_json(socket, attach(nonce, token(ctx.issuer, claims), ctx.device))
+
+    assert {:json,
+            %{"type" => "annotation_state", "state" => %{"layer" => %{"layer_id" => ^layer}}},
+            socket} =
+             TestWSClient.recv(socket)
+
+    socket =
+      TestWSClient.send_json(socket, command(layer, 1, %{"kind" => "pause", "paused" => true}))
+
+    assert {:json, %{"type" => "annotation_receipt", "result" => %{"kind" => "accepted"}}, socket} =
+             TestWSClient.recv(socket)
+
+    assert {:ok, _, %{paused: true, fence: 2}, _, _} = Repository.read(ctx.host)
+
+    socket =
+      TestWSClient.send_json(
+        socket,
+        command(layer, 2, %{"kind" => "set_policy", "policy" => "hosts"})
+      )
+
+    assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
+    assert {:ok, %{draw_policy: "everyone"}, _, _, _} = Repository.read(ctx.host)
+  end
+
+  defp command(layer, fence, payload) do
+    %{
+      "type" => "annotation_command",
+      "layer_id" => layer,
+      "fence" => fence,
+      "operation_id" => Proof.operation_id(System.system_time(:millisecond)),
+      "command" => payload
+    }
   end
 
   defp attach(nonce, ticket, secret) do

@@ -13,6 +13,7 @@ create table sync_screen_annotation_layers (
     paused boolean not null default false,
     marks jsonb not null default '{}',
     requests jsonb not null default '{}',
+    next_expiry_at_ms bigint,
     history jsonb not null default '{}',
     last_change jsonb,
     opened_event_id uuid not null default gen_random_uuid(),
@@ -23,6 +24,9 @@ create table sync_screen_annotation_layers (
     primary key (tenant_id, space_id, episode_id),
     foreign key (tenant_id, space_id, episode_id) references episodes(tenant_id, space_id, id) on delete cascade
 );
+
+create index sync_screen_annotation_layers_expiry
+    on sync_screen_annotation_layers(next_expiry_at_ms) where next_expiry_at_ms is not null;
 
 create table sync_screen_annotation_receipts (
     layer_id uuid not null references sync_screen_annotation_layers(layer_id) on delete cascade,
@@ -36,6 +40,8 @@ create table sync_screen_annotation_receipts (
 );
 create index sync_screen_annotation_receipts_expiry
     on sync_screen_annotation_receipts(layer_id, expires_at_ms);
+create index sync_screen_annotation_receipts_idle_expiry
+    on sync_screen_annotation_receipts(expires_at_ms);
 
 -- The publication witness is disposable, but retirement must happen in the same
 -- commit as lifecycle and draw authority changes, including writes from the API.
@@ -99,6 +105,9 @@ $$;
 -- +goose StatementBegin
 create function sync_screen_annotation_layer_changed() returns trigger language plpgsql as $$
 begin
+    if tg_op = 'UPDATE' and new.revision = old.revision then
+        return null;
+    end if;
     if tg_op = 'DELETE' then
         perform pg_notify('chalk_screen_annotation', concat_ws(':', old.tenant_id, old.space_id, old.episode_id, 'control'));
     else
