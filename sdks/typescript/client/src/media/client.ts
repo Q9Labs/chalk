@@ -506,7 +506,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #retireLocalRecoveryPublications(source: MediaPublicationSource): Promise<void> {
-    return this.#retireOwnedPublications(() => {}, { sources: [source], goneIsComplete: true });
+    return this.#retireOwnedPublications(() => {}, [source]);
   }
   #finishPublicationPoll(generation: number): void {
     if (generation !== this.#generation) return;
@@ -579,7 +579,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
     if (publication.lifecycle.kind !== "confirmed") return;
     this.#locals.markRetiring(publication, "user_pause");
-    await this.#retireOwnedPublications(undefined, { sources: [source], goneIsComplete: true });
+    await this.#retireOwnedPublications(undefined, [source]);
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
@@ -721,7 +721,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#pauseLocalSource(state.source, "discovery_absent");
-    await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
+    await this.#retireOwnedPublications();
   }
   #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause", options: { readonly group?: boolean } = {}): void {
     const sources = options.group === false ? [source] : localSourceGroup(source);
@@ -737,8 +737,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  #retireOwnedPublications(reportFailure: (error: unknown) => void = this.#reportError.bind(this), options?: { readonly sources?: readonly MediaPublicationSource[]; readonly goneIsComplete?: boolean }): Promise<void> {
-    return this.#locals.retireOwned(reportFailure, options);
+  #retireOwnedPublications(reportFailure: (error: unknown) => void = this.#reportError.bind(this), sources?: readonly MediaPublicationSource[]): Promise<void> {
+    return this.#locals.retireOwned(reportFailure, sources);
   }
   async #closeOwnedPublicationKeepingBundleTransport(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<void> {
     if (!phase.detached && !connectionIsClosed(publication.connection)) {
@@ -805,19 +805,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       if (await this.#retireWithoutRenegotiation(publication, phase, handle)) return;
       this.#locals.markBundledRetiring(publication);
-      let closed = connectionIsClosed(connection);
-      if (!phase.detached && !closed) {
-        await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
-        closed = connectionIsClosed(connection);
-        if (!closed) transceiver.stop();
-      }
-      phase.detached = true;
-      const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const withoutSdp = await this.#locals.detachForClose(publication, phase, () => this.#boundPeerOperation(transceiver.sender.replaceTrack(null)));
+      const sessionDescription = withoutSdp ? undefined : await this.#createLocalOffer(connection, "close");
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: withoutSdp }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#locals.owned.delete(publication);
-      await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
+      if (!withoutSdp || response.sessionDescription) await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
