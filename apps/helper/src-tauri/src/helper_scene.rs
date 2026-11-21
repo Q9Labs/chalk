@@ -128,3 +128,39 @@ impl Scene {
 pub fn request() -> Value {
     json!({"type": "annotation_state_request"})
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_matching_sync_state_and_does_not_skip_a_missing_revision() {
+        let snapshot = json!({
+            "type": "annotation_state",
+            "server_at_ms": 100,
+            "state": {
+                "layer": {"layer_id": "layer", "publication_id": "publication", "sharer_id": "sharer"},
+                "paused": false,
+                "fence": 4,
+                "revision": 2,
+                "access": {"can_draw": true},
+                "marks": [],
+            }
+        });
+        assert!(Scene::snapshot(&snapshot, "layer", "other", "sharer").is_none());
+        assert!(Scene::snapshot(&snapshot, "layer", "publication", "other").is_none());
+        let mut scene = Scene::snapshot(&snapshot, "layer", "publication", "sharer").unwrap();
+        let mut change = json!({
+            "type": "annotation_changed",
+            "server_at_ms": 120,
+            "revision": 4,
+            "fence": 4,
+            "change": {"kind": "upsert", "mark": {"draft": {"mark_id": "mark"}}},
+        });
+        assert!(scene.apply(&change).is_none());
+        assert!(scene.marks.is_empty());
+        change["revision"] = json!(3);
+        assert!(scene.apply(&change).is_some());
+        assert_eq!(scene.marks.len(), 1);
+    }
+}

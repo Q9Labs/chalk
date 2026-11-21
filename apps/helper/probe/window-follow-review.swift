@@ -9,6 +9,7 @@ target.title = "Chalk Helper target fixture"
 target.animationBehavior = .none
 target.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
+target.orderFrontRegardless()
 let cover = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 20, height: 20),
     styleMask: [.borderless], backing: .buffered, defer: false)
 cover.backgroundColor = .red

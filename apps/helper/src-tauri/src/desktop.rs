@@ -288,6 +288,8 @@ pub(crate) fn show_live_overlay(
         overlay.set_content_protected(false)?;
     }
     place(&overlay, bounds)?;
+    overlay.set_focusable(false)?;
+
     overlay.set_ignore_cursor_events(true)?;
     let size = overlay.inner_size()?;
     let position = overlay.inner_position()?;
@@ -368,6 +370,8 @@ fn start_fixture(app: &AppHandle) -> tauri::Result<()> {
     for (index, segment) in segments.iter().enumerate() {
         let overlay = floating(app, &format!("ink-{index}"), false)?;
         place(&overlay, segment.bounds)?;
+        overlay.set_focusable(false)?;
+
         overlay.set_ignore_cursor_events(true)?;
         let handle = app.clone();
         overlay.on_window_event(move |event| {

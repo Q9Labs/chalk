@@ -11,7 +11,7 @@ tauri-build = { version = "2", features = [] }
 cc = "1"
 
 [dependencies]
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 axum = "0.8"
 base64 = "0.22"
 ring = "0.17"

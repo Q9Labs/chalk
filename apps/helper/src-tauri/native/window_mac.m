@@ -57,13 +57,13 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
         NSUInteger index = [windows indexOfObjectPassingTest:^BOOL(NSDictionary *item, NSUInteger ignored_index __attribute__((unused)), BOOL *ignored_stop __attribute__((unused))) {
             return [item[(__bridge NSString *)kCGWindowNumber] unsignedIntValue] == id;
         }];
-        if (index == NSNotFound || index > 128) return false;
+        if (index == NSNotFound || index > 128) { fprintf(stderr,"window-rejection: missing target\n"); return (false); }
         NSDictionary *target = windows[index];
         int pid = [target[(__bridge NSString *)kCGWindowOwnerPID] intValue];
-        if (pid <= 0 || pid == getpid() || [target[(__bridge NSString *)kCGWindowLayer] intValue] != 0) return false;
+        if (pid <= 0 || pid == getpid() || [target[(__bridge NSString *)kCGWindowLayer] intValue] != 0) { fprintf(stderr,"window-rejection: wrong layer or owner\n"); return (false); }
         CGRect rect;
-        if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)target[(__bridge NSString *)kCGWindowBounds], &rect)) return false;
-        if (CGRectGetWidth(rect) < 320 || CGRectGetHeight(rect) < 240) return false;
+        if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)target[(__bridge NSString *)kCGWindowBounds], &rect)) { fprintf(stderr,"window-rejection: missing bounds\n"); return (false); }
+        if (CGRectGetWidth(rect) < 320 || CGRectGetHeight(rect) < 240) { fprintf(stderr,"window-rejection: undersize\n"); return (false); }
         // Conservatively count any overlap above the target, ignoring Helper
         // windows and the cursor, which don't obscure the target.
         for (NSUInteger i = 0; i < index; i++) {
@@ -71,21 +71,21 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
             if ([candidate[(__bridge NSString *)kCGWindowOwnerPID] intValue] == getpid()
                 || [candidate[(__bridge NSString *)kCGWindowAlpha] doubleValue] <= 0) continue;
             CGRect frame;
-            if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)candidate[(__bridge NSString *)kCGWindowBounds], &frame)) return false;
-            if (covers(rect, frame)) return false;
+            if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)candidate[(__bridge NSString *)kCGWindowBounds], &frame)) { fprintf(stderr,"window-rejection: covering bounds unavailable\n"); return (false); }
+            if (covers(rect, frame)) { fprintf(stderr,"window-cover: layer=%d, app=%s\n",[candidate[(__bridge NSString *)kCGWindowLayer] intValue], [candidate[(__bridge NSString *)kCGWindowOwnerName] UTF8String] ?: "unknown"); return (false); }
         }
         // Resolve coordinates into the physical pixel space used by Tauri.
         // One scale in the virtual desktop keeps negative origins unambiguous.
         CGDirectDisplayID display[2];
         uint32_t matches = 0;
-        if (CGGetDisplaysWithRect(rect, 2, display, &matches) != kCGErrorSuccess || matches != 1) return false;
+        if (CGGetDisplaysWithRect(rect, 2, display, &matches) != kCGErrorSuccess || matches != 1) { fprintf(stderr,"window-rejection: display count\n"); return (false); }
         CGRect displayBounds = CGDisplayBounds(display[0]);
         CGFloat scale = CGDisplayPixelsWide(display[0]) / CGRectGetWidth(displayBounds);
         CGRect primary = CGDisplayBounds(CGMainDisplayID());
         CGFloat mainScale = CGDisplayPixelsWide(CGMainDisplayID()) / CGRectGetWidth(primary);
-        if (!CGRectContainsRect(displayBounds, rect) || scale != mainScale || scale <= 0) return false;
+        if (!CGRectContainsRect(displayBounds, rect) || scale != mainScale || scale <= 0) { fprintf(stderr,"window-rejection: display geometry\n"); return (false); }
         struct proc_bsdinfo info = {0};
-        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info)) return false;
+        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info)) { fprintf(stderr,"window-rejection: process lifetime\n"); return (false); }
         *out = (ChalkWindowBounds){
             .x = (int32_t)llround(rect.origin.x * scale), .y = (int32_t)llround(rect.origin.y * scale),
             .width = (uint32_t)llround(rect.size.width * scale), .height = (uint32_t)llround(rect.size.height * scale),

@@ -388,7 +388,7 @@ impl Pairing {
             if let (Some(pen), Some(commands)) = (session.capture.drain_commit(), &session.commands)
             {
                 let _ = commands.try_send(serde_json::json!({
-                    "type":"annotation_command", "operation_id": uuid::Uuid::new_v4(),
+                    "type":"annotation_command", "operation_id": uuid::Uuid::now_v7(),
                     "layer_id": session.ticket.layer_id, "fence": pen.fence,
                     "command": {"kind":"commit", "draft":{
                         "mark_id": uuid::Uuid::new_v4(), "lifetime":"fade", "color":"#ffffff",
@@ -1327,22 +1327,44 @@ mod tests {
         assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
             .await
             .is_err());
-        let code = pairing
-            .approval_prompt()
-            .expect("local consent required")
-            .fingerprint;
-        assert_eq!(
-            router
-                .clone()
-                .oneshot(attach(valid))
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::UNAUTHORIZED
+        let approval = pairing.approval_prompt().expect("local consent required");
+        let valid: Value = serde_json::from_str(&valid).unwrap();
+        let pair = valid["pairTicket"].as_str().unwrap();
+        let attachment_hash = valid["attachmentHash"].as_str().unwrap();
+        let public_key = challenge["helperPublicKey"].as_str().unwrap();
+        let transcript = consent::transcript(
+            challenge["challenge"].as_str().unwrap(),
+            &URL_SAFE_NO_PAD.encode(browser.public_key()),
+            public_key,
+            pair,
+            attachment_hash,
         );
-        pairing.decide(&code, true);
+        assert_eq!(approval.fingerprint, consent::fingerprint(&transcript));
+        let replay = router
+            .clone()
+            .oneshot(attach(valid.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+        pairing.decide(&approval.fingerprint, true);
         let session = body(pending.await.unwrap()).await;
         let secret = session["sessionSecret"].as_str().unwrap();
+        let expiration = session["leaseExpiresAtMs"].as_u64().unwrap();
+        let code = approval.confirmation_code.replace('-', "");
+        let proof = session["confirmation"].as_str().unwrap();
+        let witness =
+            format!("chalk.helper.confirm.v2\n{transcript}\n{secret}\n{expiration}\n{code}");
+        assert!(consent::verifies(public_key, &witness, proof));
+        assert!(!consent::verifies(
+            public_key,
+            &witness.replace(attachment_hash, "altered"),
+            proof
+        ));
+        assert!(!consent::verifies(
+            public_key,
+            &witness.replace(&code, "unauthorized"),
+            proof
+        ));
         assert!(
             !pairing.connected(),
             "native Allow alone is not Sync acceptance"
