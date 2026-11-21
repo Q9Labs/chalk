@@ -1,6 +1,6 @@
 ---
 name: verify-chalk
-description: Launch Chalk (web, API, Sync, Postgres, Redis) headless on one machine, check it, drive a real call in Chromium with fake camera and microphone through the Chalk SFU, and capture evidence into .verify/<run-id>/. Use when a task needs proof that Chalk's web app works as a user sees it.
+description: Launch Chalk (web, API, Sync, SFU, Postgres, Redis) headless on one machine, check it, drive a real call in Chromium with fake camera and microphone through the Chalk SFU, and capture evidence into .verify/<run-id>/. Use when a task needs proof that Chalk's web app works as a user sees it.
 ---
 
 # Verify Chalk
@@ -24,7 +24,7 @@ pnpm dev                                           # run it in tmux or another s
 - Chalk's guest cookie is `__Host-chalk_space_guest_*` and is `Secure`. A browser only stores it on `https://` origins or on `localhost`. Use `http://localhost:3070` (or `http://<name>.localhost:3070`, which Chromium resolves to loopback) for a plain-HTTP run. A real remote origin needs HTTPS in front of port 3070. A name such as `http://chalk-orb.test` fails: the browser cannot resolve it.
 - From an empty data dir the first run starts Postgres and Redis containers, pulls their images, compiles the API, runs `mix deps.get` and compile for Sync, runs migrations, creates a tenant and a Space, and enables the Space's public invite. Plan for about 3 GB of memory for the stack and about 6 GB with two Chromium contexts, so keep other work off the box while you drive.
 
-- Orbs use a local Chalk SFU instead of Cloudflare. Run media journeys in browsers on the Orb machine: its HTTPS preview exposes web and signaling, not native ICE ports. Startup and doctor require a Chalk SFU grant.
+- The dev stack and Orbs run Chalk SFU locally. Run media journeys in browsers on the stack machine: the Orb’s HTTPS preview exposes the web app and signaling, not WebRTC media ports. Startup and doctor require a Chalk SFU grant.
 
 Ready means the supervisor printed `Chalk dev ready`. That line only appears after a seeded guest has arrived through the invite page and left again, using the web origin. The seed is in .private/chalk-dev/seed.json (mode 0600, git-ignored) and holds `tenantId`, `spaceId`, `invite.path`, `systemToken`, `urls`. The `systemToken` is a credential: read it, never copy it into evidence.
 

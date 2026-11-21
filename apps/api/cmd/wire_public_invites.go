@@ -100,7 +100,7 @@ func (w *apiWiring) wirePublicInviteScheduler(repository postgres.PublicInviteRe
 }
 
 const (
-	localPublicInviteTenantName = "Chalk local public Spaces"
+	localPublicInviteTenantName = "Chalk local public Spaces (Chalk SFU)"
 	localPublicInviteKeyID      = "local-cspi1"
 	localPublicInviteSeedLabel  = "chalk.local.public_invites.cspi1.v1"
 	localPublicInviteWebDefault = "http://127.0.0.1:3070"

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import ports from "./ports.json" with { type: "json" };
+import sfuNode from "../../features/media/sfu/internal/config/node.json" with { type: "json" };
 
 export async function reverseAndroidPorts({ run, env = process.env }) {
   try {
@@ -11,10 +12,11 @@ export async function reverseAndroidPorts({ run, env = process.env }) {
     return;
   }
   const { stdout } = await run("adb", ["devices"]);
+  const hostPorts = [Number(env.CHALK_DEV_API_PORT || ports.api), Number(env.RCT_METRO_PORT || ports.metro), Number(env.CHALK_DEV_SFU_MEDIA_PORT || sfuNode.ports.media)];
   for (const line of stdout.split(/\r?\n/)) {
     const [serial, state] = line.trim().split(/\s+/);
     if (state !== "device") continue;
-    for (const port of [Number(env.CHALK_DEV_API_PORT || ports.api), Number(env.RCT_METRO_PORT || ports.metro)]) await run("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
+    for (const port of hostPorts) await run("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
   }
 }
 

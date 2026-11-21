@@ -98,7 +98,7 @@ async function verifyHostIsolation() {
     ),
   ];
   assert.ok(addresses.length, "isolation proof needs a non-loopback interface");
-  const ports = [config.ports.api, config.ports.sync, config.ports.postgres, config.ports.redis, config.ports.providerBridge];
+  const ports = [config.ports.api, config.ports.sync, config.ports.postgres, config.ports.redis, config.ports.providerBridge, config.ports.sfuMedia];
   if (!config.publicOrigin) ports.push(config.ports.web);
   for (const host of addresses) for (const port of ports) await assertUnreachable(host, port);
   console.log(`isolation: ${ports.length} host ports refuse connections on ${addresses.length} non-loopback interfaces`);

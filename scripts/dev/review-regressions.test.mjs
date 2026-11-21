@@ -40,10 +40,10 @@ test("ownership accepts a real forward-slash Node invocation with Windows record
   }
 });
 
-test("adb CRLF listings forward both ports for every authorized device", async () => {
+test("adb CRLF listings forward the API, Metro and media ports for every authorized device", async () => {
   const forwarded = [];
   await reverseAndroidPorts({
-    env: { CHALK_DEV_API_PORT: "18080", RCT_METRO_PORT: "18081" },
+    env: { CHALK_DEV_API_PORT: "18080", RCT_METRO_PORT: "18081", CHALK_DEV_SFU_MEDIA_PORT: "18082" },
     run: async (_command, args) => {
       if (args[0] === "devices") return { stdout: "List of devices attached\r\nemulator-5554\tdevice\r\nusb-123\tdevice\r\nlocked\tunauthorized\r\n" };
       if (args.includes("reverse")) forwarded.push(args);
@@ -53,8 +53,10 @@ test("adb CRLF listings forward both ports for every authorized device", async (
   assert.deepEqual(forwarded, [
     ["-s", "emulator-5554", "reverse", "tcp:18080", "tcp:18080"],
     ["-s", "emulator-5554", "reverse", "tcp:18081", "tcp:18081"],
+    ["-s", "emulator-5554", "reverse", "tcp:18082", "tcp:18082"],
     ["-s", "usb-123", "reverse", "tcp:18080", "tcp:18080"],
     ["-s", "usb-123", "reverse", "tcp:18081", "tcp:18081"],
+    ["-s", "usb-123", "reverse", "tcp:18082", "tcp:18082"],
   ]);
 });
 
