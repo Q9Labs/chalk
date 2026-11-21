@@ -15,7 +15,9 @@ const state: ScreenAnnotationState = {
 const target = { layerId, fence: 1 };
 const cursor = (x: number) => ({ tool: "ink" as const, point: { x, y: 20 } });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 it("sends the first preview immediately and only the latest update in the next send slot", () => {
   vi.useFakeTimers();
