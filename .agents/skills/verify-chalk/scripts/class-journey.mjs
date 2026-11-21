@@ -235,12 +235,19 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
       await shot(me, size === portrait ? "11-portrait-again" : "10-landscape");
       const orientation = size === portrait ? "portrait" : "landscape";
       // With the board primary a short stage folds people into a "+N" tile, so the host is checked through the people list there.
-      const more = me.page.getByRole("button", { name: /^Show \d+ more participants$/ });
+      const more = me.page.getByRole("button", { name: /^Show \d+ more (participants|items)$/ });
       if (await more.count()) {
         await more.click();
-        const listed = await me.page.getByRole("dialog").getByText(hostName).count();
-        await me.page.keyboard.press("Escape");
-        if (!listed) throw new Error(`the "+N" tile on the ${device} in ${orientation} did not list the host`);
+        const people = me.page.getByRole("tab", { name: /^People/ });
+        await people.waitFor({ timeout: 5000 }).catch(() => undefined);
+        await shot(me, `${orientation}-more`);
+        const listed = (await people.count()) > 0 && (await me.page.getByText("Host", { exact: true }).count()) > 0;
+        await me.page
+          .getByRole("button", { name: /^close/i })
+          .first()
+          .click()
+          .catch(() => me.page.keyboard.press("Escape"));
+        if (!listed) throw new Error(`the "+N" tile on the ${device} in ${orientation} did not open the people list with the host`);
         continue;
       }
       const advance = await measureAdvance(me.page, hostName, { timeoutMs: waitMs });
