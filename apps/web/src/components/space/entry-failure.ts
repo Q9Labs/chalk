@@ -1,4 +1,3 @@
-import { CallLimbo } from "@q9labsai/chalk-react";
 import { ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "@q9labsai/chalk-client";
 
 export type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string; readonly reason?: "declined" | "expired" };
@@ -27,19 +26,4 @@ export function entryFailure(cause: unknown): EntryFailure {
   if (globalThis.navigator?.onLine === false) return { message: "You’re offline. Reconnect, then try again.", retryable: true };
   if (cause && typeof cause === "object" && "status" in cause && typeof cause.status === "number" && cause.status >= 500) return { message: "Chalk is having trouble right now. Try again in a minute.", retryable: true };
   return { message: "Couldn’t reach Chalk. Check your connection, then try again.", retryable: true };
-}
-
-/** The entrance stopped. A refused or expired knock always offers a way home beside asking again; any other retryable failure offers only to try again. */
-export function FailedEntry({ failure, spaceName, colorScheme, restarting, onAskAgain }: { readonly failure: EntryFailure; readonly spaceName?: string; readonly colorScheme: "light" | "dark"; readonly restarting: boolean; readonly onAskAgain: () => void }) {
-  const askAgain = { label: failure.retryLabel ?? "Ask again", onClick: onAskAgain, disabled: restarting };
-  return (
-    <CallLimbo
-      theme={{ colorScheme }}
-      spaceName={spaceName}
-      message={failure.message}
-      glyph={failure.reason}
-      action={failure.retryable && !failure.reason ? askAgain : { label: "Go to Chalk", onClick: () => globalThis.location.assign("/") }}
-      secondaryAction={failure.retryable && failure.reason ? { ...askAgain, label: "Ask again" } : undefined}
-    />
-  );
 }
