@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -452,11 +453,18 @@ func TestListenOnlyBeforeAnyonePublishes(t *testing.T) {
 		t.Fatal(err)
 	}
 	description := listener.complete(t, offer)
+	sending := description
+	sending.SDP = strings.Replace(sending.SDP, "a=recvonly", "a=sendrecv", 1)
+	if status, code := svc.call(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{
+		OperationID: op(), Scope: scopeB, SessionDescription: &sending,
+	}, nil); status != http.StatusBadRequest || code != protocol.CodeInvalidRequest {
+		t.Fatalf("a new sending section still needs a named track: status %d, code %q", status, code)
+	}
 	var response protocol.TracksResponse
 	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{
 		OperationID: op(), Scope: scopeB, SessionDescription: &description,
 	}, &response)
-	if response.SessionDescription == nil || len(response.Tracks) != 0 {
+	if response.SessionDescription == nil || len(response.Tracks) != 0 || len(response.TrackErrors) != 0 {
 		t.Fatalf("listener expected a transport answer without publications: %+v", response)
 	}
 	if err := listener.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: response.SessionDescription.SDP}); err != nil {

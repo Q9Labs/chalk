@@ -1,22 +1,28 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as joinPath, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, devices, webkit } from "playwright";
 import { cleanupRun } from "../prod-proof/cleanup.mjs";
-import { createSpace, prepareIntegration } from "../prod-proof/proofs.mjs";
+import { createProofKey, createSpace } from "../prod-proof/proofs.mjs";
 import { createRun, loadConfig, maskCredentials, save } from "../prod-proof/runtime.mjs";
 import { webMediaFixture } from "./media.mjs";
 
-// Run against the loopback nightly stack with headed browsers (xvfb-run on Linux).
+// Run against the loopback nightly stack with headed Edge and WebKit under xvfb-run.
 const hiddenMs = 315_000;
 const receiveMs = 8_000;
 const runId = `listen-only-${randomUUID()}`;
 const directory = resolve(process.env.CHALK_LISTEN_ONLY_DIRECTORY ?? `.private/web-proof/${runId}`);
 const report = {};
 const browsers = [];
+let edgeProcess;
+let edgeProfile;
 let run;
 let failed = false;
+let stage = "setup";
 try {
   assert.equal(process.env.CHALK_PROOF_CONFIG_SOURCE, "env");
   for (const name of ["CHALK_PROOF_API_URL", "CHALK_PROOF_WEB_URL"]) {
@@ -26,27 +32,21 @@ try {
   assert.ok(!process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU && process.env.CHALK_PROOF_SPACE_BY_SLUG !== "true");
   const config = await loadConfig({ capabilities: false });
   run = await createRun(config, directory, undefined, runId);
-  await prepareIntegration(run, false);
+  await createProofKey(run);
   const space = await createSpace(run, "chalk_sfu");
   await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
   const invite = await run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}/public-invite`, { enabled: true });
   const url = new URL(invite.canonical_url);
   maskCredentials({ inviteToken: url.hash.slice(1), canonicalCredential: invite.canonical_url });
   const entry = new URL(url.pathname + url.search + url.hash, config.web_url).href;
-  const [edge, safari] = await Promise.all([
-    launch(chromium, {
-      channel: process.env.CHALK_PROOF_CHROMIUM_CHANNEL,
-      ignoreDefaultArgs: ["--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"],
-    }),
-    launch(webkit, {}),
-  ]);
-  const listeners = await Promise.all([
-    join(edge, entry, "Chromium listener", 1),
-    join(safari, entry, "WebKit listener", 2, devices["iPad Pro 11"]),
-  ]);
+  stage = "join";
+  const [edge, safari] = await Promise.all([launchEdge(), webkit.launch({ headless: false }).then(keepBrowser)]);
+  const listeners = await Promise.all([join(edge.contexts()[0], entry, "Edge listener", 1), join(await safari.newContext(devices["iPad Pro 11"]), entry, "WebKit listener", 2)]);
   await Promise.all(listeners.map(checkEmptyJoin));
-  await Promise.all(listeners.map(backgroundThroughRefresh));
-  const publisher = await join(edge, entry, "Publisher", 3);
+  stage = "background through grant renewal";
+  await Promise.all([backgroundThroughRefresh(listeners[0], hideEdgeTab), backgroundThroughRefresh(listeners[1], hideWebKitPage)]);
+  stage = "receive from late publisher";
+  const publisher = await join(await edge.newContext(), entry, "Publisher", 3);
   await control(publisher.page, "Unmute microphone");
   await control(publisher.page, "Turn on camera");
   await Promise.all(listeners.map(checkDelivery));
@@ -54,9 +54,14 @@ try {
 } catch (error) {
   failed = true;
   // Locator errors may include an invite URL. Save the step results, not raw errors.
-  report.error = error.name;
+  report.error = { stage, name: error.name };
 } finally {
   await Promise.allSettled(browsers.map((browser) => browser.close()));
+  if (edgeProcess?.exitCode === null && edgeProcess.signalCode === null) {
+    edgeProcess.kill();
+    await new Promise((done) => edgeProcess.once("exit", done));
+  }
+  if (edgeProfile) await rm(edgeProfile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
   if (run) {
     try {
       await cleanupRun(run);
@@ -71,14 +76,30 @@ try {
 console.log(`Listen-only proof ${failed ? "failed" : "passed"}: ${directory}/listen-only-report.json`);
 process.exitCode = failed ? 1 : 0;
 
-async function launch(engine, options) {
-  const browser = await engine.launch({ headless: false, ...options });
+function keepBrowser(browser) {
   browsers.push(browser);
   return browser;
 }
 
-async function join(browser, entry, name, fixture, device) {
-  const context = await browser.newContext(device);
+async function launchEdge() {
+  // Playwright-launched Chromium forces each page to appear focused. Connect to a
+  // regular Edge window so a tab switch produces a real visibility change.
+  edgeProfile = await mkdtemp(joinPath(tmpdir(), "chalk-listener-edge-"));
+  edgeProcess = spawn("microsoft-edge", [`--user-data-dir=${edgeProfile}`, "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", "--no-sandbox", "--disable-dev-shm-usage", "about:blank"], { stdio: "ignore" });
+  return Promise.race([
+    new Promise((_, reject) => edgeProcess.once("error", reject)),
+    (async () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const endpoint = await readFile(joinPath(edgeProfile, "DevToolsActivePort"), "utf8").catch(() => "");
+        if (endpoint) return keepBrowser(await chromium.connectOverCDP(`http://127.0.0.1:${endpoint.split("\n")[0]}`, { noDefaults: true }));
+        await delay(150);
+      }
+      throw new Error("Edge did not start");
+    })(),
+  ]);
+}
+
+async function join(context, entry, name, fixture) {
   await context.addInitScript(webMediaFixture(fixture, { permission: "granted" }));
   await context.addInitScript(() => {
     window.proofReconnected = false;
@@ -88,7 +109,7 @@ async function join(browser, entry, name, fixture, device) {
       if (document.querySelector('[data-part="connection-status"]')) window.proofReconnected = true;
     }).observe(document, { childList: true, subtree: true });
   });
-  const page = await context.newPage();
+  const page = context.pages()[0] ?? (await context.newPage());
   const evidence = (report[name] = { journeys: {}, refreshes: [], mediaErrors: [] });
   let initialBinding;
   let initialExpiry;
@@ -99,20 +120,26 @@ async function join(browser, entry, name, fixture, device) {
     const refresh = path === "/v1/public/space-invite-arrival/access-grants";
     const arrival = path === "/v1/public/space-invite-arrivals" || (path === "/v1/public/space-invite-arrival" && response.request().method() === "GET");
     if (!refresh && !arrival && ![404, 409].includes(response.status())) return;
-    responses.push(response.json().then((body) => {
-      const media = (refresh ? body : body.access)?.media;
-      if (arrival && media && !initialBinding) {
-        initialBinding = media.client_payload.connectionId;
-        initialExpiry = media.expires_at;
-      }
-      if (refresh) evidence.refreshes.push({
-        status: response.status(),
-        sameBinding: initialBinding !== undefined && media?.client_payload.connectionId === initialBinding,
-        extendedExpiry: initialExpiry !== undefined && media?.expires_at > initialExpiry,
-      });
-      const code = body.error?.code ?? body.code;
-      if (code === "media.connection_not_found" || code === "access.media_proof_expired") evidence.mediaErrors.push(code);
-    }).catch(() => {}));
+    const renewal = refresh ? { status: response.status(), sameBinding: false, extendedExpiry: false } : null;
+    if (renewal) evidence.refreshes.push(renewal);
+    responses.push(
+      response
+        .json()
+        .then((body) => {
+          const media = (refresh ? body : body.access)?.media;
+          if (arrival && media && !initialBinding) {
+            initialBinding = media.client_payload.connectionId;
+            initialExpiry = media.expires_at;
+          }
+          if (renewal) {
+            renewal.sameBinding = initialBinding !== undefined && media?.client_payload.connectionId === initialBinding;
+            renewal.extendedExpiry = initialExpiry !== undefined && media?.expires_at > initialExpiry;
+          }
+          const code = body.error?.code ?? body.code;
+          if (code === "media.connection_not_found" || code === "access.media_proof_expired") evidence.mediaErrors.push(code);
+        })
+        .catch(() => {}),
+    );
   });
   await page.goto(entry);
   await page.getByLabel("Your name").fill(name);
@@ -124,46 +151,77 @@ async function join(browser, entry, name, fixture, device) {
 async function checkEmptyJoin({ page, name, evidence }) {
   await control(page, "Unmute microphone", { waitOnly: true });
   await control(page, "Turn on camera", { waitOnly: true });
-  evidence.emptyConnected = await waitFor(page, () => {
-    const [peer] = window.proofConnections;
-    return peer?.connectionState === "connected" && peer.getSenders().every((sender) => sender.track === null);
-  }, receiveMs);
+  evidence.emptyConnected = await waitFor(
+    page,
+    () => {
+      const [peer] = window.proofConnections;
+      return peer?.connectionState === "connected" && peer.getSenders().every((sender) => sender.track === null);
+    },
+    receiveMs,
+  );
   await page.screenshot({ path: `${directory}/${name}-joined.png` });
 }
 
-async function backgroundThroughRefresh({ page, context, name, evidence, responses }) {
-  const cover = await context.newPage();
-  await cover.bringToFront();
+async function hideEdgeTab({ context, page, evidence }) {
+  const cdp = await context.newCDPSession(page);
+  const blankTab = await cdp.send("Target.createTarget", { url: "about:blank", newWindow: false });
+  evidence.visibilityControl = "native tab switch";
+  return () => cdp.send("Target.closeTarget", blankTab);
+}
+
+async function hideWebKitPage({ page, evidence }) {
+  // Linux WebKit treats its automation view as visible even when minimized.
+  // Replay the visibility signal without changing timers, signaling, or media.
+  evidence.visibilityControl = "injected WebKit visibility";
+  const setVisibility = (state) => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: state });
+    Object.defineProperty(document, "hidden", { configurable: true, value: state === "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  await page.evaluate(setVisibility, "hidden");
+  return () => page.evaluate(setVisibility, "visible");
+}
+
+async function backgroundThroughRefresh(participant, hide) {
+  const { page, name, evidence, responses } = participant;
+  const restore = await hide(participant);
   evidence.wentHidden = await waitFor(page, () => document.hidden, 5_000);
+  const transitionsAtHide = await page.evaluate(() => window.proofVisibility.length);
   const started = Date.now();
   console.log(`${name}: empty transport connected=${evidence.emptyConnected}, hidden=${evidence.wentHidden}`);
   await delay(hiddenMs);
-  await page.bringToFront();
+  await restore();
   const foreground = await waitFor(page, () => !document.hidden, 5_000);
-  await cover.close();
   await Promise.all(responses);
-  const state = await page.evaluate(() => ({
-    peerStates: window.proofConnections.map((peer) => peer.connectionState),
-    reconnected: window.proofReconnected,
-    continuouslyHidden: window.proofVisibility.slice(-2).join(",") === "hidden,visible",
-  }));
+  const state = await page.evaluate(
+    (start) => ({
+      peerStates: window.proofConnections.map((peer) => peer.connectionState),
+      reconnected: window.proofReconnected,
+      continuouslyHidden: window.proofVisibility.slice(start).join() === "visible",
+    }),
+    transitionsAtHide,
+  );
   evidence.hiddenDurationMs = Date.now() - started;
   Object.assign(evidence, state);
   evidence.journeys.background = evidence.wentHidden && state.continuouslyHidden && foreground && !state.reconnected && state.peerStates.join() === "connected";
-  evidence.journeys.refresh = evidence.refreshes.some(({ status, sameBinding, extendedExpiry }) => status === 201 && sameBinding && extendedExpiry) && evidence.mediaErrors.length === 0;
+  evidence.journeys.refresh = evidence.refreshes.length > 0 && evidence.refreshes.every(({ status, sameBinding, extendedExpiry }) => status === 201 && sameBinding && extendedExpiry) && evidence.mediaErrors.length === 0;
   await page.screenshot({ path: `${directory}/${name}-returned.png` });
 }
 
 async function checkDelivery({ page, name, evidence, responses }) {
   const started = Date.now();
-  const media = await waitFor(page, async () => {
-    const [peer, ...replacements] = window.proofConnections;
-    if (!peer || replacements.length || peer.connectionState !== "connected") return false;
-    const reports = [...(await peer.getStats()).values()];
-    const audio = reports.some((row) => row.type === "inbound-rtp" && (row.kind ?? row.mediaType) === "audio" && row.packetsReceived > 5);
-    const video = document.querySelector('[aria-label="Video tile for Publisher"]')?.closest('[data-part="stage-tile"]')?.querySelector("video");
-    return audio && video?.readyState >= 2 && video.getVideoPlaybackQuality().totalVideoFrames > 5;
-  }, receiveMs);
+  const media = await waitFor(
+    page,
+    async () => {
+      const [peer, ...replacements] = window.proofConnections;
+      if (!peer || replacements.length || peer.connectionState !== "connected") return false;
+      const reports = [...(await peer.getStats()).values()];
+      const audio = reports.some((row) => row.type === "inbound-rtp" && (row.kind ?? row.mediaType) === "audio" && (row.totalAudioEnergy > 0 || row.audioLevel > 0));
+      const video = document.querySelector('[aria-label="Video tile for Publisher"]')?.closest('[data-part="stage-tile"]')?.querySelector("video");
+      return audio && video?.readyState >= 2 && video.getVideoPlaybackQuality().totalVideoFrames > 5;
+    },
+    receiveMs,
+  );
   await Promise.all(responses);
   evidence.mediaAfterPublishMs = media ? Date.now() - started : null;
   evidence.journeys.latePublisher = evidence.emptyConnected && media && evidence.mediaErrors.length === 0;
@@ -171,13 +229,12 @@ async function checkDelivery({ page, name, evidence, responses }) {
 }
 
 async function waitFor(page, predicate, timeout) {
-  try {
-    await page.waitForFunction(predicate, undefined, { timeout, polling: 100 });
-    return true;
-  } catch (error) {
-    if (error.name !== "TimeoutError") throw error;
-    return false;
-  }
+  const deadline = Date.now() + timeout;
+  do {
+    if (await page.evaluate(predicate)) return true;
+    await delay(100);
+  } while (Date.now() < deadline);
+  return false;
 }
 
 async function control(page, name, { waitOnly = false } = {}) {
