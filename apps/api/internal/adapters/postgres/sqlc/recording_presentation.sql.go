@@ -235,7 +235,7 @@ select boundary.presentation_handle, boundary.tenant_id, boundary.space_id, boun
             'sha256', encode(files.sha256, 'hex')
         ) order by files.scene_id, files.file_id)
         from (
-            select files.upload_id, files.tenant_id, files.space_id, files.episode_id, files.scene_id, files.participant_id, files.participant_generation, files.file_id, files.object_key, files.mime_type, files.byte_length, files.sha256, files.status, files.immutable_object_identity, files.expires_at, files.finalized_at, files.cleanup_claim_token, files.cleanup_claimed_until, files.cleanup_attempts, files.created_at, files.updated_at
+            select files.upload_id, files.tenant_id, files.space_id, files.episode_id, files.scene_id, files.participant_id, files.participant_generation, files.file_id, files.object_key, files.mime_type, files.byte_length, files.sha256, files.status, files.immutable_object_identity, files.expires_at, files.finalized_at, files.referenced_at, files.cleanup_claim_token, files.cleanup_claimed_until, files.cleanup_attempts, files.created_at, files.updated_at
             from sync_whiteboard_files files
             where files.tenant_id = boundary.tenant_id
               and files.space_id = boundary.space_id

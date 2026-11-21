@@ -151,6 +151,8 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
       readonly type: "file_write";
       readonly payload: {
         readonly requestId: string;
+        readonly sceneId: string;
+        readonly sceneGeneration: string;
         readonly fileId: string;
         readonly mimeType: string;
         readonly byteLength: number;

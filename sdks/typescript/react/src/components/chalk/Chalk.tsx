@@ -354,6 +354,7 @@ function SpaceSurface(
               requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
               onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
               clear: () => whiteboardSubscription.transport.clear(),
+              uploadFile: whiteboardSubscription.transport.files.uploadFile,
               presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },

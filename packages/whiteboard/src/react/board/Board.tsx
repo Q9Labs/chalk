@@ -255,13 +255,12 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
   }, [root]);
 }
 
-/** Images need a board file upload that the service does not offer yet, so the board refuses them plainly. */
-function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (toast: BoardToast) => void) {
+function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, acceptsImages: boolean, toast: (toast: BoardToast) => void) {
   const latest = useRef(toast);
   latest.current = toast;
   useEffect(() => {
     const element = root.current;
-    if (!element) return;
+    if (!element || acceptsImages) return;
     const refuse = (files: FileList | undefined | null, event: Event) => {
       if (!files || ![...files].some((file) => file.type.startsWith("image/"))) return;
       event.preventDefault();
@@ -276,7 +275,7 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
       element.removeEventListener("paste", paste, true);
       element.removeEventListener("drop", drop, true);
     };
-  }, [root]);
+  }, [root, acceptsImages]);
 }
 
 /**
@@ -571,7 +570,7 @@ export function Board({
     [camera, stopFollowing],
   );
   useBoardKeys(root, { onTool: chooseTool, onZoom: zoomBy, canDraw });
-  useImageRefusal(root, toast);
+  useImageRefusal(root, Boolean(board.collab?.uploadFile), toast);
 
   const restyle = (next: { readonly color?: PenColor; readonly width?: PenWidth }) => {
     if (next.color) setColor(next.color);

@@ -1540,11 +1540,21 @@ type SyncWhiteboardFile struct {
 	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
 	FinalizedAt             pgtype.Timestamptz `json:"finalized_at"`
+	ReferencedAt            pgtype.Timestamptz `json:"referenced_at"`
 	CleanupClaimToken       pgtype.UUID        `json:"cleanup_claim_token"`
 	CleanupClaimedUntil     pgtype.Timestamptz `json:"cleanup_claimed_until"`
 	CleanupAttempts         int32              `json:"cleanup_attempts"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardFileWriter struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	SceneID               pgtype.UUID `json:"scene_id"`
 }
 
 type SyncWhiteboardOperationReceipt struct {

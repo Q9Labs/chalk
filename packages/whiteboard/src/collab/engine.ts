@@ -2,7 +2,8 @@ import { CaptureUpdateAction, newElementWith, reconcileElements, restoreElements
 
 import { WHITEBOARD_CURSOR_TTL_MS } from "./wire-limits";
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
-import { WhiteboardFilesSync } from "./files";
+import { decodeWhiteboardImageDataURL } from "./file-data";
+import { updateImageStatus, WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
 import { CANONICAL_INK, withInk } from "./ink";
 import { compareElementOrder } from "./order";
@@ -98,6 +99,8 @@ export class ExcalidrawCollabEngine {
   private canManage: boolean | undefined;
   private inkColor: string;
   private storedImageFileIds = new Set<string>();
+  private readonly imageUploads = new Map<string, AbortController>();
+  private readonly failedImageUploads = new Set<string>();
 
   private broadcastedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
   private rejectedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
@@ -163,7 +166,7 @@ export class ExcalidrawCollabEngine {
   async clear(): Promise<WhiteboardCommit> {
     if (!(this.canManage ?? this.canDraw)) throw new Error("whiteboard management is not permitted");
     const commit = await this.opts.clear();
-    this.storedImageFileIds.clear();
+    this.resetImageUploads();
     this.sceneId = commit.sceneId;
     this.sceneRevision = commit.revision;
     this.sceneGeneration = commit.sceneGeneration ?? null;
@@ -205,6 +208,7 @@ export class ExcalidrawCollabEngine {
     this.submissionRetryTimer = null;
     this.dirtyDuringSubmission = false;
     this.deferredRemoteElements.clear();
+    this.resetImageUploads();
     this.filesSync.dispose();
     this.presence.dispose();
     this.unsubscribe();
@@ -216,9 +220,10 @@ export class ExcalidrawCollabEngine {
     if (this.disposed) return;
 
     this.applyDeferredRemoteElements();
-    this.stripUnstoredImages();
+    if (!this.opts.uploadFile) this.stripUnstoredImages();
 
     if (!this.canDraw) return;
+    this.uploadLocalImages();
 
     const now = Date.now();
     const deadline = this.changeDebounceDeadline ?? now + CHANGE_MAX_WAIT_MS;
@@ -301,6 +306,51 @@ export class ExcalidrawCollabEngine {
       appState: payload.appState,
       isSnapshot: true,
     });
+  }
+
+  private uploadLocalImages(): void {
+    const { sceneId, sceneGeneration } = this;
+    const { excalidrawAPI, uploadFile } = this.opts;
+    if (!sceneId || !uploadFile) return;
+
+    const files = excalidrawAPI.getFiles();
+    for (const element of excalidrawAPI.getSceneElements()) {
+      if (element.type !== "image" || !element.fileId) continue;
+      const { fileId } = element;
+      const file = files[fileId];
+      if (!file || this.storedImageFileIds.has(fileId) || this.imageUploads.has(fileId) || this.failedImageUploads.has(fileId)) continue;
+
+      const transfer = new AbortController();
+      this.imageUploads.set(fileId, transfer);
+      void this.uploadLocalImage(uploadFile, sceneId, sceneGeneration, fileId, file.dataURL, transfer);
+    }
+  }
+
+  private async uploadLocalImage(uploadFile: NonNullable<WhiteboardFileTransferOptions["uploadFile"]>, sceneId: string, sceneGeneration: string | null, fileId: string, dataURL: string, transfer: AbortController): Promise<void> {
+    const { signal } = transfer;
+    try {
+      const { mimeType, bytes } = decodeWhiteboardImageDataURL(dataURL);
+      const blob = new Blob([bytes], { type: mimeType });
+      await uploadFile({ sceneId, ...(sceneGeneration ? { sceneGeneration } : {}), fileId, blob, signal });
+      if (signal.aborted) return;
+      this.storedImageFileIds.add(fileId);
+      updateImageStatus(this.opts.excalidrawAPI, fileId, "saved");
+      this.handleChange();
+    } catch (cause) {
+      if (signal.aborted) return;
+      this.failedImageUploads.add(fileId);
+      updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
+      this.opts.onSubmissionError?.(cause);
+    } finally {
+      if (this.imageUploads.get(fileId) === transfer) this.imageUploads.delete(fileId);
+    }
+  }
+
+  private resetImageUploads(): void {
+    for (const transfer of this.imageUploads.values()) transfer.abort();
+    this.imageUploads.clear();
+    this.failedImageUploads.clear();
+    this.storedImageFileIds.clear();
   }
 
   private stripUnstoredImages(): void {
@@ -505,7 +555,7 @@ export class ExcalidrawCollabEngine {
       }
     }
     if (replacingScene) {
-      this.storedImageFileIds.clear();
+      this.resetImageUploads();
       this.rejectedElementVersions.clear();
       this.clearChangeDebounce();
       this.dirtyDuringSubmission = false;
@@ -533,7 +583,8 @@ export class ExcalidrawCollabEngine {
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const appState = excalidrawAPI.getAppState();
     const editing = editingElementIds(appState);
-    const reconciled = retainStoredImages(reconcileElements(local, remoteForReconcile, appState), this.storedImageFileIds);
+    const merged = reconcileElements(local, remoteForReconcile, appState);
+    const reconciled = this.opts.uploadFile ? merged : retainStoredImages(merged, this.storedImageFileIds);
 
     // A reconciled local draft is not evidence that the remote scene received it.
     if (args.isSnapshot) {
