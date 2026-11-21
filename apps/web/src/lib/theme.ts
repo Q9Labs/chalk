@@ -15,12 +15,17 @@ export function persistThemePreference(preference: ThemePreference): void {
 export function resolveTheme({ preference, pathname }: { preference: ThemePreference; pathname: string }): ResolvedTheme {
   return pathname === "/space" || pathname.startsWith("/space/") || INVITE_CODE_PATH_PATTERN.test(pathname) ? preference : "light";
 }
+const CALL_JOIN_PATH_PATTERN = /^\/dashboard\/call\/[^/]+\/join\/?$/;
+const isCallPath = (pathname: string): boolean => pathname === "/space" || pathname.startsWith("/space/") || INVITE_CODE_PATH_PATTERN.test(pathname) || CALL_JOIN_PATH_PATTERN.test(pathname);
+/** The head script marks a call path for the call boot frame; leaving for a page that is not a call takes the mark off so that page keeps its own background. */
+export function clearCallBoot(root: HTMLElement, pathname: string): void {
+  if (!isCallPath(pathname)) root.removeAttribute("data-call-boot");
+}
 export function applyTheme(root: HTMLElement, mode: ResolvedTheme): void {
   root.classList.toggle("dark", mode === "dark");
   root.setAttribute("data-chalk-theme", mode);
   root.style.colorScheme = mode;
 }
-const CALL_JOIN_PATH_PATTERN = /^\/dashboard\/call\/[^/]+\/join\/?$/;
 /** Runs in head before first paint; keep aligned with resolveTheme. Call routes also get data-call-boot, set to the call's theme (the cookie's, even on the dashboard join route), for CALL_BOOT_CSS. */
 export const THEME_BOOTSTRAP_SCRIPT = `(function(){var m=document.cookie.match(${THEME_COOKIE_PATTERN});var p=m&&m[1]==="light"?"light":"dark";var path=location.pathname;var space=path==="/space"||path.indexOf("/space/")===0||${INVITE_CODE_PATH_PATTERN}.test(path);var mode=space?p:"light";var root=document.documentElement;root.classList.toggle("dark",mode==="dark");root.setAttribute("data-chalk-theme",mode);root.style.colorScheme=mode;if(space||${CALL_JOIN_PATH_PATTERN}.test(path))root.setAttribute("data-call-boot",p);})();`;
 /**
