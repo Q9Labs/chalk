@@ -357,16 +357,6 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-detail-label,.chalk-invite-link-label {flex:1;min-width:0;}
 .chalk-shell-detail-trail,.chalk-invite-link-end {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);}
 .chalk-invite-link[data-copied="true"] .chalk-invite-link-end {color:var(--chalk-positive);}
-.chalk-invite-link[data-variant="card"] {
-  height: 48px;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  border-radius: var(--corner-2xl);
-  background: var(--chalk-hover);
-  font-weight: 500;
-}
-.chalk-invite-link[data-variant="card"]:hover {background:var(--chalk-pressed);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] {background:var(--chalk-hover);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] .chalk-invite-link-label {color:var(--chalk-positive);}
 .chalk-details .chalk-switch,.chalk-shell-report .chalk-switch {width:40px;height:24px;}
 .chalk-details .chalk-switch > span:first-child,.chalk-shell-report .chalk-switch > span:first-child {width:18px;height:18px;}
 .chalk-details .chalk-switch[aria-checked="true"] > span:first-child,.chalk-shell-report .chalk-switch[aria-checked="true"] > span:first-child {transform:translateX(16px);}
@@ -489,7 +479,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 }
 ${phoneRules(`
   .chalk-shell-details-heading {display:none;}
-  .chalk-shell-detail-action,.chalk-invite-link[data-variant="menu"],.chalk-details-row {min-height:48px;}
+  .chalk-shell-detail-action,.chalk-invite-link,.chalk-details-row {min-height:48px;}
   .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
   .chalk-shell-dock .chalk-shell-leave {margin-inline-start:0;}
   .chalk-shell-dock {
