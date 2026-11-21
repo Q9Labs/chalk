@@ -869,7 +869,7 @@
     height: 44px;
   }
 }
-/* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon and a thin border tint only. */
+/* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon only. */
 .chalk-toast {
   --chalk-toast-accent: var(--chalk-muted-text);
   /* Height of the action and close buttons; a one-line message centers on it. */
