@@ -3,7 +3,7 @@
 // frame count of the Participant's own video sender, sampled every second for --seconds, per iteration.
 // A sender whose encoder stops while the camera track is live shows as `stalled`.
 //
-//   node .agents/skills/verify-chalk/scripts/camera-soak.mjs <run-id> --device ipad [--iterations 20] [--seconds 25] [--camera 1280x720] [--encodings fixture|sdk]
+//   node .agents/skills/verify-chalk/scripts/camera-soak.mjs <run-id> --device ipad [--iterations 20] [--seconds 25] [--camera 1280x720] [--encodings sdk|fixture]  (sdk, the default, publishes with the SDK's own layers; fixture replaces them with a fixed set and bypasses the uplink policy)
 import { runJourney } from "./journey.mjs";
 
 const option = (name, fallback) => {
@@ -14,7 +14,8 @@ const device = option("device", "ipad");
 const iterations = Number(option("iterations", "20"));
 const seconds = Number(option("seconds", "25"));
 const [width, height] = option("camera", "1280x720").split("x").map(Number);
-const encodings = option("encodings", "fixture");
+if (!Number.isInteger(iterations) || iterations < 1) throw new Error("--iterations must be a whole number of at least 1");
+const encodings = option("encodings", "sdk");
 
 // Runs in the page: what the sender is doing right now.
 async function senderState() {
@@ -44,31 +45,34 @@ await runJourney(`camera-soak-${device}`, async ({ step, person, startCall }) =>
   for (let run = 1; run <= iterations; run++) {
     await step(`join ${run} with the camera on`, async () => {
       const me = await person(`Soak-${run}`, 2, { device, camera: { width, height }, encodings, record: false });
-      await me.page.goto(link);
-      const join = me.page.getByRole("button", { name: "Join call", exact: true });
-      const name = me.page.getByLabel("Your name", { exact: true });
-      for (let attempt = 0; attempt < 20 && !(await join.isEnabled()); attempt++) {
-        await name.fill(me.name);
-        await me.page.waitForTimeout(250);
+      try {
+        await me.page.goto(link);
+        const join = me.page.getByRole("button", { name: "Join call", exact: true });
+        const name = me.page.getByLabel("Your name", { exact: true });
+        for (let attempt = 0; attempt < 20 && !(await join.isEnabled()); attempt++) {
+          await name.fill(me.name);
+          await me.page.waitForTimeout(250);
+        }
+        const sheet = me.page.getByRole("dialog", { name: "Camera and microphone" });
+        await sheet.waitFor({ timeout: 15_000 });
+        await sheet.getByRole("button", { name: "Turn on", exact: true }).click();
+        await sheet.waitFor({ state: "detached", timeout: 15_000 });
+        await join.click();
+        await me.page.getByRole("button", { name: `Video tile for ${me.name}`, exact: true }).waitFor({ timeout: 60_000 });
+        const samples = [];
+        for (let second = 0; second < seconds; second++) {
+          await me.page.waitForTimeout(1000);
+          samples.push({ second, ...(await me.page.evaluate(senderState)) });
+        }
+        const last = samples.at(-1);
+        const earlier = samples.at(-11) ?? samples[0];
+        const stalled = last.encoded - earlier.encoded < 5;
+        const verdict = { run, stalled, encodedAtEnd: last.encoded, gainLast10s: last.encoded - earlier.encoded, layers: last.layers, encodings: last.encodings, bandwidth: last.bandwidth, trackLive: last.trackLive, firstFrameSecond: samples.find((sample) => sample.encoded > 0)?.second ?? null };
+        if (stalled) throw new Error(`stalled: ${JSON.stringify({ ...verdict, timeline: samples.map((sample) => `${sample.second}:${sample.encoded}/${sample.sourceFrames}`).join(" ") })}`);
+        return verdict;
+      } finally {
+        await me.context.close();
       }
-      const sheet = me.page.getByRole("dialog", { name: "Camera and microphone" });
-      await sheet.waitFor({ timeout: 15_000 });
-      await sheet.getByRole("button", { name: "Turn on", exact: true }).click();
-      await sheet.waitFor({ state: "detached", timeout: 15_000 });
-      await join.click();
-      await me.page.getByRole("button", { name: `Video tile for ${me.name}`, exact: true }).waitFor({ timeout: 60_000 });
-      const samples = [];
-      for (let second = 0; second < seconds; second++) {
-        await me.page.waitForTimeout(1000);
-        samples.push({ second, ...(await me.page.evaluate(senderState)) });
-      }
-      const last = samples.at(-1);
-      const earlier = samples.at(-11) ?? samples[0];
-      const stalled = last.encoded - earlier.encoded < 5;
-      const verdict = { run, stalled, encodedAtEnd: last.encoded, gainLast10s: last.encoded - earlier.encoded, layers: last.layers, encodings: last.encodings, bandwidth: last.bandwidth, trackLive: last.trackLive, firstFrameSecond: samples.find((sample) => sample.encoded > 0)?.second ?? null };
-      await me.context.close();
-      if (stalled) throw new Error(`stalled: ${JSON.stringify({ ...verdict, timeline: samples.map((sample) => `${sample.second}:${sample.encoded}/${sample.sourceFrames}`).join(" ") })}`);
-      return verdict;
     }).catch(() => undefined);
   }
 });

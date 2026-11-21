@@ -5,6 +5,7 @@
 // Only the camera, the microphone and the shared screen are fakes; the touch is emulated, not a real finger.
 //
 //   node .agents/skills/verify-chalk/scripts/class-journey.mjs <run-id> --device ipad|iphone|android [--web <origin>]
+import { paintedInk } from "./board-ink.mjs";
 import { runJourney } from "./journey.mjs";
 import { incomingAudioLevel } from "../../../../scripts/web-proof/media.mjs";
 import { measureAdvance, measureFirstFrame } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
@@ -167,7 +168,7 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
 
   await step("sees the whiteboard the host opens", async () => {
     await control(host, "Board");
-    await me.page.locator('.chalk-board[data-ready]').first().waitFor({ timeout: waitMs });
+    await me.page.locator(".chalk-board[data-ready]").first().waitFor({ timeout: waitMs });
     await me.page.waitForTimeout(1500);
     await shot(me, "07-whiteboard");
   });
@@ -184,10 +185,18 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
     const touchAction = await me.page.evaluate(boardTouchAction);
     if (touchAction !== "none") throw new Error(`the board canvas has touch-action ${touchAction}, so a finger would scroll the page instead of drawing`);
     const input = await drawStroke(me, { x: 0.2, y: 0.3 }, { x: 0.6, y: 0.5 });
-    await me.page.locator(`.chalk-board[data-elements="${before + 1}"]`).first().waitFor({ timeout: 30_000 });
-    await host.page.locator(`.chalk-board[data-elements="${before + 1}"]`).first().waitFor({ timeout: 30_000 });
+    await me.page
+      .locator(`.chalk-board[data-elements="${before + 1}"]`)
+      .first()
+      .waitFor({ timeout: 30_000 });
+    await host.page
+      .locator(`.chalk-board[data-elements="${before + 1}"]`)
+      .first()
+      .waitFor({ timeout: 30_000 });
+    // A scene can hold the stroke while the canvas stays blank, so read the painted pixels on both screens.
+    const ink = [await paintedInk(me.page, (pixels) => pixels > 0), await paintedInk(host.page, (pixels) => pixels > 0)];
     await shot(me, "08-whiteboard-drawn");
-    return { input, touchAction };
+    return { input, touchAction, ink };
   });
 
   await step("goes to the background briefly and comes back", async () => {
@@ -224,12 +233,22 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
       const overflow = await me.page.evaluate(pageOverflow);
       fits.push({ ...overflow, stage: stage && { width: Math.round(stage.width), height: Math.round(stage.height), inside: stage.x >= -1 && stage.y >= -1 && stage.x + stage.width <= overflow.width + 1 && stage.y + stage.height <= overflow.height + 1 } });
       await shot(me, size === portrait ? "11-portrait-again" : "10-landscape");
+      const orientation = size === portrait ? "portrait" : "landscape";
+      // With the board primary a short stage folds people into a "+N" tile, so the host is checked through the people list there.
+      const more = me.page.getByRole("button", { name: /^Show \d+ more participants$/ });
+      if (await more.count()) {
+        await more.click();
+        const listed = await me.page.getByRole("dialog").getByText(hostName).count();
+        await me.page.keyboard.press("Escape");
+        if (!listed) throw new Error(`the "+N" tile on the ${device} in ${orientation} did not list the host`);
+        continue;
+      }
+      const advance = await measureAdvance(me.page, hostName, { timeoutMs: waitMs });
+      if (advance.advancedAfterMs === null) throw new Error(`the host's video stopped after rotating to ${orientation} on the ${device}`);
     }
     for (const fit of fits) {
       if (fit.overflowX > 1 || !fit.stage || !fit.stage.inside) throw new Error(`layout overflows after rotating: ${JSON.stringify(fit)}`);
     }
-    const advance = await measureAdvance(me.page, hostName, { timeoutMs: waitMs });
-    if (advance.advancedAfterMs === null) throw new Error(`the host's video stopped after rotating on the ${device}`);
     return fits;
   });
 
@@ -239,5 +258,4 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
     await shot(me, "12-left");
     await leave(host);
   });
-
 });
