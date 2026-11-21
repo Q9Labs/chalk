@@ -51,6 +51,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       { kind: "generated", path: config.runtimeRoot },
     ],
     resolveSecrets: async (context) => {
+      // The API still requires both fields to boot its provider bridge; Orbs never call Cloudflare.
       provider = config.orb ? { appId: "orb-unused", appSecret: "orb-unused" } : await resolver();
       if (provider?.source) await writeJsonAtomic(`${config.runtimeRoot}/sfu-source.json`, provider.source, { redacted: false });
       return provider;

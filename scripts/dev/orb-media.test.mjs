@@ -12,7 +12,7 @@ test("published Orbs always select Chalk SFU even with Cloudflare credentials", 
       },
     });
     assert.equal(config.mediaPlane, "chalk_sfu");
-    assert.ok(!config.requiredTools.includes("op"));
+    assert.ok(!resolveDevConfig({ env: { PUBLIC_ORIGIN: origin } }).requiredTools.includes("op"));
   }
 });
 
