@@ -54,9 +54,11 @@ export function parseRecordingAnnotation(value: unknown, binding: AnnotationReco
   layers.sort((left, right) => left.initial.atMs - right.initial.atMs);
   for (const layer of layers) {
     const id = layer.layer.layer_id;
-    if (ids.has(id)) throw invalid("has a duplicate layer binding");
-    ids.add(id);
     for (const source of layer.sourceIds) {
+      // A capture retry can checkpoint the same live layer against a new source ID.
+      const binding = `${id}:${source}`;
+      if (ids.has(binding)) throw invalid("has a duplicate layer binding");
+      ids.add(binding);
       if ((endOfSource.get(source) ?? 0) > layer.initial.atMs) throw invalid("has overlapping source bindings");
       endOfSource.set(source, layer.closedAtMs);
     }

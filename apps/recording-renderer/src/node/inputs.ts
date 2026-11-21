@@ -61,7 +61,12 @@ export async function loadVerifiedRenderInputs(request: ComposeRequestV1, annota
   const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
   await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
 
-  const annotation = annotationFile === undefined ? [] : await loadAnnotation(workspaceDirectory, annotationFile, timeline);
+  const frozenAnnotation = timeline.assets.filter((asset) => asset.kind === "screen_annotation");
+  if (frozenAnnotation.length > 1) throw new TypeError("multiple frozen screen annotation assets");
+  const annotationAsset = frozenAnnotation[0];
+  if (annotationAsset && annotationFile && annotationAsset.sha256 !== annotationFile.sha256) throw new TypeError("recording annotation does not match the frozen asset");
+  const annotationInput = annotationAsset ? { path: join(assetDirectory, annotationAsset.sha256), sha256: annotationAsset.sha256 } : annotationFile;
+  const annotation = annotationInput === undefined ? [] : await loadAnnotation(workspaceDirectory, annotationInput, timeline);
   return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath, annotation };
 }
 

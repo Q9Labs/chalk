@@ -14,10 +14,7 @@ export interface ScreenAnnotationOptions {
   readonly helper?: ScreenAnnotationHelper;
 }
 
-export interface ScreenAnnotationSetup extends Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper"> {
-  /** Publish an immutable file to this board scene. An identical retry with the same ID must succeed. */
-  readonly uploadBoardFrame?: (input: { readonly sceneId: string; readonly fileId: string; readonly png: Blob }) => Promise<void>;
-}
+export type ScreenAnnotationSetup = Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper">;
 
 export type AnnotationTool = ScreenAnnotationDraft["shape"]["kind"] | "pointer" | "eraser";
 export type AnnotationStamp = Extract<ScreenAnnotationDraft["shape"], { kind: "stamp" }>["stamp"];

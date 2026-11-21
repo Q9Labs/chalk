@@ -6,4 +6,4 @@ var themePalettes = map[string]struct{}{"light": {}, "warm-porcelain": {}, "cool
 
 var reactionValues = map[string]struct{}{"👍": {}, "❤️": {}, "😂": {}, "😮": {}, "🎉": {}, "👏": {}, "😀": {}, "😅": {}, "🙏": {}, "🔥": {}, "✅": {}, "👀": {}, "💯": {}, "🤔": {}, "😢": {}, "🙌": {}, "🚀": {}, "👌": {}, "😍": {}, "🤝": {}, "💡": {}, "⭐": {}, "😎": {}, "🥳": {}}
 
-var assetKinds = map[string]struct{}{"logo": {}, "avatar": {}, "chat_attachment": {}, "whiteboard_state": {}, "whiteboard_file": {}, "font": {}}
+var assetKinds = map[string]struct{}{"logo": {}, "avatar": {}, "chat_attachment": {}, "whiteboard_state": {}, "whiteboard_file": {}, "font": {}, "screen_annotation": {}}
