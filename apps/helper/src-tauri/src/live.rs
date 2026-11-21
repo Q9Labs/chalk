@@ -158,9 +158,6 @@ impl Capture {
     }
 
     pub fn enable_follow(&mut self) -> Result<(), &'static str> {
-        if !window_follow::can_sample() {
-            return Err("This Helper cannot verify the captured window. Use the call preview.");
-        }
         let window = self
             .window
             .as_mut()

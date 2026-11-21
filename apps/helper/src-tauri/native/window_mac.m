@@ -64,9 +64,11 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
     }
 }
 
-// Used only on explicit follow. Never request Screen Recording permission
-// here; without existing consent the caller must leave the overlay off.
-bool chalk_window_can_sample(void) { return CGPreflightScreenCaptureAccess(); }
+// Only the native Settings action may prompt. Background sampling always
+// preflights without prompting.
+bool chalk_window_request_capture_access(void) {
+    return CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess();
+}
 
 bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
     if (!CGPreflightScreenCaptureAccess()) return false;

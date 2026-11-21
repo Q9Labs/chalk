@@ -44,8 +44,8 @@ impl From<NativeBounds> for Observation {
     }
 }
 
-pub fn can_sample() -> bool {
-    platform::can_sample()
+pub fn request_capture_access() -> bool {
+    platform::request_capture_access()
 }
 
 pub fn observe(id: u64) -> Option<Observation> {
@@ -110,14 +110,14 @@ mod platform {
     use super::{NativeBounds, SIZE};
 
     extern "C" {
-        fn chalk_window_can_sample() -> bool;
+        fn chalk_window_request_capture_access() -> bool;
         fn chalk_window_bounds(id: u32, output: *mut NativeBounds) -> bool;
         fn chalk_window_sample(id: u32, output: *mut u8, size: usize) -> bool;
     }
 
-    pub fn can_sample() -> bool {
-        // Preflight checks existing consent without displaying a prompt.
-        unsafe { chalk_window_can_sample() }
+    pub fn request_capture_access() -> bool {
+        // Only called from the user’s explicit Follow action in native Settings.
+        unsafe { chalk_window_request_capture_access() }
     }
 
     pub fn bounds(id: u64) -> Option<NativeBounds> {
@@ -193,7 +193,7 @@ mod platform {
         )
     }
 
-    pub fn can_sample() -> bool {
+    pub fn request_capture_access() -> bool {
         true
     }
 
@@ -341,7 +341,7 @@ mod platform {
 mod platform {
     use super::NativeBounds;
 
-    pub fn can_sample() -> bool {
+    pub fn request_capture_access() -> bool {
         false
     }
     pub fn bounds(_: u64) -> Option<NativeBounds> {

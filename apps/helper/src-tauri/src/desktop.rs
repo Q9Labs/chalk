@@ -735,6 +735,12 @@ pub fn act(
         Action::FollowWindow => {
             let pairing = local.pairing.clone().ok_or("No Helper session.")?;
             drop(local);
+            if !pairing.offers_window() {
+                return Err("No active window share.".into());
+            }
+            if !crate::window_follow::request_capture_access() {
+                return Err("Allow Screen Recording for Chalk Helper, then try again. Until then, use the call preview.".into());
+            }
             pairing.enable_follow().map_err(str::to_owned)?;
             let _ = window.hide();
             return Ok(());
