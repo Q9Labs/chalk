@@ -63,21 +63,7 @@ import { SFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure, pullShortfall, subscribeFailure } from "./failure-diagnostics";
 import { observeOperation } from "../telemetry/operation";
-import type {
-  SFUBootstrap,
-  SFUClientOptions,
-  SFUFailureCode,
-  SFULocalOfferDiagnostic,
-  SFUPublication,
-  SFUPublicationSnapshot,
-  SFURemoteTrack,
-  SFURestartOptions,
-  SFUSignalingTransport,
-  SFUSnapshot,
-  SFUTrackRequest,
-  SFUTracksResponse,
-  SFUMediaCapabilities,
-} from "./types";
+import type { SFUBootstrap, SFUClientOptions, SFUFailureCode, SFULocalOfferDiagnostic, SFUPublication, SFUPublicationSnapshot, SFURemoteTrack, SFURestartOptions, SFUSignalingTransport, SFUSnapshot, SFUTrackRequest, SFUTracksResponse, SFUMediaCapabilities } from "./types";
 import type { PublicationCursor } from "./tracks";
 import { expectedOfferAddition, measureOffer, shouldReplaceForOfferSize } from "./offer-size";
 export class SFUClient implements ClientMediaPlane {
@@ -1051,7 +1037,6 @@ export class SFUClient implements ClientMediaPlane {
   #tracksToPublish(states: readonly LocalTrackState[]): LocalTrackState[] {
     return [...this.#locals.tracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended");
   }
-  // Cloudflare answers an offer on a session that never came up with 406, and later calls on it with 410 or 404.
   // The once-per-generation replacement budget protects a connection that was up. A connection that never came up
   // gets its own short budget, so a dead session cannot keep the speaker silent until someone toggles the mic.
   async #publishOnReplacedConnections(states: readonly LocalTrackState[], generation: number, rejection: unknown): Promise<void> {
@@ -1649,7 +1634,6 @@ export class SFUClient implements ClientMediaPlane {
             trackName: reference.trackName,
             // h sorts before l: prefer full camera quality, but keep video flowing
             // when the publisher pauses h. Do not silently downgrade a live h layer.
-            // https://developers.cloudflare.com/realtime/sfu/features/simulcast/#quality-control
             ...(publication.source === "camera" ? { simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } as const } : {}),
           };
         });
@@ -1905,8 +1889,7 @@ export class SFUClient implements ClientMediaPlane {
   }
   // An answer cannot enable a section that this side set inactive. The SFU reuses a closed mid for its next pull: the mid of a
   // parked receiver, or of our own muted microphone or camera. So an inactive transceiver that the request's response names and
-  // that the offer turns on must receive again before the answer is made. cf_sfu keeps offering every closed mid as sendonly (the
-  // 2026-11-10 Orb churn probe), so only the mids the response names are revived; the others stay parked and get an inactive answer.
+  // that the offer turns on must receive again before the answer is made. Leave other mids parked.
   #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string, response: SFUTracksResponse): void {
     const named = new Set((response.tracks ?? []).map((track) => track.mid));
     const active = activeOfferedMids(offerSDP);

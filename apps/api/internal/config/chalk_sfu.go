@@ -25,7 +25,6 @@ const (
 	ChalkSFUTimeoutMS          = "CHALK_SFU_TIMEOUT_MS"
 	ChalkSFUSTUNURLs           = "CHALK_SFU_STUN_URLS"
 	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
-	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
 	ChalkSFUNewEpisodes        = "CHALK_SFU_NEW_EPISODES"
 	DefaultChalkSFUTimeoutMS   = int64(6000)
 	// DefaultChalkSFUColocatedGraceSeconds is how long a capture waits for the healthy worker
@@ -52,7 +51,7 @@ type ChalkSFUNode struct {
 }
 
 // ChalkSFUConfig points the API at the Chalk SFU. It is off by default: while
-// Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
+// Enabled is false the API does not issue media grants.
 type ChalkSFUConfig struct {
 	Enabled bool
 	// CaptureEnabled lets the recorder reach the pool's nodes through the capture plane. It is

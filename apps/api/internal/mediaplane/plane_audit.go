@@ -14,29 +14,9 @@ import (
 // settings that chose it have changed.
 type Selector string
 
-const (
-	// SelectedBySpace: the Space's own setting, or the chalk_sfu a Space created before
-	// the setting existed still stores in its legacy column.
-	SelectedBySpace Selector = "space"
-	// SelectedByTenant: the Tenant's default plane.
-	SelectedByTenant Selector = "tenant"
-	// SelectedByDefault: CHALK_DEFAULT_MEDIA_PLANE.
-	SelectedByDefault Selector = "default"
-	// SelectedByTenantConfig: the choice was the Chalk SFU, but the Tenant runs on its own
-	// credentials or has no media, so it starts on Cloudflare.
-	SelectedByTenantConfig Selector = "tenant_config"
-	// SelectedByKillSwitch: the kill switch, live or the deploy-time floor, sent the
-	// Episode to Cloudflare although the settings chose the Chalk SFU.
-	SelectedByKillSwitch Selector = "kill_switch"
-	// SelectedByAllowlist: the Space is off CHALK_SFU_ALLOWED_SPACES, so the Episode
-	// started on Cloudflare although the settings chose the Chalk SFU.
-	SelectedByAllowlist Selector = "allowlist"
-	// SelectedByClient: the client cannot run the Chalk SFU, so the Episode started on
-	// Cloudflare.
-	SelectedByClient Selector = "client"
-	// SelectedByOverflow: no Chalk SFU node had room, so the Episode started on Cloudflare.
-	SelectedByOverflow Selector = "overflow"
-)
+// SelectedByDefault is the source for new bindings. Older selector values are
+// still accepted when reading historical Episodes.
+const SelectedByDefault Selector = "default"
 
 // valid accepts any bounded lowercase name. It does not list the values: a
 // rollback must still read an Episode that a later release bound with a selector
@@ -76,13 +56,12 @@ const (
 	ChangeScopeKillSwitch ChangeScope = "kill_switch"
 )
 
-// Plane values of a Change. Inherit is no choice of its own. The kill switch is
-// PlaneCloudflare while it holds every new Episode on Cloudflare and Inherit otherwise.
+// PlaneInherit records an unset Space or Tenant setting.
 const (
 	PlaneInherit = "inherit"
 )
 
-// PlaneCloudflare and PlaneChalk are the providers' setting names, the spelling the audit records.
+// Audit history can still contain the retired Cloudflare setting name.
 var (
 	PlaneCloudflare = "cf_sfu"
 	PlaneChalk      = ProviderChalkSFU.SettingName()

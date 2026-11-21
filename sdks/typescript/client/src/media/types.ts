@@ -90,13 +90,7 @@ export type SFUPublicationSnapshot = {
   readonly publications: readonly SFUPublication[];
 };
 export type SFUSignalingTransport = {
-  readonly addTracks: (input: {
-    readonly connectionId: string;
-    readonly sessionDescription?: SFUSessionDescription;
-    readonly tracks: readonly SFUTrackRequest[];
-    readonly allowPartialRemoteTracks?: boolean;
-    readonly replacementCause?: MediaConnectionReplacementCause;
-  }) => Promise<SFUTracksResponse>;
+  readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription?: SFUSessionDescription; readonly tracks: readonly SFUTrackRequest[]; readonly allowPartialRemoteTracks?: boolean; readonly replacementCause?: MediaConnectionReplacementCause }) => Promise<SFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: SFUSessionDescription; readonly tracks: readonly SFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<SFUTracksResponse>;
   /** Changes the simulcast layer of tracks already pulled, or pauses them in place, without renegotiating. Transports without it keep the layer chosen at pull time. */
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly SFUTrackRequest[] }) => Promise<SFUTracksResponse>;

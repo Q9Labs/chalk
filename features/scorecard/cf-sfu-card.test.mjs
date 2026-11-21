@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -18,28 +18,14 @@ const metric = (id, value, n = 60) => ({ id, unit: "ms", n, p50: value, p95: val
 const card = (mediaPlane, metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane, metrics, dropped: [] });
 const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, SCORECARD_HISTORY_REF: "origin/no-history", ...env } });
 
-test("a Cloudflare latency card is collected, shown with the note, and an over-budget value blocks its own run", (t) => {
+test("a historical Cloudflare latency card remains readable but cannot block a gate", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "cf-card-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const evidence = join(dir, "evidence");
-  const artifacts = join(dir, "artifacts");
-  const summary = join(dir, "summary.md");
   const path = join(dir, "scorecard-cf_sfu.json");
   writeFileSync(path, JSON.stringify(card("cf_sfu", [metric("action.leave_ms", 999999, 7)])));
-  assert.equal(spawnSync("mkdir", ["-p", join(evidence, "run-latency")]).status, 0);
-  writeFileSync(join(evidence, "run-latency", "scorecard-cf_sfu.json"), readFileSync(path));
-
-  const collected = node("chalk-sfu.mjs", [evidence, "cf_sfu", revision, artifacts], { GITHUB_STEP_SUMMARY: summary });
-  assert.equal(collected.status, 0, collected.stderr);
-  assert.ok(existsSync(join(artifacts, "scorecard-cf_sfu.json")));
-  const text = readFileSync(summary, "utf8");
-  assert.match(text, /Chalk SFU nightly: cf_sfu/);
-  assert.match(text, /Iowa/);
-  assert.match(text, /❌ blocks/);
-  assert.doesNotMatch(text, /⚠️ warns/);
 
   const table = node("scorecard.mjs", ["diff", "--current", path, "--fail-on-gate"]);
-  assert.equal(table.status, 1, table.stderr);
+  assert.equal(table.status, 0, table.stderr);
   assert.match(table.stdout, /^> \*\*Read with care:\*\*.*Iowa/);
 
   writeFileSync(path, JSON.stringify(card(chalkSfu, [metric("action.leave_ms", 300)])));
@@ -56,7 +42,7 @@ test("adding a Cloudflare latency card cannot change the nightly verdict", async
       chalkSfu,
       gated.map((id) => metric(id, id === "action.leave_ms" ? leave : 100)),
     );
-  // Every Cloudflare action metric far over its budget, in every cycle.
+  // Historical values that would fail the current Chalk SFU budget.
   const cloudflare = card(
     "cf_sfu",
     gated.map((id) => metric(id, 999999)),

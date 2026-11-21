@@ -25,9 +25,7 @@ type FixtureMediaClientInput = {
   readonly onScreenEnded: () => void;
 };
 
-type FixtureMediaAccess =
-  | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: SFUBootstrap }
-  | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: FixtureChalkSFUPayload };
+type FixtureMediaAccess = { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: SFUBootstrap } | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: FixtureChalkSFUPayload };
 type FixtureChalkSFUPayload = {
   readonly connectionId: string;
   readonly episodeRef: string;

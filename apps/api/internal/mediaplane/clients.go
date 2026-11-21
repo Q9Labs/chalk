@@ -10,8 +10,7 @@ import (
 var ErrClientUnsupported = errors.New("the caller's SDK cannot run the Episode's media provider")
 
 // ClientProviders is the set of media providers that a caller's SDK can run.
-// Every released SDK runs Cloudflare, so a caller that declares nothing gets
-// Cloudflare only. The Chalk SFU needs an SDK that declares chalk_sfu.
+// A client that does not declare chalk_sfu cannot join Episodes with media.
 type ClientProviders struct {
 	chalk   bool
 	assumed bool

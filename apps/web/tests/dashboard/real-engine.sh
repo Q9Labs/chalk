@@ -25,6 +25,7 @@ dashboard_api_port="${CHALK_DASHBOARD_API_PORT:-18080}"
 dashboard_vendor_port="${CHALK_DASHBOARD_VENDOR_PORT:-18081}"
 dashboard_web_port="${CHALK_JOIN_WEB_PORT:-${CHALK_DASHBOARD_WEB_PORT:-18797}}"
 dashboard_bridge_port="${CHALK_DASHBOARD_BRIDGE_PORT:-18444}"
+dashboard_sfu_port="${CHALK_DASHBOARD_SFU_PORT:-18445}"
 export CHALK_API_ADDR=127.0.0.1:${dashboard_api_port}
 export CHALK_API_CORS_ALLOWED_ORIGINS=http://127.0.0.1:${dashboard_web_port}
 export CHALK_API_LOCAL_SYSTEM_TOKEN=fixture-local-system-not-a-secret
@@ -39,16 +40,11 @@ export CHALK_SYNC_TOKEN_KEY_ID=dashboard-proof
 CHALK_SYNC_TOKEN_PRIVATE_KEY="$(node --input-type=module -e 'import {generateKeyPairSync} from "node:crypto"; const {privateKey}=generateKeyPairSync("ed25519"); const key=privateKey.export({format:"jwk"}); process.stdout.write(Buffer.concat([Buffer.from(key.d,"base64url"),Buffer.from(key.x,"base64url")]).toString("base64url"))')"
 export CHALK_SYNC_TOKEN_PRIVATE_KEY
 export CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID=00000000-0000-4000-8000-000000000001
-export CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu
 export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:${dashboard_web_port}
 export CHALK_PUBLIC_INVITE_KEY_ID=dashboard-proof
 export CHALK_PUBLIC_INVITE_PRIVATE_KEY="$CHALK_SYNC_TOKEN_PRIVATE_KEY"
 CHALK_PUBLIC_INVITE_VERIFICATION_KEYS="$(node --input-type=module -e 'process.stdout.write(JSON.stringify({"dashboard-proof":Buffer.from(process.env.CHALK_SYNC_TOKEN_PRIVATE_KEY,"base64url").subarray(32).toString("base64url")}))')"
 export CHALK_PUBLIC_INVITE_VERIFICATION_KEYS
-export CHALK_DEFAULT_MEDIA_PLANE=cf_sfu
-export CHALK_CLOUDFLARE_REALTIME_APP_ID=dashboard-proof
-export CHALK_CLOUDFLARE_REALTIME_APP_SECRET=fixture-cloudflare-not-a-secret
-export CHALK_CLOUDFLARE_REALTIME_BASE_URL=http://127.0.0.1:${dashboard_vendor_port}
 # Enable the real historical-artifact routes without contacting vendor services.
 export CHALK_RECORDING_ENABLED=true
 export CHALK_TRANSCRIPTION_ENABLED=true
@@ -68,9 +64,11 @@ export GOFLAGS=-buildvcs=false
 if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
   pnpm exec turbo run build --filter=web...
 fi
-(cd apps/api && go build -o ../../artifacts/dashboard-api${artifact_suffix} ./cmd)
+(cd apps/api && go build -o "../../artifacts/dashboard-api${artifact_suffix}" ./cmd)
+(cd features/media/sfu && go build -o "../../../artifacts/dashboard-sfu${artifact_suffix}" ./cmd/sfu)
 final_pid=""
 api_pid=""
+sfu_pid=""
 vendor_pid=""
 watchdog_pid=""
 redis_container=""
@@ -80,9 +78,11 @@ cleanup() {
   [[ -z "$final_pid" ]] || wait "$final_pid" 2>/dev/null || true
   [[ -z "$vendor_pid" ]] || kill "$vendor_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || kill "$api_pid" 2>/dev/null || true
+  [[ -z "$sfu_pid" ]] || kill "$sfu_pid" 2>/dev/null || true
   [[ -z "$watchdog_pid" ]] || kill "$watchdog_pid" 2>/dev/null || true
   [[ -z "$vendor_pid" ]] || wait "$vendor_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || wait "$api_pid" 2>/dev/null || true
+  [[ -z "$sfu_pid" ]] || wait "$sfu_pid" 2>/dev/null || true
   [[ -z "$redis_container" ]] || docker stop --time 1 "$redis_container" >/dev/null 2>&1 || true
   if [[ -n "$certificate_dir" ]]; then
     rm -f "$certificate_dir"/{ca.key,ca.pem,ca.srl,server.key,server.csr,server.pem,server.ext,sync.key,sync.csr,sync.pem,sync.ext}
@@ -100,7 +100,7 @@ openssl req -newkey rsa:2048 -nodes -subj /CN=localhost \
   -keyout "$certificate_dir/server.key" -out "$certificate_dir/server.csr" >> artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 cat > "$certificate_dir/server.ext" <<'CERT'
 subjectAltName=DNS:localhost,IP:127.0.0.1,URI:spiffe://chalk.local/api
-extendedKeyUsage=serverAuth
+extendedKeyUsage=serverAuth,clientAuth
 CERT
 openssl x509 -req -in "$certificate_dir/server.csr" -CA "$certificate_dir/ca.pem" \
   -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
@@ -133,11 +133,32 @@ docker exec "$redis_container" redis-cli ping >/dev/null
 node apps/web/tests/dashboard/vendor-fixture.mjs "$BASHPID" > artifacts/dashboard-vendor${artifact_suffix}.log 2>&1 &
 vendor_pid=$!
 for attempt in {1..50}; do
-  if curl --fail --silent "$CHALK_CLOUDFLARE_REALTIME_BASE_URL/healthz" >/dev/null; then break; fi
+  if curl --fail --silent "http://127.0.0.1:${dashboard_vendor_port}/healthz" >/dev/null; then break; fi
   if ! kill -0 "$vendor_pid" 2>/dev/null; then cat artifacts/dashboard-vendor${artifact_suffix}.log; exit 1; fi
   sleep 0.1
 done
 kill -0 "$vendor_pid"
+export SFU_CONTROL_ADDR="127.0.0.1:${dashboard_sfu_port}"
+export SFU_UDP_ADDR=127.0.0.1:0
+export SFU_ICE_LOOPBACK=true
+export SFU_TLS_CERT_FILE="$certificate_dir/server.pem"
+export SFU_TLS_KEY_FILE="$certificate_dir/server.key"
+export SFU_CLIENT_CA_FILE="$certificate_dir/ca.pem"
+export SFU_CLIENT_IDENTITY=spiffe://chalk.local/api
+export CHALK_SFU_ENABLED=true
+export CHALK_SFU_APPLICATION_ID=dashboard-proof
+export CHALK_SFU_NODES="dashboard=https://${SFU_CONTROL_ADDR}"
+export CHALK_SFU_SERVER_NAME=localhost
+export CHALK_SFU_CA_FILE="$SFU_CLIENT_CA_FILE"
+export CHALK_SFU_CLIENT_CERT_FILE="$SFU_TLS_CERT_FILE"
+export CHALK_SFU_CLIENT_KEY_FILE="$SFU_TLS_KEY_FILE"
+artifacts/dashboard-sfu${artifact_suffix} > artifacts/dashboard-sfu${artifact_suffix}.log 2>&1 &
+sfu_pid=$!
+for attempt in {1..100}; do
+  if curl --fail --silent --cacert "$SFU_CLIENT_CA_FILE" --cert "$SFU_TLS_CERT_FILE" --key "$SFU_TLS_KEY_FILE" "https://${SFU_CONTROL_ADDR}/readyz" >/dev/null; then break; fi
+  if ! kill -0 "$sfu_pid" 2>/dev/null || [[ "$attempt" == 100 ]]; then cat artifacts/dashboard-sfu${artifact_suffix}.log; exit 1; fi
+  sleep 0.1
+done
 artifacts/dashboard-api${artifact_suffix} > artifacts/dashboard-api${artifact_suffix}.log 2>&1 &
 api_pid=$!
 # Owner loss and a hard deadline also reap the server if the driver is killed.

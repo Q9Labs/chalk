@@ -143,6 +143,9 @@ try {
     const episodes = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes`);
     const live = (episodes.episodes ?? []).at(0);
     if (!live) throw new Error("the seeded Space has no Episode after both guests joined");
+    const provider = live.config_snapshot?.media_plane_binding?.provider;
+    if (provider !== "chalk_sfu") throw new Error(`The live Episode bound to ${provider ?? "no media provider"}, not chalk_sfu`);
+    measurements.mediaPlane = provider;
     const attendance = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes/${live.id}/attendance`);
     await writeFile(join(out, "attendance.json"), `${JSON.stringify(attendance, null, 2)}\n`);
     const names = JSON.stringify(attendance);

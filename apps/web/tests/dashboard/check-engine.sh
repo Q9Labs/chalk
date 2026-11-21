@@ -22,6 +22,7 @@ case "$proof" in
     refresh_port=${CHALK_DASHBOARD_REFRESH_PORT_BASE:-18180}
     export CHALK_DASHBOARD_API_PORT=$refresh_port CHALK_DASHBOARD_VENDOR_PORT=$((refresh_port + 1))
     export CHALK_DASHBOARD_BRIDGE_PORT=$((refresh_port + 2))
+    export CHALK_DASHBOARD_SFU_PORT=$((refresh_port + 5))
     export CHALK_JOIN_WEB_PORT=$((refresh_port + 3)) CHALK_JOIN_SYNC_PORT=$((refresh_port + 4))
     export DASHBOARD_ENGINE_ARTIFACT_SUFFIX=-refresh DASHBOARD_ENGINE_DEADLINE_SECONDS=600
     bash apps/web/tests/dashboard/real-engine.sh node apps/web/tests/dashboard/owner-refresh.mjs

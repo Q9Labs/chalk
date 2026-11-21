@@ -5262,7 +5262,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "409": {
             "content": {
@@ -5532,7 +5532,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "404": {
             "content": {

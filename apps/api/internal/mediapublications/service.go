@@ -117,7 +117,7 @@ type Registry interface {
 }
 
 // RecordPublicationAvailability changes Chalk visibility without ending the
-// Cloudflare SFU track or replacing its publication identity.
+// SFU track or replacing its publication identity.
 func (s Service) RecordPublicationAvailability(ctx context.Context, input AvailabilityInput) error {
 	if s.repository == nil {
 		return ErrUnavailable

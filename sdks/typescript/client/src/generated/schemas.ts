@@ -5414,25 +5414,6 @@ export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWire
   }),
 );
 
-export class SpaceMediaPlaneNotPermittedError extends Schema.TaggedErrorClass<SpaceMediaPlaneNotPermittedError>()("SpaceMediaPlaneNotPermittedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("space.media_plane_not_permitted"),
-    message: Schema.String,
-  }),
-}) {}
-export const SpaceMediaPlaneNotPermittedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("space.media_plane_not_permitted"),
-    message: Schema.String,
-  }),
-});
-export const SpaceMediaPlaneNotPermittedErrorSchema = SpaceMediaPlaneNotPermittedErrorWireSchema.pipe(
-  Schema.decodeTo(SpaceMediaPlaneNotPermittedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceMediaPlaneNotPermittedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class SpaceNotFoundError extends Schema.TaggedErrorClass<SpaceNotFoundError>()("SpaceNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("space.not_found"),
@@ -6435,7 +6416,6 @@ export const CreateSpaceErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
   SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
-  SpaceMediaPlaneNotPermittedErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
@@ -7348,7 +7328,6 @@ export const UpdateSpaceErrorSchema = Schema.Union([
   SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidIdErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
-  SpaceMediaPlaneNotPermittedErrorSchema,
   SpaceNotFoundErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,

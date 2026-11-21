@@ -29,10 +29,7 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: w.launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(w.queries, w.pool)
 	planePolicy := spaces.PlanePolicy{NewEpisodesPaused: w.cfg.ChalkSFU.NewEpisodesPaused}
-	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool {
-		provider, err := mediaplane.ParseSettingName(plane)
-		return err == nil && planePolicy.PublicWriteAllowed(provider)
-	}, mediaplane.KnownSettingName)
+	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(mediaplane.KnownSettingName, mediaplane.KnownSettingName)
 	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), w.cfg, tenantService)
 	if err != nil {
 		return fmt.Errorf("configure public invite defaults: %w", err)

@@ -162,7 +162,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		ErrorRules(spaceRules)
 }
 
@@ -226,7 +226,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
 		ErrorRules(spaceRules)
 }
 
@@ -370,7 +370,6 @@ var spaceRules = errorRules{
 	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
 	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
 	ruleFor(apiErrorInvalidMediaPlane, spaces.ErrInvalidMediaPlane),
-	ruleFor(apiErrorSpaceMediaPlaneNotPermitted, spaces.ErrMediaPlaneNotPermitted),
 	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField),
 	ruleFor(apiErrorInvalidSpaceArtifactPolicy, spaces.ErrInvalidRecordingPolicy, spaces.ErrInvalidTranscriptionPolicy),
 	ruleFor(apiErrorSpaceNotFound, spaces.ErrSpaceNotFound),

@@ -60,6 +60,7 @@ The API reaches a node with its provider-bridge certificate, reissued by `certs 
 - `CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` is a primary; `standby:id=url` takes a new Episode only when every primary is silent, draining, host-guard closed or full, and is held to `CHALK_SFU_STANDBY_PACKET_BUDGET`. At least one node must be a primary.
 - `CHALK_SFU_CAPTURE_ENABLED` lets the recorder pull from nodes through capture sessions and needs `CHALK_SFU_ENABLED=true`. While off, an Episode bound to `chalk_sfu` refuses to start a Recording. It also needs the recorder fleet (`CHALK_RECORDING_ENABLED=true` and the private provider bridge), because the API registers the Chalk SFU capture provider only when it builds the fleet. Nightly runs with it on; keep it off in production until M10 recording parity passes.
 - `CHALK_SFU_COLOCATED_CAPTURE` (default `false`; needs `CHALK_SFU_CAPTURE_ENABLED=true`) makes the API register one capture worker per node in `CHALK_SFU_NODES` and prefer it for the captures of that node's Episodes. `CHALK_SFU_COLOCATED_CAPTURE_GRACE_SECONDS` (default 20) is how long a capture waits for the healthy worker of its node before the on-demand fleet may take it, so an unhealthy or full worker costs a delay and never a recording. Off is the default and leaves every capture to the fleet. The worker itself is deployed by `features/media/sfu/deploy/deploy`.
+
 ## Pausing new Episodes
 
 `media-settings new-episodes --state off --operator <name> --reason <text>`

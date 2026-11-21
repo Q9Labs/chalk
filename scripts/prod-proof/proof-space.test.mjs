@@ -6,8 +6,7 @@ import { readFileSync } from "node:fs";
 import { createEpisode, createSpace, openEpisodeInSpace } from "./proofs.mjs";
 import { ProofError, measured, publicFailure } from "./runtime.mjs";
 
-// The public API refuses a Create Space request that names the Chalk SFU, so a proof names no
-// plane and fails at once when the Space it gets is not on the plane it asked for.
+// Proofs verify that the Space is served by the Chalk SFU before starting an Episode.
 async function fakeRun(responder) {
   const requests = [];
   return {
@@ -24,7 +23,6 @@ async function fakeRun(responder) {
   };
 }
 
-const cloudflare = "cf_sfu";
 const policyApplied = { recording_policy: "manual", transcription_policy: "on_demand" };
 
 test("a proof Space is created without naming a plane and must be on the requested one", async () => {
@@ -32,14 +30,6 @@ test("a proof Space is created without naming a plane and must be on the request
   const space = await createSpace(run, "chalk_sfu");
   assert.equal(space.id, "s");
   assert.equal("media_plane" in run.requests[0].body, false);
-});
-
-test("a Cloudflare proof can name its plane, so a Tenant that defaults to the Chalk SFU still gets a Cloudflare Space", async () => {
-  const plane = cloudflare;
-  const run = await fakeRun((_, body) => ({ id: "s", effective_media_plane: body.media_plane ?? "other", ...policyApplied }));
-  const space = await createSpace(run, plane, undefined, { explicitPlane: true });
-  assert.equal(run.requests[0].body.media_plane, plane);
-  assert.equal(space.effective_media_plane, plane);
 });
 
 test("a Space on another plane stops the run with media-plane-config", async () => {
@@ -202,23 +192,10 @@ test("a measured check prints its message, a nested one prints every message, an
   ]);
 });
 
-// Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the Chalk SFU lane
-// takes the Space an operator moved, which the workflow hands to the proof as CHALK_PROOF_SPACE_ID_CHALK_SFU.
-test("the Cloudflare lane and the Chalk SFU lane each land on their own plane", async () => {
+test("both hosted proof steps receive the configured Chalk Spaces", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
-  for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
-    assert.equal(workflow.split(`${name}: \${{ secrets.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
-  }
-  const deployment = (method) => (method === "GET" ? { id: "chalk-space", effective_media_plane: "chalk_sfu", ...policyApplied } : { id: "new", effective_media_plane: "cf_sfu", ...policyApplied });
-  const cloudflareLane = await fakeRun(deployment);
-  assert.equal((await createSpace(cloudflareLane, cloudflare)).effective_media_plane, cloudflare);
-  process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "chalk-space";
-  try {
-    const chalkSfuLane = await fakeRun(deployment);
-    assert.equal((await createSpace(chalkSfuLane, "chalk_sfu")).id, "chalk-space");
-    assert.equal((await createSpace(chalkSfuLane, "cf_sfu")).effective_media_plane, "cf_sfu");
-  } finally {
-    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
+  for (const name of ["CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
+    assert.equal(workflow.split(`${name}: \${{ secrets.${name} }}`).length - 1, 2);
   }
 });
 
@@ -231,10 +208,7 @@ test("the automatic-policy proof reuses its own Space and never the manual one",
     assert.equal((await createSpace(run, "chalk_sfu", automatic)).id, "automatic-space");
     assert.match(run.requests[0].path, /spaces\/automatic-space$/);
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
-    await assert.rejects(
-      createSpace(await fakeRun(() => ({ id: "created", effective_media_plane: "cf_sfu", recording_policy: "automatic", transcription_policy: "automatic" })), "chalk_sfu", automatic),
-      (error) => error.reason === "media-plane-config" && /CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC/.test(error.message),
-    );
+    await assert.rejects(createSpace(await fakeRun(() => ({ id: "created", effective_media_plane: "cf_sfu", recording_policy: "automatic", transcription_policy: "automatic" })), "chalk_sfu", automatic), (error) => error.reason === "media-plane-config" && /not chalk_sfu/.test(error.message));
   } finally {
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;

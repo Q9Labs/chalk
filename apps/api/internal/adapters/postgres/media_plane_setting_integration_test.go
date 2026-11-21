@@ -94,7 +94,7 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	pool := settingsPool(t)
 	tenant, space := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.Provider("cf_sfu")
+	own := mediaplane.ProviderChalkSFU
 
 	got, err := repository.GetSpace(t.Context(), tenant, space)
 	if err != nil || got.MediaPlaneSetting != nil {
@@ -121,9 +121,9 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	}
 
 	// An update that leaves the field out must not touch it.
-	set(&cloudflare, "cf_sfu")
+	set(&own, "chalk_sfu")
 	got, err = repository.GetSpace(t.Context(), tenant, space)
-	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != cloudflare {
+	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != own {
 		t.Fatalf("setting a plane equal to the stored media_plane was dropped: %v, %v", got.MediaPlaneSetting, err)
 	}
 	name := "Renamed"
@@ -131,7 +131,7 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err = repository.GetSpace(t.Context(), tenant, space)
-	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != cloudflare {
+	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != own {
 		t.Fatalf("unrelated update changed the setting: %v, %v", got.MediaPlaneSetting, err)
 	}
 

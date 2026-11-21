@@ -99,8 +99,6 @@ export async function sampleLeave(run, origin, sdkEntry, scenario) {
   }
 }
 
-
-
 // chalk_sfu: the earlier SDK cannot join a Chalk SFU Episode, so the Leaves are judged on absolute bounds alone.
 async function ownLeaveProof(run, receiver) {
   const samples = [];

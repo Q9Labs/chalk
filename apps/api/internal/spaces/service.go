@@ -263,12 +263,7 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
-func NewServiceWithDefaultProvider(repository Repository, defaultProvider mediaplane.Provider) Service {
-	return Service{repository: repository, planes: PlanePolicy{Platform: defaultProvider}}
-}
-
-// WithPlanePolicy sets the deployment's plane policy: the platform default that new
-// Spaces inherit, and the Chalk SFU kill switch and allowlist that Effective applies.
+// WithPlanePolicy applies the deployment floor for new Episode admission.
 func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
 	s.planes = policy
 	return s
@@ -368,26 +363,11 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 	input.MediaPlaneSetting = OptionalMediaPlaneSetting{}
 	if input.MediaPlane.Set {
-		var setting *mediaplane.Provider
-		if input.MediaPlane.Value != nil {
-			provider, err := mediaplane.ParseSettingName(*input.MediaPlane.Value)
-			if err != nil {
-				return Space{}, ErrInvalidMediaPlane
-			}
-			if err := s.planes.publicWriteAllowed(provider); err != nil {
-				return Space{}, err
-			}
-			if provider != mediaplane.ProviderChalkSFU { // naming the Chalk SFU inherits; see PublicWriteAllowed
-				setting = &provider
-			}
+		if input.MediaPlane.Value != nil && !mediaplane.KnownSettingName(*input.MediaPlane.Value) {
+			return Space{}, ErrInvalidMediaPlane
 		}
-		stored := s.planes.legacyPlane(setting)
-		if stored == "" {
-			// Clearing with no platform default: the column is not null, and Cloudflare is what a
-			// public write may name anyway.
-			stored = s.planes.PublicWritePlane().SettingName()
-		}
-		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true, Value: setting}
+		stored := mediaplane.ProviderChalkSFU.SettingName()
+		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true}
 		input.MediaPlane.Value = &stored
 	}
 

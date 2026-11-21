@@ -233,7 +233,7 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 //
 // A node whose protocol is below minNodeProtocol, or that has not yet answered a probe, never
 // takes a new Episode. When no node qualifies, every node would refuse the Episode, so room is
-// false, no node is named, and the caller starts the Episode on another provider or refuses it.
+// false, no node is named, and the caller refuses the Episode.
 // The reason says why: a node that takes new Episodes was full, else a node's host guard refused
 // them (spare budget or not), else every answering node was draining, else
 // overflow_node_protocol_too_old when some node is known to be old, else overflow_node_unavailable.

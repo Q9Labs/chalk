@@ -74,7 +74,7 @@ export function requireDescription(description: RTCSessionDescriptionInit): SFUS
 }
 
 export function requireSFUDescription(description: SFUSessionDescription | undefined): SFUSessionDescription {
-  if (!description) throw new SFUError("Cloudflare did not return an SDP answer", "signaling_failed");
+  if (!description) throw new SFUError("The SFU did not return an SDP answer", "signaling_failed");
   return description;
 }
 

@@ -66,7 +66,7 @@ Fixes 1 and 2 close P2. Fix 3 is what makes P4 hold when the link never drops.
 | `reconciled`                           | `#syncLive` and `#reconcileIntents`                                                                                                   |
 | `view*`, `Ui`                          | the Sync snapshot's media items and `MediaSlice` pending state                                                                        |
 | `grant`, `lastSeq`, `hostMute`         | Sync's live Episode: `apply_live_target`, `set_media_pause`, `reserve_publication_grant` (`apps/sync/lib/chalk_sync/live/episode.ex`) |
-| `pubs`, `sess`, `sfuUp`                | the publication ledger behind the Go API (`apps/api/internal/adapters/cloudflare/sfu/adapter.go`) and the device's SFU session        |
+| `pubs`, `sess`, `sfuUp`                | the publication ledger behind the Go API (`apps/api/internal/adapters/chalksfu/adapter.go`) and the device's SFU session              |
 | `intent`, `reconnected`                | ghosts that exist only to state the properties                                                                                        |
 
 Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed SFU closes (Cloudflare only). Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
