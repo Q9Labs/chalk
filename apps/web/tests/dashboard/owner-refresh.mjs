@@ -25,7 +25,6 @@ try {
   await first.goto(`${origin}/dashboard`);
   await first.getByRole("button", { name: "Start a call", exact: true }).first().click();
   const firstJoined = callResponse(first, "join");
-  await first.getByRole("button", { name: "Join call", exact: true }).click();
   const original = await access(await firstJoined);
   await first.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const firstRefreshed = callResponse(first, "refresh-access");

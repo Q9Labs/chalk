@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
-import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
+import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { newCallIntent, startCall as startOwnedCall } from "./language-choice";
-import { inviteLink, type Row, type Home, merge, capped, listed, SHOWN_ROWS, shownRows, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { type Row, type Home, merge, capped, listed, SHOWN_ROWS, shownRows, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
-import { useJoinCall } from "./join-call";
-import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
+import { useJoinCall, usePendingJoin } from "./join-call";
+import { JoinLinkField, RenameDialog } from "./HomeDialogs";
 
-type HomeDialog = null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO };
+type HomeDialog = null | { kind: "rename"; call: HomeCallDTO };
 type UpdateHome = Update<Home>;
 
-function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) {
+function useCallActions(update: UpdateHome, join: (call: CallDTO) => void) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
   const startKey = useRef(newCallIntent());
@@ -27,9 +27,7 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
       startKey.current = newCallIntent();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
-      const link = await inviteLink(row);
-      update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
-      show({ kind: "ready", call, link });
+      join(call);
     } catch {
       // The reason belongs to the engine; the person needs the outcome and a way to retry.
       toast("Couldn’t start a call", { icon: "alert", action: { label: "Try again", onClick: () => void startCall() } });
@@ -75,7 +73,7 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
       {state.kind === "loading" ? (
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
-        <HomeLoadFailed error={state.error} onRetry={reload} />
+        <HomeLoadFailed detail={errorMessage(state.error)} onRetry={reload} />
       ) : listed(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
@@ -137,43 +135,47 @@ export function HomePage() {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
   const [dialog, setDialog] = useState<HomeDialog>(null);
-  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? listed(state.data)[0]?.id : undefined);
-  const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next));
+  const joinCall = useJoinCall();
+  const { starting, startCall, archive } = useCallActions(update, joinCall);
+  // The button keeps working until the call page has taken over, so Start a call never looks idle between the two.
+  const opening = starting || usePendingJoin() !== null;
 
   return (
     <div className="wrap">
       <div className="secth hhead">
         <h1>Recent calls</h1>
         <div className="hact">
-          <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-            <Icon name="plus" />
+          <button type="button" className="btn pri" aria-busy={opening || undefined} onClick={() => void startCall()}>
+            {opening ? <span className="spin" aria-hidden="true" /> : <Icon name="plus" />}
             Start a call
           </button>
           <JoinLinkField />
         </div>
       </div>
       <HomeBody state={state} reload={reload} update={update} onRename={(call) => setDialog({ kind: "rename", call })} onArchive={(call) => void archive(call)} />
-      {dialog?.kind === "ready" ? (
-        <CallReadyDialog call={dialog.call} link={dialog.link} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
-      ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
   );
 }
 
-/** What a failed Home read means for the person: their calls are safe, and what to do next. */
-function homeFailure(error: unknown): string {
-  if (!(error instanceof DashboardRequestError)) return "Your calls are still saved. Check your connection, then try again.";
-  if (error.status >= 500) return "Chalk couldn’t reach your calls just now. They’re still saved, so try again in a moment.";
-  return errorMessage(error);
-}
-
-/** The Home list could not load: what failed, what it means, and one way to retry. */
-function HomeLoadFailed({ error, onRetry }: { readonly error: unknown; readonly onRetry: () => void }) {
+function HomeLoadFailed({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
   return (
     <div className="hfail" role="alert">
+      <svg className="hfail-art" viewBox="0 0 160 96" fill="none" aria-hidden="true">
+        <rect x="14" y="10" width="132" height="24" rx="8" className="hfail-tile" />
+        <circle cx="30" cy="22" r="6" className="hfail-dot" />
+        <rect x="44" y="17" width="46" height="4" rx="2" className="hfail-bar" />
+        <rect x="44" y="24" width="28" height="3" rx="1.5" className="hfail-bar" />
+        <rect x="14" y="40" width="132" height="24" rx="8" className="hfail-tile" />
+        <circle cx="30" cy="52" r="6" className="hfail-dot" />
+        <rect x="44" y="47" width="38" height="4" rx="2" className="hfail-bar" />
+        <rect x="44" y="54" width="22" height="3" rx="1.5" className="hfail-bar" />
+        <path d="M14 82h50M96 82h50" className="hfail-line" />
+        <circle cx="80" cy="82" r="7" className="hfail-badge" />
+        <path d="M80 78.5v4M80 85.5v.01" className="hfail-mark" />
+      </svg>
       <b>Couldn’t load your calls</b>
-      <p>{homeFailure(error)}</p>
+      <p>{detail}</p>
       <button type="button" className="btn sec" onClick={onRetry}>
         <Icon name="retry" />
         Try again

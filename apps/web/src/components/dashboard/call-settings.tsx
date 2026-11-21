@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
 import { LanguagePicker } from "./LanguagePicker";
-import { rememberLanguage, type NewCallLanguage } from "./language-choice";
+import { rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { LinkField, Seg, useToast } from "./kit";
 
 type Admission = CallPageDTO["call"]["admission"];
@@ -42,6 +42,8 @@ export function CallSettings({ spaceId, call, inviteUrl, update }: { readonly sp
     if (transcriptLanguage === before) return;
     setSavingLanguage(true);
     const saved = await change({ transcriptLanguage }, { transcriptLanguage: before }, () => act("call", { action: "set-transcript-language", spaceId, transcriptLanguage }));
+    // The choice applies to this call and becomes the start for the next one.
+    if (saved) saveNewCallLanguage(transcriptLanguage);
     if (saved && transcriptLanguage && transcriptLanguage !== "auto") rememberLanguage(transcriptLanguage);
     setSavingLanguage(false);
   }
