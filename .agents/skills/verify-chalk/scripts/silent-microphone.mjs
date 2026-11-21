@@ -17,13 +17,15 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
       devices.enumerateDevices = async () => [{ deviceId: "silent-mic", kind: "audioinput", label: "Silent microphone" }, { deviceId: "quiet-mic", kind: "audioinput", label: "Quiet microphone" }, ...(await enumerate()).filter((device) => device.kind !== "audioinput")];
       devices.getUserMedia = async (constraints) => {
         if (!constraints.audio) return capture(constraints);
+        const deviceId = constraints.audio.deviceId?.exact ?? "silent-mic";
+        if (window.busyMicrophone === deviceId) throw new DOMException("Microphone is busy", "NotReadableError");
         const stream = await capture(constraints);
         for (const original of stream.getAudioTracks()) {
           stream.removeTrack(original);
           original.stop();
         }
-        const deviceId = constraints.audio.deviceId?.exact ?? "silent-mic";
         window.micCaptures = [...(window.micCaptures ?? []), deviceId];
+        window.micNoiseSuppression = constraints.audio.noiseSuppression;
         const audio = new AudioContext();
         const destination = audio.createMediaStreamDestination();
         const oscillator = audio.createOscillator();
@@ -34,6 +36,11 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
         const [track] = destination.stream.getAudioTracks();
         const settings = track.getSettings.bind(track);
         track.getSettings = () => ({ ...settings(), deviceId });
+        let trackConstraints = { noiseSuppression: constraints.audio.noiseSuppression };
+        track.getConstraints = () => trackConstraints;
+        track.applyConstraints = async (next) => {
+          trackConstraints = { ...trackConstraints, ...next };
+        };
         window.setMicGain = (value) => {
           gain.gain.value = value;
         };
@@ -72,6 +79,9 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
     await action.focus();
     await page.keyboard.press("Enter");
     const picker = page.getByRole("dialog", { name: "Audio" });
+    const suppression = picker.getByRole("switch", { name: /Noise suppression/ });
+    await suppression.click();
+    await picker.getByRole("switch", { name: /Noise suppression/, checked: false }).waitFor();
     await picker.getByRole("radio", { name: "Quiet microphone", checked: false }).click();
     await picker.getByRole("radio", { name: "Quiet microphone", checked: true }).waitFor();
     await shot(guest, "call-pick-mic");
@@ -86,13 +96,34 @@ await runJourney("silent-microphone", async ({ web, person, step, startCall, con
     await shot(guest, "call-input-restored");
   });
 
+  await step("a microphone pick preserves noise suppression", async () => {
+    assert.equal(await page.evaluate(() => window.micNoiseSuppression), false);
+  });
+
+  await step("retrying a busy microphone applies the original pick", async () => {
+    await page.evaluate(() => {
+      window.busyMicrophone = "silent-mic";
+    });
+    await control(guest, "Select microphone");
+    await page.getByRole("menuitemradio", { name: "Silent microphone", checked: false }).click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Try again", exact: true }).waitFor();
+    await page.evaluate(() => {
+      window.busyMicrophone = undefined;
+    });
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    await page.getByRole("button", { name: "Mute microphone", exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.micCaptures.at(-1)), "silent-mic");
+    assert.equal(await page.evaluate(() => window.micNoiseSuppression), false);
+  });
+
   await step("choosing a device while muted does not start capture or show a notice", async () => {
     await control(guest, "Mute microphone");
     await page.getByRole("button", { name: "Unmute microphone", exact: true }).waitFor();
     const before = await page.evaluate(() => window.micCaptures.length);
     await control(guest, "Select microphone");
-    await page.getByRole("menuitemradio", { name: "Silent microphone", checked: false }).click();
-    await page.getByRole("menuitemradio", { name: "Silent microphone", checked: true }).waitFor();
+    await page.getByRole("menuitemradio", { name: "Quiet microphone", checked: false }).click();
+    await page.getByRole("menuitemradio", { name: "Quiet microphone", checked: true }).waitFor();
     await page.keyboard.press("Escape");
     await page.waitForTimeout(13_000);
     assert.equal(await page.evaluate(() => window.micCaptures.length), before);

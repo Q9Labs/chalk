@@ -1,3 +1,4 @@
+import { useDeviceSheets } from "./useDeviceSheets";
 import { commandFailureMessage } from "./command-failure";
 import { LazyDeviceAccessWaiting } from "../device-access/LazyDeviceAccessCard";
 import { isDeviceAccessFailure } from "../device-access/model";
@@ -29,8 +30,7 @@ function DeviceValue({ devices, selectedDeviceId }: { readonly devices: readonly
 export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const { buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({ ...props, density: props.density ?? "comfortable", detectDevices: props.detectDevices ?? true });
   const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
-  const [deviceSheet, setDeviceSheet] = useState<"mic" | "video" | null>(null);
-  const setMicrophonePickerOpen = props.microphonePicker?.onOpenChange ?? ((open: boolean) => setDeviceSheet(open ? "mic" : null));
+  const { microphoneOpen, setMicrophoneOpen, cameraOpen, setCameraOpen } = useDeviceSheets(props.microphonePicker);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect display-capture support after hydration so server and first client markup agree.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
@@ -95,8 +95,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
           access={props.deviceAccess?.microphone}
-          sheetOpen={props.microphonePicker?.open ?? deviceSheet === "mic"}
-          onSheetOpenChange={setMicrophonePickerOpen}
+          sheetOpen={microphoneOpen}
+          onSheetOpenChange={setMicrophoneOpen}
         />
       ) : null}
       {has("video") ? (
@@ -116,8 +116,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}
           access={props.deviceAccess?.camera}
-          sheetOpen={deviceSheet === "video"}
-          onSheetOpenChange={(open) => setDeviceSheet(open ? "video" : null)}
+          sheetOpen={cameraOpen}
+          onSheetOpenChange={setCameraOpen}
         />
       ) : null}
       {has("screenshare") && canCaptureDisplay ? (
@@ -134,14 +134,14 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           devices={
             <>
               {has("mic") ? (
-                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setMicrophonePickerOpen(true)}>
+                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setMicrophoneOpen(true)}>
                   <VolumeHighIcon />
                   <span className="chalk-sheet-label-text">Microphone and speaker</span>
                   <DeviceValue devices={effectiveAudioInputDevices} selectedDeviceId={props.selectedAudioInput} />
                 </button>
               ) : null}
               {has("video") ? (
-                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setDeviceSheet("video")}>
+                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setCameraOpen(true)}>
                   <MediaGlyph kind="cam" slashed={false} busy={false} />
                   <span className="chalk-sheet-label-text">Camera</span>
                   <DeviceValue devices={effectiveVideoInputDevices} selectedDeviceId={props.selectedVideoInput} />
