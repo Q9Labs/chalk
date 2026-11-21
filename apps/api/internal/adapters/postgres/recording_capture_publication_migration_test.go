@@ -23,7 +23,15 @@ func TestCapturePublicationMigrationUpDownUpPreservesRecovery(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), seedCompletedCaptureSQL); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(t.Context(), `select seed_completed_capture(0)`); err != nil {
+	var preAuthorityRecording pgtype.UUID
+	if err := pool.QueryRow(t.Context(), `select seed_completed_capture(0)`).Scan(&preAuthorityRecording); err != nil {
+		t.Fatal(err)
+	}
+	// Both live Episodes use Chalk SFU. Only the completed capture predates the
+	// publication authority; neither Episode predates media-plane bindings.
+	if _, err := pool.Exec(t.Context(), `update episodes
+		set config_snapshot = config_snapshot || '{"media_plane_binding":{"provider":"chalk_sfu","node":"fixture-node","generation":1}}'::jsonb
+		from recordings where recordings.episode_id = episodes.id and recordings.id in ($1, $2)`, f.recordingID.Bytes(), preAuthorityRecording); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(t.Context(), `create function reject_capture_publication() returns trigger language plpgsql as $$ begin raise exception 'outbox down'; end $$;
