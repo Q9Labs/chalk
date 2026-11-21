@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Drives the end of a call for every Participant: the host starts a call, three guests join by its link (one with camera and
 // microphone off, as a class often has, and one whose Sync notices stop arriving), the Episode's deadline moves to a few
-// seconds away, and the Episode reaches its time limit while all four are in it. Each Participant must see "The call reached its time limit" and never see
-// "Reconnecting" or "Connection lost".
+// seconds away, and the Episode reaches its time limit while all four are in it. Each Participant must see an ended screen ("The call reached its
+// time limit", or "The call ended" for the guest that never hears the reason) and never see "Connection lost".
 //
 //   node .agents/skills/verify-chalk/scripts/call-end.mjs <run-id> [--web <origin>]
 import { randomUUID } from "node:crypto";
@@ -11,8 +11,6 @@ import { runJourney } from "./journey.mjs";
 const wait = 60_000;
 // A deadline cannot sit within a minute of the start, and the server ends the call on its own schedule.
 const endWait = 120_000;
-// A guest without Sync notices learns of the end at its next scheduled access refresh, a few minutes after joining.
-const deafEndWait = 420_000;
 
 await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot, system, seed, web, people }) => {
   const host = await person("EndHost", 1);
@@ -68,10 +66,19 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   const seen = new Map(people.map((who) => [who.name, new Set()]));
   const ended = people.map((who) =>
     (async () => {
-      const heading = who.page.getByRole("heading", { name: "The call reached its time limit", exact: true });
-      const deadline = Date.now() + (who === deaf ? deafEndWait : endWait);
+      // A guest without Sync notices never hears the reason, so it learns only that the call ended.
+      const heading = who.page.getByRole("heading", { name: who === deaf ? /^The call (ended|reached its time limit)$/ : "The call reached its time limit", exact: who !== deaf });
+      const deadline = Date.now() + endWait;
       while (Date.now() < deadline) {
-        for (const text of ["Reconnecting", "Connection lost"]) if (await who.page.getByText(text, { exact: false }).first().isVisible().catch(() => false)) seen.get(who.name).add(text);
+        for (const text of ["Reconnecting", "Connection lost"])
+          if (
+            await who.page
+              .getByText(text, { exact: false })
+              .first()
+              .isVisible()
+              .catch(() => false)
+          )
+            seen.get(who.name).add(text);
         if (await heading.isVisible().catch(() => false)) return true;
         await who.page.waitForTimeout(250);
       }
@@ -83,7 +90,7 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   for (const [index, who] of people.entries()) {
     await step(`${who.name} sees that the call has ended`, async () => {
       await shot(who, "time-limit-ended");
-      if (!results[index]) throw new Error(`${who.name} never saw "The call reached its time limit"; saw ${[...seen.get(who.name)].join(", ") || "nothing else"}${who === deaf ? `; first failed access refresh: ${refreshAnswer || "none"}` : ""}`);
+      if (!results[index]) throw new Error(`${who.name} never saw the ended screen; saw ${[...seen.get(who.name)].join(", ") || "nothing else"}${who === deaf ? `; first failed access refresh: ${refreshAnswer || "none"}` : ""}`);
       const forbidden = [...seen.get(who.name)].filter((text) => text === "Connection lost" || who !== deaf);
       if (forbidden.length) throw new Error(`${who.name} saw ${forbidden.join(" and ")} before the ended screen`);
     });

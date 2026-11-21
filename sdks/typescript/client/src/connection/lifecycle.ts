@@ -1126,7 +1126,8 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         if (model.state === "leaving") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
         const failure = failureFromCause(cause, "media_start_failed", "Media transport needs recovery");
-        if (sfuAccessRejected(cause)) {
+        // A credential refresh that the API refuses (the Episode is over) reaches here as the access failure itself, not as the SFU's 403.
+        if (sfuAccessRejected(cause) || (cause instanceof ConnectionAccessFailure && cause.code === "access.invalid")) {
           stopRejectedMedia();
           return failForSnapshot(failure);
         }
