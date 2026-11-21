@@ -604,7 +604,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#locals.held(target.source, this.#connection)) return { outcome, errorCode: null };
     this.#pauseLocalSource(target.source);
     try {
-      await this.#retireOwnedPublications();
+      await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
       return { outcome, errorCode: null };
     } catch (error) {
       return mediaTargetFailure(error);
