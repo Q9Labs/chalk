@@ -18,7 +18,7 @@ import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type C
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions, SpaceSnapshot } from "./types";
 const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
@@ -252,22 +252,26 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#selection.selectCapture("microphone", deviceId);
       this.#store.select("microphone", deviceId);
       if (!sameDevice) this.#microphoneSwitchRevision = undefined;
-
-      const consent = this.#hasConsent("microphone");
-      const active = consent && (snapshot.media.local.microphone.state === "enabled" || this.#pendingSources.has("microphone"));
-      const switching = snapshot.connection.status === "live" && (active || retry);
-      if (!switching && consent) return Effect.void;
-      const oldTrack = this.#track("microphone");
-      if (oldTrack) {
-        this.#microphoneNoiseSuppression = oldTrack.getConstraints?.().noiseSuppression ?? this.#microphoneNoiseSuppression;
-        this.#selection.releaseTrack(oldTrack);
-      }
-      if (!switching) return Effect.void;
-
-      // The old device is gone. Handle a failed acquire like a failed turn-on, not like an edit to a live source.
-      state.localEnabled = false;
-      return this.#act("microphone", true, undefined, { revision, retry });
+      return this.#applyMicrophoneSelection(snapshot, revision, retry);
     }).pipe(Effect.mapError(normalizeMediaError));
+  #applyMicrophoneSelection(snapshot: SpaceSnapshot, revision: number, retry: boolean): ClientEffect<void> {
+    const consent = this.#hasConsent("microphone");
+    const active = consent && (snapshot.media.local.microphone.state === "enabled" || this.#pendingSources.has("microphone"));
+    const switching = snapshot.connection.status === "live" && (active || retry);
+    if (!switching && consent) return Effect.void;
+    this.#releaseSelectedMicrophone();
+    if (!switching) return Effect.void;
+
+    // The old device is gone. Handle a failed acquire like a failed turn-on, not like an edit to a live source.
+    this.#sources.microphone.localEnabled = false;
+    return this.#act("microphone", true, undefined, { revision, retry });
+  }
+  #releaseSelectedMicrophone(): void {
+    const track = this.#track("microphone");
+    if (!track) return;
+    this.#microphoneNoiseSuppression = track.getConstraints?.().noiseSuppression ?? this.#microphoneNoiseSuppression;
+    this.#selection.releaseTrack(track);
+  }
   selectCamera = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
       const changed = this.#store.getSnapshot().media.selection.camera !== deviceId;
@@ -542,19 +546,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (microphoneSwitch) this.#microphoneSwitchRevision = desired.revision;
       if (!enabled) this.#sources[source].offDebt = "owed";
       else this.#cancelOffRetry(source);
-      const ready =
-        enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
-          ? this.#awaitLive(source, desired.revision).pipe(
-              Effect.tapError((cause) =>
-                Effect.sync(() => {
-                  if (this.#sources[source].desired.revision === desired.revision) {
-                    const cancelled = this.#recordIntent(source, false);
-                    this.#sources[source].result = { revision: cancelled.revision, status: "failed", cause, cleanup: false };
-                  }
-                }),
-              ),
-            )
-          : Effect.void;
+      const ready = this.#awaitDeviceIntent(source, desired);
       return this.#pending(
         source,
         ready.pipe(
@@ -576,6 +568,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       );
     }).pipe(Effect.mapError(normalizeMediaError));
+  }
+  #awaitDeviceIntent(source: MediaSource, desired: MediaIntent): ClientEffect<void> {
+    if (!desired.enabled || source === "screen" || this.#store.getSnapshot().connection.status === "live") return Effect.void;
+    return this.#awaitLive(source, desired.revision).pipe(
+      Effect.tapError((cause) =>
+        Effect.sync(() => {
+          if (this.#sources[source].desired.revision !== desired.revision) return;
+          const cancelled = this.#recordIntent(source, false);
+          this.#sources[source].result = { revision: cancelled.revision, status: "failed", cause, cleanup: false };
+        }),
+      ),
+    );
   }
   #work(source: MediaSource): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
