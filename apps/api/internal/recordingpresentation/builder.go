@@ -162,7 +162,7 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 	}
 	annotationSources := make(annotationSources)
 	annotationSources.collect(active)
-	active, planEnd, err = schedulePlanTail(source, active, planEnd, annotationSources, appendScheduled)
+	planEnd, err = schedulePlanTail(source, active, planEnd, annotationSources, appendScheduled)
 	if err != nil {
 		return builtPresentation{}, err
 	}
@@ -653,12 +653,12 @@ func screenSharedContent(active map[string]activeTrack) SharedContent {
 	return SharedContent{Kind: "screen_share", ParticipantID: screen.ParticipantID, SourceID: screen.SourceID}
 }
 
-func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, annotationSources annotationSources, appendEvent func(int64, int, Event)) (map[string]activeTrack, int64, error) {
+func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, annotationSources annotationSources, appendEvent func(int64, int, Event)) (int64, error) {
 	previousRevision := int64(0)
 	endRevision := originRevision
 	for _, fact := range source.CapturePlans {
 		if fact.Revision != previousRevision+1 {
-			return nil, 0, fmt.Errorf("%w: capture plan gap", ErrInvalidCompletionSource)
+			return 0, fmt.Errorf("%w: capture plan gap", ErrInvalidCompletionSource)
 		}
 		previousRevision = fact.Revision
 		if fact.Revision <= source.CapturePlanStartRevision {
@@ -675,11 +675,11 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		}
 		at, err := elapsedMillis(source, createdAt)
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 		desired, err := tracksForPlan(source, fact, active)
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 		priorShared := screenSharedContent(active)
 		nextShared := screenSharedContent(desired)
@@ -722,7 +722,7 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		active = desired
 		endRevision = fact.Revision
 	}
-	return active, endRevision, nil
+	return endRevision, nil
 }
 
 func unionTrackKeys(left, right map[string]activeTrack) []string {
