@@ -9,7 +9,8 @@ import type { StageItem } from "./stage-items";
 
 type ContentItem = Extract<StageItem, { kind: "screen-share" | "whiteboard" }>;
 
-export interface StageContentTileProps extends Pick<ScreenSharePresentationProps, "onStopSharing" | "onChangeShare" | "capture" | "switcher"> {
+export interface StageContentTileProps extends Pick<ScreenSharePresentationProps, "onStopSharing" | "onChangeShare" | "capture" | "switcher" | "annotation"> {
+  readonly annotationContext?: import("../screen-annotation/AnnotationSurface").AnnotationPresentationContext;
   readonly primary?: boolean;
   readonly item: ContentItem;
   /** Whether the tile is on the visible page; off-page tiles keep their video detached. */
@@ -23,6 +24,7 @@ export interface StageContentTileProps extends Pick<ScreenSharePresentationProps
 }
 
 export interface StageContentTileSurfaceProps extends Omit<StageContentTileProps, "active"> {
+  readonly annotationMedia?: ScreenSharePresentationProps["annotationMedia"];
   readonly media?: React.ReactNode;
   readonly mediaVisible: boolean;
   readonly state?: ScreenSharePresentationProps["state"];
@@ -40,7 +42,7 @@ export function contentTileName(item: ContentItem): string {
 }
 
 /** Unfocused screen share or whiteboard rendered with the same chrome as a participant tile. */
-export const StageContentTile = React.memo(function StageContentTile({ item, active, ...props }: StageContentTileProps) {
+export const StageContentTile = React.memo(function StageContentTile({ item, active, annotationContext, ...props }: StageContentTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = item.kind === "screen-share" ? item.participant.screenShareTrack : null;
   const status = useVideoTrack(videoRef, track, active);
@@ -52,12 +54,13 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
       {...props}
       state={item.kind === "screen-share" ? (item.participant.screenShareState ?? (status === "muted" ? "paused" : undefined)) : undefined}
       media={item.kind === "screen-share" ? <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" /> : undefined}
+      annotationMedia={track && annotationContext ? { ...annotationContext, videoRef, track } : undefined}
       mediaVisible={status === "playing" || status === "muted"}
     />
   );
 });
 
-export const StageContentTileSurface = React.memo(function StageContentTileSurface({ item, pinned, onClick, onDoubleClick, className, style, hidden, media, mediaVisible, primary, state, onStopSharing, onChangeShare, capture, switcher }: StageContentTileSurfaceProps) {
+export const StageContentTileSurface = React.memo(function StageContentTileSurface({ item, pinned, onClick, onDoubleClick, className, style, hidden, media, mediaVisible, primary, state, onStopSharing, onChangeShare, capture, switcher, annotation, annotationMedia }: StageContentTileSurfaceProps) {
   if (item.kind === "screen-share")
     return (
       <ScreenSharePresentation
@@ -78,6 +81,8 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
         onChangeShare={onChangeShare}
         capture={capture}
         switcher={switcher}
+        annotation={annotation}
+        annotationMedia={annotationMedia}
       />
     );
   const accentColor = BOARD_ACCENT;
