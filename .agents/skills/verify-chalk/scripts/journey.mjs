@@ -32,10 +32,7 @@ async function createCallThroughBrowser(page) {
   const deadline = Date.now() + 40_000;
   let action = "Join call";
   for (;;) {
-    const [response] = await Promise.all([
-      page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces"),
-      page.getByRole("button", { name: action, exact: true }).click(),
-    ]);
+    const [response] = await Promise.all([page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces"), page.getByRole("button", { name: action, exact: true }).click()]);
     if (response.status() === 201) return response.json();
     const body = await response.json().catch(() => null);
     const code = body?.error?.code;
