@@ -820,7 +820,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#locals.owned.delete(publication);
-      await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
+      if (!withoutSdp || response.sessionDescription) await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;

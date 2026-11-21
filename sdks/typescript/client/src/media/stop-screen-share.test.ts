@@ -260,9 +260,8 @@ it("stops a screen share that is the only section and so carries the BUNDLE tag,
   const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`) });
   await h.client.start(fakeStream());
   await startScreen(h);
-  const close = vi.spyOn(h.transport, "closeTracks");
   await stopScreenAsTheController(h);
-  expect(close).toHaveBeenCalledWith(expect.objectContaining({ force: true, sessionDescription: undefined }));
+  expect(h.transport.closeInputs.some((input) => input.force && input.sessionDescription === undefined)).toBe(true);
   await shareAgain(h);
   await stopScreenAsTheController(h);
   await shareAgain(h);
@@ -275,7 +274,17 @@ it("stops sharing when the SFU answers every close call with 404, then shares ag
   await startScreen(h);
   const close = vi.spyOn(h.transport, "closeTracks").mockRejectedValue(GONE());
   await stopScreenAsTheController(h);
-  expect(close).toHaveBeenCalled();
+  expect(h.client.getSnapshot().localTracks.find((track) => track.source === "screen")?.enabled ?? false).toBe(false);
   close.mockRestore();
   await shareAgain(h);
+});
+
+it("reports no error when the SFU closes the BUNDLE-tag screen without an answer", async () => {
+  const errors: unknown[] = [];
+  let replacements = 1;
+  const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`), onError: (error) => errors.push(error) });
+  await h.client.start(fakeStream());
+  await startScreen(h);
+  await stopScreenAsTheController(h);
+  expect(errors).toEqual([]);
 });

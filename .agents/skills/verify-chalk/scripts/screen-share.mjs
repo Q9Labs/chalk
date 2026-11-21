@@ -74,10 +74,10 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
   if (fault)
     await sharer.context.route("**/signal", async (route) => {
       const request = route.request();
-      if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
+      if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close" || request.postDataJSON()?.receive_only) return route.continue();
       signals.tracksClose += 1;
-      const closing = JSON.stringify(request.postDataJSON()?.tracks ?? [])
-        .replace(/"(trackName|publicationId)":"[^"]*"/g, "")
+      const closing = JSON.stringify(request.postDataJSON()?.close_tracks ?? [])
+        .replace(/"(trackName|publication_id)":"[^"]*"/g, "")
         .slice(0, 200);
       if (fault && signals.armed && signals.answered404 < faultCalls) {
         signals.answered404 += 1;
