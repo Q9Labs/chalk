@@ -30,7 +30,9 @@ const EPISODE = "1f8fad5b-d9cb-469f-a165-70867728950e";
 const TENANT = "c1000000-0000-4000-8000-000000000001";
 const SEAT = "a1000000-0000-4000-8000-000000000001";
 const WINDOW = { from_ms: 1_795_596_400_000, to_ms: 1_795_600_000_000 };
-const ASOF = 1_795_600_300_000;
+// ASOF sits past every symptom's settle window: report.cannot_send reads ten
+// minutes past the seat's end, the others less.
+const ASOF = 1_795_600_600_000;
 
 /**
  * What one symptom's chain proves: the hop its positive run expects. `seat_left_ms` marks a seat that left before the
@@ -69,16 +71,18 @@ const declarationOf = ({ seat_left_ms } = {}) => ({
 
 /**
  * The chain files one run's fixture is built from, in hop order. Missing files just don't contribute — the symptoms
- * that own no client or sync hop write none.
+ * that own no sync hop write none. `client-frames.<code>.<run>.json` is the SDK hop's hand-off to the API hop, which
+ * posts it through the real telemetry intake: its stamped records land in `api-rows`, so the file itself feeds no row —
+ * folding it in would duplicate every client record and the dedupe would drop both copies.
  * @param {string} code @param {"positive" | "healthy"} run
  */
 const chainFiles = (code, run) =>
-  [`client-frames.${code}.${run}.json`, `api-rows.${code}.${run}.json`, `db-rows.${code}.${run}.json`, `sync-rows.${code}.${run}.json`]
+  [`api-rows.${code}.${run}.json`, `db-rows.${code}.${run}.json`, `sync-rows.${code}.${run}.json`]
     .map((name) => `observability/fixtures/${code}/chain/${name}`)
     .filter((path) => existsSync(new URL(path, root)));
 
 /**
- * The fixture a run's hand-off rows make. `client-frames` files hold `[{ events: [...] }]`; the rest hold `[row]`.
+ * The fixture a run's hand-off rows make. Each file holds `[row]`.
  * @param {string} code @param {"positive" | "healthy"} run
  * @returns {Fixture & { chain: string[] }}
  */

@@ -14,3 +14,11 @@ export { currentSessionId, lastFailedRequest, newSessionId, requestContextHeader
 export { formatSyncConnectDiagnostic } from "./sync/connect-diagnostics";
 export { getConnectionFailureDetail, getRecordingFailureDetail } from "./space-client/failure-detail";
 export { mediaBootstrap } from "./access/media-bootstrap";
+
+export { SDK_VERSION } from "./version";
+export { ClassifiedError, expected, failure } from "./obs/kernel";
+export type { Classification, Kernel } from "./obs/kernel";
+export type { EventFields, SurfaceName } from "./obs/registry";
+export { buildDiagnosticBundle, type DiagnosticBundleInput, type DiagnosticBundleState } from "./diagnostics/bundle";
+export { uploadDiagnosticBundle, type DiagnosticUploadOptions, type DiagnosticUploadRequest, type DiagnosticUploadResult } from "./diagnostics/upload";
+export { createLiveIntrospection, type LiveIntrospection } from "./diagnostics/live";

@@ -121,6 +121,8 @@ export class V1SyncClient implements V1CollaborationClient {
   #offReasonNegotiated = false;
   /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
   #connectionQualityNegotiated = false;
+  /** Whether this connection's welcome advertised `live_introspection`; reset for each connection. */
+  #liveIntrospectionNegotiated = false;
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -436,6 +438,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = false;
     this.#offReasonNegotiated = false;
     this.#connectionQualityNegotiated = false;
+    this.#liveIntrospectionNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -580,6 +583,9 @@ export class V1SyncClient implements V1CollaborationClient {
       case "directed_request":
         this.#directedRequest(frame);
         return;
+      case "live_request":
+        this.#liveRequest(frame);
+        return;
       case "reaction":
         this.#collaborationState.reaction(frame);
         return;
@@ -677,6 +683,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#connectionQualityNegotiated = frame.connection_quality === true;
+    this.#liveIntrospectionNegotiated = frame.live_introspection === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -796,6 +803,21 @@ export class V1SyncClient implements V1CollaborationClient {
     if (frame.expires_at_ms <= this.#now()) return;
     this.#send({ type: "request_ack", request_id: frame.request_id });
     for (const listener of this.#requestListeners) listener(frame);
+  }
+  /**
+   * One Sync control frame reaches the running client: record the receipt, answer with the one ack the
+   * server waits on, then hand the request to the diagnostic upload. An already-expired request drops
+   * before the ack, matching directed_request — Sync would drop the ack anyway.
+   */
+  #liveRequest(frame: ServerFrame<"live_request">): void {
+    this.#requireLive();
+    // Sync sends the frame only to sockets whose welcome advertised the extension; anything else is dropped unread.
+    if (!this.#liveIntrospectionNegotiated) return;
+    // The seat is the telemetry credential's, stamped at intake: a record naming participant_id is refused there.
+    this.#options.obs?.fact("live_request.received", { live_request_id: frame.request_id });
+    if (frame.expires_at_ms <= this.#now()) return;
+    this.#send({ type: "live_request_ack", request_id: frame.request_id });
+    this.#options.onLiveRequest?.({ requestId: frame.request_id, expiresAtMs: frame.expires_at_ms });
   }
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;

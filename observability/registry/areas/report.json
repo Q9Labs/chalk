@@ -1572,7 +1572,6 @@
           "fields": [
             "live_request_id",
             "participant_id",
-            "sync_connection_id",
             "est_server_ms"
           ]
         }

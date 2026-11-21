@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "0a633dc1cf08",
+  "schema_ver": "a0bb4763071d",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -273,7 +273,7 @@
             {
               "event": "live_request.ack",
               "source": "sync",
-              "fields": ["live_request_id", "participant_id", "sync_connection_id", "est_server_ms"]
+              "fields": ["live_request_id", "participant_id", "est_server_ms"]
             }
           ]
         },
@@ -495,7 +495,7 @@
             {
               "event": "live_request.ack",
               "source": "sync",
-              "fields": ["live_request_id", "participant_id", "sync_connection_id", "est_server_ms"]
+              "fields": ["live_request_id", "participant_id", "est_server_ms"]
             }
           ]
         },

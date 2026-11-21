@@ -7,6 +7,8 @@ export function syncEntryUrl(value: string, generation: number | null, confirmat
   url.searchParams.set("media_off_reason", "1");
   // Previous Sync ignores this query, never echoes it in the welcome, and never gets a quality frame.
   url.searchParams.set("connection_quality", "1");
+  // Offers the live introspection control frame; a Sync that predates it ignores the flag and never sends one.
+  url.searchParams.set("live_introspection", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

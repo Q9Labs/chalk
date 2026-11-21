@@ -90,7 +90,9 @@ export function dbRows({ seats, uploads, requests, sessions, episode, tenant }, 
   }
   for (const l of requests) {
     const requested = ms(l.requested_at) ?? readMs;
-    const status = l.delivery === null || l.delivery === undefined ? "pending" : l.delivery;
+    // The column keeps the full string ("delivered(2)"); the fact's enum takes
+    // the base word, the detail living in sockets/unavailable_reason.
+    const status = l.delivery === null || l.delivery === undefined ? "pending" : String(l.delivery).split("(")[0];
     obs.push(observation({
       id: eventId("ev", "live.db_request", l.id),
       fact: "live.request", source: "db", origin: origin.measured("db"),
@@ -101,7 +103,7 @@ export function dbRows({ seats, uploads, requests, sessions, episode, tenant }, 
         live_request_id: l.id, request_status: status, requested_ms: requested,
         expires_ms: ms(l.expires_at), participant_status: l.participant_status, episode_status: l.episode_status,
         ...(l.seat_left_at ? { seat_left_ms: ms(l.seat_left_at) } : {}),
-        ...(l.delivery ? { delivery: l.delivery } : {}), ...(l.delivered_at ? { delivered_ms: ms(l.delivered_at) } : {}),
+        ...(l.delivery ? { delivery: status } : {}), ...(l.delivered_at ? { delivered_ms: ms(l.delivered_at) } : {}),
         ...(l.sockets != null ? { sockets: l.sockets } : {}), ...(l.unavailable_reason ? { unavailable_reason: l.unavailable_reason } : {}),
       },
       failure: false, query: `psql -c "select * from live_introspection_requests where id = '${l.id}'"`,

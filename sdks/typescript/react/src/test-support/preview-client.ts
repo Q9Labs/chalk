@@ -173,7 +173,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       setPolicy: async (policy: OfflineActionsPolicy) => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, policy } })),
     },
     whiteboard: { transport: () => null },
-    telemetry: { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined },
+    telemetry: { sessionId: "", sdkVersion: "", problemReported: () => undefined, renderCrashed: () => undefined },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
     close: async () => dispose(),

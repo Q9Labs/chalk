@@ -1,7 +1,9 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useRef, useState, type RefObject } from "react";
-import { ChalkButton, ChalkIconButton, ChalkToggle } from "../chalk-ui";
-import type { SpaceHeaderProps } from "./space-header-contract";
+import type { EventFields } from "@q9labsai/chalk-client";
+import { ChalkButton, ChalkIconButton, ChalkSegmentedControl, ChalkToggle } from "../chalk-ui";
+import { ObservedSurface, type SurfaceObserver } from "../observed-surface";
+import { REPORT_SYMPTOMS, type ReportProblemResult, type ReportSymptom, type SpaceHeaderProps } from "./space-header-contract";
 
 const REPORT_MAX_CHARACTERS = 1000;
 
@@ -27,6 +29,8 @@ export function CallDialogContent({
   returnFocus,
   focusScope,
   unavailableReason,
+  unavailableCode,
+  observe,
 }: {
   readonly kind: "shortcuts" | "report";
   readonly open: boolean;
@@ -36,24 +40,52 @@ export function CallDialogContent({
   readonly returnFocus?: RefObject<HTMLButtonElement | null>;
   readonly focusScope: RefObject<HTMLElement | null>;
   readonly unavailableReason?: string;
+  /** The machine reason behind `unavailableReason`; the blocked surface reports it instead of reading the copy. */
+  readonly unavailableCode?: "credential_expired" | "reports_unavailable";
+  readonly observe?: SurfaceObserver;
 }) {
   const container = useRef<HTMLElement>(null);
   const reportInput = useRef<HTMLTextAreaElement>(null);
   const reportOpener = useRef<HTMLElement>(null);
   const [text, setText] = useState("");
+  const [pickedSymptom, setPickedSymptom] = useState<ReportSymptom | undefined>(undefined);
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [sentReport, setSentReport] = useState<ReportProblemResult | undefined>(undefined);
   const [error, setError] = useState("");
+  const [failedJourneyId, setFailedJourneyId] = useState<string | undefined>(undefined);
   const [session, setSession] = useState({ kind, open });
   if (session.kind !== kind || session.open !== open) {
     setSession({ kind, open });
     if (open && kind === "report") {
       setText("");
+      setPickedSymptom(undefined);
       setIncludeDiagnostics(false);
       setError("");
       setStatus("idle");
+      setSentReport(undefined);
+      setFailedJourneyId(undefined);
     }
   }
+  // The surface records the branch that committed to the screen, not the render that led to it.
+  const reportDialogFields: EventFields["report.dialog"] = unavailableReason
+    ? { dialog_state: "blocked", blocked_reason: unavailableCode ?? "reports_unavailable" }
+    : status === "sent"
+      ? {
+          dialog_state: "sent",
+          ...(sentReport?.journeyId ? { journey_id: sentReport.journeyId } : {}),
+          ...(pickedSymptom ? { picked_symptom: pickedSymptom } : {}),
+        }
+      : error
+        ? {
+            dialog_state: "send_failed",
+            ...(failedJourneyId ? { journey_id: failedJourneyId } : {}),
+            ...(pickedSymptom ? { picked_symptom: pickedSymptom } : {}),
+          }
+        : {
+            dialog_state: "form",
+            ...(pickedSymptom ? { picked_symptom: pickedSymptom } : {}),
+          };
   return (
     <span
       ref={(element) => {
@@ -114,61 +146,78 @@ export function CallDialogContent({
                   </div>
                 ))}
               </dl>
-            ) : status === "sent" ? (
-              <div className="chalk-shell-report-sent" role="status">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m5 12 4 4L19 6" />
-                </svg>
-                <Dialog.Title>Sent</Dialog.Title>
-                <p>Thanks. We’ll look into it.</p>
-                <ChalkButton variant="solid" onClick={onClose}>
-                  Done
-                </ChalkButton>
-              </div>
             ) : (
-              <form
-                className="chalk-shell-report"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!text.trim() || !onReportProblem || status === "sending" || unavailableReason) return;
-                  setStatus("sending");
-                  setError("");
-                  void Promise.resolve()
-                    .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics && diagnostics.trim() ? diagnostics : undefined }))
-                    .then(
-                      () => setStatus("sent"),
-                      () => {
-                        setStatus("idle");
-                        setError("Your report could not be sent. Try again.");
-                      },
-                    );
-                }}
-              >
-                <div className="chalk-shell-report-field">
-                  <textarea ref={reportInput} id="chalk-problem" rows={2} required aria-label="What went wrong?" disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, REPORT_MAX_CHARACTERS).join(""))} placeholder="What went wrong?" />
-                  <span className="chalk-shell-report-count" aria-hidden="true">
-                    {Array.from(text).length} / {REPORT_MAX_CHARACTERS}
-                  </span>
-                </div>
-                {diagnostics.trim() ? (
-                  <div className="chalk-shell-report-check">
-                    <span id="chalk-report-diagnostics">
-                      Include diagnostics<small>Session, connection and devices</small>
-                    </span>
-                    <ChalkToggle aria-labelledby="chalk-report-diagnostics" disabled={status === "sending"} pressed={includeDiagnostics} onPressedChange={setIncludeDiagnostics} />
+              <ObservedSurface name="report.dialog" fields={reportDialogFields} observer={observe}>
+                {status === "sent" ? (
+                  <div className="chalk-shell-report-sent" role="status">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m5 12 4 4L19 6" />
+                    </svg>
+                    <Dialog.Title>Sent</Dialog.Title>
+                    <p>Thanks. We’ll look into it.</p>
+                    {sentReport?.code ? <p>Reference {sentReport.code}</p> : null}
+                    <ChalkButton variant="solid" onClick={onClose}>
+                      Done
+                    </ChalkButton>
                   </div>
-                ) : null}
-                {error ? <p role="alert">{error}</p> : null}
-                {unavailableReason ? <p role="alert">{unavailableReason}</p> : null}
-                <div className="chalk-shell-report-actions">
-                  <ChalkButton onClick={onClose} disabled={status === "sending"}>
-                    Cancel
-                  </ChalkButton>
-                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending" || Boolean(unavailableReason)}>
-                    {status === "sending" ? "Sending…" : "Send report"}
-                  </ChalkButton>
-                </div>
-              </form>
+                ) : (
+                  <form
+                    className="chalk-shell-report"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!text.trim() || !onReportProblem || status === "sending" || unavailableReason) return;
+                      setStatus("sending");
+                      setError("");
+                      setFailedJourneyId(undefined);
+                      void Promise.resolve()
+                        .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics && diagnostics.trim() ? diagnostics : undefined, ...(pickedSymptom ? { pickedSymptom } : {}) }))
+                        .then(
+                          (result) => {
+                            setSentReport(result ?? undefined);
+                            setStatus("sent");
+                          },
+                          (cause) => {
+                            setStatus("idle");
+                            if (typeof cause === "object" && cause !== null && typeof (cause as { journeyId?: unknown }).journeyId === "string") setFailedJourneyId((cause as { journeyId: string }).journeyId);
+                            setError("Your report could not be sent. Try again.");
+                          },
+                        );
+                    }}
+                  >
+                    <ChalkSegmentedControl<ReportSymptom>
+                      label="What went wrong?"
+                      // The control requires a value; an unmatched "" leaves every segment unpressed.
+                      value={pickedSymptom ?? ("" as ReportSymptom)}
+                      options={REPORT_SYMPTOMS.map(({ code, label }) => ({ value: code, label }))}
+                      onValueChange={(value) => setPickedSymptom((current) => (current === value ? undefined : value))}
+                    />
+                    <div className="chalk-shell-report-field">
+                      <textarea ref={reportInput} id="chalk-problem" rows={2} required aria-label="What went wrong?" disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, REPORT_MAX_CHARACTERS).join(""))} placeholder="What went wrong?" />
+                      <span className="chalk-shell-report-count" aria-hidden="true">
+                        {Array.from(text).length} / {REPORT_MAX_CHARACTERS}
+                      </span>
+                    </div>
+                    {diagnostics.trim() ? (
+                      <div className="chalk-shell-report-check">
+                        <span id="chalk-report-diagnostics">
+                          Include diagnostics<small>Session, connection and devices</small>
+                        </span>
+                        <ChalkToggle aria-labelledby="chalk-report-diagnostics" disabled={status === "sending"} pressed={includeDiagnostics} onPressedChange={setIncludeDiagnostics} />
+                      </div>
+                    ) : null}
+                    {error ? <p role="alert">{error}</p> : null}
+                    {unavailableReason ? <p role="alert">{unavailableReason}</p> : null}
+                    <div className="chalk-shell-report-actions">
+                      <ChalkButton onClick={onClose} disabled={status === "sending"}>
+                        Cancel
+                      </ChalkButton>
+                      <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending" || Boolean(unavailableReason)}>
+                        {status === "sending" ? "Sending…" : "Send report"}
+                      </ChalkButton>
+                    </div>
+                  </form>
+                )}
+              </ObservedSurface>
             )}
           </Dialog.Popup>
         </Dialog.Portal>

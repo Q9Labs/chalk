@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -24,8 +26,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/diagnosticuploads"
-	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
@@ -49,8 +51,10 @@ var reportChainSubject = accessgrants.Subject{
 }
 
 // The cs_ telemetry source the reporting seat's outbox owns; the CHK code and the
-// db client-session row key on it.
-const reportChainSession = "00000000-0000-4000-8000-000000000042"
+// db client-session row key on it. Its uuid part is the SDK fault tests' own
+// client_session_id, so a report's stored row and the client's records name the
+// same session.
+const reportChainSession = "00000000-0000-4000-8000-000000000004"
 
 // reportChainAt stamps every API record and durable timestamp the chain
 // writes: a fixed instant inside the fixture window so replay reproduces the
@@ -60,6 +64,26 @@ var reportChainAt = time.UnixMilli(1_795_599_900_000).UTC()
 // reportChainIDs are the fixed ids each run's minted report, upload and live
 // request take in the committed hand-offs — the same ids the sync hop and the
 // SDK hop write, so the fixture's rows join across hops.
+// reportChainClientJourney is the journey the SDK fault test's send/dialog
+// records name for each symptom, sent as the report body's journey_id so the
+// API's submit/outcome rows share the client's journey.
+var reportChainClientJourney = map[string]string{
+	"report.cannot_send":    "00000000-0000-4000-8000-000000000101",
+	"report.send_failed":    "00000000-0000-4000-8000-000000000102",
+	"report.upload_missing": "00000000-0000-4000-8000-000000000104",
+}
+
+// reportChainClientIDs maps the fixed ids the SDK fault tests mint, to each
+// run's chain ids — the frames predate the API's mints, so the remap joins them.
+var reportChainClientIDs = map[string]struct{ report, upload, request string }{
+	"report.send_failed.healthy":     {report: "00000000-0000-4000-8000-000000000103"},
+	"report.upload_missing.positive": {report: "00000000-0000-4000-8000-000000000105", upload: "00000000-0000-4000-8000-000000000106"},
+	"report.upload_missing.healthy":  {report: "00000000-0000-4000-8000-000000000105", upload: "00000000-0000-4000-8000-000000000106"},
+	"live.no_reply.healthy":          {request: "00000000-0000-4000-8000-000000000110", upload: "00000000-0000-4000-8000-000000000111"},
+	"live.upload_missing.positive":   {request: "00000000-0000-4000-8000-000000000112", upload: "00000000-0000-4000-8000-000000000113"},
+	"live.upload_missing.healthy":    {request: "00000000-0000-4000-8000-000000000112", upload: "00000000-0000-4000-8000-000000000113"},
+}
+
 var reportChainIDs = map[string]struct{ request, report, upload string }{
 	"report.cannot_send.positive":      {"f1000000-0000-4000-8000-000000000011", "b1000000-0000-4000-8000-000000000001", "d3000000-0000-4000-8000-000000000001"},
 	"report.cannot_send.healthy":       {"f1000000-0000-4000-8000-000000000012", "b1000000-0000-4000-8000-000000000002", "d3000000-0000-4000-8000-000000000002"},
@@ -134,14 +158,21 @@ func (s *reportChainObjects) InspectObject(_ context.Context, key string) (objec
 // chainScenario drives one run through the real routes and services. Anything
 // unset is simply not called — the fault is the missing evidence, not a stub.
 type chainScenario struct {
-	participantStatus string                  // seat status at seed: "" means left
-	sender            problemreports.Sender   // the Discord hop; nil means not_configured
-	report            bool                    // POST a problem report
-	reportInvalid     bool                    // the report body is blank on purpose (send_failed's refusal)
-	uploadTrigger     string                  // "", "report" or "live": POST a diagnostic upload issue
-	uploadComplete    bool                    // store the object and POST complete
-	liveRequest       bool                    // POST /operator/diagnostics/live-requests
-	availability      bool                    // GET the availability endpoint first
+	participantStatus  string                // seat status at seed: "" means left
+	sender             problemreports.Sender // the Discord hop; nil means not_configured
+	report             bool                  // POST a problem report
+	priorReport        bool                  // POST an accepted report first (an earlier report lives beside the fault)
+	reportInvalid      bool                  // the report body is blank on purpose (send_failed's refusal)
+	uploadTrigger      string                // "", "report" or "live": POST a diagnostic upload issue
+	uploadComplete     bool                  // store the object and POST complete
+	liveRequest        bool                  // POST /operator/diagnostics/live-requests
+	liveUploadStored   bool                  // the live request's upload issues and stores (live_request_id, stored fields)
+	priorLiveFlow      bool                  // a first live request that delivers, then issues+stores its upload
+	storedReportUpload bool                  // an accepted report whose upload issues and stores (report_id, stored fields)
+	seatLeftRequest    bool                  // a live request made after the seat left (seat_left_ms, unavailable_reason)
+	failedUpload       bool                  // a second report whose upload completes with no object (failed)
+	refusedIssue       bool                  // a second report-trigger issue the API refuses (reason_code)
+	availability       bool                  // GET the availability endpoint first
 }
 
 var reportChainScenarios = map[string]map[string]chainScenario{
@@ -152,7 +183,7 @@ var reportChainScenarios = map[string]map[string]chainScenario{
 		"healthy":  {participantStatus: "left", availability: true, sender: reportChainSender{}, report: true, uploadTrigger: "report", uploadComplete: true},
 	},
 	"report.send_failed": {
-		"positive": {sender: reportChainSender{}, report: true, reportInvalid: true},
+		"positive": {sender: reportChainSender{}, priorReport: true, report: true, reportInvalid: true},
 		"healthy":  {sender: reportChainSender{}, report: true, uploadTrigger: "report", uploadComplete: true},
 	},
 	"report.forward_failed": {
@@ -160,19 +191,28 @@ var reportChainScenarios = map[string]map[string]chainScenario{
 		"healthy":  {sender: reportChainSender{}, report: true, uploadTrigger: "report", uploadComplete: true},
 	},
 	"report.upload_missing": {
-		"positive": {sender: reportChainSender{}, report: true, uploadTrigger: "report"}, // issued, never stored
+		// The report upload stays issued-never-stored; alongside it a live
+		// upload stores, a second report's upload fails, and a duplicate issue
+		// is refused — a real episode's other uploads around the missing one.
+		"positive": {sender: reportChainSender{}, report: true, uploadTrigger: "report", refusedIssue: true, liveRequest: true, liveUploadStored: true, failedUpload: true},
 		"healthy":  {sender: reportChainSender{}, report: true, uploadTrigger: "report", uploadComplete: true},
 	},
 	"live.target_unreachable": {
-		"positive": {participantStatus: "active", liveRequest: true},
+		"positive": {participantStatus: "active", liveRequest: true, seatLeftRequest: true},
 		"healthy":  {participantStatus: "active", liveRequest: true, uploadTrigger: "live", uploadComplete: true},
 	},
 	"live.no_reply": {
-		"positive": {participantStatus: "active", liveRequest: true},
+		// A first request's full flow sits beside the stalled second one: the
+		// client received and acked it, and its upload issued and stored. The
+		// report side's refused and failed uploads run in the same episode.
+		"positive": {participantStatus: "active", priorLiveFlow: true, liveRequest: true, seatLeftRequest: true, sender: reportChainSender{}, storedReportUpload: true, refusedIssue: true, failedUpload: true},
 		"healthy":  {participantStatus: "active", liveRequest: true, uploadTrigger: "live", uploadComplete: true},
 	},
 	"live.upload_missing": {
-		"positive": {participantStatus: "active", liveRequest: true, uploadTrigger: "live"}, // issued, never stored
+		// The live upload stays issued-never-stored; around it a first request's
+		// flow, a report's full upload lifecycle, a failed upload and a
+		// seat-left request all ran in the same episode.
+		"positive": {participantStatus: "active", priorLiveFlow: true, liveRequest: true, uploadTrigger: "live", sender: reportChainSender{}, storedReportUpload: true, refusedIssue: true, failedUpload: true, seatLeftRequest: true},
 		"healthy":  {participantStatus: "active", liveRequest: true, uploadTrigger: "live", uploadComplete: true},
 	},
 }
@@ -182,14 +222,18 @@ var reportChainScenarios = map[string]map[string]chainScenario{
 // routes, relays the outbox to an Axiom fake, captures the api kernel's emits,
 // and snapshots the durable rows the db source reads. `-args -scenario X`
 // limits it to one symptom's chain.
+// chainScenarioFlag carries hops.json's `-args -scenario <code>` into the
+// test binary: a real flag, because the test runner rejects undefined ones.
+var chainScenarioFlag = flag.String("scenario", "", "one symptom's chain to run")
+
 func TestProblemReportsChain(t *testing.T) {
 	databaseURL := os.Getenv("CHALK_TELEMETRY_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("set CHALK_TELEMETRY_TEST_DATABASE_URL to an isolated, migrated database")
 	}
 	scenarios := []string{}
-	if i := slices.Index(os.Args, "-scenario"); i >= 0 && i+1 < len(os.Args) {
-		scenarios = []string{os.Args[i+1]}
+	if *chainScenarioFlag != "" {
+		scenarios = []string{*chainScenarioFlag}
 	} else {
 		for code := range reportChainScenarios {
 			scenarios = append(scenarios, code)
@@ -235,11 +279,11 @@ func TestProblemReportsChain(t *testing.T) {
 					objects := &reportChainObjects{objects: map[string][]byte{}}
 					router := reportChainRouter(pool, subject, scenario, objects)
 					postChainClientFrames(t, chainDir, code, run, subject, ledger)
-					driveChain(t, router, run, scenario, subject, objects)
-					remap := pinChainRows(t, pool, subject, code, run)
+					order := driveChain(t, router, pool, code, run, scenario, subject, objects)
+					remap := pinChainRows(t, pool, subject, code, run, scenario, order)
 					apiRows := normalizeChainRows(append(relayChainAxiom(t, ledger, subject), capture.rows...), remap)
 					compareChainJSON(t, filepath.Join(chainDir, "api-rows."+code+"."+run+".json"), apiRows)
-					compareChainJSON(t, filepath.Join(chainDir, "db-rows."+code+"."+run+".json"), normalizeChainRows(reportChainDBRows(t, pool, subject, objects), remap))
+					compareChainJSON(t, filepath.Join(chainDir, "db-rows."+code+"."+run+".json"), normalizeChainRows(reportChainDBRows(t, pool, subject, objects, order), remap))
 					report, err := telemetrydelivery.EpisodeReport(t.Context(), ledger, subject.TenantID, subject.EpisodeID)
 					if err != nil {
 						t.Fatal(err)
@@ -303,8 +347,17 @@ func postChainClientFrames(t *testing.T, chainDir, code, run string, subject acc
 	}
 }
 
+// chainMintOrder is the order the drive minted each stored report and issued
+// upload: the db snapshot sorts by it, since ctid order shifts once the pin
+// update rewrites every row.
+type chainMintOrder struct {
+	reports  []string
+	uploads  []string
+	requests []string
+}
+
 // driveChain runs the scenario's calls against the mounted routes.
-func driveChain(t *testing.T, router *chi.Mux, run string, scenario chainScenario, subject accessgrants.Subject, objects *reportChainObjects) {
+func driveChain(t *testing.T, router *chi.Mux, pool *pgxpool.Pool, code, run string, scenario chainScenario, subject accessgrants.Subject, objects *reportChainObjects) chainMintOrder {
 	t.Helper()
 	const media = "chain-media"
 	call := func(method, path string, body any, token string) *httptest.ResponseRecorder {
@@ -323,29 +376,47 @@ func driveChain(t *testing.T, router *chi.Mux, run string, scenario chainScenari
 		router.ServeHTTP(recorder, request)
 		return recorder
 	}
+	// The service's boot-time config emit, as main.go makes it: one record per
+	// run saying whether the forward webhook is wired.
+	obs.Fact(context.Background(), "problem_reports.config", obs.F("forwarding", scenario.sender != nil))
 	if scenario.availability {
 		call(http.MethodGet, "/v1/tenants/"+subject.TenantID.String()+"/problem-reports/availability", nil, media)
 	}
+	var order chainMintOrder
+	postReport := func(description, journeyID string) (string, *httptest.ResponseRecorder) {
+		body := map[string]any{
+			"description":       description,
+			"picked_symptom":    "report.forward_failed",
+			"client_session_id": "cs_" + reportChainSession,
+			"sdk_version":       "4.1.0",
+		}
+		if journeyID != "" {
+			body["journey_id"] = journeyID
+		}
+		response := call(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/problem-reports", body, media)
+		var sent struct {
+			ReportID string `json:"report_id"`
+		}
+		_ = json.Unmarshal(response.Body.Bytes(), &sent)
+		if sent.ReportID != "" {
+			order.reports = append(order.reports, sent.ReportID)
+		}
+		return sent.ReportID, response
+	}
 	var reportID string
+	if scenario.priorReport {
+		reportID, _ = postReport("The chain's earlier accepted report", "")
+	}
 	if scenario.report {
 		description := "The chain's deterministic report"
 		if scenario.reportInvalid {
 			description = ""
 		}
-		response := call(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/problem-reports", map[string]any{
-			"description":       description,
-			"picked_symptom":    "report.forward_failed",
-			"client_session_id": "cs_" + reportChainSession,
-			"sdk_version":       "4.1.0",
-		}, media)
-		var sent struct {
-			ReportID string `json:"report_id"`
-		}
-		_ = json.Unmarshal(response.Body.Bytes(), &sent)
-		reportID = sent.ReportID
+		// The report under test shares the SDK fault test's journey, so the
+		// client's send op and the API's submit/outcome rows name one journey.
+		reportID, _ = postReport(description, reportChainClientJourney[code])
 	}
-	var liveRequestID string
-	if scenario.liveRequest {
+	liveRequest := func() string {
 		response := call(http.MethodPost, "/operator/diagnostics/live-requests", map[string]any{
 			"tenant_id": subject.TenantID.String(), "episode_id": subject.EpisodeID.String(), "participant_id": subject.ParticipantID.String(),
 		}, chainOperatorToken)
@@ -356,39 +427,131 @@ func driveChain(t *testing.T, router *chi.Mux, run string, scenario chainScenari
 			RequestID string `json:"request_id"`
 		}
 		_ = json.Unmarshal(response.Body.Bytes(), &created)
-		liveRequestID = created.RequestID
+		order.requests = append(order.requests, created.RequestID)
+		return created.RequestID
 	}
-	var uploadID, objectKey string
-	if scenario.uploadTrigger != "" {
-		body := map[string]any{"trigger": scenario.uploadTrigger}
-		if scenario.uploadTrigger == "report" {
+	issueUpload := func(trigger, reportID, liveRequestID string) (string, string) {
+		body := map[string]any{"trigger": trigger}
+		if trigger == "report" {
 			body["report_id"] = reportID
 		} else {
 			body["live_request_id"] = liveRequestID
 		}
 		response := call(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/diagnostic-uploads", body, media)
 		if response.Code >= 300 {
-			t.Fatalf("issue status = %d, body %s", response.Code, response.Body)
+			return "", ""
 		}
 		var issued struct {
 			UploadID string `json:"upload_id"`
 			URL      string `json:"url"`
 		}
 		_ = json.Unmarshal(response.Body.Bytes(), &issued)
-		uploadID = issued.UploadID
-		objectKey = strings.TrimPrefix(issued.URL, "mem://put/")
+		order.uploads = append(order.uploads, issued.UploadID)
+		return issued.UploadID, strings.TrimPrefix(issued.URL, "mem://put/")
 	}
-	if scenario.uploadComplete && uploadID != "" {
-		// The client PUTs its bundle to the presigned URL before complete: the
-		// gzipped diagnostics doc the SDK builds, with the identity the r2
-		// readback matches on.
-		objects.objects[objectKey] = chainBundle(t, subject)
-		response := call(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/diagnostic-uploads/"+uploadID+"/complete",
-			map[string]any{"bytes": int64(len(objects.objects[objectKey]))}, media)
-		if response.Code >= 300 {
-			t.Fatalf("complete status = %d, body %s", response.Code, response.Body)
+	completeUpload := func(uploadID, objectKey string, store bool) {
+		if store {
+			// The client PUTs its bundle to the presigned URL before complete:
+			// the gzipped diagnostics doc the SDK builds, with the identity the
+			// r2 readback matches on.
+			objects.objects[objectKey] = chainBundle(t, subject)
+		}
+		body := map[string]any{"bytes": int64(len(objects.objects[objectKey]))}
+		if store {
+			sum := sha256.Sum256(objects.objects[objectKey])
+			body["sha256"] = hex.EncodeToString(sum[:])
+		}
+		call(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/diagnostic-uploads/"+uploadID+"/complete", body, media)
+	}
+	var liveRequestID string
+	if scenario.priorLiveFlow {
+		// An earlier request's whole flow sits beside the fault run: Sync's own
+		// hop proved the fault request's delivery, so the api hop writes the
+		// delivered(1) mark the delivery path writes, then its upload runs.
+		first := liveRequest()
+		// The delivery path's mark, then its upload runs; the request expires
+		// only after its upload completes, so issue is not refused as expired —
+		// and the one-pending-per-seat rule lets the fault request post next.
+		if _, err := pool.Exec(t.Context(), `update live_introspection_requests set delivery='delivered(1)', delivered_at=$2 where id=$1`, first, reportChainAt); err != nil {
+			t.Fatal(err)
+		}
+		id, key := issueUpload("live", "", first)
+		if id == "" {
+			t.Fatal("prior live issue refused")
+		}
+		completeUpload(id, key, true)
+		if _, err := pool.Exec(t.Context(), `update live_introspection_requests set expires_at='2001-01-01' where id=$1`, first); err != nil {
+			t.Fatal(err)
 		}
 	}
+	if scenario.liveRequest {
+		liveRequestID = liveRequest()
+	}
+	var uploadID, objectKey string
+	if scenario.uploadTrigger != "" {
+		uploadID, objectKey = issueUpload(scenario.uploadTrigger, reportID, liveRequestID)
+		if uploadID == "" {
+			t.Fatal("issue refused")
+		}
+	}
+	storedReport := ""
+	if scenario.storedReportUpload {
+		storedReport, _ = postReport("The chain's uploaded report", "")
+		if storedReport == "" {
+			t.Fatal("uploaded report refused")
+		}
+		id, key := issueUpload("report", storedReport, "")
+		if id == "" {
+			t.Fatal("report issue refused")
+		}
+		completeUpload(id, key, true)
+	}
+	if scenario.refusedIssue {
+		// The one-upload-per-report rule refuses the duplicate with a reason.
+		target := reportID
+		if target == "" {
+			target = storedReport
+		}
+		if id, _ := issueUpload("report", target, ""); id != "" {
+			t.Fatal("duplicate issue accepted")
+		}
+	}
+	if scenario.liveUploadStored {
+		id, key := issueUpload("live", "", liveRequestID)
+		if id == "" {
+			t.Fatal("live issue refused")
+		}
+		completeUpload(id, key, true)
+	}
+	if scenario.failedUpload {
+		// A second accepted report carries its own upload; the client completes
+		// without ever PUTting the object: object_missing marks it failed.
+		second, _ := postReport("The chain's second accepted report", "")
+		if second == "" {
+			t.Fatal("second report refused")
+		}
+		id, key := issueUpload("report", second, "")
+		if id == "" {
+			t.Fatal("failed-upload issue refused")
+		}
+		completeUpload(id, key, false)
+	}
+	if scenario.uploadComplete && uploadID != "" {
+		completeUpload(uploadID, objectKey, true)
+	}
+	if scenario.seatLeftRequest {
+		// A request made once the seat has already left carries the seat's own
+		// left stamp: the seat_left_ms/unavailable_reason evidence's source.
+		// The still-open fault request expires first so this one may post.
+		if _, err := pool.Exec(t.Context(), `update live_introspection_requests set expires_at='2001-01-01' where tenant_id=$1`, subject.TenantID.String()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(t.Context(), `update participants set status='left', left_at=$2 where id=$1`, subject.ParticipantID.String(), reportChainAt); err != nil {
+			t.Fatal(err)
+		}
+		liveRequest()
+	}
+	return order
 }
 
 // relayChainAxiom exports the ledger's settled outbox to an HTTP Axiom fake and
@@ -477,7 +640,7 @@ func compareChainJSON(t *testing.T, path string, value any) {
 // the live reader emits for its db/report reads, each spanning row creation to
 // this read, the way report-store.mjs shapes them. The live request's delivery
 // lands later — the Sync hop writes that row, so the snapshot skips it.
-func reportChainDBRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Subject, objects *reportChainObjects) []map[string]any {
+func reportChainDBRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Subject, objects *reportChainObjects, order chainMintOrder) []map[string]any {
 	t.Helper()
 	readAt := reportChainAt.Add(1500 * time.Millisecond)
 	rows := []map[string]any{}
@@ -524,7 +687,7 @@ func reportChainDBRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Su
 	// Stored reports.
 	reportRows, err := pool.Query(t.Context(),
 		`select id, journey_id, chk_code, picked_symptom, forward_outcome, sdk_version, client_session_id, created_at
-		 from problem_reports where tenant_id=$1`, subject.TenantID.String())
+		 from problem_reports where tenant_id=$1 order by array_position($2::uuid[], id)`, subject.TenantID.String(), order.reports)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +723,7 @@ func reportChainDBRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Su
 		 from diagnostic_uploads u
 		 left join problem_reports rp on rp.id = u.report_id
 		 left join live_introspection_requests l on l.id = u.live_request_id
-		 where u.tenant_id=$1 order by u.issued_at, u.id`, subject.TenantID.String())
+		 where u.tenant_id=$1 order by array_position($2::uuid[], u.id)`, subject.TenantID.String(), order.uploads)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,6 +850,20 @@ func chainReadback(t *testing.T, envelope func(string, time.Time, map[string]any
 	return envelope("report.r2_upload", *storedAt, fields)
 }
 
+func firstOrEmpty(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return ids[0]
+}
+
+func firstOrNil(id *string) string {
+	if id == nil {
+		return ""
+	}
+	return *id
+}
+
 func rowCreatedAt(at *time.Time, fallback time.Time) time.Time {
 	if at != nil {
 		return *at
@@ -704,7 +881,7 @@ func chainEventID(seq *int64) string {
 // pinChainRows pins every volatile timestamp the run wrote to reportChainAt and
 // answers the run's minted→fixed id map: report, upload and live request ids
 // become the chain's f100/b100/d300 values the other hops committed.
-func pinChainRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Subject, code, run string) map[string]string {
+func pinChainRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Subject, code, run string, scenario chainScenario, order chainMintOrder) map[string]string {
 	t.Helper()
 	remap := map[string]string{}
 	fixed := reportChainIDs[code+"."+run]
@@ -719,20 +896,45 @@ func pinChainRows(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Subject
 			t.Fatal(err)
 		}
 	}
-	type binding struct{ table, column, fixed string }
-	for _, binding := range []binding{
-		{"problem_reports", "id", fixed.report},
-		{"diagnostic_uploads", "id", fixed.upload},
-		{"live_introspection_requests", "id", fixed.request},
-	} {
-		var minted *string
-		if err := pool.QueryRow(t.Context(),
-			fmt.Sprintf("select id::text from %s where tenant_id=$1 order by id limit 1", binding.table),
-			subject.TenantID.String()).Scan(&minted); err != nil && minted == nil {
-			continue
+	// Each run's fixed id goes on one row the drive minted, in the drive's mint
+	// order — ctid order shifts once the pin update above rewrites each row.
+	// The fault request is the first request this hop's store never delivered:
+	// the prior flow's request carries the delivery mark its update wrote.
+	var faultRequest *string
+	if err := pool.QueryRow(t.Context(),
+		`select id::text from live_introspection_requests where tenant_id=$1 and delivered_at is null order by array_position($2::uuid[], id) nulls last limit 1`,
+		subject.TenantID.String(), order.requests).Scan(&faultRequest); err != nil {
+		faultRequest = nil
+	}
+	uploadFor := ""
+	switch scenario.uploadTrigger {
+	case "report":
+		if len(order.reports) > 0 {
+			_ = pool.QueryRow(t.Context(), `select id::text from diagnostic_uploads where report_id=$1`, order.reports[0]).Scan(&uploadFor)
 		}
-		if minted != nil && *minted != "" {
-			remap[*minted] = binding.fixed
+	case "live":
+		if faultRequest != nil {
+			_ = pool.QueryRow(t.Context(), `select id::text from diagnostic_uploads where live_request_id=$1`, *faultRequest).Scan(&uploadFor)
+		}
+	default:
+		if len(order.uploads) > 0 {
+			uploadFor = order.uploads[0]
+		}
+	}
+	for _, pair := range [][2]string{
+		{fixed.report, firstOrEmpty(order.reports)},
+		{fixed.upload, uploadFor},
+		{fixed.request, firstOrNil(faultRequest)},
+	} {
+		if pair[1] != "" {
+			remap[pair[1]] = pair[0]
+		}
+	}
+	if client, ok := reportChainClientIDs[code+"."+run]; ok {
+		for _, pair := range [][2]string{{client.report, fixed.report}, {client.upload, fixed.upload}, {client.request, fixed.request}} {
+			if pair[0] != "" {
+				remap[pair[0]] = pair[1]
+			}
 		}
 	}
 	return remap
@@ -795,7 +997,14 @@ func normalizeChainRows(rows []map[string]any, remap map[string]string) []map[st
 		out := map[string]any{}
 		for _, key := range keys {
 			value := row[key]
-			if key == "duration_ms" || key == "shown_ms" || key == "schema_ver" {
+			if key == "schema_ver" {
+				continue
+			}
+			if (key == "duration_ms" || key == "shown_ms") && row["source_id"] != "db-snapshot" && row["module"] == "api" {
+				// Only the api kernel's own timing is volatile; client and db
+				// rows carry deterministic values the fixture must keep so the
+				// gate sees each witness field on a real row.
+				out[key] = int64(17)
 				continue
 			}
 			if chainVolatileKeys[key] {

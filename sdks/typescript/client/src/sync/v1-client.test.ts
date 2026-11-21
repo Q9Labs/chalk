@@ -2542,6 +2542,8 @@ async function liveClient(overrides: ClientOptions = {}, initialState = baseStat
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode: "snapshot",
     snapshot,
+    // The hello always asks for live_introspection (entry-url.ts), so a current Sync echoes it, like entry_confirmation.
+    live_introspection: true,
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
     ...(ownIdentityId === undefined ? {} : { participant_identity_id: ownIdentityId }),
@@ -2610,7 +2612,7 @@ async function liveCollaborationClient(overrides: ClientOptions = {}) {
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false, connectionQuality = false): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false, connectionQuality = false, liveIntrospection = true): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2622,6 +2624,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode,
     ...(mode === "snapshot" ? { snapshot } : {}),
+    ...(liveIntrospection ? { live_introspection: true } : {}),
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
     ...(mediaOffReason ? { media_off_reason: true } : {}),
@@ -3021,3 +3024,87 @@ function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1EpisodeSnaps
 function operationFrames(socket: TestSocket, commandId: string): Record<string, unknown>[] {
   return socket.frames().filter((frame) => (frame.type === "operation" || frame.type === "command") && frame.command_id === commandId);
 }
+
+describe("live_request", () => {
+  it("acks one delivered request and hands it to the live introspection handler", async () => {
+    const requested: { requestId: string; expiresAtMs: number }[] = [];
+    const { client, socket, urls } = await liveClient({ onLiveRequest: (request) => requested.push(request) });
+    expect(new URL(urls[0]!).searchParams.get("live_introspection")).toBe("1");
+    const expiresAtMs = Date.now() + 60_000;
+    socket.receive({ type: "live_request", request_id: "live-request-00001", expires_at_ms: expiresAtMs });
+    await settle();
+    expect(socket.frames()).toContainEqual({ type: "live_request_ack", request_id: "live-request-00001" });
+    expect(requested).toEqual([{ requestId: "live-request-00001", expiresAtMs }]);
+    client.stop();
+  });
+
+  it("records live_request.received through the kernel", async () => {
+    const facts: { name: string; fields: Record<string, unknown> }[] = [];
+    const obs = {
+      fact: (name: string, fields: Record<string, unknown>) => facts.push({ name, fields }),
+    };
+    const { client, socket } = await liveClient({ obs: obs as never });
+    socket.receive({ type: "live_request", request_id: "live-request-00002", expires_at_ms: Date.now() + 60_000 });
+    await settle();
+    // The seat is the telemetry credential's, stamped at intake: the record names only the request.
+    expect(facts).toContainEqual({ name: "live_request.received", fields: { live_request_id: "live-request-00002" } });
+    client.stop();
+  });
+
+  it("records the receipt but neither acks nor uploads an already-expired request", async () => {
+    const facts: string[] = [];
+    const requested: unknown[] = [];
+    const { client, socket } = await liveClient({
+      obs: { fact: (name: string) => facts.push(name) } as never,
+      onLiveRequest: (request) => requested.push(request),
+    });
+    socket.receive({ type: "live_request", request_id: "live-request-00003", expires_at_ms: 1 });
+    await settle();
+    expect(facts).toEqual(["live_request.received"]);
+    expect(socket.frames().filter((frame) => frame.type === "live_request_ack")).toHaveLength(0);
+    expect(requested).toHaveLength(0);
+    client.stop();
+  });
+
+  it("ignores a request on a connection whose welcome never advertised the extension", async () => {
+    const facts: string[] = [];
+    const requested: unknown[] = [];
+    const socket = new TestSocket();
+    const client = syncClient({
+      webSocket: { connect: () => socket },
+      mediaPlane: new TestMediaPlane(),
+      obs: { fact: (name: string) => facts.push(name) } as never,
+      onLiveRequest: (request) => requested.push(request),
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    await client.start();
+    socket.open();
+    await settle();
+    // An older Sync's welcome omits live_introspection even though the entry URL asks for it.
+    await recoverSocket(client, socket, state, snapshot, "snapshot", true, undefined, false, false, false);
+    socket.receive({ type: "live_request", request_id: "live-request-00004", expires_at_ms: Date.now() + 60_000 });
+    await settle();
+    expect(facts).toHaveLength(0);
+    expect(socket.frames().filter((frame) => frame.type === "live_request_ack")).toHaveLength(0);
+    expect(requested).toHaveLength(0);
+    client.stop();
+  });
+
+  it("stops answering requests after a reconnect whose welcome did not renegotiate the extension", async () => {
+    const facts: string[] = [];
+    const requested: unknown[] = [];
+    const { client, socket, state } = await liveClient({
+      obs: { fact: (name: string) => facts.push(name) } as never,
+      onLiveRequest: (request) => requested.push(request),
+    });
+    // The second connection's welcome answers the hello without live_introspection, so the gate drops the frame.
+    await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, undefined, false, false, false);
+    socket.receive({ type: "live_request", request_id: "live-request-00005", expires_at_ms: Date.now() + 60_000 });
+    await settle();
+    expect(facts).toHaveLength(0);
+    expect(socket.frames().filter((frame) => frame.type === "live_request_ack")).toHaveLength(0);
+    expect(requested).toHaveLength(0);
+    client.stop();
+  });
+});

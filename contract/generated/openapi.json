@@ -3339,6 +3339,350 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/diagnostic-uploads": {
+      "post": {
+        "operationId": "issueDiagnosticUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticUploadIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticUploadIssued"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["diagnostic_uploads.target_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["diagnostic_uploads.conflict", "diagnostic_uploads.request_expired"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["diagnostic_uploads.storage_unavailable", "service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Issue diagnostic upload",
+        "x-chalk-max-body-bytes": 4096,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/diagnostic-uploads/{upload_id}/complete": {
+      "post": {
+        "operationId": "completeDiagnosticUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticUploadCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticUploadStored"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["diagnostic_uploads.invalid_id", "request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["diagnostic_uploads.not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["diagnostic_uploads.conflict", "diagnostic_uploads.request_expired"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["diagnostic_uploads.storage_unavailable", "service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Complete diagnostic upload",
+        "x-chalk-max-body-bytes": 4096,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/live-episodes": {
       "get": {
         "operationId": "listSpaceLiveEpisodes",
@@ -4322,7 +4666,7 @@
               }
             },
             "description": "Service Unavailable",
-            "x-chalk-error-codes": ["reports.unavailable", "service.unavailable"]
+            "x-chalk-error-codes": ["reports.not_stored", "reports.unavailable", "service.unavailable"]
           }
         },
         "security": [
@@ -16024,6 +16368,72 @@
         "type": "string",
         "x-chalk-brand": "DateTimeString"
       },
+      "DiagnosticUploadCompleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "sha256": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["bytes"],
+        "type": "object"
+      },
+      "DiagnosticUploadIssueRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "live_request_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "trigger": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["trigger"],
+        "type": "object"
+      },
+      "DiagnosticUploadIssued": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "headers": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
+          "upload_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["expires_at", "headers", "upload_id", "url"],
+        "type": "object"
+      },
+      "DiagnosticUploadStored": {
+        "additionalProperties": false,
+        "properties": {
+          "stored": {
+            "type": "boolean"
+          }
+        },
+        "required": ["stored"],
+        "type": "object"
+      },
       "Email": {
         "format": "email",
         "type": "string",
@@ -16945,6 +17355,9 @@
       "ProblemReportRequest": {
         "additionalProperties": false,
         "properties": {
+          "client_session_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "description": {
             "maxLength": 1000,
             "minLength": 1,
@@ -16956,6 +17369,19 @@
             "maxLength": 2000,
             "type": "string",
             "x-chalk-length-unit": "code-points"
+          },
+          "journey_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "picked_symptom": {
+            "minLength": 1,
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
+          },
+          "sdk_version": {
+            "minLength": 1,
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
           }
         },
         "required": ["description"],
@@ -16964,11 +17390,17 @@
       "ProblemReportSent": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "sent": {
             "type": "boolean"
           }
         },
-        "required": ["sent"],
+        "required": ["code", "report_id", "sent"],
         "type": "object"
       },
       "PublicAdmissionRequest": {

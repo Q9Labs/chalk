@@ -28,8 +28,18 @@ const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
 const readJson = (root, path) => JSON.parse(readFileSync(join(root, path), "utf8"));
 
 /** Problems with one fixture row: an unknown event or field, a missing required field, or a value outside its enum. */
-function rowProblems(row, index, events, fields) {
+function rowProblems(row, index, events, fields, machines) {
   const eventName = eventOf(row);
+  if (row.kind === "transition" || (typeof eventName === "string" && machines.has(eventName))) {
+    const machine = machines.get(eventName);
+    if (!machine) return [`row ${index} is a transition of undeclared machine ${eventName}`];
+    const problems = [];
+    if (typeof row.machine !== "string" || row.machine !== eventName) problems.push(`row ${index} (${eventName}) has machine=${JSON.stringify(row.machine)}`);
+    for (const [key, allowed] of [["from_state", machine.states], ["to_state", machine.states], ["trigger", machine.triggers]]) {
+      if (row[key] !== undefined && !allowed?.includes(row[key])) problems.push(`row ${index} (${eventName}) has ${key}=${JSON.stringify(row[key])}, not one of ${allowed?.join(", ")}`);
+    }
+    return problems;
+  }
   const event = eventName === undefined ? undefined : events.get(eventName);
   if (!event) return [`row ${index} has unknown event ${eventName}`];
   const problems = [];
@@ -115,7 +125,7 @@ function hopLinks(root, symptom) {
   return missing;
 }
 
-async function ruleLinks(root, symptom, events, fields, declared) {
+async function ruleLinks(root, symptom, events, fields, machines, declared) {
   const missing = [];
   if (!existsSync(join(root, symptom.rule))) return [`rule ${symptom.rule}`];
   let check;
@@ -132,7 +142,7 @@ async function ruleLinks(root, symptom, events, fields, declared) {
     }
     const fixture = readJson(root, path);
     const rows = fixture.rows ?? [];
-    const problems = rows.flatMap((row, index) => rowProblems(row, index, events, fields));
+    const problems = rows.flatMap((row, index) => rowProblems(row, index, events, fields, machines));
     if (problems.length > 0) {
       missing.push(...problems.map((problem) => `${kind} fixture: ${problem}`));
       continue;
@@ -153,7 +163,7 @@ async function ruleLinks(root, symptom, events, fields, declared) {
 }
 
 /** Every missing link for one symptom; an empty list means it is covered. */
-async function symptomLinks(root, symptom, events, fields, declared) {
+async function symptomLinks(root, symptom, events, fields, machines, declared) {
   const missing = [];
   if (symptom.witnesses.length === 0) missing.push("witnesses");
   for (const witness of symptom.witnesses) if (witness.events.length === 0) missing.push(`an event for fact ${witness.fact}`);
@@ -165,7 +175,7 @@ async function symptomLinks(root, symptom, events, fields, declared) {
       else if (!readFileSync(path, "utf8").includes(site.literal)) missing.push(`emit site ${site.path} no longer contains ${site.literal}`);
     }
   }
-  missing.push(...(await ruleLinks(root, symptom, events, fields, declared)));
+  missing.push(...(await ruleLinks(root, symptom, events, fields, machines, declared)));
   missing.push(...faultLinks(root, symptom));
   return missing;
 }
@@ -178,10 +188,11 @@ async function symptomLinks(root, symptom, events, fields, declared) {
 export async function checkCoverage({ root = repositoryRoot, graph = readJson(root, "observability/generated/coverage-graph.json"), registry = readJson(root, "observability/generated/registry.json") } = {}) {
   const events = new Map(registry.events.map((event) => [event.name, event]));
   const fields = new Map(registry.fields.map((field) => [field.name, field]));
+  const machines = new Map((registry.machines ?? []).map((machine) => [machine.name, machine]));
   const declared = new Map(registry.symptoms.map((symptom) => [symptom.code, symptom]));
   const result = { failures: [], allowlisted: [], covered: [] };
   for (const symptom of graph.symptoms) {
-    const missing = await symptomLinks(root, symptom, events, fields, declared.get(symptom.code));
+    const missing = await symptomLinks(root, symptom, events, fields, machines, declared.get(symptom.code));
     if (symptom.allowlisted && missing.length === 0) result.failures.push(`${symptom.code} is complete: remove it from observability/registry/coverage-allowlist.json`);
     else if (symptom.allowlisted) result.allowlisted.push({ code: symptom.code, slice: symptom.slice, missing });
     else if (missing.length > 0) result.failures.push(`${symptom.code} is missing: ${missing.join("; ")}`);

@@ -106,7 +106,7 @@ export function decide({ readings }) {
     return finding(surface, sendAt, "api", "api.problemreports", "unknown", [
       { text: `the client showed send_failed for ${jr}`, evidence: [surface.id], window: surface.window, absent: null },
       { text: `problem_report.submit refused ${cause} for ${jr}`, evidence: [(refused ?? outcomeRow).id], window: (refused ?? outcomeRow).window, absent: null },
-      { text: `no problem_reports row for ${jr}`, evidence: [], window: null, absent: "report.problem" },
+      { text: `the refused submit stores no problem_reports row for ${jr}`, evidence: [(refused ?? outcomeRow).id], window: (refused ?? outcomeRow).window, absent: null },
     ]);
   }
 
@@ -119,7 +119,7 @@ export function decide({ readings }) {
   return {
     ...finding(surface, sendAt, "client_network", "network", "witnessed", [
       { text: `problem_report.send ${errClass} for ${jr}`, evidence: [sendOp?.id ?? surface.id], window: sendOp?.window ?? surface.window, absent: null },
-      { text: `no api decision for ${jr}`, evidence: [], window: null, absent: "report.submit" },
+      { text: `no api decision for ${jr}`, evidence: [], window: sendOp?.window ?? surface.window, absent: "report.submit" },
     ], "the request was blocked before the API", `any api or edge row for ${jr}`),
     hypothesis: { text: "blocked before the API", falsified_by: `any api or edge row for ${jr}` },
   };

@@ -102,6 +102,8 @@ export type Kernel = {
   surface<N extends SurfaceName>(name: N, fields: EventFields[N]): SurfaceHandle;
   fact<N extends FactName>(name: N, fields: EventFields[N]): void;
   setFlags(flags: FlagMap): void;
+  /** The flags hash stamped on this kernel's records, or undefined before `setFlags` runs. */
+  flagsHash(): string | undefined;
   inFlight(): readonly InFlightOp[];
   stats(): KernelStats;
 };
@@ -253,6 +255,8 @@ export function createKernel(options: KernelOptions): Kernel {
       currentFlagsHash = flagsHash(flags);
       send("fact", "obs.flags_snapshot", { flags }, {});
     },
+
+    flagsHash: () => currentFlagsHash,
 
     inFlight: () => [...inFlight.values()],
     stats: () => ({ records, violations, exportFailures, ...(lastViolation === undefined ? {} : { lastViolation }) }),

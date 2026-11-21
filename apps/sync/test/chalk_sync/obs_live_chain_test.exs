@@ -47,6 +47,21 @@ defmodule ChalkSync.ObsLiveChainTest do
     {"live.upload_missing", "healthy"} => "f1000000-0000-4000-8000-000000000006"
   }
 
+  # The extra requests each positive run carries beside the fault request: a
+  # request the seat never saw because it had already left (the seat_left_ms
+  # and unavailable_reason evidence), and for no_reply an earlier request the
+  # seat received and acked in time — proof the stall belongs to the fault one.
+  @extras %{
+    {"live.target_unreachable", "positive"} => [:left],
+    {"live.no_reply", "positive"} => [:prior, :left],
+    {"live.upload_missing", "positive"} => [:left]
+  }
+
+  @extra_ids %{
+    :prior => "f1000000-0000-4000-8000-000000000010",
+    :left => "f1000000-0000-4000-8000-000000000011"
+  }
+
   setup_all do
     previous = Application.get_env(:chalk_sync, :database_connections)
     connections = SyncPostgres.start_connections(@database_url, 2)
@@ -117,9 +132,47 @@ defmodule ChalkSync.ObsLiveChainTest do
     @mode mode
     test "#{@code} #{@run}: the seat's delivery lands on the row", ctx do
       request_id = @request_ids[{@code, @run}]
+      extras = Map.get(@extras, {@code, @run}, [])
       insert_request(ctx.connection, request_id)
+
+      if :prior in extras do
+        insert_request(ctx.connection, @extra_ids[:prior])
+      end
+
+      db_rows =
+        if :left in extras do
+          # The seat leaves between the fault request's insert and the later
+          # one's: the later row carries the left stamp and, delivered with no
+          # coordinator up yet, the unavailable_reason the fault row lacks.
+          leave_seat(ctx.connection)
+          left_id = @extra_ids[:left]
+          insert_request(ctx.connection, left_id)
+          Introspection.deliver(@tenant, @episode, left_id)
+          pin_request_times(ctx.connection, left_id)
+          [live_request_db_row(ctx.connection, left_id, "e1000000-0000-4000-8000-000000009997")]
+        else
+          []
+        end
+
       identity = identity()
       coordinator = if @mode != :no_socket, do: registered_socket(identity), else: nil
+
+      if :prior in extras do
+        # The earlier request's full answer ran a minute before the fault
+        # one's: delivered, then the socket's ack — stamped on its own clock
+        # and pins, so the fault request's ack window proves empty.
+        prior_id = @extra_ids[:prior]
+        prior_ms = @requested_ms - 60_000
+
+        with_obs_clock(prior_ms, fn ->
+          Introspection.deliver(@tenant, @episode, prior_id)
+          assert :ok = Coordinator.acknowledge_request(coordinator, identity, prior_id)
+          assert {:ok, prior_fields} = Introspection.acknowledge(identity, prior_id)
+          Obs.fact("live_request.ack", prior_fields)
+        end)
+
+        pin_request_times(ctx.connection, prior_id, prior_ms)
+      end
 
       Introspection.deliver(@tenant, @episode, request_id)
 
@@ -152,7 +205,13 @@ defmodule ChalkSync.ObsLiveChainTest do
         _ -> assert String.starts_with?(delivery, "delivered")
       end
 
-      rows = sync_kernel_rows(ctx.connection) ++ [live_request_db_row(ctx.connection, request_id)]
+      rows =
+        db_rows ++
+          sync_kernel_rows(ctx.connection) ++
+          if(:prior in extras,
+            do: [live_request_db_row(ctx.connection, @extra_ids[:prior], "e1000000-0000-4000-8000-000000009998")],
+            else: []
+          ) ++ [live_request_db_row(ctx.connection, request_id)]
       compare_chain(Path.join([@chain_root, @code, "chain", "sync-rows.#{@code}.#{@run}.json"]), rows)
       _ = unavailable_reason
       _ = sockets
@@ -220,21 +279,44 @@ defmodule ChalkSync.ObsLiveChainTest do
     request_id
   end
 
+  # The seat's own leave: the participant status the request rows snapshot.
+  defp leave_seat(connection) do
+    Postgrex.query!(
+      connection,
+      "update participants set status = 'left', left_at = now() where tenant_id = $1 and id = $2",
+      [UUID.dump!(@tenant), UUID.dump!(@participant)]
+    )
+  end
+
+  # Stamps the kernel's records at `at_ms` for the block: the prior request's
+  # evidence sits on its own earlier clock, the way it answered then.
+  defp with_obs_clock(at_ms, fun) do
+    config = Application.get_env(:chalk_sync, ChalkSync.Obs)
+    Application.put_env(:chalk_sync, ChalkSync.Obs, Keyword.merge(config, clock: fn -> at_ms end))
+    fun.()
+    Application.put_env(:chalk_sync, ChalkSync.Obs, config)
+  end
+
   # The delivery writes now() stamps; the chain pins them to fixed values so
   # the committed rows replay byte-for-byte.
   defp pin_request_times(connection, request_id) do
+    pin_request_times(connection, request_id, @requested_ms)
+  end
+
+  defp pin_request_times(connection, request_id, at_ms) do
     Postgrex.query!(
       connection,
       """
       update live_introspection_requests
       set requested_at = $2::timestamptz, expires_at = $3::timestamptz,
-          delivered_at = case when delivered_at is null then null else $2::timestamptz end
+          delivered_at = case when delivered_at is null then null else $2::timestamptz end,
+          seat_left_at = case when seat_left_at is null then null else $2::timestamptz end
       where tenant_id = $1 and id = $4
       """,
       [
         UUID.dump!(@tenant),
-        DateTime.from_unix!(@requested_ms, :millisecond),
-        DateTime.from_unix!(@expires_ms, :millisecond),
+        DateTime.from_unix!(at_ms, :millisecond),
+        DateTime.from_unix!(at_ms + 60_000, :millisecond),
         UUID.dump!(request_id)
       ]
     )
@@ -255,17 +337,21 @@ defmodule ChalkSync.ObsLiveChainTest do
 
   # The post-delivery request row as the db source's live.db_request event.
   defp live_request_db_row(connection, request_id) do
+    live_request_db_row(connection, request_id, "e1000000-0000-4000-8000-000000009999")
+  end
+
+  defp live_request_db_row(connection, request_id, event_id) do
     %{rows: [[row]]} =
       Postgrex.query!(
         connection,
         """
         select jsonb_strip_nulls(jsonb_build_object(
-          'live_request_id', id, 'request_status', coalesce(delivery, 'pending'),
+          'live_request_id', id, 'request_status', coalesce(split_part(delivery, '(', 1), 'pending'),
           'requested_ms', (extract(epoch from requested_at) * 1000)::bigint,
           'expires_ms', (extract(epoch from expires_at) * 1000)::bigint,
           'participant_status', participant_status, 'episode_status', episode_status,
           'seat_left_ms', (extract(epoch from seat_left_at) * 1000)::bigint,
-          'delivery', delivery, 'delivered_ms', (extract(epoch from delivered_at) * 1000)::bigint,
+          'delivery', split_part(delivery, '(', 1), 'delivered_ms', (extract(epoch from delivered_at) * 1000)::bigint,
           'sockets', sockets, 'unavailable_reason', unavailable_reason,
           'participant_id', participant_id
         ))
@@ -275,7 +361,7 @@ defmodule ChalkSync.ObsLiveChainTest do
       )
 
     Map.merge(row, %{
-      "event_id" => "e1000000-0000-4000-8000-000000009999",
+      "event_id" => event_id,
       "name" => "live.db_request",
       "kind" => "fact",
       "module" => "checker",

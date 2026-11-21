@@ -1,22 +1,25 @@
 [
   {
     "clock_state": "server",
+    "duration_ms": 1500,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
-    "est_server_ms": 1795599901500,
+    "est_server_ms": 1795599900000,
     "event_id": "12000000-0000-4000-8000-000000000001",
     "kind": "fact",
     "module": "checker",
     "name": "report.db_participant",
     "participant_id": "a1000000-0000-4000-8000-000000000001",
-    "participant_status": "active",
+    "participant_status": "left",
     "platform": "server",
+    "seat_left_ms": 1795599900000,
     "source_id": "db-snapshot",
     "tenant_id": "c1000000-0000-4000-8000-000000000001"
   },
   {
-    "client_session_id": "00000000-0000-4000-8000-000000000042",
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "clock_state": "server",
+    "duration_ms": 0,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599901500,

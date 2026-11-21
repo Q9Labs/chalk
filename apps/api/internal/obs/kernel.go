@@ -40,9 +40,8 @@ type Config struct {
 	SourceID string
 	// Trail adds the ID trail known from the context, such as the Episode and Participant.
 	Trail func(context.Context) []slog.Attr
-	// Clock, EventID and Seq pin the volatile envelope fields in tests: the
-	// chain harness fixes every record's time, id and sequence so replay
-	// compares bytes, the way the sync kernel's test hooks do. Nil means real.
+	// Clock, EventID and Seq pin the volatile stamps in tests: the record's
+	// est_server_ms, event_id and seq come from these when set.
 	Clock   func() time.Time
 	EventID func() string
 	Seq     func() int64
@@ -248,30 +247,30 @@ func violate(st *state, problems []string) {
 
 func send(ctx context.Context, st *state, kind, name string, attrs, own []slog.Attr, failed bool) {
 	config := st.config
+	eventID, recordSeq, now := newID(), seq.Add(1), time.Now()
+	if config.EventID != nil {
+		eventID = config.EventID()
+	}
+	if config.Seq != nil {
+		recordSeq = config.Seq()
+	}
+	if config.Clock != nil {
+		now = config.Clock()
+	}
 	record := make([]slog.Attr, 0, len(attrs)+len(own)+16)
 	if config.Trail != nil {
 		record = append(record, config.Trail(ctx)...)
 	}
 	record = append(record, attrs...)
-	eventID, sequence, at := newID(), seq.Add(1), time.Now().UnixMilli()
-	if config.EventID != nil {
-		eventID = config.EventID()
-	}
-	if config.Seq != nil {
-		sequence = config.Seq()
-	}
-	if config.Clock != nil {
-		at = config.Clock().UnixMilli()
-	}
 	record = append(record,
 		slog.String(FieldEventID, eventID),
-		slog.Int64(FieldSeq, sequence),
+		slog.Int64(FieldSeq, recordSeq),
 		slog.String(FieldSourceID, st.sourceID),
 		slog.String(FieldSchemaVer, SchemaVer),
 		slog.String(FieldModule, config.Module),
 		slog.String(FieldEnv, config.Env),
 		slog.String(FieldClockState, "server"),
-		slog.Int64(FieldEstServerMs, at),
+		slog.Int64(FieldEstServerMs, now.UnixMilli()),
 	)
 	for _, optional := range [][2]string{{FieldPlatform, config.Platform}, {FieldReleaseSHA, config.ReleaseSHA}, {FieldFlagsHash, st.flagsHash}} {
 		if optional[1] != "" {

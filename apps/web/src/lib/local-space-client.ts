@@ -16,6 +16,7 @@ export function createLocalSpaceClient({ credential, getAccess, connectionAccess
     { space: credential.space, getAccess, baseUrl: credential.apiBaseURL },
     {
       syncUrl: credential.syncURL,
+      appVersion: __APP_VERSION__,
       ...(connectionAccess ? { connectionAccess } : {}),
       ...(credential.syncDirectURL ? { syncDirectUrl: credential.syncDirectURL } : {}),
       ...(credential.directPath ? { directPath: credential.directPath } : {}),

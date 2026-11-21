@@ -75,7 +75,16 @@ func observeReportOutcomes() func(http.Handler) http.Handler {
 			if state.result != nil && !state.result.ReportID.IsZero() {
 				kernelFields = append(kernelFields, obs.F("report_id", state.result.ReportID.String()))
 			}
-			obs.Fact(ctx, "problem_report.outcome", kernelFields...)
+			if state.result != nil && state.result.DecisionID != "" {
+				kernelFields = append(kernelFields, obs.F("decision_id", state.result.DecisionID))
+			}
+			// The record's trail wants the subject; the auth middleware put it on
+			// the request's inner context, so restate it on this boundary's.
+			emitCtx := ctx
+			if state.subject != nil {
+				emitCtx = accessgrants.WithSubject(ctx, *state.subject)
+			}
+			obs.Fact(emitCtx, "problem_report.outcome", kernelFields...)
 			level := slog.LevelWarn
 			if outcome == problemreports.OutcomeAccepted {
 				level = slog.LevelInfo

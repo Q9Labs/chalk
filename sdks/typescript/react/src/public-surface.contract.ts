@@ -49,6 +49,7 @@ type ExpectedChalkProps =
   | "onReportProblem"
   | "onOpenReportProblem"
   | "reportUnavailableReason"
+  | "reportUnavailableCode"
   | "client"
   | "space"
   | "getAccess"

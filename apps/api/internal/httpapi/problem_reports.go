@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type ProblemReportService interface {
@@ -43,14 +44,14 @@ var (
 
 func problemReportEndpoints(service ProblemReportService, verifier ParticipantMediaVerifier, limits RateLimitOptions) []RouteEndpoint {
 	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
-		func(r *http.Request) (struct{}, error) { _, err := tenantIDRequest(r); return struct{}{}, err },
-		func(ctx context.Context, _ struct{}) (problemReportAvailability, error) {
+		func(r *http.Request) (utilities.ID, error) { return tenantIDRequest(r) },
+		func(ctx context.Context, tenantID utilities.ID) (problemReportAvailability, error) {
 			available := service != nil && service.Available()
 			decision := "false"
 			if available {
 				decision = "true"
 			}
-			obs.Decision(ctx, "problem_report.availability", decision, "")
+			obs.Decision(ctx, "problem_report.availability", decision, "", obs.F("tenant_id", tenantID.String()))
 			return problemReportAvailability{Available: available}, nil
 		},
 	).Parameters(tenantIDParameter()).Responds(http.StatusOK, "ProblemReportAvailability", problemReportAvailability{}).Errors(apiErrorInvalidTenantID)

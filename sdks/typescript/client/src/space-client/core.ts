@@ -16,6 +16,7 @@ import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl, normalizeBaseUrl } from "../urls";
+import { SDK_VERSION } from "../version";
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
 export type SpaceClientPlatform = {
   readonly apiBaseUrl?: string;
@@ -34,13 +35,21 @@ export type SpaceClientPlatform = {
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
+  /** The app's own version string, stamped on kernel records as `app_version` and sent in diagnostic bundles. */
+  readonly appVersion?: string;
 };
 export class SpaceClientCoreService extends Context.Service<SpaceClientCoreService, SpaceClientCore>()("@chalk/client/SpaceClientCore") {}
 /** Production composition keeps every mutable owner inside a scoped Layer. */
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const telemetry = platform.dependencies?.telemetry ?? new TelemetryOutbox({ platform: createWebTelemetryPlatform(platform.fetch), endpoint: (tenantId) => apiUrls.telemetry(apiBaseUrl, tenantId) });
+  const telemetry =
+    platform.dependencies?.telemetry ??
+    new TelemetryOutbox({
+      platform: createWebTelemetryPlatform(platform.fetch),
+      endpoint: (tenantId) => apiUrls.telemetry(apiBaseUrl, tenantId),
+      build: { module: "sdk", env: "production", platform: "web", sdk_version: SDK_VERSION, ...(platform.appVersion ? { app_version: platform.appVersion } : {}) },
+    });
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), telemetry, ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
@@ -92,7 +101,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
     }),
   );
 /** Stands in when the platform gave no outbox, so an app can always call `telemetry`. */
-const silentTelemetry: AppTelemetry = { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined };
+const silentTelemetry: AppTelemetry = { sessionId: "", sdkVersion: "", problemReported: () => undefined, renderCrashed: () => undefined };
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
   readonly telemetry: AppTelemetry;

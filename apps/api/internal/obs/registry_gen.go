@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "0a633dc1cf08"
+const SchemaVer = "a0bb4763071d"
 
 // Event names.
 const (

@@ -1,6 +1,7 @@
 [
   {
     "clock_state": "server",
+    "duration_ms": 0,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599901500,
@@ -15,8 +16,9 @@
     "tenant_id": "c1000000-0000-4000-8000-000000000001"
   },
   {
-    "client_session_id": "00000000-0000-4000-8000-000000000042",
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "clock_state": "server",
+    "duration_ms": 0,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599901500,
@@ -31,9 +33,10 @@
     "tenant_id": "c1000000-0000-4000-8000-000000000001"
   },
   {
-    "bytes": 202,
+    "bytes": 200,
     "clock_state": "server",
     "diagnostic_upload_id": "d3000000-0000-4000-8000-00000000000c",
+    "duration_ms": 1500,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599900000,
@@ -46,6 +49,7 @@
     "name": "report.db_upload",
     "participant_id": "a1000000-0000-4000-8000-000000000001",
     "platform": "server",
+    "sha256": "5b74ea9b8a78142388c12319dfda29fb792eab1ca90329f8b645dc11188cf4a9",
     "source_id": "db-snapshot",
     "stored_ms": 1795599900000,
     "tenant_id": "c1000000-0000-4000-8000-000000000001",
@@ -53,9 +57,10 @@
     "upload_trigger": "live"
   },
   {
-    "bytes": 202,
+    "bytes": 200,
     "clock_state": "server",
     "diagnostic_upload_id": "d3000000-0000-4000-8000-00000000000c",
+    "duration_ms": 1500,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599900000,

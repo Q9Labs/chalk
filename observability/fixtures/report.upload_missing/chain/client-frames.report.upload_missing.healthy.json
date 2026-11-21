@@ -1,0 +1,95 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000006",
+    "next_seq": 1,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "flags": {},
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1000,
+        "client_wall_ms": 1795599001000,
+        "clock_epoch": 0,
+        "clock_state": "unsynced",
+        "schema_ver": "a0bb4763071d",
+        "flags_hash": "44136fa355b3678a",
+        "kind": "fact",
+        "name": "obs.flags_snapshot",
+        "event_id": "00000000-0000-4000-8000-000000000005",
+        "seq": 0
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000011",
+    "next_seq": 3,
+    "events": [
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "journey_id": "00000000-0000-4000-8000-000000000104",
+        "picked_symptom": "audio.not_heard",
+        "http_status": 200,
+        "report_id": "00000000-0000-4000-8000-000000000105",
+        "chk_code": "CHK-7Q2M",
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1040,
+        "client_wall_ms": 1795599001040,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795599001060,
+        "clock_err_ms": 20,
+        "schema_ver": "a0bb4763071d",
+        "flags_hash": "44136fa355b3678a",
+        "outcome": "ok",
+        "duration_ms": 0,
+        "op_id": "00000000-0000-4000-8000-000000000007",
+        "kind": "op",
+        "name": "problem_report.send",
+        "event_id": "00000000-0000-4000-8000-000000000008",
+        "seq": 1
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "upload_trigger": "report",
+        "diagnostic_upload_id": "00000000-0000-4000-8000-000000000106",
+        "report_id": "00000000-0000-4000-8000-000000000105",
+        "http_status": 200,
+        "bytes": 3,
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1040,
+        "client_wall_ms": 1795599001040,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795599001060,
+        "clock_err_ms": 20,
+        "schema_ver": "a0bb4763071d",
+        "flags_hash": "44136fa355b3678a",
+        "outcome": "ok",
+        "duration_ms": 0,
+        "op_id": "00000000-0000-4000-8000-000000000009",
+        "kind": "op",
+        "name": "report.upload",
+        "event_id": "00000000-0000-4000-8000-000000000010",
+        "seq": 2
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000012",
+    "next_seq": 3,
+    "end": "closed",
+    "events": []
+  }
+]

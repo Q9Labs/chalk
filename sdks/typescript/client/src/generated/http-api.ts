@@ -70,6 +70,28 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("completeDiagnosticUpload", "/v1/tenants/:tenant_id/diagnostic-uploads/:upload_id/complete", {
+      params: S.CompleteDiagnosticUploadPathParamsSchema,
+      payload: S.CompleteDiagnosticUploadRequestBodySchema,
+      success: S.CompleteDiagnosticUploadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.DiagnosticUploadsInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.DiagnosticUploadsNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.DiagnosticUploadsConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.DiagnosticUploadsRequestExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.DiagnosticUploadsStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
       params: S.CreateAPIKeyPathParamsSchema,
       headers: S.CreateAPIKeyRequestHeadersSchema,
@@ -354,6 +376,27 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("issueDiagnosticUpload", "/v1/tenants/:tenant_id/diagnostic-uploads", {
+      params: S.IssueDiagnosticUploadPathParamsSchema,
+      payload: S.IssueDiagnosticUploadRequestBodySchema,
+      success: S.IssueDiagnosticUploadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.DiagnosticUploadsTargetNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.DiagnosticUploadsConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.DiagnosticUploadsRequestExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.DiagnosticUploadsStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -656,6 +699,7 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ReportsDeliveryFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ReportsNotStoredErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ReportsUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

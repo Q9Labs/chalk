@@ -1,5 +1,5 @@
 {
-  "schema_ver": "0a633dc1cf08",
+  "schema_ver": "a0bb4763071d",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -2693,7 +2693,7 @@
           "source": "sync",
           "claim": "live_request_id",
           "failure_claims": [],
-          "fields": ["live_request_id", "participant_id", "sync_connection_id", "est_server_ms"]
+          "fields": ["live_request_id", "participant_id", "est_server_ms"]
         }
       ],
       "doc": "A socket answered live_request_ack before expires_at."

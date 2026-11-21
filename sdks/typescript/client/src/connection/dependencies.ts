@@ -104,7 +104,8 @@ export type ConnectionSyncFactoryInput = {
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
-  readonly telemetry?: TelemetrySink;
+  /** The client outbox: Sync records `live_request.received` through its kernel, and a live request's diagnostic upload takes its session and build from it. */
+  readonly telemetry?: TelemetryOutbox;
   readonly onTransportDiagnostic?: (event: TransportDiagnostic) => void;
   readonly onTransportPath?: (path: TransportPath) => void;
 };

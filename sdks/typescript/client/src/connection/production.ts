@@ -10,6 +10,7 @@ import { mediaBootstrap } from "../access/media-bootstrap";
 import { directOrigin, type DirectPathMode } from "../direct-path";
 import * as apiUrls from "../api-urls";
 import { directSyncUrl, whiteboardUrl } from "../urls";
+import { createLiveIntrospection } from "../diagnostics/live";
 const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
@@ -38,7 +39,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
     },
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, options.directPath ?? "auto", input),
-    createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, options.directPath ?? "auto", input),
+    createSyncClient: (input) => createSyncClient(options.apiBaseURL, options.syncURL, options.syncDirectURL, options.directPath ?? "auto", input),
     createChatFileTransport: (input) => createChalkChatFileHttpTransport({ baseUrl: options.apiBaseURL, token: input.token }),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardUrl(options.syncURL), input),
     subscribeForeground: subscribeBrowserForeground,
@@ -145,16 +146,28 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     subscribe: client.subscribe.bind(client),
   };
 }
-function createSyncClient(syncURL: string, syncDirectURL: string | null | undefined, directPath: DirectPathMode, input: ConnectionSyncFactoryInput) {
+function createSyncClient(apiBaseURL: string, syncURL: string, syncDirectURL: string | null | undefined, directPath: DirectPathMode, input: ConnectionSyncFactoryInput) {
   // A configured direct Sync URL wins, because the lobby warm socket was opened for it; otherwise the grant's door serves Sync too.
   const advertised = directOrigin(mediaBootstrap(input.access.media).capabilities?.directSignalingUrl);
   const directURL = directPath === "off" ? null : syncDirectURL || (advertised ? directSyncUrl(advertised) : null);
   if (!directURL) input.onTransportPath?.({ plane: "sync", path: "tunnel", fellBack: false });
-  return createV1SyncClient({
+  // The client exists only after this factory returns, so the live answer reads its snapshot through a deferred lookup.
+  let clientSnapshot: (() => ReturnType<ReturnType<typeof createV1SyncClient>["getSnapshot"]>) | undefined;
+  const liveRequest = input.telemetry
+    ? createLiveIntrospection({
+        apiBaseURL,
+        access: input.access,
+        telemetry: input.telemetry,
+        connection: () => clientSnapshot?.().connection,
+      })
+    : undefined;
+  const client = createV1SyncClient({
     url: syncURL,
     onDiagnostic: input.onTransportDiagnostic,
     traceparent: input.traceparent,
     telemetry: input.telemetry,
+    obs: input.telemetry?.obs,
+    ...(liveRequest ? { onLiveRequest: liveRequest } : {}),
     token: input.token,
     mediaPlane: input.media,
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
@@ -162,6 +175,8 @@ function createSyncClient(syncURL: string, syncDirectURL: string | null | undefi
     entryConfirmation: true,
     ...directFirstSyncOptions(directURL, createBrowserWebSocketFactory(), input.onTransportPath),
   });
+  clientSnapshot = client.getSnapshot.bind(client);
+  return client;
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {
   const files = createChalkWhiteboardV1FileDownloadTransport({

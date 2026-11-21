@@ -40,7 +40,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
+      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "live_request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 5,
@@ -515,6 +515,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "request_id", "name", "target_participant_id"]);
     case "request_ack":
       return exactObject(value, ["type", "request_id"]);
+    case "live_request_ack":
+      return exactObject(value, ["type", "request_id"]);
     case "reaction_send":
       return exactObject(value, ["type", "operation_id", "reaction"]);
     case "chat_send":
@@ -642,12 +644,14 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
   if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
   if (Object.hasOwn(value, "connection_quality") && value.connection_quality !== true) return false;
+  if (Object.hasOwn(value, "live_introspection") && value.live_introspection !== true) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
     ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
     ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
     ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
+    ...(Object.hasOwn(value, "live_introspection") ? ["live_introspection"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -708,6 +712,8 @@ function strictServerFrame(value: unknown): boolean {
       return exactObjectWithCorrelation(value, ["type", "request_id", "name", "actor_participant_id", "expires_at_ms"]);
     case "directed_request_result":
       return exactObjectWithCorrelation(value, ["type", "request_id", "result"]);
+    case "live_request":
+      return exactObjectWithCorrelation(value, ["type", "request_id", "expires_at_ms"]);
     case "reaction":
       return strictReaction(value);
     case "reaction_result":
@@ -906,6 +912,7 @@ export const LiveTargetFrameSchema = Schema.Struct({ type: Schema.Literal("live_
 export const DirectedRequestNameSchema = Schema.Union([Schema.Literal("request_unmute"), Schema.Literal("request_start_camera")]);
 export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, target_participant_id: UuidSchema });
 export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal("request_ack"), request_id: RequestIdSchema });
+export const LiveRequestAckFrameSchema = Schema.Struct({ type: Schema.Literal("live_request_ack"), request_id: RequestIdSchema });
 export const ReactionValues = ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"] as const;
 export const ReactionSchema = Schema.Union([
   Schema.Literal("👍"),
@@ -1314,6 +1321,7 @@ const WelcomeBase = {
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
   media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   connection_quality: Schema.optionalKey(Schema.Literal(true)),
+  live_introspection: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
@@ -1414,6 +1422,7 @@ export const LiveTargetResultFrameSchema = Schema.Struct({
 export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_id: UuidSchema, expires_at_ms: PositiveIntegerSchema, ...ServerCorrelationFields });
 export const DirectedRequestResultSchema = Schema.Union([Schema.Literal("delivered"), Schema.Literal("target_unavailable"), Schema.Literal("expired"), Schema.Literal("rejected"), Schema.Literal("rate_limited")]);
 export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request_result"), request_id: RequestIdSchema, result: DirectedRequestResultSchema, ...ServerCorrelationFields });
+export const LiveRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal("live_request"), request_id: RequestIdSchema, expires_at_ms: PositiveIntegerSchema, ...ServerCorrelationFields });
 export const ReactionEventFrameSchema = Schema.Struct({
   type: Schema.Literal("reaction"),
   event_id: UuidSchema,
@@ -1542,6 +1551,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         LiveTargetFrameSchema,
         DirectedRequestSendFrameSchema,
         RequestAckFrameSchema,
+        LiveRequestAckFrameSchema,
         ReactionSendFrameSchema,
         ChatSendFrameSchema,
         ChatPageRequestFrameSchema,
@@ -1573,6 +1583,7 @@ export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         LiveTargetResultFrameSchema,
         DirectedRequestDeliverFrameSchema,
         DirectedRequestResultFrameSchema,
+        LiveRequestDeliverFrameSchema,
         ReactionEventFrameSchema,
         ReactionResultFrameSchema,
         ChatMessageFrameSchema,

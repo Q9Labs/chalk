@@ -62,6 +62,8 @@ export type ChalkProps = SpaceIntegration &
     readonly onOpenReportProblem?: () => void;
     /** Hides new report actions and disables Send without discarding an open report. */
     readonly reportUnavailableReason?: string;
+    /** The machine reason behind `reportUnavailableReason`, for `report.dialog` `blocked_reason`. */
+    readonly reportUnavailableCode?: "credential_expired" | "reports_unavailable";
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
@@ -134,6 +136,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
                 onClose={() => setReportOpen(false)}
                 onReportProblem={props.onReportProblem}
                 unavailableReason={props.reportUnavailableReason}
+                unavailableCode={props.reportUnavailableCode}
                 diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
                 focusScope={container}
               />

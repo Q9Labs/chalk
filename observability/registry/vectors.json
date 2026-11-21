@@ -49,6 +49,11 @@
       "expect": "fl_9f3a00c1d2e4b5a6"
     },
     {
+      "kind": "problem_report",
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "expect": "pr_b1000000000040008000000000000001"
+    },
+    {
       "kind": "diagnostic_upload",
       "id": "3f9a1c2e-0000-4000-8000-00000000a001",
       "expect": "dg_3f9a1c2e00004000800000000000a001"
@@ -203,6 +208,10 @@
             "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
           },
           {
+            "kind": "problem_report",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
             "kind": "diagnostic_upload",
             "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
           },
@@ -303,6 +312,10 @@
             "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
           },
           {
+            "kind": "problem_report",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
             "kind": "diagnostic_upload",
             "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
           },
@@ -394,6 +407,14 @@
     {
       "text": "usr_",
       "error": "bad_value"
+    },
+    {
+      "text": "pr_b1000000000040008000000000000001",
+      "expect": {
+        "form": "full",
+        "kind": "problem_report",
+        "id": "b1000000-0000-4000-8000-000000000001"
+      }
     },
     {
       "text": "dg_3f9a1c2e00004000800000000000a001",

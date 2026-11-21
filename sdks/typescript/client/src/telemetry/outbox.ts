@@ -1,4 +1,5 @@
 import { ClockEstimator } from "../obs/clock";
+import { SDK_VERSION } from "../version";
 import { createKernel, type BuildInfo, type Kernel, type KernelMode, type ObsRecord } from "../obs/kernel";
 import { startOperation } from "./operation";
 import { entryOf } from "./queue";
@@ -29,7 +30,7 @@ export type TelemetryOutboxOptions = {
   readonly obsMode?: KernelMode;
 };
 
-const DEFAULT_BUILD: BuildInfo = { module: "sdk", env: "production", platform: "web" };
+const DEFAULT_BUILD: BuildInfo = { module: "sdk", env: "production", platform: "web", sdk_version: SDK_VERSION };
 
 /**
  * Everything the client tells the server about a call goes through here. One outbox belongs to one SDK client and lives from before its first join until the client is disposed.
@@ -46,6 +47,8 @@ export class TelemetryOutbox implements TelemetrySink {
   readonly traceparent: string;
   /** The registry kernel of this client. Its records come here, and each takes the next seq of the live source. */
   readonly obs: Kernel;
+  /** The build stamp the kernel puts on every record: module, environment, platform and SDK or app versions. */
+  readonly buildInfo: BuildInfo;
   readonly #clientSessionId: string;
   readonly #startedAt: number;
   readonly #closing = new Set<() => void>();
@@ -66,8 +69,9 @@ export class TelemetryOutbox implements TelemetrySink {
     this.#realm.add(this.#live.id);
     this.traceparent = `00-${hex(platform.uuid())}-${hex(platform.uuid()).slice(0, 16)}-01`;
     this.#clientSessionId = platform.uuid();
+    this.buildInfo = options.build ?? DEFAULT_BUILD;
     const clock = new ClockEstimator({ mono: platform.now, wall: platform.wall ?? Date.now });
-    this.obs = createKernel({ sink: (record) => this.#take(record), build: options.build ?? DEFAULT_BUILD, clock, trail: () => ({ client_session_id: this.#clientSessionId }), mode: options.obsMode ?? "open", uuid: platform.uuid });
+    this.obs = createKernel({ sink: (record) => this.#take(record), build: this.buildInfo, clock, trail: () => ({ client_session_id: this.#clientSessionId }), mode: options.obsMode ?? "open", uuid: platform.uuid });
     this.#startedAt = platform.now();
     const shared = { platform, disposed: () => this.#disposed, step: (step: DeliveryStep) => this.#step(step) };
     this.#journal = new StreamJournal({ ...shared, streams: () => this.#streams(), forget: (stream) => this.#forget(stream) });

@@ -96,6 +96,13 @@ const frameSession = (run) => {
   return /** @type {string} */ (sessions[0]);
 };
 
+/** The ledger source the client's outbox stamped on its frames, as hop (a) handed it off. @param {"positive" | "healthy"} run */
+const frameSource = (run) => {
+  const sources = [...new Set(read(`${FIXTURES}/chain/client-frames.${run}.json`).map((/** @type {{ source_id?: string }} */ frame) => frame.source_id))];
+  assert.equal(sources.length, 1);
+  return /** @type {string} */ (sources[0]);
+};
+
 describe("end.wrong_screen's chain ends in the kernel's verdict", () => {
   it("positive: the chain's rows give the finding on the client's end hop", () => {
     const fixture = handOff("positive");
@@ -140,7 +147,9 @@ describe("end.wrong_screen's chain ends in the kernel's verdict", () => {
       [[origin.measured("client", session), session, run === "positive" ? "connection_lost" : "episode_ended"]],
     );
     assert.equal(observations.find((observation) => observation.fact === "end.episode")?.claim, "maximum_duration");
-    assert.deepEqual(world.sessions, [{ id: session, meaning: "client_session", episode: EPISODE, participant: SEAT }]);
+    // The world names both the session the client stamped on its records and the telemetry source the ledger stored.
+    const source = frameSource(run);
+    assert.deepEqual(world.sessions, [{ id: session, meaning: "client_session", episode: EPISODE, participant: SEAT }, { id: source, meaning: "client_session", episode: EPISODE, participant: SEAT }]);
 
     const { verdict } = checked;
     if (run === "positive") {

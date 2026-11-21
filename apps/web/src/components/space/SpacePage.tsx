@@ -316,6 +316,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           admission={entrance.joined}
           reportsAvailable={reportsAvailable}
           reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+          reportUnavailableCode={reportExpired ? "credential_expired" : undefined}
           onOpenReportProblem={(send, diagnostics) => {
             setReportDialog({ send, diagnostics });
             setReportOpen(true);
@@ -380,6 +381,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {sendReport && callSurface ? (
         <callSurface.ReportProblemDialog
           unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
+          unavailableCode={reportExpired ? "credential_expired" : !reportsAvailable ? "reports_unavailable" : undefined}
+          observe={sendReport.observe}
           diagnostics={ended ? `Connection: ${ended.phase}\nLast error: ${ended.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}

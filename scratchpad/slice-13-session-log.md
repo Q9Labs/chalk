@@ -25,3 +25,34 @@
   v1-client received, entry-url), web (problem-reports op, CallDialogContent surfaces + picker, SpacePage props).
 - Checker side: r2.mjs, live/stores.mjs new-source reads, diagnose live command + view + golden, evidence.mjs harness.
 - Fixtures/chains/fault tests per check; real-Postgres fault runs; proof log; foundation merge + push.
+
+## Chain regen + coverage green (continuation)
+
+- `live.no_reply` hop-z positive fixed: the prior request's ack sat exactly on the fault's `deliveredAt`
+  boundary — `touches` excluded it (half-open) but the citation checker's `overlaps` counted it, so
+  "ack absent" couldn't be proven. `obs_live_chain_test.exs` now stamps the whole prior flow a minute
+  earlier via `with_obs_clock` + `pin_request_times/3` (prior_ms = @requested_ms - 60_000).
+- Chain files raced a concurrent session running `obs-chain-replay.mjs` (it sets files aside to `.replay`);
+  transient "no chain files"/no-finding failures were that rotation, not real breakage.
+- Final state: hop-a diagnostics 7 files/23 tests, hop-c 6/6, hop-z 14/14 read-mode, and
+  `obs-coverage.mjs` reports all six slice-13 symptoms covered end to end.
+- `chain.helpers.ts` renamed to `chain.test.helpers.ts` (imports updated) — shared-worktree change.
+- Also regenerated `end.wrong_screen` hop-d fixtures (its chain files had been regenerated concurrently);
+  coverage gate green again at 8 symptoms.
+
+## Live-readback path fixes (this session)
+
+- `stores.mjs` `declarationSql`: the seats block ended `'[]'::json)),` — one paren too many,
+  closing `json_build_object` before the new reports/uploads/requests/sessions entries. psql
+  parsed them as bare select columns and errored only at the statement's final `))`. Now
+  verified end to end: returns episode/tenant/seats/reports/uploads/requests/sessions.
+- `end-wrong-screen-chain.test.mjs` live readback: `world.sessions` now honestly expects both
+  the stamped `client_session_id` and the `telemetry_sources` envelope source (`frameSource`).
+- Slice-13 SDK fault coverage: `cannot_send` positive gains an earlier send_failed cycle
+  (`journey_id` on the surface, the way `CallDialogContent` emits it); `send_failed` positive
+  gains a prior blocked+sent cycle (`blocked_reason`, `report_id`, `chk_code`, `http_status`);
+  `upload_missing`/`live.upload_missing` positives gain a stored counterpart upload so
+  `live_request_id`/`report_id`/`http_status`/`bytes` all appear; `live.no_reply` positive
+  gains the prior request's full received+stored flow.
+- Result: coverage 8/8, judge 14/14, `obs-chain-replay` all 8 symptoms "wrote exactly the
+  committed files", `check:generated` 14/14, sync hop-c via `with-postgres.sh` 2/2.

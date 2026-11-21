@@ -1,4 +1,6 @@
 import type { TelemetrySink } from "../telemetry/types";
+import type { Kernel } from "../obs/kernel";
+import type { LiveRequestFrame } from "../diagnostics/live";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
@@ -270,6 +272,10 @@ export type V1SyncClientOptions = {
   readonly maxPendingCollaborationRequests?: number;
   /** Asks Sync to hold the entry until `confirmEntered()`; set it only when the caller will call that method. */
   readonly entryConfirmation?: boolean;
+  /** The client's registry kernel; `live_request.received` records through it when given. */
+  readonly obs?: Kernel;
+  /** Answers one accepted `live_request` frame after its ack leaves; the production client builds a diagnostic upload here. */
+  readonly onLiveRequest?: (request: LiveRequestFrame) => void;
 };
 export type V1Socket = SyncSocket;
 

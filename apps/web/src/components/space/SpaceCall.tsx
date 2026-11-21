@@ -17,6 +17,7 @@ export function LocalSpace({
   admission,
   reportsAvailable,
   reportUnavailableReason,
+  reportUnavailableCode,
   onOpenReportProblem,
   displayName,
   defaults,
@@ -27,6 +28,7 @@ export function LocalSpace({
   readonly admission: PublicSpaceAdmission;
   readonly reportsAvailable: boolean;
   readonly reportUnavailableReason?: string;
+  readonly reportUnavailableCode?: "credential_expired" | "reports_unavailable";
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly displayName: string;
   readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
@@ -47,7 +49,7 @@ export function LocalSpace({
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const tenantId = session.reloadMarker().tenantId;
-  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [credential.apiBaseURL, tenantId, session, client]);
+  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection, telemetry: client.telemetry, identity: session.reloadMarker }), [credential.apiBaseURL, tenantId, session, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -70,7 +72,7 @@ export function LocalSpace({
         tenantId,
         callName: spaceName,
         endReason: client.getSnapshot().connection.episodeEndReason,
-        reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }), telemetry: client.telemetry }),
+        reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }), telemetry: client.telemetry, identity: session.reloadMarker }),
         reportExpiresAt: session.mediaExpiresAt(),
       });
     },
@@ -133,6 +135,7 @@ export function LocalSpace({
           client={client}
           onReportProblem={reportsAvailable ? reportProblem : undefined}
           reportUnavailableReason={reportUnavailableReason}
+          reportUnavailableCode={reportUnavailableCode}
           onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
           displayName={displayName}
           defaults={defaults}

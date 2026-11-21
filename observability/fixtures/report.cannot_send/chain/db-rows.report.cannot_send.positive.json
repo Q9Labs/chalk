@@ -1,6 +1,7 @@
 [
   {
     "clock_state": "server",
+    "duration_ms": 2000,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599899500,
@@ -16,8 +17,9 @@
     "tenant_id": "c1000000-0000-4000-8000-000000000001"
   },
   {
-    "client_session_id": "00000000-0000-4000-8000-000000000042",
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "clock_state": "server",
+    "duration_ms": 0,
     "env": "test",
     "episode_id": "1f8fad5b-d9cb-469f-a165-70867728950e",
     "est_server_ms": 1795599901500,

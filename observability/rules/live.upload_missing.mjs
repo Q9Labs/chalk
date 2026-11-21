@@ -67,7 +67,7 @@ export function decide({ readings, window }) {
     if (row.claim !== "stored") {
       if (row.claim === "issued" && window.to_ms < deliveredAt + STORE_MS) return { status: "unknown", reason: "the upload is still inside its 60 s store window" };
       const module = op !== undefined && op.claim === "error" && op.value.reason_code === "report.network" ? "network" : "sdk.diagnostics";
-      return degraded(req, acked[0], { from_ms: deliveredAt, to_ms: deliveredAt + STORE_MS }, "client_upload", module, "not_uploaded", "upload issued, never stored", citeOp(op, row));
+      return degraded(req, acked[0], { from_ms: deliveredAt, to_ms: deliveredAt + STORE_MS }, "client_upload", module, "not_uploaded", "upload issued, never stored", citeOp(op, row, readbacks));
     }
     const readback = readbacks.find((o) => o.value.diagnostic_upload_id === row.value.diagnostic_upload_id);
     if (readback === undefined) return { status: "unknown", reason: "the checker never read the stored object back" };
@@ -78,14 +78,16 @@ export function decide({ readings, window }) {
   return { status: "pass" };
 }
 
-/** @param {Observation|undefined} op @param {Observation} row */
-const citeOp = (op, row) => op === undefined
-  ? [{ text: "upload issued, never stored", evidence: [row.id], window: row.window, absent: null }, { text: "no R2 object for the upload", evidence: [], window: null, absent: "report.readback" }]
-  : [
-      { text: "upload issued, never stored", evidence: [row.id], window: row.window, absent: null },
-      { text: `report.upload error(${op.value.reason_code === "report.network" ? "network" : String(op.value.reason_code)})`, evidence: [op.id], window: op.window, absent: null },
-      { text: "no R2 object for the upload", evidence: [], window: null, absent: "report.readback" },
-    ];
+/** The "no R2 object" fact claims an absence only when provable: no readback observation may overlap the upload's window. @param {Observation|undefined} op @param {Observation} row @param {readonly Observation[]} readbacks */
+const citeOp = (op, row, readbacks) => {
+  const facts = [{ text: "upload issued, never stored", evidence: [row.id], window: row.window, absent: null }];
+  if (op !== undefined) facts.push({ text: `report.upload error(${op.value.reason_code === "report.network" ? "network" : String(op.value.reason_code)})`, evidence: [op.id], window: op.window, absent: null });
+  // Absence is claimable only while nothing of the fact touches the window:
+  // the same inclusive overlap provenAbsent applies in run-check.
+  const touches = (o) => (o.window.from_ms === o.window.to_ms || row.window.from_ms === row.window.to_ms ? o.window.from_ms <= row.window.to_ms && row.window.from_ms <= o.window.to_ms : o.window.from_ms < row.window.to_ms && row.window.from_ms < o.window.to_ms);
+  if (!readbacks.some(touches)) facts.push({ text: "no R2 object for the upload", evidence: [], window: row.window, absent: "report.readback" });
+  return facts;
+};
 
 /** @param {Observation} req @param {Observation} acked @param {import("../../scripts/diagnose-call/proof/evidence.mjs").Window} window @param {string} hop @param {string} module @param {string} cause @param {string} observed @param {import("../../scripts/diagnose-call/proof/profile.mjs").Fact[]} extraFacts */
 function degraded(req, acked, window, hop, module, cause, observed, extraFacts) {

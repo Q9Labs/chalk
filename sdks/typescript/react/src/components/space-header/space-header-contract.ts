@@ -1,6 +1,30 @@
 import type { ReactNode } from "react";
 import type { CallNetwork } from "./call-network";
 
+/** The symptom picker the report dialog shows; the codes ride on `picked_symptom` fields and into the stored report. Other slices own each area's code; "Something else" stores `not_applicable`, and no pick stores `unavailable(not_picked)`. */
+export const REPORT_SYMPTOMS = [
+  { code: "join.no_media", label: "I couldn't join" },
+  { code: "audio.not_heard", label: "Others can't hear me" },
+  { code: "audio.cant_hear", label: "I can't hear others" },
+  { code: "video.frozen", label: "Video froze or went black" },
+  { code: "share.wont_stop", label: "Screen share won't stop" },
+  { code: "board.view_jumped", label: "The whiteboard jumped" },
+  { code: "access.connection_lost", label: "I got disconnected" },
+  { code: "end.wrong_screen", label: "The call ended wrongly" },
+  { code: "not_applicable", label: "Something else" },
+] as const;
+export type ReportSymptom = (typeof REPORT_SYMPTOMS)[number]["code"];
+export type ReportProblemInput = { readonly description: string; readonly diagnostics?: string; readonly pickedSymptom?: ReportSymptom };
+/** The stored report's outcome a sender hands back: its CHK code and the journey the op and surfaces join on. */
+export type ReportProblemResult = { readonly code?: string; readonly journeyId?: string };
+/** A send that failed mid-flight may still carry the journey its records were written under. */
+export type ReportProblemError = Error & { readonly journeyId?: string };
+export type ReportProblem = {
+  (report: ReportProblemInput): void | Promise<ReportProblemResult | void>;
+  /** The kernel `surface` observer the dialog's `report.dialog` surfaces emit through; a host without one leaves surfaces unobserved. */
+  readonly observe?: import("../observed-surface").SurfaceObserver;
+};
+
 export interface SpaceHeaderProps {
   spaceName: string;
   people?: readonly { readonly participantId: string; readonly displayName: string }[];
@@ -16,7 +40,7 @@ export interface SpaceHeaderProps {
   videoOn?: boolean;
   /** The "Turn off video" action of the connection chip. The video stays off until the person turns it back on. */
   onTurnOffVideo?: () => void;
-  onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
+  onReportProblem?: ReportProblem;
   reportUnavailableReason?: string;
   onOpenReportProblem?: () => void;
   shortcuts?: {

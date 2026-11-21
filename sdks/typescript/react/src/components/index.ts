@@ -41,3 +41,7 @@ export type { LogoProps, LogoVariant } from "./logo/Logo";
 
 export { CallLimbo } from "./call-limbo/CallLimbo";
 export type { CallLimboProps } from "./call-limbo/CallLimbo";
+export { ObservedSurface } from "./observed-surface";
+export type { SurfaceObserver } from "./observed-surface";
+export { REPORT_SYMPTOMS } from "./space-header/space-header-contract";
+export type { ReportProblem, ReportProblemError, ReportProblemInput, ReportProblemResult, ReportSymptom } from "./space-header/space-header-contract";

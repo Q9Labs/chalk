@@ -66,11 +66,21 @@ export function decide({ readings, window }) {
     if (!issueCovered) return { status: "unknown", reason: "the upload rows are not complete to the issue window" };
 
     const got = received.find((o) => o.value.live_request_id === id);
-    const evidence = [decision ?? req];
+    const ackWindow = { from_ms: deliveredAt, to_ms: deliveredAt + ACK_MS };
+    const issueWindow = { from_ms: deliveredAt, to_ms: deliveredAt + ISSUE_MS };
+    // Point windows count as touching at the boundary, the same overlap the
+    // proof's citations check applies — a zero-width ack at delivery time
+    // still covers the window.
+    const touches = (/** @type {Observation} */ o, /** @type {{from_ms:number,to_ms:number}} */ w) =>
+      o.window.from_ms === o.window.to_ms || w.from_ms === w.to_ms
+        ? o.window.from_ms <= w.to_ms && w.from_ms <= o.window.to_ms
+        : o.window.from_ms < w.to_ms && w.from_ms < o.window.to_ms;
+    const otherAcks = acks.filter((o) => o.value.live_request_id !== id && touches(o, ackWindow));
+    const otherUploads = issueRows.filter((o) => o.value.live_request_id !== id && touches(o, issueWindow));
     return {
       status: "finding",
       outcome: "degraded",
-      window: { from_ms: deliveredAt, to_ms: deliveredAt + ISSUE_MS },
+      window: issueWindow,
       hop: "client_handler",
       module: "sdk.diagnostics",
       reason: null,
@@ -78,8 +88,14 @@ export function decide({ readings, window }) {
       observed: "delivered, but no ack within 10 s and no upload issued within 30 s",
       facts: [
         { text: `live_request.deliver delivered ${decision?.value.sockets ?? "?"} socket(s)`, evidence: [(decision ?? req).id], window: (decision ?? req).window, absent: null },
-        { text: "no live_request.ack within 10 s", evidence: [], window: { from_ms: deliveredAt, to_ms: deliveredAt + ACK_MS }, absent: "live.ack" },
-        { text: "no upload issued within 30 s", evidence: [], window: { from_ms: deliveredAt, to_ms: deliveredAt + ISSUE_MS }, absent: "report.upload_row" },
+        // Absence is claimable only while nothing of the fact touches the window;
+        // a row that names another request is itself the proof this one's never came.
+        otherAcks.length === 0
+          ? { text: "no live_request.ack within 10 s", evidence: [], window: ackWindow, absent: "live.ack" }
+          : { text: "the acks inside the window all name other requests", evidence: otherAcks.map((o) => o.id), window: ackWindow, absent: null },
+        otherUploads.length === 0
+          ? { text: "no upload issued within 30 s", evidence: [], window: issueWindow, absent: "report.upload_row" }
+          : { text: "the upload rows inside the window all name other requests", evidence: otherUploads.map((o) => o.id), window: issueWindow, absent: null },
         ...(got !== undefined ? [{ text: "the client's handler ran for the frame", evidence: [got.id], window: got.window, absent: null }] : []),
       ],
       hypothesis: got === undefined

@@ -861,6 +861,36 @@ export const CreateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
   }))();
 export type CreateWebhookEndpointRequest = typeof CreateWebhookEndpointRequestSchema.Type;
 
+export const DiagnosticUploadCompleteRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    bytes: Schema.Number,
+    sha256: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  }))();
+export type DiagnosticUploadCompleteRequest = typeof DiagnosticUploadCompleteRequestSchema.Type;
+
+export const DiagnosticUploadIssueRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    live_request_id: Schema.optional(UUIDSchema),
+    report_id: Schema.optional(UUIDSchema),
+    trigger: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type DiagnosticUploadIssueRequest = typeof DiagnosticUploadIssueRequestSchema.Type;
+
+export const DiagnosticUploadIssuedSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+    upload_id: UUIDSchema,
+    url: Schema.String,
+  }))();
+export type DiagnosticUploadIssued = typeof DiagnosticUploadIssuedSchema.Type;
+
+export const DiagnosticUploadStoredSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    stored: Schema.Boolean,
+  }))();
+export type DiagnosticUploadStored = typeof DiagnosticUploadStoredSchema.Type;
+
 export const EmailSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)).pipe(Schema.brand("Email")))();
 export type Email = typeof EmailSchema.Type;
 
@@ -1200,13 +1230,19 @@ export type ProblemReportAvailability = typeof ProblemReportAvailabilitySchema.T
 
 export const ProblemReportRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
+    client_session_id: Schema.optional(UUIDSchema),
     description: Schema.String.check(isCodePointLengthBetween(1, 1000), Schema.isPattern(new RegExp("[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"))),
     diagnostics: Schema.optional(Schema.String.check(isCodePointLengthBetween(0, 2000))),
+    journey_id: Schema.optional(UUIDSchema),
+    picked_symptom: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, Infinity))),
+    sdk_version: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, Infinity))),
   }))();
 export type ProblemReportRequest = typeof ProblemReportRequestSchema.Type;
 
 export const ProblemReportSentSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
+    code: Schema.String,
+    report_id: UUIDSchema,
     sent: Schema.Boolean,
   }))();
 export type ProblemReportSent = typeof ProblemReportSentSchema.Type;
@@ -2857,6 +2893,27 @@ export const CloseCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ 
   }))();
 export type CloseCloudflareSFUTracks429ResponseHeaders = typeof CloseCloudflareSFUTracks429ResponseHeadersSchema.Type;
 
+export const CompleteDiagnosticUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+    upload_id: UUIDSchema,
+  }))();
+export type CompleteDiagnosticUploadPathParams = typeof CompleteDiagnosticUploadPathParamsSchema.Type;
+
+export const CompleteDiagnosticUploadRequestBodySchema = /* @__PURE__ */ (() => DiagnosticUploadCompleteRequestSchema)();
+export type CompleteDiagnosticUploadRequestBody = typeof CompleteDiagnosticUploadRequestBodySchema.Type;
+
+export const CompleteDiagnosticUploadResponseSchema = /* @__PURE__ */ (() => DiagnosticUploadStoredSchema)();
+export type CompleteDiagnosticUploadResponse = typeof CompleteDiagnosticUploadResponseSchema.Type;
+
+export const CompleteDiagnosticUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CompleteDiagnosticUpload429ResponseHeaders = typeof CompleteDiagnosticUpload429ResponseHeadersSchema.Type;
+
 export const CreateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     tenant_id: TenantIdSchema,
@@ -3520,6 +3577,26 @@ export const IssueAccessGrant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type IssueAccessGrant429ResponseHeaders = typeof IssueAccessGrant429ResponseHeadersSchema.Type;
+
+export const IssueDiagnosticUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type IssueDiagnosticUploadPathParams = typeof IssueDiagnosticUploadPathParamsSchema.Type;
+
+export const IssueDiagnosticUploadRequestBodySchema = /* @__PURE__ */ (() => DiagnosticUploadIssueRequestSchema)();
+export type IssueDiagnosticUploadRequestBody = typeof IssueDiagnosticUploadRequestBodySchema.Type;
+
+export const IssueDiagnosticUploadResponseSchema = /* @__PURE__ */ (() => DiagnosticUploadIssuedSchema)();
+export type IssueDiagnosticUploadResponse = typeof IssueDiagnosticUploadResponseSchema.Type;
+
+export const IssueDiagnosticUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type IssueDiagnosticUpload429ResponseHeaders = typeof IssueDiagnosticUpload429ResponseHeadersSchema.Type;
 
 export const IssueEpisodeParticipantSyncTokenPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4861,6 +4938,120 @@ export const ChatUploadNotReadyErrorSchema = ChatUploadNotReadyErrorWireSchema.p
   }),
 );
 
+export class DiagnosticUploadsConflictError extends Schema.TaggedErrorClass<DiagnosticUploadsConflictError>()("DiagnosticUploadsConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.conflict"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsConflictErrorSchema = DiagnosticUploadsConflictErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class DiagnosticUploadsInvalidIdError extends Schema.TaggedErrorClass<DiagnosticUploadsInvalidIdError>()("DiagnosticUploadsInvalidIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.invalid_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsInvalidIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.invalid_id"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsInvalidIdErrorSchema = DiagnosticUploadsInvalidIdErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsInvalidIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsInvalidIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class DiagnosticUploadsNotFoundError extends Schema.TaggedErrorClass<DiagnosticUploadsNotFoundError>()("DiagnosticUploadsNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.not_found"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsNotFoundErrorSchema = DiagnosticUploadsNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class DiagnosticUploadsRequestExpiredError extends Schema.TaggedErrorClass<DiagnosticUploadsRequestExpiredError>()("DiagnosticUploadsRequestExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.request_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsRequestExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.request_expired"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsRequestExpiredErrorSchema = DiagnosticUploadsRequestExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsRequestExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsRequestExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class DiagnosticUploadsStorageUnavailableError extends Schema.TaggedErrorClass<DiagnosticUploadsStorageUnavailableError>()("DiagnosticUploadsStorageUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.storage_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsStorageUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.storage_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsStorageUnavailableErrorSchema = DiagnosticUploadsStorageUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsStorageUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsStorageUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class DiagnosticUploadsTargetNotFoundError extends Schema.TaggedErrorClass<DiagnosticUploadsTargetNotFoundError>()("DiagnosticUploadsTargetNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.target_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const DiagnosticUploadsTargetNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("diagnostic_uploads.target_not_found"),
+    message: Schema.String,
+  }),
+});
+export const DiagnosticUploadsTargetNotFoundErrorSchema = DiagnosticUploadsTargetNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(DiagnosticUploadsTargetNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "DiagnosticUploadsTargetNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class EpisodeCapacityExceededError extends Schema.TaggedErrorClass<EpisodeCapacityExceededError>()("EpisodeCapacityExceededError", {
   error: Schema.Struct({
     code: Schema.Literal("episode.capacity_exceeded"),
@@ -5750,6 +5941,25 @@ export const ReportsDeliveryFailedErrorWireSchema = Schema.Struct({
 export const ReportsDeliveryFailedErrorSchema = ReportsDeliveryFailedErrorWireSchema.pipe(
   Schema.decodeTo(ReportsDeliveryFailedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsDeliveryFailedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ReportsNotStoredError extends Schema.TaggedErrorClass<ReportsNotStoredError>()("ReportsNotStoredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("reports.not_stored"),
+    message: Schema.String,
+  }),
+}) {}
+export const ReportsNotStoredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("reports.not_stored"),
+    message: Schema.String,
+  }),
+});
+export const ReportsNotStoredErrorSchema = ReportsNotStoredErrorWireSchema.pipe(
+  Schema.decodeTo(ReportsNotStoredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsNotStoredError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6957,6 +7167,23 @@ export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
 ]);
 export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksErrorSchema.Type;
 
+export const CompleteDiagnosticUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  DiagnosticUploadsConflictErrorSchema,
+  DiagnosticUploadsInvalidIdErrorSchema,
+  DiagnosticUploadsNotFoundErrorSchema,
+  DiagnosticUploadsRequestExpiredErrorSchema,
+  DiagnosticUploadsStorageUnavailableErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type CompleteDiagnosticUploadError = typeof CompleteDiagnosticUploadErrorSchema.Type;
+
 export const CreateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7481,6 +7708,22 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
 ]);
 export type IssueAccessGrantError = typeof IssueAccessGrantErrorSchema.Type;
 
+export const IssueDiagnosticUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  DiagnosticUploadsConflictErrorSchema,
+  DiagnosticUploadsRequestExpiredErrorSchema,
+  DiagnosticUploadsStorageUnavailableErrorSchema,
+  DiagnosticUploadsTargetNotFoundErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type IssueDiagnosticUploadError = typeof IssueDiagnosticUploadErrorSchema.Type;
+
 export const IssueEpisodeParticipantSyncTokenErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7931,6 +8174,7 @@ export const SendProblemReportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   ReportsDeliveryFailedErrorSchema,
+  ReportsNotStoredErrorSchema,
   ReportsUnavailableErrorSchema,
   RequestInvalidErrorSchema,
   RequestPayloadTooLargeErrorSchema,
@@ -8150,6 +8394,7 @@ export const ChalkOperationPolicies = {
   cancelEpisodeParticipantJoin: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  completeDiagnosticUpload: { maxBodyBytes: 4096, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8178,6 +8423,7 @@ export const ChalkOperationPolicies = {
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   inspectMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  issueDiagnosticUpload: { maxBodyBytes: 4096, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

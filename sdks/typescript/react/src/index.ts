@@ -75,3 +75,5 @@ export { CallReady, type CallReadyProps } from "./components/call-limbo/CallRead
 export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";
 
 export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";
+export { ObservedSurface, REPORT_SYMPTOMS } from "./components";
+export type { ReportProblem, ReportProblemError, ReportProblemInput, ReportProblemResult, ReportSymptom, SurfaceObserver } from "./components";
