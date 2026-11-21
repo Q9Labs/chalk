@@ -71,30 +71,35 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
   const socketFrames = [];
 
   if (sharerEngine === "webkit") await sharer.context.addInitScript(syntheticDisplay);
-  if (fault) await sharer.context.route("**/signal", async (route) => {
-    const request = route.request();
-    if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
-    signals.tracksClose += 1;
-    const closing = JSON.stringify(request.postDataJSON()?.tracks ?? []).replace(/"(trackName|publicationId)":"[^"]*"/g, "").slice(0, 200);
-    if (fault && signals.armed && signals.answered404 < faultCalls) {
-      signals.answered404 += 1;
-      note("intercepted tracks_close #" + signals.tracksClose + ": answered 404 without forwarding", { closing });
-      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "media.connection_not_found" }) });
-    }
-    signals.forwarded += 1;
-    note("tracks_close #" + signals.tracksClose + " forwarded to the API", { closing });
-    return route.continue();
-  });
+  if (fault)
+    await sharer.context.route("**/signal", async (route) => {
+      const request = route.request();
+      if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
+      signals.tracksClose += 1;
+      const closing = JSON.stringify(request.postDataJSON()?.tracks ?? [])
+        .replace(/"(trackName|publicationId)":"[^"]*"/g, "")
+        .slice(0, 200);
+      if (fault && signals.armed && signals.answered404 < faultCalls) {
+        signals.answered404 += 1;
+        note("intercepted tracks_close #" + signals.tracksClose + ": answered 404 without forwarding", { closing });
+        return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "media.connection_not_found" }) });
+      }
+      signals.forwarded += 1;
+      note("tracks_close #" + signals.tracksClose + " forwarded to the API", { closing });
+      return route.continue();
+    });
   // Every SFU signalling call the sharer makes, in order, with the API's answer.
   signals.ops = [];
   sharer.page.on("response", (response) => {
     if (!response.url().endsWith("/signal")) return;
     signals.ops.push({ at: new Date().toISOString().slice(11, 23), op: response.request().postDataJSON()?.op, status: response.status() });
   });
-  sharer.page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => {
-    const text = String(payload);
-    if (socketFrames.length < 60 && /retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
-  }));
+  sharer.page.on("websocket", (socket) =>
+    socket.on("framereceived", ({ payload }) => {
+      const text = String(payload);
+      if (socketFrames.length < 60 && /retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
+    }),
+  );
 
   // While sharing, the stage also shows a "Stop sharing" pill; the toolbar toggle is the one with the aria-label.
   const toolbarStop = sharer.page.getByLabel("Stop sharing", { exact: true });

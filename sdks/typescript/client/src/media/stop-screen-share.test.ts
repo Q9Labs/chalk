@@ -275,6 +275,7 @@ it("stops sharing when the SFU answers every close call with 404, then shares ag
   await startScreen(h);
   const close = vi.spyOn(h.transport, "closeTracks").mockRejectedValue(GONE());
   await stopScreenAsTheController(h);
+  expect(close).toHaveBeenCalled();
   close.mockRestore();
   await shareAgain(h);
 });
