@@ -1,5 +1,6 @@
 import { ComputerScreenShareIcon, MicOff01Icon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { DANGER, drawContained, drawCovered, drawIcon, ellipsize, hash, HAND, IDENTITY_COLORS, initials, inset, NAME_TAG, roundedPath, SPEAKING, strokeTile, TAG_RADIUS, THEMES, TILE_RADIUS, type IconNode, type PaintKit, type Theme } from "./draw.js";
+import { paintAnnotation } from "@q9labsai/chalk-screen-annotation";
 import type { Rect, Scene, SceneParticipant, SceneTile } from "./scene.js";
 
 type WhiteboardTile = Extract<SceneTile, { kind: "whiteboard" }>;
@@ -33,6 +34,10 @@ async function paintPersonTile(kit: PaintKit, tile: PersonTile, theme: Theme): P
     roundedPath(context, tile.rect, radius);
     context.clip();
     context.clearRect(tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height);
+    if (tile.kind === "screen_share" && tile.annotation !== undefined) {
+      const { content, marks, atMs } = tile.annotation;
+      paintAnnotation(context, { rect: content, marks, nowMs: atMs });
+    }
     context.restore();
   } else if (tile.kind === "screen_share") {
     paintUnavailableScreen(kit, tile, theme);

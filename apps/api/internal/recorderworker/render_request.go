@@ -14,20 +14,27 @@ const (
 	maximumFrameStderrBytes   = 64 << 10
 )
 
+// FrameAnnotationSidecar identifies a verified render input staged in this attempt.
+type FrameAnnotationSidecar struct {
+	Path   string
+	SHA256 string
+}
+
 type FrameRenderRequest struct {
-	SchemaVersion      string `json:"schema_version"`
-	RecordingID        string `json:"recording_id"`
-	EpisodeID          string `json:"episode_id"`
-	WorkspaceDirectory string `json:"workspace_directory"`
-	PresentationPath   string `json:"presentation_path"`
-	PresentationSHA256 string `json:"presentation_sha256"`
-	AssetDirectory     string `json:"asset_directory"`
-	DecodedMediaPath   string `json:"decoded_media_path"`
-	DecodedMediaSHA256 string `json:"decoded_media_sha256"`
-	Width              int    `json:"width"`
-	Height             int    `json:"height"`
-	FPS                int    `json:"fps"`
-	DurationMs         int64  `json:"duration_ms"`
+	SchemaVersion      string                  `json:"schema_version"`
+	RecordingID        string                  `json:"recording_id"`
+	EpisodeID          string                  `json:"episode_id"`
+	WorkspaceDirectory string                  `json:"workspace_directory"`
+	PresentationPath   string                  `json:"presentation_path"`
+	PresentationSHA256 string                  `json:"presentation_sha256"`
+	AssetDirectory     string                  `json:"asset_directory"`
+	DecodedMediaPath   string                  `json:"decoded_media_path"`
+	DecodedMediaSHA256 string                  `json:"decoded_media_sha256"`
+	Width              int                     `json:"width"`
+	Height             int                     `json:"height"`
+	FPS                int                     `json:"fps"`
+	DurationMs         int64                   `json:"duration_ms"`
+	AnnotationSidecar  *FrameAnnotationSidecar `json:"-"`
 }
 
 func (request FrameRenderRequest) Validate() error {
@@ -47,6 +54,11 @@ func (request FrameRenderRequest) Validate() error {
 	}
 	if !pathWithin(request.WorkspaceDirectory, request.PresentationPath) || !pathWithin(request.WorkspaceDirectory, request.AssetDirectory) || !pathWithin(request.WorkspaceDirectory, request.DecodedMediaPath) {
 		return errors.New("frame render inputs must stay inside the attempt workspace")
+	}
+	if sidecar := request.AnnotationSidecar; sidecar != nil {
+		if !isLowerSHA256(sidecar.SHA256) || !filepath.IsAbs(sidecar.Path) || !pathWithin(request.WorkspaceDirectory, sidecar.Path) {
+			return errors.New("recording annotation sidecar is not a verified workspace input")
+		}
 	}
 	return nil
 }

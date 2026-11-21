@@ -36,6 +36,7 @@ export default defineConfig(({ mode }) => ({
               for (const file of await readdir(source("src/compose/font-assets"))) {
                 if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
               }
+              await cp(createRequire(import.meta.url).resolve("@q9labsai/chalk-screen-annotation/fonts/Figtree-SemiBold.ttf"), join(fonts, "Figtree-SemiBold.ttf"));
               for (const [folder] of EXCALIDRAW_FONTS) {
                 await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });
               }
@@ -44,6 +45,7 @@ export default defineConfig(({ mode }) => ({
         ],
   resolve: {
     alias: {
+      "@q9labsai/chalk-screen-annotation": source("../../packages/screen-annotation/src/index.ts"),
       "@q9labsai/recording-presentation": source("../../packages/recording-presentation/src/index.ts"),
       "@q9labsai/chalk-react/headless": source("../../sdks/typescript/react/src/headless.ts"),
       "@q9labsai/chalk-whiteboard": source("../../packages/whiteboard/src/index.ts"),
