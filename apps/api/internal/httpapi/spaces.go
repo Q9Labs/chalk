@@ -168,7 +168,6 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
-
 		var list spaces.SpaceList
 		var err error
 		if filtered, ok := service.(SpaceFilterService); ok && request.Options != (spaces.ListOptions{}) {
@@ -183,7 +182,7 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}, {Name: "order", In: "query", Type: "string", Required: false, Enum: []string{string(spaces.ListOrderCreated), string(spaces.ListOrderActive)}}}, paginationParameters()...)...).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}, spaceOrderParameter()}, paginationParameters()...)...).
 		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter, apiErrorInvalidSpaceOrder)...).
 		ErrorRules(spaceRules)
 }
@@ -298,18 +297,6 @@ func decodeListSpacesRequest(r *http.Request) (listSpacesRequest, error) {
 		return listSpacesRequest{}, err
 	}
 	return listSpacesRequest{TenantID: tenantID, Page: page, Options: spaces.ListOptions{Archived: archived, Order: order}}, nil
-}
-
-// spaceOrderQuery reads `order`. Leaving it out or asking for `created` keeps the newest-first order older callers rely on.
-func spaceOrderQuery(r *http.Request) (spaces.ListOrder, error) {
-	switch raw := strings.TrimSpace(r.URL.Query().Get("order")); spaces.ListOrder(raw) {
-	case "", spaces.ListOrderCreated:
-		return "", nil
-	case spaces.ListOrderActive:
-		return spaces.ListOrderActive, nil
-	default:
-		return "", apiErrorInvalidSpaceOrder
-	}
 }
 
 func optionalArchivedQuery(r *http.Request) (*bool, error) {
