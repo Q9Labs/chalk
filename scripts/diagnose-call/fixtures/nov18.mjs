@@ -14,6 +14,8 @@
  * - ep_2d4e on 11 Nov: Haris silent again, so `participant` shows a pattern across days.
  * - a second Haris in tenant AB, so the name alone is ambiguous.
  */
+import { createHash } from "node:crypto";
+
 import { origin } from "../proof/evidence.mjs";
 
 /** @typedef {import("../proof/fixture-world.mjs").World} World */
@@ -64,7 +66,20 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CLIENT_EMITS = Object.freeze([
+  "audio.mic_state",
+  "join.leave",
+  "end.client_screen",
+  "app.marker_scan",
+  "app.previous_run",
+  "app.process_exit",
+  "app.js_fatal",
+  "page.render_crash",
+  "page.crash_surface",
+  "perf.heartbeat",
+  "perf.memory",
+  "perf.thermal",
+]);
 
 /**
  * @param {string} participant
@@ -106,6 +121,26 @@ const ended = (episode, id, when, claim) => row(id, { fact: "end.episode", sourc
 const endScreen = (episode, participant, id, when, claim) =>
   row(id, { fact: "end.client_screen", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: when, to_ms: when }, claim, value: {}, failure: false });
 
+/** The seat's once-per-boot previous_run.read scan, reporting no dead marker. @param {string} episode @param {string} participant @param {string} id @param {number} when */
+const markerScan = (episode, participant, id, when) =>
+  row(id, { fact: "app.marker_scan", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: when, to_ms: when }, claim: "ok", value: { dead_markers: 0 }, failure: false });
+
+/** One quiet heartbeat window for a seat: on screen, no stall, and a measured heap and memory probe under the limit. @param {string} episode @param {string} participant @param {string} id @param {number} to */
+const beat = (episode, participant, id, to) =>
+  row(id, { fact: "perf.heartbeat", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: to - 30_000, to_ms: to }, claim: "30000", value: { window_ms: 30_000, visibility: "visible", long_task_max_ms_30s: 10, memory_state: "measured", heap_probe: "measured", heap_used_mib: 320, heap_limit_mib: 4_096 }, failure: false });
+
+/** The same heartbeat's memory reading under the perf.memory fact: a measured probe reporting a heap below its limit. @param {string} episode @param {string} participant @param {string} id @param {number} to */
+const memory = (episode, participant, id, to) =>
+  row(id, { fact: "perf.memory", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: to - 30_000, to_ms: to }, claim: "measured", value: { memory_state: "measured", heap_probe: "measured", heap_used_mib: 320, heap_limit_mib: 4_096, low_memory: false }, failure: false });
+
+/** The seat's thermal probe reporting nominal: a measured probe that never reached serious. @param {string} episode @param {string} participant @param {string} id @param {number} when */
+const thermal = (episode, participant, id, when) =>
+  row(id, { fact: "perf.thermal", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: when, to_ms: when }, claim: "measured", value: { probe_state: "measured", thermal_state: "nominal", cpu_pressure: "nominal" }, failure: false });
+
+/** Sync's close of the seat's socket at the Episode's end: normal transport close keyed by the seat's hash. @param {string} episode @param {string} participant @param {string} id @param {number} when */
+const closed = (episode, participant, id, when) =>
+  row(id, { fact: "page.tab_close", source: "sync", origin: origin.measured("sync"), subject: { episode }, window: { from_ms: when, to_ms: when }, claim: "client_closed", value: { close_kind: "normal", close_reason: "client_closed", participant_id_hash: createHash("sha256").update(participant).digest("hex") }, failure: false });
+
 /**
  * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
  * @param {readonly string[]} participants
@@ -114,8 +149,8 @@ const endScreen = (episode, participant, id, when, claim) =>
  */
 const episodeWatermarks = (participants, complete_to_ms) => [
   { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
-  { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
-  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
+  { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress", "page.media_close"], build: "sfu 2026.11.12" },
+  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "page.tab_close"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
   ...participants.map((participant) => ({ source: "client", subject: `pt:${participant}`, complete_to_ms, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD })),
 ];
@@ -134,6 +169,11 @@ function quietEpisode(id, tenant, from, minutes, people) {
   const observations = seats.flatMap((s, index) => [
     mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
     ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
+    markerScan(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000b${index + 1}`, from + 2_000),
+    beat(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000c${index + 1}`, from + 60_000),
+    memory(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000a${index + 1}`, from + 60_000),
+    thermal(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000d${index + 1}`, from + 60_000),
+    closed(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000f${index + 1}`, to + 2_000),
     endScreen(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000e${index + 1}`, to + 1_500, "episode_ended"),
   ]);
   observations.push(ended(id, `${id.slice(0, 8)}-0000-4000-8000-0000000000e0`, to, "ended_by_participant"));
@@ -181,6 +221,11 @@ export function nov18() {
     mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
     ended(ep, IDS.evEnd, end, "maximum_duration"),
     ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => endScreen(ep, participant, `9feb0e00-0000-4000-8000-00000000000${index + 1}`, end + 1_000, "time_limit")),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => markerScan(ep, participant, `9feb0b00-0000-4000-8000-00000000000${index + 1}`, start + 2_000)),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => beat(ep, participant, `9feb0c00-0000-4000-8000-00000000000${index + 1}`, start + 60_000)),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => memory(ep, participant, `9feb0a00-0000-4000-8000-00000000000${index + 1}`, start + 60_000)),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => thermal(ep, participant, `9feb0d00-0000-4000-8000-00000000000${index + 1}`, start + 60_000)),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => closed(ep, participant, `9feb0f00-0000-4000-8000-00000000000${index + 1}`, end + 2_000)),
     row(IDS.evLeave, {
       fact: "join.leave",
       source: "client",
@@ -243,7 +288,24 @@ export function nov18() {
   const attemptWindow = { from_ms: at("2026-11-18T10:02:00Z"), to_ms: at("2026-11-18T10:02:40Z") };
   const attempt = {
     declaration: { kind: /** @type {const} */ ("attempt"), id: IDS.attempt, tenant: TH, window: attemptWindow },
-    evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" }] },
+    evidence: {
+      observations: [
+        row("6d5e4f3a-0b1c-4d2e-9f8a-7b6c5d4e3f2a", {
+          fact: "app.marker_scan",
+          source: "client",
+          origin: origin.measured("client", IDS.attempt),
+          subject: { attempt: IDS.attempt },
+          window: { from_ms: attemptWindow.from_ms - 500, to_ms: attemptWindow.from_ms - 500 },
+          claim: "ok",
+          value: { dead_markers: 0 },
+          failure: false,
+        }),
+      ],
+      watermarks: [
+        { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
+        { source: "client", subject: `cs:${IDS.attempt}`, complete_to_ms: ASOF, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD },
+      ],
+    },
   };
   const job = {
     declaration: { kind: /** @type {const} */ ("job"), id: IDS.job, tenant: TH, episode: ep, job_kind: "recording", window: { from_ms: end, to_ms: null } },

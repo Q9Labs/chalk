@@ -64,6 +64,18 @@ const STEPS = {
   "db.recording": (row) => step("recording", "recorder", said("the recording row", row, ["status", "failure_code"])),
   "db.journey_event": (row) => step("leaving", "API", said(`the ledger recorded ${attr(row, "journey_name") ?? "an event"}`, row, ["expiry_path", "last_seen_age_ms"])),
   "db.presence_lease": () => step("leaving", "API", "the Participant's presence lease row exists"),
+  "sync.websocket.closed": (row) => step(attr(row, "close_kind") === "normal" ? "leaving" : "connecting", "Sync", said("Sync closed the websocket", row, ["close_kind", "close_reason", "heartbeat_gap_ms", "socket_age_ms"])),
+  "db.participant_media_sessions": (row) => step(NORMAL_OUTCOMES.includes(attr(row, "sfu_outcome")) ? "leaving" : "connecting", "SFU", said("the durable outcome of the media session", row, ["sfu_outcome", "sfu_cause", "connected", "lifetime_ms"])),
+  "previous_run.read": (row) => step("joining", "client", said("the run scanned for a dead previous run", row, ["outcome", "dead_markers"])),
+  "client.previous_run": (row) => step("joining", "client", said("a marker of a dead previous run", row, ["phase", "clean_exit", "app_state", "last_elapsed_ms", "pid", "launch_id"])),
+  "client.app_exit_info": (row) => step("leaving", "client", said("the OS said why the previous run exited", row, ["exit_reason", "pid", "launch_id"])),
+  "client.app_js_fatal": (row) => step("leaving", "client", said("the run recorded a fatal JS error", row, ["error_name", "error_class", "app_state"])),
+  "client.render_crashed": (row) => step("leaving", "client", said("the client reported a render crash", row, ["render_cause", "error_name", "error_class"])),
+  "client.call_crashed": (row) => step("leaving", "client", said("the crash fallback", row, ["surface_state"])),
+  "client.perf_heartbeat": (row) => step("other", "client", said("a client heartbeat", row, ["window_ms", "long_task_max_ms_30s", "memory_state", "cpu_pressure"])),
+  "client.timer_throttled": (row) => step("other", "client", said("the page throttled the heartbeat timer", row, ["expected_ms", "actual_ms", "visibility"])),
+  "client.memory_warning": (row) => step("other", "client", said("the client got a memory warning", row, ["app_state", "low_memory"])),
+  "client.thermal_changed": (row) => step("other", "client", said("the device's thermal or CPU pressure changed", row, ["thermal_state", "cpu_pressure", "app_state"])),
 };
 
 const generic = (row) => step(row.source === "sync" ? "joining" : "other", { api: "API", sync: "Sync", sfu: "SFU", client: "client", recorder: "recorder", db: "API" }[row.source] ?? "unknown", said(row.event, row, ["state", "cause", "reason", "code", "trigger"]));
