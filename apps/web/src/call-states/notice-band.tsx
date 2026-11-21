@@ -9,7 +9,7 @@ import { NoticeButton } from "../../../../sdks/typescript/react/src/components/t
 export function OfflineNoticeFixture() {
   const [client] = useState(() => {
     const snapshot = liveSnapshot();
-    return createCallStateClient({ ...snapshot, offline: { ...snapshot.offline, notice: "Some changes you made offline were too old to send." } });
+    return createCallStateClient({ ...snapshot, offline: { ...snapshot.offline, notice: "Some changes you made offline were too old to send. They are kept for up to 24 hours." } });
   });
   useEffect(() => () => client.dispose(), [client]);
   return (

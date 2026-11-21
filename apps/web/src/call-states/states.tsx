@@ -50,7 +50,7 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "time-limit-anonymous-ended", title: "Anonymous time limit", render: () => <TimeLimitFixture role="anonymous" ended /> },
   { id: "time-limit-guest-ended", title: "Guest time limit", render: () => <TimeLimitFixture role="guest" ended /> },
 
-  { id: "offline-notice", title: "Expired offline actions join the shared notices", render: () => <OfflineNoticeFixture /> },
+  { id: "offline-notice", title: "Expired offline changes join the shared notices", render: () => <OfflineNoticeFixture /> },
   { id: "notice-band", title: "SDK notices fit the call's available band", render: () => <NoticeBandFixture /> },
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,

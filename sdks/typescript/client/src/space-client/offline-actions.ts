@@ -27,7 +27,7 @@ export type OfflineActionsHold = {
 
 const NOTICE_SCOPE_CHANGED = "Changes you made offline weren’t sent because the call changed.";
 const NOTICE_CONNECTION_ENDED = "Changes you made offline weren’t sent because the call ended.";
-const NOTICE_EXPIRED = "Some changes you made offline were too old to send.";
+const NOTICE_EXPIRED = "Some changes you made offline were too old to send. They are kept for up to 24 hours.";
 const sameSubject = (current: AccessSubject | null, saved: AccessSubject | null): boolean =>
   !!current && !!saved && current.tenantId === saved.tenantId && current.spaceId === saved.spaceId && current.episodeId === saved.episodeId && current.participantId === saved.participantId && current.participantGeneration === saved.participantGeneration;
 
@@ -138,7 +138,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     }
     // Retire before dispatch: a crash after dispatch must never cause a replay.
     if (!this.#clearStorage() && this.#storage) {
-      this.#notice = "Changes you made offline couldn’t be sent safely. Try them again.";
+      this.#notice = "Changes you made offline couldn’t be sent safely. Try them again when storage is available.";
       this.#publish();
       return;
     }
