@@ -199,7 +199,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     ports,
     publicOrigin,
     orb,
-    mediaPlane: orb ? chalkSfuPlane : cloudflareSfuPlane,
+    mediaPlane: cloudflareSfuPlane,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
