@@ -136,6 +136,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   });
   readonly #ice = new IceRestartController({
     restartsInPlace: () => this.#restartsIceInPlace(),
+    needsReceiveTransport: (generation) => this.#capabilities().iceRestart && this.#negotiatedGeneration !== generation,
+    markNegotiated: (generation) => {
+      this.#negotiatedGeneration = generation;
+    },
     currentFailure: () => this.#snapshot.failure,
     generation: () => this.#generation,
     connectionEpoch: () => this.#connectionEpoch,
@@ -143,7 +147,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     bootstrapConnectionId: () => this.#bootstrap.connectionId,
     stopped: () => this.#stopped,
     serializeSDP: (operation) => this.#serializeSDP(operation),
-    createLocalOffer: (connection) => this.#createLocalOffer(connection, "ice_restart", { iceRestart: true }),
+    createLocalOffer: (connection, origin) => this.#createLocalOffer(connection, origin, origin === "ice_restart" ? { iceRestart: true } : undefined),
     addTracks: (input, owner) => this.#signal(() => this.#addTracks(input), owner),
     applyProviderDescription: (response, connection, owner) => this.#applyProviderDescription(response, connection, owner),
     rollbackLocalOffer: (connection) => this.#rollbackLocalOffer(connection),
@@ -170,7 +174,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
-  // The publication the microphone's head start tried to resume, set before the request goes out, until the enable has used it.
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
   #syncPublications: readonly MediaPublication[] = [];
@@ -868,7 +871,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #activatePreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
     try {
-      await this.#connectWithPreparedTracks(states, generation);
+      await this.#publishPreparedTracks(states, generation);
+      await this.#ice.establishReceiveTransport(generation);
       this.#requireGeneration(generation);
       if (this.#pulls.recoveryGeneration !== generation) this.#replacer.attemptedGeneration = null;
       this.#started = true;
@@ -878,34 +882,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
       throw error;
     }
-  }
-  async #connectWithPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
-    await this.#publishPreparedTracks(states, generation);
-    if (!this.#capabilities().iceRestart || this.#negotiatedGeneration === generation) return;
-    await this.#serializeSDP(async () => {
-      this.#requireGeneration(generation);
-      // A pull can negotiate while startup is waiting its turn in the SDP queue.
-      if (this.#negotiatedGeneration === generation) return;
-      const connection = this.#connection;
-      const connectionId = this.#bootstrap.connectionId;
-      const owner = { generation, connectionId };
-      // An empty Episode has no track to pull. Establish ICE and DTLS without opening a device or publishing.
-      connection.addTransceiver("audio", { direction: "recvonly" });
-      try {
-        const sessionDescription = await this.#createLocalOffer(connection, "receive_transport");
-        this.#requireGeneration(generation);
-        if (connection !== this.#connection) throw new CloudflareSFUError("Stale media connection", "stale_generation");
-        const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks: [] }), owner);
-        this.#requireGeneration(generation);
-        if (connection !== this.#connection) throw new CloudflareSFUError("Stale media connection", "stale_generation");
-        await this.#applyProviderDescription(response, connection, owner);
-        this.#requireGeneration(generation);
-        if (connection === this.#connection) this.#negotiatedGeneration = generation;
-      } catch (error) {
-        await this.#rollbackLocalOffer(connection);
-        throw error;
-      }
-    });
   }
   stop(): void {
     if (this.#stopped) {
@@ -2104,11 +2080,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #restartsIceInPlace(): boolean {
     return this.#started && this.#capabilities().iceRestart;
   }
-  // On an SFU that restarts ICE in place, a failed path first restarts ICE on the same session.
-  // While that runs the phase stays recovering. Once it fails, every state, live included, reports
-  // the failure until replacement: the attempt dropped an answer the SFU may have applied, so the
-  // session's ICE credentials can no longer be trusted.
-  // The restart offer keeps every media section, so the SFU keeps the session's publications and subscriptions.
   #addTracks(input: Omit<Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0], "replacementCause">): Promise<CloudflareSFUTracksResponse> {
     // The first signaling attempt on the new binding reports its origin, even if
     // that attempt fails. Extra query parameters also work with older APIs.
@@ -2138,7 +2109,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#locals.tracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
-    await this.#connectWithPreparedTracks(enabled, generation);
+    await this.#publishPreparedTracks(enabled, generation);
+    await this.#ice.establishReceiveTransport(generation);
   }
   #observeRemotePublicationCursor(cursor: PublicationCursor, pullIncomplete = false): void {
     this.#cursor = cursor;

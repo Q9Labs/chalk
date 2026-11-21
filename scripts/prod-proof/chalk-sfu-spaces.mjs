@@ -6,6 +6,7 @@ import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 // release lets the public API set it on an allowlisted Space, and a plane stored that way survives the
 // upgrade. They are found by slug, so no Space ID lives in a variable or a log.
 const automaticPolicy = { recording: "automatic", transcription: "automatic" };
+export const chalkSfuPlane = "chalk_sfu";
 export const chalkSfuSpaces = {
   manual: { slug: "promote-proof-chalk-sfu", policy: manualPolicy },
   automatic: { slug: "promote-proof-chalk-sfu-automatic", policy: automaticPolicy },

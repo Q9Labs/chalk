@@ -148,18 +148,25 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 	if len(transceivers)+added > s.transceiverLimit() {
 		return nil, nil, fmt.Errorf("%w: too many media sections on this connection", ErrCapacityExceeded)
 	}
+	if err := s.checkPublicationCapacity(request.Tracks); err != nil {
+		return nil, nil, err
+	}
+	return sections, existing, nil
+}
+
+func (s *Session) checkPublicationCapacity(tracks []protocol.Track) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fresh := make(map[string]bool, len(request.Tracks))
-	for _, track := range request.Tracks {
+	fresh := make(map[string]bool, len(tracks))
+	for _, track := range tracks {
 		if s.published[track.Mid] == nil && s.publishedByName(track.TrackName) == nil {
 			fresh[track.Mid] = true
 		}
 	}
 	if len(s.published)+len(fresh) > s.node.cfg.MaxPublishedPerSession {
-		return nil, nil, fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
+		return fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
 	}
-	return sections, existing, nil
+	return nil
 }
 
 // transceiverLimit is the most media sections one connection may ever hold.
