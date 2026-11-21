@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "4b3c04077466"
+  @schema_ver "0f24749432eb"
 
   @events %{
     "client.call_ended" => %{
@@ -529,6 +529,17 @@ defmodule ChalkSync.Obs.Registry do
         }
       }
     },
+    "video.camera_bound" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "camera_bound" => %{
+          "required" => true
+        }
+      }
+    },
     "video.camera_capture" => %{
       "kind" => "op",
       "dataset" => "lifecycle",
@@ -760,6 +771,9 @@ defmodule ChalkSync.Obs.Registry do
         },
         "target_layer" => %{
           "required" => false
+        },
+        "pause_reason" => %{
+          "required" => false
         }
       }
     },
@@ -924,7 +938,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"]
+      "values" => ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"]
     },
     "cause" => %{
       "type" => "enum",
@@ -1338,7 +1352,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["l", "m", "h"]
+      "values" => ["low", "high", "single", "other"]
     },
     "layers" => %{
       "type" => "int",
@@ -1764,7 +1778,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["l", "m", "h"]
+      "values" => ["low", "high", "single", "other"]
     },
     "revision" => %{
       "type" => "int",
@@ -1908,7 +1922,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["none", "l", "m", "h"]
+      "values" => ["none", "low", "high", "single", "other"]
     },
     "tenant_id" => %{
       "type" => "id",

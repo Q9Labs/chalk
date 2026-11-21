@@ -280,6 +280,37 @@ func (s *Session) traceDownlink(subscribed []*subscription, now int64, final boo
 		attrs = append(attrs, "feedback_age_ms", *state.FeedbackAgeMs)
 	}
 	s.trail(slog.LevelInfo, EventMediaTransport, attrs...)
+	for _, sub := range subscribed {
+		s.traceSubscriptionForwarded(sub, now, final)
+	}
+}
+
+// traceSubscriptionForwarded writes one video.subscription_forwarded row per camera subscription:
+// the subscription's own delivery counters plus the publisher's ingress counters, so a viewer's
+// diagnose sees the upstream it cannot otherwise reach. Rows land while counters grow, once when
+// they stop, and a final row on close.
+func (s *Session) traceSubscriptionForwarded(sub *subscription, now int64, final bool) {
+	if sub.pub.session == nil || !sub.pub.video() {
+		return
+	}
+	packets := sub.forwardedPackets.Load()
+	if !final && !due(&sub.statsForwarded, &sub.statsIdle, packets) {
+		return
+	}
+	_, reason, _, requested, effective := sub.state()
+	ingress := sub.pub.ingressStats(now)
+	attrs := append(s.subscriptionAttrs(sub),
+		"forwarded_packets", packets, "forwarded_keyframes", sub.forwardedKeyframes.Load(),
+		"requested_layer", layerLabel(requested), "plan", planName(sub.pub.plan),
+		"ingress_packets", ingress.packets, "ingress_lost", ingress.lost, "ingress_repaired", ingress.repaired,
+		"ingress_jitter_ms", round2(ingress.jitterMs), "ingress_bitrate_bps", int64(ingress.bitrate),
+		"ingress_layers_active", ingress.layersActive, "final", final)
+	if reason != "" {
+		attrs = append(attrs, "pause_reason", reason)
+	} else {
+		attrs = append(attrs, "layer", layerLabel(effective))
+	}
+	s.trail(slog.LevelInfo, EventVideoSubscriptionForwarded, attrs...)
 }
 
 // due decides whether a counter that was last written as mark deserves another event: it does

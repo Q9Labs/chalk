@@ -64,6 +64,14 @@ type subscription struct {
 	talliedSwitches counted
 	// resent remembers recent resends by outgoing sequence number.
 	resent [resendMemory]resentPacket
+
+	// forwarded counts what this subscription put on the wire; video.subscription_forwarded
+	// rows report them so a viewer check sees delivery without reading another seat's facts.
+	forwardedPackets   atomic.Uint64
+	forwardedKeyframes atomic.Uint64
+	// statsForwarded and statsIdle mark what the last stats row already said.
+	statsForwarded uint64
+	statsIdle      bool
 	// limit is how far the node holds this subscription below its request.
 	limit serverLimit
 
@@ -184,6 +192,9 @@ func (s *subscription) reselect(views []layerView) int {
 	if target != s.target {
 		s.owner.traceSubscriptionLayer(s, target)
 	}
+	if reason != "" || target != s.target {
+		s.owner.traceSubscriptionSelect(s, reason, target, s.revision)
+	}
 	s.target = target
 	current := s.translator.layer()
 	// An idle layer may resume mid-GOP, so its segment ends here and any
@@ -252,6 +263,10 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 			s.abandonSwitch(switches)
 		}
 		return
+	}
+	s.forwardedPackets.Add(1)
+	if p.switchPoint(s.pub.video()) {
+		s.forwardedKeyframes.Add(1)
 	}
 	if p.unmute != nil {
 		s.owner.traceFirstForwarded(s, p.unmute)

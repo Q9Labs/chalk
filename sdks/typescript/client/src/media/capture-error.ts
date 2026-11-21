@@ -48,7 +48,7 @@ export function failCapture(telemetry: Pick<TelemetrySink, "record"> | undefined
   throw cause;
 }
 
-function errorNameOf(cause: unknown): ErrorName {
+export function errorNameOf(cause: unknown): ErrorName {
   for (let depth = 0, current = cause; depth < 4 && typeof current === "object" && current !== null; depth += 1, current = "cause" in current ? current.cause : undefined) {
     const name = "name" in current && typeof current.name === "string" ? (ERROR_ALIASES[current.name] ?? current.name) : "";
     const known = ERROR_NAMES.find((candidate) => candidate === name);

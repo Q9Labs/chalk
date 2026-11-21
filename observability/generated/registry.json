@@ -1,5 +1,5 @@
 {
-  "schema_ver": "4b3c04077466",
+  "schema_ver": "0f24749432eb",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -654,7 +654,7 @@
     {
       "name": "capture_error_name",
       "type": "enum",
-      "values": ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"],
+      "values": ["NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
       "required": false,
       "sensitivity": null,
       "owner": "areas/video",
@@ -1222,11 +1222,11 @@
     {
       "name": "layer",
       "type": "enum",
-      "values": ["l", "m", "h"],
+      "values": ["low", "high", "single", "other"],
       "required": false,
       "sensitivity": null,
       "owner": "areas/video",
-      "doc": "The forwarded simulcast layer."
+      "doc": "The forwarded layer label."
     },
     {
       "name": "layers",
@@ -1818,11 +1818,11 @@
     {
       "name": "requested_layer",
       "type": "enum",
-      "values": ["l", "m", "h"],
+      "values": ["low", "high", "single", "other"],
       "required": false,
       "sensitivity": null,
       "owner": "areas/video",
-      "doc": "The layer the viewer's selection asked for."
+      "doc": "The layer label the viewer's selection asked for."
     },
     {
       "name": "revision",
@@ -2018,7 +2018,7 @@
     {
       "name": "target_layer",
       "type": "enum",
-      "values": ["none", "l", "m", "h"],
+      "values": ["none", "low", "high", "single", "other"],
       "required": false,
       "sensitivity": null,
       "owner": "areas/video",
@@ -2990,6 +2990,27 @@
       "doc": "A legacy sdk.telemetry call_stats window: one 10 s sample. A window with gap measured nothing and is not a zero."
     },
     {
+      "name": "video.camera_bound",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "video",
+      "test_only": false,
+      "fields": {
+        "camera_bound": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera_bound"
+        }
+      ],
+      "doc": "The camera's bound bit flipped without a state change: a publication was bound (initial -> port) or unbound (port -> null) while the machine stayed live."
+    },
+    {
       "name": "video.camera_capture",
       "kind": "op",
       "dataset": "lifecycle",
@@ -3311,6 +3332,9 @@
           "required": true
         },
         "target_layer": {
+          "required": false
+        },
+        "pause_reason": {
           "required": false
         }
       },
@@ -3682,9 +3706,16 @@
           "claim": "to_state",
           "failure_claims": [],
           "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+        },
+        {
+          "event": "video.camera_bound",
+          "source": "client",
+          "claim": "camera_bound",
+          "failure_claims": [],
+          "fields": ["camera_bound"]
         }
       ],
-      "doc": "The camera machine's transition rows for a seat. Claim: to_state."
+      "doc": "The camera machine's transition rows for a seat, plus bound-bit flips. Claim: to_state on transitions, camera_bound on bound rows."
     },
     {
       "name": "video.camera_track_muted",

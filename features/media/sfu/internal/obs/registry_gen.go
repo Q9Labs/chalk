@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "4b3c04077466"
+const SchemaVer = "0f24749432eb"
 
 // Event names.
 const (
@@ -28,6 +28,7 @@ const (
 	EventSyncEpisodeEnded           = "sync.episode.ended"
 	EventSyncMediaIntent            = "sync.media.intent"
 	EventVideoCallStats             = "video.call_stats"
+	EventVideoCameraBound           = "video.camera_bound"
 	EventVideoCameraCapture         = "video.camera_capture"
 	EventVideoCameraTrackMuted      = "video.camera_track_muted"
 	EventVideoDeviceFailed          = "video.device_failed"
@@ -282,7 +283,7 @@ var registryFields = map[string]fieldSpec{
 	"bytes":                     {typ: "int", group: "event", required: false},
 	"bytes_sent":                {typ: "int", group: "event", required: false},
 	"camera_bound":              {typ: "bool", group: "event", required: false},
-	"capture_error_name":        {typ: "enum", group: "event", required: false, values: []string{"NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "TypeError", "unknown"}},
+	"capture_error_name":        {typ: "enum", group: "event", required: false, values: []string{"NotReadableError", "NotAllowedError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"}},
 	"cause":                     {typ: "enum", group: "event", required: false, values: []string{"newer_allocation", "revoked", "closed", "caller"}},
 	"client_mono_ms":            {typ: "number", group: "clock", required: false},
 	"client_session_id":         {typ: "id", group: "trail", required: false},
@@ -351,7 +352,7 @@ var registryFields = map[string]fieldSpec{
 	"key_frames_decoded":        {typ: "int", group: "event", required: false},
 	"keyframe_repairs":          {typ: "int", group: "event", required: false},
 	"kind":                      {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"layer":                     {typ: "enum", group: "event", required: false, values: []string{"l", "m", "h"}},
+	"layer":                     {typ: "enum", group: "event", required: false, values: []string{"low", "high", "single", "other"}},
 	"layers":                    {typ: "int", group: "event", required: false},
 	"layers_active":             {typ: "int", group: "event", required: false},
 	"local":                     {typ: "bool", group: "event", required: false},
@@ -422,7 +423,7 @@ var registryFields = map[string]fieldSpec{
 	"repaired":                  {typ: "int", group: "event", required: false},
 	"repairs_cut":               {typ: "int", group: "event", required: false},
 	"request_id":                {typ: "id", group: "trail", required: false},
-	"requested_layer":           {typ: "enum", group: "event", required: false, values: []string{"l", "m", "h"}},
+	"requested_layer":           {typ: "enum", group: "event", required: false, values: []string{"low", "high", "single", "other"}},
 	"revision":                  {typ: "int", group: "event", required: false},
 	"rid":                       {typ: "enum", group: "event", required: false, values: []string{"h", "m", "l"}},
 	"rtt_ms":                    {typ: "int", group: "event", required: false},
@@ -446,7 +447,7 @@ var registryFields = map[string]fieldSpec{
 	"subscriptions":             {typ: "int", group: "event", required: false},
 	"surface_state":             {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
 	"sync_connection_id":        {typ: "id", group: "trail", required: false},
-	"target_layer":              {typ: "enum", group: "event", required: false, values: []string{"none", "l", "m", "h"}},
+	"target_layer":              {typ: "enum", group: "event", required: false, values: []string{"none", "low", "high", "single", "other"}},
 	"tenant_id":                 {typ: "id", group: "trail", required: false},
 	"tile_reason":               {typ: "string", group: "event", required: false},
 	"tile_state":                {typ: "enum", group: "event", required: false, values: []string{"picture", "avatar", "paused_for_network", "frozen_frame", "media_state"}},
@@ -484,6 +485,7 @@ var registryEvents = map[string]eventSpec{
 	"sync.episode.ended":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
 	"sync.media.intent":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"operation_id": {required: false}, "source": {required: true}, "enabled": {required: true}}},
 	"video.call_stats":             {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"window_ms": {required: true}, "gap": {required: false}, "gap_ms": {required: false}, "recv_height": {required: false}, "recv_paused_videos": {required: false}, "recv_hidden_videos": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "send_layer": {required: false}, "send_loss_pct": {required: false}, "send_jitter_ms": {required: false}, "recv_loss_pct": {required: false}, "recv_jitter_ms": {required: false}, "rtt_ms": {required: false}, "connection_type": {required: false}, "local_candidate_type": {required: false}, "remote_candidate_type": {required: false}, "relay_protocol": {required: false}, "quality_limitation_reason": {required: false}, "recv_bitrate_bps": {required: false}, "send_bitrate_bps": {required: false}}},
+	"video.camera_bound":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"camera_bound": {required: true}}},
 	"video.camera_capture":         {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: false}, "permission_before": {required: false}, "permission_after": {required: false}, "permission_probe": {required: false}, "policy_allows": {required: false}, "policy_probe": {required: false}}},
 	"video.camera_track_muted":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"muted": {required: true}}},
 	"video.device_failed":          {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"device_kind": {required: true}, "capture_error_name": {required: false}, "permission_state": {required: false}}},
@@ -492,7 +494,7 @@ var registryEvents = map[string]eventSpec{
 	"video.send_window":            {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"rid": {required: true}, "frames_encoded": {required: true}, "bytes_sent": {required: true}, "frame_height": {required: false}, "quality_limitation_reason": {required: false}, "active": {required: false}, "window_ms": {required: true}}},
 	"video.stats_failed":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: true}}},
 	"video.subscription_forwarded": {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "forwarded_packets": {required: true}, "forwarded_keyframes": {required: false}, "layer": {required: false}, "requested_layer": {required: false}, "pause_reason": {required: false}, "ingress_packets": {required: false}, "ingress_lost": {required: false}, "ingress_repaired": {required: false}, "ingress_jitter_ms": {required: false}, "ingress_bitrate_bps": {required: false}, "ingress_layers_active": {required: false}, "plan": {required: false}, "final": {required: false}}},
-	"video.subscription_select":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"paused", "forwarding"}, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "target_layer": {required: false}}},
+	"video.subscription_select":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"paused", "forwarding"}, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "target_layer": {required: false}, "pause_reason": {required: false}}},
 	"video.tile":                   {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"tile_state": {required: false}, "status_shown": {required: false}, "tile_reason": {required: false}}},
 	"video.track_window":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "source": {required: true}, "publication_id": {required: false}, "packets": {required: true}, "lost": {required: false}, "bytes": {required: false}, "frames_received": {required: false}, "frames_decoded": {required: false}, "frames_dropped": {required: false}, "key_frames_decoded": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "pli_sent": {required: false}, "nack_sent": {required: false}, "frame_height": {required: false}, "playout": {required: false}, "window_ms": {required: true}}},
 }

@@ -4,7 +4,9 @@ import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
 import { cameraEffectFailure } from "../media/camera-effects";
-import { describeMediaCaptureError, failCapture } from "../media/capture-error";
+import { describeMediaCaptureError, errorNameOf, failCapture, permissionBlockOf } from "../media/capture-error";
+import { expected, failure, type Kernel } from "../obs/kernel";
+import { TelemetryOutbox } from "../telemetry/outbox";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
 import { displayMediaConstraints, releaseTracks, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
@@ -106,7 +108,7 @@ type CameraOwner = {
 type CameraState =
   | { readonly status: "idle" | "ended" }
   | { readonly status: "capturing"; readonly owner: CameraOwner }
-  | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
+  | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void; readonly onMuted: () => void };
 export type MediaControllerEffects = {
   readonly observeAudioElement: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   readonly configure: (
@@ -249,7 +251,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const changed = this.#store.getSnapshot().media.selection.camera !== deviceId;
       this.#selection.selectCapture("camera", deviceId);
       if (changed && (!this.#sources.camera.localEnabled || !this.#hasTrack("camera"))) {
-        this.#transitionCamera({ status: "ended" });
+        this.#transitionCamera({ status: "ended" }, "device_switched");
       }
       this.#store.select("camera", deviceId);
     }).pipe(Effect.mapError(normalizeMediaError));
@@ -466,7 +468,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if ("owner" in camera && camera.owner.references > 0) return this.#scheduleIdleRelease("camera");
     this.#releasePublished("camera", camera.status === "live" ? camera.track : undefined);
     // Ending the camera state releases its own track and hands the media client a clean slate for the next capture.
-    if (camera.status === "live") this.#transitionCamera({ status: "ended" });
+    if (camera.status === "live") this.#transitionCamera({ status: "ended" }, "released");
   }
   #releasePublished(source: "microphone" | "camera", skip: MediaStreamTrack | undefined): void {
     const tracks = (this.#ports?.media.getSnapshot().localTracks ?? []).filter((publication) => publication.source === source && publication.track !== skip).map((publication) => publication.track);
@@ -1055,16 +1057,37 @@ class MediaControllerRuntime implements MediaControllerEffects {
       ),
     );
   }
-  #transitionCamera(next: CameraState): void {
+  /** The registry kernel on the connection's outbox, when the platform carries one. */
+  #obs(): Kernel | undefined {
+    const telemetry = this.#connection.telemetry;
+    return telemetry instanceof TelemetryOutbox ? telemetry.obs : undefined;
+  }
+  #cameraBound(state: CameraState): boolean {
+    return state.status === "live" && state.publication !== null && state.publication !== "initial";
+  }
+  #transitionCamera(next: CameraState, trigger: "capture_requested" | "captured" | "capture_not_live" | "track_ended" | "device_switched" | "released" | "unbound" | "bound" | "cleared" | "cancelled"): void {
     const previous = this.#camera;
     const sameOwner = "owner" in previous && "owner" in next && previous.owner === next.owner;
-    if (previous.status === "live") previous.track.removeEventListener("ended", previous.onEnded);
+    if (previous.status === "live") {
+      previous.track.removeEventListener("ended", previous.onEnded);
+      previous.track.removeEventListener("mute", previous.onMuted);
+      previous.track.removeEventListener("unmute", previous.onMuted);
+    }
     this.#camera = next;
+    const obs = this.#obs();
+    if (previous.status !== next.status) {
+      obs?.transition("video.camera", previous.status, next.status, trigger);
+      if (this.#cameraBound(next)) obs?.fact("video.camera_bound", { camera_bound: true });
+    } else if (this.#cameraBound(previous) !== this.#cameraBound(next)) obs?.fact("video.camera_bound", { camera_bound: this.#cameraBound(next) });
     if (!sameOwner && "owner" in previous) {
       previous.owner.cancel();
       if (previous.status === "live") this.#selection.releaseTrack(previous.track);
     }
-    if (next.status === "live") next.track.addEventListener("ended", next.onEnded, { once: true });
+    if (next.status === "live") {
+      next.track.addEventListener("ended", next.onEnded, { once: true });
+      next.track.addEventListener("mute", next.onMuted);
+      next.track.addEventListener("unmute", next.onMuted);
+    }
     this.#publish();
     this.#retireCameraPublication(previous, next);
   }
@@ -1104,7 +1127,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!("owner" in state)) throw this.#cancelledCaptureError();
     if (state.status === "live" && state.track !== track) throw this.#cancelledCaptureError();
     const onEnded = () => this.#handleCameraEnded(track);
-    this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
+    const onMuted = () => this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
+    this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded, onMuted }, "captured");
   }
   #handleCameraEnded(track: MediaStreamTrack): void {
     const state = this.#camera;
@@ -1112,7 +1136,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const failure = cameraEffectFailure(track);
     if (failure) this.#connection.recordTransportDiagnostic(failure);
     if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision, "capture_cleanup");
-    this.#transitionCamera({ status: "ended" });
+    this.#transitionCamera({ status: "ended" }, "track_ended");
   }
   #watchMicrophone(track: MediaStreamTrack | null): void {
     if (this.#microphoneWatch?.track === track) return;
@@ -1151,13 +1175,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const state = this.#camera;
     if (state.status !== "live") return;
     if (state.owner.references > 0 && state.track.readyState === "live") {
-      this.#transitionCamera({ ...state, publication: null });
-    } else this.#transitionCamera({ status: "ended" });
+      this.#transitionCamera({ ...state, publication: null }, "unbound");
+    } else this.#transitionCamera({ status: "ended" }, "unbound");
   }
   #clearTracks(): void {
     this.#watchMicrophone(null);
     this.#tracks.clear();
-    this.#transitionCamera({ status: "idle" });
+    this.#transitionCamera({ status: "idle" }, "cleared");
   }
   #cameraSource(purpose: "preview" | "publication", acquire: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown> = (signal) => this.#captureSource("camera", signal)): Effect.Effect<CameraPreview, unknown> {
     return Effect.suspend(() => {
@@ -1169,7 +1193,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #discardEndedCamera(): void {
-    if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
+    if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" }, "track_ended");
   }
   #retireEndedMicrophone(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     const track = this.#tracks.get("microphone");
@@ -1206,7 +1230,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Deferred.doneUnsafe(owner.result, Effect.fail(this.#cancelledCaptureError()));
       },
     };
-    this.#transitionCamera({ status: "capturing", owner });
+    this.#transitionCamera({ status: "capturing", owner }, "capture_requested");
     this.#fork(
       acquire(abort.signal).pipe(
         Effect.tap((track) =>
@@ -1218,9 +1242,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 throw this.#cancelledCaptureError();
               }
               const onEnded = () => this.#handleCameraEnded(track);
-              this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded });
+              const onMuted = () => this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
+              this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded, onMuted }, "captured");
               if (track.readyState !== "live") {
-                this.#transitionCamera({ status: "ended" });
+                this.#transitionCamera({ status: "ended" }, "capture_not_live");
                 throw this.#cancelledCaptureError();
               }
             },
@@ -1241,7 +1266,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       released = true;
       owner.references--;
       const current = this.#camera;
-      if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || current.publication === null)) this.#transitionCamera({ status: "ended" });
+      if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || current.publication === null)) this.#transitionCamera({ status: "ended" }, "released");
     };
     return Deferred.await(owner.result).pipe(
       Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(this.#cancelledCaptureError()))),
@@ -1310,7 +1335,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #cancelCaptures(): void {
-    this.#transitionCamera({ status: "ended" });
+    this.#transitionCamera({ status: "ended" }, "cancelled");
     for (const cancel of this.#pendingCaptures) cancel();
     this.#pendingCaptures.clear();
     this.#screenAudioTrack?.stop();
@@ -1328,9 +1353,66 @@ class MediaControllerRuntime implements MediaControllerEffects {
       (stream?.getTracks() ?? []).filter((track) => track.readyState !== "ended"),
     );
   }
+  /** The permission/policy probes a camera capture records; unavailable APIs report themselves, never a guess. */
+  async #cameraProbes(): Promise<Record<string, string | boolean>> {
+    const fields: Record<string, string | boolean> = {};
+    const permissions = globalThis.navigator?.permissions;
+    if (permissions?.query === undefined) fields.permission_probe = "no_permissions_api";
+    else {
+      try {
+        fields.permission_before = (await permissions.query({ name: "camera" as PermissionName })).state;
+      } catch {
+        fields.permission_probe = "no_permissions_api";
+      }
+    }
+    const policy = (globalThis.document as { featurePolicy?: { allowsFeature?: (feature: string) => boolean }; permissionsPolicy?: { allowsFeature?: (feature: string) => boolean } } | undefined)?.featurePolicy ?? (globalThis.document as { permissionsPolicy?: { allowsFeature?: (feature: string) => boolean } } | undefined)?.permissionsPolicy;
+    if (policy?.allowsFeature === undefined) fields.policy_probe = "no_policy_api";
+    else {
+      try {
+        fields.policy_allows = policy.allowsFeature("camera");
+      } catch {
+        fields.policy_probe = "no_policy_api";
+      }
+    }
+    return fields;
+  }
+  /** One camera capture attempt, measured by the video.camera_capture op. */
+  #captureCameraOnce(captureSignal: AbortSignal): Promise<MediaStream> {
+    const acquire = () => this.#selection.getUserMedia({ audio: false, video: true }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, "camera"));
+    const obs = this.#obs();
+    if (!obs) return acquire();
+    return obs.op(
+      "video.camera_capture",
+      {},
+      async (scope) => {
+        scope.set(await this.#cameraProbes());
+        try {
+          return await acquire();
+        } catch (cause) {
+          const fields: Record<string, string | boolean> = { capture_error_name: errorNameOf(cause) };
+          const permissions = globalThis.navigator?.permissions;
+          if (permissions?.query !== undefined) {
+            try {
+              fields.permission_after = (await permissions.query({ name: "camera" as PermissionName })).state;
+            } catch {
+              fields.permission_probe = "no_permissions_api";
+            }
+          }
+          scope.set(fields);
+          // A refusal is expected(video.permission_denied) only when the probes show the person chose it: the
+          // permission is denied, the block is not the system's, and no policy forbids camera.
+          if (errorNameOf(cause) === "NotAllowedError" && fields.permission_after === "denied" && permissionBlockOf(cause) !== "system") {
+            throw expected("video.permission_denied", cause);
+          }
+          const described = describeMediaCaptureError(cause);
+          throw failure(described.code === "permission_denied" ? "video.capture_denied" : `video.${described.code}`, cause);
+        }
+      },
+    );
+  }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
-      (captureSignal) => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, source)),
+      (captureSignal) => (source === "camera" ? this.#captureCameraOnce(captureSignal) : this.#selection.getUserMedia({ audio: true, video: false }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, source))),
       (stream) =>
         this.#refreshDevices().pipe(
           Effect.ignore,
@@ -1549,7 +1631,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #bindCamera(ports: ConnectionPorts | null): void {
     if (!ports) return;
     const state = this.#camera;
-    if (state.status === "live" && state.publication === "initial") this.#transitionCamera({ ...state, publication: ports.media });
+    if (state.status === "live" && state.publication === "initial") this.#transitionCamera({ ...state, publication: ports.media }, "bound");
   }
   #applyRemoteMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
     for (const publication of ports.media.getSnapshot().remoteTracks) {

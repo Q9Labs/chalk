@@ -79,6 +79,9 @@
         "OverconstrainedError",
         "AbortError",
         "SecurityError",
+        "InvalidStateError",
+        "OperationError",
+        "NotSupportedError",
         "TypeError",
         "unknown"
       ],
@@ -136,9 +139,10 @@
       "type": "enum",
       "values": [
         "none",
-        "l",
-        "m",
-        "h"
+        "low",
+        "high",
+        "single",
+        "other"
       ],
       "sensitivity": null,
       "doc": "The layer the SFU is trying to forward, or none when paused."
@@ -159,23 +163,25 @@
       "name": "layer",
       "type": "enum",
       "values": [
-        "l",
-        "m",
-        "h"
+        "low",
+        "high",
+        "single",
+        "other"
       ],
       "sensitivity": null,
-      "doc": "The forwarded simulcast layer."
+      "doc": "The forwarded layer label."
     },
     {
       "name": "requested_layer",
       "type": "enum",
       "values": [
-        "l",
-        "m",
-        "h"
+        "low",
+        "high",
+        "single",
+        "other"
       ],
       "sensitivity": null,
-      "doc": "The layer the viewer's selection asked for."
+      "doc": "The layer label the viewer's selection asked for."
     },
     {
       "name": "pause_reason",
@@ -908,6 +914,27 @@
       ]
     },
     {
+      "name": "video.camera_bound",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The camera's bound bit flipped without a state change: a publication was bound (initial -> port) or unbound (port -> null) while the machine stayed live.",
+      "fields": {
+        "camera_bound": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera_bound"
+        }
+      ]
+    },
+    {
       "name": "video.camera_track_muted",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1097,7 +1124,8 @@
         "mid": {
           "required": true
         },
-        "target_layer": {}
+        "target_layer": {},
+        "pause_reason": {}
       },
       "emit_sites": [
         {
@@ -1759,7 +1787,7 @@
       "name": "video.camera_state",
       "kind": "state",
       "per": "seat",
-      "doc": "The camera machine's transition rows for a seat. Claim: to_state.",
+      "doc": "The camera machine's transition rows for a seat, plus bound-bit flips. Claim: to_state on transitions, camera_bound on bound rows.",
       "events": [
         {
           "event": "video.camera",
@@ -1769,6 +1797,14 @@
             "to_state",
             "from_state",
             "trigger",
+            "camera_bound"
+          ]
+        },
+        {
+          "event": "video.camera_bound",
+          "source": "client",
+          "claim": "camera_bound",
+          "fields": [
             "camera_bound"
           ]
         }

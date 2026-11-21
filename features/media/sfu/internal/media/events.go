@@ -49,6 +49,8 @@ const (
 	EventPublicationHeld        = "sfu.publication.held"
 	EventUnmuteVoiced           = "sfu.unmute.first_voiced"
 	EventUnmuteForwarded        = "sfu.unmute.first_forwarded"
+	EventVideoSubscriptionSelect    = "video.subscription_select"
+	EventVideoSubscriptionForwarded = "video.subscription_forwarded"
 )
 
 // FieldSources lists every field that may leave the node, and where its value comes from.
@@ -75,6 +77,10 @@ var FieldSources = map[string]FieldSource{
 	"trend": Enum, "decrease_cause": Enum, "decrease_ago_ms": Number, "decrease_from_bps": Number,
 	"decrease_to_bps": Number, "decrease_acked_bps": Number,
 	"unmute_seq": Number, "since_unmute_ms": Number, "since_voiced_ms": Number,
+	"decision": Enum, "decision_id": RestrictedID, "target_layer": Enum, "requested_layer": Enum,
+	"pause_reason": Enum, "forwarded_packets": Number, "forwarded_keyframes": Number, "plan": Enum,
+	"ingress_packets": Number, "ingress_lost": Number, "ingress_repaired": Number,
+	"ingress_jitter_ms": Number, "ingress_bitrate_bps": Number, "ingress_layers_active": Number,
 }
 
 // IDFields name who and where an event happened. Every event may carry them.
@@ -128,5 +134,13 @@ var EventFields = map[string][]string{
 		"mid", "layer", "reason", "estimate_bps", "proven_bps", "delivered_share", "probing", "host_pressure",
 		"acked_bps", "loss_share", "lossy", "trend", "decrease_cause", "decrease_ago_ms", "decrease_from_bps",
 		"decrease_to_bps", "decrease_acked_bps",
+	},
+	EventVideoSubscriptionSelect: {
+		"publisher_id", "source", "media_kind", "mid", "decision", "decision_id", "target_layer", "pause_reason",
+	},
+	EventVideoSubscriptionForwarded: {
+		"publisher_id", "source", "media_kind", "mid", "forwarded_packets", "forwarded_keyframes", "layer",
+		"requested_layer", "pause_reason", "plan", "ingress_packets", "ingress_lost", "ingress_repaired",
+		"ingress_jitter_ms", "ingress_bitrate_bps", "ingress_layers_active", "final",
 	},
 }

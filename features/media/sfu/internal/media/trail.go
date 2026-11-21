@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -192,6 +193,26 @@ func layerLabel(rid string) string {
 		return "low"
 	}
 	return "other"
+}
+
+// traceSubscriptionSelect records the node's forwarding decision for a camera subscription each
+// time the pause or the target changes: the video diagnostics' authoritative hop between a
+// publisher's ingress and a viewer's egress.
+func (s *Session) traceSubscriptionSelect(sub *subscription, reason string, target int, revision uint64) {
+	if s == nil || sub.pub.session == nil || !sub.pub.video() {
+		return
+	}
+	attrs := append(s.subscriptionAttrs(sub), "decision_id", sub.mid+":"+strconv.FormatUint(revision, 10))
+	if reason != "" {
+		attrs = append(attrs, "decision", "paused", "pause_reason", reason)
+	} else {
+		layer := "none"
+		if picked := sub.pub.layer(target); picked != nil {
+			layer = layerLabel(picked.rid)
+		}
+		attrs = append(attrs, "decision", "forwarding", "target_layer", layer)
+	}
+	s.trail(slog.LevelInfo, EventVideoSubscriptionSelect, attrs...)
 }
 
 func (s *Session) traceSubscriptionStopped(sub *subscription) {

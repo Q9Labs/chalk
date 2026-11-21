@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "4b3c04077466",
+  "schema_ver": "0f24749432eb",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -321,6 +321,11 @@
               "event": "video.camera",
               "source": "client",
               "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+            },
+            {
+              "event": "video.camera_bound",
+              "source": "client",
+              "fields": ["camera_bound"]
             }
           ]
         },
@@ -378,6 +383,16 @@
           "name": "video.camera",
           "fields": [],
           "emit_sites": []
+        },
+        {
+          "name": "video.camera_bound",
+          "fields": ["camera_bound"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera_bound"
+            }
+          ]
         },
         {
           "name": "video.camera_track_muted",
@@ -446,6 +461,11 @@
               "event": "video.camera",
               "source": "client",
               "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+            },
+            {
+              "event": "video.camera_bound",
+              "source": "client",
+              "fields": ["camera_bound"]
             }
           ]
         },
@@ -525,6 +545,16 @@
           "name": "video.camera",
           "fields": [],
           "emit_sites": []
+        },
+        {
+          "name": "video.camera_bound",
+          "fields": ["camera_bound"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera_bound"
+            }
+          ]
         },
         {
           "name": "video.device_failed",
@@ -818,7 +848,7 @@
         },
         {
           "name": "video.subscription_select",
-          "fields": ["publisher_id", "source", "mid", "target_layer"],
+          "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
               "path": "features/media/sfu/internal/media/subscription.go",
@@ -1139,7 +1169,7 @@
         },
         {
           "name": "video.subscription_select",
-          "fields": ["publisher_id", "source", "mid", "target_layer"],
+          "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
               "path": "features/media/sfu/internal/media/subscription.go",
@@ -1202,6 +1232,11 @@
               "event": "video.camera",
               "source": "client",
               "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+            },
+            {
+              "event": "video.camera_bound",
+              "source": "client",
+              "fields": ["camera_bound"]
             }
           ]
         },
@@ -1322,6 +1357,16 @@
           "name": "video.camera",
           "fields": [],
           "emit_sites": []
+        },
+        {
+          "name": "video.camera_bound",
+          "fields": ["camera_bound"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera_bound"
+            }
+          ]
         },
         {
           "name": "video.send_window",
@@ -1661,7 +1706,7 @@
         },
         {
           "name": "video.subscription_select",
-          "fields": ["publisher_id", "source", "mid", "target_layer"],
+          "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
               "path": "features/media/sfu/internal/media/subscription.go",
