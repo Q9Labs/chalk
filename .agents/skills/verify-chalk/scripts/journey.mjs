@@ -108,10 +108,12 @@ export async function runJourney(journey, body) {
     const response = await created;
     if (response.status() !== 201) throw new Error(`Start call answered HTTP ${response.status()}`);
     const call = await response.json();
+    const mediaPlane = call.arrival?.access?.media?.provider;
+    if (mediaPlane !== "chalk_sfu") throw new Error(`Start call issued ${mediaPlane ?? "no media grant"}, not chalk_sfu`);
     await host.page.getByRole("button", { name: `Video tile for ${host.name}`, exact: true }).waitFor({ timeout: 60_000 });
     await host.page.getByRole("button", { name: "Close call link", exact: true }).click();
     const { tenant_id: tenantId, space_id: spaceId } = call.arrival.access.subject;
-    return { link: new URL(call.invite_link, web).href, tenantId, spaceId };
+    return { link: new URL(call.invite_link, web).href, tenantId, spaceId, mediaPlane };
   };
 
   const enterLink = async (guest, link) => {
