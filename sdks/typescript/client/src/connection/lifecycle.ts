@@ -13,6 +13,7 @@ import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./in
 import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
+import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, mediaCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
@@ -139,7 +140,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
     (request) =>
       Effect.tryPromise({
         try: (signal) => Promise.resolve(options.access(request ? { ...request, signal } : undefined)),
-        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) ? "access.invalid" : "access.unavailable", cause })),
+        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) || episodeNoLongerActive(cause) ? "access.invalid" : "access.unavailable", cause })),
       }),
     options.accessRefreshWindowMs,
   );
@@ -1125,7 +1126,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         if (model.state === "leaving") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
         const failure = failureFromCause(cause, "media_start_failed", "Media transport needs recovery");
-        if (sfuAccessRejected(cause)) {
+        if (mediaAccessRejected(cause)) {
           stopRejectedMedia();
           return failForSnapshot(failure);
         }
@@ -1386,9 +1387,6 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   if (cause instanceof ConnectionError) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
   if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
   return lifecycleFailure(code, true, message, cause);
-}
-function sfuAccessRejected(cause: unknown): boolean {
-  return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);
 }
 function accessRejected(cause: unknown): boolean {
   return cause instanceof ConnectionError ? cause.code === "invalid_access" : typeof cause === "object" && cause !== null && "code" in cause && (cause.code === "access.invalid" || cause.code === "participant.connection_superseded");
