@@ -370,12 +370,6 @@ func (q operationQuerier) RequeueArtifactJob(ctx context.Context, arg sqlc.Reque
 	LogOperation(ctx, q.logger, "db.query", "RequeueArtifactJob", startedAt, err)
 	return value, err
 }
-func (q operationQuerier) ReleaseArtifactJob(ctx context.Context, arg sqlc.ReleaseArtifactJobParams) (sqlc.ArtifactJob, error) {
-	startedAt := time.Now()
-	value, err := q.next.ReleaseArtifactJob(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReleaseArtifactJob", startedAt, err)
-	return value, err
-}
 func (q operationQuerier) RetryArtifactJob(ctx context.Context, arg sqlc.RetryArtifactJobParams) (sqlc.ArtifactJob, error) {
 	startedAt := time.Now()
 	value, err := q.next.RetryArtifactJob(ctx, arg)
