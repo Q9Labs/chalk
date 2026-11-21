@@ -4,7 +4,7 @@ import { relative, sep } from "node:path";
 
 export function containerNames(config) {
   const id = createHash("sha256").update(config.root).digest("hex").slice(0, 12);
-  return { network: `chalk-dev-${id}`, api: `chalk-dev-${id}-api`, sync: `chalk-dev-${id}-sync`, cache: `chalk-dev-${id}` };
+  return { network: `chalk-dev-${id}`, api: `chalk-dev-${id}-api`, sync: `chalk-dev-${id}-sync`, sfu: `chalk-dev-${id}-sfu`, cache: `chalk-dev-${id}` };
 }
 
 export function containerPath(config, path) {

@@ -17,7 +17,7 @@ const helpText = `Usage: pnpm dev [command] [options]
 Commands: start, status, doctor, logs [service], stop, down, reset
 Options: --profile core|android|mobile|ios, --fresh, --yes, --ready (status only)
 
-start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
+start creates a local Tenant and Space with the configured media plane; its ids are
 in the ready summary. Use the dev fixture for local media runs. Run pnpm dev:smoke
 for the media smoke test.
 
@@ -136,7 +136,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
   }
   await check("sign-in", async () => {
     const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
-    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, fetchImpl });
+    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, mediaPlane: seed.signInMediaPlane, fetchImpl });
     return `seeded guest arrival ${proof.state}`;
   });
   const result = { ok: checks.every((entry) => entry.ok), checks };

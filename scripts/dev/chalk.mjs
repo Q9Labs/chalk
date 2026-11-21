@@ -9,6 +9,7 @@ import { containerArguments, containerEnvironment, containerNames, imageName } f
 import { spawnService, stopProcessGroup, waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
+import { orbSfuAPIEnvironment } from "./orb-sfu.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
@@ -51,7 +52,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       { kind: "generated", path: config.runtimeRoot },
     ],
     resolveSecrets: async (context) => {
-      provider = await resolver();
+      // The API still requires both fields to boot its provider bridge; Orbs never call Cloudflare.
+      provider = config.orb ? { appId: "orb-unused", appSecret: "orb-unused" } : await resolver();
       if (provider?.source) await writeJsonAtomic(`${config.runtimeRoot}/sfu-source.json`, provider.source, { redacted: false });
       return provider;
     },
@@ -104,17 +106,17 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs, fetchImpl: adapters.fetchImpl });
       if (spec.id === "api") {
         const runtimeId = context.runtime.runtimeId || "local";
-        const stableMarker = stableFixtureMarker(config.root);
+        const stableMarker = stableFixtureMarker(config.orb ? `${config.root}:${config.mediaPlane}` : config.root);
         if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
         const fixtureMarker = stableMarker;
-        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
+        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, mediaPlane: config.mediaPlane, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
         invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
-        await seedDashboard({ config, serviceToken: dashboardToken });
+        await seedDashboard({ config, serviceToken: dashboardToken, systemToken });
         // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
-        await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
+        await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin, signInMediaPlane: config.orb ? config.mediaPlane : undefined }, { redacted: false });
       }
       // Ready means the seeded guest is admitted through the web origin, not that a port answers.
-      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, fetchImpl: adapters.fetchImpl });
+      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, mediaPlane: config.orb ? config.mediaPlane : undefined, fetchImpl: adapters.fetchImpl });
     },
     onReady: async ({ runtime }) => {
       output(runtime.state === RuntimeState.DEGRADED ? formatDegradedSummary(config, runtime.status()) : formatReadySummary(config, bindings));
@@ -152,7 +154,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
-        CHALK_DEFAULT_MEDIA_PLANE: "cf_sfu",
+        CHALK_DEFAULT_MEDIA_PLANE: config.mediaPlane,
+        ...orbSfuAPIEnvironment(config),
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,
@@ -204,7 +207,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         VITE_API_URL: config.publicOrigin ?? config.urls.api,
         VITE_CHALK_SYNC_URL: browserSync,
         VITE_CHALK_DEV_SYNC_URL: browserSync,
-        VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu",
+        VITE_CHALK_DEV_MEDIA_PLANE: config.mediaPlane,
       };
     }
     if (serviceId === "mobile") return { ...base, RCT_METRO_PORT: String(config.metro.port) };
@@ -240,12 +243,12 @@ function formatReadySummary(config, bindings) {
     `Web       ${config.urls.public}`,
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
-    "Media     Cloudflare SFU, real provider path",
+    `Media     ${config.mediaPlane}, real provider path`,
     `Dashboard ${config.urls.public}/dashboard/sign-in (Google or Apple, then Ada; Malik is empty)`,
     `Logs      ${config.aggregateLog}`,
     "Proof     pnpm dev:smoke",
     bindings ? `Runtime   ${bindings.marker}` : "",
-    bindings ? `Space     ${bindings.spaceId} (Tenant ${bindings.tenantId}, media plane cf_sfu)` : "",
+    bindings ? `Space     ${bindings.spaceId} (Tenant ${bindings.tenantId}, media plane ${config.mediaPlane})` : "",
   ]
     .filter(Boolean)
     .join("\n");
