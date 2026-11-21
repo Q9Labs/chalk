@@ -48,8 +48,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        {/* Before the script: it appends the dashboard canvas style to the end of head, which must not sit between React's nodes. */}
         <style dangerouslySetInnerHTML={{ __html: CALL_BOOT_CSS }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
         {/* Draws the dashboard's opening frame before the app loads; does nothing on other pages. */}
