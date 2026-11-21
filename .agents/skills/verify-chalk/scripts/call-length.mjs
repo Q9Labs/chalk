@@ -106,7 +106,6 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
   await step("a call started from the dashboard has the same policy", async () => {
     await page.goto(new URL("/dashboard", web).href);
     await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
-    await page.getByRole("button", { name: "Join call", exact: true }).click();
     dashboard = await inCall();
     await hasAccountPolicy(dashboard);
     await shot(ada, "dashboard-call");
