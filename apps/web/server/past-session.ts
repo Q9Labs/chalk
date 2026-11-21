@@ -45,6 +45,18 @@ export async function pastMutation(engine: Engine, action: PastSessionAction): P
         const result = await run(engine.api.transcripts.requestTranscript({ params, payload: { idempotency_key: action.idempotencyKey } }));
         return { transcript: transcriptDTO(result.transcript) };
       }
+      case "playback-event": {
+        // The client sends one of "playback.media_error", "playback.progressed", "playback.player_error_note".
+        const kind = action.name === "playback.player_error_note" ? "surface" : "fact";
+        const fields: Record<string, unknown> = { recording_id: params.recording_id, player_id: action.playerId };
+        if (action.mediaErrorCode !== undefined) fields.media_error_code = action.mediaErrorCode;
+        if (action.urlAgeMs !== undefined) fields.url_age_ms = action.urlAgeMs;
+        if (action.urlLifetimeMs !== undefined) fields.url_lifetime_ms = action.urlLifetimeMs;
+        if (action.mintCount !== undefined) fields.mint_count = action.mintCount;
+        if (action.canPlayMp4 !== undefined) fields.can_play_mp4 = action.canPlayMp4;
+        console.warn(JSON.stringify({ event: action.name, name: action.name, kind, event_id: crypto.randomUUID(), est_server_ms: Date.now(), tenant_id: engine.tenantId, space_id: action.spaceId, episode_id: action.episodeId, ...(kind === "surface" ? { surface_state: action.surfaceState ?? "shown" } : {}), ...fields }));
+        return { ok: true };
+      }
       case "transcripts": {
         return recordingTranscripts(engine, params.recording_id, transcriptPageSize(action.view ?? "past-session"));
       }

@@ -96,6 +96,9 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 				return
 			}
 			receivedAt := time.Now()
+			if dropCaptureRTP() {
+				continue
+			}
 			if !stamped {
 				stamped = true
 				if !firstPacketAt.IsZero() && firstPacketAt.Before(receivedAt) {

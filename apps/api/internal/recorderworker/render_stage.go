@@ -3,15 +3,19 @@ package recorderworker
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 func (attempt *ProductionRenderAttempt) measure(ctx context.Context, stage RenderAttemptStage, action func() error) error {
 	started := time.Now()
-	err := action()
+	err := obs.Op(ctx, obs.EventRecordingRenderStage, func(opCtx context.Context, scope *obs.Scope) error {
+		return action()
+	}, slog.String(obs.FieldJobID, attempt.claim.Envelope.JobID), slog.String(obs.FieldRecordingStage, string(stage)))
 	observability.LogRenderStage(ctx, string(stage), err == nil, time.Since(started))
 	if err != nil {
 		return renderStageError{stage: stage, err: err}

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"log/slog"
 	"errors"
 	"fmt"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
@@ -68,11 +70,17 @@ func (r RecordingPipelineRepository) captureBundleCounts(ctx context.Context, jo
 // failEmptyCapture ends a capture that committed no media. The recorder sees a finished call: the
 // Recording, not the worker, is what failed, and the job row carries the reason.
 func (r RecordingPipelineRepository) failEmptyCapture(ctx context.Context, input recordingpipeline.LeaseInput, counts recordingpipeline.CaptureBundleCounts) (recordingpipeline.Job, error) {
-	return r.Fail(ctx, recordingpipeline.FailureInput{
+	job, err := r.Fail(ctx, recordingpipeline.FailureInput{
 		LeaseInput: input, AvailableAt: time.Now().UTC(), Terminal: true,
 		ErrorCode:   recordingpipeline.ErrorCodeCaptureEmpty,
 		ErrorDetail: fmt.Sprintf("stage=capture_complete outcome=no_media media_bundles=%d gap_bundles=%d", counts.MediaBundles, counts.GapBundles),
 	})
+	if err == nil {
+		obs.Decision(ctx, obs.EventRecordingCaptureEmpty, "empty", "",
+			slog.String(obs.FieldJobID, job.ID.String()), slog.String(obs.FieldRecordingID, job.RecordingID.String()),
+			slog.Int64(obs.FieldRecordingMediaBundles, int64(counts.MediaBundles)), slog.Int64(obs.FieldRecordingGapBundles, int64(counts.GapBundles)))
+	}
+	return job, err
 }
 
 func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID, counts recordingpipeline.CaptureBundleCounts) (recordingpipeline.Job, error) {

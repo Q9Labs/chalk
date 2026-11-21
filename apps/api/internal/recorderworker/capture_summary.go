@@ -33,7 +33,7 @@ func (a *PionCaptureAttempt) finishByCause(runCtx context.Context, err error, wr
 
 // logCaptureSummary is the recorder's own account of what a capture saw. A capture that ends
 // with no packets is the early sign of an empty Recording, before the API counts bundles.
-func logCaptureSummary(ctx context.Context, writer *captureBundleWriter, stop error, result error) {
+func logCaptureSummary(ctx context.Context, a *PionCaptureAttempt, writer *captureBundleWriter, stop error, result error) {
 	if writer == nil {
 		return
 	}
@@ -46,6 +46,8 @@ func logCaptureSummary(ctx context.Context, writer *captureBundleWriter, stop er
 	}
 	slog.Log(ctx, level, "recording capture finished",
 		"event", "recording.capture_finished", "outcome", outcome,
+		"job_id", a.authority.JobID.String(), "recording_id", a.authority.RecordingID.String(),
+		"episode_id", a.authority.EpisodeID.String(), "tenant_id", a.authority.TenantID.String(),
 		"track_count", len(writer.clocks), "packet_count", writer.packets,
 		"stop_cause", captureStopCause(stop))
 }

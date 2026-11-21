@@ -83,6 +83,17 @@ export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, view: z.enum(["call", "past-session"]).optional() }),
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
+  z.strictObject({
+    action: z.literal("playback-event"), spaceId: id, episodeId: id, recordingId: id,
+    name: z.enum(["playback.media_error", "playback.progressed", "playback.player_error_note"]),
+    playerId: z.string().max(128),
+    mediaErrorCode: z.number().int().min(0).max(16).optional(),
+    urlAgeMs: z.number().int().min(0).optional(),
+    urlLifetimeMs: z.number().int().min(0).optional(),
+    mintCount: z.number().int().min(0).max(64).optional(),
+    canPlayMp4: z.enum(["", "maybe", "probably"]).optional(),
+    surfaceState: z.enum(["shown", "dismissed"]).optional(),
+  }),
 ]);
 const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);
 const eventType = z.enum([
@@ -270,6 +281,7 @@ export type ActionResults = {
   transcripts: { transcripts: TranscriptDTO[] };
   "transcript-document": { cues: CueDTO[] };
   "delete-transcript": Ok;
+  "playback-event": Ok;
   "allowed-websites": AllowedWebsitesDTO;
   "set-allowed-websites": AllowedWebsitesDTO;
   "set-recording-render-mode": RecordingRenderSettingsDTO;

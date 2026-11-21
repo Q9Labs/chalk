@@ -2,6 +2,7 @@ package recorderworker
 
 import (
 	"context"
+	"log/slog"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/pion"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
@@ -206,6 +208,21 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	return obs.Op(ctx, obs.EventRecordingCaptureAttempt, func(opCtx context.Context, scope *obs.Scope) error {
+		err := a.run(opCtx)
+		switch {
+		case errors.Is(err, capturesignaling.ErrMediaStopped):
+			return &obs.Classified{Outcome: "expected", Code: obs.ReasonRecordingMediaStopped, Err: err}
+		case errors.Is(err, recordercapture.ErrDeadlineExpired):
+			return &obs.Classified{Outcome: "expected", Code: obs.ReasonRecordingDeadline, Err: err}
+		case err != nil:
+			return &obs.Classified{Outcome: "error", Code: obs.ReasonRecordingCapture, Err: err}
+		}
+		return nil
+	}, slog.String(obs.FieldJobID, a.authority.JobID.String()), slog.String(obs.FieldRecordingID, a.authority.RecordingID.String()))
+}
+
+func (a *PionCaptureAttempt) run(ctx context.Context) error {
 	a.mu.Lock()
 	if a.running || a.closing || a.closed {
 		a.mu.Unlock()
@@ -218,7 +235,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	defer cancel(nil)
 	finish := func(err error, writer *captureBundleWriter) error {
 		result := a.finishByCause(runCtx, err, writer)
-		logCaptureSummary(ctx, writer, err, result)
+		logCaptureSummary(ctx, a, writer, err, result)
 		a.observer.record(writer)
 		return result
 	}

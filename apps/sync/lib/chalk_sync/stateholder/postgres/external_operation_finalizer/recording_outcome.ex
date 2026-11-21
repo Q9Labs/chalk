@@ -4,6 +4,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Obs
   alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
@@ -41,7 +42,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
             applied_revision: revision
         }
 
-        ExternalOperationDecision.build(applied, :original, state, event_id, revision)
+        decision = ExternalOperationDecision.build(applied, :original, state, event_id, revision)
+        Obs.decision("recording.start", "accepted", %{"recording_id" => external.recording_id})
+        decision
 
       [] ->
         Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
@@ -67,6 +70,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
         _event_id = Products.persist_event(connection, episode, external, event, next_state)
         Products.finalize_recording_product(connection, episode, external, "failed", failure_code)
         Control.notify_head(connection, episode, event.revision)
+        Obs.decision("recording.status_failed", "failed", %{"recording_id" => external.recording_id, "recording_error_code" => failure_code})
         next_state
 
       _ ->

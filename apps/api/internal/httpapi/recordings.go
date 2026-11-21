@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"mime"
 	"net/http"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -253,6 +255,12 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 		if err != nil {
 			return recordingDownloadURLResponse{}, err
 		}
+		obs.Fact(ctx, obs.EventPlaybackURLMinted,
+			slog.String(obs.FieldRecordingID, recording.ID.String()),
+			slog.Int64(obs.FieldPlaybackSignedMs, url.SignedAt.UnixMilli()),
+			slog.Int64(obs.FieldPlaybackExpiresMs, url.ExpiresAt.UnixMilli()),
+			slog.Int64(obs.FieldURLLifetimeMs, url.ExpiresAt.Sub(url.SignedAt).Milliseconds()),
+			slog.Bool(obs.FieldPlaybackDownload, request.Body.Download))
 
 		return recordingDownloadURLResponse{
 			Method:       url.Method,

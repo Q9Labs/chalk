@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
@@ -418,6 +419,7 @@ func (r RecordingPipelineRepository) ExpireReservations(ctx context.Context, now
 		reservation := mapExpiredReservation(row)
 		reservations = append(reservations, reservation)
 		logExpiredRecordingReservation(ctx, reservation)
+		obs.Decision(ctx, obs.EventRecordingReservationExpired, "expired", "", slog.String(obs.FieldRecordingID, reservation.RecordingID.String()))
 	}
 	for _, metric := range metrics {
 		metric.Record(ctx)
@@ -624,6 +626,14 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 	if err == nil {
 		if freshClaim {
 			observability.Recorder.RecordJobClaim(ctx, string(claimed.Kind))
+			obs.Transition(ctx, obs.Move{Machine: obs.MachineRecordingJob, From: "pending", To: "leased", Trigger: "claim"},
+				slog.String(obs.FieldJobID, claimed.ID.String()), slog.String(obs.FieldRecordingID, claimed.RecordingID.String()))
+			if claimed.Kind == recordingpipeline.JobKindCapture {
+				obs.Decision(ctx, obs.EventRecordingCaptureClaim, "claimed", "",
+					slog.String(obs.FieldJobID, claimed.ID.String()), slog.String(obs.FieldRecordingID, claimed.RecordingID.String()),
+					slog.Int64(obs.FieldRecordingAttemptCount, int64(claimed.AttemptCount)),
+					slog.Int64(obs.FieldRecordingClaimLagMs, time.Since(claimed.AvailableAt).Milliseconds()))
+			}
 		}
 		return claimed, nil
 	}
@@ -833,6 +843,10 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 	if job.State == recordingpipeline.JobStateTerminalFailure {
 		observability.Recorder.RecordTerminalFailure(ctx, string(job.Kind), row.ErrorCode.String)
 	}
+	if job.State == recordingpipeline.JobStateRetryableFailure || job.State == recordingpipeline.JobStateTerminalFailure {
+		obs.Transition(ctx, obs.Move{Machine: obs.MachineRecordingJob, From: "leased", To: string(job.State), Trigger: "fail"},
+			slog.String(obs.FieldJobID, job.ID.String()), slog.String(obs.FieldRecordingID, job.RecordingID.String()))
+	}
 	return job, nil
 }
 
@@ -889,6 +903,8 @@ func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]reco
 		job := mapRecoveredJob(row)
 		jobs = append(jobs, job)
 		logRecoveredRecordingJob(ctx, job)
+		obs.Transition(ctx, obs.Move{Machine: obs.MachineRecordingJob, From: "leased", To: string(job.State), Trigger: "recover"},
+			slog.String(obs.FieldJobID, job.ID.String()), slog.String(obs.FieldRecordingID, job.RecordingID.String()))
 	}
 	for _, metric := range metrics {
 		metric.Record(ctx)

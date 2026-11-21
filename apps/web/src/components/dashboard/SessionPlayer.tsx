@@ -9,19 +9,23 @@ import type { Ids } from "./session-reads";
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 
 /** The signed address of a recording, or that it couldn't be read. */
-function useRecordingSource(ids: Ids, recordingId: string) {
+function useRecordingSource(ids: Ids, recordingId: string, onMint: (expiresAt: string) => void) {
   const [source, setSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let current = true;
     act("past-session", { action: "recording-url", ...ids, recordingId, download: false }).then(
-      ({ url }) => current && setSource(url),
+      (result) => {
+        if (!current) return;
+        setSource(result.url);
+        onMint(result.expiresAt);
+      },
       () => current && setFailed(true),
     );
     return () => {
       current = false;
     };
-  }, [ids, recordingId]);
+  }, [ids, recordingId, onMint]);
   return { source, failed };
 }
 
@@ -67,11 +71,29 @@ function SpeedButton({ video }: { readonly video: RefObject<HTMLVideoElement | n
 export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly onTime: (seconds: number) => void; readonly seekRef: RefObject<(seconds: number) => void> }) {
   const video = useRef<HTMLVideoElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const { source, failed } = useRecordingSource(ids, recording.id);
+  const playerId = useRef(crypto.randomUUID()).current;
+  const mintedAt = useRef(0);
+  const expiresAt = useRef(0);
+  const mints = useRef(0);
+  const progressed = useRef(false);
+  const onMint = (expires: string) => {
+    mintedAt.current = Date.now();
+    expiresAt.current = Date.parse(expires);
+    mints.current += 1;
+  };
+  const { source, failed } = useRecordingSource(ids, recording.id, onMint);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [time, setTime] = useState(0);
   const [length, setLength] = useState(0);
+
+  const playbackEvent = (name: "playback.media_error" | "playback.progressed" | "playback.player_error_note", extra?: Record<string, unknown>) =>
+    void act("past-session", { action: "playback-event", ...ids, recordingId: recording.id, name, playerId, ...extra }).catch(() => {});
+
+  useEffect(() => {
+    if (failed) playbackEvent("playback.player_error_note", { surfaceState: "shown" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failed]);
 
   const jump = (seconds: number) => {
     const element = video.current;
@@ -103,9 +125,22 @@ export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids;
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onLoadedMetadata={(event) => setLength(event.currentTarget.duration)}
+        onError={() =>
+          playbackEvent("playback.media_error", {
+            mediaErrorCode: video.current?.error?.code ?? 0,
+            urlAgeMs: mintedAt.current ? Date.now() - mintedAt.current : 0,
+            urlLifetimeMs: expiresAt.current && mintedAt.current ? expiresAt.current - mintedAt.current : 0,
+            mintCount: mints.current,
+            canPlayMp4: typeof document !== "undefined" ? document.createElement("video").canPlayType("video/mp4") : "probably",
+          })
+        }
         onTimeUpdate={(event) => {
           setTime(event.currentTarget.currentTime);
           onTime(event.currentTarget.currentTime);
+          if (!progressed.current && event.currentTarget.currentTime >= 2 && !event.currentTarget.paused) {
+            progressed.current = true;
+            playbackEvent("playback.progressed");
+          }
         }}
       />
       <div className="pctl">
