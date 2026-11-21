@@ -51,7 +51,8 @@ await runJourney("screen-annotation-live", async ({ step, person, startCall, joi
   });
 
   await step("Stopping the share removes its annotation plane", async () => {
-    await control(sharer, "Stop sharing");
+    await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
+    await sharer.page.getByLabel("Stop sharing", { exact: true }).click();
     await observer.page
       .locator(canvasSelector)
       .first()
