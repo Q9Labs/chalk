@@ -38,19 +38,20 @@ export async function seedDashboard({ config, serviceToken, systemToken }) {
     await runChecked("docker", ["exec", "-e", "PGOPTIONS=-c chalk.entry_writer=1", config.postgres.container, "psql", "-U", "postgres", "-d", config.databaseName || "chalk_dev", "-v", "ON_ERROR_STOP=1", "-c", statement], { cwd: config.root });
   }
   const mediaPlane = config.mediaPlane;
+  const tenantMedia = mediaPlane === cloudflareSfuPlane ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : { default_media_plane: null };
   const owner = await api("/tenants", {
     name: "Ada's workspace",
     external_id: "google:local:fixture_ada",
     cors_allowed_origins: [...new Set([config.urls.web, config.publicOrigin || config.urls.web])],
-    ...(mediaPlane === cloudflareSfuPlane ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
+    ...tenantMedia,
   });
-  if (config.orb && owner.default_media_plane === cloudflareSfuPlane) {
-    await api(`/tenants/${owner.id}`, { default_media_plane: null }, { method: "PATCH", token: systemToken });
+  if (config.orb && (owner.default_media_plane ?? null) !== tenantMedia.default_media_plane) {
+    await api(`/tenants/${owner.id}`, tenantMedia, { method: "PATCH", token: systemToken });
   }
   const artifacts = {};
   const spaces = await api(`/tenants/${owner.id}/spaces?page_size=100`);
   for (const [index, name] of ["Product planning", "Design review", "Weekly catch-up"].entries()) {
-    const slug = config.orb ? `local-dashboard-chalk-sfu-${index}` : `local-dashboard-${index}`;
+    const slug = config.localOrbSfu ? `local-dashboard-chalk-sfu-${index}` : `local-dashboard-${index}`;
     const space = spaces.spaces.find((item) => item.slug === slug) || (await api(`/tenants/${owner.id}/spaces`, { name, slug, media_plane: mediaPlane, recording_policy: "disabled", transcription_policy: "disabled" }));
     const episodes = await api(`/tenants/${owner.id}/spaces/${space.id}/episodes?page_size=1`);
     let episode = episodes.episodes[0];
