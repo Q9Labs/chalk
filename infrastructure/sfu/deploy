@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Deploys the SFU at the current commit to one Chalk SFU node.
 #
-#   deploy <staging|production|bench> <node address> [--force|--firewall-only]
+#   deploy <staging|production|bench> <node address> [--force|--firewall-only] [--image <chalk-sfu image by digest>]
 #
 # It first makes the node's host firewall allow exactly the control and SSH
 # sources of the environment's cloud firewall, which OpenTofu owns; first boot
 # set the host firewall once, so an address change in OpenTofu alone would leave
 # the old address allowed and the new one blocked. --firewall-only stops there,
-# so an address change needs no restart. Otherwise it builds the image, loads it into the node's rootless Podman, installs the
+# so an address change needs no restart. Otherwise it builds the image, or with --image pulls the digest the nightly cut published
+# (ghcr.io/<owner>/chalk-sfu@sha256:...; its revision label must equal this checkout's HEAD, so the node runs the image that was measured),
+# loads it into the node's rootless Podman, installs the
 # certificates as Podman secrets, the settings and the Quadlet unit, drains the
 # running node, restarts it and checks readiness through an SSH tunnel with an
 # operator certificate. Running it twice converges on the same state. Without
@@ -25,14 +27,22 @@
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
-usage="usage: deploy <staging|production|bench> <node address> [--force|--firewall-only]"
+usage="usage: deploy <staging|production|bench> <node address> [--force|--firewall-only] [--image <chalk-sfu image by digest>]"
 environment="${1:?$usage}"
 host="${2:?$usage}"
-mode="${3:-}"
-case "$mode" in
-  "" | --force | --firewall-only) ;;
-  *) echo "$usage" >&2; exit 2 ;;
-esac
+shift 2
+mode="" image_ref=""
+while (($# > 0)); do
+  case "$1" in
+    --force | --firewall-only) mode="$1"; shift ;;
+    --image) image_ref="${2:?$usage}"; shift 2 ;;
+    *) echo "$usage" >&2; exit 2 ;;
+  esac
+done
+if [[ -n "$image_ref" && ! "$image_ref" =~ ^ghcr\.io/[a-z0-9._-]+/chalk-sfu@sha256:[0-9a-f]{64}$ ]]; then
+  echo "--image takes ghcr.io/<owner>/chalk-sfu@sha256:<digest>, got: ${image_ref}" >&2
+  exit 2
+fi
 case "$environment" in
   staging) spiffe_environment=nightly sfu_environment=staging ;;
   production) spiffe_environment=production sfu_environment=production ;;
@@ -145,9 +155,17 @@ if [[ -n "$(git -C "$sfu_root" status --porcelain -- .)" ]]; then
   echo "features/media/sfu has uncommitted changes; the image must match ${revision}" >&2
   exit 1
 fi
-echo "==> building chalk-sfu at ${revision}"
-docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
-  --file "${node_dir}/Dockerfile" --tag "chalk-sfu:${revision}" --load "$sfu_root" >/dev/null
+if [[ -n "$image_ref" ]]; then
+  echo "==> pulling ${image_ref}"
+  docker pull --quiet --platform linux/amd64 "$image_ref" >/dev/null
+  pulled="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_ref")"
+  [[ "$pulled" == "$revision" ]] || { echo "${image_ref} is revision ${pulled}; check out that revision, or deploy without --image to build ${revision}" >&2; exit 1; }
+  docker tag "$image_ref" "chalk-sfu:${revision}"
+else
+  echo "==> building chalk-sfu at ${revision}"
+  docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+    --file "${node_dir}/Dockerfile" --tag "chalk-sfu:${revision}" --load "$sfu_root" >/dev/null
+fi
 
 echo "==> loading the image"
 docker save "chalk-sfu:${revision}" | as_sfu podman load --quiet >/dev/null

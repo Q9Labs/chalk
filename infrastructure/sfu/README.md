@@ -41,6 +41,14 @@ byte-for-byte against its OpenTofu rendering.
    SFU_SSH_KEY=~/.ssh/chalk-sfu-operator_ed25519 infrastructure/sfu/deploy staging "$(cat ~/.config/chalk-sfu/staging/address)"
    ```
 
+A nightly cut publishes its Chalk SFU image by digest (`ghcr.io/<owner>/chalk-sfu@sha256:...`, also tagged with the SHA; the cut run's summary names it). To install that image instead of building one, check out its revision and pass the digest. The deploy refuses an image whose revision label differs from the checkout:
+
+```sh
+infrastructure/sfu/deploy staging "$(cat ~/.config/chalk-sfu/staging/address)" --image ghcr.io/q9labs/chalk-sfu@sha256:<digest>
+```
+
+To go back to a locally built image, run the same command without `--image`.
+
 To change `control_addresses` or `ssh_addresses`, widen first and narrow second. The cloud firewall and the node's own firewall both filter SSH, and only a deploy run brings the node's firewall into line, so a straight swap locks out both: the cloud firewall drops the old address while the node's firewall still drops the new one, and no run can reach the node to fix it.
 
 1. Apply with the old and the new addresses both listed, then run `deploy <env> <address> --firewall-only` (it changes no running calls).
