@@ -62,7 +62,7 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
   async function archive() {
     try {
       await act("home", { action: "archive-call", spaceId });
-      toast(`Archived ${call.name}`, { icon: "trash" });
+      toast(`Archived ${call.name}`, { icon: "archive" });
       void navigate({ to: "/dashboard" });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
