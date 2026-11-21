@@ -1,3 +1,5 @@
+import { sendEntryEvent } from "./boot-beacon";
+
 const RELOAD_GUARD_KEY = "__chalk_chunk_reload_guard_v1";
 
 function shouldReloadOnce(): boolean {
@@ -44,6 +46,7 @@ function announce(cause: PageFailure): void {
 /** Reloads once for a handled chunk-load failure. Returns whether the page is reloading. */
 export function reloadAfterChunkLoadFailure(reason: unknown): boolean {
   if (typeof window === "undefined" || !matchesChunkLoadFailure(reasonMessage(reason)) || !shouldReloadOnce()) return false;
+  sendEntryEvent("boot.chunk_failed", { reloaded: true });
   announce("chunk_reload");
   reloadLatest();
   return true;

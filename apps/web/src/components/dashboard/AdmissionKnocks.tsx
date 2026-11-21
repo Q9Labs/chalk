@@ -1,7 +1,15 @@
+import { useEffect } from "react";
+
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
+import { entrySender } from "../../lib/boot-beacon";
 import { Avatar } from "../site/Avatar";
 
-export function AdmissionKnocks({ knocks, onDecision }: { readonly knocks: CallPageDTO["knocks"]; readonly onDecision: (handle: string, allow: boolean) => Promise<void> }) {
+export function AdmissionKnocks({ knocks, onDecision, spaceId }: { readonly knocks: CallPageDTO["knocks"]; readonly onDecision: (handle: string, allow: boolean) => Promise<void>; readonly spaceId?: string }) {
+  useEffect(() => {
+    if (!knocks.length) return;
+    const shown = entrySender().surface("dashboard.knocks", { knock_count: knocks.length, ...(spaceId !== undefined ? { space_id: spaceId } : {}) });
+    return () => shown.dismiss();
+  }, [knocks.length, spaceId]);
   if (!knocks.length) return null;
   return (
     <div className="list" aria-label="Asking to join" style={{ marginTop: "var(--space-4)" }}>

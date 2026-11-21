@@ -1,5 +1,6 @@
 import type { JoinOptions } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { entryChannel, entryFact } from "../entry";
 import { NO_DETECTED_DEVICES, watchMediaDevices, type DetectedMediaDevices } from "../internal/media-devices";
 import { playSpeakerTestTone } from "../internal/speaker-test";
 import { useInputLevel } from "../internal/useInputLevel";
@@ -66,7 +67,17 @@ const NOTHING_CAPTURED: Capture = { microphone: null, camera: null, missing: new
  */
 export function usePreJoinDevices(): PreJoinDevices {
   const [choice, setChoice] = useState<RememberedDevices>(() => readRememberedDevices() ?? { microphone: true, camera: true });
-  const [access, setAccess] = useState<PreJoinAccess>("checking");
+  const [accessState, setAccessState] = useState<PreJoinAccess>("checking");
+  const accessRef = useRef<PreJoinAccess>("checking");
+  const setAccess = useCallback((next: PreJoinAccess | ((current: PreJoinAccess) => PreJoinAccess), trigger = "permission_query") => {
+    setAccessState((current) => {
+      const to = typeof next === "function" ? next(current) : next;
+      if (to !== current) entryChannel()?.transition("prejoin.access", current, to, trigger);
+      accessRef.current = to;
+      return to;
+    });
+  }, []);
+  const access = accessState;
   const [devices, setDevices] = useState<DetectedMediaDevices | null>(null);
   const [capture, setCapture] = useState<Capture>(NOTHING_CAPTURED);
   const [generation, setGeneration] = useState(0);
@@ -110,7 +121,7 @@ export function usePreJoinDevices(): PreJoinDevices {
       if (cancelled) return;
       const states = statuses.map((status) => status.state);
       const next = states.includes("denied") ? "blocked" : states.every((state) => state === "granted") ? "granted" : "ask";
-      setAccess((current) => (current === "requesting" ? current : next));
+      setAccess((current) => (current === "requesting" ? current : next), "permission_query");
     };
     void (async () => {
       try {
@@ -118,7 +129,7 @@ export function usePreJoinDevices(): PreJoinDevices {
       } catch {
         // Firefox cannot query camera permission. Device labels appear only once access exists, so they stand in for the answer.
         const known = (await navigator.mediaDevices?.enumerateDevices().catch(() => [])) ?? [];
-        if (!cancelled) setAccess(known.some((device) => device.label !== "") ? "granted" : "ask");
+        if (!cancelled) setAccess(known.some((device) => device.label !== "") ? "granted" : "ask", "device_labels");
         return;
       }
       for (const status of statuses) status.addEventListener("change", settle);
@@ -161,7 +172,7 @@ export function usePreJoinDevices(): PreJoinDevices {
       const tracks = { microphone: opened.stream?.getAudioTracks()[0] ?? null, camera: opened.stream?.getVideoTracks()[0] ?? null };
       for (const track of [tracks.microphone, tracks.camera]) track?.addEventListener("ended", () => setGeneration((count) => count + 1), { once: true });
       setCapture({ ...tracks, missing: opened.missing, denied: opened.denied });
-      setAccess(opened.denied ? "blocked" : "granted");
+      setAccess(opened.denied ? "blocked" : "granted", "preview_open");
       refreshDevices.current();
     });
     return () => {
@@ -210,7 +221,7 @@ export function usePreJoinDevices(): PreJoinDevices {
   return {
     access,
     requestAccess: () => {
-      setAccess("requesting");
+      setAccess("requesting", "request");
       update({ microphone: true, camera: true });
     },
     microphones,
@@ -275,6 +286,10 @@ async function attempt(microphone: Request, camera: Request, held: MediaStream[]
     held.push(stream);
     return { stream };
   } catch (cause) {
+    entryFact("prejoin.device_error", {
+      device: microphone && camera ? "camera_and_microphone" : microphone ? "microphone" : "camera",
+      error_name: cause instanceof Error ? cause.name : "Error",
+    });
     return { failure: classify(cause) };
   }
 }

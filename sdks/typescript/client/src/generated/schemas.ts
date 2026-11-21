@@ -864,6 +864,12 @@ export type CreateWebhookEndpointRequest = typeof CreateWebhookEndpointRequestSc
 export const EmailSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)).pipe(Schema.brand("Email")))();
 export type Email = typeof EmailSchema.Type;
 
+export const RequestRecordingExportRequestSchema = /* @__PURE__ */ (() => Schema.Struct({}))();
+export type RequestRecordingExportRequest = typeof RequestRecordingExportRequestSchema.Type;
+
+export const EmptySchema = /* @__PURE__ */ (() => RequestRecordingExportRequestSchema)();
+export type Empty = typeof EmptySchema.Type;
+
 export const EntranceInviteSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     space_invite_token: Schema.String.check(Schema.isMinLength(1)),
@@ -1380,9 +1386,6 @@ export const RemoveEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
     participant_generation: Schema.Number,
   }))();
 export type RemoveEpisodeParticipantRequest = typeof RemoveEpisodeParticipantRequestSchema.Type;
-
-export const RequestRecordingExportRequestSchema = /* @__PURE__ */ (() => Schema.Struct({}))();
-export type RequestRecordingExportRequest = typeof RequestRecordingExportRequestSchema.Type;
 
 export const RequestTranscriptRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4460,6 +4463,9 @@ export const UploadCallStats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type UploadCallStats429ResponseHeaders = typeof UploadCallStats429ResponseHeadersSchema.Type;
+
+export const UploadEntryEventsResponseSchema = /* @__PURE__ */ (() => EmptySchema)();
+export type UploadEntryEventsResponse = typeof UploadEntryEventsResponseSchema.Type;
 
 export const UploadTelemetryPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -8215,6 +8221,7 @@ export const ChalkOperationPolicies = {
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   uploadCallStats: { maxBodyBytes: 32768, rateLimit: { limit: 30, policy: "call_stats.participant", windowSeconds: 600 } },
+  uploadEntryEvents: { rateLimit: { limit: 4194304, policy: "v1.entry.intake", windowSeconds: 86400 } },
   uploadTelemetry: { maxBodyBytes: 65536, rateLimit: { limit: 4194304, policy: "v1.telemetry.intake", windowSeconds: 8100 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];

@@ -1,0 +1,195 @@
+{
+ "description": "The guest's knock expired while a host was authenticated and positioned, but the host's dashboard never showed the knock and nothing was decided.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "episode",
+  "id": "e0000000-0000-4000-8000-000000000003",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "features": [
+   "media"
+  ],
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  },
+  "seats": [
+   {
+    "participant": "b0000000-0000-4000-8000-000000000004",
+    "name": "Spec",
+    "role": "guest",
+    "can_publish": true,
+    "generations": [
+     1
+    ],
+    "connections": [
+     "cn_1"
+    ],
+    "window": {
+     "from_ms": 1795600000000,
+     "to_ms": 1795603600000
+    },
+    "person": {
+     "kind": "guest",
+     "device": "dev_g",
+     "name": "Spec"
+    }
+   },
+   {
+    "participant": "c0000000-0000-4000-8000-000000000005",
+    "name": "Spec",
+    "role": "host",
+    "can_publish": true,
+    "generations": [
+     1
+    ],
+    "connections": [
+     "cn_1"
+    ],
+    "window": {
+     "from_ms": 1795600000000,
+     "to_ms": 1795603600000
+    },
+    "person": {
+     "kind": "user",
+     "id": "d0000000-0000-4000-8000-000000000006",
+     "name": "Host",
+     "tenant": "10000000-0000-4000-8000-000000000001"
+    }
+   }
+  ]
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "sync.admission_requested",
+   "event_id": "ev_sync_admission_requested_052",
+   "est_server_ms": 1795600005000,
+   "admission_request_id": "90000000-0000-4000-8000-000000000008",
+   "participant_id": "b0000000-0000-4000-8000-000000000004",
+   "event": "admission_requested",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.db.sync_request",
+   "event_id": "ev_admission_db_sync_request_053",
+   "est_server_ms": 1795600005000,
+   "admission_status": "expired",
+   "requested_at": 1795600005000,
+   "expires_at": 1795600305000,
+   "decided_at": null,
+   "admission_request_id": "90000000-0000-4000-8000-000000000008",
+   "participant_id": "b0000000-0000-4000-8000-000000000004",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "sync.websocket.authenticated",
+   "event_id": "ev_sync_websocket_authenticated_054",
+   "est_server_ms": 1795600001000,
+   "participant_id_hash": "h_host",
+   "participant_id": "c0000000-0000-4000-8000-000000000005",
+   "event": "sync.websocket.authenticated",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "dashboard.call_page",
+   "event_id": "ev_dashboard_call_page_055",
+   "est_server_ms": 1795600010000,
+   "surface_state": "shown",
+   "shown_ms": 1795600010000,
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "user_id": "d0000000-0000-4000-8000-000000000006",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "edge.call_status",
+   "event_id": "ev_edge_call_status_056",
+   "est_server_ms": 1795600010000,
+   "http_status": 200,
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "user_id": "d0000000-0000-4000-8000-000000000006",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.knock_notice",
+   "event_id": "ev_admission_knock_notice_057",
+   "est_server_ms": 1795600020000,
+   "surface_state": "dismissed",
+   "shown_ms": 0,
+   "admission_request_id": "99999999-0000-4000-8000-000000000099",
+   "participant_id": "c0000000-0000-4000-8000-000000000005",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "dashboard.knocks",
+   "event_id": "ev_dashboard_knocks_058",
+   "est_server_ms": 1795600020000,
+   "surface_state": "dismissed",
+   "shown_ms": 0,
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "user_id": "d0000000-0000-4000-8000-000000000006",
+   "participant_id": "c0000000-0000-4000-8000-000000000005",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.decide",
+   "event_id": "ev_admission_decide_059",
+   "est_server_ms": 1795600021000,
+   "outcome": "ok",
+   "reason_code": "",
+   "duration_ms": 50,
+   "admission_request_id": "99999999-0000-4000-8000-000000000099",
+   "participant_id": "c0000000-0000-4000-8000-000000000005",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.db.request",
+   "event_id": "db:req:90000000",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "decided_at": null,
+   "decided_by": null,
+   "expires_at": 1795600305000,
+   "requested_at": 1795600005000,
+   "est_server_ms": 1795600005000,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "admission_status": "expired",
+   "admission_request_id": "90000000-0000-4000-8000-000000000008",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.db.participant",
+   "event_id": "db:pt:c0000000",
+   "joined_at": 1795599993000,
+   "episode_id": "e0000000-0000-4000-8000-000000000003",
+   "est_server_ms": 1795600004000,
+   "participant_id": "c0000000-0000-4000-8000-000000000005",
+   "manage_admission": true,
+   "participant_status": "active",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/admission.unanswered/chain/admission.unanswered.rows.positive.json"
+ ]
+}

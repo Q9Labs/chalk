@@ -1,5 +1,9 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+import { bootBeaconScript, markAppShown, sendEntryEvent } from "../lib/boot-beacon";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
+import { EntrySurface } from "../lib/entry-surface";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
@@ -32,12 +36,33 @@ export const Route = createRootRoute({
   }),
   shellComponent: RootDocument,
   component: RootComponent,
+  errorComponent: RootErrorComponent,
+  onCatch: (error) => {
+    sendEntryEvent("boot.render_failed", { error_name: error instanceof Error ? error.name : "Error" });
+  },
 });
 function RootComponent() {
+  useEffect(() => {
+    markAppShown();
+  }, []);
   return (
-    <ThemeProvider>
-      <Outlet />
-    </ThemeProvider>
+    <EntrySurface name="boot.app" fields={{}}>
+      <ThemeProvider>
+        <Outlet />
+      </ThemeProvider>
+    </EntrySurface>
+  );
+}
+function RootErrorComponent() {
+  return (
+    <EntrySurface name="boot.error_page" fields={{}}>
+      <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+        <p>Something went wrong. Reload to try again.</p>
+        <button type="button" onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    </EntrySurface>
   );
 }
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -48,6 +73,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: bootBeaconScript() }} />
       </head>
       <body>
         {children}

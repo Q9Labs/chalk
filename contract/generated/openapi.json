@@ -912,6 +912,30 @@
         }
       }
     },
+    "/v1/public/entry": {
+      "post": {
+        "operationId": "uploadEntryEvents",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Empty"
+                }
+              }
+            },
+            "description": "Accepted"
+          }
+        },
+        "security": [],
+        "summary": "Upload entry events",
+        "x-chalk-rate-limit": {
+          "limit": 4194304,
+          "name": "v1.entry.intake",
+          "window_seconds": 86400
+        }
+      }
+    },
     "/v1/public/space-invite-arrival": {
       "delete": {
         "operationId": "leaveSpacePublicInviteArrival",
@@ -16028,6 +16052,9 @@
         "format": "email",
         "type": "string",
         "x-chalk-brand": "Email"
+      },
+      "Empty": {
+        "$ref": "#/components/schemas/RequestRecordingExportRequest"
       },
       "EntranceInvite": {
         "additionalProperties": false,

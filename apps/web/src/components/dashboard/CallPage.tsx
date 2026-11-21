@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
+import { entrySender } from "../../lib/boot-beacon";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
@@ -17,6 +18,10 @@ import { ErrorPanel, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } fro
 import { Menu, RenameArchiveItems } from "./menu";
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
+  useEffect(() => {
+    const shown = entrySender().surface("dashboard.call_page", { space_id: spaceId });
+    return () => shown.dismiss();
+  }, [spaceId]);
   const refresh = useRef(newCallRefresh(spaceId));
   const { state, reload, update } = useLoad(() => loadCallPage(spaceId, refresh.current), `call:${spaceId}`, {
     visibility: "status",
@@ -69,13 +74,16 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
   async function answerKnock(handle: string, allow: boolean) {
     if (pendingDecisions.current.has(handle) || knocks.find((knock) => knock.handle === handle)?.decisionState === "in_flight") return;
     pendingDecisions.current.add(handle);
+    const decide = entrySender().op("admission.decide", { admission_request_id: handle });
     try {
       const intent = `${allow ? "approve" : "deny"}:${handle}`;
       await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intents.key(intent) });
       intents.done(intent);
+      decide.ok({ decision: allow ? "approve" : "deny" });
       // The next authoritative status replaces optimistic progress, including retryable failures.
       update((data) => ({ ...data, knocks: data.knocks.map((knock): CallPageDTO["knocks"][number] => (knock.handle === handle ? { ...knock, decisionState: "in_flight", decisionAction: allow ? "approve" : "deny" } : knock)) }), { refresh: false });
     } catch (error) {
+      decide.error(error instanceof Error ? error.name : "unclassified");
       toast(errorMessage(error), { icon: "alert" });
     } finally {
       pendingDecisions.current.delete(handle);
@@ -87,7 +95,7 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
       {back}
       <CallHeader spaceId={spaceId} name={call.name} onRename={() => setRenaming(true)} onArchive={() => void archive()} />
       {live ? <LiveBanner participants={live.participants.map((person) => person.name)} startedAt={current?.startedAt} /> : null}
-      <AdmissionKnocks knocks={knocks} onDecision={answerKnock} />
+      <AdmissionKnocks knocks={knocks} onDecision={answerKnock} spaceId={spaceId} />
       <CallSettings spaceId={spaceId} call={call} inviteUrl={inviteUrl} update={update} />
       <PastSessions spaceId={spaceId} past={past} nextCursor={nextCursor} refresh={refresh} update={update} />
       {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}

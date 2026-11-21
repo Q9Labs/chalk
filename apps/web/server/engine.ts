@@ -73,15 +73,16 @@ async function engineCode(error: unknown, httpError: HttpClientError.HttpClientE
 
 const CONFLICT_CODES = ["conflict", "already_active", "already_exists", "capacity_exceeded"];
 
-function dashboardErrorFor(code: string, status: number | undefined): DashboardError {
-  if (status === 429) return new DashboardError(429, "engine_rate_limited");
-  if (code === "api_key.invalid_expiry") return new DashboardError(400, "api_key_invalid_expiry");
-  if (code === "request.invalid") return new DashboardError(400, "invalid_request");
-  if (code.endsWith("not_found") || code === "access.forbidden") return new DashboardError(404, "resource_not_found");
-  if (code === "participant.connection_superseded" || code === "media_token.subject_mismatch" || CONFLICT_CODES.some((part) => code.includes(part))) return new DashboardError(409, "engine_conflict");
-  if (code.includes("rate_limited")) return new DashboardError(429, "engine_rate_limited");
-  if (code === "participant.not_active") return new DashboardError(409, "participant_not_active");
-  return new DashboardError(502, "engine_unavailable");
+function dashboardErrorFor(code: string, status: number | undefined, upstreamJourneyId?: string): DashboardError {
+  const detail = { upstreamStatus: status, upstreamJourneyId };
+  if (status === 429) return new DashboardError(429, "engine_rate_limited", detail);
+  if (code === "api_key.invalid_expiry") return new DashboardError(400, "api_key_invalid_expiry", detail);
+  if (code === "request.invalid") return new DashboardError(400, "invalid_request", detail);
+  if (code.endsWith("not_found") || code === "access.forbidden") return new DashboardError(404, "resource_not_found", detail);
+  if (code === "participant.connection_superseded" || code === "media_token.subject_mismatch" || CONFLICT_CODES.some((part) => code.includes(part))) return new DashboardError(409, "engine_conflict", detail);
+  if (code.includes("rate_limited")) return new DashboardError(429, "engine_rate_limited", detail);
+  if (code === "participant.not_active") return new DashboardError(409, "participant_not_active", detail);
+  return new DashboardError(502, "engine_unavailable", detail);
 }
 
 export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
@@ -107,7 +108,9 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
       sdk_error_reason: httpError?.reason._tag,
     }),
   );
-  throw dashboardErrorFor(code, httpError?.response?.status);
+  const responseHeaders = httpError?.response?.headers as { get?: (name: string) => string | null } | undefined;
+  const upstreamJourneyId = responseHeaders?.get?.("x-journey-id") ?? undefined;
+  throw dashboardErrorFor(code, httpError?.response?.status, upstreamJourneyId);
 }
 type LiveEpisodeRow = { episode_id: string; participant_count: number; participants: readonly { participant_id: string; display_name: string }[] } | null;
 export function liveDTO(spaceId: string, liveEpisode: LiveEpisodeRow): LiveDTO {

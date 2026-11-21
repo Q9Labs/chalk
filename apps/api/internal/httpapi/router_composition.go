@@ -43,7 +43,7 @@ func v1RouteGroups(options Options) []routeGroup {
 		{middleware: tenantAuthenticated, endpoints: publicInviteManagementEndpoints(options.PublicInvites, options.TenantAuthz, origin)},
 		{
 			middleware: []func(http.Handler) http.Handler{rejectTenantAPIKeyCredential, rejectNativePublicCookies},
-			endpoints:  append([]RouteEndpoint{publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, origin)}, publicInvitePublicEndpoints(options.PublicInvites, origin)...),
+			endpoints:  append([]RouteEndpoint{publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, origin), entryTelemetryEndpoint(origin)}, publicInvitePublicEndpoints(options.PublicInvites, origin)...),
 		},
 		{middleware: tenantScoped, endpoints: tenantEndpointsList},
 		{

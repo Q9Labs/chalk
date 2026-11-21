@@ -1,0 +1,75 @@
+{
+ "description": "The beacon ran and the page was visible, but render threw before the first screen and the root error page showed.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "boot.started",
+   "event_id": "ev_boot_started_020",
+   "est_server_ms": 1795600000000,
+   "entry_path": "space_public",
+   "framed": false,
+   "policy_camera": "true",
+   "policy_microphone": "true",
+   "visibility": "visible",
+   "storage_state": "persistent",
+   "client_session_id": "cs_spec_fault",
+   "device_id": "dev_spec",
+   "device_ephemeral": false,
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "entry.record",
+   "event_id": "ev_entry_record_021",
+   "est_server_ms": 1795600000050,
+   "record_name": "boot.started",
+   "entry_path": "space_public",
+   "client_session_id": "cs_spec_fault",
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.visible",
+   "event_id": "ev_boot_visible_022",
+   "est_server_ms": 1795600000100,
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.app",
+   "event_id": "ev_boot_app_023",
+   "est_server_ms": 1795600000900,
+   "surface_state": "shown",
+   "shown_ms": 1795600000900,
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.load_call_ui",
+   "event_id": "ev_boot_load_call_ui_024",
+   "est_server_ms": 1795600003000,
+   "outcome": "ok",
+   "reason_code": "",
+   "duration_ms": 200,
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/boot.app_failed/chain/boot.app_failed.rows.healthy.json"
+ ]
+}

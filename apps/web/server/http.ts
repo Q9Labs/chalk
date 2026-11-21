@@ -1,9 +1,16 @@
 export class DashboardError extends Error {
+  readonly authResult?: "expired" | "unreadable" | "missing";
+  readonly upstreamStatus?: number;
+  readonly upstreamJourneyId?: string;
   constructor(
     readonly status: number,
     readonly code: string,
+    detail?: { readonly authResult?: "expired" | "unreadable" | "missing"; readonly upstreamStatus?: number; readonly upstreamJourneyId?: string },
   ) {
     super(code);
+    this.authResult = detail?.authResult;
+    this.upstreamStatus = detail?.upstreamStatus;
+    this.upstreamJourneyId = detail?.upstreamJourneyId;
   }
 }
 export function json(value: unknown, status = 200): Response {

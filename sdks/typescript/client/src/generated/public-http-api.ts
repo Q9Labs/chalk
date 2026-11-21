@@ -3,6 +3,12 @@
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 import * as S from "./schemas";
 
+export const uploadEntryEventsEndpoint = HttpApiEndpoint.post("uploadEntryEvents", "/v1/public/entry", {
+  success: S.UploadEntryEventsResponseSchema.pipe(HttpApiSchema.status(202)),
+});
+
+const defaultGroup = HttpApiGroup.make("default").add(uploadEntryEventsEndpoint);
+
 export const arriveBySpacePublicInviteEndpoint = HttpApiEndpoint.post("arriveBySpacePublicInvite", "/v1/public/space-invite-arrivals", {
   headers: S.ArriveBySpacePublicInviteRequestHeadersSchema,
   payload: S.ArriveBySpacePublicInviteRequestBodySchema,
@@ -137,4 +143,4 @@ export const refreshSpacePublicInviteAccessEndpoint = HttpApiEndpoint.post("refr
 
 const spacesGroup = HttpApiGroup.make("spaces").add(arriveBySpacePublicInviteEndpoint).add(createPublicSpaceEndpoint).add(getSpacePublicInviteArrivalEndpoint).add(leaveSpacePublicInviteArrivalEndpoint).add(preparePublicSpaceEntranceEndpoint).add(refreshSpacePublicInviteAccessEndpoint);
 
-export class ChalkPublicApi extends HttpApi.make("ChalkPublicApi").add(spacesGroup) {}
+export class ChalkPublicApi extends HttpApi.make("ChalkPublicApi").add(defaultGroup).add(spacesGroup) {}

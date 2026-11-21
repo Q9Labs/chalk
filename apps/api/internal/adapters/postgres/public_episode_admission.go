@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -122,6 +123,12 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 	if err == nil {
 		commitMetric.Record(ctx)
 		announceEpisodeBinding(ctx, born, bornNow)
+		obs.Decision(ctx, obs.EventAdmissionRequested, "requested", "",
+			obs.F("admission_request_id", result.RequestHandle.String()),
+			obs.F("arrival_handle", arrival.ArrivalHandle.String()),
+			obs.F("space_id", arrival.SpaceID.String()),
+			obs.F("tenant_id", arrival.TenantID.String()),
+			obs.F("client_session_id", publicinvites.ClientSessionIDFrom(ctx)))
 	}
 	return result, err
 }
@@ -267,5 +274,18 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		return r.decideLegacyAdmissionRequest(ctx, input)
 	}
 	request, err = r.GetAdmissionRequest(ctx, input.TenantID, input.SpaceID, input.RequestHandle)
+	if err == nil {
+		decision := "admitted"
+		if input.Decision == publicinvites.DecisionDeny {
+			decision = "denied"
+		}
+		obs.Decision(ctx, obs.EventAdmissionDecided, decision, "",
+			obs.F("admission_request_id", input.RequestHandle.String()),
+			obs.F("arrival_handle", arrival.ArrivalHandle.String()),
+			obs.F("decided_by", input.ActorID.String()),
+			obs.F("space_id", input.SpaceID.String()),
+			obs.F("tenant_id", input.TenantID.String()),
+			obs.F("client_session_id", publicinvites.ClientSessionIDFrom(ctx)))
+	}
 	return request, arrival, err
 }

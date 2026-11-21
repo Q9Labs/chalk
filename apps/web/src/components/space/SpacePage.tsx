@@ -5,7 +5,9 @@ import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoin
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
+import { entrySender } from "../../lib/boot-beacon";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
+import { EntrySurface } from "../../lib/entry-surface";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
@@ -29,10 +31,18 @@ function warmCall(): void {
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
 function loadCallSurface(): Promise<typeof CallSurface> {
-  callSurfaceLoad ??= import("./SpaceCall").catch((cause: unknown) => {
-    callSurfaceLoad = undefined;
-    throw cause;
-  });
+  const op = entrySender().op("boot.load_call_ui", {});
+  callSurfaceLoad ??= import("./SpaceCall").then(
+    (surface) => {
+      op.ok();
+      return surface;
+    },
+    (cause: unknown) => {
+      callSurfaceLoad = undefined;
+      op.error(cause instanceof Error ? cause.name : "unclassified");
+      throw cause;
+    },
+  );
   return callSurfaceLoad;
 }
 type SpacePageProps = {
@@ -164,7 +174,17 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (!active.current || !send({ type: "rejoinReleased", attempt })) return;
           attempt = latest.current.attempt;
         }
-        const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken });
+        const arriveOp = entrySender().op("invite.arrive", {});
+        const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken }).then(
+          (result) => {
+            arriveOp.ok({ arrival_handle: result.arrival.arrival_handle });
+            return result;
+          },
+          (cause: unknown) => {
+            arriveOp.error(cause instanceof Error ? cause.name : "unclassified");
+            throw cause;
+          },
+        );
         try {
           await navigatePublicSpace(arrived.canonicalSlug, arrived.inviteLink);
         } catch (cause) {
@@ -211,8 +231,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     if (!waiting || !arrival || !arrivalHandle) return;
     let cancelled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const onPageHide = () => sendEntryFact("admission.pagehide", { phase: "waiting", arrival_handle: arrivalHandle });
+    globalThis.addEventListener?.("pagehide", onPageHide);
     const poll = async () => {
       try {
+        sendEntryFact("admission.status_poll", { arrival_handle: arrivalHandle });
         const answer = await client.status({ arrivalHandle });
         if (cancelled) return;
         if (entranceStep(answer).state === "pending") {
@@ -228,6 +251,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     timer = globalThis.setTimeout(poll, arrivalRetryDelayMs(arrival.retry_after));
     return () => {
       cancelled = true;
+      globalThis.removeEventListener?.("pagehide", onPageHide);
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
   }, [client, displayName, inviteCode, settle, waiting, waitingAttempt]);
@@ -349,7 +373,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         );
       case "failed":
         return (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={current.failure.message} glyph={current.failure.reason} action={current.failure.retryable ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start(), disabled: current.restarting } : undefined} />
+          <EntrySurface name="invite.failure" fields={{ reason: current.failure.reason ?? "unknown" }}>
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={current.failure.message} glyph={current.failure.reason} action={current.failure.retryable ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start(), disabled: current.restarting } : undefined} />
+          </EntrySurface>
         );
       case "idle":
       case "arriving":
@@ -397,13 +423,35 @@ function useEntrance(initial: () => Entrance) {
   const [entrance, setEntrance] = useState(initial);
   const latest = useRef(entrance);
   const send = useCallback((event: EntranceEvent): boolean => {
-    const next = entranceReducer(latest.current, event);
-    if (next === latest.current) return false;
+    const before = latest.current;
+    const next = entranceReducer(before, event);
+    if (next === before) return false;
     latest.current = next;
     setEntrance(next);
+    if (before.phase !== next.phase) sendEntranceTransition(before.phase, next.phase, event.type);
     return true;
   }, []);
   return { entrance, send, latest };
+}
+
+const ENTRANCE_TRIGGERS: Partial<Record<EntranceEvent["type"], string>> = {
+  started: "started",
+  rejoinReleased: "rejoin_released",
+  waitingForHost: "waiting_for_host",
+  admitted: "admitted",
+  callUiFailed: "call_ui_failed",
+  failed: "failed",
+  cancelled: "cancelled",
+  callEnded: "call_ended",
+};
+
+function sendEntranceTransition(from: string, to: string, eventType: EntranceEvent["type"]): void {
+  const trigger = ENTRANCE_TRIGGERS[eventType];
+  if (trigger) entrySender().transition("admission.entrance", from, to, trigger);
+}
+
+function sendEntryFact(name: string, fields: Record<string, unknown>): void {
+  entrySender().fact(name, fields);
 }
 
 function resumeFailure(cause: unknown): EntryFailure {

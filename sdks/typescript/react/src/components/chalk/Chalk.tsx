@@ -2,6 +2,7 @@
 import { commandFailure, type MediaCommandAction, type MediaCommandSource } from "../control-bar/command-failure";
 import { CallLimbo } from "../call-limbo/CallLimbo";
 import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { entryChannel, entryFact } from "../../entry";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -105,7 +106,17 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   const getLatestAccess = useCallback<GetAccess>((context) => {
     const latestGetAccess = getAccessRef.current;
     if (!latestGetAccess) return Promise.reject(new Error("Chalk cannot refresh access after getAccess was removed."));
-    return latestGetAccess(context);
+    const op = entryChannel()?.op("embed.get_access", { reason: context.reason });
+    return latestGetAccess(context).then(
+      (grant) => {
+        op?.ok();
+        return grant;
+      },
+      (cause: unknown) => {
+        op?.error(cause instanceof Error ? cause.name : "unclassified");
+        throw cause;
+      },
+    );
   }, []);
   const ownedClient = useMemo(() => {
     if (suppliedClient) return null;
@@ -207,6 +218,26 @@ function SpaceExperience(
     autoJoinAttempted.current = true;
     void join(defaultJoinOptions(props));
   }, [connection.status, join, props.defaults?.camera, props.defaults?.microphone, props.displayName]);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] One host CSP listener per embed: a violation names only the blocked origin and the directive.
+  useEffect(() => {
+    const onViolation = (event: SecurityPolicyViolationEvent) => {
+      let blockedOrigin = "";
+      try {
+        blockedOrigin = new URL(event.blockedURI || event.documentURI).origin;
+      } catch {
+        blockedOrigin = "";
+      }
+      entryFact("embed.csp_violation", { blocked_origin: blockedOrigin, directive: event.violatedDirective });
+    };
+    globalThis.addEventListener?.("securitypolicyviolation", onViolation as EventListener);
+    return () => globalThis.removeEventListener?.("securitypolicyviolation", onViolation as EventListener);
+  }, []);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [surface] The join-error screen is a surface while joinError holds.
+  useEffect(() => {
+    if (joinError === null) return;
+    const shown = entryChannel()?.surface("embed.join_error", {});
+    return () => shown?.dismiss();
+  }, [joinError]);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Notify host callbacks of committed connection transitions, excluding reconnects and the initial snapshot.
   useEffect(() => {
     const previous = previousStatus.current;

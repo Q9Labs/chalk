@@ -1,0 +1,45 @@
+{
+ "description": "The dashboard's call page request failed 503 at the function while its upstream API answered 200: the failure is the dashboard's own hop.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "platform",
+  "id": "test",
+  "tenant": null,
+  "day": "2026-11-18",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "dashboard.request_failed",
+   "event_id": "ev_dashboard_request_failed_043",
+   "est_server_ms": 1795600001000,
+   "page": "call",
+   "method": "GET",
+   "http_status": 200,
+   "auth_result": "missing",
+   "upstream_status": 200,
+   "upstream_journey_id": "",
+   "client_session_id": "cs_spec_fault",
+   "event": "dashboard.request_failed",
+   "env": "test"
+  },
+  {
+   "kind": "fact",
+   "name": "http.request",
+   "event_id": "ev_http_request_044",
+   "est_server_ms": 1795600000900,
+   "http_route": "/v1/dashboard/call",
+   "http_status": 200,
+   "method": "GET",
+   "event": "http.request",
+   "env": "test"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/dashboard.request_failed/chain/dashboard.request_failed.rows.healthy.json"
+ ]
+}

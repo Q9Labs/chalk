@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { entryChannel } from "../../entry";
 import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
@@ -125,14 +126,24 @@ export function KnockNoticeSurface({ requests, onAdmit, onDeny, onReview, onHide
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const summary = summarizeKnocks(requests);
+  const noticeId = summary?.kind === "one" ? summary.request.id : undefined;
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [surface] The knock notice is a surface while a request stays unanswered.
+  useEffect(() => {
+    if (!noticeId) return;
+    const shown = entryChannel()?.surface("admission.knock_notice", { admission_request_id: noticeId });
+    return () => shown?.dismiss();
+  }, [noticeId]);
   if (!summary) return null;
-  const answer = async (action: () => Promise<unknown>) => {
+  const answer = async (action: () => Promise<unknown>, requestId?: string) => {
     if (busy) return;
     setBusy(true);
     setError(null);
+    const op = entryChannel()?.op("admission.decide", { ...(requestId !== undefined ? { admission_request_id: requestId } : {}) });
     try {
       await action();
+      op?.ok();
     } catch (cause) {
+      op?.error(cause instanceof Error ? cause.name : "unclassified");
       setError(cause instanceof Error ? cause.message : "Couldn’t answer this request.");
     } finally {
       setBusy(false);
@@ -172,10 +183,10 @@ export function KnockNoticeSurface({ requests, onAdmit, onDeny, onReview, onHide
       <div className="chalk-knock-actions">
         {summary.kind === "one" ? (
           <>
-            <ChalkButton disabled={busy} onClick={() => void answer(() => onDeny(summary.request.id))} aria-label={`Decline ${summary.request.displayName}`}>
+            <ChalkButton disabled={busy} onClick={() => void answer(() => onDeny(summary.request.id), summary.request.id)} aria-label={`Decline ${summary.request.displayName}`}>
               Decline
             </ChalkButton>
-            <ChalkButton variant="solid" disabled={busy} onClick={() => void answer(() => onAdmit(summary.request.id))} aria-label={`Let ${summary.request.displayName} in`}>
+            <ChalkButton variant="solid" disabled={busy} onClick={() => void answer(() => onAdmit(summary.request.id), summary.request.id)} aria-label={`Let ${summary.request.displayName} in`}>
               Let in
             </ChalkButton>
           </>

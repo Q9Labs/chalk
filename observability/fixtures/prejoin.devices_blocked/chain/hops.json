@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/entry-observability/prejoin.devices_blocked.fault.test.mjs",
+      "command": "scripts/gates/with-postgres.sh -- node --test scripts/entry-observability/prejoin.devices_blocked.fault.test.mjs",
+      "writes": [
+        "prejoin.devices_blocked.rows.positive.json",
+        "prejoin.devices_blocked.rows.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/entry-observability/chain.test.mjs",
+      "command": "CHALK_CHECK=prejoin.devices_blocked node --test scripts/entry-observability/chain.test.mjs",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

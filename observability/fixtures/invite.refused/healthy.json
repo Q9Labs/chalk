@@ -1,0 +1,85 @@
+{
+ "description": "The API refused an invite as disabled, but the invite row at the decision's state_epoch is enabled with no disabled_at: a refusal its own rows contradict.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "invite.resolve",
+   "event_id": "ev_invite_resolve_008",
+   "est_server_ms": 1795600005000,
+   "decision": "admitted",
+   "reason_code": "",
+   "credential_kind": "code",
+   "state_epoch": 7,
+   "invite_generation": 3,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "user_id": "",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "client_session_id": "cs_spec_fault"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.db.arrival",
+   "event_id": "ev_admission_db_arrival_009",
+   "est_server_ms": 1795600000000,
+   "arrival_state": "admitted",
+   "terminal_reason": "admitted",
+   "completed_at": 1795600006000,
+   "invite_generation": 3,
+   "created_at": 1795600000000,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "client_session_id": "cs_spec_fault"
+  },
+  {
+   "kind": "fact",
+   "name": "invite.db.membership",
+   "event_id": "ev_invite_db_membership_010",
+   "est_server_ms": 1795600004000,
+   "created_at": 1795599995000,
+   "user_id": "d0000000-0000-4000-8000-000000000006",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "client_session_id": "cs_spec_fault"
+  },
+  {
+   "kind": "fact",
+   "name": "invite.db.invite",
+   "enabled": true,
+   "event_id": "db:inv:1",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "rotated_at": null,
+   "disabled_at": null,
+   "state_epoch": 7,
+   "est_server_ms": 1795600004000,
+   "client_session_id": "cs_spec_fault",
+   "invite_generation": 3
+  },
+  {
+   "kind": "fact",
+   "name": "invite.db.space",
+   "event_id": "db:sp:1",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "updated_at": 1795599991000,
+   "archived_at": null,
+   "est_server_ms": 1795600004000,
+   "admission_mode": "open",
+   "client_session_id": "cs_spec_fault"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/invite.refused/chain/invite.refused.rows.healthy.json"
+ ]
+}

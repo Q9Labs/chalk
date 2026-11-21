@@ -2,37 +2,2971 @@
   "area": "entry",
   "slice": 1,
   "title": "Entry: dashboard, invite, admission, prejoin, embed and boot",
-  "prefixes": ["boot", "embed", "invite", "admission", "prejoin", "dashboard"],
-  "fields": [],
-  "events": [],
-  "reasons": [],
-  "machines": [],
+  "prefixes": [
+    "boot",
+    "embed",
+    "invite",
+    "admission",
+    "prejoin",
+    "dashboard"
+  ],
+  "fields": [
+    {
+      "name": "arrival_handle",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "A public arrival's handle (the public invite credential header value's row id). It is a handle, not a credential; never log the invite token."
+    },
+    {
+      "name": "entry_path",
+      "type": "enum",
+      "values": [
+        "space_public",
+        "space_private",
+        "space_open_signup",
+        "space_dash_account",
+        "dashboard",
+        "embed",
+        "api_key",
+        "site"
+      ],
+      "sensitivity": null,
+      "doc": "Which entry path a page boot belongs to, classified at the beacon; site is a page that is not an entry path."
+    },
+    {
+      "name": "framed",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "Whether the page ran inside a frame (window.top !== window.self) at boot."
+    },
+    {
+      "name": "policy_camera",
+      "type": "enum",
+      "values": [
+        "true",
+        "false",
+        "unavailable(no_api)"
+      ],
+      "sensitivity": null,
+      "doc": "Whether the embedding document's permissions policy allows camera, or unavailable(no_api) when no policy API exists."
+    },
+    {
+      "name": "policy_microphone",
+      "type": "enum",
+      "values": [
+        "true",
+        "false",
+        "unavailable(no_api)"
+      ],
+      "sensitivity": null,
+      "doc": "Whether the embedding document's permissions policy allows microphone, or unavailable(no_api) when no policy API exists."
+    },
+    {
+      "name": "visibility",
+      "type": "enum",
+      "values": [
+        "visible",
+        "hidden"
+      ],
+      "sensitivity": null,
+      "doc": "The document's visibility state when the fact was recorded."
+    },
+    {
+      "name": "storage_state",
+      "type": "enum",
+      "values": [
+        "persistent",
+        "unavailable"
+      ],
+      "sensitivity": null,
+      "doc": "Whether durable local storage was usable at boot."
+    },
+    {
+      "name": "reloaded",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "Whether the one allowed reload-after-chunk-failure was taken."
+    },
+    {
+      "name": "app_shown",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "True once surface(boot.app) was shown on this client session."
+    },
+    {
+      "name": "route_id",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The TanStack route ID (such as /_space/$code), never the path, which can carry an invite code."
+    },
+    {
+      "name": "error_name",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "An Error or DOMException name, such as NotAllowedError."
+    },
+    {
+      "name": "error_class",
+      "type": "enum",
+      "values": [
+        "chunk_load",
+        "missing_export",
+        "other"
+      ],
+      "sensitivity": null,
+      "doc": "The closed render-error classes slice 9's render_crashed fields define."
+    },
+    {
+      "name": "error_fingerprint",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "A stable hash of the render error's distinguishing fields."
+    },
+    {
+      "name": "state_epoch",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The public invite row's state epoch at the decision, so a reader can line the row up with it."
+    },
+    {
+      "name": "invite_generation",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "A public invite's generation, on the invite row or copied onto an arrival."
+    },
+    {
+      "name": "participant_id_hash",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The canonical Participant ID hashed exactly as Sync hashes it on websocket authentication."
+    },
+    {
+      "name": "blocked_origin",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The origin (scheme, host and port) a policy blocked; never a full URL."
+    },
+    {
+      "name": "directive",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The CSP directive name a violation report names, such as connect-src."
+    },
+    {
+      "name": "device",
+      "type": "enum",
+      "values": [
+        "camera",
+        "microphone"
+      ],
+      "sensitivity": null,
+      "doc": "Which media device an error concerns."
+    },
+    {
+      "name": "phase",
+      "type": "enum",
+      "values": [
+        "arriving",
+        "waiting",
+        "admitted",
+        "joining"
+      ],
+      "sensitivity": null,
+      "doc": "The entrance phase a pagehide fact was recorded in."
+    },
+    {
+      "name": "page",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The dashboard API page name a request targeted."
+    },
+    {
+      "name": "method",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The HTTP method of a request."
+    },
+    {
+      "name": "http_route",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The API route a request matched, with placeholders; never a raw URL."
+    },
+    {
+      "name": "http_status",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "An HTTP response status code."
+    },
+    {
+      "name": "upstream_status",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The status a dashboard server function got from its upstream API call."
+    },
+    {
+      "name": "upstream_journey_id",
+      "type": "id",
+      "id_kind": "journey",
+      "sensitivity": null,
+      "doc": "The journey the upstream API stamped on its response."
+    },
+    {
+      "name": "auth_result",
+      "type": "enum",
+      "values": [
+        "expired",
+        "unreadable",
+        "missing"
+      ],
+      "sensitivity": null,
+      "doc": "Why a dashboard session cookie failed authentication."
+    },
+    {
+      "name": "path_class",
+      "type": "enum",
+      "values": [
+        "space_page",
+        "other"
+      ],
+      "sensitivity": null,
+      "doc": "The edge rollup's route class; space_page covers the Space document patterns."
+    },
+    {
+      "name": "content_class",
+      "type": "enum",
+      "values": [
+        "html",
+        "other"
+      ],
+      "sensitivity": null,
+      "doc": "The edge rollup's response content class."
+    },
+    {
+      "name": "ua_class",
+      "type": "enum",
+      "values": [
+        "browser",
+        "bot",
+        "other"
+      ],
+      "sensitivity": null,
+      "doc": "The edge rollup's user-agent class."
+    },
+    {
+      "name": "edge_status",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The response status an edge rollup bucket counts."
+    },
+    {
+      "name": "request_count",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "How many requests an edge rollup bucket counted in its window."
+    },
+    {
+      "name": "window_start_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The inclusive start of a rollup window."
+    },
+    {
+      "name": "window_end_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The exclusive end of a rollup window."
+    },
+    {
+      "name": "enabled",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "A public invite row's enabled flag."
+    },
+    {
+      "name": "disabled_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a public invite row was disabled, in server milliseconds; null means never disabled."
+    },
+    {
+      "name": "rotated_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a public invite row was last rotated, in server milliseconds."
+    },
+    {
+      "name": "archived_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a Space row was archived, in server milliseconds; null means not archived."
+    },
+    {
+      "name": "updated_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a row was last updated, in server milliseconds."
+    },
+    {
+      "name": "created_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a row was created, in server milliseconds."
+    },
+    {
+      "name": "joined_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a Participant joined its Episode, in server milliseconds."
+    },
+    {
+      "name": "requested_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When an admission request was created, in server milliseconds."
+    },
+    {
+      "name": "expires_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When an admission request expires, in server milliseconds."
+    },
+    {
+      "name": "completed_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When a terminal admission outcome was committed, in server milliseconds."
+    },
+    {
+      "name": "decided_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When an admission request's decision committed, in server milliseconds; the proof a host's answer landed."
+    },
+    {
+      "name": "ended_at",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "When an Episode ended, in server milliseconds."
+    },
+    {
+      "name": "admission_status",
+      "type": "enum",
+      "values": [
+        "pending",
+        "admitted",
+        "approved",
+        "denied",
+        "expired",
+        "invalidated"
+      ],
+      "sensitivity": null,
+      "doc": "An admission request's status in its row: space_public_admission_requests uses approved, sync_admission_requests uses admitted."
+    },
+    {
+      "name": "participant_status",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "A Participant row's status, such as active."
+    },
+    {
+      "name": "manage_admission",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "Whether a Participant's capabilities include manageAdmission."
+    },
+    {
+      "name": "arrival_state",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "A public arrival's state, such as pending or admitted."
+    },
+    {
+      "name": "terminal_reason",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Why a public arrival went terminal, such as admission_not_collected."
+    },
+    {
+      "name": "admission_mode",
+      "type": "enum",
+      "values": [
+        "open",
+        "knock",
+        "members_only"
+      ],
+      "sensitivity": null,
+      "doc": "A Space's admission mode."
+    },
+    {
+      "name": "episode_status",
+      "type": "enum",
+      "values": [
+        "active",
+        "ending",
+        "ended"
+      ],
+      "sensitivity": null,
+      "doc": "An Episode row's status."
+    },
+    {
+      "name": "credential_kind",
+      "type": "enum",
+      "values": [
+        "code",
+        "token"
+      ],
+      "sensitivity": null,
+      "doc": "Whether the presented invite credential was a code or a signed token; never its value."
+    },
+    {
+      "name": "operation",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The public-invite operation a request ran, such as public.arrive or public.status."
+    },
+    {
+      "name": "decided_by",
+      "type": "id",
+      "id_kind": "user",
+      "sensitivity": null,
+      "doc": "The User who committed an admission decision."
+    },
+    {
+      "name": "record_name",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The registry event a copied client record carried, on the API's entry-intake copy."
+    }
+  ],
+  "events": [
+    {
+      "name": "boot.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The inline boot beacon ran: the first client fact of every page, minted before authentication with its cs_ and dev_.",
+      "fields": {
+        "entry_path": {
+          "required": true
+        },
+        "framed": {
+          "required": true
+        },
+        "policy_camera": {
+          "required": true
+        },
+        "policy_microphone": {
+          "required": true
+        },
+        "visibility": {
+          "required": true
+        },
+        "storage_state": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/lib/boot-beacon.ts",
+          "literal": "\"boot.started\""
+        }
+      ]
+    },
+    {
+      "name": "boot.visible",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The beacon saw the first transition to visible; the boot.app_failed clock starts here when the page was hidden at boot.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/lib/boot-beacon.ts",
+          "literal": "\"boot.visible\""
+        }
+      ]
+    },
+    {
+      "name": "boot.pagehide",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The beacon's last word on pagehide, with app_shown false when the app never showed its first screen.",
+      "fields": {
+        "app_shown": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/lib/boot-beacon.ts",
+          "literal": "\"boot.pagehide\""
+        }
+      ]
+    },
+    {
+      "name": "boot.chunk_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "A code chunk failed to load and the one allowed reload either ran (reloaded=true) or had already been spent.",
+      "fields": {
+        "reloaded": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/lib/chunkReload.ts",
+          "literal": "\"boot.chunk_failed\""
+        }
+      ]
+    },
+    {
+      "name": "boot.render_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The root route caught a render error before the call UI mounted and reported it through sendEntryEvent.",
+      "fields": {
+        "route_id": {
+          "required": true
+        },
+        "error_name": {
+          "required": true
+        },
+        "error_class": {
+          "required": true
+        },
+        "error_fingerprint": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/routes/__root.tsx",
+          "literal": "\"boot.render_failed\""
+        }
+      ]
+    },
+    {
+      "name": "boot.error_page",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The root route's error page was shown; paired with boot.render_failed but never dropped when the fact is missing.",
+      "fields": {
+        "route_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/routes/__root.tsx",
+          "literal": "\"boot.error_page\""
+        }
+      ]
+    },
+    {
+      "name": "boot.app",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The app's first screen was shown; through ObservedSurface in RootComponent.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/routes/__root.tsx",
+          "literal": "\"boot.app\""
+        }
+      ]
+    },
+    {
+      "name": "boot.load_call_ui",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "Loading the admitted call UI (the SpaceCall chunk); ok at callUiReady, error(boot.chunk_load) or error(boot.load_failed) at callUiFailed.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/SpacePage.tsx",
+          "literal": "\"boot.load_call_ui\""
+        }
+      ]
+    },
+    {
+      "name": "invite.arrive",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The client's arrival request; terminal ok, or error carrying the generic refusal the client is allowed to see.",
+      "fields": {
+        "arrival_handle": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/SpacePage.tsx",
+          "literal": "\"invite.arrive\""
+        }
+      ]
+    },
+    {
+      "name": "invite.failure",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The invite failure screen was shown; proves display, never the server-side cause.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/SpacePage.tsx",
+          "literal": "\"invite.failure\""
+        }
+      ]
+    },
+    {
+      "name": "admission.status_poll",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "One client status poll attempt while waiting for the host's answer; a measurement, not an op.",
+      "fields": {
+        "arrival_handle": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/SpacePage.tsx",
+          "literal": "\"admission.status_poll\""
+        }
+      ]
+    },
+    {
+      "name": "admission.pagehide",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The entrance page hid, with the phase it was in; phase=waiting before approval is the guest_left witness.",
+      "fields": {
+        "phase": {
+          "required": true
+        },
+        "arrival_handle": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/SpacePage.tsx",
+          "literal": "\"admission.pagehide\""
+        }
+      ]
+    },
+    {
+      "name": "prejoin.access_edge",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "One prejoin.access transition, carried as a fact row so a fact can read it; the transition itself is the machine.",
+      "fields": {
+        "error_name": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts",
+          "literal": "\"prejoin.access\""
+        }
+      ]
+    },
+    {
+      "name": "prejoin.device_error",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "getUserMedia failed in prejoin; carries the DOMException name classify drops.",
+      "fields": {
+        "device": {
+          "required": true
+        },
+        "error_name": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts",
+          "literal": "\"prejoin.device_error\""
+        }
+      ]
+    },
+    {
+      "name": "prejoin.access_card",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The prejoin access card was shown to the visitor.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/space/pre-join/PreJoin.tsx",
+          "literal": "\"prejoin.access_card\""
+        }
+      ]
+    },
+    {
+      "name": "embed.get_access",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The embed's call for a host access grant; a resolved promise is not proof of connection.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/chalk/Chalk.tsx",
+          "literal": "\"embed.get_access\""
+        }
+      ]
+    },
+    {
+      "name": "embed.join_error",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The embed's join error was shown; its message copies the transport's error and is not a second witness.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/chalk/Chalk.tsx",
+          "literal": "\"embed.join_error\""
+        }
+      ]
+    },
+    {
+      "name": "embed.csp_violation",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "A securitypolicyviolation inside the embed; records the blocked origin and directive only, never a URL.",
+      "fields": {
+        "blocked_origin": {
+          "required": true
+        },
+        "directive": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/chalk/Chalk.tsx",
+          "literal": "\"embed.csp_violation\""
+        }
+      ]
+    },
+    {
+      "name": "admission.knock_notice",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The host-side knock notice was shown for a request handle; one per request.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx",
+          "literal": "\"admission.knock_notice\""
+        }
+      ]
+    },
+    {
+      "name": "admission.decide",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk",
+        "web"
+      ],
+      "doc": "A host's admit or deny call; ok is not proof of a decision, decided_at on the db row is.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx",
+          "literal": "\"admission.decide\""
+        },
+        {
+          "path": "apps/web/src/components/dashboard/CallPage.tsx",
+          "literal": "\"admission.decide\""
+        }
+      ]
+    },
+    {
+      "name": "dashboard.call_page",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The dashboard call page was shown for a Space; positions a dashboard host for admission.unanswered.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/dashboard/CallPage.tsx",
+          "literal": "\"dashboard.call_page\""
+        }
+      ]
+    },
+    {
+      "name": "dashboard.knocks",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "web"
+      ],
+      "doc": "The dashboard knocks list rendered non-empty for a Space; the dashboard-side knock surface.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/web/src/components/dashboard/AdmissionKnocks.tsx",
+          "literal": "\"dashboard.knocks\""
+        }
+      ]
+    },
+    {
+      "name": "invite.resolve",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The API's authoritative invite resolve or arrival refusal decision, with the server-side reason the client never sees.",
+      "decisions": [
+        "allowed",
+        "refused"
+      ],
+      "fields": {
+        "credential_kind": {
+          "required": false
+        },
+        "state_epoch": {
+          "required": false
+        },
+        "invite_generation": {
+          "required": false
+        },
+        "arrival_handle": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/publicinvites/service.go",
+          "literal": "obs.EventInviteResolve"
+        }
+      ]
+    },
+    {
+      "name": "admission.requested",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "A public admission request committed in Postgres, recorded after commit.",
+      "decisions": [
+        "requested"
+      ],
+      "fields": {
+        "arrival_handle": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/public_episode_admission.go",
+          "literal": "obs.EventAdmissionRequested"
+        }
+      ]
+    },
+    {
+      "name": "admission.decided",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "A public admission request's host decision committed in Postgres, recorded after commit.",
+      "decisions": [
+        "admitted",
+        "denied",
+        "expired"
+      ],
+      "fields": {
+        "arrival_handle": {
+          "required": false
+        },
+        "decided_by": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/public_episode_admission.go",
+          "literal": "obs.EventAdmissionDecided"
+        }
+      ]
+    },
+    {
+      "name": "admission.outcome",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "A public arrival's committed terminal admission outcome, beside the existing counter and log.",
+      "decisions": [
+        "admitted",
+        "denied",
+        "expired",
+        "withdrawn",
+        "not_collected"
+      ],
+      "fields": {
+        "arrival_handle": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/publicinvites/admission_telemetry.go",
+          "literal": "obs.EventAdmissionOutcome"
+        }
+      ]
+    },
+    {
+      "name": "public_invite.request",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The public-invite request log line; one witness with http.request, never a second one.",
+      "fields": {
+        "operation": {
+          "required": true
+        },
+        "http_status": {
+          "required": true
+        },
+        "arrival_handle": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/public_invites.go",
+          "literal": "\"public_invite.request\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "public_invite.request"
+        }
+      }
+    },
+    {
+      "name": "http.request",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The API request log; for embed.blocked, its presence under a grant's Participant and its 2xx coverage decide the witness.",
+      "fields": {
+        "http_route": {
+          "required": true
+        },
+        "http_status": {
+          "required": true
+        },
+        "method": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/observability/http.go",
+          "literal": "\"http.request\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "http.request"
+        }
+      }
+    },
+    {
+      "name": "sync.websocket.authenticated",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "Sync authenticated a Participant's websocket; participant_id_hash is computed exactly as socket_context.ex computes it.",
+      "fields": {
+        "participant_id_hash": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket_context.ex",
+          "literal": "\"sync.websocket.authenticated\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sync.websocket.authenticated"
+        }
+      }
+    },
+    {
+      "name": "sync.admission_requested",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "Sync's admission_requested span: proves the knock reached room state.",
+      "fields": {},
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/observability/sink.ex",
+          "literal": "admission_requested"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "admission_requested"
+        }
+      }
+    },
+    {
+      "name": "admission.sweep",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The admission sweeper's span for a terminal arrival; one decision with the db row's terminal_reason.",
+      "fields": {
+        "arrival_handle": {
+          "required": true
+        },
+        "completed_at": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/episode_admission_expiry.go",
+          "literal": "\"admission.not_collected\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "admission.not_collected"
+        }
+      }
+    },
+    {
+      "name": "admission.db.request",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The space_public_admission_requests row; one decision with sync_admission_requests, which a guard keeps equal.",
+      "fields": {
+        "admission_status": {
+          "required": true
+        },
+        "requested_at": {
+          "required": true
+        },
+        "expires_at": {
+          "required": true
+        },
+        "decided_at": {
+          "required": false
+        },
+        "decided_by": {
+          "required": false
+        },
+        "arrival_handle": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "admission.db.request"
+        }
+      ]
+    },
+    {
+      "name": "admission.db.sync_request",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "The sync_admission_requests row; the request as Sync's room state holds it.",
+      "fields": {
+        "admission_status": {
+          "required": true
+        },
+        "requested_at": {
+          "required": true
+        },
+        "expires_at": {
+          "required": true
+        },
+        "decided_at": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "admission.db.sync_request"
+        }
+      ]
+    },
+    {
+      "name": "admission.db.participant",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The participants row: capabilities, status and joined_at for host positioning and grant-withdrawal checks.",
+      "fields": {
+        "participant_status": {
+          "required": true
+        },
+        "manage_admission": {
+          "required": true
+        },
+        "joined_at": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "admission.db.participant"
+        }
+      ]
+    },
+    {
+      "name": "admission.db.arrival",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The space_public_arrivals row: state, invite generation, terminal reason and completion for invite and collection checks.",
+      "fields": {
+        "arrival_state": {
+          "required": true
+        },
+        "invite_generation": {
+          "required": false
+        },
+        "terminal_reason": {
+          "required": false
+        },
+        "completed_at": {
+          "required": false
+        },
+        "created_at": {
+          "required": true
+        },
+        "arrival_handle": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "admission.db.arrival"
+        }
+      ]
+    },
+    {
+      "name": "invite.db.invite",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The space_public_invites row at the decision's state_epoch: enabled, disabled_at, rotated_at and generation.",
+      "fields": {
+        "enabled": {
+          "required": true
+        },
+        "disabled_at": {
+          "required": false
+        },
+        "rotated_at": {
+          "required": false
+        },
+        "invite_generation": {
+          "required": true
+        },
+        "state_epoch": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "invite.db.invite"
+        }
+      ]
+    },
+    {
+      "name": "invite.db.space",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The spaces row: archived_at and updated_at for archived refusals, admission_mode for members_only.",
+      "fields": {
+        "archived_at": {
+          "required": false
+        },
+        "updated_at": {
+          "required": true
+        },
+        "admission_mode": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "invite.db.space"
+        }
+      ]
+    },
+    {
+      "name": "invite.db.membership",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "A memberships row for the Tenant: a members_only refusal is broken when the decision's usr_ held one.",
+      "fields": {
+        "created_at": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "invite.db.membership"
+        }
+      ]
+    },
+    {
+      "name": "embed.db.episode",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The episodes row for a grant's Participant; an ended Episode can explain an unused grant.",
+      "fields": {
+        "episode_status": {
+          "required": true
+        },
+        "ended_at": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "embed.db.episode"
+        }
+      ]
+    },
+    {
+      "name": "edge.http_rollup",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [],
+      "doc": "Slice 14's five-minute edge rollup buckets; declared here so boot.never_ran can read them until slice 14 lands.",
+      "fields": {
+        "path_class": {
+          "required": true
+        },
+        "content_class": {
+          "required": true
+        },
+        "ua_class": {
+          "required": true
+        },
+        "edge_status": {
+          "required": true
+        },
+        "request_count": {
+          "required": true
+        },
+        "window_start_ms": {
+          "required": true
+        },
+        "window_end_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "edge.http_rollup"
+        }
+      ]
+    },
+    {
+      "name": "edge.call_status",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [],
+      "doc": "A per-request edge row for a /dashboard-api/call-status read; no owner yet, so admission.unanswered prints partial(edge) until it exists.",
+      "fields": {
+        "http_status": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/entry-observability/specs.mjs",
+          "literal": "edge.call_status"
+        }
+      ]
+    },
+    {
+      "name": "dashboard.request_failed",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": [
+        "web"
+      ],
+      "doc": "The dashboard server function's failure log, extended with upstream status and journey, auth result, page and method; reaches the checker through the edge feed.",
+      "fields": {
+        "page": {
+          "required": true
+        },
+        "method": {
+          "required": true
+        },
+        "http_status": {
+          "required": true
+        },
+        "auth_result": {
+          "required": false
+        },
+        "upstream_status": {
+          "required": false
+        },
+        "upstream_journey_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/web/server/application.ts",
+          "literal": "\"dashboard.request_failed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "dashboard.request_failed"
+        }
+      }
+    },
+    {
+      "name": "entry.record",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "api"
+      ],
+      "doc": "The API's accepted copy of a client entry record (POST /v1/public/entry), the non-per-seat witness of client facts.",
+      "fields": {
+        "record_name": {
+          "required": true
+        },
+        "entry_path": {},
+        "client_session_id": {},
+        "app_build": {},
+        "est_server_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/entry_telemetry.go",
+          "literal": "\"entry.\""
+        }
+      ]
+    }
+  ],
+  "reasons": [
+    {
+      "code": "invite.not_found",
+      "outcome": "expected",
+      "doc": "No invite row matched the credential. Always unknown to the check, because the code is never logged."
+    },
+    {
+      "code": "invite.disabled",
+      "outcome": "expected",
+      "doc": "The invite row was disabled before the decision."
+    },
+    {
+      "code": "invite.space_archived",
+      "outcome": "expected",
+      "doc": "The invite's Space was archived before the decision."
+    },
+    {
+      "code": "invite.members_only",
+      "outcome": "expected",
+      "doc": "The Space admits members only and no Tenant member arrived."
+    },
+    {
+      "code": "invite.arrival_mismatch",
+      "outcome": "expected",
+      "doc": "A re-presented arrival's credential no longer matches its invite, such as an old link after rotation."
+    },
+    {
+      "code": "invite.generation_mismatch",
+      "outcome": "error",
+      "doc": "A matching handle with another generation; rotation replaces the handle, so it has no legitimate cause."
+    },
+    {
+      "code": "invite.invalid_row",
+      "outcome": "error",
+      "doc": "The invite row failed its own validation at the decision."
+    },
+    {
+      "code": "invite.space_mismatch",
+      "outcome": "error",
+      "doc": "The fetched Space does not belong to the invite's Tenant and Space ids."
+    },
+    {
+      "code": "invite.unavailable",
+      "outcome": "expected",
+      "doc": "The generic refusal the client is allowed to see; the real reason stays server-side."
+    },
+    {
+      "code": "admission.no_host",
+      "outcome": "expected",
+      "doc": "No host was positioned during the knock's window, proven by db, sync and edge."
+    },
+    {
+      "code": "admission.seen_unanswered",
+      "outcome": "expected",
+      "doc": "A knock surface was shown to a host for at least five seconds and no admission.decide op began."
+    },
+    {
+      "code": "admission.guest_left",
+      "outcome": "expected",
+      "doc": "The guest's page hid while still waiting and never polled again."
+    },
+    {
+      "code": "admission.decide_failed",
+      "outcome": "error",
+      "doc": "The host's admission answer did not commit through the client op."
+    },
+    {
+      "code": "boot.chunk_reloaded",
+      "outcome": "expected",
+      "doc": "The one allowed chunk-failure reload ran and a new client session booted on the same device."
+    },
+    {
+      "code": "boot.chunk_load",
+      "outcome": "error",
+      "doc": "The call UI chunk failed to load; judged by the chunk-failure cases, not here."
+    },
+    {
+      "code": "boot.load_failed",
+      "outcome": "error",
+      "doc": "The call UI load failed for a reason other than a chunk."
+    },
+    {
+      "code": "prejoin.prompt_refused",
+      "outcome": "expected",
+      "doc": "The visitor refused the browser's device prompt on a page whose policy allows both devices."
+    },
+    {
+      "code": "prejoin.refusal_remembered",
+      "outcome": "expected",
+      "doc": "The browser kept an earlier refusal on an unframed page whose policy allows both devices."
+    },
+    {
+      "code": "embed.grant_withdrawn",
+      "outcome": "expected",
+      "doc": "Every unused grant's Participant was removed, or its Episode ended, by a tenant-credential request within 60 s of issue."
+    },
+    {
+      "code": "embed.access_refused",
+      "outcome": "error",
+      "doc": "The host application's access call failed or refused the embed."
+    },
+    {
+      "code": "dashboard.signed_out",
+      "outcome": "expected",
+      "doc": "A dashboard request was rejected because the session was expired or missing, not unreadable."
+    }
+  ],
+  "machines": [
+    {
+      "name": "prejoin.access",
+      "doc": "The prejoin device-access state on a client session (usePreJoinDevices): checking reads the permission, ask waits for the visitor, requesting waits on the prompt, granted opens the preview, blocked means the browser refuses.",
+      "states": [
+        "checking",
+        "ask",
+        "requesting",
+        "granted",
+        "blocked"
+      ],
+      "initial": "checking",
+      "edges": [
+        [
+          "checking",
+          "ask"
+        ],
+        [
+          "checking",
+          "granted"
+        ],
+        [
+          "checking",
+          "blocked"
+        ],
+        [
+          "ask",
+          "requesting"
+        ],
+        [
+          "requesting",
+          "granted"
+        ],
+        [
+          "requesting",
+          "blocked"
+        ],
+        [
+          "granted",
+          "blocked"
+        ],
+        [
+          "blocked",
+          "requesting"
+        ]
+      ],
+      "triggers": [
+        "permission_query",
+        "device_labels",
+        "preview_open",
+        "request"
+      ]
+    },
+    {
+      "name": "admission.entrance",
+      "doc": "The public entrance phase on a client session (entrance-machine.ts).",
+      "states": [
+        "idle",
+        "arriving",
+        "waiting",
+        "admitted",
+        "ended",
+        "failed"
+      ],
+      "initial": "idle",
+      "edges": [
+        [
+          "idle",
+          "arriving"
+        ],
+        [
+          "failed",
+          "arriving"
+        ],
+        [
+          "ended",
+          "arriving"
+        ],
+        [
+          "arriving",
+          "waiting"
+        ],
+        [
+          "arriving",
+          "admitted"
+        ],
+        [
+          "arriving",
+          "failed"
+        ],
+        [
+          "waiting",
+          "admitted"
+        ],
+        [
+          "waiting",
+          "failed"
+        ],
+        [
+          "waiting",
+          "idle"
+        ],
+        [
+          "admitted",
+          "failed"
+        ],
+        [
+          "admitted",
+          "ended"
+        ]
+      ],
+      "triggers": [
+        "started",
+        "rejoin_released",
+        "waiting_for_host",
+        "admitted",
+        "call_ui_failed",
+        "failed",
+        "cancelled",
+        "call_ended"
+      ]
+    }
+  ],
   "facts": [
+    {
+      "name": "boot.started",
+      "kind": "event",
+      "per": "any",
+      "doc": "A page's first client fact: the beacon ran, with the entry path, framing and device policy it saw.",
+      "events": [
+        {
+          "event": "boot.started",
+          "source": "client",
+          "claim": "entry_path",
+          "fields": [
+            "entry_path",
+            "framed",
+            "policy_camera",
+            "policy_microphone",
+            "visibility",
+            "storage_state",
+            "client_session_id",
+            "device_id",
+            "device_ephemeral",
+            "app_build",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "entry.record",
+          "source": "api",
+          "claim": "entry_path",
+          "fields": [
+            "record_name",
+            "entry_path",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.edge_documents",
+      "kind": "aggregate",
+      "per": "any",
+      "doc": "Edge document serves in a rollup bucket; the only witness for a page whose scripts never ran.",
+      "events": [
+        {
+          "event": "edge.http_rollup",
+          "source": "edge",
+          "claim": "request_count",
+          "fields": [
+            "path_class",
+            "content_class",
+            "ua_class",
+            "edge_status",
+            "request_count",
+            "window_start_ms",
+            "window_end_ms",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.visible",
+      "kind": "event",
+      "per": "any",
+      "doc": "The first visibility transition to visible; the clock start when boot.started saw a hidden page.",
+      "events": [
+        {
+          "event": "boot.visible",
+          "source": "client",
+          "claim": "est_server_ms",
+          "fields": [
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.app",
+      "kind": "event",
+      "per": "any",
+      "doc": "The app's first screen surface.",
+      "events": [
+        {
+          "event": "boot.app",
+          "source": "client",
+          "claim": "surface_state",
+          "fields": [
+            "surface_state",
+            "shown_ms",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.pagehide",
+      "kind": "event",
+      "per": "any",
+      "doc": "The page hid; app_shown=false after the clock start proves the app never reached its first screen.",
+      "events": [
+        {
+          "event": "boot.pagehide",
+          "source": "client",
+          "claim": "app_shown",
+          "fields": [
+            "app_shown",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.chunk_failed",
+      "kind": "event",
+      "per": "any",
+      "doc": "A chunk failed and the one reload either ran or had been spent.",
+      "events": [
+        {
+          "event": "boot.chunk_failed",
+          "source": "client",
+          "claim": "reloaded",
+          "fields": [
+            "reloaded",
+            "client_session_id",
+            "device_id",
+            "device_ephemeral",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.render_failed",
+      "kind": "event",
+      "per": "any",
+      "doc": "The root route's onCatch reported a render error before the call UI mounted.",
+      "events": [
+        {
+          "event": "boot.render_failed",
+          "source": "client",
+          "claim": "error_name",
+          "fields": [
+            "route_id",
+            "error_name",
+            "error_class",
+            "error_fingerprint",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.error_page",
+      "kind": "event",
+      "per": "any",
+      "doc": "The root error page surface; broken even when its paired boot.render_failed is missing.",
+      "events": [
+        {
+          "event": "boot.error_page",
+          "source": "client",
+          "claim": "surface_state",
+          "fields": [
+            "surface_state",
+            "shown_ms",
+            "route_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "boot.load_call_ui",
+      "kind": "event",
+      "per": "any",
+      "doc": "The call UI load op and its terminal.",
+      "events": [
+        {
+          "event": "boot.load_call_ui",
+          "source": "client",
+          "claim": "outcome",
+          "fields": [
+            "outcome",
+            "reason_code",
+            "duration_ms",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embed.grant",
+      "kind": "event",
+      "per": "any",
+      "doc": "An access grant the API issued for a Participant; needs 2xx api logs to be witnessed.",
+      "events": [
+        {
+          "event": "http.request",
+          "source": "api",
+          "claim": "http_status",
+          "fields": [
+            "http_route",
+            "http_status",
+            "method",
+            "participant_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embed.sync_auth",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Sync's websocket authentication of the grant's Participant, by participant_id_hash.",
+      "events": [
+        {
+          "event": "sync.websocket.authenticated",
+          "source": "sync",
+          "claim": "participant_id_hash",
+          "fields": [
+            "participant_id_hash",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embed.api_request",
+      "kind": "event",
+      "per": "any",
+      "doc": "Any api request under the grant's Participant after issue; its absence with no sync auth makes the grant unused.",
+      "events": [
+        {
+          "event": "http.request",
+          "source": "api",
+          "claim": "http_route",
+          "fields": [
+            "http_route",
+            "http_status",
+            "method",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embed.participant",
+      "kind": "state",
+      "per": "seat",
+      "doc": "The grant Participant's row: whether it was removed and when.",
+      "events": [
+        {
+          "event": "admission.db.participant",
+          "source": "db",
+          "claim": "participant_status",
+          "fields": [
+            "participant_status",
+            "manage_admission",
+            "joined_at",
+            "participant_id",
+            "episode_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embed.episode",
+      "kind": "once",
+      "per": "item",
+      "doc": "Whether the grant Participant's Episode ended and when.",
+      "events": [
+        {
+          "event": "embed.db.episode",
+          "source": "db",
+          "claim": "episode_status",
+          "fields": [
+            "episode_status",
+            "ended_at",
+            "episode_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invite.decision",
+      "kind": "event",
+      "per": "item",
+      "doc": "The API's invite.resolve decision for this attempt, with its server-side reason and row inputs.",
+      "events": [
+        {
+          "event": "invite.resolve",
+          "source": "api",
+          "claim": "decision",
+          "fields": [
+            "decision",
+            "reason_code",
+            "credential_kind",
+            "state_epoch",
+            "invite_generation",
+            "arrival_handle",
+            "user_id",
+            "space_id",
+            "tenant_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invite.row",
+      "kind": "state",
+      "per": "item",
+      "doc": "The invite row at the decision's state_epoch.",
+      "events": [
+        {
+          "event": "invite.db.invite",
+          "source": "db",
+          "claim": "enabled",
+          "fields": [
+            "enabled",
+            "disabled_at",
+            "rotated_at",
+            "invite_generation",
+            "state_epoch",
+            "space_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invite.space",
+      "kind": "state",
+      "per": "item",
+      "doc": "The Space row: archived_at and updated_at for archived refusals, admission_mode for members_only.",
+      "events": [
+        {
+          "event": "invite.db.space",
+          "source": "db",
+          "claim": "updated_at",
+          "fields": [
+            "archived_at",
+            "updated_at",
+            "admission_mode",
+            "space_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invite.arrival",
+      "kind": "state",
+      "per": "item",
+      "doc": "The arrival row behind an arrival_mismatch refusal.",
+      "events": [
+        {
+          "event": "admission.db.arrival",
+          "source": "db",
+          "claim": "arrival_state",
+          "fields": [
+            "arrival_state",
+            "invite_generation",
+            "created_at",
+            "arrival_handle",
+            "space_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invite.membership",
+      "kind": "state",
+      "per": "item",
+      "doc": "The decision's usr_ membership in the Tenant, for members_only refusals.",
+      "events": [
+        {
+          "event": "invite.db.membership",
+          "source": "db",
+          "claim": "created_at",
+          "fields": [
+            "created_at",
+            "user_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
     {
       "name": "admission.decision",
       "kind": "once",
       "per": "item",
-      "events": [],
-      "doc": "The API's admission decision for a join attempt. Claim: admitted, or the refusal reason."
+      "doc": "The attempt's authoritative admission decision: the invite.resolve that refused or open-admitted it, or the admission.decided or outcome that ended its knock.",
+      "events": [
+        {
+          "event": "invite.resolve",
+          "source": "api",
+          "claim": "decision",
+          "fields": [
+            "decision",
+            "reason_code",
+            "arrival_handle",
+            "client_session_id",
+            "space_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "admission.decided",
+          "source": "api",
+          "claim": "decision",
+          "fields": [
+            "decision",
+            "reason_code",
+            "admission_request_id",
+            "arrival_handle",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "admission.outcome",
+          "source": "api",
+          "claim": "decision",
+          "fields": [
+            "decision",
+            "reason_code",
+            "arrival_handle",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.request",
+      "kind": "state",
+      "per": "item",
+      "doc": "The knock's request row in Postgres and Sync's room state, one decision, plus the sync span that proves it reached room state.",
+      "events": [
+        {
+          "event": "admission.db.request",
+          "source": "db",
+          "claim": "admission_status",
+          "fields": [
+            "admission_status",
+            "requested_at",
+            "expires_at",
+            "decided_at",
+            "decided_by",
+            "arrival_handle",
+            "admission_request_id",
+            "space_id",
+            "tenant_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "admission.db.sync_request",
+          "source": "db",
+          "claim": "admission_status",
+          "fields": [
+            "admission_status",
+            "requested_at",
+            "expires_at",
+            "decided_at",
+            "admission_request_id",
+            "participant_id",
+            "episode_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "sync.admission_requested",
+          "source": "sync",
+          "claim": "admission_request_id",
+          "fields": [
+            "admission_request_id",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.host",
+      "kind": "state",
+      "per": "seat",
+      "doc": "A positioned host Participant: manageAdmission, active at request time and staying, plus its sync authentication.",
+      "events": [
+        {
+          "event": "admission.db.participant",
+          "source": "db",
+          "claim": "participant_status",
+          "fields": [
+            "participant_status",
+            "manage_admission",
+            "joined_at",
+            "participant_id",
+            "episode_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "sync.websocket.authenticated",
+          "source": "sync",
+          "claim": "participant_id_hash",
+          "fields": [
+            "participant_id_hash",
+            "participant_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.host_reads",
+      "kind": "event",
+      "per": "any",
+      "doc": "A dashboard host's call page surface or its edge call-status reads for the Space.",
+      "events": [
+        {
+          "event": "dashboard.call_page",
+          "source": "client",
+          "claim": "surface_state",
+          "fields": [
+            "surface_state",
+            "shown_ms",
+            "space_id",
+            "user_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "edge.call_status",
+          "source": "edge",
+          "claim": "http_status",
+          "fields": [
+            "http_status",
+            "space_id",
+            "user_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.knock_shown",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A knock surface for the request shown to a host, on the notice or the dashboard list.",
+      "events": [
+        {
+          "event": "admission.knock_notice",
+          "source": "client",
+          "claim": "surface_state",
+          "fields": [
+            "surface_state",
+            "shown_ms",
+            "admission_request_id",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "dashboard.knocks",
+          "source": "client",
+          "claim": "surface_state",
+          "fields": [
+            "surface_state",
+            "shown_ms",
+            "space_id",
+            "user_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.decide",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A host's admission.decide op for the request; ok is not proof, decided_at is.",
+      "events": [
+        {
+          "event": "admission.decide",
+          "source": "client",
+          "claim": "outcome",
+          "fields": [
+            "outcome",
+            "reason_code",
+            "duration_ms",
+            "admission_request_id",
+            "participant_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.arrival_terminal",
+      "kind": "once",
+      "per": "item",
+      "doc": "The arrival's terminal admission outcome: the db row's terminal_reason and the sweeper span, one decision.",
+      "events": [
+        {
+          "event": "admission.db.arrival",
+          "source": "db",
+          "claim": "terminal_reason",
+          "fields": [
+            "terminal_reason",
+            "arrival_state",
+            "completed_at",
+            "arrival_handle",
+            "space_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "admission.sweep",
+          "source": "api",
+          "claim": "completed_at",
+          "fields": [
+            "completed_at",
+            "arrival_handle",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.status_poll",
+      "kind": "event",
+      "per": "item",
+      "doc": "A status poll for the arrival, witnessed by the api request log (with its arrival handle) and the client poll fact.",
+      "events": [
+        {
+          "event": "public_invite.request",
+          "source": "api",
+          "claim": "http_status",
+          "fields": [
+            "operation",
+            "http_status",
+            "arrival_handle",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        },
+        {
+          "event": "admission.status_poll",
+          "source": "client",
+          "claim": "est_server_ms",
+          "fields": [
+            "arrival_handle",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "admission.pagehide",
+      "kind": "event",
+      "per": "item",
+      "doc": "The waiting page hid; phase=waiting before approval witnesses the guest leaving.",
+      "events": [
+        {
+          "event": "admission.pagehide",
+          "source": "client",
+          "claim": "phase",
+          "fields": [
+            "phase",
+            "arrival_handle",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prejoin.access",
+      "kind": "event",
+      "per": "any",
+      "doc": "A prejoin.access machine transition, witnessed through its prejoin.access_edge row.",
+      "events": [
+        {
+          "event": "prejoin.access_edge",
+          "source": "client",
+          "claim": "to_state",
+          "fields": [
+            "from_state",
+            "to_state",
+            "trigger",
+            "error_name",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prejoin.device",
+      "kind": "event",
+      "per": "any",
+      "doc": "A prejoin device failure with its DOMException name.",
+      "events": [
+        {
+          "event": "prejoin.device_error",
+          "source": "client",
+          "claim": "error_name",
+          "fields": [
+            "device",
+            "error_name",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dashboard.function",
+      "kind": "event",
+      "per": "any",
+      "doc": "A dashboard server function's failure log through the edge feed.",
+      "events": [
+        {
+          "event": "dashboard.request_failed",
+          "source": "edge",
+          "claim": "http_status",
+          "fields": [
+            "page",
+            "method",
+            "http_status",
+            "auth_result",
+            "upstream_status",
+            "upstream_journey_id",
+            "client_session_id",
+            "est_server_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dashboard.upstream",
+      "kind": "event",
+      "per": "any",
+      "doc": "The api request the dashboard function called upstream; an independent witness.",
+      "events": [
+        {
+          "event": "http.request",
+          "source": "api",
+          "claim": "http_status",
+          "fields": [
+            "http_route",
+            "http_status",
+            "method",
+            "est_server_ms"
+          ]
+        }
+      ]
     }
   ],
   "symptoms": [
     {
+      "code": "boot.never_ran",
+      "item": "platform",
+      "per": "item",
+      "doc": "Space pages were served to real browsers, but no script ran in any of them.",
+      "user_words": [
+        "the link never loads for anyone",
+        "every visitor gets a blank page"
+      ],
+      "witnesses": [
+        {
+          "fact": "boot.edge_documents",
+          "from": [
+            "edge"
+          ],
+          "required": true,
+          "query": "edge rollup buckets for path_class=space_page, content_class=html, ua_class=browser, edge_status=200, {from}..{to}",
+          "doc": "Edge document serves to real browsers."
+        },
+        {
+          "fact": "boot.started",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "client boot.started rows for the environment in the window, the previous 24 h and after the window",
+          "doc": "A script that ran would have sent boot.started."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/boot.never_ran.fault.test.mjs"
+    },
+    {
+      "code": "boot.app_failed",
+      "item": "attempt",
+      "per": "item",
+      "doc": "The beacon ran but the app never showed its first screen, a chunk failed past the one reload, or the page threw during render before the call UI mounted.",
+      "user_words": [
+        "the page stayed blank",
+        "it crashed before the call opened"
+      ],
+      "witnesses": [
+        {
+          "fact": "boot.started",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.started for {attempt}",
+          "doc": "The beacon ran and holds the page's framing and policy."
+        },
+        {
+          "fact": "boot.visible",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.visible for {attempt}",
+          "doc": "The clock start for a page that booted hidden."
+        },
+        {
+          "fact": "boot.app",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client surface(boot.app) for {attempt}",
+          "doc": "The first screen surface."
+        },
+        {
+          "fact": "boot.pagehide",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.pagehide for {attempt}",
+          "doc": "The page's last word; app_shown=false is the no-app proof."
+        },
+        {
+          "fact": "boot.chunk_failed",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.chunk_failed for {attempt} and its device",
+          "doc": "Chunk failures and the one reload."
+        },
+        {
+          "fact": "boot.load_call_ui",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client op(boot.load_call_ui) for {attempt}",
+          "doc": "The call UI load op and its terminal."
+        },
+        {
+          "fact": "boot.render_failed",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.render_failed for {attempt}",
+          "doc": "A root-caught render error."
+        },
+        {
+          "fact": "boot.error_page",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client surface(boot.error_page) for {attempt}",
+          "doc": "The root error page surface; broken even without its paired fact."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/boot.app_failed.fault.test.mjs"
+    },
+    {
+      "code": "embed.blocked",
+      "item": "tenant",
+      "per": "item",
+      "doc": "The embed got access grants, but nothing sent under them reached Chalk.",
+      "user_words": [
+        "the embed never connects",
+        "the call in our page is dead"
+      ],
+      "witnesses": [
+        {
+          "fact": "embed.grant",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "api http.request 2xx on the access-grant route for {tenant} in the window",
+          "doc": "Grants the API issued; needs 2xx api logs shipped."
+        },
+        {
+          "fact": "embed.sync_auth",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "sync.websocket.authenticated for the grant's participant_id_hash within 60 s of issue",
+          "doc": "A sync authentication under the grant."
+        },
+        {
+          "fact": "embed.api_request",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "api http.request naming the grant's Participant within 60 s of issue",
+          "doc": "Any api request under the grant besides its issue."
+        },
+        {
+          "fact": "embed.participant",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "participants rows for the grants' Participants",
+          "doc": "Whether the Participant was removed."
+        },
+        {
+          "fact": "embed.episode",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "episodes rows for the grants' Episodes",
+          "doc": "Whether the Episode ended."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/embed.blocked.fault.test.mjs"
+    },
+    {
+      "code": "invite.refused",
+      "item": "attempt",
+      "per": "item",
+      "doc": "The API refused an invite for a reason its own rows contradict.",
+      "user_words": [
+        "the link says unavailable but it's on",
+        "my invite stopped working for no reason"
+      ],
+      "witnesses": [
+        {
+          "fact": "invite.decision",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "api invite.resolve decisions for {attempt}",
+          "doc": "The refusal decision and its server-side reason."
+        },
+        {
+          "fact": "invite.row",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "space_public_invites row for the item ids at the decision's state_epoch",
+          "doc": "The invite row the decision claims."
+        },
+        {
+          "fact": "invite.space",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "spaces row for the item ids",
+          "doc": "The Space's archived and admission state."
+        },
+        {
+          "fact": "invite.arrival",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "space_public_arrivals row for the decision's arrival",
+          "doc": "The arrival behind an arrival_mismatch refusal."
+        },
+        {
+          "fact": "invite.membership",
+          "from": [
+            "db"
+          ],
+          "required": true,
+          "query": "memberships rows for the decision's usr_ and {tenant}",
+          "doc": "Whether the decision's account held a membership."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/invite.refused.fault.test.mjs"
+    },
+    {
       "code": "admission.unresolved",
       "item": "attempt",
       "per": "item",
-      "doc": "A join attempt never got an admission decision, so the person waited on a screen that never resolved.",
-      "user_words": ["it just kept loading", "I never got in"],
+      "doc": "A join attempt never got an admission decision, so the visitor waited on a screen that never resolved.",
+      "user_words": [
+        "it just spins forever",
+        "nothing happened after I asked to join"
+      ],
       "witnesses": [
         {
           "fact": "admission.decision",
-          "from": ["api"],
+          "from": [
+            "api"
+          ],
           "required": true,
-          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
-          "doc": "The decision that admits or refuses the attempt."
+          "query": "api invite.resolve, admission.decided and admission.outcome decisions for {attempt}",
+          "doc": "The attempt's authoritative admission decision, witnessed only by api."
         }
       ],
-      "fault_scenario": null
+      "fault_scenario": "scripts/entry-observability/admission.unresolved.fault.test.mjs"
+    },
+    {
+      "code": "admission.unanswered",
+      "item": "episode",
+      "per": "item",
+      "doc": "A knock expired while a host was positioned but never saw it, or a host's answer never committed.",
+      "user_words": [
+        "I knocked and nobody saw it",
+        "the host let me in but I still can't join"
+      ],
+      "witnesses": [
+        {
+          "fact": "admission.request",
+          "from": [
+            "db",
+            "sync"
+          ],
+          "required": true,
+          "query": "space_public_admission_requests, sync_admission_requests and admission_requested for the seat's request",
+          "doc": "The request row and room state, one decision."
+        },
+        {
+          "fact": "admission.host",
+          "from": [
+            "db",
+            "sync"
+          ],
+          "required": true,
+          "query": "participants and sync.websocket.authenticated for {episode}'s hosts",
+          "doc": "Host positioning by Participant row plus sync authentication."
+        },
+        {
+          "fact": "admission.host_reads",
+          "from": [
+            "client",
+            "edge"
+          ],
+          "required": true,
+          "query": "dashboard.call_page surfaces and edge call-status reads for the Space",
+          "doc": "Host positioning by the dashboard."
+        },
+        {
+          "fact": "admission.knock_shown",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "admission.knock_notice and dashboard.knocks surfaces for the request",
+          "doc": "The knock surface shown to a host."
+        },
+        {
+          "fact": "admission.decide",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "op(admission.decide) for the request",
+          "doc": "A host's answer op; ok is not proof, decided_at is."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/admission.unanswered.fault.test.mjs"
+    },
+    {
+      "code": "admission.not_collected",
+      "item": "episode",
+      "per": "item",
+      "doc": "The host approved, but the Guest's waiting page never collected the approval.",
+      "user_words": [
+        "I was let in but nothing happened",
+        "it approved me and I'm still waiting"
+      ],
+      "witnesses": [
+        {
+          "fact": "admission.arrival_terminal",
+          "from": [
+            "db",
+            "api"
+          ],
+          "required": true,
+          "query": "space_public_arrivals terminal_reason and the admission sweeper span for the seat's arrival",
+          "doc": "The terminal not-collected outcome, one decision."
+        },
+        {
+          "fact": "admission.status_poll",
+          "from": [
+            "api",
+            "client"
+          ],
+          "required": true,
+          "query": "api public.status polls for the arrival and client admission.status_poll facts",
+          "doc": "The poll cadence before and after completion."
+        },
+        {
+          "fact": "admission.pagehide",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client admission.pagehide for the arrival's client session",
+          "doc": "Whether the waiting page hid before approval."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/admission.not_collected.fault.test.mjs"
+    },
+    {
+      "code": "prejoin.devices_blocked",
+      "item": "attempt",
+      "per": "item",
+      "doc": "The browser refused devices without the visitor refusing a prompt: a host policy or the OS said no.",
+      "user_words": [
+        "it says no permission but I never got asked",
+        "camera blocked before I could allow it"
+      ],
+      "witnesses": [
+        {
+          "fact": "boot.started",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client boot.started for {attempt}",
+          "doc": "Framing and the page's device policy."
+        },
+        {
+          "fact": "prejoin.access",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "prejoin.access transitions for {attempt}",
+          "doc": "How the access state reached blocked, and by which trigger."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/prejoin.devices_blocked.fault.test.mjs"
+    },
+    {
+      "code": "prejoin.preview_failed",
+      "item": "attempt",
+      "per": "item",
+      "doc": "A device failed to open for a reason other than refusal or absence.",
+      "user_words": [
+        "my camera won't turn on",
+        "the preview never starts"
+      ],
+      "witnesses": [
+        {
+          "fact": "prejoin.device",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "client prejoin.device_error for {attempt}",
+          "doc": "The device error and its DOMException name."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/prejoin.preview_failed.fault.test.mjs"
+    },
+    {
+      "code": "dashboard.request_failed",
+      "item": "platform",
+      "per": "item",
+      "doc": "A /dashboard-api/* request failed with 5xx, or valid sign-ins were rejected as unreadable.",
+      "user_words": [
+        "the dashboard is down",
+        "I keep getting signed out"
+      ],
+      "witnesses": [
+        {
+          "fact": "dashboard.function",
+          "from": [
+            "edge"
+          ],
+          "required": true,
+          "query": "dashboard.request_failed rows through the edge feed for the platform day",
+          "doc": "The function's failure log with auth result and upstream status."
+        },
+        {
+          "fact": "dashboard.upstream",
+          "from": [
+            "api"
+          ],
+          "required": true,
+          "query": "api http.request rows for the dashboard's upstream calls",
+          "doc": "The upstream API witness, independent of the function."
+        }
+      ],
+      "fault_scenario": "scripts/entry-observability/dashboard.request_failed.fault.test.mjs"
     }
   ]
 }

@@ -5,6 +5,7 @@ export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
 export * from "./public-invites";
+export { createEntrySender, mintEntryIds, type EntrySender, type EntrySenderOptions } from "./obs/entry";
 export type { AppTelemetry } from "./telemetry/app";
 export { TelemetryOutbox } from "./telemetry/outbox";
 export { postTelemetry } from "./telemetry/send";

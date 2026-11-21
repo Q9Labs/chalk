@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/entry-observability/admission.unanswered.fault.test.mjs",
+      "command": "scripts/gates/with-postgres.sh -- node --test scripts/entry-observability/admission.unanswered.fault.test.mjs",
+      "writes": [
+        "admission.unanswered.rows.positive.json",
+        "admission.unanswered.rows.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/entry-observability/chain.test.mjs",
+      "command": "CHALK_CHECK=admission.unanswered node --test scripts/entry-observability/chain.test.mjs",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

@@ -106,6 +106,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/public/entry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Upload entry events */
+    post: operations["uploadEntryEvents"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/public/space-invite-arrival": {
     parameters: {
       query?: never;
@@ -2030,6 +2047,7 @@ export interface components {
     DateTimeString: string;
     /** Format: email */
     Email: string;
+    Empty: components["schemas"]["RequestRecordingExportRequest"];
     EntranceInvite: {
       space_invite_token: string;
     };
@@ -4257,6 +4275,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  uploadEntryEvents: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Empty"];
         };
       };
     };

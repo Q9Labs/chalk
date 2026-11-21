@@ -1,0 +1,126 @@
+{
+ "description": "The host approved the arrival and it went terminal, but the guest's waiting page kept polling until it left: the approval was never collected.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "episode",
+  "id": "e0000000-0000-4000-8000-000000000003",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "features": [
+   "media"
+  ],
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  },
+  "seats": [
+   {
+    "participant": "b0000000-0000-4000-8000-000000000004",
+    "name": "Spec",
+    "role": "guest",
+    "can_publish": true,
+    "generations": [
+     1
+    ],
+    "connections": [
+     "cn_1"
+    ],
+    "window": {
+     "from_ms": 1795600000000,
+     "to_ms": 1795603600000
+    },
+    "person": {
+     "kind": "guest",
+     "device": "dev_g",
+     "name": "Spec"
+    }
+   },
+   {
+    "participant": "c0000000-0000-4000-8000-000000000005",
+    "name": "Spec",
+    "role": "host",
+    "can_publish": true,
+    "generations": [
+     1
+    ],
+    "connections": [
+     "cn_1"
+    ],
+    "window": {
+     "from_ms": 1795600000000,
+     "to_ms": 1795603600000
+    },
+    "person": {
+     "kind": "user",
+     "id": "d0000000-0000-4000-8000-000000000006",
+     "name": "Host",
+     "tenant": "10000000-0000-4000-8000-000000000001"
+    }
+   }
+  ]
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "admission.sweep",
+   "event_id": "ev_admission_sweep_068",
+   "est_server_ms": 1795600030000,
+   "completed_at": 1795600030000,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "public_invite.request",
+   "event_id": "ev_public_invite_request_069",
+   "est_server_ms": 1795600010000,
+   "operation": "status",
+   "http_status": 200,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "client_session_id": "cs_spec_fault",
+   "event": "public_invite.request",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.status_poll",
+   "event_id": "ev_admission_status_poll_070",
+   "est_server_ms": 1795600010000,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.pagehide",
+   "event_id": "ev_admission_pagehide_071",
+   "est_server_ms": 1795600050000,
+   "phase": "admitted",
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  },
+  {
+   "kind": "fact",
+   "name": "admission.db.arrival",
+   "event_id": "db:arr:f0000000",
+   "space_id": "a0000000-0000-4000-8000-000000000002",
+   "tenant_id": "10000000-0000-4000-8000-000000000001",
+   "created_at": 1795600004000,
+   "completed_at": 1795600030000,
+   "arrival_state": "left",
+   "est_server_ms": 1795600030000,
+   "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+   "terminal_reason": "admission_not_collected",
+   "client_session_id": "cs_spec_fault",
+   "invite_generation": 1,
+   "episode_id": "e0000000-0000-4000-8000-000000000003"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/admission.not_collected/chain/admission.not_collected.rows.positive.json"
+ ]
+}

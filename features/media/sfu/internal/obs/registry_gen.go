@@ -3,89 +3,202 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "be1eeb3d2442"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventAdmissionDbArrival         = "admission.db.arrival"
+	EventAdmissionDbParticipant     = "admission.db.participant"
+	EventAdmissionDbRequest         = "admission.db.request"
+	EventAdmissionDbSyncRequest     = "admission.db.sync_request"
+	EventAdmissionDecide            = "admission.decide"
+	EventAdmissionDecided           = "admission.decided"
+	EventAdmissionKnockNotice       = "admission.knock_notice"
+	EventAdmissionOutcome           = "admission.outcome"
+	EventAdmissionPagehide          = "admission.pagehide"
+	EventAdmissionRequested         = "admission.requested"
+	EventAdmissionStatusPoll        = "admission.status_poll"
+	EventAdmissionSweep             = "admission.sweep"
+	EventBootApp                    = "boot.app"
+	EventBootChunkFailed            = "boot.chunk_failed"
+	EventBootErrorPage              = "boot.error_page"
+	EventBootLoadCallUi             = "boot.load_call_ui"
+	EventBootPagehide               = "boot.pagehide"
+	EventBootRenderFailed           = "boot.render_failed"
+	EventBootStarted                = "boot.started"
+	EventBootVisible                = "boot.visible"
+	EventClientCallEnded            = "client.call_ended"
+	EventDashboardCallPage          = "dashboard.call_page"
+	EventDashboardKnocks            = "dashboard.knocks"
+	EventDashboardRequestFailed     = "dashboard.request_failed"
+	EventEdgeCallStatus             = "edge.call_status"
+	EventEdgeHTTPRollup             = "edge.http_rollup"
+	EventEmbedCspViolation          = "embed.csp_violation"
+	EventEmbedDbEpisode             = "embed.db.episode"
+	EventEmbedGetAccess             = "embed.get_access"
+	EventEmbedJoinError             = "embed.join_error"
+	EventEntryRecord                = "entry.record"
+	EventHTTPRequest                = "http.request"
+	EventInviteArrive               = "invite.arrive"
+	EventInviteDbInvite             = "invite.db.invite"
+	EventInviteDbMembership         = "invite.db.membership"
+	EventInviteDbSpace              = "invite.db.space"
+	EventInviteFailure              = "invite.failure"
+	EventInviteResolve              = "invite.resolve"
+	EventObsClockJump               = "obs.clock_jump"
+	EventObsFlagsSnapshot           = "obs.flags_snapshot"
+	EventPrejoinAccessCard          = "prejoin.access_card"
+	EventPrejoinAccessEdge          = "prejoin.access_edge"
+	EventPrejoinDeviceError         = "prejoin.device_error"
+	EventPublicInviteRequest        = "public_invite.request"
+	EventSelftestAdmit              = "selftest.admit"
+	EventSelftestBanner             = "selftest.banner"
+	EventSelftestNote               = "selftest.note"
+	EventSelftestWork               = "selftest.work"
+	EventSyncAdmissionRequested     = "sync.admission_requested"
+	EventSyncEpisodeEnded           = "sync.episode.ended"
+	EventSyncWebsocketAuthenticated = "sync.websocket.authenticated"
 )
 
 // Machine names.
 const (
-	MachineClientConnection = "client.connection"
-	MachineEpisodeLifecycle = "episode.lifecycle"
-	MachineSelftestDoor     = "selftest.door"
+	MachineAdmissionEntrance = "admission.entrance"
+	MachineClientConnection  = "client.connection"
+	MachineEpisodeLifecycle  = "episode.lifecycle"
+	MachinePrejoinAccess     = "prejoin.access"
+	MachineSelftestDoor      = "selftest.door"
 )
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonAdmissionDecideFailed    = "admission.decide_failed"
+	ReasonAdmissionGuestLeft       = "admission.guest_left"
+	ReasonAdmissionNoHost          = "admission.no_host"
+	ReasonAdmissionSeenUnanswered  = "admission.seen_unanswered"
+	ReasonBootChunkLoad            = "boot.chunk_load"
+	ReasonBootChunkReloaded        = "boot.chunk_reloaded"
+	ReasonBootLoadFailed           = "boot.load_failed"
+	ReasonCancelled                = "cancelled"
+	ReasonDashboardSignedOut       = "dashboard.signed_out"
+	ReasonEmbedAccessRefused       = "embed.access_refused"
+	ReasonEmbedGrantWithdrawn      = "embed.grant_withdrawn"
+	ReasonEndTimeLimit             = "end.time_limit"
+	ReasonInviteArrivalMismatch    = "invite.arrival_mismatch"
+	ReasonInviteDisabled           = "invite.disabled"
+	ReasonInviteGenerationMismatch = "invite.generation_mismatch"
+	ReasonInviteInvalidRow         = "invite.invalid_row"
+	ReasonInviteMembersOnly        = "invite.members_only"
+	ReasonInviteNotFound           = "invite.not_found"
+	ReasonInviteSpaceArchived      = "invite.space_archived"
+	ReasonInviteSpaceMismatch      = "invite.space_mismatch"
+	ReasonInviteUnavailable        = "invite.unavailable"
+	ReasonPrejoinPromptRefused     = "prejoin.prompt_refused"
+	ReasonPrejoinRefusalRemembered = "prejoin.refusal_remembered"
+	ReasonSelftestBroken           = "selftest.broken"
+	ReasonSelftestBusy             = "selftest.busy"
+	ReasonUnclassified             = "unclassified"
 )
 
 // Field names.
 const (
+	FieldAdmissionMode      = "admission_mode"
 	FieldAdmissionRequestID = "admission_request_id"
+	FieldAdmissionStatus    = "admission_status"
 	FieldAgentID            = "agent_id"
 	FieldAppBuild           = "app_build"
+	FieldAppShown           = "app_shown"
 	FieldAppVersion         = "app_version"
+	FieldArchivedAt         = "archived_at"
+	FieldArrivalHandle      = "arrival_handle"
+	FieldArrivalState       = "arrival_state"
 	FieldAttempt            = "attempt"
+	FieldAuthResult         = "auth_result"
 	FieldBannerKind         = "banner_kind"
 	FieldBatchID            = "batch_id"
+	FieldBlockedOrigin      = "blocked_origin"
 	FieldClientMonoMs       = "client_mono_ms"
 	FieldClientSessionID    = "client_session_id"
 	FieldClientWallMs       = "client_wall_ms"
 	FieldClockEpoch         = "clock_epoch"
 	FieldClockErrMs         = "clock_err_ms"
 	FieldClockState         = "clock_state"
+	FieldCompletedAt        = "completed_at"
+	FieldContentClass       = "content_class"
+	FieldCreatedAt          = "created_at"
+	FieldCredentialKind     = "credential_kind"
+	FieldDecidedAt          = "decided_at"
+	FieldDecidedBy          = "decided_by"
 	FieldDecision           = "decision"
 	FieldDecisionID         = "decision_id"
+	FieldDevice             = "device"
 	FieldDeviceEphemeral    = "device_ephemeral"
 	FieldDeviceID           = "device_id"
+	FieldDirective          = "directive"
+	FieldDisabledAt         = "disabled_at"
 	FieldDropReason         = "drop_reason"
 	FieldDroppedSeqs        = "dropped_seqs"
 	FieldDurationMs         = "duration_ms"
+	FieldEdgeStatus         = "edge_status"
+	FieldEnabled            = "enabled"
 	FieldEnd                = "end"
 	FieldEndReason          = "end_reason"
+	FieldEndedAt            = "ended_at"
+	FieldEntryPath          = "entry_path"
 	FieldEnv                = "env"
 	FieldEpisodeID          = "episode_id"
+	FieldEpisodeStatus      = "episode_status"
+	FieldErrorClass         = "error_class"
+	FieldErrorFingerprint   = "error_fingerprint"
+	FieldErrorName          = "error_name"
 	FieldEstServerMs        = "est_server_ms"
 	FieldEventID            = "event_id"
+	FieldExpiresAt          = "expires_at"
 	FieldFlags              = "flags"
 	FieldFlagsHash          = "flags_hash"
+	FieldFramed             = "framed"
 	FieldFromState          = "from_state"
 	FieldGeneration         = "generation"
+	FieldHTTPRoute          = "http_route"
+	FieldHTTPStatus         = "http_status"
+	FieldInviteGeneration   = "invite_generation"
 	FieldItemCount          = "item_count"
 	FieldJobID              = "job_id"
+	FieldJoinedAt           = "joined_at"
 	FieldJourneyID          = "journey_id"
 	FieldJumpMs             = "jump_ms"
 	FieldKind               = "kind"
 	FieldMachine            = "machine"
+	FieldManageAdmission    = "manage_admission"
 	FieldMediaConnectionID  = "media_connection_id"
+	FieldMethod             = "method"
 	FieldModule             = "module"
 	FieldName               = "name"
 	FieldNextSeq            = "next_seq"
 	FieldNoteKind           = "note_kind"
 	FieldOpID               = "op_id"
+	FieldOperation          = "operation"
 	FieldOutcome            = "outcome"
+	FieldPage               = "page"
 	FieldParentOpID         = "parent_op_id"
 	FieldParticipantID      = "participant_id"
+	FieldParticipantIDHash  = "participant_id_hash"
+	FieldParticipantStatus  = "participant_status"
+	FieldPathClass          = "path_class"
+	FieldPhase              = "phase"
 	FieldPlatform           = "platform"
+	FieldPolicyCamera       = "policy_camera"
+	FieldPolicyMicrophone   = "policy_microphone"
 	FieldProviderMediaID    = "provider_media_id"
 	FieldReasonCode         = "reason_code"
+	FieldRecordName         = "record_name"
 	FieldRecordingID        = "recording_id"
 	FieldReleaseSHA         = "release_sha"
+	FieldReloaded           = "reloaded"
+	FieldRequestCount       = "request_count"
 	FieldRequestID          = "request_id"
+	FieldRequestedAt        = "requested_at"
+	FieldRotatedAt          = "rotated_at"
+	FieldRouteID            = "route_id"
 	FieldSchemaVer          = "schema_ver"
 	FieldSDKVersion         = "sdk_version"
 	FieldSeq                = "seq"
@@ -93,68 +206,125 @@ const (
 	FieldSourceID           = "source_id"
 	FieldSpaceID            = "space_id"
 	FieldSpanID             = "span_id"
+	FieldStateEpoch         = "state_epoch"
+	FieldStorageState       = "storage_state"
 	FieldSurfaceState       = "surface_state"
 	FieldSyncConnectionID   = "sync_connection_id"
 	FieldTenantID           = "tenant_id"
+	FieldTerminalReason     = "terminal_reason"
 	FieldToState            = "to_state"
 	FieldTraceID            = "trace_id"
 	FieldTrigger            = "trigger"
+	FieldUaClass            = "ua_class"
+	FieldUpdatedAt          = "updated_at"
+	FieldUpstreamJourneyID  = "upstream_journey_id"
+	FieldUpstreamStatus     = "upstream_status"
 	FieldUserID             = "user_id"
+	FieldVisibility         = "visibility"
 	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldWindowEndMs        = "window_end_ms"
+	FieldWindowStartMs      = "window_start_ms"
 )
 
 var registryFields = map[string]fieldSpec{
+	"admission_mode":       {typ: "enum", group: "event", required: false, values: []string{"open", "knock", "members_only"}},
 	"admission_request_id": {typ: "id", group: "trail", required: false},
+	"admission_status":     {typ: "enum", group: "event", required: false, values: []string{"pending", "admitted", "approved", "denied", "expired", "invalidated"}},
 	"agent_id":             {typ: "id", group: "trail", required: false},
 	"app_build":            {typ: "string", group: "build", required: false},
+	"app_shown":            {typ: "bool", group: "event", required: false},
 	"app_version":          {typ: "string", group: "build", required: false},
+	"archived_at":          {typ: "int", group: "event", required: false},
+	"arrival_handle":       {typ: "string", group: "event", required: false},
+	"arrival_state":        {typ: "string", group: "event", required: false},
 	"attempt":              {typ: "int", group: "trail", required: false},
+	"auth_result":          {typ: "enum", group: "event", required: false, values: []string{"expired", "unreadable", "missing"}},
 	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
 	"batch_id":             {typ: "id", group: "delivery", required: false},
+	"blocked_origin":       {typ: "string", group: "event", required: false},
 	"client_mono_ms":       {typ: "number", group: "clock", required: false},
 	"client_session_id":    {typ: "id", group: "trail", required: false},
 	"client_wall_ms":       {typ: "int", group: "clock", required: false},
 	"clock_epoch":          {typ: "int", group: "clock", required: false},
 	"clock_err_ms":         {typ: "int", group: "clock", required: false},
 	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"completed_at":         {typ: "int", group: "event", required: false},
+	"content_class":        {typ: "enum", group: "event", required: false, values: []string{"html", "other"}},
+	"created_at":           {typ: "int", group: "event", required: false},
+	"credential_kind":      {typ: "enum", group: "event", required: false, values: []string{"code", "token"}},
+	"decided_at":           {typ: "int", group: "event", required: false},
+	"decided_by":           {typ: "id", group: "event", required: false},
 	"decision":             {typ: "string", group: "record", required: false},
 	"decision_id":          {typ: "id", group: "record", required: false},
+	"device":               {typ: "enum", group: "event", required: false, values: []string{"camera", "microphone"}},
 	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
 	"device_id":            {typ: "id", group: "trail", required: false},
+	"directive":            {typ: "string", group: "event", required: false},
+	"disabled_at":          {typ: "int", group: "event", required: false},
 	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
 	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
 	"duration_ms":          {typ: "int", group: "record", required: false},
+	"edge_status":          {typ: "int", group: "event", required: false},
+	"enabled":              {typ: "bool", group: "event", required: false},
 	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
 	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"ended_at":             {typ: "int", group: "event", required: false},
+	"entry_path":           {typ: "enum", group: "event", required: false, values: []string{"space_public", "space_private", "space_open_signup", "space_dash_account", "dashboard", "embed", "api_key", "site"}},
 	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
 	"episode_id":           {typ: "id", group: "trail", required: false},
+	"episode_status":       {typ: "enum", group: "event", required: false, values: []string{"active", "ending", "ended"}},
+	"error_class":          {typ: "enum", group: "event", required: false, values: []string{"chunk_load", "missing_export", "other"}},
+	"error_fingerprint":    {typ: "string", group: "event", required: false},
+	"error_name":           {typ: "string", group: "event", required: false},
 	"est_server_ms":        {typ: "int", group: "clock", required: false},
 	"event_id":             {typ: "id", group: "delivery", required: true},
+	"expires_at":           {typ: "int", group: "event", required: false},
 	"flags":                {typ: "map", group: "event", required: false},
 	"flags_hash":           {typ: "string", group: "flags", required: false},
+	"framed":               {typ: "bool", group: "event", required: false},
 	"from_state":           {typ: "string", group: "record", required: false},
 	"generation":           {typ: "int", group: "trail", required: false},
+	"http_route":           {typ: "string", group: "event", required: false},
+	"http_status":          {typ: "int", group: "event", required: false},
+	"invite_generation":    {typ: "int", group: "event", required: false},
 	"item_count":           {typ: "int", group: "event", required: false},
 	"job_id":               {typ: "id", group: "trail", required: false},
+	"joined_at":            {typ: "int", group: "event", required: false},
 	"journey_id":           {typ: "id", group: "trail", required: false},
 	"jump_ms":              {typ: "int", group: "event", required: false},
 	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
 	"machine":              {typ: "string", group: "record", required: false},
+	"manage_admission":     {typ: "bool", group: "event", required: false},
 	"media_connection_id":  {typ: "id", group: "trail", required: false},
+	"method":               {typ: "string", group: "event", required: false},
 	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
 	"name":                 {typ: "string", group: "record", required: true},
 	"next_seq":             {typ: "int", group: "delivery", required: false},
 	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
 	"op_id":                {typ: "id", group: "record", required: false},
+	"operation":            {typ: "string", group: "event", required: false},
 	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"page":                 {typ: "string", group: "event", required: false},
 	"parent_op_id":         {typ: "id", group: "record", required: false},
 	"participant_id":       {typ: "id", group: "trail", required: false},
+	"participant_id_hash":  {typ: "string", group: "event", required: false},
+	"participant_status":   {typ: "string", group: "event", required: false},
+	"path_class":           {typ: "enum", group: "event", required: false, values: []string{"space_page", "other"}},
+	"phase":                {typ: "enum", group: "event", required: false, values: []string{"arriving", "waiting", "admitted", "joining"}},
 	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"policy_camera":        {typ: "enum", group: "event", required: false, values: []string{"true", "false", "unavailable(no_api)"}},
+	"policy_microphone":    {typ: "enum", group: "event", required: false, values: []string{"true", "false", "unavailable(no_api)"}},
 	"provider_media_id":    {typ: "id", group: "trail", required: false},
 	"reason_code":          {typ: "string", group: "record", required: false},
+	"record_name":          {typ: "string", group: "event", required: false},
 	"recording_id":         {typ: "id", group: "trail", required: false},
 	"release_sha":          {typ: "string", group: "build", required: false},
+	"reloaded":             {typ: "bool", group: "event", required: false},
+	"request_count":        {typ: "int", group: "event", required: false},
 	"request_id":           {typ: "id", group: "trail", required: false},
+	"requested_at":         {typ: "int", group: "event", required: false},
+	"rotated_at":           {typ: "int", group: "event", required: false},
+	"route_id":             {typ: "string", group: "event", required: false},
 	"schema_ver":           {typ: "string", group: "build", required: true},
 	"sdk_version":          {typ: "string", group: "build", required: false},
 	"seq":                  {typ: "int", group: "delivery", required: true},
@@ -162,39 +332,115 @@ var registryFields = map[string]fieldSpec{
 	"source_id":            {typ: "string", group: "delivery", required: true},
 	"space_id":             {typ: "id", group: "trail", required: false},
 	"span_id":              {typ: "id", group: "trail", required: false},
+	"state_epoch":          {typ: "int", group: "event", required: false},
+	"storage_state":        {typ: "enum", group: "event", required: false, values: []string{"persistent", "unavailable"}},
 	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
 	"sync_connection_id":   {typ: "id", group: "trail", required: false},
 	"tenant_id":            {typ: "id", group: "trail", required: false},
+	"terminal_reason":      {typ: "string", group: "event", required: false},
 	"to_state":             {typ: "string", group: "record", required: false},
 	"trace_id":             {typ: "id", group: "trail", required: false},
 	"trigger":              {typ: "string", group: "record", required: false},
+	"ua_class":             {typ: "enum", group: "event", required: false, values: []string{"browser", "bot", "other"}},
+	"updated_at":           {typ: "int", group: "event", required: false},
+	"upstream_journey_id":  {typ: "id", group: "event", required: false},
+	"upstream_status":      {typ: "int", group: "event", required: false},
 	"user_id":              {typ: "id", group: "trail", required: false},
+	"visibility":           {typ: "enum", group: "event", required: false, values: []string{"visible", "hidden"}},
 	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"window_end_ms":        {typ: "int", group: "event", required: false},
+	"window_start_ms":      {typ: "int", group: "event", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"admission.db.arrival":         {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"arrival_state": {required: true}, "invite_generation": {required: false}, "terminal_reason": {required: false}, "completed_at": {required: false}, "created_at": {required: true}, "arrival_handle": {required: true}}},
+	"admission.db.participant":     {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_status": {required: true}, "manage_admission": {required: true}, "joined_at": {required: true}}},
+	"admission.db.request":         {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"admission_status": {required: true}, "requested_at": {required: true}, "expires_at": {required: true}, "decided_at": {required: false}, "decided_by": {required: false}, "arrival_handle": {required: false}}},
+	"admission.db.sync_request":    {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"admission_status": {required: true}, "requested_at": {required: true}, "expires_at": {required: true}, "decided_at": {required: false}}},
+	"admission.decide":             {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"admission.decided":            {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"admitted", "denied", "expired"}, fields: map[string]fieldRule{"arrival_handle": {required: false}, "decided_by": {required: false}}},
+	"admission.knock_notice":       {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"admission.outcome":            {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"admitted", "denied", "expired", "withdrawn", "not_collected"}, fields: map[string]fieldRule{"arrival_handle": {required: true}}},
+	"admission.pagehide":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"phase": {required: true}, "arrival_handle": {required: false}}},
+	"admission.requested":          {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"requested"}, fields: map[string]fieldRule{"arrival_handle": {required: true}}},
+	"admission.status_poll":        {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"arrival_handle": {required: true}}},
+	"admission.sweep":              {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"arrival_handle": {required: true}, "completed_at": {required: true}}},
+	"boot.app":                     {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"boot.chunk_failed":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"reloaded": {required: true}}},
+	"boot.error_page":              {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"route_id": {required: false}}},
+	"boot.load_call_ui":            {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"boot.pagehide":                {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"app_shown": {required: true}}},
+	"boot.render_failed":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"route_id": {required: true}, "error_name": {required: true}, "error_class": {required: true}, "error_fingerprint": {required: true}}},
+	"boot.started":                 {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"entry_path": {required: true}, "framed": {required: true}, "policy_camera": {required: true}, "policy_microphone": {required: true}, "visibility": {required: true}, "storage_state": {required: true}}},
+	"boot.visible":                 {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"client.call_ended":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"dashboard.call_page":          {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"dashboard.knocks":             {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"dashboard.request_failed":     {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"page": {required: true}, "method": {required: true}, "http_status": {required: true}, "auth_result": {required: false}, "upstream_status": {required: false}, "upstream_journey_id": {required: false}}},
+	"edge.call_status":             {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"http_status": {required: true}}},
+	"edge.http_rollup":             {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"path_class": {required: true}, "content_class": {required: true}, "ua_class": {required: true}, "edge_status": {required: true}, "request_count": {required: true}, "window_start_ms": {required: true}, "window_end_ms": {required: true}}},
+	"embed.csp_violation":          {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"blocked_origin": {required: true}, "directive": {required: true}}},
+	"embed.db.episode":             {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_status": {required: true}, "ended_at": {required: false}}},
+	"embed.get_access":             {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"embed.join_error":             {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"entry.record":                 {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"record_name": {required: true}, "entry_path": {required: false}, "client_session_id": {required: false}, "app_build": {required: false}, "est_server_ms": {required: true}}},
+	"http.request":                 {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"http_route": {required: true}, "http_status": {required: true}, "method": {required: true}}},
+	"invite.arrive":                {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"arrival_handle": {required: false}}},
+	"invite.db.invite":             {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"enabled": {required: true}, "disabled_at": {required: false}, "rotated_at": {required: false}, "invite_generation": {required: true}, "state_epoch": {required: true}}},
+	"invite.db.membership":         {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"created_at": {required: true}}},
+	"invite.db.space":              {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"archived_at": {required: false}, "updated_at": {required: true}, "admission_mode": {required: true}}},
+	"invite.failure":               {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"invite.resolve":               {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"allowed", "refused"}, fields: map[string]fieldRule{"credential_kind": {required: false}, "state_epoch": {required: false}, "invite_generation": {required: false}, "arrival_handle": {required: false}}},
+	"obs.clock_jump":               {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":           {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"prejoin.access_card":          {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{}},
+	"prejoin.access_edge":          {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"error_name": {required: false}}},
+	"prejoin.device_error":         {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"device": {required: true}, "error_name": {required: true}}},
+	"public_invite.request":        {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"operation": {required: true}, "http_status": {required: true}, "arrival_handle": {required: false}}},
+	"selftest.admit":               {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":              {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":                {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":                {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.admission_requested":     {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{}},
+	"sync.episode.ended":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"sync.websocket.authenticated": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id_hash": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{
-	"client.connection": {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
-	"episode.lifecycle": {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
-	"selftest.door":     {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
+	"admission.entrance": {states: []string{"idle", "arriving", "waiting", "admitted", "ended", "failed"}, edges: [][2]string{{"idle", "arriving"}, {"failed", "arriving"}, {"ended", "arriving"}, {"arriving", "waiting"}, {"arriving", "admitted"}, {"arriving", "failed"}, {"waiting", "admitted"}, {"waiting", "failed"}, {"waiting", "idle"}, {"admitted", "failed"}, {"admitted", "ended"}}, triggers: []string{"started", "rejoin_released", "waiting_for_host", "admitted", "call_ui_failed", "failed", "cancelled", "call_ended"}},
+	"client.connection":  {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
+	"episode.lifecycle":  {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
+	"prejoin.access":     {states: []string{"checking", "ask", "requesting", "granted", "blocked"}, edges: [][2]string{{"checking", "ask"}, {"checking", "granted"}, {"checking", "blocked"}, {"ask", "requesting"}, {"requesting", "granted"}, {"requesting", "blocked"}, {"granted", "blocked"}, {"blocked", "requesting"}}, triggers: []string{"permission_query", "device_labels", "preview_open", "request"}},
+	"selftest.door":      {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"admission.decide_failed":    "error",
+	"admission.guest_left":       "expected",
+	"admission.no_host":          "expected",
+	"admission.seen_unanswered":  "expected",
+	"boot.chunk_load":            "error",
+	"boot.chunk_reloaded":        "expected",
+	"boot.load_failed":           "error",
+	"cancelled":                  "expected",
+	"dashboard.signed_out":       "expected",
+	"embed.access_refused":       "error",
+	"embed.grant_withdrawn":      "expected",
+	"end.time_limit":             "expected",
+	"invite.arrival_mismatch":    "expected",
+	"invite.disabled":            "expected",
+	"invite.generation_mismatch": "error",
+	"invite.invalid_row":         "error",
+	"invite.members_only":        "expected",
+	"invite.not_found":           "expected",
+	"invite.space_archived":      "expected",
+	"invite.space_mismatch":      "error",
+	"invite.unavailable":         "expected",
+	"prejoin.prompt_refused":     "expected",
+	"prejoin.refusal_remembered": "expected",
+	"selftest.broken":            "error",
+	"selftest.busy":              "expected",
+	"unclassified":               "error",
 }
 
 var registryIDKinds = []idKind{

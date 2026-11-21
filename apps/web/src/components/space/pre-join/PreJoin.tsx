@@ -1,6 +1,8 @@
-import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { setEntrySender, usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { entrySender } from "../../../lib/boot-beacon";
 import { Loading01Icon } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { EntrySurface } from "../../../lib/entry-surface";
 import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
@@ -43,6 +45,8 @@ export type PreJoinProps = {
 };
 
 /** The step before the call: see yourself, hear yourself, press Join. */
+setEntrySender(entrySender());
+
 export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin }: PreJoinProps) {
   const devices = usePreJoinDevices();
   const stacked = useMediaQuery(STACKED);
@@ -66,7 +70,11 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
     if (device === "microphone") devices.setMicrophoneOn(!devices.microphoneOn);
     else devices.setCameraOn(!devices.cameraOn);
   };
-  const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
+  const card = reason ? (
+    <EntrySurface name="prejoin.access_card" fields={{ reason }}>
+      <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} />
+    </EntrySurface>
+  ) : null;
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
   const preview = (

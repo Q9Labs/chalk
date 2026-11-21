@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/entry-observability/invite.refused.fault.test.mjs",
+      "command": "scripts/gates/with-postgres.sh -- node --test scripts/entry-observability/invite.refused.fault.test.mjs",
+      "writes": [
+        "invite.refused.rows.positive.json",
+        "invite.refused.rows.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/entry-observability/chain.test.mjs",
+      "command": "CHALK_CHECK=invite.refused node --test scripts/entry-observability/chain.test.mjs",
+      "writes": [
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+[
+ {
+  "kind": "fact",
+  "name": "invite.resolve",
+  "event_id": "ev_invite_resolve_004",
+  "est_server_ms": 1795600005000,
+  "decision": "admitted",
+  "reason_code": "",
+  "credential_kind": "code",
+  "state_epoch": 1,
+  "invite_generation": 1,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "user_id": "",
+  "space_id": "a0000000-0000-4000-8000-000000000002",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "client_session_id": "cs_spec_fault"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.decided",
+  "event_id": "ev_admission_decided_005",
+  "est_server_ms": 1795600006000,
+  "decision": "admitted",
+  "reason_code": "",
+  "admission_request_id": "90000000-0000-4000-8000-000000000008",
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "tenant_id": "10000000-0000-4000-8000-000000000001"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.outcome",
+  "event_id": "ev_admission_outcome_006",
+  "est_server_ms": 1795600006100,
+  "decision": "admitted",
+  "reason_code": "",
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "tenant_id": "10000000-0000-4000-8000-000000000001"
+ }
+]

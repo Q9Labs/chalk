@@ -1,0 +1,70 @@
+[
+ {
+  "kind": "fact",
+  "name": "http.request",
+  "event_id": "ev_http_request_048",
+  "est_server_ms": 1795600005000,
+  "http_route": "/v1/tenants/:tenant_id/participants/:participant_id/access-grants",
+  "http_status": 200,
+  "method": "POST",
+  "participant_id": "b0000000-0000-4000-8000-000000000004",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "event": "http.request"
+ },
+ {
+  "kind": "fact",
+  "name": "http.request",
+  "event_id": "ev_http_request_049",
+  "est_server_ms": 1795600060000,
+  "http_route": "/v1/tenants/:tenant_id/participants/:participant_id/access-grants",
+  "http_status": 200,
+  "method": "POST",
+  "participant_id": "c0000000-0000-4000-8000-000000000005",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "event": "http.request"
+ },
+ {
+  "kind": "fact",
+  "name": "http.request",
+  "event_id": "ev_http_request_050",
+  "est_server_ms": 1795600030000,
+  "http_route": "/v1/participants/:participant_id/episode",
+  "http_status": 200,
+  "method": "GET",
+  "participant_id": "b0000000-0000-4000-8000-000000000004",
+  "event": "http.request",
+  "tenant_id": "10000000-0000-4000-8000-000000000001"
+ },
+ {
+  "kind": "fact",
+  "name": "sync.websocket.authenticated",
+  "event_id": "ev_sync_websocket_authenticated_051",
+  "est_server_ms": 1795600001000,
+  "participant_id_hash": "h_other",
+  "participant_id": "99999999-0000-4000-8000-000000000077",
+  "event": "sync.websocket.authenticated",
+  "tenant_id": "10000000-0000-4000-8000-000000000001"
+ },
+ {
+  "kind": "fact",
+  "name": "embed.db.episode",
+  "ended_at": null,
+  "event_id": "db:ep:1",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003",
+  "est_server_ms": 1795600004000,
+  "episode_status": "active"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.db.participant",
+  "event_id": "db:pt:c0000000",
+  "joined_at": 1795599992000,
+  "episode_id": "e0000000-0000-4000-8000-000000000003",
+  "est_server_ms": 1795600004000,
+  "participant_id": "c0000000-0000-4000-8000-000000000005",
+  "manage_admission": true,
+  "participant_status": "active",
+  "tenant_id": "10000000-0000-4000-8000-000000000001"
+ }
+]

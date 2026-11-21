@@ -1,0 +1,88 @@
+{
+ "description": "Edge served Space documents to real browsers for a 15-minute window and no script ran in any of them; the same build ran on those paths before and after.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "platform",
+  "id": "test",
+  "tenant": null,
+  "day": "2026-11-18",
+  "window": {
+   "from_ms": 1795513600000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "edge.http_rollup",
+   "event_id": "ev_edge_http_rollup_025",
+   "est_server_ms": 1795600000000,
+   "path_class": "space_page",
+   "content_class": "html",
+   "ua_class": "browser",
+   "edge_status": 200,
+   "request_count": 25,
+   "window_start_ms": 1795600000000,
+   "window_end_ms": 1795600900000,
+   "duration_ms": 900000,
+   "env": "test"
+  },
+  {
+   "kind": "fact",
+   "name": "edge.http_rollup",
+   "event_id": "ev_edge_http_rollup_026",
+   "est_server_ms": 1795600900000,
+   "path_class": "space_page",
+   "content_class": "html",
+   "ua_class": "browser",
+   "edge_status": 200,
+   "request_count": 25,
+   "window_start_ms": 1795600900000,
+   "window_end_ms": 1795601800000,
+   "duration_ms": 900000,
+   "env": "test"
+  },
+  {
+   "kind": "fact",
+   "name": "entry.record",
+   "event_id": "ev_entry_record_027",
+   "est_server_ms": 1795599940000,
+   "record_name": "boot.started",
+   "entry_path": "space_public",
+   "client_session_id": "cs_spec_other",
+   "app_build": "spec",
+   "env": "test"
+  },
+  {
+   "kind": "fact",
+   "name": "entry.record",
+   "event_id": "ev_entry_record_028",
+   "est_server_ms": 1795601900000,
+   "record_name": "boot.started",
+   "entry_path": "space_public",
+   "client_session_id": "cs_spec_other",
+   "app_build": "spec",
+   "env": "test"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.started",
+   "event_id": "ev_boot_started_029",
+   "est_server_ms": 1795602000000,
+   "entry_path": "space_public",
+   "framed": false,
+   "policy_camera": "true",
+   "policy_microphone": "true",
+   "visibility": "visible",
+   "storage_state": "persistent",
+   "client_session_id": "cs_spec_other",
+   "device_id": "dev_spec",
+   "device_ephemeral": false,
+   "app_build": "spec",
+   "env": "test"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/boot.never_ran/chain/boot.never_ran.rows.positive.json"
+ ]
+}

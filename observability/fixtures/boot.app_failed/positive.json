@@ -1,0 +1,118 @@
+{
+ "description": "The beacon ran and the page was visible, but render threw before the first screen and the root error page showed.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "boot.started",
+   "event_id": "ev_boot_started_011",
+   "est_server_ms": 1795600000000,
+   "entry_path": "space_public",
+   "framed": false,
+   "policy_camera": "true",
+   "policy_microphone": "true",
+   "visibility": "visible",
+   "storage_state": "persistent",
+   "client_session_id": "cs_spec_fault",
+   "device_id": "dev_spec",
+   "device_ephemeral": false,
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "entry.record",
+   "event_id": "ev_entry_record_012",
+   "est_server_ms": 1795600000050,
+   "record_name": "boot.started",
+   "entry_path": "space_public",
+   "client_session_id": "cs_spec_fault",
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.visible",
+   "event_id": "ev_boot_visible_013",
+   "est_server_ms": 1795600000100,
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.render_failed",
+   "event_id": "ev_boot_render_failed_014",
+   "est_server_ms": 1795600000900,
+   "route_id": "/_space/x",
+   "error_name": "TypeError",
+   "error_class": "other",
+   "error_fingerprint": "fp1",
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.error_page",
+   "event_id": "ev_boot_error_page_015",
+   "est_server_ms": 1795600001000,
+   "surface_state": "shown",
+   "shown_ms": 1795600001000,
+   "route_id": "/_space/x",
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.app",
+   "event_id": "ev_boot_app_016",
+   "est_server_ms": 1795600002000,
+   "surface_state": "shown",
+   "shown_ms": 1795600002000,
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.pagehide",
+   "event_id": "ev_boot_pagehide_017",
+   "est_server_ms": 1795600003000,
+   "app_shown": false,
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.chunk_failed",
+   "event_id": "ev_boot_chunk_failed_018",
+   "est_server_ms": 1795600002500,
+   "reloaded": false,
+   "client_session_id": "cs_spec_other",
+   "device_id": "dev_o",
+   "device_ephemeral": false,
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "boot.load_call_ui",
+   "event_id": "ev_boot_load_call_ui_019",
+   "est_server_ms": 1795600004000,
+   "outcome": "ok",
+   "reason_code": "",
+   "duration_ms": 100,
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/boot.app_failed/chain/boot.app_failed.rows.positive.json"
+ ]
+}

@@ -1,0 +1,28 @@
+{
+ "description": "The camera device open failed with NotReadableError — not a refusal and not an absent device.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "prejoin.device_error",
+   "event_id": "ev_prejoin_device_error_040",
+   "est_server_ms": 1795600000700,
+   "device": "camera",
+   "error_name": "NotReadableError",
+   "client_session_id": "cs_spec_other",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/prejoin.preview_failed/chain/prejoin.preview_failed.rows.healthy.json"
+ ]
+}

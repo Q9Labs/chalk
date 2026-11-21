@@ -1,0 +1,50 @@
+[
+ {
+  "kind": "fact",
+  "name": "edge.http_rollup",
+  "event_id": "ev_edge_http_rollup_030",
+  "est_server_ms": 1795600000000,
+  "path_class": "space_page",
+  "content_class": "html",
+  "ua_class": "browser",
+  "edge_status": 200,
+  "request_count": 25,
+  "window_start_ms": 1795600000000,
+  "window_end_ms": 1795600900000,
+  "duration_ms": 900000,
+  "env": "test"
+ },
+ {
+  "kind": "fact",
+  "name": "entry.record",
+  "event_id": "ev_entry_record_031",
+  "est_server_ms": 1795599940000,
+  "record_name": "boot.started",
+  "entry_path": "space_public",
+  "client_session_id": "cs_spec_other",
+  "app_build": "spec",
+  "env": "test"
+ },
+ {
+  "kind": "fact",
+  "name": "entry.record",
+  "event_id": "ev_entry_record_032",
+  "est_server_ms": 1795600300000,
+  "record_name": "boot.started",
+  "entry_path": "space_public",
+  "client_session_id": "cs_spec_other",
+  "app_build": "spec",
+  "env": "test"
+ },
+ {
+  "kind": "fact",
+  "name": "entry.record",
+  "event_id": "ev_entry_record_033",
+  "est_server_ms": 1795601900000,
+  "record_name": "boot.started",
+  "entry_path": "space_public",
+  "client_session_id": "cs_spec_other",
+  "app_build": "spec",
+  "env": "test"
+ }
+]

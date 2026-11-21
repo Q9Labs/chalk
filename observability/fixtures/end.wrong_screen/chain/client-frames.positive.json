@@ -225,7 +225,7 @@
         "clock_state": "synced",
         "est_server_ms": 1795600001200,
         "clock_err_ms": 40,
-        "schema_ver": "06a4092b8fb7",
+        "schema_ver": "be1eeb3d2442",
         "kind": "fact",
         "name": "client.call_ended",
         "event_id": "00000000-0000-4000-8000-000000000028",

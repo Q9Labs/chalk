@@ -1,0 +1,47 @@
+{
+ "description": "The Permissions Policy already denied camera in this document and the prejoin machine went to blocked on permission_query — no visitor refusal was involved.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "boot.started",
+   "event_id": "ev_boot_started_037",
+   "est_server_ms": 1795600000000,
+   "entry_path": "space_public",
+   "framed": false,
+   "policy_camera": "true",
+   "policy_microphone": "true",
+   "visibility": "visible",
+   "storage_state": "persistent",
+   "client_session_id": "cs_spec_fault",
+   "device_id": "dev_spec",
+   "device_ephemeral": false,
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "transition",
+   "name": "prejoin.access_edge",
+   "event_id": "ev_prejoin_access_edge_038",
+   "est_server_ms": 1795600000500,
+   "from_state": "checking",
+   "to_state": "ready",
+   "trigger": "device_labels",
+   "error_name": "",
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/prejoin.devices_blocked/chain/prejoin.devices_blocked.rows.healthy.json"
+ ]
+}

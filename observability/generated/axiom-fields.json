@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "be1eeb3d2442",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 85,
       "fields": [
         {
           "name": "admission_request_id",
@@ -20,7 +20,15 @@
           "type": "string"
         },
         {
+          "name": "app_shown",
+          "type": "boolean"
+        },
+        {
           "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "arrival_handle",
           "type": "string"
         },
         {
@@ -29,6 +37,10 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "blocked_origin",
           "type": "string"
         },
         {
@@ -56,6 +68,14 @@
           "type": "string"
         },
         {
+          "name": "credential_kind",
+          "type": "string"
+        },
+        {
+          "name": "decided_by",
+          "type": "string"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
@@ -64,11 +84,19 @@
           "type": "string"
         },
         {
+          "name": "device",
+          "type": "string"
+        },
+        {
           "name": "device_ephemeral",
           "type": "boolean"
         },
         {
           "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "directive",
           "type": "string"
         },
         {
@@ -92,11 +120,27 @@
           "type": "string"
         },
         {
+          "name": "entry_path",
+          "type": "string"
+        },
+        {
           "name": "env",
           "type": "string"
         },
         {
           "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "error_class",
+          "type": "string"
+        },
+        {
+          "name": "error_fingerprint",
+          "type": "string"
+        },
+        {
+          "name": "error_name",
           "type": "string"
         },
         {
@@ -112,11 +156,19 @@
           "type": "string"
         },
         {
+          "name": "framed",
+          "type": "boolean"
+        },
+        {
           "name": "from_state",
           "type": "string"
         },
         {
           "name": "generation",
+          "type": "integer"
+        },
+        {
+          "name": "invite_generation",
           "type": "integer"
         },
         {
@@ -172,7 +224,23 @@
           "type": "string"
         },
         {
+          "name": "participant_id_hash",
+          "type": "string"
+        },
+        {
+          "name": "phase",
+          "type": "string"
+        },
+        {
           "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "policy_camera",
+          "type": "string"
+        },
+        {
+          "name": "policy_microphone",
           "type": "string"
         },
         {
@@ -184,6 +252,10 @@
           "type": "string"
         },
         {
+          "name": "record_name",
+          "type": "string"
+        },
+        {
           "name": "recording_id",
           "type": "string"
         },
@@ -192,7 +264,15 @@
           "type": "string"
         },
         {
+          "name": "reloaded",
+          "type": "boolean"
+        },
+        {
           "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "route_id",
           "type": "string"
         },
         {
@@ -224,6 +304,14 @@
           "type": "string"
         },
         {
+          "name": "state_epoch",
+          "type": "integer"
+        },
+        {
+          "name": "storage_state",
+          "type": "string"
+        },
+        {
           "name": "surface_state",
           "type": "string"
         },
@@ -252,6 +340,10 @@
           "type": "string"
         },
         {
+          "name": "visibility",
+          "type": "string"
+        },
+        {
           "name": "webhook_delivery_id",
           "type": "string"
         }
@@ -260,7 +352,7 @@
     {
       "dataset": "requests",
       "budget": 256,
-      "used": 60,
+      "used": 76,
       "fields": [
         {
           "name": "admission_request_id",
@@ -279,8 +371,16 @@
           "type": "string"
         },
         {
+          "name": "arrival_handle",
+          "type": "string"
+        },
+        {
           "name": "attempt",
           "type": "integer"
+        },
+        {
+          "name": "auth_result",
+          "type": "string"
         },
         {
           "name": "batch_id",
@@ -311,6 +411,10 @@
           "type": "string"
         },
         {
+          "name": "content_class",
+          "type": "string"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
@@ -336,6 +440,10 @@
         },
         {
           "name": "duration_ms",
+          "type": "integer"
+        },
+        {
+          "name": "edge_status",
           "type": "integer"
         },
         {
@@ -371,6 +479,14 @@
           "type": "integer"
         },
         {
+          "name": "http_route",
+          "type": "string"
+        },
+        {
+          "name": "http_status",
+          "type": "integer"
+        },
+        {
           "name": "job_id",
           "type": "string"
         },
@@ -391,6 +507,10 @@
           "type": "string"
         },
         {
+          "name": "method",
+          "type": "string"
+        },
+        {
           "name": "module",
           "type": "string"
         },
@@ -407,7 +527,15 @@
           "type": "string"
         },
         {
+          "name": "operation",
+          "type": "string"
+        },
+        {
           "name": "outcome",
+          "type": "string"
+        },
+        {
+          "name": "page",
           "type": "string"
         },
         {
@@ -416,6 +544,10 @@
         },
         {
           "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "path_class",
           "type": "string"
         },
         {
@@ -437,6 +569,10 @@
         {
           "name": "release_sha",
           "type": "string"
+        },
+        {
+          "name": "request_count",
+          "type": "integer"
         },
         {
           "name": "request_id",
@@ -495,12 +631,32 @@
           "type": "string"
         },
         {
+          "name": "ua_class",
+          "type": "string"
+        },
+        {
+          "name": "upstream_journey_id",
+          "type": "string"
+        },
+        {
+          "name": "upstream_status",
+          "type": "integer"
+        },
+        {
           "name": "user_id",
           "type": "string"
         },
         {
           "name": "webhook_delivery_id",
           "type": "string"
+        },
+        {
+          "name": "window_end_ms",
+          "type": "integer"
+        },
+        {
+          "name": "window_start_ms",
+          "type": "integer"
         }
       ]
     },
@@ -754,10 +910,18 @@
     {
       "dataset": "infra",
       "budget": 256,
-      "used": 61,
+      "used": 84,
       "fields": [
         {
+          "name": "admission_mode",
+          "type": "string"
+        },
+        {
           "name": "admission_request_id",
+          "type": "string"
+        },
+        {
+          "name": "admission_status",
           "type": "string"
         },
         {
@@ -770,6 +934,18 @@
         },
         {
           "name": "app_version",
+          "type": "string"
+        },
+        {
+          "name": "archived_at",
+          "type": "integer"
+        },
+        {
+          "name": "arrival_handle",
+          "type": "string"
+        },
+        {
+          "name": "arrival_state",
           "type": "string"
         },
         {
@@ -805,6 +981,22 @@
           "type": "string"
         },
         {
+          "name": "completed_at",
+          "type": "integer"
+        },
+        {
+          "name": "created_at",
+          "type": "integer"
+        },
+        {
+          "name": "decided_at",
+          "type": "integer"
+        },
+        {
+          "name": "decided_by",
+          "type": "string"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
@@ -821,6 +1013,10 @@
           "type": "string"
         },
         {
+          "name": "disabled_at",
+          "type": "integer"
+        },
+        {
           "name": "drop_reason",
           "type": "string"
         },
@@ -833,8 +1029,16 @@
           "type": "integer"
         },
         {
+          "name": "enabled",
+          "type": "boolean"
+        },
+        {
           "name": "end",
           "type": "string"
+        },
+        {
+          "name": "ended_at",
+          "type": "integer"
         },
         {
           "name": "env",
@@ -845,12 +1049,20 @@
           "type": "string"
         },
         {
+          "name": "episode_status",
+          "type": "string"
+        },
+        {
           "name": "est_server_ms",
           "type": "integer"
         },
         {
           "name": "event_id",
           "type": "string"
+        },
+        {
+          "name": "expires_at",
+          "type": "integer"
         },
         {
           "name": "flags",
@@ -869,8 +1081,16 @@
           "type": "integer"
         },
         {
+          "name": "invite_generation",
+          "type": "integer"
+        },
+        {
           "name": "job_id",
           "type": "string"
+        },
+        {
+          "name": "joined_at",
+          "type": "integer"
         },
         {
           "name": "journey_id",
@@ -883,6 +1103,10 @@
         {
           "name": "machine",
           "type": "string"
+        },
+        {
+          "name": "manage_admission",
+          "type": "boolean"
         },
         {
           "name": "media_connection_id",
@@ -917,6 +1141,10 @@
           "type": "string"
         },
         {
+          "name": "participant_status",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
@@ -939,6 +1167,14 @@
         {
           "name": "request_id",
           "type": "string"
+        },
+        {
+          "name": "requested_at",
+          "type": "integer"
+        },
+        {
+          "name": "rotated_at",
+          "type": "integer"
         },
         {
           "name": "schema_ver",
@@ -969,6 +1205,10 @@
           "type": "string"
         },
         {
+          "name": "state_epoch",
+          "type": "integer"
+        },
+        {
           "name": "surface_state",
           "type": "string"
         },
@@ -978,6 +1218,10 @@
         },
         {
           "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "terminal_reason",
           "type": "string"
         },
         {
@@ -991,6 +1235,10 @@
         {
           "name": "trigger",
           "type": "string"
+        },
+        {
+          "name": "updated_at",
+          "type": "integer"
         },
         {
           "name": "user_id",

@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "be1eeb3d2442",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -19,10 +19,331 @@
       "fault_scenario": null
     },
     {
+      "code": "admission.not_collected",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "admission.arrival_terminal",
+          "from": ["db", "api"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.db.arrival",
+              "source": "db",
+              "fields": ["terminal_reason", "arrival_state", "completed_at", "arrival_handle", "space_id", "est_server_ms"]
+            },
+            {
+              "event": "admission.sweep",
+              "source": "api",
+              "fields": ["completed_at", "arrival_handle", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.status_poll",
+          "from": ["api", "client"],
+          "required": true,
+          "events": [
+            {
+              "event": "public_invite.request",
+              "source": "api",
+              "fields": ["operation", "http_status", "arrival_handle", "client_session_id", "est_server_ms"]
+            },
+            {
+              "event": "admission.status_poll",
+              "source": "client",
+              "fields": ["arrival_handle", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.pagehide",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.pagehide",
+              "source": "client",
+              "fields": ["phase", "arrival_handle", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "admission.db.arrival",
+          "fields": ["arrival_state", "invite_generation", "terminal_reason", "completed_at", "created_at", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.arrival"
+            }
+          ]
+        },
+        {
+          "name": "admission.sweep",
+          "fields": ["arrival_handle", "completed_at"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/episode_admission_expiry.go",
+              "literal": "\"admission.not_collected\""
+            }
+          ]
+        },
+        {
+          "name": "public_invite.request",
+          "fields": ["operation", "http_status", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/public_invites.go",
+              "literal": "\"public_invite.request\""
+            }
+          ]
+        },
+        {
+          "name": "admission.status_poll",
+          "fields": ["arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/space/SpacePage.tsx",
+              "literal": "\"admission.status_poll\""
+            }
+          ]
+        },
+        {
+          "name": "admission.pagehide",
+          "fields": ["phase", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/space/SpacePage.tsx",
+              "literal": "\"admission.pagehide\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/admission.not_collected.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/admission.not_collected/positive.json",
+        "healthy": "observability/fixtures/admission.not_collected/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/admission.not_collected.fault.test.mjs"
+    },
+    {
+      "code": "admission.unanswered",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "admission.request",
+          "from": ["db", "sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.db.request",
+              "source": "db",
+              "fields": ["admission_status", "requested_at", "expires_at", "decided_at", "decided_by", "arrival_handle", "admission_request_id", "space_id", "tenant_id", "est_server_ms"]
+            },
+            {
+              "event": "admission.db.sync_request",
+              "source": "db",
+              "fields": ["admission_status", "requested_at", "expires_at", "decided_at", "admission_request_id", "participant_id", "episode_id", "est_server_ms"]
+            },
+            {
+              "event": "sync.admission_requested",
+              "source": "sync",
+              "fields": ["admission_request_id", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.host",
+          "from": ["db", "sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.db.participant",
+              "source": "db",
+              "fields": ["participant_status", "manage_admission", "joined_at", "participant_id", "episode_id", "est_server_ms"]
+            },
+            {
+              "event": "sync.websocket.authenticated",
+              "source": "sync",
+              "fields": ["participant_id_hash", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.host_reads",
+          "from": ["client", "edge"],
+          "required": true,
+          "events": [
+            {
+              "event": "dashboard.call_page",
+              "source": "client",
+              "fields": ["surface_state", "shown_ms", "space_id", "user_id", "client_session_id", "est_server_ms"]
+            },
+            {
+              "event": "edge.call_status",
+              "source": "edge",
+              "fields": ["http_status", "space_id", "user_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.knock_shown",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.knock_notice",
+              "source": "client",
+              "fields": ["surface_state", "shown_ms", "admission_request_id", "participant_id", "client_session_id", "est_server_ms"]
+            },
+            {
+              "event": "dashboard.knocks",
+              "source": "client",
+              "fields": ["surface_state", "shown_ms", "space_id", "user_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "admission.decide",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.decide",
+              "source": "client",
+              "fields": ["outcome", "reason_code", "duration_ms", "admission_request_id", "participant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "admission.db.request",
+          "fields": ["admission_status", "requested_at", "expires_at", "decided_at", "decided_by", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.request"
+            }
+          ]
+        },
+        {
+          "name": "admission.db.sync_request",
+          "fields": ["admission_status", "requested_at", "expires_at", "decided_at"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.sync_request"
+            }
+          ]
+        },
+        {
+          "name": "sync.admission_requested",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/observability/sink.ex",
+              "literal": "admission_requested"
+            }
+          ]
+        },
+        {
+          "name": "admission.db.participant",
+          "fields": ["participant_status", "manage_admission", "joined_at"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.participant"
+            }
+          ]
+        },
+        {
+          "name": "sync.websocket.authenticated",
+          "fields": ["participant_id_hash"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket_context.ex",
+              "literal": "\"sync.websocket.authenticated\""
+            }
+          ]
+        },
+        {
+          "name": "dashboard.call_page",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/dashboard/CallPage.tsx",
+              "literal": "\"dashboard.call_page\""
+            }
+          ]
+        },
+        {
+          "name": "edge.call_status",
+          "fields": ["http_status"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "edge.call_status"
+            }
+          ]
+        },
+        {
+          "name": "admission.knock_notice",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx",
+              "literal": "\"admission.knock_notice\""
+            }
+          ]
+        },
+        {
+          "name": "dashboard.knocks",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/dashboard/AdmissionKnocks.tsx",
+              "literal": "\"dashboard.knocks\""
+            }
+          ]
+        },
+        {
+          "name": "admission.decide",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx",
+              "literal": "\"admission.decide\""
+            },
+            {
+              "path": "apps/web/src/components/dashboard/CallPage.tsx",
+              "literal": "\"admission.decide\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/admission.unanswered.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/admission.unanswered/positive.json",
+        "healthy": "observability/fixtures/admission.unanswered/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/admission.unanswered.fault.test.mjs"
+    },
+    {
       "code": "admission.unresolved",
       "area": "entry",
       "slice": 1,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "attempt",
       "per": "item",
       "witnesses": [
@@ -30,16 +351,63 @@
           "fact": "admission.decision",
           "from": ["api"],
           "required": true,
-          "events": []
+          "events": [
+            {
+              "event": "invite.resolve",
+              "source": "api",
+              "fields": ["decision", "reason_code", "arrival_handle", "client_session_id", "space_id", "tenant_id", "est_server_ms"]
+            },
+            {
+              "event": "admission.decided",
+              "source": "api",
+              "fields": ["decision", "reason_code", "admission_request_id", "arrival_handle", "client_session_id", "est_server_ms"]
+            },
+            {
+              "event": "admission.outcome",
+              "source": "api",
+              "fields": ["decision", "reason_code", "arrival_handle", "client_session_id", "est_server_ms"]
+            }
+          ]
         }
       ],
-      "events": [],
+      "events": [
+        {
+          "name": "invite.resolve",
+          "fields": ["credential_kind", "state_epoch", "invite_generation", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/publicinvites/service.go",
+              "literal": "obs.EventInviteResolve"
+            }
+          ]
+        },
+        {
+          "name": "admission.decided",
+          "fields": ["arrival_handle", "decided_by"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/public_episode_admission.go",
+              "literal": "obs.EventAdmissionDecided"
+            }
+          ]
+        },
+        {
+          "name": "admission.outcome",
+          "fields": ["arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/publicinvites/admission_telemetry.go",
+              "literal": "obs.EventAdmissionOutcome"
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/admission.unresolved.mjs",
       "fixtures": {
         "positive": "observability/fixtures/admission.unresolved/positive.json",
         "healthy": "observability/fixtures/admission.unresolved/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "scripts/entry-observability/admission.unresolved.fault.test.mjs"
     },
     {
       "code": "audio.cant_hear",
@@ -114,6 +482,472 @@
         "healthy": "observability/fixtures/board.view_jumped/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "boot.app_failed",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "boot.started",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.started",
+              "source": "client",
+              "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state", "client_session_id", "device_id", "device_ephemeral", "app_build", "est_server_ms"]
+            },
+            {
+              "event": "entry.record",
+              "source": "api",
+              "fields": ["record_name", "entry_path", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.visible",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.visible",
+              "source": "client",
+              "fields": ["client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.app",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.app",
+              "source": "client",
+              "fields": ["surface_state", "shown_ms", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.pagehide",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.pagehide",
+              "source": "client",
+              "fields": ["app_shown", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.chunk_failed",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.chunk_failed",
+              "source": "client",
+              "fields": ["reloaded", "client_session_id", "device_id", "device_ephemeral", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.load_call_ui",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.load_call_ui",
+              "source": "client",
+              "fields": ["outcome", "reason_code", "duration_ms", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.render_failed",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.render_failed",
+              "source": "client",
+              "fields": ["route_id", "error_name", "error_class", "error_fingerprint", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.error_page",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.error_page",
+              "source": "client",
+              "fields": ["surface_state", "shown_ms", "route_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "boot.started",
+          "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/boot-beacon.ts",
+              "literal": "\"boot.started\""
+            }
+          ]
+        },
+        {
+          "name": "entry.record",
+          "fields": ["record_name", "entry_path", "client_session_id", "app_build", "est_server_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/entry_telemetry.go",
+              "literal": "\"entry.\""
+            }
+          ]
+        },
+        {
+          "name": "boot.visible",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/boot-beacon.ts",
+              "literal": "\"boot.visible\""
+            }
+          ]
+        },
+        {
+          "name": "boot.app",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/routes/__root.tsx",
+              "literal": "\"boot.app\""
+            }
+          ]
+        },
+        {
+          "name": "boot.pagehide",
+          "fields": ["app_shown"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/boot-beacon.ts",
+              "literal": "\"boot.pagehide\""
+            }
+          ]
+        },
+        {
+          "name": "boot.chunk_failed",
+          "fields": ["reloaded"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/chunkReload.ts",
+              "literal": "\"boot.chunk_failed\""
+            }
+          ]
+        },
+        {
+          "name": "boot.load_call_ui",
+          "fields": [],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/components/space/SpacePage.tsx",
+              "literal": "\"boot.load_call_ui\""
+            }
+          ]
+        },
+        {
+          "name": "boot.render_failed",
+          "fields": ["route_id", "error_name", "error_class", "error_fingerprint"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/routes/__root.tsx",
+              "literal": "\"boot.render_failed\""
+            }
+          ]
+        },
+        {
+          "name": "boot.error_page",
+          "fields": ["route_id"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/routes/__root.tsx",
+              "literal": "\"boot.error_page\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/boot.app_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/boot.app_failed/positive.json",
+        "healthy": "observability/fixtures/boot.app_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/boot.app_failed.fault.test.mjs"
+    },
+    {
+      "code": "boot.never_ran",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "platform",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "boot.edge_documents",
+          "from": ["edge"],
+          "required": true,
+          "events": [
+            {
+              "event": "edge.http_rollup",
+              "source": "edge",
+              "fields": ["path_class", "content_class", "ua_class", "edge_status", "request_count", "window_start_ms", "window_end_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "boot.started",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.started",
+              "source": "client",
+              "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state", "client_session_id", "device_id", "device_ephemeral", "app_build", "est_server_ms"]
+            },
+            {
+              "event": "entry.record",
+              "source": "api",
+              "fields": ["record_name", "entry_path", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "edge.http_rollup",
+          "fields": ["path_class", "content_class", "ua_class", "edge_status", "request_count", "window_start_ms", "window_end_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "edge.http_rollup"
+            }
+          ]
+        },
+        {
+          "name": "boot.started",
+          "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/boot-beacon.ts",
+              "literal": "\"boot.started\""
+            }
+          ]
+        },
+        {
+          "name": "entry.record",
+          "fields": ["record_name", "entry_path", "client_session_id", "app_build", "est_server_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/entry_telemetry.go",
+              "literal": "\"entry.\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/boot.never_ran.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/boot.never_ran/positive.json",
+        "healthy": "observability/fixtures/boot.never_ran/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/boot.never_ran.fault.test.mjs"
+    },
+    {
+      "code": "dashboard.request_failed",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "platform",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "dashboard.function",
+          "from": ["edge"],
+          "required": true,
+          "events": [
+            {
+              "event": "dashboard.request_failed",
+              "source": "edge",
+              "fields": ["page", "method", "http_status", "auth_result", "upstream_status", "upstream_journey_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "dashboard.upstream",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "http.request",
+              "source": "api",
+              "fields": ["http_route", "http_status", "method", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "dashboard.request_failed",
+          "fields": ["page", "method", "http_status", "auth_result", "upstream_status", "upstream_journey_id"],
+          "emit_sites": [
+            {
+              "path": "apps/web/server/application.ts",
+              "literal": "\"dashboard.request_failed\""
+            }
+          ]
+        },
+        {
+          "name": "http.request",
+          "fields": ["http_route", "http_status", "method"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/observability/http.go",
+              "literal": "\"http.request\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/dashboard.request_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/dashboard.request_failed/positive.json",
+        "healthy": "observability/fixtures/dashboard.request_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/dashboard.request_failed.fault.test.mjs"
+    },
+    {
+      "code": "embed.blocked",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "embed.grant",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "http.request",
+              "source": "api",
+              "fields": ["http_route", "http_status", "method", "participant_id", "tenant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "embed.sync_auth",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.websocket.authenticated",
+              "source": "sync",
+              "fields": ["participant_id_hash", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "embed.api_request",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "http.request",
+              "source": "api",
+              "fields": ["http_route", "http_status", "method", "participant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "embed.participant",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.db.participant",
+              "source": "db",
+              "fields": ["participant_status", "manage_admission", "joined_at", "participant_id", "episode_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "embed.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "embed.db.episode",
+              "source": "db",
+              "fields": ["episode_status", "ended_at", "episode_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "http.request",
+          "fields": ["http_route", "http_status", "method"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/observability/http.go",
+              "literal": "\"http.request\""
+            }
+          ]
+        },
+        {
+          "name": "sync.websocket.authenticated",
+          "fields": ["participant_id_hash"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket_context.ex",
+              "literal": "\"sync.websocket.authenticated\""
+            }
+          ]
+        },
+        {
+          "name": "admission.db.participant",
+          "fields": ["participant_status", "manage_admission", "joined_at"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.participant"
+            }
+          ]
+        },
+        {
+          "name": "embed.db.episode",
+          "fields": ["episode_status", "ended_at"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "embed.db.episode"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/embed.blocked.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/embed.blocked/positive.json",
+        "healthy": "observability/fixtures/embed.blocked/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/embed.blocked.fault.test.mjs"
     },
     {
       "code": "end.time_limit",
@@ -218,6 +1052,134 @@
       "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
     },
     {
+      "code": "invite.refused",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "invite.decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "invite.resolve",
+              "source": "api",
+              "fields": ["decision", "reason_code", "credential_kind", "state_epoch", "invite_generation", "arrival_handle", "user_id", "space_id", "tenant_id", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "invite.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "invite.db.invite",
+              "source": "db",
+              "fields": ["enabled", "disabled_at", "rotated_at", "invite_generation", "state_epoch", "space_id", "tenant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "invite.space",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "invite.db.space",
+              "source": "db",
+              "fields": ["archived_at", "updated_at", "admission_mode", "space_id", "tenant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "invite.arrival",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "admission.db.arrival",
+              "source": "db",
+              "fields": ["arrival_state", "invite_generation", "created_at", "arrival_handle", "space_id", "tenant_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "invite.membership",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "invite.db.membership",
+              "source": "db",
+              "fields": ["created_at", "user_id", "tenant_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "invite.resolve",
+          "fields": ["credential_kind", "state_epoch", "invite_generation", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/publicinvites/service.go",
+              "literal": "obs.EventInviteResolve"
+            }
+          ]
+        },
+        {
+          "name": "invite.db.invite",
+          "fields": ["enabled", "disabled_at", "rotated_at", "invite_generation", "state_epoch"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "invite.db.invite"
+            }
+          ]
+        },
+        {
+          "name": "invite.db.space",
+          "fields": ["archived_at", "updated_at", "admission_mode"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "invite.db.space"
+            }
+          ]
+        },
+        {
+          "name": "admission.db.arrival",
+          "fields": ["arrival_state", "invite_generation", "terminal_reason", "completed_at", "created_at", "arrival_handle"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "admission.db.arrival"
+            }
+          ]
+        },
+        {
+          "name": "invite.db.membership",
+          "fields": ["created_at"],
+          "emit_sites": [
+            {
+              "path": "scripts/entry-observability/specs.mjs",
+              "literal": "invite.db.membership"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/invite.refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/invite.refused/positive.json",
+        "healthy": "observability/fixtures/invite.refused/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/invite.refused.fault.test.mjs"
+    },
+    {
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
@@ -248,6 +1210,123 @@
         "healthy": "observability/fixtures/page.crashed/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "prejoin.devices_blocked",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "boot.started",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "boot.started",
+              "source": "client",
+              "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state", "client_session_id", "device_id", "device_ephemeral", "app_build", "est_server_ms"]
+            },
+            {
+              "event": "entry.record",
+              "source": "api",
+              "fields": ["record_name", "entry_path", "client_session_id", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "prejoin.access",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "prejoin.access_edge",
+              "source": "client",
+              "fields": ["from_state", "to_state", "trigger", "error_name", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "boot.started",
+          "fields": ["entry_path", "framed", "policy_camera", "policy_microphone", "visibility", "storage_state"],
+          "emit_sites": [
+            {
+              "path": "apps/web/src/lib/boot-beacon.ts",
+              "literal": "\"boot.started\""
+            }
+          ]
+        },
+        {
+          "name": "entry.record",
+          "fields": ["record_name", "entry_path", "client_session_id", "app_build", "est_server_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/entry_telemetry.go",
+              "literal": "\"entry.\""
+            }
+          ]
+        },
+        {
+          "name": "prejoin.access_edge",
+          "fields": ["error_name"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts",
+              "literal": "\"prejoin.access\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/prejoin.devices_blocked.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/prejoin.devices_blocked/positive.json",
+        "healthy": "observability/fixtures/prejoin.devices_blocked/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/prejoin.devices_blocked.fault.test.mjs"
+    },
+    {
+      "code": "prejoin.preview_failed",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": false,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "prejoin.device",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "prejoin.device_error",
+              "source": "client",
+              "fields": ["device", "error_name", "client_session_id", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "prejoin.device_error",
+          "fields": ["device", "error_name"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts",
+              "literal": "\"prejoin.device_error\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/prejoin.preview_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/prejoin.preview_failed/positive.json",
+        "healthy": "observability/fixtures/prejoin.preview_failed/healthy.json"
+      },
+      "fault_scenario": "scripts/entry-observability/prejoin.preview_failed.fault.test.mjs"
     },
     {
       "code": "recording.not_ready",

@@ -18,9 +18,9 @@ export function sealSession(identity: Identity, secret: string): Promise<string>
 export async function authenticate(sealed: string, secret: string): Promise<Authentication> {
   try {
     const identity = identitySchema.parse(await unseal(sealed, secret, "session"));
-    if (identity.expiresAt <= Date.now()) return { kind: "unauthenticated" };
+    if (identity.expiresAt <= Date.now()) return { kind: "unauthenticated", reason: "expired" };
     return { kind: "authenticated", identity };
   } catch {
-    return { kind: "unauthenticated" };
+    return { kind: "unauthenticated", reason: "unreadable" };
   }
 }

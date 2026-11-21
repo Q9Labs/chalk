@@ -169,6 +169,10 @@ start_native_postgres() {
   local port
   port="$(available_port)"
 
+  # initdb and the postmaster refuse to start when the locale variables are unset or name a locale the OS lacks.
+  : "${LC_ALL:=en_US.UTF-8}"
+  export LC_ALL
+
   "${native_pg_bin}/initdb" -D "${native_root}/data" -A trust -U postgres >/dev/null
   "${native_pg_bin}/pg_ctl" \
     -D "${native_root}/data" \

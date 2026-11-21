@@ -1,0 +1,84 @@
+[
+ {
+  "kind": "fact",
+  "name": "admission.sweep",
+  "event_id": "ev_admission_sweep_072",
+  "est_server_ms": 1795600030000,
+  "completed_at": 1795600030000,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "public_invite.request",
+  "event_id": "ev_public_invite_request_073",
+  "est_server_ms": 1795600010000,
+  "operation": "status",
+  "http_status": 200,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "event": "public_invite.request",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "public_invite.request",
+  "event_id": "ev_public_invite_request_074",
+  "est_server_ms": 1795600029000,
+  "operation": "status",
+  "http_status": 200,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "event": "public_invite.request",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.status_poll",
+  "event_id": "ev_admission_status_poll_075",
+  "est_server_ms": 1795600010000,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.status_poll",
+  "event_id": "ev_admission_status_poll_076",
+  "est_server_ms": 1795600029000,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.pagehide",
+  "event_id": "ev_admission_pagehide_077",
+  "est_server_ms": 1795600031000,
+  "phase": "admitted",
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "client_session_id": "cs_spec_fault",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ },
+ {
+  "kind": "fact",
+  "name": "admission.db.arrival",
+  "event_id": "db:arr:f0000000",
+  "space_id": "a0000000-0000-4000-8000-000000000002",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "created_at": 1795600004000,
+  "completed_at": 1795600030000,
+  "arrival_state": "admitted",
+  "est_server_ms": 1795600030000,
+  "arrival_handle": "f0000000-0000-4000-8000-000000000007",
+  "terminal_reason": "admitted",
+  "invite_generation": 1,
+  "episode_id": "e0000000-0000-4000-8000-000000000003"
+ }
+]

@@ -2,7 +2,7 @@
 // Do not edit by hand.
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 import * as S from "./schemas";
-import { arriveBySpacePublicInviteEndpoint, createPublicSpaceEndpoint, getSpacePublicInviteArrivalEndpoint, leaveSpacePublicInviteArrivalEndpoint, preparePublicSpaceEntranceEndpoint, refreshSpacePublicInviteAccessEndpoint } from "./public-http-api";
+import { uploadEntryEventsEndpoint, arriveBySpacePublicInviteEndpoint, createPublicSpaceEndpoint, getSpacePublicInviteArrivalEndpoint, leaveSpacePublicInviteArrivalEndpoint, preparePublicSpaceEntranceEndpoint, refreshSpacePublicInviteAccessEndpoint } from "./public-http-api";
 
 const defaultGroup = HttpApiGroup.make("default")
   .add(
@@ -794,6 +794,7 @@ const defaultGroup = HttpApiGroup.make("default")
       ],
     }),
   )
+  .add(uploadEntryEventsEndpoint)
   .add(
     HttpApiEndpoint.post("uploadTelemetry", "/v1/tenants/:tenant_id/telemetry", {
       params: S.UploadTelemetryPathParamsSchema,

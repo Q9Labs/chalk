@@ -2,9 +2,287 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "06a4092b8fb7"
+  @schema_ver "be1eeb3d2442"
 
   @events %{
+    "admission.db.arrival" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "arrival_state" => %{
+          "required" => true
+        },
+        "invite_generation" => %{
+          "required" => false
+        },
+        "terminal_reason" => %{
+          "required" => false
+        },
+        "completed_at" => %{
+          "required" => false
+        },
+        "created_at" => %{
+          "required" => true
+        },
+        "arrival_handle" => %{
+          "required" => true
+        }
+      }
+    },
+    "admission.db.participant" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "participant_status" => %{
+          "required" => true
+        },
+        "manage_admission" => %{
+          "required" => true
+        },
+        "joined_at" => %{
+          "required" => true
+        }
+      }
+    },
+    "admission.db.request" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "admission_status" => %{
+          "required" => true
+        },
+        "requested_at" => %{
+          "required" => true
+        },
+        "expires_at" => %{
+          "required" => true
+        },
+        "decided_at" => %{
+          "required" => false
+        },
+        "decided_by" => %{
+          "required" => false
+        },
+        "arrival_handle" => %{
+          "required" => false
+        }
+      }
+    },
+    "admission.db.sync_request" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "admission_status" => %{
+          "required" => true
+        },
+        "requested_at" => %{
+          "required" => true
+        },
+        "expires_at" => %{
+          "required" => true
+        },
+        "decided_at" => %{
+          "required" => false
+        }
+      }
+    },
+    "admission.decide" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "admission.decided" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["admitted", "denied", "expired"],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => false
+        },
+        "decided_by" => %{
+          "required" => false
+        }
+      }
+    },
+    "admission.knock_notice" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "admission.outcome" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["admitted", "denied", "expired", "withdrawn", "not_collected"],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => true
+        }
+      }
+    },
+    "admission.pagehide" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "phase" => %{
+          "required" => true
+        },
+        "arrival_handle" => %{
+          "required" => false
+        }
+      }
+    },
+    "admission.requested" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["requested"],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => true
+        }
+      }
+    },
+    "admission.status_poll" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => true
+        }
+      }
+    },
+    "admission.sweep" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => true
+        },
+        "completed_at" => %{
+          "required" => true
+        }
+      }
+    },
+    "boot.app" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "boot.chunk_failed" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "reloaded" => %{
+          "required" => true
+        }
+      }
+    },
+    "boot.error_page" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "route_id" => %{
+          "required" => false
+        }
+      }
+    },
+    "boot.load_call_ui" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "boot.pagehide" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "app_shown" => %{
+          "required" => true
+        }
+      }
+    },
+    "boot.render_failed" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "route_id" => %{
+          "required" => true
+        },
+        "error_name" => %{
+          "required" => true
+        },
+        "error_class" => %{
+          "required" => true
+        },
+        "error_fingerprint" => %{
+          "required" => true
+        }
+      }
+    },
+    "boot.started" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "entry_path" => %{
+          "required" => true
+        },
+        "framed" => %{
+          "required" => true
+        },
+        "policy_camera" => %{
+          "required" => true
+        },
+        "policy_microphone" => %{
+          "required" => true
+        },
+        "visibility" => %{
+          "required" => true
+        },
+        "storage_state" => %{
+          "required" => true
+        }
+      }
+    },
+    "boot.visible" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
     "client.call_ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -17,6 +295,257 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      }
+    },
+    "dashboard.call_page" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "dashboard.knocks" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "dashboard.request_failed" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "page" => %{
+          "required" => true
+        },
+        "method" => %{
+          "required" => true
+        },
+        "http_status" => %{
+          "required" => true
+        },
+        "auth_result" => %{
+          "required" => false
+        },
+        "upstream_status" => %{
+          "required" => false
+        },
+        "upstream_journey_id" => %{
+          "required" => false
+        }
+      }
+    },
+    "edge.call_status" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "http_status" => %{
+          "required" => true
+        }
+      }
+    },
+    "edge.http_rollup" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "path_class" => %{
+          "required" => true
+        },
+        "content_class" => %{
+          "required" => true
+        },
+        "ua_class" => %{
+          "required" => true
+        },
+        "edge_status" => %{
+          "required" => true
+        },
+        "request_count" => %{
+          "required" => true
+        },
+        "window_start_ms" => %{
+          "required" => true
+        },
+        "window_end_ms" => %{
+          "required" => true
+        }
+      }
+    },
+    "embed.csp_violation" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "blocked_origin" => %{
+          "required" => true
+        },
+        "directive" => %{
+          "required" => true
+        }
+      }
+    },
+    "embed.db.episode" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "episode_status" => %{
+          "required" => true
+        },
+        "ended_at" => %{
+          "required" => false
+        }
+      }
+    },
+    "embed.get_access" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "embed.join_error" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "entry.record" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "record_name" => %{
+          "required" => true
+        },
+        "entry_path" => %{
+          "required" => false
+        },
+        "client_session_id" => %{
+          "required" => false
+        },
+        "app_build" => %{
+          "required" => false
+        },
+        "est_server_ms" => %{
+          "required" => true
+        }
+      }
+    },
+    "http.request" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "http_route" => %{
+          "required" => true
+        },
+        "http_status" => %{
+          "required" => true
+        },
+        "method" => %{
+          "required" => true
+        }
+      }
+    },
+    "invite.arrive" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "arrival_handle" => %{
+          "required" => false
+        }
+      }
+    },
+    "invite.db.invite" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "enabled" => %{
+          "required" => true
+        },
+        "disabled_at" => %{
+          "required" => false
+        },
+        "rotated_at" => %{
+          "required" => false
+        },
+        "invite_generation" => %{
+          "required" => true
+        },
+        "state_epoch" => %{
+          "required" => true
+        }
+      }
+    },
+    "invite.db.membership" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "created_at" => %{
+          "required" => true
+        }
+      }
+    },
+    "invite.db.space" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "archived_at" => %{
+          "required" => false
+        },
+        "updated_at" => %{
+          "required" => true
+        },
+        "admission_mode" => %{
+          "required" => true
+        }
+      }
+    },
+    "invite.failure" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "invite.resolve" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["allowed", "refused"],
+      "fields" => %{
+        "credential_kind" => %{
+          "required" => false
+        },
+        "state_epoch" => %{
+          "required" => false
+        },
+        "invite_generation" => %{
+          "required" => false
+        },
+        "arrival_handle" => %{
+          "required" => false
         }
       }
     },
@@ -39,6 +568,55 @@ defmodule ChalkSync.Obs.Registry do
       "fields" => %{
         "flags" => %{
           "required" => true
+        }
+      }
+    },
+    "prejoin.access_card" => %{
+      "kind" => "surface",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
+    "prejoin.access_edge" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "error_name" => %{
+          "required" => false
+        }
+      }
+    },
+    "prejoin.device_error" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "device" => %{
+          "required" => true
+        },
+        "error_name" => %{
+          "required" => true
+        }
+      }
+    },
+    "public_invite.request" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "operation" => %{
+          "required" => true
+        },
+        "http_status" => %{
+          "required" => true
+        },
+        "arrival_handle" => %{
+          "required" => false
         }
       }
     },
@@ -83,6 +661,13 @@ defmodule ChalkSync.Obs.Registry do
         }
       }
     },
+    "sync.admission_requested" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{}
+    },
     "sync.episode.ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -97,15 +682,38 @@ defmodule ChalkSync.Obs.Registry do
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
         }
       }
+    },
+    "sync.websocket.authenticated" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "participant_id_hash" => %{
+          "required" => true
+        }
+      }
     }
   }
 
   @fields %{
+    "admission_mode" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["open", "knock", "members_only"]
+    },
     "admission_request_id" => %{
       "type" => "id",
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "admission_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["pending", "admitted", "approved", "denied", "expired", "invalidated"]
     },
     "agent_id" => %{
       "type" => "id",
@@ -119,9 +727,33 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "app_shown" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "app_version" => %{
       "type" => "string",
       "group" => "build",
+      "required" => false,
+      "values" => nil
+    },
+    "archived_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "arrival_handle" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "arrival_state" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -130,6 +762,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "auth_result" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["expired", "unreadable", "missing"]
     },
     "banner_kind" => %{
       "type" => "enum",
@@ -140,6 +778,12 @@ defmodule ChalkSync.Obs.Registry do
     "batch_id" => %{
       "type" => "id",
       "group" => "delivery",
+      "required" => false,
+      "values" => nil
+    },
+    "blocked_origin" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -179,6 +823,42 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => ["server", "synced", "unsynced"]
     },
+    "completed_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "content_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["html", "other"]
+    },
+    "created_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "credential_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["code", "token"]
+    },
+    "decided_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "decided_by" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "decision" => %{
       "type" => "string",
       "group" => "record",
@@ -191,6 +871,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "device" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["camera", "microphone"]
+    },
     "device_ephemeral" => %{
       "type" => "bool",
       "group" => "trail",
@@ -200,6 +886,18 @@ defmodule ChalkSync.Obs.Registry do
     "device_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "directive" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "disabled_at" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -221,6 +919,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "edge_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "enabled" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "end" => %{
       "type" => "enum",
       "group" => "delivery",
@@ -233,6 +943,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
     },
+    "ended_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "entry_path" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["space_public", "space_private", "space_open_signup", "space_dash_account", "dashboard", "embed", "api_key", "site"]
+    },
     "env" => %{
       "type" => "enum",
       "group" => "build",
@@ -242,6 +964,30 @@ defmodule ChalkSync.Obs.Registry do
     "episode_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "episode_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["active", "ending", "ended"]
+    },
+    "error_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["chunk_load", "missing_export", "other"]
+    },
+    "error_fingerprint" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "error_name" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -257,6 +1003,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => nil
     },
+    "expires_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "flags" => %{
       "type" => "map",
       "group" => "event",
@@ -266,6 +1018,12 @@ defmodule ChalkSync.Obs.Registry do
     "flags_hash" => %{
       "type" => "string",
       "group" => "flags",
+      "required" => false,
+      "values" => nil
+    },
+    "framed" => %{
+      "type" => "bool",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -281,6 +1039,24 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "http_route" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "http_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "invite_generation" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "item_count" => %{
       "type" => "int",
       "group" => "event",
@@ -290,6 +1066,12 @@ defmodule ChalkSync.Obs.Registry do
     "job_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "joined_at" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -317,9 +1099,21 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "manage_admission" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "media_connection_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "method" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -353,11 +1147,23 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "operation" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "outcome" => %{
       "type" => "enum",
       "group" => "record",
       "required" => false,
       "values" => ["ok", "expected", "error"]
+    },
+    "page" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "parent_op_id" => %{
       "type" => "id",
@@ -371,11 +1177,47 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "participant_id_hash" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "participant_status" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "path_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["space_page", "other"]
+    },
+    "phase" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["arriving", "waiting", "admitted", "joining"]
+    },
     "platform" => %{
       "type" => "enum",
       "group" => "build",
       "required" => false,
       "values" => ["web", "ios", "android", "server", "lambda", "node"]
+    },
+    "policy_camera" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["true", "false", "unavailable(no_api)"]
+    },
+    "policy_microphone" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["true", "false", "unavailable(no_api)"]
     },
     "provider_media_id" => %{
       "type" => "id",
@@ -386,6 +1228,12 @@ defmodule ChalkSync.Obs.Registry do
     "reason_code" => %{
       "type" => "string",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "record_name" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -401,9 +1249,39 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "reloaded" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "request_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "request_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "requested_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "rotated_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "route_id" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -449,6 +1327,18 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "state_epoch" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "storage_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["persistent", "unavailable"]
+    },
     "surface_state" => %{
       "type" => "enum",
       "group" => "record",
@@ -464,6 +1354,12 @@ defmodule ChalkSync.Obs.Registry do
     "tenant_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "terminal_reason" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -485,21 +1381,80 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "ua_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["browser", "bot", "other"]
+    },
+    "updated_at" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "upstream_journey_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "upstream_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "user_id" => %{
       "type" => "id",
       "group" => "trail",
       "required" => false,
       "values" => nil
     },
+    "visibility" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["visible", "hidden"]
+    },
     "webhook_delivery_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "window_end_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "window_start_ms" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     }
   }
 
   @machines %{
+    "admission.entrance" => %{
+      "states" => ["idle", "arriving", "waiting", "admitted", "ended", "failed"],
+      "edges" => [
+        ["idle", "arriving"],
+        ["failed", "arriving"],
+        ["ended", "arriving"],
+        ["arriving", "waiting"],
+        ["arriving", "admitted"],
+        ["arriving", "failed"],
+        ["waiting", "admitted"],
+        ["waiting", "failed"],
+        ["waiting", "idle"],
+        ["admitted", "failed"],
+        ["admitted", "ended"]
+      ],
+      "triggers" => ["started", "rejoin_released", "waiting_for_host", "admitted", "call_ui_failed", "failed", "cancelled", "call_ended"]
+    },
     "client.connection" => %{
       "states" => ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"],
       "edges" => [
@@ -529,6 +1484,20 @@ defmodule ChalkSync.Obs.Registry do
       ],
       "triggers" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
     },
+    "prejoin.access" => %{
+      "states" => ["checking", "ask", "requesting", "granted", "blocked"],
+      "edges" => [
+        ["checking", "ask"],
+        ["checking", "granted"],
+        ["checking", "blocked"],
+        ["ask", "requesting"],
+        ["requesting", "granted"],
+        ["requesting", "blocked"],
+        ["granted", "blocked"],
+        ["blocked", "requesting"]
+      ],
+      "triggers" => ["permission_query", "device_labels", "preview_open", "request"]
+    },
     "selftest.door" => %{
       "states" => ["closed", "open", "locked"],
       "edges" => [
@@ -542,8 +1511,29 @@ defmodule ChalkSync.Obs.Registry do
   }
 
   @reasons %{
+    "admission.decide_failed" => "error",
+    "admission.guest_left" => "expected",
+    "admission.no_host" => "expected",
+    "admission.seen_unanswered" => "expected",
+    "boot.chunk_load" => "error",
+    "boot.chunk_reloaded" => "expected",
+    "boot.load_failed" => "error",
     "cancelled" => "expected",
+    "dashboard.signed_out" => "expected",
+    "embed.access_refused" => "error",
+    "embed.grant_withdrawn" => "expected",
     "end.time_limit" => "expected",
+    "invite.arrival_mismatch" => "expected",
+    "invite.disabled" => "expected",
+    "invite.generation_mismatch" => "error",
+    "invite.invalid_row" => "error",
+    "invite.members_only" => "expected",
+    "invite.not_found" => "expected",
+    "invite.space_archived" => "expected",
+    "invite.space_mismatch" => "error",
+    "invite.unavailable" => "expected",
+    "prejoin.prompt_refused" => "expected",
+    "prejoin.refusal_remembered" => "expected",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
     "unclassified" => "error"

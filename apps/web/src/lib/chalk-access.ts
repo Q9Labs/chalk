@@ -1,6 +1,8 @@
 import { createChalkPublicClient, createPublicSpaceSession, resumePublicSpaceSession, type ChalkPublicClient, type PublicSpaceArrival, type PublicSpaceSession, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "@q9labsai/chalk-client/effect";
 
+import { entryIds } from "./boot-beacon";
+
 export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
@@ -19,7 +21,12 @@ export type PublicSpaceAdmission = {
 };
 
 export function createPublicInviteClient(): ChalkPublicClient {
-  return createChalkPublicClient({ baseUrl: publicAPIBaseURL(), credentials: "include" });
+  const { cs, dev } = entryIds();
+  return createChalkPublicClient({
+    baseUrl: publicAPIBaseURL(),
+    credentials: "include",
+    headers: { "X-Chalk-Client-Session": cs, "X-Chalk-Device": dev },
+  });
 }
 
 export function admitPublicSpace(client: ChalkPublicClient, arrival: PublicSpaceArrival): PublicSpaceAdmission {

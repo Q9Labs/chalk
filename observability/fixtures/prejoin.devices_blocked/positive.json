@@ -1,0 +1,58 @@
+{
+ "description": "The Permissions Policy already denied camera in this document and the prejoin machine went to blocked on permission_query — no visitor refusal was involved.",
+ "asof_ms": 1795603600000,
+ "declaration": {
+  "kind": "attempt",
+  "id": "cs_spec_fault",
+  "tenant": "10000000-0000-4000-8000-000000000001",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795603600000
+  }
+ },
+ "rows": [
+  {
+   "kind": "fact",
+   "name": "boot.started",
+   "event_id": "ev_boot_started_034",
+   "est_server_ms": 1795600000000,
+   "entry_path": "space_public",
+   "framed": true,
+   "policy_camera": "false",
+   "policy_microphone": "true",
+   "visibility": "visible",
+   "storage_state": "persistent",
+   "client_session_id": "cs_spec_fault",
+   "device_id": "dev_spec",
+   "device_ephemeral": false,
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "fact",
+   "name": "entry.record",
+   "event_id": "ev_entry_record_035",
+   "est_server_ms": 1795600000050,
+   "record_name": "boot.started",
+   "entry_path": "space_public",
+   "client_session_id": "cs_spec_fault",
+   "app_build": "spec",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  },
+  {
+   "kind": "transition",
+   "name": "prejoin.access_edge",
+   "event_id": "ev_prejoin_access_edge_036",
+   "est_server_ms": 1795600000500,
+   "from_state": "checking",
+   "to_state": "blocked",
+   "trigger": "permission_query",
+   "error_name": "NotAllowedError",
+   "client_session_id": "cs_spec_fault",
+   "tenant_id": "10000000-0000-4000-8000-000000000001"
+  }
+ ],
+ "chain": [
+  "observability/fixtures/prejoin.devices_blocked/chain/prejoin.devices_blocked.rows.positive.json"
+ ]
+}

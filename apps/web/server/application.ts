@@ -21,9 +21,9 @@ const emptyBody = z.strictObject({});
 const faviconQuery = z.strictObject({ host: z.string().min(1).max(253) });
 async function current(request: Request, env: DashboardEnvironment, provider: IdentityProvider): Promise<Identity> {
   const sealed = readCookie(request, env, "session");
-  if (!sealed) throw new DashboardError(401, "sign_in_required");
+  if (!sealed) throw new DashboardError(401, "sign_in_required", { authResult: "missing" });
   const result = await provider.authenticate(sealed);
-  if (result.kind !== "authenticated") throw new DashboardError(401, "sign_in_required");
+  if (result.kind !== "authenticated") throw new DashboardError(401, "sign_in_required", { authResult: result.reason ?? "unreadable" });
   const bound = await binding(request, env);
   if (bound.userId !== result.identity.userId || bound.sessionId !== result.identity.sessionId) throw new DashboardError(401, "session_binding_mismatch");
   return result.identity;
@@ -67,7 +67,7 @@ async function authCallback(context: AuthContext, name: Provider): Promise<Respo
   try {
     response = await completeSignIn(context, name);
   } catch (error) {
-    const failed = failure(error);
+    const failed = failure(error, context.request);
     response = redirect(`/dashboard/sign-in?failed=${name}`);
     response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
   }
@@ -120,11 +120,32 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
     return request.method === "GET" ? page.read(context) : page.act(context, await body(request));
   });
 }
-function failure(error: unknown): Response {
+function failure(error: unknown, request?: Request): Response {
   const status = error instanceof DashboardError ? error.status : error instanceof z.ZodError ? 400 : 503;
   const code = error instanceof DashboardError ? error.code : error instanceof z.ZodError ? "invalid_request" : "service_unavailable";
   const requestId = crypto.randomUUID();
-  console.warn(JSON.stringify({ event: "dashboard.request_failed", request_id: requestId, status, code, error_type: error instanceof Error ? error.name : typeof error }));
+  let pathname: string | undefined;
+  try {
+    pathname = request ? new URL(request.url).pathname : undefined;
+  } catch {
+    pathname = undefined;
+  }
+  console.warn(
+    JSON.stringify({
+      event: "dashboard.request_failed",
+      request_id: requestId,
+      http_status: status,
+      status,
+      code,
+      error_type: error instanceof Error ? error.name : typeof error,
+      page: pathname?.startsWith("/dashboard-api/") ? pathname.slice("/dashboard-api/".length) : pathname,
+      method: request?.method,
+      auth_result: error instanceof DashboardError ? error.authResult : undefined,
+      upstream_status: error instanceof DashboardError ? error.upstreamStatus : undefined,
+      upstream_journey_id: error instanceof DashboardError ? error.upstreamJourneyId : undefined,
+      client_session_id: request?.headers.get("X-Chalk-Client-Session") ?? undefined,
+    }),
+  );
   const response = json({ error: status === 429 ? { code, retryable: true, retryAfterSeconds: 60 } : { code } }, status);
   if (status === 429) response.headers.set("Retry-After", "60");
   response.headers.set("X-Request-ID", requestId);
@@ -138,6 +159,6 @@ export async function handleDashboard(request: Request, bindings: DashboardBindi
     const path = new URL(request.url).pathname;
     return path.startsWith("/auth/") ? await auth(request, env, provider, path) : await dashboard(request, env, provider, path);
   } catch (error) {
-    return failure(error);
+    return failure(error, request);
   }
 }

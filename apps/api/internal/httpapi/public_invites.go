@@ -35,6 +35,7 @@ var (
 
 const (
 	publicInviteTokenHeader  = "X-Chalk-Arrival-Handle"
+	clientSessionHeader      = "X-Chalk-Client-Session"
 	publicClientHeader       = "X-Chalk-Client"
 	publicInviteFormatHeader = "X-Chalk-Invite-Format"
 	publicGuestScheme        = "ChalkGuest"
@@ -598,6 +599,9 @@ func publicInviteTelemetry(operation string) func(http.Handler) http.Handler {
 			ctx, span := tracer.Start(r.Context(), "public_invite."+operation, trace.WithAttributes(
 				attribute.String("chalk.public_invite.operation", operation),
 			))
+			if clientSession := r.Header.Get(clientSessionHeader); clientSession != "" {
+				ctx = publicinvites.WithClientSessionID(ctx, clientSession)
+			}
 			recorder := &publicInviteResponseRecorder{ResponseWriter: w}
 			next.ServeHTTP(recorder, r.WithContext(ctx))
 			status := recorder.status
@@ -613,13 +617,21 @@ func publicInviteTelemetry(operation string) func(http.Handler) http.Handler {
 			if outcome != "succeeded" {
 				span.SetStatus(codes.Error, reason)
 			}
-			slog.Default().Log(ctx, publicInviteLogLevel(outcome), "public invite request",
+			attrs := []any{
 				"event", "public_invite.request",
 				"operation", operation,
 				"outcome", outcome,
 				"reason", reason,
 				"status", status,
-			)
+				"http_status", status,
+			}
+			if arrivalHandle := r.Header.Get(publicInviteTokenHeader); arrivalHandle != "" {
+				attrs = append(attrs, "arrival_handle", arrivalHandle)
+			}
+			if clientSession := r.Header.Get(clientSessionHeader); clientSession != "" {
+				attrs = append(attrs, "client_session_id", clientSession)
+			}
+			slog.Default().Log(ctx, publicInviteLogLevel(outcome), "public invite request", attrs...)
 			span.End()
 		})
 	}

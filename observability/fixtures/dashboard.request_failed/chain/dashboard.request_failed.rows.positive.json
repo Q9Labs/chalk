@@ -1,0 +1,28 @@
+[
+ {
+  "kind": "fact",
+  "name": "dashboard.request_failed",
+  "event_id": "ev_dashboard_request_failed_041",
+  "est_server_ms": 1795600001000,
+  "page": "call",
+  "method": "GET",
+  "http_status": 503,
+  "auth_result": "missing",
+  "upstream_status": 0,
+  "upstream_journey_id": "",
+  "client_session_id": "cs_spec_fault",
+  "event": "dashboard.request_failed",
+  "env": "test"
+ },
+ {
+  "kind": "fact",
+  "name": "http.request",
+  "event_id": "ev_http_request_042",
+  "est_server_ms": 1795600000900,
+  "http_route": "/v1/dashboard/call",
+  "http_status": 200,
+  "method": "GET",
+  "event": "http.request",
+  "env": "test"
+ }
+]

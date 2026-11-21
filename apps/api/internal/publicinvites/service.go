@@ -10,11 +10,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -185,19 +187,49 @@ func (s Service) IssueInviteToken(invite Invite) (string, error) {
 	return s.signer.Encode(token)
 }
 
+// inviteRefuse records the API's own invite.resolve decision for a refusal: the row inputs the
+// decision used, so a later check can ask whether the refusal still agreed with the rows. The
+// credential is never an attribute — the code alone would name the invite.
+func inviteRefuse(ctx context.Context, reason string, attrs ...slog.Attr) {
+	obs.Decision(ctx, obs.EventInviteResolve, "refused", reason, attrs...)
+}
+
+func credentialKind(credential inviteCredential) string {
+	if credential.code != "" {
+		return "code"
+	}
+	return "token"
+}
+
+func inviteAttrs(invite Invite, attrs ...slog.Attr) []slog.Attr {
+	return append([]slog.Attr{
+		obs.F("space_id", invite.SpaceID.String()),
+		obs.F("tenant_id", invite.TenantID.String()),
+		obs.F("invite_generation", int64(invite.Generation)),
+		obs.F("state_epoch", int64(invite.StateEpoch)),
+	}, attrs...)
+}
+
 func (s Service) ResolveInviteToken(ctx context.Context, raw string) (Invite, Token, error) {
 	if code, ok := ParseInviteCode(raw); ok {
 		trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.credential", "code"))
 		invite, err := s.repository.GetInviteByCode(ctx, code)
 		if errors.Is(err, ErrInviteNotFound) {
+			inviteRefuse(ctx, obs.ReasonInviteNotFound, obs.F("credential_kind", "code"))
 			return Invite{}, Token{}, ErrInviteUnavailable
 		}
 		if err != nil {
 			return Invite{}, Token{}, err
 		}
-		if err := validateInvite(invite); err != nil || !invite.Enabled {
+		if err := validateInvite(invite); err != nil {
+			inviteRefuse(ctx, obs.ReasonInviteInvalidRow, inviteAttrs(invite, obs.F("credential_kind", "code"))...)
 			return Invite{}, Token{}, ErrInviteUnavailable
 		}
+		if !invite.Enabled {
+			inviteRefuse(ctx, obs.ReasonInviteDisabled, inviteAttrs(invite, obs.F("credential_kind", "code"))...)
+			return Invite{}, Token{}, ErrInviteUnavailable
+		}
+		obs.Decision(ctx, obs.EventInviteResolve, "allowed", "", inviteAttrs(invite, obs.F("credential_kind", "code"))...)
 		return invite, Token{Handle: invite.Handle, Generation: invite.Generation}, nil
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.credential", "token"))
@@ -210,17 +242,25 @@ func (s Service) ResolveInviteToken(ctx context.Context, raw string) (Invite, To
 	}
 	invite, err := s.repository.GetInviteByHandle(ctx, token.Handle)
 	if errors.Is(err, ErrInviteNotFound) {
+		inviteRefuse(ctx, obs.ReasonInviteNotFound, obs.F("credential_kind", "token"))
 		return Invite{}, Token{}, ErrInviteUnavailable
 	}
 	if err != nil {
 		return Invite{}, Token{}, err
 	}
 	if err := validateInvite(invite); err != nil {
+		inviteRefuse(ctx, obs.ReasonInviteInvalidRow, inviteAttrs(invite, obs.F("credential_kind", "token"))...)
 		return Invite{}, Token{}, ErrInviteUnavailable
 	}
-	if !invite.Enabled || invite.Generation != token.Generation || !bytes.Equal(invite.Handle, token.Handle) {
+	switch {
+	case !invite.Enabled:
+		inviteRefuse(ctx, obs.ReasonInviteDisabled, inviteAttrs(invite, obs.F("credential_kind", "token"))...)
+		return Invite{}, Token{}, ErrInviteUnavailable
+	case invite.Generation != token.Generation || !bytes.Equal(invite.Handle, token.Handle):
+		inviteRefuse(ctx, obs.ReasonInviteGenerationMismatch, inviteAttrs(invite, obs.F("credential_kind", "token"))...)
 		return Invite{}, Token{}, ErrInviteUnavailable
 	}
+	obs.Decision(ctx, obs.EventInviteResolve, "allowed", "", inviteAttrs(invite, obs.F("credential_kind", "token"))...)
 	return invite, token, nil
 }
 
@@ -955,6 +995,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			return PublicSpaceArrival{}, authErr
 		}
 		if !credential.matches(arrival.InviteHandle, arrival.InviteGeneration) {
+			inviteRefuse(ctx, obs.ReasonInviteArrivalMismatch, obs.F("arrival_handle", arrival.ArrivalHandle.String()), obs.F("invite_generation", int64(arrival.InviteGeneration)), obs.F("space_id", arrival.SpaceID.String()), obs.F("tenant_id", arrival.TenantID.String()))
 			return PublicSpaceArrival{}, ErrInviteUnavailable
 		}
 		space, spaceErr := r.space.GetPublicSpace(ctx, arrival.TenantID, arrival.SpaceID)
@@ -962,9 +1003,11 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			return PublicSpaceArrival{}, spaceErr
 		}
 		if space.TenantID != arrival.TenantID || space.SpaceID != arrival.SpaceID {
+			inviteRefuse(ctx, obs.ReasonInviteSpaceMismatch, obs.F("arrival_handle", arrival.ArrivalHandle.String()), obs.F("space_id", arrival.SpaceID.String()), obs.F("tenant_id", arrival.TenantID.String()))
 			return PublicSpaceArrival{}, ErrInviteUnavailable
 		}
 		if space.Archived && arrival.State != ArrivalAdmitted {
+			inviteRefuse(ctx, obs.ReasonInviteSpaceArchived, obs.F("arrival_handle", arrival.ArrivalHandle.String()), obs.F("space_id", arrival.SpaceID.String()), obs.F("tenant_id", arrival.TenantID.String()))
 			return PublicSpaceArrival{}, ErrInviteUnavailable
 		}
 		if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest {
@@ -1027,9 +1070,11 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		return PublicSpaceArrival{}, err
 	}
 	if space.TenantID != invite.TenantID || space.SpaceID != invite.SpaceID {
+		inviteRefuse(ctx, obs.ReasonInviteSpaceMismatch, inviteAttrs(invite, obs.F("credential_kind", credentialKind(credential)))...)
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	if space.Archived {
+		inviteRefuse(ctx, obs.ReasonInviteSpaceArchived, inviteAttrs(invite, obs.F("credential_kind", credentialKind(credential)))...)
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	accountAuthorized, err := r.authorizeAccount(ctx, input.AccountID, invite.TenantID)
@@ -1037,6 +1082,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		return PublicSpaceArrival{}, err
 	}
 	if space.AdmissionMode == AdmissionMembersOnly && !accountAuthorized {
+		inviteRefuse(ctx, obs.ReasonInviteMembersOnly, inviteAttrs(invite, obs.F("credential_kind", credentialKind(credential)), obs.F("user_id", input.AccountID.String()))...)
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	identityMode := IdentityGuest
