@@ -127,11 +127,7 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 		return config.PublicInviteConfig{}, errors.New("local public invite Tenant service unavailable")
 	}
 	webOrigin := localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins)
-	plane := cfg.DefaultMediaPlane
-	if plane == "" {
-		plane = mediaplane.ProviderCloudflareSFU
-	}
-	managedTenant, err := ensureLocalPublicInviteTenant(ctx, tenantService, plane)
+	managedTenant, err := ensureLocalPublicInviteTenant(ctx, tenantService)
 	if err != nil {
 		return config.PublicInviteConfig{}, err
 	}
@@ -143,7 +139,7 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 	return config.PublicInviteConfig{
 		Enabled:           true,
 		ManagedTenantID:   managedTenant.ID.String(),
-		DefaultMediaPlane: plane,
+		DefaultMediaPlane: mediaplane.ProviderChalkSFU,
 		WebOrigin:         webOrigin,
 		KeyID:             localPublicInviteKeyID,
 		PrivateKey:        privateKey,
@@ -163,11 +159,7 @@ func localPublicInviteWebOrigin(origins []string) string {
 	return localPublicInviteWebDefault
 }
 
-func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPublicInviteTenantService, plane mediaplane.Provider) (tenants.Tenant, error) {
-	tenantName := localPublicInviteTenantName
-	if plane == mediaplane.ProviderChalkSFU {
-		tenantName += " (Chalk SFU)"
-	}
+func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPublicInviteTenantService) (tenants.Tenant, error) {
 	var cursor *pagination.Cursor
 	for {
 		page, err := pagination.NewPageRequest(pagination.MaxPageSize, cursor)
@@ -179,7 +171,7 @@ func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPubli
 			return tenants.Tenant{}, fmt.Errorf("list local public invite Tenants: %w", err)
 		}
 		for _, tenant := range list.Tenants {
-			if tenant.Name == tenantName {
+			if tenant.Name == localPublicInviteTenantName {
 				return tenant, nil
 			}
 		}
@@ -189,13 +181,13 @@ func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPubli
 		cursor = list.Page.NextCursor
 	}
 
-	mediaConfig, err := mediaplane.ChalkManagedTenantConfig(plane)
+	mediaConfig, err := mediaplane.ChalkManagedTenantConfig(mediaplane.ProviderChalkSFU)
 	if err != nil {
 		return tenants.Tenant{}, fmt.Errorf("encode local public invite Tenant media config: %w", err)
 	}
-	defaultMediaPlane := plane.SettingName()
+	defaultMediaPlane := mediaplane.ProviderChalkSFU.SettingName()
 	created, err := tenantService.CreateTenant(ctx, tenants.CreateTenantInput{
-		Name:                     tenantName,
+		Name:                     localPublicInviteTenantName,
 		DefaultMediaPlane:        &defaultMediaPlane,
 		MediaPlaneProviderConfig: mediaConfig,
 	})

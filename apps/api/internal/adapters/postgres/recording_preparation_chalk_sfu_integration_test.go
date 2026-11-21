@@ -31,11 +31,11 @@ type chalkSFUPlaneCase struct {
 var chalkSFUPlaneCases = []chalkSFUPlaneCase{
 	{"space selects the Chalk SFU", "", "chalk_sfu", "", false, false},
 	{"tenant default is the Chalk SFU", "chalk_sfu", "", "", false, false},
-	{"space overrides a tenant default", "chalk_sfu", "cf_sfu", "", false, true},
-	{"cloudflare control", "", "cf_sfu", "", false, true},
+	{"legacy Space setting does not enable capture", "chalk_sfu", "cf_sfu", "", false, false},
+	{"unconfigured capture", "", "cf_sfu", "", false, false},
 	{"space selects the Chalk SFU with capture on", "", "chalk_sfu", "", true, true},
 	{"tenant default is the Chalk SFU with capture on", "chalk_sfu", "", "", true, true},
-	{"live Cloudflare Episode keeps its recorder after the Space switches", "", "chalk_sfu", "cf_sfu", false, true},
+	{"retired live binding cannot start capture", "", "chalk_sfu", "cf_sfu", true, false},
 	{"live Chalk SFU Episode gets no recorder after the Space switches back", "", "cf_sfu", "chalk_sfu", false, false},
 	{"live Chalk SFU Episode with capture on", "", "cf_sfu", "chalk_sfu", true, true},
 }

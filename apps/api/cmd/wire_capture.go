@@ -9,7 +9,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureproviders"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -68,17 +67,13 @@ func (w *apiWiring) wireCaptureWorkers() error {
 		w.options.RecorderFleetController = fleet.service
 		w.options.RecorderFleetWorker = fleet.service
 		w.options.RecorderFleetVerifier = fleet.controllerVerifier
-		managedBinding, err := w.mediaPlaneRegistry.DeploymentBinding(mediaplane.ProviderCloudflareSFU)
-		if err != nil {
-			return fmt.Errorf("configure recording application identity: %w", err)
-		}
-		captureRegistrations := []captureproviders.Registration{{Binding: managedBinding, Plane: w.managedSFU}}
+		var captureRegistrations []captureproviders.Registration
 		if w.ownCapture {
-			ownBinding, err := w.mediaPlaneRegistry.DeploymentBinding(mediaplane.ProviderChalkSFU)
+			binding, err := w.mediaPlaneRegistry.DeploymentBinding()
 			if err != nil {
 				return fmt.Errorf("configure Chalk SFU recording identity: %w", err)
 			}
-			captureRegistrations = append(captureRegistrations, captureproviders.Registration{Binding: ownBinding, Nodes: w.chalkSFU})
+			captureRegistrations = append(captureRegistrations, captureproviders.Registration{Binding: binding, Nodes: w.chalkSFU})
 		}
 		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(w.queries), captureRegistrations...)
 		if err != nil {

@@ -60,7 +60,7 @@ func testSubject(t *testing.T) accessgrants.Subject {
 		EpisodeID:             mustID(t, "33333333-3333-4333-8333-333333333333"),
 		ParticipantID:         mustID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration: 7,
-		Provider:              accessgrants.ProviderCloudflareSFU,
+		Provider:              accessgrants.ProviderChalkSFU,
 		ConnectionID:          "connection_123",
 	}
 }

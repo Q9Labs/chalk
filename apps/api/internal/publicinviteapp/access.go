@@ -416,7 +416,7 @@ func scopeOf(tenantID, episodeID, participantID utilities.ID, generation int64) 
 // publicProvider reports whether the provider's joins name one connection, which
 // the guest's media proof binds to. Both SFU providers do.
 func publicProvider(provider mediaplane.Provider) bool {
-	return provider == mediaplane.ProviderCloudflareSFU || provider == mediaplane.ProviderChalkSFU
+	return provider == mediaplane.ProviderChalkSFU
 }
 
 func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (string, publicinvites.PublicAccessClientPayload, error) {
@@ -440,15 +440,6 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 		}
 		capabilities.DirectSignalingURL, _ = flags["directSignalingUrl"].(string)
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
-	case mediaplane.ProviderCloudflareSFU:
-		connectionID, ok := join.ClientPayload["connectionId"].(string)
-		stunServer, stunOK := join.ClientPayload["stunServer"].(string)
-		if !ok || !stunOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(stunServer) == "" {
-			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
-		}
-		iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
-		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, StunServer: stunServer, ICEServers: iceServers}, nil
-
 	default:
 		return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
 	}
@@ -459,7 +450,7 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 		return false
 	}
 	switch arrival.Provider {
-	case publicinvites.PublicProviderCloudflareSFU, publicinvites.PublicProviderChalkSFU:
+	case publicinvites.PublicProviderChalkSFU:
 		return subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 	default:
 		return false

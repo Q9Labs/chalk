@@ -84,7 +84,7 @@ const (
 
 // PlaneCloudflare and PlaneChalk are the providers' setting names, the spelling the audit records.
 var (
-	PlaneCloudflare = ProviderCloudflareSFU.SettingName()
+	PlaneCloudflare = "cf_sfu"
 	PlaneChalk      = ProviderChalkSFU.SettingName()
 )
 

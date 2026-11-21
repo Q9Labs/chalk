@@ -868,12 +868,6 @@ func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicA
 
 func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string]any {
 	switch grant.Provider {
-	case publicinvites.PublicProviderCloudflareSFU:
-		return map[string]any{
-			"connectionId": grant.ClientPayload.ConnectionID,
-			"stunServer":   grant.ClientPayload.StunServer,
-			"iceServers":   grant.ClientPayload.ICEServers,
-		}
 	case publicinvites.PublicProviderChalkSFU:
 		return map[string]any{
 			"connectionId": grant.ClientPayload.ConnectionID,

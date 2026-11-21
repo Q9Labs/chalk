@@ -340,40 +340,30 @@ func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input 
 // as a terminal failure; it never falls back to Cloudflare, which would close
 // another provider's tracks by the wrong rules.
 func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, ChalkNode, *ExecutionResult) {
-	name, node, generation := mediaplane.ProviderCloudflareSFU.SettingName(), "", int64(0)
-	if e.episodes != nil {
-		found, foundNode, foundGeneration, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
-		if err != nil {
-			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
-			return "", nil, nil, &result
-		}
-		if found != "" {
-			name, node, generation = found, foundNode, foundGeneration
-		}
+	if e.episodes == nil {
+		return mediaplane.ProviderChalkSFU, e.tracks, nil, nil
 	}
-	provider, _ := mediaplane.ParseSettingName(name)
-	switch provider {
-	case mediaplane.ProviderCloudflareSFU:
-		if e.tracks == nil {
-			return mediaplane.ProviderCloudflareSFU, nil, nil, nil
-		}
-		return mediaplane.ProviderCloudflareSFU, e.tracks, nil, nil
-	case mediaplane.ProviderChalkSFU:
-		unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
-		if e.chalk == nil {
-			return "", nil, nil, &unavailable
-		}
-		// A node missing from this process's configuration may come back with the
-		// next deploy, so the operation retries instead of failing for good.
-		chalk, err := e.chalk(node, generation)
-		if err != nil {
-			return "", nil, nil, &unavailable
-		}
-		return mediaplane.ProviderChalkSFU, chalk, chalk, nil
-	default:
+	name, node, generation, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
+	if err != nil {
+		result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
+		return "", nil, nil, &result
+	}
+	if name == "" {
+		return "", nil, nil, nil
+	}
+	if name != mediaplane.ProviderChalkSFU.SettingName() {
 		result := ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_provider"}
 		return "", nil, nil, &result
 	}
+	unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
+	if e.chalk == nil {
+		return "", nil, nil, &unavailable
+	}
+	chalk, err := e.chalk(node, generation)
+	if err != nil {
+		return "", nil, nil, &unavailable
+	}
+	return mediaplane.ProviderChalkSFU, chalk, chalk, nil
 }
 
 // resumePublication grants the source on the Chalk SFU, which forwards a source only

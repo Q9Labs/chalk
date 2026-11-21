@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { CloudflareSFUError } from "./cloudflare-sfu";
-import { bootstrap, createSfuHarness, FakeTrack, fakeStream, type HarnessOptions } from "./cloudflare-sfu.test.helpers";
+import { SFUError } from "./sfu";
+import { bootstrap, createSfuHarness, FakeTrack, fakeStream, type HarnessOptions } from "./sfu.test.helpers";
 
 type Harness = ReturnType<typeof createHarness>;
 function createHarness(options: HarnessOptions = {}) {
@@ -206,7 +206,7 @@ class FakePeerConnection extends EventTarget {
   }
 }
 
-const GONE = () => new CloudflareSFUError("Chalk SFU signaling failed with HTTP 404", "signaling_failed", { status: 404, retryableConnection: true });
+const GONE = () => new SFUError("Chalk SFU signaling failed with HTTP 404", "signaling_failed", { status: 404, retryableConnection: true });
 
 async function startScreen(h: Harness): Promise<void> {
   h.client.prepareLocalTrack("screen", new FakeTrack("screen", "video") as unknown as MediaStreamTrack);

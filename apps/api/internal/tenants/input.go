@@ -1,7 +1,11 @@
 package tenants
 
 import (
+	"encoding/json"
+	"errors"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -27,7 +31,7 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.JSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.NullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.NullableString(input.Website)
-	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
+	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr, checkMediaConfig(input.MediaPlaneProviderConfig))
 }
 
 func prepareUpdateTenantInput(input *UpdateTenantInput) error {
@@ -77,7 +81,7 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.OptionalNullableJSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.OptionalNullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.OptionalNullableString(input.Website)
-	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
+	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr, checkMediaConfig(input.MediaPlaneProviderConfig.Value))
 }
 
 func firstTenantFieldError(errs ...error) error {
@@ -102,4 +106,16 @@ func ValidExternalID(id string) bool {
 func validStoredText(value string, maxCharacters int) bool {
 	characters := utf8.RuneCountInString(value)
 	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+
+func checkMediaConfig(raw json.RawMessage) error {
+	config, err := mediaplane.ParseTenantConfig(raw)
+	if errors.Is(err, mediaplane.ErrMissingTenantConfig) {
+		return nil
+	}
+	if err != nil || (config.Provider != "" && config.Provider != string(mediaplane.ProviderChalkSFU)) ||
+		(config.Mode != "" && config.Mode != mediaplane.ModeChalkManaged) {
+		return ErrInvalidTenantField
+	}
+	return nil
 }

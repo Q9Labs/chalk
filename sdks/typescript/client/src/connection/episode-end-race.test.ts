@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CloudflareSFUError } from "../media";
+import { SFUError } from "../media";
 import type { ConnectionDependencies, ConnectionMediaFactoryInput } from "./dependencies";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
@@ -16,7 +16,7 @@ describe("Episode end wins media rejection", () => {
     const test = fixture("ending");
     try {
       await test.join();
-      test.reject(new CloudflareSFUError("SFU request rejected during teardown", "signaling_failed", { status: 403 }));
+      test.reject(new SFUError("SFU request rejected during teardown", "signaling_failed", { status: 403 }));
       await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
       expect(test.platform.sync.getSnapshot().control?.status).toBe("active");
       expect(test.events.ended).toHaveLength(1);
@@ -86,7 +86,7 @@ describe("Episode end wins media rejection", () => {
     const test = fixture();
     try {
       await test.join();
-      test.reject(new CloudflareSFUError("Revoked media credential", "signaling_failed", { status: 403 }));
+      test.reject(new SFUError("Revoked media credential", "signaling_failed", { status: 403 }));
       await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("failed"));
       expect(test.client.getSnapshot().connection.lastError).toMatchObject({ code: "access.invalid", recoverable: false });
       expect(test.events.ended).toEqual([]);

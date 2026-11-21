@@ -534,10 +534,10 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("signalCloudflareSFU", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/signal", {
-      params: S.SignalCloudflareSFUPathParamsSchema,
-      payload: S.SignalCloudflareSFURequestBodySchema,
-      success: S.SignalCloudflareSFUResponseSchema.pipe(HttpApiSchema.status(200)),
+    HttpApiEndpoint.post("signalChalkSFU", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/signal", {
+      params: S.SignalChalkSFUPathParamsSchema,
+      payload: S.SignalChalkSFURequestBodySchema,
+      success: S.SignalChalkSFUResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
         S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),

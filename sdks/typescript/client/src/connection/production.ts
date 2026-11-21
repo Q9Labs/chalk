@@ -1,5 +1,5 @@
 import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
-import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
+import { SFUClient, createSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
@@ -69,11 +69,11 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const bootstrap = mediaBootstrap(input.access.media);
-  const client = new CloudflareSFUClient({
+  const client = new SFUClient({
     bootstrap,
     participantId: subject.participantId,
     replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
-    transport: createCloudflareSFUHTTPTransport({
+    transport: createSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
       ...(input.refreshCredential ? { refreshCredential: input.refreshCredential } : {}),

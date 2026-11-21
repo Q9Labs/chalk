@@ -1,7 +1,7 @@
 import { afterEach, vi } from "vitest";
 import type { TransportDiagnostic } from "../transport-diagnostics";
-import { CloudflareSFUClient, CloudflareSFUError } from "./cloudflare-sfu";
-import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import { SFUClient, SFUError } from "./sfu";
+import type { SFUBootstrap, SFUCloseTrackRequest, SFULocalOfferDiagnostic, SFUPublicationSnapshot, SFUSessionDescription, SFUSignalingTransport, SFUTrackRequest, SFUTracksResponse } from "./sfu";
 
 /** The part of a fake peer connection that the fake transport drives when the SFU hands out a remote track. */
 export interface TransportPeer {
@@ -9,10 +9,10 @@ export interface TransportPeer {
   emitTrack(mid: string, track: FakeTrack): void;
 }
 
-export function bootstrap(connectionId: string): CloudflareSFUBootstrap {
-  return { connectionId, stunServer: "stun:example.test" };
+export function bootstrap(connectionId: string): SFUBootstrap {
+  return { connectionId, iceServers: [] };
 }
-export function publicationSnapshot(incarnation: number, sequence: number, publicationId: string): CloudflareSFUPublicationSnapshot {
+export function publicationSnapshot(incarnation: number, sequence: number, publicationId: string): SFUPublicationSnapshot {
   return { incarnation, sequence, publications: [{ participantId: "participant-2", source: "camera", publicationId }] };
 }
 export function versionedPublicationID(connectionId: string, mid: string, trackName: string): string {
@@ -23,7 +23,7 @@ export function fakeStream(...tracks: readonly FakeTrack[]): MediaStream {
   return { getTracks: () => tracks as unknown as MediaStreamTrack[] } as MediaStream;
 }
 
-export class FakeTransport implements CloudflareSFUSignalingTransport {
+export class FakeTransport implements SFUSignalingTransport {
   uniqueRemoteMids = false;
   /** MIDs the SFU hands out again for the next pulls, as it does for a mid whose track was closed. */
   readonly reuseRemoteMids: string[] = [];
@@ -33,17 +33,17 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
   #localPublicationRevision = 0;
   readonly addInputs: {
     readonly connectionId: string;
-    readonly sessionDescription?: CloudflareSFUSessionDescription;
-    readonly tracks: readonly CloudflareSFUTrackRequest[];
+    readonly sessionDescription?: SFUSessionDescription;
+    readonly tracks: readonly SFUTrackRequest[];
   }[] = [];
   readonly closeInputs: {
     readonly connectionId: string;
-    readonly sessionDescription?: CloudflareSFUSessionDescription;
-    readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
+    readonly sessionDescription?: SFUSessionDescription;
+    readonly tracks: readonly SFUCloseTrackRequest[];
     readonly force: boolean;
   }[] = [];
-  listSubscriptions: CloudflareSFUSignalingTransport["listSubscriptions"];
-  readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
+  listSubscriptions: SFUSignalingTransport["listSubscriptions"];
+  readonly localPublications = new Map<string, SFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
   nextLocalPublishFailure: Error | null = null;
   localPublishFailure: Error | null = null;
@@ -55,19 +55,19 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
   readonly remotePullFailures: unknown[] = [];
-  readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
+  readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: SFUSessionDescription }[] = [];
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
-  readonly publicationListSnapshots: CloudflareSFUPublicationSnapshot[] = [];
+  readonly publicationListSnapshots: SFUPublicationSnapshot[] = [];
   maxLocalMids: number | null = null;
-  snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
+  snapshot: SFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
   readonly #localMids = new Set<string>();
   readonly #peer: () => TransportPeer | undefined;
   constructor(peer: () => TransportPeer | undefined) {
     this.#peer = peer;
   }
-  async addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
+  async addTracks(input: Parameters<SFUSignalingTransport["addTracks"]>[0]): Promise<SFUTracksResponse> {
     this.addInputs.push(input);
     return input.tracks.some((track) => track.location === "remote") ? this.#pullRemote(input) : this.#publishLocal(input);
   }
@@ -75,17 +75,17 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
     if (this.failRemotePullCount > 0) {
       this.failRemotePullCount--;
-      throw new CloudflareSFUError("remote pull failed", "signaling_failed");
+      throw new SFUError("remote pull failed", "signaling_failed");
     }
     if (this.failNextRemotePull) {
       this.failNextRemotePull = false;
-      throw new CloudflareSFUError("remote pull failed", "signaling_failed");
+      throw new SFUError("remote pull failed", "signaling_failed");
     }
   }
   #throwQueuedLocalPublishFailure(): void {
     if (this.failNextLocalPublish) {
       this.failNextLocalPublish = false;
-      throw new CloudflareSFUError("local publish failed", "signaling_failed");
+      throw new SFUError("local publish failed", "signaling_failed");
     }
     if (this.localPublishFailure) throw this.localPublishFailure;
     if (this.nextLocalPublishFailure) {
@@ -95,10 +95,10 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     }
     if (this.failNextStaleLocalPublish) {
       this.failNextStaleLocalPublish = false;
-      throw new CloudflareSFUError("stale local publish failed", "signaling_failed", { status: 410, retryableConnection: true });
+      throw new SFUError("stale local publish failed", "signaling_failed", { status: 410, retryableConnection: true });
     }
   }
-  #pullRemote(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): CloudflareSFUTracksResponse {
+  #pullRemote(input: Parameters<SFUSignalingTransport["addTracks"]>[0]): SFUTracksResponse {
     this.#throwQueuedRemotePullFailure();
     const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
     const trackErrors = input.tracks.flatMap((track) => {
@@ -115,11 +115,11 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
       sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: this.remoteOfferSDP ?? "remote-offer" } : undefined,
     };
   }
-  #publishLocal(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): CloudflareSFUTracksResponse {
+  #publishLocal(input: Parameters<SFUSignalingTransport["addTracks"]>[0]): SFUTracksResponse {
     this.#throwQueuedLocalPublishFailure();
     const localMids = input.tracks.flatMap((track) => (track.location === "local" && track.mid !== undefined ? [track.mid] : []));
     const nextLocalMids = new Set([...this.#localMids, ...localMids]);
-    if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new CloudflareSFUError("local media-section budget exceeded", "signaling_failed");
+    if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new SFUError("local media-section budget exceeded", "signaling_failed");
     for (const mid of localMids) this.#localMids.add(mid);
     const tracks = input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) }));
     for (const track of tracks) {
@@ -132,45 +132,45 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
       tracks,
     };
   }
-  async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
+  async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: SFUSessionDescription; readonly tracks: readonly SFUCloseTrackRequest[]; readonly force: boolean }): Promise<SFUTracksResponse> {
     this.closeInputs.push(input);
     if (input.tracks.some((track) => track.source === "microphone")) this.log.push("close microphone");
     if (this.failCloseCount > 0) {
       this.failCloseCount--;
-      throw new CloudflareSFUError("close unavailable", "signaling_failed", { status: 503 });
+      throw new SFUError("close unavailable", "signaling_failed", { status: 503 });
     }
     for (const track of input.tracks) {
       if (this.localPublications.delete(track.publicationId)) this.#localPublicationRevision++;
     }
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
   }
-  readonly updateInputs: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0][] = [];
+  readonly updateInputs: Parameters<NonNullable<SFUSignalingTransport["updateTracks"]>>[0][] = [];
   failTrackUpdates = false;
   trackUpdateGate: Promise<void> | null = null;
   /** While set, a track update waits for it; `log` shows whether a later call overtook it. */
   holdTrackUpdates: Promise<void> | null = null;
   /** Local-track calls in the order they reached the transport, and when an update returned. */
   readonly log: string[] = [];
-  async updateTracks(input: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0]): Promise<CloudflareSFUTracksResponse> {
+  async updateTracks(input: Parameters<NonNullable<SFUSignalingTransport["updateTracks"]>>[0]): Promise<SFUTracksResponse> {
     this.updateInputs.push(input);
     const local = input.tracks.find((track) => track.location === "local");
     if (local) this.log.push(`update paused=${local.paused}`);
     if (this.holdTrackUpdates) await this.holdTrackUpdates;
     if (local) this.log.push(`update returned paused=${local.paused}`);
     await this.trackUpdateGate;
-    if (this.failTrackUpdates) throw new CloudflareSFUError("layer switch rejected", "signaling_failed");
+    if (this.failTrackUpdates) throw new SFUError("layer switch rejected", "signaling_failed");
     return { tracks: input.tracks };
   }
-  async renegotiate(input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }): Promise<void> {
+  async renegotiate(input: { readonly connectionId: string; readonly sessionDescription: SFUSessionDescription }): Promise<void> {
     this.renegotiateInputs.push(input);
-    if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
+    if (this.failRenegotiation) throw new SFUError("renegotiation failed", "signaling_failed");
   }
-  async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
+  async listPublications(): Promise<SFUPublicationSnapshot> {
     this.listPublicationCalls++;
     const next = this.publicationListSnapshots.shift();
     return next ?? this.#currentSnapshot();
   }
-  #currentSnapshot(): CloudflareSFUPublicationSnapshot {
+  #currentSnapshot(): SFUPublicationSnapshot {
     return { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
   }
 }
@@ -208,23 +208,23 @@ export class FakeTrack extends EventTarget {
   }
 }
 
-export interface HarnessOptions extends Pick<ConstructorParameters<typeof CloudflareSFUClient>[0], "telemetry"> {
+export interface HarnessOptions extends Pick<ConstructorParameters<typeof SFUClient>[0], "telemetry"> {
   readonly autoConnect?: boolean;
   /** Decides per peer, by creation index, whether it ever connects. */
   readonly connectsPeer?: (index: number) => boolean;
   readonly onError?: (error: unknown, binding: string) => void;
-  readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
+  readonly onDiagnostic?: (event: SFULocalOfferDiagnostic) => void;
   readonly onScreenEnded?: () => void;
-  readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+  readonly replaceMediaConnection?: () => Promise<SFUBootstrap>;
   readonly pollIntervalMs?: number;
   readonly unreportedVideoTileWaitMs?: number;
   readonly onReceiveHealth?: (event: TransportDiagnostic) => void;
-  readonly bootstrap?: CloudflareSFUBootstrap;
+  readonly bootstrap?: SFUBootstrap;
   readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
 }
 
 // Every harness client is stopped, and every global and mock restored, after each test, so a test body needs no try/finally.
-const startedClients: CloudflareSFUClient[] = [];
+const startedClients: SFUClient[] = [];
 afterEach(() => {
   for (const client of startedClients.splice(0)) client.stop();
   vi.unstubAllGlobals();
@@ -241,7 +241,7 @@ export function createSfuHarness<Peer extends TransportPeer>(options: HarnessOpt
     peers.push(peer);
     return peer as unknown as RTCPeerConnection;
   });
-  const client = new CloudflareSFUClient({
+  const client = new SFUClient({
     bootstrap: options.bootstrap ?? bootstrap("connection-1"),
     participantId: "participant-1",
     transport,

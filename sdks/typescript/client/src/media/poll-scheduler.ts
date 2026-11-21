@@ -3,7 +3,7 @@
 // or a failed one comes back on a bounded backoff, and a Sync off gets a short repoll
 // ladder so a frozen tile drops quickly. The refresh itself belongs to the coordinator
 // and runs through #ops.run.
-import { POLL_FAILURE_LIMIT, pollFailureDelayMs, remotePullBackoffMs, SYNC_OFF_REPOLL_MS } from "./cloudflare-limits";
+import { POLL_FAILURE_LIMIT, pollFailureDelayMs, remotePullBackoffMs, SYNC_OFF_REPOLL_MS } from "./sfu-limits";
 
 /** What the scheduler needs from the coordinator. */
 export interface PollSchedulerOps {

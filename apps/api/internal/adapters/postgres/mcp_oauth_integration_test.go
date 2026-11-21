@@ -96,7 +96,7 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 	spaceA, spaceB := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	mustExec(t, pool, `insert into tenants(id,name,created_by_service_id) values($1,'OAuth A',$3),($2,'OAuth B',$3)`, uuid(tenantA), uuid(tenantB), oauthTestService)
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantA), uuid(tenantB))
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Alpha OAuth Space',$3,'cf_sfu'),($4,$5,'Beta OAuth Space',$6,'cf_sfu')`, uuid(spaceA), uuid(tenantA), spaceA.String(), uuid(spaceB), uuid(tenantB), spaceB.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Alpha OAuth Space',$3,'chalk_sfu'),($4,$5,'Beta OAuth Space',$6,'chalk_sfu')`, uuid(spaceA), uuid(tenantA), spaceA.String(), uuid(spaceB), uuid(tenantB), spaceB.String())
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

@@ -19,7 +19,7 @@ defmodule ChalkSync.SyncPostgres.Rows do
       connection,
       """
       insert into spaces (id, name, tenant_id, slug, media_plane)
-      values ($1, 'Sync Test Space', $2, $3, 'cf_rtk')
+      values ($1, 'Sync Test Space', $2, $3, 'chalk_sfu')
       on conflict (id) do nothing
       """,
       [uuid(episode.space_id), uuid(episode.tenant_id), "sync-test-#{episode.space_id}"]

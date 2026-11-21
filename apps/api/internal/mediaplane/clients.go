@@ -43,12 +43,5 @@ func (c ClientProviders) DeclarationKnown() bool {
 
 // Runs reports whether the caller's SDK can run the provider.
 func (c ClientProviders) Runs(provider Provider) bool {
-	switch provider {
-	case ProviderCloudflareSFU:
-		return true
-	case ProviderChalkSFU:
-		return c.chalk
-	default:
-		return false
-	}
+	return provider == ProviderChalkSFU && c.chalk
 }

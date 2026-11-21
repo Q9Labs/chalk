@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/spiffe"
@@ -121,15 +121,11 @@ func run() error {
 	}))
 	defer vendor.Close()
 	defer releaseOnce.Do(func() { close(release) })
-	adapter, err := sfu.NewAdapter(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-only", RealtimeBaseURL: vendor.URL, RequestTimeout: 30 * time.Second})
-	if err != nil {
-		return err
-	}
 	verifier, err := spiffe.NewVerifier("bridge.test", "test")
 	if err != nil {
 		return err
 	}
-	bridge := httptest.NewUnstartedServer(httpapi.NewProviderBridgeHandler(providerbridge.NewService(repository, providerbridge.NewSFUExecutor(publications, adapter)), verifier.ForRole(spiffe.RoleSync)))
+	bridge := httptest.NewUnstartedServer(httpapi.NewProviderBridgeHandler(providerbridge.NewService(repository, providerbridge.NewSFUExecutor(publications, fixtureTrackCloser{entered: entered, release: release, enterOnce: &enterOnce})), verifier.ForRole(spiffe.RoleSync)))
 	cert, roots, err := certificates(os.Args[1])
 	if err != nil {
 		return err
@@ -183,4 +179,20 @@ func certificates(directory string) (tls.Certificate, *x509.CertPool, error) {
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(caPEM)
 	return cert, roots, nil
+}
+
+type fixtureTrackCloser struct {
+	entered   chan struct{}
+	release   chan struct{}
+	enterOnce *sync.Once
+}
+
+func (c fixtureTrackCloser) CloseTracks(ctx context.Context, _ mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	c.enterOnce.Do(func() { close(c.entered) })
+	select {
+	case <-c.release:
+		return mediaplane.CloseTracksResponse{}, mediaplane.ErrConnectionNotFound
+	case <-ctx.Done():
+		return mediaplane.CloseTracksResponse{}, ctx.Err()
+	}
 }

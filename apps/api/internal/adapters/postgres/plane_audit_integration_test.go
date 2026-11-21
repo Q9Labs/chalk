@@ -88,7 +88,7 @@ func TestEveryPlaneWriterLeavesARow(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := authentication.ContextWithPrincipal(t.Context(), authentication.Principal{Kind: authentication.PrincipalAPIKey, TenantID: tenant, APIKeyID: key})
-	cf := mediaplane.ProviderCloudflareSFU
+	cf := mediaplane.Provider("cf_sfu")
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
 	if _, err := repository.UpdateSpace(request, tenant, space, spaces.UpdateSpaceInput{
 		MediaPlane:        utilities.OptionalString{Set: true, Value: &cloudflare},

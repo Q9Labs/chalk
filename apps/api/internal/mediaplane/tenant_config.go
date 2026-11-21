@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 const (
@@ -23,20 +22,9 @@ var (
 // TenantConfig is the media plane document stored on a Tenant. It says whether
 // media is on and whether Chalk or the Tenant supplies the credentials.
 type TenantConfig struct {
-	Enabled    *bool             `json:"enabled"`
-	Provider   string            `json:"provider"`
-	Mode       string            `json:"mode"`
-	Cloudflare *CloudflareConfig `json:"cloudflare,omitempty"`
-}
-
-type CloudflareConfig struct {
-	AccountID string               `json:"account_id"`
-	SFU       *CloudflareSFUConfig `json:"sfu"`
-}
-
-type CloudflareSFUConfig struct {
-	AppID     string `json:"app_id"`
-	AppSecret string `json:"app_secret"`
+	Enabled  *bool  `json:"enabled"`
+	Provider string `json:"provider"`
+	Mode     string `json:"mode"`
 }
 
 // ChalkManagedTenantConfig is the document of a Tenant that Chalk runs the provider for.
@@ -77,5 +65,5 @@ func TenantRunsEveryProvider(raw json.RawMessage) bool {
 	if errors.Is(err, ErrMissingTenantConfig) {
 		return true
 	}
-	return err == nil && !config.Disabled() && strings.TrimSpace(config.Mode) == ModeChalkManaged
+	return err == nil && !config.Disabled()
 }

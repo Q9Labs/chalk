@@ -4,7 +4,7 @@ export const WHITEBOARD_PATH = "/v1/whiteboard";
 
 /** An API that binds a call to the Chalk SFU does so only for an SDK that says which media providers it runs. */
 export const MEDIA_PROVIDERS_HEADER = "X-Chalk-Media-Providers";
-export const MEDIA_PROVIDERS = "cloudflare_sfu,chalk_sfu";
+export const MEDIA_PROVIDERS = "chalk_sfu";
 
 /** Drops trailing slashes without a regular expression, whose cost grows with the run of slashes in input we do not control. */
 export function trimTrailingSlashes(value: string): string {

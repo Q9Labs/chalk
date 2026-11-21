@@ -718,12 +718,16 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if values := telemetryFieldEnum(schemaName, fieldName); values != nil {
 		return values
 	}
-	if schemaName == "CloudflareSFUSignalRequest" {
+	if schemaName == "ChalkSFUSignalRequest" {
 		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
 			return values
 		}
 	}
 	switch fieldName {
+	case "media_plane":
+		if schemaName == "Space" || schemaName == "CreateSpaceRequest" || schemaName == "UpdateSpaceRequest" {
+			return []string{"chalk_sfu"}
+		}
 	case "transcript_language":
 		return artifactpolicy.TranscriptLanguageValues()
 	case "recording_render_mode":
@@ -935,12 +939,12 @@ func providerConfigSchemas() map[string]map[string]any {
 	return map[string]map[string]any{
 		"MediaPlaneProviderConfig": {
 			"type":                 "object",
-			"description":          "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
+			"description":          "Controls whether the Tenant uses the Chalk SFU.",
 			"additionalProperties": true,
 			"properties": map[string]any{
 				"enabled":  map[string]any{"type": "boolean"},
-				"provider": map[string]any{"type": "string", "description": "The supported provider is cf_sfu."},
-				"mode":     providerModeSchema(),
+				"provider": map[string]any{"type": "string", "enum": []string{"chalk_sfu"}},
+				"mode":     map[string]any{"type": "string", "enum": []string{"chalk_managed"}},
 			},
 		},
 		"StorageProviderConfig": {
@@ -1142,7 +1146,7 @@ func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {
 		return true
 	}
-	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")
+	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "ChalkSFU")
 }
 
 func schemaTypeIs(schema map[string]any, value string) bool {

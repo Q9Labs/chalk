@@ -91,15 +91,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if url == "" {
 		return fmt.Errorf("%s required", config.DatabaseURL)
 	}
-	policy, err := config.LoadPlanePolicy()
-	if err != nil {
-		return err
-	}
-	if parsed.command == "backfill" {
-		if _, set := os.LookupEnv(config.ChalkSFUAllowedSpaces); !set {
-			return fmt.Errorf("state the allowlist the API runs with: set %s (empty means none)", config.ChalkSFUAllowedSpaces)
-		}
-	}
+	policy := spaces.PlanePolicy{}
 
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()

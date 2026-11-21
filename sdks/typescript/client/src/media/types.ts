@@ -1,28 +1,18 @@
 import type { TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
-export type CloudflareSFUIceServer = {
+export type SFUIceServer = {
   readonly urls: readonly string[];
   readonly username?: string;
   readonly credential?: string;
 };
-export type CloudflareSFUBootstrap =
-  | {
-      readonly connectionId: string;
-      readonly stunServer: string;
-      /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
-      readonly iceServers?: readonly CloudflareSFUIceServer[];
-      readonly capabilities?: undefined;
-    }
-  | {
-      readonly connectionId: string;
-      readonly stunServer?: undefined;
-      /** The Chalk SFU sends every ICE server it wants. Empty means host candidates only. */
-      readonly iceServers: readonly CloudflareSFUIceServer[];
-      /** Absent means none: the client behaves as it does on Cloudflare. */
-      readonly capabilities?: SFUMediaCapabilities;
-    };
-/** What the media plane does for this connection beyond Cloudflare's behavior. */
+export type SFUBootstrap = {
+  readonly connectionId: string;
+  readonly iceServers: readonly SFUIceServer[];
+  readonly capabilities?: SFUMediaCapabilities;
+};
+
+/** Capabilities advertised by the SFU for this connection. */
 export type SFUMediaCapabilities = {
   /** The SFU picks each subscriber's layer under the requested one, so the client asks only for a ceiling. */
   readonly serverLayerAdaptation: boolean;
@@ -53,11 +43,11 @@ export type SFUSubscriptionState = {
   readonly requestedRid?: string;
   readonly effectiveRid?: string;
 };
-export type CloudflareSFUSessionDescription = {
+export type SFUSessionDescription = {
   readonly type: "offer" | "answer";
   readonly sdp: string;
 };
-export type CloudflareSFUTrackRequest = {
+export type SFUTrackRequest = {
   readonly location: "local" | "remote";
   readonly mid?: string;
   readonly trackName: string;
@@ -72,14 +62,14 @@ export type CloudflareSFUTrackRequest = {
   /** On an update only: stops or resumes a remote video in place (a plane with `subscriptionState`), or parks or resumes the caller's own local track (a plane with `muteInPlace`). */
   readonly paused?: boolean;
 };
-export type CloudflareSFUCloseTrackRequest = {
+export type SFUCloseTrackRequest = {
   readonly mid: string;
   readonly source: MediaPublicationSource;
   readonly publicationId: string;
 };
-export type CloudflareSFUTracksResponse = {
-  readonly sessionDescription?: CloudflareSFUSessionDescription;
-  readonly tracks?: readonly CloudflareSFUTrackRequest[];
+export type SFUTracksResponse = {
+  readonly sessionDescription?: SFUSessionDescription;
+  readonly tracks?: readonly SFUTrackRequest[];
   readonly trackErrors?: readonly {
     readonly connectionId: string;
     readonly trackName: string;
@@ -87,37 +77,37 @@ export type CloudflareSFUTracksResponse = {
   }[];
   readonly requiresImmediateRenegotiation?: boolean;
 };
-export type CloudflareSFUPublication = {
+export type SFUPublication = {
   readonly participantId: string;
   readonly source: MediaPublicationSource;
   readonly publicationId: string;
   /** The owner muted it in place: it stays listed and subscribed, and sends nothing until it resumes. */
   readonly paused?: boolean;
 };
-export type CloudflareSFUPublicationSnapshot = {
+export type SFUPublicationSnapshot = {
   readonly incarnation: number;
   readonly sequence: number;
-  readonly publications: readonly CloudflareSFUPublication[];
+  readonly publications: readonly SFUPublication[];
 };
-export type CloudflareSFUSignalingTransport = {
+export type SFUSignalingTransport = {
   readonly addTracks: (input: {
     readonly connectionId: string;
-    readonly sessionDescription?: CloudflareSFUSessionDescription;
-    readonly tracks: readonly CloudflareSFUTrackRequest[];
+    readonly sessionDescription?: SFUSessionDescription;
+    readonly tracks: readonly SFUTrackRequest[];
     readonly allowPartialRemoteTracks?: boolean;
     readonly replacementCause?: MediaConnectionReplacementCause;
-  }) => Promise<CloudflareSFUTracksResponse>;
-  readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
+  }) => Promise<SFUTracksResponse>;
+  readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: SFUSessionDescription; readonly tracks: readonly SFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<SFUTracksResponse>;
   /** Changes the simulcast layer of tracks already pulled, or pauses them in place, without renegotiating. Transports without it keep the layer chosen at pull time. */
-  readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
-  readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
-  readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly SFUTrackRequest[] }) => Promise<SFUTracksResponse>;
+  readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: SFUSessionDescription }) => Promise<void>;
+  readonly listPublications: () => Promise<SFUPublicationSnapshot>;
   /**
    * One request that lists the publications and pulls the other Participants' microphone and screen audio.
    * The response carries the SFU's offer for those tracks, which the caller must answer with `renegotiate`.
    * Only a plane with the `pullPublished` capability answers it.
    */
-  readonly pullPublishedAudio?: (input: { readonly connectionId: string }) => Promise<{ readonly snapshot: CloudflareSFUPublicationSnapshot; readonly response: CloudflareSFUTracksResponse }>;
+  readonly pullPublishedAudio?: (input: { readonly connectionId: string }) => Promise<{ readonly snapshot: SFUPublicationSnapshot; readonly response: SFUTracksResponse }>;
   /** Reads the delivery state of this connection's remote videos. Only a plane with `subscriptionState` answers it. */
   readonly listSubscriptions?: () => Promise<readonly SFUSubscriptionState[]>;
   /**
@@ -126,17 +116,17 @@ export type CloudflareSFUSignalingTransport = {
    * for a participant who just left or was evicted.
    */
 };
-export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
+export type SFURemoteTrack = SFUPublication & {
   readonly track: MediaStreamTrack;
 };
-export type CloudflareSFULocalTrack = Pick<MediaPublication, "source" | "enabled" | "publicationId"> & {
+export type SFULocalTrack = Pick<MediaPublication, "source" | "enabled" | "publicationId"> & {
   readonly track: MediaStreamTrack;
 };
-export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "signaling_timeout" | "negotiation_timeout" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
-export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
-export type CloudflareSFUConnectionPhase = "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped";
-export type CloudflareSFUPhase = CloudflareSFUConnectionPhase;
-export type CloudflareSFUSnapshot = {
+export type SFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "signaling_timeout" | "negotiation_timeout" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
+export type SFUFailureCode = SFUErrorCode;
+export type SFUConnectionPhase = "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped";
+export type SFUPhase = SFUConnectionPhase;
+export type SFUSnapshot = {
   /** Omitted by media adapters without receive diagnostics; treat as empty. */
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   /** Remote videos whose delivery the SFU reported. Omitted or empty on planes without `subscriptionState`. */
@@ -144,7 +134,7 @@ export type CloudflareSFUSnapshot = {
   /** The latest call-stats windows, oldest first, for the call menu's charts. Omitted by planes that do not measure the connection. */
   readonly callStats?: readonly import("./call-stats").CallStatsSample[];
   readonly connection: {
-    readonly phase: CloudflareSFUConnectionPhase;
+    readonly phase: SFUConnectionPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
     readonly iceConnectionState: RTCIceConnectionState | null;
   };
@@ -152,27 +142,27 @@ export type CloudflareSFUSnapshot = {
     readonly incarnation: number;
     readonly sequence: number;
   } | null;
-  readonly localTracks: readonly CloudflareSFULocalTrack[];
-  readonly remoteTracks: readonly CloudflareSFURemoteTrack[];
+  readonly localTracks: readonly SFULocalTrack[];
+  readonly remoteTracks: readonly SFURemoteTrack[];
   readonly failure: {
-    readonly code: CloudflareSFUFailureCode;
+    readonly code: SFUFailureCode;
     readonly recoverable: boolean;
     readonly diagnostic?: import("./failure-diagnostics").MediaFailureDiagnostic;
   } | null;
 };
 /** A local SDP offer was still pending when it should not be. `origin` names the SDK call that started it. */
-export type CloudflareSFULocalOfferDiagnostic = {
+export type SFULocalOfferDiagnostic = {
   readonly event: "local_offer_pending";
   readonly where: "sdp_operation_start" | "remote_offer";
   readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "receive_transport" | "outside_sdk";
   readonly pendingMs: number | null;
 };
-export type CloudflareSFUClientOptions = {
-  readonly bootstrap: CloudflareSFUBootstrap;
+export type SFUClientOptions = {
+  readonly bootstrap: SFUBootstrap;
   readonly participantId: string;
-  readonly transport: CloudflareSFUSignalingTransport;
+  readonly transport: SFUSignalingTransport;
   /** Asks for a fresh connection. The argument is the connection this client runs on, so a replacement made since then is not replaced again. */
-  readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<CloudflareSFUBootstrap>;
+  readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<SFUBootstrap>;
   readonly pollIntervalMs?: number;
   /**
    * How long an unreported video publication waits for `setVideoTileVisibility` before it is pulled. Defaults to 250 ms;
@@ -180,29 +170,29 @@ export type CloudflareSFUClientOptions = {
    */
   readonly unreportedVideoTileWaitMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
-  readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
-  readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
+  readonly onDiagnostic?: (event: SFULocalOfferDiagnostic) => void;
+  readonly onRemoteTrack?: (publication: SFURemoteTrack) => void;
   readonly onReceiveHealth?: (event: TransportDiagnostic) => void;
   /** Where call stats windows go. */
   readonly telemetry?: TelemetrySink;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };
-export type CloudflareSFURestartOptions = {
-  readonly bootstrap: CloudflareSFUBootstrap;
-  readonly transport?: CloudflareSFUSignalingTransport;
+export type SFURestartOptions = {
+  readonly bootstrap: SFUBootstrap;
+  readonly transport?: SFUSignalingTransport;
 };
-export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
-export type CloudflareSFUHTTPTransportOptions = {
+export type SFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
+export type SFUHTTPTransportOptions = {
   readonly traceparent?: string;
   readonly onDiagnostic?: (event: TransportDiagnostic) => void;
   readonly apiBaseURL: string;
-  readonly credential?: CloudflareSFUCredentialProvider;
+  readonly credential?: SFUCredentialProvider;
   /**
    * Fetches a fresh grant for the current media connection and returns its token. The transport calls it once when the API answers 403 and
    * sends the request again with the new token; a second 403 is final.
    */
-  readonly refreshCredential?: CloudflareSFUCredentialProvider;
+  readonly refreshCredential?: SFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */
   readonly bearerToken?: string;
   readonly tenantId: string;
@@ -222,10 +212,10 @@ export type CloudflareSFUHTTPTransportOptions = {
   /** Told when the path that carries signalling changes, and on the first call. */
   readonly onPath?: (path: import("../direct-path").TransportPath) => void;
 };
-export class CloudflareSFUError extends Error {
+export class SFUError extends Error {
   constructor(
     message: string,
-    readonly code: CloudflareSFUFailureCode,
+    readonly code: SFUFailureCode,
     readonly options: {
       readonly status?: number;
       readonly retryableConnection?: boolean;
@@ -233,6 +223,6 @@ export class CloudflareSFUError extends Error {
     } = {},
   ) {
     super(message);
-    this.name = "CloudflareSFUError";
+    this.name = "SFUError";
   }
 }

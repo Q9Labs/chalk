@@ -3,7 +3,7 @@ import type { TransportPath } from "../direct-path";
 import type { TelemetryOutbox } from "../telemetry/outbox";
 import type { TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
-import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
+import type { ClientMediaPlane, SFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { LinkJudge } from "../sync/link-watch";
@@ -80,7 +80,7 @@ export type ConnectionMediaClient = ClientMediaPlane & {
   /** Starts receiving immediately; resolves the optional initial publication policy before sending. */
   readonly start: (stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => Promise<void>;
   readonly stop: () => void;
-  readonly restart: (input: CloudflareSFUBootstrap | ParticipantMediaAccess) => Promise<void>;
+  readonly restart: (input: SFUBootstrap | ParticipantMediaAccess) => Promise<void>;
   readonly prepareLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio", track: MediaStreamTrack) => void;
   readonly clearPreparedLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio", options?: { readonly stopTrack?: boolean }) => Promise<void>;
   readonly getSnapshot: () => ConnectionMediaSnapshot;

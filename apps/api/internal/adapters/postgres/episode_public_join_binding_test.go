@@ -14,10 +14,8 @@ func TestRequireClientRunsBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloudflare, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "app")
-	if err != nil {
-		t.Fatal(err)
-	}
+	retired := own
+	retired.Provider = "cf_sfu"
 	snapshot := func(binding *mediaplane.Binding) []byte {
 		encoded, err := json.Marshal(map[string]any{"media_plane_binding": binding})
 		if err != nil {
@@ -33,8 +31,7 @@ func TestRequireClientRunsBinding(t *testing.T) {
 	}{
 		{"Chalk SFU Episode, declaring client", snapshot(&own), mediaplane.ParseClientProviders("chalk_sfu"), nil},
 		{"Chalk SFU Episode, silent client", snapshot(&own), mediaplane.ClientProviders{}, mediaplane.ErrClientUnsupported},
-		{"Cloudflare Episode, silent client", snapshot(&cloudflare), mediaplane.ClientProviders{}, nil},
-		{"Cloudflare Episode, declaring client", snapshot(&cloudflare), mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"), nil},
+		{"retired binding cannot admit", snapshot(&retired), mediaplane.AllClientProviders(), mediaplane.ErrPlaneUnavailable},
 		{"Episode without media", snapshot(nil), mediaplane.ClientProviders{}, nil},
 		{"Episode from before bindings", []byte(`{}`), mediaplane.ClientProviders{}, nil},
 	}

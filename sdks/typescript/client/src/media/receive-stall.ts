@@ -1,5 +1,5 @@
 import type { MediaPublication } from "./plane";
-import type { CloudflareSFURemoteTrack } from "./types";
+import type { SFURemoteTrack } from "./types";
 
 export const RECEIVE_STALL_WINDOW_MS = 7000;
 export const RECEIVE_STARTUP_GRACE_MS = 20_000;
@@ -81,7 +81,7 @@ export class ReceiveStallRecovery {
   readonly #repulled = new Set<string>();
   // Re-pulled but not yet restored. Retired receivers vanish from stats, so this cannot depend on detector samples.
   readonly #awaiting = new Set<string>();
-  readonly #identities = new Map<string, CloudflareSFURemoteTrack>();
+  readonly #identities = new Map<string, SFURemoteTrack>();
   #expected = new Set<string>();
   #screens = new Set<string>();
   #stalled = new Set<string>();
@@ -180,7 +180,7 @@ export class ReceiveStallRecovery {
   }
 
   /** `held` names publications whose silence is not a stall yet, such as a video the SFU paused for network. */
-  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<CloudflareSFURemoteTrack>, held: (publicationId: string) => boolean = () => false): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
+  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<SFURemoteTrack>, held: (publicationId: string) => boolean = () => false): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
     const active = [...tracks].filter((publication) => this.#isExpected(publication));
     for (const publication of active) this.#rememberIdentity(publication);
     this.#active = active.map((publication) => publication.publicationId);
@@ -202,11 +202,11 @@ export class ReceiveStallRecovery {
     return { stalled: [...stalled, ...unrestored], advanced, newlyStalled };
   }
 
-  #isExpected(publication: CloudflareSFURemoteTrack): boolean {
+  #isExpected(publication: SFURemoteTrack): boolean {
     return publication.source === "screen_audio" ? this.#screens.has(publication.participantId) : this.#expected.has(publication.publicationId);
   }
 
-  #rememberIdentity(publication: CloudflareSFURemoteTrack): void {
+  #rememberIdentity(publication: SFURemoteTrack): void {
     const key = sourceKey(publication);
     const previous = this.#identities.get(key);
     if (previous && previous.publicationId !== publication.publicationId) this.#forget(previous.publicationId);
@@ -232,7 +232,7 @@ function sourceKey({ participantId, source }: { readonly participantId: string; 
   return `${participantId}\0${source}`;
 }
 
-function receivePacketSample(connection: RTCPeerConnection, report: RTCStatsReport, publication: CloudflareSFURemoteTrack): ReceivePacketSample | undefined {
+function receivePacketSample(connection: RTCPeerConnection, report: RTCStatsReport, publication: SFURemoteTrack): ReceivePacketSample | undefined {
   const rows = [...report.values()].filter((row) => row.type === "inbound-rtp" && row.trackIdentifier === publication.track.id);
   if (rows.some((row) => !Number.isSafeInteger(row.packetsReceived) || row.packetsReceived < 0)) return;
   if (publication.track.kind === "audio" && !audioPacketCadenceKnown(connection, report, publication.track, rows)) return;

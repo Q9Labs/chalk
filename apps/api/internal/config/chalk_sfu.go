@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 const (
@@ -25,10 +24,8 @@ const (
 	ChalkSFUClientKeyFile      = "CHALK_SFU_CLIENT_KEY_FILE"
 	ChalkSFUTimeoutMS          = "CHALK_SFU_TIMEOUT_MS"
 	ChalkSFUSTUNURLs           = "CHALK_SFU_STUN_URLS"
-	ChalkSFUCloudflareOverflow = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
 	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
 	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
-	ChalkSFUClientSunset       = "CHALK_SFU_CLIENT_SUNSET"
 	ChalkSFUNewEpisodes        = "CHALK_SFU_NEW_EPISODES"
 	DefaultChalkSFUTimeoutMS   = int64(6000)
 	// DefaultChalkSFUColocatedGraceSeconds is how long a capture waits for the healthy worker
@@ -84,17 +81,6 @@ type ChalkSFUConfig struct {
 	// what the node itself reports. The node enforces its own budget as well.
 	StandbyPacketBudget int
 
-	// AllowedSpaces are the only Spaces that start Episodes on the Chalk SFU while the
-	// rest of the deployment stays on Cloudflare. It is empty by default, even when
-	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
-	AllowedSpaces spaces.ChalkSFUAllowlist
-
-	// ClientSunset is the instant after which a client that does not declare the own
-	// SFU can no longer start an Episode in a Space on the allowlist: it gets
-	// media.client_unsupported instead of Cloudflare. The zero value means never.
-	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
-	ClientSunset time.Time
-
 	// DirectSignalingURL is the origin of the direct door (TLS proxy on the host) for the
 	// signalling routes. Each Chalk SFU join advertises it as directSignalingUrl, so the SDK
 	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
@@ -102,16 +88,11 @@ type ChalkSFUConfig struct {
 	DirectSignalingURL string
 
 	// NewEpisodesPaused is the deploy-time floor of the kill switch, CHALK_SFU_NEW_EPISODES=off.
-	// Every new Episode then starts on Cloudflare, and Episodes already on the Chalk SFU keep
+	// New Episodes are refused, and Episodes already on the Chalk SFU keep
 	// running there. Turning the Chalk SFU off instead would also strand those live Episodes.
 	// The live switch (media-settings new-episodes) pauses on top of this floor, with no restart.
 	NewEpisodesPaused bool
-
-	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
-	// room. It is on by default. When it is off, creating that Episode fails with
-	// a retryable capacity error instead. Migration policy until M13 removes it.
-	CloudflareOverflow bool
-	RequestTimeout     time.Duration
+	RequestTimeout    time.Duration
 }
 
 // loadNewEpisodesPaused reads the kill switch. It is on unless set to off.
@@ -138,10 +119,6 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if timeout <= 0 {
 		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUTimeoutMS)
 	}
-	overflow, err := envStrictBool(ChalkSFUCloudflareOverflow, true)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
 	standbyBudget, err := envInt32(ChalkSFUStandbyBudget, DefaultChalkSFUStandbyBudget)
 	if err != nil {
 		return ChalkSFUConfig{}, err
@@ -167,7 +144,6 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 		NewEpisodesPaused:     newEpisodesPaused,
 		DirectSignalingURL:    directURL,
 		CaptureEnabled:        envBool(ChalkSFUCaptureEnabled),
-		CloudflareOverflow:    overflow,
 		ApplicationID:         strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
 		ServerName:            strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
 		CAFile:                strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
@@ -202,14 +178,6 @@ func loadChalkSFUDeployment(config *ChalkSFUConfig) error {
 		return err
 	}
 	config.Nodes = nodes
-	if config.AllowedSpaces, err = spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces)); err != nil {
-		return fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
-	}
-	if sunset := strings.TrimSpace(envOrDefault(ChalkSFUClientSunset, "")); sunset != "" {
-		if config.ClientSunset, err = time.Parse(time.RFC3339, sunset); err != nil {
-			return fmt.Errorf("%s must be an RFC 3339 instant: %w", ChalkSFUClientSunset, err)
-		}
-	}
 	return nil
 }
 
@@ -261,10 +229,6 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	}
 	return nodes, nil
 }
-
-// validateMediaPlaneProcessConfig checks what a platform default needs to run. Cloudflare is
-// needed under either default: it is the default itself, or the fallback for an SDK that
-// cannot run the Chalk SFU, for the kill switch and for Episodes already bound to it.
 
 // directSignalingURL accepts empty (off) or an https origin: the SDK appends the route path to it.
 func directSignalingURL(raw string) (string, error) {

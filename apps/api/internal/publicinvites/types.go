@@ -68,10 +68,7 @@ const (
 )
 
 const (
-	PublicProviderCloudflareSFU = "cloudflare_sfu"
-	PublicProviderChalkSFU      = "chalk_sfu"
-
-	ProviderCloudflareSFU = PublicProviderCloudflareSFU
+	PublicProviderChalkSFU = "chalk_sfu"
 )
 
 type AdmissionMode string

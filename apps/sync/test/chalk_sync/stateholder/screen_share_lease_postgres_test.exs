@@ -166,7 +166,7 @@ defmodule ChalkSync.Stateholder.Postgres.ScreenShareLeasePostgresTest do
         transaction,
         """
         insert into spaces (id, name, tenant_id, slug, media_plane)
-        values ($1, 'Live Test Space', $2, $3, 'cf_rtk')
+        values ($1, 'Live Test Space', $2, $3, 'chalk_sfu')
         """,
         [
           UUID.dump!(episode.space_id),

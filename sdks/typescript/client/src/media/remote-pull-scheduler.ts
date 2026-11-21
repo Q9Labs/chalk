@@ -3,9 +3,9 @@
 // unreconciled work that keeps the poll coming back. The state used to be scattered
 // between the client and the failure policy; it lives here now.
 import { classifyMediaFailure } from "./failure-diagnostics";
-import { LONG_PULL_DEFERRAL_MS, REMOTE_PULL_BACKOFF_LIMIT, remotePullBackoffMs, TRANSIENT_PULL_RETRY_MS } from "./cloudflare-limits";
-import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
+import { LONG_PULL_DEFERRAL_MS, REMOTE_PULL_BACKOFF_LIMIT, remotePullBackoffMs, TRANSIENT_PULL_RETRY_MS } from "./sfu-limits";
+import { SFUError } from "./types";
+import type { SFUPublication, SFURemoteTrack } from "./types";
 import type { ReceiveStallRecovery } from "./receive-stall";
 
 // A 5xx, a signaling timeout or a network failure usually clears in seconds, so the pull is retried
@@ -17,7 +17,7 @@ export function transientRemotePull(error: unknown): boolean {
 }
 export function retryableRemotePull(error: unknown): boolean {
   if (transientRemotePull(error)) return true;
-  if (!(error instanceof CloudflareSFUError)) return false;
+  if (!(error instanceof SFUError)) return false;
   if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
   return ["signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
 }
@@ -60,7 +60,7 @@ export class RemotePullScheduler {
   setRemoteParticipants(participantIds: readonly string[]): void {
     this.#remoteParticipantIds = new Set(participantIds);
   }
-  canSubscribe(publication: CloudflareSFUPublication): boolean {
+  canSubscribe(publication: SFUPublication): boolean {
     return this.#remoteParticipantIds === null || this.#remoteParticipantIds.has(publication.participantId) || this.#subscribed.has(publication.publicationId);
   }
   noteSubscribed(publicationId: string): void {
@@ -98,7 +98,7 @@ export class RemotePullScheduler {
     const failures = Math.min(previous.failures + 1, REMOTE_PULL_BACKOFF_LIMIT);
     this.#retries.set(publicationId, { retryAfter: Date.now() + remotePullBackoffMs(failures), failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
-  defer(publications: readonly CloudflareSFUPublication[], error: unknown): void {
+  defer(publications: readonly SFUPublication[], error: unknown): void {
     const transient = transientRemotePull(error);
     const retryable = retryableRemotePull(error);
     for (const publication of publications) {
@@ -108,7 +108,7 @@ export class RemotePullScheduler {
       this.#retries.set(publication.publicationId, { retryAfter: Date.now() + delay, failures: transient ? Math.min(failures + 1, REMOTE_PULL_BACKOFF_LIMIT) : failures, receiveStalled: previous?.receiveStalled });
     }
   }
-  pending(desired: ReadonlyMap<string, CloudflareSFUPublication>, remoteTracks: ReadonlyMap<string, CloudflareSFURemoteTrack>, receiveProgress: ReceiveStallRecovery, canReplace: boolean): CloudflareSFUPublication[] {
+  pending(desired: ReadonlyMap<string, SFUPublication>, remoteTracks: ReadonlyMap<string, SFURemoteTrack>, receiveProgress: ReceiveStallRecovery, canReplace: boolean): SFUPublication[] {
     const now = Date.now();
     return [...desired]
       .filter(([key, publication]) => {

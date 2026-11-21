@@ -171,7 +171,7 @@ func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKin
 	}
 
 	execCleanupFixture(t, transaction, `insert into tenants (id, name) values ($1, $2)`, tenantID.Bytes(), "transcription allocation cleanup")
-	execCleanupFixture(t, transaction, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, $2, $3, $4, 'cf_sfu')`, spaceID.Bytes(), "transcription allocation cleanup", tenantID.Bytes(), "transcription-allocation-cleanup-"+spaceID.String()[:8])
+	execCleanupFixture(t, transaction, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, $2, $3, $4, 'chalk_sfu')`, spaceID.Bytes(), "transcription allocation cleanup", tenantID.Bytes(), "transcription-allocation-cleanup-"+spaceID.String()[:8])
 	execCleanupFixture(t, transaction, `
 		insert into episodes (id, status, space_id, tenant_id, config_snapshot)
 		values ($1, 'active', $2, $3, $4::jsonb)`,

@@ -1,6 +1,6 @@
 import type { MediaPublicationSource } from "./plane";
-import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUPublication, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription } from "./types";
+import { SFUError } from "./types";
+import type { SFUPublication, SFUPublicationSnapshot, SFUSessionDescription } from "./types";
 
 export type PublicationCursor = {
   readonly incarnation: number;
@@ -8,15 +8,15 @@ export type PublicationCursor = {
   readonly signature: string;
 };
 
-export function parseCloudflareSFUPublicationID(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
+export function parseSFUPublicationID(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   if (publicationId.startsWith("chalk_pub_v1.")) return parseVersionOnePublicationReference(publicationId.slice("chalk_pub_v1.".length));
-  if (publicationId.startsWith("chalk_pub_")) throw new CloudflareSFUError("Cloudflare SFU publication ID uses an unsupported version", "invalid_publication");
+  if (publicationId.startsWith("chalk_pub_")) throw new SFUError("Chalk SFU publication ID uses an unsupported version", "invalid_publication");
   return parseBarePublicationReference(publicationId);
 }
 
 function parseVersionOnePublicationReference(encoded: string): { readonly connectionId: string; readonly trackName: string } {
   if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded) || encoded.length % 4 === 1) {
-    throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
+    throw new SFUError("Chalk SFU publication ID is malformed", "invalid_publication");
   }
   try {
     const standard = encoded.replaceAll("-", "+").replaceAll("_", "/");
@@ -29,7 +29,7 @@ function parseVersionOnePublicationReference(encoded: string): { readonly connec
     if (!isVersionOnePublicationPayload(decoded)) throw new Error("invalid publication payload");
     return { connectionId: decoded.c, trackName: decoded.t };
   } catch {
-    throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
+    throw new SFUError("Chalk SFU publication ID is malformed", "invalid_publication");
   }
 }
 
@@ -58,39 +58,39 @@ function isPositiveSafeInteger(value: unknown): value is number {
 function parseBarePublicationReference(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   const separator = publicationId.indexOf("|");
   if (separator <= 0 || separator === publicationId.length - 1 || publicationId.indexOf("|", separator + 1) !== -1) {
-    throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
+    throw new SFUError("Chalk SFU publication ID is malformed", "invalid_publication");
   }
   const connectionId = publicationId.slice(0, separator);
   const trackName = publicationId.slice(separator + 1);
-  if (connectionId.trim() !== connectionId || trackName.trim() !== trackName) throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
+  if (connectionId.trim() !== connectionId || trackName.trim() !== trackName) throw new SFUError("Chalk SFU publication ID is malformed", "invalid_publication");
   return { connectionId, trackName };
 }
 
-export function requireDescription(description: RTCSessionDescriptionInit): CloudflareSFUSessionDescription {
+export function requireDescription(description: RTCSessionDescriptionInit): SFUSessionDescription {
   if ((description.type !== "offer" && description.type !== "answer") || !description.sdp) {
-    throw new CloudflareSFUError("Browser SDP description is incomplete", "media_failed");
+    throw new SFUError("Browser SDP description is incomplete", "media_failed");
   }
   return { type: description.type, sdp: description.sdp };
 }
 
-export function requireSFUDescription(description: CloudflareSFUSessionDescription | undefined): CloudflareSFUSessionDescription {
-  if (!description) throw new CloudflareSFUError("Cloudflare did not return an SDP answer", "signaling_failed");
+export function requireSFUDescription(description: SFUSessionDescription | undefined): SFUSessionDescription {
+  if (!description) throw new SFUError("Cloudflare did not return an SDP answer", "signaling_failed");
   return description;
 }
 
-export function validatePublicationSnapshot(snapshot: CloudflareSFUPublicationSnapshot): PublicationCursor {
+export function validatePublicationSnapshot(snapshot: SFUPublicationSnapshot): PublicationCursor {
   if (!Number.isSafeInteger(snapshot.incarnation) || snapshot.incarnation < 0 || !Number.isSafeInteger(snapshot.sequence) || snapshot.sequence < 0) {
-    throw new CloudflareSFUError("Cloudflare SFU publication cursor is invalid", "invalid_publication");
+    throw new SFUError("Chalk SFU publication cursor is invalid", "invalid_publication");
   }
   const seen = new Set<string>();
   for (const publication of snapshot.publications) {
     if (!publication.participantId.trim() || !publication.publicationId.trim()) {
-      throw new CloudflareSFUError("Cloudflare SFU publication is incomplete", "invalid_publication");
+      throw new SFUError("Chalk SFU publication is incomplete", "invalid_publication");
     }
     const key = publicationKey(publication);
-    if (seen.has(key)) throw new CloudflareSFUError("Cloudflare SFU publication snapshot contains duplicate participant sources", "invalid_publication");
+    if (seen.has(key)) throw new SFUError("Chalk SFU publication snapshot contains duplicate participant sources", "invalid_publication");
     seen.add(key);
-    parseCloudflareSFUPublicationID(publication.publicationId);
+    parseSFUPublicationID(publication.publicationId);
   }
   return { incarnation: snapshot.incarnation, sequence: snapshot.sequence, signature: publicationSignature(snapshot.publications) };
 }
@@ -98,7 +98,7 @@ export function validatePublicationSnapshot(snapshot: CloudflareSFUPublicationSn
 export function comparePublicationCursor(current: PublicationCursor | null, next: PublicationCursor): "newer" | "same" | "stale" {
   if (!current || next.incarnation > current.incarnation || (next.incarnation === current.incarnation && next.sequence > current.sequence)) return "newer";
   if (next.incarnation < current.incarnation || next.sequence < current.sequence) return "stale";
-  if (next.signature !== current.signature) throw new CloudflareSFUError("Cloudflare SFU returned conflicting data for one publication cursor", "invalid_publication");
+  if (next.signature !== current.signature) throw new SFUError("Chalk SFU returned conflicting data for one publication cursor", "invalid_publication");
   return "same";
 }
 
@@ -106,7 +106,7 @@ export function publicationKey(publication: { readonly participantId: string; re
   return `${publication.participantId}\u0000${publication.source}`;
 }
 
-function publicationSignature(publications: readonly CloudflareSFUPublication[]): string {
+function publicationSignature(publications: readonly SFUPublication[]): string {
   return [...publications]
     .sort((left, right) => publicationKey(left).localeCompare(publicationKey(right)))
     .map((publication) => `${publicationKey(publication)}\u0000${publication.publicationId}`)
@@ -116,7 +116,7 @@ function publicationSignature(publications: readonly CloudflareSFUPublication[])
 export async function waitFor(predicate: () => boolean, timeoutMs: number, timeoutMessage = "Timed out waiting for a remote media track"): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new CloudflareSFUError(timeoutMessage, "media_failed");
+    if (Date.now() >= deadline) throw new SFUError(timeoutMessage, "media_failed");
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
   }
 }

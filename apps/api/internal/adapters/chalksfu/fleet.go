@@ -48,7 +48,6 @@ var ErrUnknownNode = errors.New("chalk sfu node is not configured")
 // for that Episode, cleanup included, goes to that node.
 type Fleet struct {
 	applicationID string
-	overflow      bool
 	nodes         []*Adapter
 	standbys      map[string]bool // node IDs with the standby role
 	standbyBudget int             // packets/s a standby admits for new Episodes
@@ -131,7 +130,6 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 	}
 	fleet := &Fleet{
 		applicationID: config.ApplicationID,
-		overflow:      config.CloudflareOverflow,
 		standbys:      map[string]bool{},
 		standbyBudget: config.StandbyPacketBudget,
 		log:           log,
@@ -190,9 +188,7 @@ func (f *Fleet) observeReadiness(meter metric.Meter) error {
 // when nodes, hosts or certificates change.
 func (f *Fleet) ApplicationID() string { return f.applicationID }
 
-// CloudflareOverflow reports whether a new Episode may start on Cloudflare when
 // no node has room.
-func (f *Fleet) CloudflareOverflow() bool { return f.overflow }
 
 // Node returns the adapter of the node an Episode is bound to.
 func (f *Fleet) Node(id string) (*Adapter, error) {

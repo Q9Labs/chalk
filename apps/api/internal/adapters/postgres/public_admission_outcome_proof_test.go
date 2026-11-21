@@ -178,7 +178,7 @@ func proveTerminalAdmissionCollection(t *testing.T, ctx context.Context, pool *p
 					}
 					exec(`update participants set status=$3 where tenant_id=$1 and id=$2`, uuid(tenantID), uuid(binding.ParticipantID), status)
 				}
-				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "racing-connection", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "racing-connection", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}, nil
+				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderChalkSFU, ProviderSubject: "racing-connection", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "racing-connection", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}, nil
 			}
 			runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, outcomeProofAccounts{}, admissionProofLinks{})
 			if err != nil {

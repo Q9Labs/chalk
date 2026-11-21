@@ -102,7 +102,7 @@ func (f schedulerFixture) episode(deadline string, activeParticipants int, lease
 	f.t.Helper()
 	episode := schedulerEpisode{tenantID: accountTenantIntegrationID(f.t), spaceID: accountTenantIntegrationID(f.t), episodeID: accountTenantIntegrationID(f.t)}
 	f.exec(`insert into tenants(id, name) values($1, 'Deadline scheduler regression')`, episode.tenantID.Bytes())
-	f.exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Deadline scheduler regression', $2, $3, 'cf_sfu')`, episode.spaceID.Bytes(), episode.tenantID.Bytes(), "deadline-cycle-"+episode.spaceID.String())
+	f.exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Deadline scheduler regression', $2, $3, 'chalk_sfu')`, episode.spaceID.Bytes(), episode.tenantID.Bytes(), "deadline-cycle-"+episode.spaceID.String())
 	f.exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot, started_at, created_at, deadline_at) values($1, 'active', $2, $3, '{}'::jsonb, now() - interval '1 hour', now() - interval '1 hour', `+deadline+`)`, episode.episodeID.Bytes(), episode.spaceID.Bytes(), episode.tenantID.Bytes())
 	f.exec(`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes) values($1, $2, $3, '{}'::jsonb, 1, $4, 2)`, episode.tenantID.Bytes(), episode.spaceID.Bytes(), episode.episodeID.Bytes(), make([]byte, 32))
 	leaseExpiry := `now() + interval '1 hour'`

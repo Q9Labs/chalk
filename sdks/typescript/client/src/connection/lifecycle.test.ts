@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
-import { CloudflareSFUError } from "../media";
+import { SFUError } from "../media";
 import { track } from "../space-client/capture.test.helpers";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
@@ -68,7 +68,7 @@ it.each([
     await leaveSent.promise;
     expect(microphone.readyState).toBe("ended");
     expect(camera.readyState).toBe("ended");
-    rejectMedia?.(new CloudflareSFUError("Leaving participant cannot poll publications", "signaling_failed", { status: 403 }));
+    rejectMedia?.(new SFUError("Leaving participant cannot poll publications", "signaling_failed", { status: 403 }));
     expect(shutdown).toEqual([]);
     clock.advance(delay);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));

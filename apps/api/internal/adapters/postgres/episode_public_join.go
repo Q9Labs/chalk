@@ -296,7 +296,13 @@ func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.Clien
 	if err != nil {
 		return err
 	}
-	if binding != nil && mediaplane.Provider(binding.Provider) == mediaplane.ProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+	if binding == nil {
+		return nil
+	}
+	if !binding.Is(mediaplane.ProviderChalkSFU) {
+		return mediaplane.ErrPlaneUnavailable
+	}
+	if !clients.Runs(mediaplane.ProviderChalkSFU) {
 		return mediaplane.ErrClientUnsupported
 	}
 	return nil

@@ -1,4 +1,4 @@
-export * from "./cloudflare-sfu";
+export * from "./sfu";
 export type { ClientMediaPlane, ConnectionMediaLocalTrack, ConnectionMediaPhase, ConnectionMediaRemoteTrack, ConnectionMediaSnapshot, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "./plane";
 export { CALL_STATS_HISTORY } from "./call-stats";
 export type { CallStatsSample } from "./call-stats";

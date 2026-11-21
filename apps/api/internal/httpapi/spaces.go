@@ -431,7 +431,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		Name:                          space.Name,
 		TenantID:                      space.TenantID.String(),
 		Slug:                          space.Slug,
-		MediaPlane:                    space.MediaPlane,
+		MediaPlane:                    mediaplane.ProviderChalkSFU.SettingName(),
 		MediaPlaneSetting:             mediaplane.OptionalSettingName(space.MediaPlaneSetting),
 		RecordingPolicy:               space.RecordingPolicy,
 		TranscriptionPolicy:           space.TranscriptionPolicy,

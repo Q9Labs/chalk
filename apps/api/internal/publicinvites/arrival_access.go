@@ -175,10 +175,6 @@ func validateAccessGrant(grant PublicAccessGrant, arrival Arrival) error {
 func validateClientPayload(grant PublicAccessGrant) error {
 	payload := grant.ClientPayload
 	switch grant.Provider {
-	case PublicProviderCloudflareSFU:
-		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.StunServer) || payload.ProviderSubject != "" || payload.Token != "" {
-			return ErrInvalidArrival
-		}
 	case PublicProviderChalkSFU:
 		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.EpisodeRef) || payload.StunServer != "" || payload.ProviderSubject != "" || payload.Token != "" {
 			return ErrInvalidArrival

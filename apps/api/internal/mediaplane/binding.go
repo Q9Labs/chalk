@@ -109,7 +109,7 @@ const (
 // ErrPlacementRefused means a new Episode was refused because no Chalk SFU node had
 // room and Cloudflare overflow is off. The wrapping error names the overflow
 // placement reason. It is a bounded reason, safe to log.
-var ErrPlacementRefused = errors.New("no Chalk SFU node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled")
+var ErrPlacementRefused = errors.New("no Chalk SFU node with room (full, draining, host guard closed or not answering)")
 
 // Placement is where a new Episode goes: a node of a provider that runs several,
 // or none for a provider with one global endpoint.
@@ -209,8 +209,14 @@ func AdapterFingerprint(provider Provider, applicationID string) (string, error)
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// Retired providers remain readable in immutable Episode snapshots. Their names
+// are not accepted by ParseSettingName or by the signaling and capture resolvers.
+func validStoredProvider(name string) bool {
+	return KnownSettingName(name) || name == "cf_sfu" || name == "cf_rtk"
+}
+
 func (binding Binding) Validate() error {
-	if binding.SchemaVersion != BindingSchemaVersion || !KnownSettingName(binding.Provider) {
+	if binding.SchemaVersion != BindingSchemaVersion || !validStoredProvider(binding.Provider) {
 		return ErrInvalidBinding
 	}
 	switch binding.ConfigurationSource {

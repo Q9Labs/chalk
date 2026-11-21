@@ -65,39 +65,18 @@ func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (PlaneChoice,
 	if mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig) {
 		return PlaneChoice{}, nil
 	}
-	choice, err := SelectPlane(p.Platform, tenant, space)
-	if err != nil {
-		return PlaneChoice{}, err
+	if p.NewEpisodesPaused {
+		return PlaneChoice{}, nil
 	}
-	if choice.Plane == mediaplane.ProviderChalkSFU {
-		if refusal := Refusal(p.NewEpisodesPaused, p.Allowed, space.ID); refusal != "" {
-			return PlaneChoice{Plane: mediaplane.ProviderCloudflareSFU, By: refusal}, nil
-		}
-	}
-	return choice, nil
+	return PlaneChoice{Plane: mediaplane.ProviderChalkSFU, By: mediaplane.SelectedByDefault}, nil
 }
 
-// PublicWritePlane is the plane a Space created without one is stored with: the platform
-// default, or Cloudflare while none is configured.
 func (p PlanePolicy) PublicWritePlane() mediaplane.Provider {
-	if p.Platform == "" {
-		return mediaplane.ProviderCloudflareSFU
-	}
-	return p.Platform
+	return mediaplane.ProviderChalkSFU
 }
 
-// PublicWriteAllowed is true for the planes a Tenant or Space owner may name: the platform
-// default, and Cloudflare, which every integration could always name. Naming the Chalk SFU
-// stays an operator choice until it is the platform default. The new-Space plane is no
-// exception: the deployment fills it in for a Space that names none, after it checked that
-// the Tenant can serve it, but a caller may not name it.
-//
-// Even then the write only says "use the default": the Space stores no setting of its own,
-// so a platform default that moves back to Cloudflare moves the Space with it. A stored
-// Chalk SFU setting would stay on the Chalk SFU until an operator cleared it, and only an
-// operator may make that choice.
 func (p PlanePolicy) PublicWriteAllowed(provider mediaplane.Provider) bool {
-	return provider == p.PublicWritePlane() || provider == mediaplane.ProviderCloudflareSFU
+	return provider == mediaplane.ProviderChalkSFU
 }
 
 func (p PlanePolicy) publicWriteAllowed(provider mediaplane.Provider) error {
@@ -107,19 +86,9 @@ func (p PlanePolicy) publicWriteAllowed(provider mediaplane.Provider) error {
 	return nil
 }
 
-// legacyPlane is what the previous release reads from media_plane: the Space's own
-// setting, else the platform default. A Space that inherits must not store the Chalk SFU:
-// the stored value would count as the Space's own choice (see SelectPlane) and survive a
-// platform default that moves back to Cloudflare. It stores Cloudflare, which both releases
-// can serve, and follows the platform default through its empty setting.
-func (p PlanePolicy) legacyPlane(setting *mediaplane.Provider) string {
-	if setting != nil {
-		return setting.SettingName()
-	}
-	if p.Platform == mediaplane.ProviderChalkSFU {
-		return mediaplane.ProviderCloudflareSFU.SettingName()
-	}
-	return p.Platform.SettingName()
+// legacyPlane also writes the compatibility column read by the previous release.
+func (p PlanePolicy) legacyPlane(_ *mediaplane.Provider) string {
+	return mediaplane.ProviderChalkSFU.SettingName()
 }
 
 // TenantPlaneStore reads a Tenant and writes its default plane with operator authority.

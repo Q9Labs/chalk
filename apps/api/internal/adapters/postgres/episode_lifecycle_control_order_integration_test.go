@@ -115,7 +115,7 @@ func TestAPIWritersLockControlBeforeEpisode(t *testing.T) {
 				args []any
 			}{
 				{`insert into tenants(id,name) values($1,'Control lock order regression')`, []any{uuid(e.tenantID)}},
-				{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Control order regression',$3,'cf_sfu')`, []any{uuid(e.spaceID), uuid(e.tenantID), e.spaceID.String()}},
+				{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Control order regression',$3,'chalk_sfu')`, []any{uuid(e.spaceID), uuid(e.tenantID), e.spaceID.String()}},
 				{`insert into episodes(id,tenant_id,space_id,status,config_snapshot` + writer.episodeColumns + `) values($1,$2,$3,'active','{"maximum_episode_duration_seconds":7200}'::jsonb` + writer.episodeValues + `)`, []any{uuid(e.episodeID), uuid(e.tenantID), uuid(e.spaceID)}},
 				{`insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes) values($1,$2,$3,'{}'::jsonb,1,$4,2)`, []any{uuid(e.tenantID), uuid(e.spaceID), uuid(e.episodeID), make([]byte, 32)}},
 				{participantInsert, []any{uuid(e.participantID), uuid(e.tenantID), uuid(e.spaceID), uuid(e.episodeID)}},

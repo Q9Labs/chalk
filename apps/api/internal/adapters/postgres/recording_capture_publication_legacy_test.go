@@ -154,7 +154,7 @@ declare
  d bytea:=sha256(convert_to('completed capture recovery','UTF8'));
 begin
  insert into tenants(id,name) values(t,'Recovery fixture');
- insert into spaces(id,name,tenant_id,slug,media_plane) values(s,'Review',t,'review','cf_sfu');
+ insert into spaces(id,name,tenant_id,slug,media_plane) values(s,'Review',t,'review','chalk_sfu');
  insert into episodes(id,status,space_id,tenant_id,config_snapshot) values(e,'active',s,t,'{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0,"artifact_policy":{"schema_version":"episode_config.v2","recording":{"mode":"manual","profile":"composite_720p_v1","retention_seconds":86400},"transcription":{"mode":"on_demand","retention_seconds":0,"source_window_seconds":3600,"provider_policy_version":"recovery"}}}');
  insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values(r,t,s,e,'completed','r2');
  insert into recording_reservations(id,tenant_id,space_id,episode_id,recording_id,idempotency_key,request_fingerprint,policy_snapshot_version,participant_count,max_duration_seconds,input_bitrate_bps,state,ends_at) values(v,t,s,e,r,'recovery_reservation_'||v,d,'episode_config.v2',1,3600,1000,'released',now());

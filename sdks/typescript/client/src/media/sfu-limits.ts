@@ -1,4 +1,4 @@
-// The Cloudflare SFU's quotas and the client's own timing policy, in one place.
+// The Chalk SFU's quotas and the client's own timing policy, in one place.
 //
 // Provider limits the client is written against:
 //   - a request names at most TRACKS_PER_REQUEST tracks (16), or the SFU rejects it;
@@ -8,7 +8,7 @@
 //   - the SFU answers 404, 406 or 410 once it has dropped a session, and expires
 //     tracks after 30 seconds without RTP (CAPTURE_REUSE_WINDOW_MS stays under it).
 import type { MediaPublicationSource } from "./plane";
-import type { CloudflareSFULocalTrack, CloudflareSFUPublication, CloudflareSFURemoteTrack, SFUMediaCapabilities } from "./types";
+import type { SFULocalTrack, SFUPublication, SFURemoteTrack, SFUMediaCapabilities } from "./types";
 
 export const CONNECTION_TIMEOUT_MS = 8000;
 // Each participant may spend 60 call-control writes per minute; viewer-layer adaptation budgets at most 12.
@@ -55,9 +55,9 @@ export const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 export const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false, keepsIdleSession: false });
 export const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
-export const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
-export const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
-export type RemoteTrackEntry = readonly [string, CloudflareSFURemoteTrack];
+export const EMPTY_LOCAL: readonly SFULocalTrack[] = Object.freeze([]);
+export const EMPTY_REMOTE: readonly SFURemoteTrack[] = Object.freeze([]);
+export type RemoteTrackEntry = readonly [string, SFURemoteTrack];
 
 /** A pull retry waits this long: 750ms doubling each counted failure, capped. */
 export function remotePullBackoffMs(failures: number, capMs = REMOTE_PULL_BACKOFF_CAP_MS): number {
@@ -67,7 +67,7 @@ export function remotePullBackoffMs(failures: number, capMs = REMOTE_PULL_BACKOF
 export function pollFailureDelayMs(failures: number, intervalMs: number): number {
   return Math.min(intervalMs, (POLL_RETRY_BASE_MS + Math.random() * POLL_RETRY_JITTER_MS) * 2 ** (failures - 1));
 }
-export function isVideoPublication(publication: Pick<CloudflareSFUPublication, "source">): boolean {
+export function isVideoPublication(publication: Pick<SFUPublication, "source">): boolean {
   return publication.source === "camera" || publication.source === "screen";
 }
 export function localSourceGroup(source: MediaPublicationSource): readonly MediaPublicationSource[] {

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -291,28 +290,6 @@ func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults, tenants TenantR
 	return s
 }
 
-// planeForNewSpace returns the plane for a Space whose request names none, and
-// whether it is the configured new-Space plane. A Tenant that pins its own
-// provider keeps the deployment default.
-func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (plane mediaplane.Provider, newSpacePlane bool, err error) {
-	if s.newSpace.MediaPlane != "" {
-		tenant, err := s.tenants.GetTenant(ctx, tenantID)
-		if err != nil {
-			return "", false, fmt.Errorf("read Tenant for the new Space plane: %w", err)
-		}
-		if tenantServesNewSpacePlane(tenant) {
-			return s.newSpace.MediaPlane, true, nil
-		}
-	}
-	return s.planes.Platform, false, nil
-}
-
-// tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
-// and the Tenant names no plane of its own. A Tenant default plane is its own choice.
-func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
-	return tenantDefault(tenant) == nil && mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig)
-}
-
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
 	id, err := utilities.NewID()
 	if err != nil {
@@ -321,18 +298,13 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	input.ID = id
 	input.MediaPlaneSetting = nil
 	explicitPlane := input.MediaPlaneSet || input.MediaPlane != ""
-	newSpacePlane := false
 	if !explicitPlane {
-		plane, isNewSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
-		if err != nil {
-			return Space{}, err
-		}
-		input.MediaPlane, newSpacePlane = plane.SettingName(), isNewSpacePlane
+		input.MediaPlane = mediaplane.ProviderChalkSFU.SettingName()
 	}
-	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
+	if !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
 		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
 	}
-	if newSpacePlane && !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
+	if !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
 		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
@@ -340,30 +312,6 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	}
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
-	}
-	// The request names a plane only when the caller may; a Space that names none
-	// inherits, except that the configured new-Space plane is the Space's own choice.
-	provider, err := mediaplane.ParseSettingName(input.MediaPlane)
-	if err != nil {
-		return Space{}, ErrInvalidMediaPlane
-	}
-	switch {
-	case explicitPlane:
-		if !input.MediaPlaneFromConfig {
-			if err := s.planes.publicWriteAllowed(provider); err != nil {
-				return Space{}, err
-			}
-			if provider == mediaplane.ProviderChalkSFU {
-				// A public write naming the Chalk SFU inherits; see PublicWriteAllowed.
-				input.MediaPlane = s.planes.legacyPlane(nil)
-				break
-			}
-		}
-		input.MediaPlaneSetting = &provider
-	case newSpacePlane:
-		input.MediaPlaneSetting = &provider
-	default:
-		input.MediaPlane = s.planes.legacyPlane(nil)
 	}
 	if input.RequestKey != "" {
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {

@@ -59,7 +59,7 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 	episode := func(status, binding string) utilities.ID {
 		episodeID, spaceID := id(), id()
 		spaces[episodeID] = spaceID
-		exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Source lease renewal', $2, $3, 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "source-leases-"+spaceID.String())
+		exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Source lease renewal', $2, $3, 'chalk_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "source-leases-"+spaceID.String())
 		exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, $2, $3, $4, $5::jsonb)`, episodeID.Bytes(), status, spaceID.Bytes(), tenantID.Bytes(), `{"media_plane_binding":`+binding+`}`)
 		exec(`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes) values($1, $2, $3, '{}'::jsonb, 1, $4, 2)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), make([]byte, 32))
 		return episodeID
@@ -134,7 +134,7 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 
 	ended := episode("ended", `{"provider":"chalk_sfu","node":"sfu-a"}`)
 	grant(ended, participant(ended, "active", "{publishAudio}"), "microphone", "confirmed", 3)
-	cloudflare := episode("active", `{"provider":"cf_sfu"}`)
+	cloudflare := episode("active", `{"provider":"chalk_sfu"}`)
 	grant(cloudflare, participant(cloudflare, "active", "{publishAudio}"), "microphone", "confirmed", 3)
 
 	// A page of one proves the cursor walks every row without repeating any.
