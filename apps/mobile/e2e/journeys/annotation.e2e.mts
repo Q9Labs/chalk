@@ -12,6 +12,9 @@ test("viewer draws and removes a kept mark", async ({ app, screen }) => {
   const to = { x: from.x + 95, y: from.y + 45 };
   await screen.swipe({ from, to, duration: 420 });
   await expect(screen.getByText("1 committed marks")).toBeVisible();
+  await screen.getByRole("button", "Mark authors").tap();
+  await expect(screen.getByText("Omar")).toBeVisible();
+  await screen.getByRole("button", "Mark authors").tap();
 
   await screen.getByRole("button", "Undo").tap();
   await expect(screen.getByText("0 committed marks")).toBeVisible();

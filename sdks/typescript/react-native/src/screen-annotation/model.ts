@@ -100,6 +100,11 @@ export function canCapture(state: ScreenAnnotationState, participantId: string):
   return state.access.can_draw && (!state.paused || state.layer.sharer_id === participantId);
 }
 
+export function visibleCommittedMarks(state: ScreenAnnotationState, nowMs: number): readonly ScreenAnnotationMark[] {
+  return state.marks.filter(({ author, expires_at_ms }) =>
+    (expires_at_ms === null || expires_at_ms > nowMs) && (!state.paused || author.participant_id === state.layer.sharer_id));
+}
+
 /** Does not split a UTF-8 code point to meet the wire limit. */
 export function boundedNote(value: string): string {
   let bytes = 0;

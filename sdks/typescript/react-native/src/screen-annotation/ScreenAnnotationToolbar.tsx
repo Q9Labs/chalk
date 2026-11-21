@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Icon, type IconName } from "../icons/Icon";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
-import type { Ink, Tool } from "./model";
+import { visibleCommittedMarks, type Ink, type Tool } from "./model";
 
 const toolRows: ReadonlyArray<ReadonlyArray<{ readonly tool: Tool; readonly label: string; readonly glyph?: string; readonly icon?: IconName }>> = [
   [{ tool: "laser", label: "Laser", glyph: "•" }, { tool: "pen", label: "Pen", icon: "pen" }, { tool: "highlighter", label: "Highlight", glyph: "▰" }, { tool: "line", label: "Line", glyph: "╱" }, { tool: "arrow", label: "Arrow", glyph: "↗" }],
@@ -21,7 +21,7 @@ export type ScreenAnnotationToolbarProps = {
   readonly ink: Ink;
   readonly drawingAllowed: boolean;
   readonly canRequestDraw: boolean;
-  readonly nowMs: number;
+  readonly serverNowMs: () => number;
   readonly people?: readonly Person[];
   readonly onInk: (next: Ink) => void;
   readonly onCommand: (command: ScreenAnnotationCommand) => void;
@@ -30,15 +30,19 @@ export type ScreenAnnotationToolbarProps = {
   readonly onDownload?: () => void;
 };
 
-export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllowed, canRequestDraw, nowMs, people = [], onInk, onCommand, onClose, onSave, onDownload }: ScreenAnnotationToolbarProps): React.JSX.Element {
+export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllowed, canRequestDraw, serverNowMs, people = [], onInk, onCommand, onClose, onSave, onDownload }: ScreenAnnotationToolbarProps): React.JSX.Element {
   const { colors: theme } = useTheme();
-  const [menu, setMenu] = useState<"format" | "manage" | null>(null);
+  const [menu, setMenu] = useState<"format" | "manage" | "authors" | null>(null);
   const { access, layer } = state;
+  const nowMs = serverNowMs();
   const pending = access.requests.some((request) => request.participant_id === participantId && request.expires_at_ms > nowMs);
   const open = (panel: typeof menu) => setMenu(menu === panel ? null : panel);
   const paused = state.paused && participantId !== layer.sharer_id;
   const canModerate = access.can_moderate;
   const canManagePolicy = access.can_manage_policy;
+  const authors = menu === "authors"
+    ? [...new Map(visibleCommittedMarks(state, nowMs).map(({ author }) => [author.participant_id, author])).values()]
+    : [];
 
   return (
     <View testID="annotation.tray" style={[styles.tray, { backgroundColor: theme.popover, borderColor: theme.lineStrong }]}>
@@ -68,11 +72,18 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
         )}
         <View style={styles.row}>
           <ToolButton label="Clear mine" onPress={() => onCommand({ kind: "clear", scope: { kind: "mine" } })} />
+          {state.marks.length || menu === "authors" ? <ToolButton label="Mark authors" selected={menu === "authors"} onPress={() => open("authors")} /> : null}
           {canModerate || canManagePolicy ? <ToolButton label="Manage marks" selected={menu === "manage"} onPress={() => open("manage")} /> : null}
           {onSave ? <ToolButton label="Add to board" onPress={onSave} /> : null}
           {onDownload ? <ToolButton label="Save PNG" onPress={onDownload} /> : null}
           <ToolButton label="Done" selected onPress={onClose} />
         </View>
+        {menu === "authors" ? (
+          authors.length ? authors.map((author) => <View key={author.participant_id} style={styles.person}>
+            <View style={[styles.swatch, { backgroundColor: author.color }]} />
+            <ChalkText>{author.display_name}</ChalkText>
+          </View>) : <ChalkText>No visible marks</ChalkText>
+        ) : null}
         {menu === "manage" ? (
           <>
             {canModerate ? <View style={styles.row}>

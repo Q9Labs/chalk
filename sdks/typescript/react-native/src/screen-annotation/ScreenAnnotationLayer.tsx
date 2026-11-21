@@ -14,7 +14,7 @@ import { useTheme } from "../theme/theme";
 import { AnnotationCanvas, type AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { ScreenAnnotationToolbar, ToolButton, type ScreenAnnotationToolbarProps } from "./ScreenAnnotationToolbar";
 import {
-  boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleFrame,
+  boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame,
   type Ink, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationSource,
 } from "./model";
 import { shareAnnotationPng } from "./export-native-png";
@@ -144,8 +144,7 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
     const live = matchLayer(client, publicationId);
     if (!source.captureFrame || !hasTarget(live, target)) return;
     const at = client.serverNowMs();
-    const marks = live.marks.filter((mark) => (mark.expires_at_ms === null || mark.expires_at_ms > at) &&
-      (!live.paused || mark.author.participant_id === live.layer.sharer_id));
+    const marks = visibleCommittedMarks(live, at);
     try {
       const frame = await source.captureFrame();
       if (frame === null) {
@@ -180,7 +179,7 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
         ink={ink}
         drawingAllowed={allowed}
         canRequestDraw={!state.access.can_draw && state.access.draw_policy !== "hosts"}
-        nowMs={nowMs}
+        serverNowMs={() => client.serverNowMs()}
         onInk={setStyle}
         onCommand={(command) => void dispatch(target, command)}
         onClose={() => {
