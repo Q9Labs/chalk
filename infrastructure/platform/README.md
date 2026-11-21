@@ -67,6 +67,9 @@ whose secret is missing is `check-failed`. Credentials come from read-only provi
 `DIGITALOCEAN_TOKEN` for SFU, `CHALK_CAPTURE_DIGITALOCEAN_TOKEN` and `CHALK_RENDER_DIGITALOCEAN_TOKEN`
 for the recorder pools, and `CLOUDFLARE_API_TOKEN` with `CLOUDFLARE_ACCOUNT_ID` for the recorder R2
 bucket. The DigitalOcean tokens are custom-scoped read tokens (droplet, firewall, tag, ssh_key,
-image and project read), never a full-access token. Media relay uses Calls TURN key reads. Do not
+image, project and vpc read), never a full-access token. Without vpc read, DigitalOcean leaves
+`vpc_uuid` out of the Droplet and every SFU host reports drift. The workflow prefers
+`CHALK_DRIFT_CLOUDFLARE_API_TOKEN` (Account: Workers R2 Storage Read) over the shared
+`CLOUDFLARE_API_TOKEN`, a Pages deploy token that cannot read R2, so the recorder check fails. Media relay uses Calls TURN key reads. Do not
 grant every future provider in advance: configure only the registered production cutovers before
 enabling their checks.

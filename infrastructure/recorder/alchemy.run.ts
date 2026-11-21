@@ -8,6 +8,7 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { environment, providers, state } from "../platform/config.ts";
+import { kmsKeyProvider } from "../providers/aws-kms-key.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag, recorderPoolProviders } from "../providers/digitalocean-recorder-pools.ts";
 import { RecordingBucket, recordingBucketProvider } from "../providers/cloudflare-recording-bucket.ts";
 import { requireCloudflareCredentials, credential } from "../platform/credentials.ts";
@@ -18,7 +19,7 @@ const cloudflare = Cloudflare.providers();
 export default Alchemy.Stack(
   "recorder",
   {
-    providers: Layer.mergeAll(providers, recorderPoolProviders, cloudflare, recordingBucketProvider.pipe(Layer.provide(cloudflare))),
+    providers: Layer.mergeAll(providers, kmsKeyProvider.pipe(Layer.provide(providers)), recorderPoolProviders, cloudflare, recordingBucketProvider.pipe(Layer.provide(cloudflare))),
     state,
   },
   Effect.gen(function* () {
