@@ -19,6 +19,7 @@ defmodule ChalkSync.Obs do
   """
 
   alias ChalkSync.Obs.{Check, Flags, Registry, Violation}
+  alias ChalkSync.UUID
 
   @event [:chalk_sync, :obs, :record]
   @op_stack {__MODULE__, :op_stack}
@@ -33,7 +34,7 @@ defmodule ChalkSync.Obs do
   @doc false
   def init_counters do
     :persistent_term.put(@counters, :atomics.new(3, signed: false))
-    :persistent_term.put(@source_id, uuid())
+    :persistent_term.put(@source_id, UUID.generate())
     :ok
   end
 
@@ -50,7 +51,7 @@ defmodule ChalkSync.Obs do
         when result: term()
   def op(name, fields, fun, options \\ []) do
     classify = Keyword.get(options, :classify, &default_classify/1)
-    op_id = uuid()
+    op_id = UUID.generate()
     stack = Process.get(@op_stack, [])
     Process.put(@op_stack, [{op_id, %{}} | stack])
     started = System.monotonic_time(:millisecond)
@@ -155,7 +156,7 @@ defmodule ChalkSync.Obs do
         Check.decision_problems(name, decision) ++ Check.reason_problems(name, reason, nil)
     )
 
-    decision_id = uuid()
+    decision_id = UUID.generate()
 
     send_record(
       "decision",
@@ -196,10 +197,7 @@ defmodule ChalkSync.Obs do
     send_record("fact", name, fields, %{})
   end
 
-  @doc """
-  Builds a registry-checked fact without emitting it, so the caller commits it with the state change it witnesses. Nothing else
-  sends this record: the caller must store it (see `ChalkSync.Obs.EvidenceSink.enqueue!/2`).
-  """
+  @doc "Builds a fact without emitting it; the caller stores it (`ChalkSync.Obs.EvidenceSink.enqueue!/2`) with the state it witnesses."
   @spec stage(String.t(), fields()) :: map()
   def stage(name, fields) do
     fields = normalize(fields)
@@ -270,7 +268,7 @@ defmodule ChalkSync.Obs do
 
     envelope =
       %{
-        "event_id" => Keyword.get(config, :event_id, &uuid/0).(),
+        "event_id" => Keyword.get(config, :event_id, &UUID.generate/0).(),
         "seq" => Keyword.get(config, :seq, fn -> :atomics.add_get(counters, @seq, 1) end).(),
         "source_id" => Keyword.get(config, :source_id) || :persistent_term.get(@source_id),
         "schema_ver" => Registry.schema_ver(),
@@ -298,12 +296,4 @@ defmodule ChalkSync.Obs do
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
-
-  defp uuid do
-    <<a::48, _version::4, b::12, _variant::2, c::62>> = :crypto.strong_rand_bytes(16)
-    <<a::48, 4::4, b::12, 2::2, c::62>> |> Base.encode16(case: :lower) |> format_uuid()
-  end
-
-  defp format_uuid(<<a::binary-8, b::binary-4, c::binary-4, d::binary-4, e::binary-12>>),
-    do: Enum.join([a, b, c, d, e], "-")
 end

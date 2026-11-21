@@ -5295,22 +5295,25 @@ create index telemetry_outbox_ready_idx on telemetry_outbox (available_at, id);
 create index telemetry_outbox_tenant_idx on telemetry_outbox (tenant_id);
 
 -- Abort an enqueue at capacity rather than evict acknowledged evidence. The
--- same counter covers both writers and is debited on relay or Tenant purge.
-create table telemetry_outbox_capacity (
-    singleton boolean primary key default true check (singleton),
-    max_bytes bigint not null default 67108864,
+-- counter is per Tenant, so it follows the Tenant on purge and one Tenant
+-- cannot use the whole queue. Both writers go through the trigger.
+create table telemetry_outbox_usage (
+    tenant_id uuid primary key references tenants(id) on delete cascade,
+    max_bytes bigint not null default 16777216,
     queued_bytes bigint not null default 0 check (queued_bytes between 0 and max_bytes)
 );
-insert into telemetry_outbox_capacity default values;
 
 create function account_telemetry_outbox() returns trigger language plpgsql as $$
 begin
     if TG_OP = 'INSERT' then
-        update telemetry_outbox_capacity set queued_bytes = queued_bytes + octet_length(new.payload::text) + 256;
+        insert into telemetry_outbox_usage (tenant_id, queued_bytes)
+        values (new.tenant_id, octet_length(new.payload::text) + 256)
+        on conflict (tenant_id) do update set queued_bytes = telemetry_outbox_usage.queued_bytes + excluded.queued_bytes;
     elsif TG_OP = 'DELETE' then
-        update telemetry_outbox_capacity set queued_bytes = queued_bytes - octet_length(old.payload::text) - 256;
+        update telemetry_outbox_usage set queued_bytes = queued_bytes - octet_length(old.payload::text) - 256
+        where tenant_id = old.tenant_id;
     else
-        update telemetry_outbox_capacity set queued_bytes = 0;
+        update telemetry_outbox_usage set queued_bytes = 0;
     end if;
     return null;
 end;
