@@ -110,6 +110,8 @@ export function pageChecks(options) {
   for (const el of everything) {
     if (inertOrHidden(el)) continue;
     const own = style(el);
+    // Text shrunk to a 1px box is screen-reader-only text (the sr-only pattern): it is cut off on purpose.
+    if (el.clientWidth <= 1 && el.clientHeight <= 1) continue;
     const hasText = [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "");
     const clipsX = own.overflowX === "hidden" || own.overflowX === "clip";
     if (hasText && clipsX && el.scrollWidth > el.clientWidth + 1 && own.textOverflow !== "ellipsis" && own.display !== "inline") {
@@ -167,12 +169,19 @@ export function pageChecks(options) {
     add("frame-unfilled", `${describe(named)} face`, `${describe(frame)} is ${Math.round(box.width)}x${Math.round(box.height)} but its content is ${Math.round(child.width)}x${Math.round(child.height)}, flush on one side and short on the other`);
   }
 
-  // control-overlap: two controls share screen area and neither sits inside the other.
+  // control-overlap: two controls share screen area and neither sits inside the other. A menu or dialog floats over the page on
+  // purpose, so a control inside one may overlap what is behind it; control-covered still catches a layer that blocks a control.
+  const floatingSelector = "[role=menu], [role=listbox], [role=dialog], [role=alertdialog], [popover]";
+  const floatsOver = (a, b) => {
+    const layerA = a.closest(floatingSelector);
+    const layerB = b.closest(floatingSelector);
+    return layerA !== layerB && (layerA !== null || layerB !== null);
+  };
   for (let i = 0; i < shownControls.length; i += 1) {
     for (let j = i + 1; j < shownControls.length; j += 1) {
       const a = shownControls[i];
       const b = shownControls[j];
-      if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      if (a.el.contains(b.el) || b.el.contains(a.el) || floatsOver(a.el, b.el)) continue;
       const width = Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left);
       const height = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
       if (width <= 2 || height <= 2) continue;

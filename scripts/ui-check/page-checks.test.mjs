@@ -51,6 +51,18 @@ test("two controls on top of each other are found", async () => {
   assert.ok(found.includes("control-overlap"));
 });
 
+test("screen-reader-only text in a 1px box is not clipped", async () => {
+  const found = await checksFor(`<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">Options for Alex</div><p>Hi</p>`);
+  assert.ok(!found.includes("text-clipped"));
+});
+
+test("a menu over a control is not an overlap, two controls inside the same menu still are", async () => {
+  const menu = (items) => `<button aria-label="Tile" style="position:absolute;left:0;top:0;width:200px;height:200px">t</button><div role="menu" style="position:absolute;left:20px;top:20px;width:150px;height:100px;background:#fff">${items}</div>`;
+  const item = (name, top) => `<div role="menuitem" tabindex="0" aria-label="${name}" style="position:absolute;left:0;top:${top}px;width:150px;height:40px">${name}</div>`;
+  assert.ok(!(await checksFor(menu(item("One", 0)))).includes("control-overlap"));
+  assert.ok((await checksFor(menu(item("One", 0) + item("Two", 20)))).includes("control-overlap"));
+});
+
 test("a control with a layer over its center is found", async () => {
   const found = await checksFor(`<button aria-label="Chat">c</button><div style="position:fixed;left:0;top:0;width:100px;height:100px;background:#0004"></div>`);
   assert.ok(found.includes("control-covered"));
