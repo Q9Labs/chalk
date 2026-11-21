@@ -164,7 +164,7 @@ export type CloudflareSFUSnapshot = {
 export type CloudflareSFULocalOfferDiagnostic = {
   readonly event: "local_offer_pending";
   readonly where: "sdp_operation_start" | "remote_offer";
-  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "outside_sdk";
+  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "receive_transport" | "outside_sdk";
   readonly pendingMs: number | null;
 };
 export type CloudflareSFUClientOptions = {

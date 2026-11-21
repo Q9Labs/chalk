@@ -868,7 +868,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #activatePreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
     try {
-      await this.#publishPreparedTracks(states, generation);
+      await this.#connectWithPreparedTracks(states, generation);
       this.#requireGeneration(generation);
       if (this.#pulls.recoveryGeneration !== generation) this.#replacer.attemptedGeneration = null;
       this.#started = true;
@@ -878,6 +878,34 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
       throw error;
     }
+  }
+  async #connectWithPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
+    await this.#publishPreparedTracks(states, generation);
+    if (!this.#capabilities().iceRestart || this.#negotiatedGeneration === generation) return;
+    await this.#serializeSDP(async () => {
+      this.#requireGeneration(generation);
+      // A pull can negotiate while startup is waiting its turn in the SDP queue.
+      if (this.#negotiatedGeneration === generation) return;
+      const connection = this.#connection;
+      const connectionId = this.#bootstrap.connectionId;
+      const owner = { generation, connectionId };
+      // An empty Episode has no track to pull. Establish ICE and DTLS without opening a device or publishing.
+      connection.addTransceiver("audio", { direction: "recvonly" });
+      try {
+        const sessionDescription = await this.#createLocalOffer(connection, "receive_transport");
+        this.#requireGeneration(generation);
+        if (connection !== this.#connection) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+        const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks: [] }), owner);
+        this.#requireGeneration(generation);
+        if (connection !== this.#connection) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+        await this.#applyProviderDescription(response, connection, owner);
+        this.#requireGeneration(generation);
+        if (connection === this.#connection) this.#negotiatedGeneration = generation;
+      } catch (error) {
+        await this.#rollbackLocalOffer(connection);
+        throw error;
+      }
+    });
   }
   stop(): void {
     if (this.#stopped) {
@@ -2110,7 +2138,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#locals.tracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
-    await this.#publishPreparedTracks(enabled, generation);
+    await this.#connectWithPreparedTracks(enabled, generation);
   }
   #observeRemotePublicationCursor(cursor: PublicationCursor, pullIncomplete = false): void {
     this.#cursor = cursor;

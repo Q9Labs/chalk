@@ -19,6 +19,7 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/control"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
@@ -346,6 +347,12 @@ func subscribeKnownMedia(t *testing.T, svc *service, conn string, scope protocol
 	t.Helper()
 	bob := newPeer(t)
 	received := collect(bob)
+	pullKnownMedia(t, svc, bob, conn, scope, publisherConn)
+	return bob, received
+}
+
+func pullKnownMedia(t *testing.T, svc *service, listener *peer, conn string, scope protocol.Scope, publisherConn string) {
+	t.Helper()
 	var pulled protocol.TracksResponse
 	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope: scope,
@@ -364,16 +371,15 @@ func subscribeKnownMedia(t *testing.T, svc *service, conn string, scope protocol
 		}
 		mids[track.Mid] = true
 	}
-	if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
+	if err := listener.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
 		t.Fatal(err)
 	}
-	answer, err := bob.pc.CreateAnswer(nil)
+	answer, err := listener.pc.CreateAnswer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	answerSDP := bob.complete(t, answer)
+	answerSDP := listener.complete(t, answer)
 	svc.mustCall(t, "/v1/sessions/"+conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: answerSDP}, nil)
-	return bob, received
 }
 
 func eventually(t *testing.T, what string, timeout time.Duration, condition func() bool) {
@@ -427,6 +433,52 @@ func countLate(t *testing.T, label string, packets []*rtp.Packet, kind byte) int
 		highest = packet.SequenceNumber
 	}
 	return late
+}
+
+func TestListenOnlyBeforeAnyonePublishes(t *testing.T) {
+	const connectTimeout = 2 * time.Second
+	svc := startService(t, newAuthority(t, "chalk test CA"), func(cfg *config.Config) {
+		cfg.ConnectTimeout = connectTimeout
+	})
+	conn := svc.createSession(t, "create-listener", scopeB)
+	listener := newPeer(t)
+	received := collect(listener)
+	_, err := listener.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer, err := listener.pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	description := listener.complete(t, offer)
+	var response protocol.TracksResponse
+	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{
+		OperationID: op(), Scope: scopeB, SessionDescription: &description,
+	}, &response)
+	if response.SessionDescription == nil || len(response.Tracks) != 0 {
+		t.Fatalf("listener expected a transport answer without publications: %+v", response)
+	}
+	if err := listener.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: response.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "listener connected with no publisher", connectTimeout, func() bool {
+		return listener.pc.ConnectionState() == webrtc.PeerConnectionStateConnected
+	})
+
+	// The original binding must still be inspectable after the idle deadline.
+	time.Sleep(connectTimeout)
+	if tracks := svc.inspect(t, conn, scopeB); len(tracks) != 0 {
+		t.Fatalf("listener unexpectedly has tracks: %+v", tracks)
+	}
+	svc.grantSources(t, scopeA)
+	publisherConn := svc.createSession(t, "create-publisher", scopeA)
+	publisher := publishKnownMedia(t, svc, publisherConn, scopeA)
+	defer publisher.stop()
+	pullKnownMedia(t, svc, listener, conn, scopeB, publisherConn)
+	eventually(t, "late publisher audio and video on the original listener connection", 5*time.Second, func() bool {
+		return received.count(webrtc.RTPCodecTypeAudio) > 0 && received.count(webrtc.RTPCodecTypeVideo) > 0
+	})
 }
 
 func TestLoopback(t *testing.T) {
