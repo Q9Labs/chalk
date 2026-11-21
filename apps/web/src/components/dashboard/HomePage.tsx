@@ -14,13 +14,14 @@ import { JoinLinkField, RenameDialog } from "./HomeDialogs";
 type HomeDialog = null | { kind: "rename"; call: HomeCallDTO };
 type UpdateHome = Update<Home>;
 
-function useCallActions(update: UpdateHome, join: (call: CallDTO) => void) {
+/** `opening` is true from the press until the call page has taken over, so a second press in that time starts nothing. */
+function useCallActions(update: UpdateHome, join: (call: CallDTO) => void, joining: boolean) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
   const startKey = useRef(newCallIntent());
 
   async function startCall() {
-    if (starting) return;
+    if (starting || joining) return;
     setStarting(true);
     try {
       const { call } = await startOwnedCall(startKey.current);
@@ -125,9 +126,9 @@ export function HomePage() {
   }, [state]);
   const [dialog, setDialog] = useState<HomeDialog>(null);
   const joinCall = useJoinCall();
-  const { starting, startCall, archive } = useCallActions(update, joinCall);
   // The button keeps working until the call page has taken over, so Start a call never looks idle between the two.
   const joining = usePendingJoin() !== null;
+  const { starting, startCall, archive } = useCallActions(update, joinCall, joining);
   const opening = starting || joining;
 
   return (
@@ -135,7 +136,7 @@ export function HomePage() {
       <div className="secth hhead">
         <h1>Recent calls</h1>
         <div className="hact">
-          <button type="button" className="btn pri" aria-busy={opening || undefined} onClick={() => void startCall()}>
+          <button type="button" className="btn pri" aria-busy={opening || undefined} aria-disabled={opening || undefined} onClick={() => void startCall()}>
             {opening ? <span className="spin" aria-hidden="true" /> : <Icon name="plus" />}
             Start a call
           </button>
