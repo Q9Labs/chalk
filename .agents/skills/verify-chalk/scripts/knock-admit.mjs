@@ -47,7 +47,7 @@ await runJourney("knock-admit", async ({ step, person, startCall, enterLink, lea
     await enterLink(refused, call.link);
     await refused.page.getByText(/^Asking to join/).waitFor({ timeout: 60_000 });
     await host.page.getByRole("button", { name: `Decline ${refused.name}`, exact: true }).click();
-    await refused.page.getByText("The host declined your request to join.").waitFor({ timeout: 60_000 });
+    await refused.page.getByText("The host didn’t let you in").waitFor({ timeout: 60_000 });
     await shot(refused, "declined");
   });
 
