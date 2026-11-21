@@ -12,7 +12,7 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
   const source = await sharer.page.context().newPage();
 
   await step("The sharer opens a live preview of a separate captured tab", async () => {
-    await source.setContent(`<title>${sourceTitle}</title><body style="background: #eceef2"><h1>Watch this spot</h1></body>`);
+    await source.goto(`data:text/html,${encodeURIComponent(`<title>${sourceTitle}</title><body style="background: #eceef2"><h1>Watch this spot</h1></body>`)}`);
     const call = await startCall(sharer);
     await joinByLink(viewer, call.link);
     await sharer.page.bringToFront();
@@ -21,7 +21,13 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
     await sharer.page.waitForFunction(
       () => {
         const video = window.documentPictureInPicture?.window?.document.querySelector("video");
-        return video?.videoWidth > 0 && video.currentTime > 0;
+        if (!video?.videoWidth || video.currentTime <= 0) return false;
+        const frame = document.createElement("canvas");
+        frame.width = frame.height = 1;
+        const ctx = frame.getContext("2d");
+        ctx.drawImage(video, 0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return r > 200 && g > 200 && b > 200;
       },
       undefined,
       wait,
