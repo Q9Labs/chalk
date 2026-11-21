@@ -23,7 +23,7 @@ func TestWhiteboardFileWriteRoutes(t *testing.T) {
 		endpoint.Mount(router, RateLimitOptions{})
 	}
 
-	path := "/whiteboard/scenes/" + scene.String() + "/files/frame/"
+	path := "/whiteboard/scenes/" + scene.String() + "/files/a%2Fframe/"
 	for _, tc := range []struct {
 		name, action, token, body string
 		error                     error
@@ -53,7 +53,7 @@ func TestWhiteboardFileWriteRoutes(t *testing.T) {
 				if service.request.FileID != "" {
 					t.Fatal("unauthenticated request reached service")
 				}
-			} else if service.request.Subject.ParticipantID != scene || service.request.SceneID != scene || service.request.FileID != "frame" {
+			} else if service.request.Subject.ParticipantID != scene || service.request.SceneID != scene || service.request.FileID != "a/frame" {
 				t.Fatalf("service request = %+v", service.request)
 			}
 			if tc.want < 300 && service.digest != "digest" {

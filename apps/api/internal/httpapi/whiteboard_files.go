@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -84,6 +85,13 @@ func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(h
 
 func decodeDownloadWhiteboardFileRequest(request *http.Request) (downloadWhiteboardFileRequest, error) {
 	fileID := chi.URLParam(request, "fileId")
+	if request.URL.RawPath != "" {
+		var err error
+		fileID, err = url.PathUnescape(fileID)
+		if err != nil {
+			return downloadWhiteboardFileRequest{}, apiErrorWhiteboardInvalidFile
+		}
+	}
 	if strings.TrimSpace(fileID) == "" || len(fileID) > 128 {
 		return downloadWhiteboardFileRequest{}, apiErrorWhiteboardInvalidFile
 	}

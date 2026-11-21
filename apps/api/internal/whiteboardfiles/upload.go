@@ -89,10 +89,7 @@ func (s Service) Initiate(ctx context.Context, input InitiateInput) (UploadInstr
 		if len(values) != 1 {
 			return UploadInstructions{}, ErrFileTransferFailed
 		}
-		// Browsers set Host and Content-Length from the destination and the Blob.
-		if !strings.EqualFold(name, "host") && !strings.EqualFold(name, "content-length") {
-			headers[name] = values[0]
-		}
+		headers[name] = values[0]
 	}
 	return UploadInstructions{URL: signed.URL, Headers: headers, ExpiresAt: signed.ExpiresAt}, nil
 }
