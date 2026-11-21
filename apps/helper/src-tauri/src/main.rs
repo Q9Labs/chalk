@@ -7,6 +7,7 @@ mod device;
 mod geometry;
 mod live;
 mod pairing;
+mod window_follow;
 
 use desktop::{act, view};
 use tauri_plugin_global_shortcut::ShortcutState;

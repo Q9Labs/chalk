@@ -1,7 +1,7 @@
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "@q9labsai/chalk-react";
 import { z } from "zod";
 import { helperDeviceOffer, manageHelperDevice } from "./dashboard/helper-devices";
-import { calibrateMonitor, probeSchema } from "./screen-annotation-helper-calibration";
+import { calibrateMonitor, calibrateWindow, chromiumWindowId, probeSchema } from "./screen-annotation-helper-calibration";
 
 const loopback = "http://127.0.0.1:47361";
 const attachLifetimeMs = 60_000;
@@ -198,19 +198,39 @@ function liveProjection({
   readonly signal: AbortSignal;
 }) {
   const settings = track?.getSettings();
-  const monitor = share.surface === "monitor" && settings?.displaySurface === "monitor" && /(?:Chrome|Chromium)\//.test(navigator.userAgent) && Boolean(settings.width && settings.height);
+  const chromium = /(?:Chrome|Chromium)\//.test(navigator.userAgent);
+  const monitor = chromium && share.surface === "monitor" && settings?.displaySurface === "monitor" && Boolean(settings.width && settings.height);
+  const windowId = chromium && share.surface === "window" && settings?.displaySurface === "window" && track ? chromiumWindowId(track.label) : undefined;
+  let verifiedWindowSize: { width: number; height: number } | undefined;
   let calibrated = false;
   let sending = false;
   let observed = false;
+  let pushing = false;
+  let checkWindowAfter = 0;
   const exchange = (data: object, timeout = 1500) => localRequest("/v1/exchange", AbortSignal.any([signal, AbortSignal.timeout(timeout)]), data, attachmentSecret);
   function checkSource() {
     const current = track?.getSettings();
-    if (!track || track !== currentTrack() || track.readyState !== "live" || !activeShare(share) || current?.displaySurface !== "monitor" || current.width !== settings?.width || current.height !== settings?.height) {
-      throw new Error("The shared monitor changed.");
+    if (
+      !track ||
+      track !== currentTrack() ||
+      track.readyState !== "live" ||
+      !activeShare(share) ||
+      (windowId ? current?.displaySurface !== "window" || chromiumWindowId(track.label) !== windowId : current?.displaySurface !== "monitor" || current.width !== settings?.width || current.height !== settings?.height)
+    ) {
+      throw new Error("The capture changed.");
     }
   }
   async function publish(): Promise<void> {
+    if (!observed) return;
     checkSource();
+    if (windowId && verifiedWindowSize) {
+      const size = track?.getSettings();
+      if (size?.width !== verifiedWindowSize.width || size.height !== verifiedWindowSize.height) {
+        observed = false;
+        await exchange({ type: "probe_abort" });
+        return;
+      }
+    }
     const snapshot = share.client.getSnapshot();
     if (snapshot.status !== "ready" || !snapshot.state) throw new Error("The screen share is no longer active.");
     const { layer, marks, paused, fence, access } = snapshot.state;
@@ -218,8 +238,8 @@ function liveProjection({
       type: "scene",
       layerId: layer.layer_id,
       publicationId: layer.publication_id,
-      width: settings?.width,
-      height: settings?.height,
+      width: verifiedWindowSize?.width ?? settings?.width,
+      height: verifiedWindowSize?.height ?? settings?.height,
       scene: { marks, presence: snapshot.presence, paused, fence, canDraw: access.can_draw, sharerId: layer.sharer_id, serverAtMs: Math.round(share.client.serverNowMs()) },
     });
   }
@@ -235,7 +255,11 @@ function liveProjection({
           await publish();
         }
       } catch (error) {
-        if (!signal.aborted) onError(error);
+        // A concurrent native move/resize can hide the overlay before the
+        // status event reaches the browser. Keep waiting for revalidation.
+        if (windowId && error instanceof HelperConflict) {
+          observed = false;
+        } else if (!signal.aborted) onError(error);
       } finally {
         sending = false;
       }
@@ -277,7 +301,7 @@ function liveProjection({
       );
     },
     async describe() {
-      await exchange({ type: "capture", surface: monitor ? "monitor" : "unsupported", width: settings?.width ?? 1, height: settings?.height ?? 1 });
+      await exchange({ type: "capture", surface: monitor ? "monitor" : windowId ? "window" : "unsupported", width: settings?.width ?? 1, height: settings?.height ?? 1, windowId });
     },
     async observe(status: ScreenAnnotationHelperStatus) {
       if (status === "calibrating" && !calibrated && monitor && track) {
@@ -298,9 +322,35 @@ function liveProjection({
             await localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "probe_abort" }, attachmentSecret);
           },
         });
+      } else if (status === "calibrating" && windowId && track) {
+        observed = false;
+        checkSource();
+        if (performance.now() < checkWindowAfter) return;
+        checkWindowAfter = performance.now() + 2200;
+        let matchedSize: { width: number; height: number } | undefined;
+        await calibrateWindow({
+          track,
+          signal,
+          verify: async (input, probeSignal) => {
+            const response = await localRequest("/v1/exchange", probeSignal, { type: "window_sample", ...input }, attachmentSecret);
+            if (response.status !== 200) return false;
+            matchedSize = { width: input.width, height: input.height };
+            return true;
+          },
+          start: (probeSignal) => localRequest("/v1/exchange", probeSignal, { type: "window_probe_start" }, attachmentSecret).then((response) => readJson(response, probeSchema)),
+          complete: async (nonce, probeSignal) => {
+            checkSource();
+            await localRequest("/v1/exchange", probeSignal, { type: "probe_complete", nonce }, attachmentSecret);
+            verifiedWindowSize = matchedSize;
+          },
+          abort: async () => {
+            await localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "probe_abort" }, attachmentSecret);
+          },
+        });
       } else if (status === "ready" && !observed) {
         observed = true;
-        if (signal.aborted) return;
+        if (signal.aborted || pushing) return;
+        pushing = true;
         pushLatest((reason) => failure.abort(reason));
       }
     },
@@ -349,6 +399,8 @@ export function activeShare(share: ScreenAnnotationHelperShare): boolean {
 }
 
 // The address, paths and methods are closed. No response or configuration supplies a local URL.
+class HelperConflict extends Error {}
+
 async function localRequest(path: HelperPath, signal: AbortSignal, data?: object, attachmentSecret?: string): Promise<Response> {
   const headers = new Headers();
   if (data) headers.set("Content-Type", "application/json");
@@ -366,6 +418,7 @@ async function localRequest(path: HelperPath, signal: AbortSignal, data?: object
     body: data ? JSON.stringify(data) : undefined,
   };
   const response = await fetch(loopback + path, options);
+  if (response.status === 409) throw new HelperConflict("Helper projection is not current.");
   if (!response.ok) throw new Error("Chalk Helper could not be reached.");
   return response;
 }

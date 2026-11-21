@@ -24,15 +24,7 @@ export async function calibrateMonitor(options: {
   if (track.readyState !== "live" || !track.enabled || track.getSettings().displaySurface !== "monitor") {
     throw new Error("The shared monitor changed.");
   }
-  const preview = track.clone();
-  preview.enabled = true;
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.srcObject = new MediaStream([preview]);
-  video.setAttribute("aria-hidden", "true");
-  Object.assign(video.style, { position: "fixed", width: "1px", height: "1px", opacity: "0.01", pointerEvents: "none" });
-  document.body.appendChild(video);
+  const { video, dispose } = localPreview(track);
   const sample = probeReader(video);
   let probing = false;
   let completed = false;
@@ -73,10 +65,118 @@ export async function calibrateMonitor(options: {
       }
     }
     if (probing && track.readyState === "live") track.enabled = true;
-    preview.stop();
-    video.srcObject = null;
-    video.remove();
+    dispose();
   }
+}
+
+function localPreview(track: MediaStreamTrack) {
+  const preview = track.clone();
+  preview.enabled = true;
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([preview]);
+  video.setAttribute("aria-hidden", "true");
+  Object.assign(video.style, { position: "fixed", width: "1px", height: "1px", opacity: "0.01", pointerEvents: "none" });
+  document.body.appendChild(video);
+  return {
+    video,
+    dispose() {
+      preview.stop();
+      video.srcObject = null;
+      video.remove();
+    },
+  };
+}
+
+export function chromiumWindowId(label: string): string | undefined {
+  // The classic Chromium picker exposes the platform source ID. A fourth
+  // ":s" field instead labels an opaque OS picker session, not a window.
+  return /^window:([1-9][0-9]{0,18}):-?[0-9]+$/.exec(label)?.[1];
+}
+
+export async function calibrateWindow(options: {
+  readonly track: MediaStreamTrack;
+  readonly signal: AbortSignal;
+  readonly verify: (input: { width: number; height: number; landmarks: number[] }, signal: AbortSignal) => Promise<boolean>;
+  readonly start: (signal: AbortSignal) => Promise<Probe>;
+  readonly complete: (nonce: string, signal: AbortSignal) => Promise<void>;
+  readonly abort: () => Promise<void>;
+}): Promise<void> {
+  const { track, signal } = options;
+  if (!track.enabled || track.readyState !== "live") return;
+  const { video, dispose } = localPreview(track);
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(3500)]);
+  let probing = false;
+  let completed = false;
+  try {
+    await Promise.race([video.play(), cancelled(deadline)]);
+    await nextFrame(video, deadline);
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (width < 320 || height < 240) return;
+    const landmarks = windowLandmarks(video);
+    if (!(await options.verify({ width, height, landmarks }, deadline))) return;
+    // Only pause the outgoing publication once the native window actually
+    // matches the browser preview. The independent clone still runs.
+    deadline.throwIfAborted();
+    track.enabled = false;
+    probing = true;
+    const probe = await options.start(deadline);
+    const sample = probeReader(video);
+    let frames = 0;
+    while (frames < 4) {
+      await nextFrame(video, deadline);
+      if (video.videoWidth !== width || video.videoHeight !== height) return;
+      frames = sample(probe).every((mark) => mark.matches === 0) ? frames + 1 : 0;
+    }
+    await options.complete(probe.nonce, deadline);
+    completed = true;
+  } catch {
+    // A moving, occluded or mismatched window stays hidden. The caller can
+    // retry with a new local sample when a valid window becomes visible.
+  } finally {
+    if (probing && !completed) {
+      try {
+        await options.abort();
+      } catch {
+        await pause(4300);
+      }
+    }
+    if (probing && track.readyState === "live") track.enabled = true;
+    dispose();
+  }
+}
+
+function windowLandmarks(video: HTMLVideoElement): number[] {
+  const canvas = document.createElement("canvas");
+  canvas.width = 72;
+  canvas.height = 72;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Chalk could not read the local preview.");
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const energy = (x: number, y: number) => {
+    const offset = (y * canvas.width + x) * 4;
+    return Math.floor(((pixels[offset] ?? 0) + 2 * (pixels[offset + 1] ?? 0) + (pixels[offset + 2] ?? 0)) / 4);
+  };
+  const landmarks: number[] = [];
+  for (const [left, top] of [
+    [3, 3],
+    [48, 3],
+    [3, 48],
+  ] as const) {
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        const px = left + x * 5;
+        const py = top + y * 5;
+        const center = energy(px, py);
+        if (x < 4) landmarks.push(Math.trunc((energy(px + 5, py) - center) / 4));
+        if (y < 4) landmarks.push(Math.trunc((energy(px, py + 5) - center) / 4));
+      }
+    }
+  }
+  return landmarks;
 }
 
 function probeReader(video: HTMLVideoElement) {

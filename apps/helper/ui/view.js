@@ -104,6 +104,7 @@ if (isOverlay) {
       <button type="button" id="deny">Deny</button>
       <button type="button" id="allow">Allow</button>
     </div>
+    <button type="button" id="follow-window" hidden>Follow captured window</button>
     <button type="button" id="live-draw" hidden>Draw one mark</button>
     <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
     <div id="device-code" hidden>
@@ -121,6 +122,7 @@ if (isOverlay) {
   bindStyleButtons();
   control("check_for_update", "#update");
   control("toggle_live_draw", "#live-draw");
+  control("follow_window", "#follow-window");
   control("start_device_code", "#new-device-code");
   control("forget_device", "#forget-device");
   for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
@@ -151,6 +153,7 @@ async function refresh() {
       root.querySelector("#connection-help").textContent = view.connected
         ? "Use the preview in Chalk while this capture is unverified."
         : "Start sharing in Chalk to connect.";
+      root.querySelector("#follow-window").hidden = !view.canFollowWindow;
       root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
       const displays = root.querySelector("#displays");
       const options = root.querySelector("#display-options");

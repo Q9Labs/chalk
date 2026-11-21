@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use crate::window_follow;
 use crate::{geometry::Rect, live};
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
@@ -25,7 +26,10 @@ use ring::{
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use tauri::AppHandle;
-use tokio::{sync::oneshot, task::JoinHandle};
+use tokio::{
+    sync::{oneshot, Semaphore},
+    task::JoinHandle,
+};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 const PORT: u16 = 47361;
@@ -43,6 +47,7 @@ struct PairingInner {
     helper_public_key: String,
     key: Arc<Ed25519KeyPair>,
     app: Mutex<Option<AppHandle>>,
+    window_sample: Arc<Semaphore>,
     state: Mutex<Local>,
 }
 
@@ -148,8 +153,16 @@ enum Exchange {
         surface: String,
         width: u32,
         height: u32,
+        #[serde(rename = "windowId")]
+        window_id: Option<String>,
+    },
+    WindowSample {
+        width: u32,
+        height: u32,
+        landmarks: Vec<i8>,
     },
     ProbeStart,
+    WindowProbeStart,
     ProbeProtect {
         nonce: String,
     },
@@ -236,6 +249,7 @@ impl Pairing {
             helper_public_key: URL_SAFE_NO_PAD.encode(key.public_key().as_ref()),
             key: Arc::new(key),
             app: Mutex::default(),
+            window_sample: Arc::new(Semaphore::new(1)),
             state: Mutex::default(),
         })))
     }
@@ -322,14 +336,19 @@ impl Pairing {
         app.run_on_main_thread(move || {
             let mut state = pairing.0.state.lock().expect("pairing state");
             let live = state.session.as_mut().filter(|session| session.usable());
-            if let Some(session) = live.filter(|session| session.capture.allows_window()) {
-                session.capture.disable_stale_input(&owner);
-                if !session.capture.projection_is_current(&owner) {
-                    session.capture.fail(&owner);
+            if let Some(session) = live {
+                if session.capture.reconcile_window(&owner) {
+                    return;
                 }
-            } else {
-                live::hide(&owner);
+                if session.capture.allows_window() {
+                    session.capture.disable_stale_input(&owner);
+                    if !session.capture.projection_is_current(&owner) {
+                        session.capture.fail(&owner);
+                    }
+                    return;
+                }
             }
+            live::hide(&owner);
         })
         .is_ok()
     }
@@ -365,6 +384,84 @@ impl Pairing {
             .session
             .as_ref()
             .is_some_and(|session| session.usable() && session.capture.offers_monitors())
+    }
+
+    pub fn offers_window(&self) -> bool {
+        self.0
+            .state
+            .lock()
+            .expect("pairing state")
+            .session
+            .as_ref()
+            .is_some_and(|session| session.usable() && session.capture.offers_window())
+    }
+
+    pub fn enable_follow(&self) -> Result<(), &'static str> {
+        self.0
+            .state
+            .lock()
+            .expect("pairing state")
+            .session
+            .as_mut()
+            .filter(|session| session.usable())
+            .ok_or("No active window share.")?
+            .capture
+            .enable_follow()
+    }
+
+    async fn sample_window(
+        &self,
+        secret: String,
+        width: u32,
+        height: u32,
+        landmarks: Vec<i8>,
+    ) -> Result<Response, StatusCode> {
+        if landmarks.len() != window_follow::LANDMARK_COUNT {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        let (id, identity) = self
+            .0
+            .state
+            .lock()
+            .expect("pairing state")
+            .session
+            .as_ref()
+            .filter(|session| session.authorizes(&secret) && session.usable())
+            .and_then(|session| session.capture.window_id())
+            .ok_or(StatusCode::CONFLICT)?;
+        let permitted = self
+            .0
+            .window_sample
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| StatusCode::CONFLICT)?;
+        let observation = tokio::task::spawn_blocking(move || {
+            let _permit = permitted;
+            let before =
+                window_follow::observe(id).filter(|observed| observed.identity == identity)?;
+            if !window_follow::matches(id, &landmarks) {
+                return None;
+            }
+            window_follow::observe(id)
+                .filter(|current| current.identity == identity && current.bounds == before.bounds)
+        })
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let Some(observed) = observation else {
+            return Ok(StatusCode::NO_CONTENT.into_response());
+        };
+
+        let mut state = self.0.state.lock().expect("pairing state");
+        let capture = &mut state
+            .session
+            .as_mut()
+            .filter(|session| session.authorizes(&secret) && session.usable())
+            .ok_or(StatusCode::UNAUTHORIZED)?
+            .capture;
+        capture
+            .record_window_match(observed, width, height)
+            .map_err(|_| StatusCode::CONFLICT)?;
+        Ok(Json(serde_json::json!({"matched":true})).into_response())
     }
 
     pub fn select_monitor(&self, bounds: Rect) -> Result<(), ()> {
@@ -404,14 +501,23 @@ impl Pairing {
                 .ok_or(StatusCode::UNAUTHORIZED)
                 .and_then(|session| {
                     let capture = &mut session.capture;
-                    if !capture.projection_is_current(&owner) {
-                        capture.fail(&owner);
+                    if !matches!(action, Exchange::ProbeAbort | Exchange::WindowProbeStart)
+                        && !capture.projection_is_current(&owner)
+                    {
+                        if capture.window_id().is_some() {
+                            capture.await_window(&owner);
+                        } else {
+                            capture.fail(&owner);
+                        }
                         return Err(StatusCode::CONFLICT);
                     }
                     match action {
                         Exchange::ProbeStart => {
                             capture.start(&owner).map(|spec| Json(spec).into_response())
                         }
+                        Exchange::WindowProbeStart => capture
+                            .start_window_probe(&owner)
+                            .map(|spec| Json(spec).into_response()),
                         Exchange::ProbeProtect { nonce } => capture
                             .protect(&owner, &nonce)
                             .map(|()| StatusCode::NO_CONTENT.into_response()),
@@ -419,7 +525,11 @@ impl Pairing {
                             .complete(&owner, &nonce)
                             .map(|()| StatusCode::NO_CONTENT.into_response()),
                         Exchange::ProbeAbort => {
-                            capture.fail(&owner);
+                            if capture.window_id().is_some() {
+                                capture.await_window(&owner);
+                            } else {
+                                capture.fail(&owner);
+                            }
                             Ok(StatusCode::NO_CONTENT.into_response())
                         }
                         _ => Err(()),
@@ -783,9 +893,20 @@ async fn exchange(
     Json(exchange): Json<Exchange>,
 ) -> Result<Response, StatusCode> {
     let secret = bearer(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    if let Exchange::WindowSample {
+        width,
+        height,
+        landmarks,
+    } = exchange
+    {
+        return pairing
+            .sample_window(secret.to_owned(), width, height, landmarks)
+            .await;
+    }
     if matches!(
         exchange,
         Exchange::ProbeStart
+            | Exchange::WindowProbeStart
             | Exchange::ProbeProtect { .. }
             | Exchange::ProbeComplete { .. }
             | Exchange::ProbeAbort
@@ -804,13 +925,14 @@ async fn exchange(
             surface,
             width,
             height,
+            window_id,
         } => {
             if !session.usable() {
                 return Err(StatusCode::CONFLICT);
             }
             session
                 .capture
-                .describe(&surface, width, height)
+                .describe(&surface, width, height, window_id.as_deref())
                 .map_err(|()| StatusCode::CONFLICT)?;
         }
         Exchange::Scene {
@@ -833,9 +955,11 @@ async fn exchange(
                 .map_err(|()| StatusCode::CONFLICT)?;
         }
         Exchange::ProbeStart
+        | Exchange::WindowProbeStart
         | Exchange::ProbeProtect { .. }
         | Exchange::ProbeComplete { .. }
-        | Exchange::ProbeAbort => {
+        | Exchange::ProbeAbort
+        | Exchange::WindowSample { .. } => {
             return Err(StatusCode::BAD_REQUEST);
         }
         Exchange::Refresh {

@@ -227,10 +227,12 @@ impl DeviceConnection {
                 registration.registered = true;
                 save(&target, &registration)?;
             }
+            let mut received_state = false;
             let result = timeout(
                 REATTACH_INTERVAL,
                 attachment::receive(ticket.ticket, key.clone(), |frame| {
                     if frame.get("type").and_then(Value::as_str) == Some("annotation_state") {
+                        received_state = true;
                         accepted = true;
                         until = Instant::now() + REQUEST_LIFETIME;
                         let mut state = self.0.lock().expect("device connection");
@@ -243,7 +245,7 @@ impl DeviceConnection {
                 }),
             )
             .await;
-            if matches!(result, Ok(Err(_))) || !accepted {
+            if matches!(result, Ok(Err(_))) || !received_state {
                 return Err("Chalk Sync did not accept the device attachment.");
             }
         }

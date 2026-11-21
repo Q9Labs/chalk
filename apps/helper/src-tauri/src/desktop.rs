@@ -89,6 +89,7 @@ pub struct View {
     connected: bool,
     live_drawing_available: bool,
     monitors: Vec<String>,
+    can_follow_window: bool,
     overlay: Option<live::Overlay>,
     update_status: Option<&'static str>,
     device: Option<DeviceView>,
@@ -103,6 +104,7 @@ pub enum Action {
     ForgetDevice,
     DecidePairing { fingerprint: String, allowed: bool },
     SelectMonitor { index: usize },
+    FollowWindow,
     ToggleLiveDraw,
     ChangeColor { color: PenColor },
     ToggleDraw,
@@ -259,7 +261,11 @@ fn floating(app: &AppHandle, label: &str, focusable: bool) -> tauri::Result<Webv
     Ok(window)
 }
 
-pub(crate) fn show_live_overlay(app: &AppHandle, bounds: Rect) -> tauri::Result<()> {
+pub(crate) fn show_live_overlay(
+    app: &AppHandle,
+    bounds: Rect,
+    protected: bool,
+) -> tauri::Result<()> {
     let overlay = match app.get_webview_window(live::OVERLAY) {
         Some(overlay) => overlay,
         None => window(app, live::OVERLAY)
@@ -275,7 +281,11 @@ pub(crate) fn show_live_overlay(app: &AppHandle, bounds: Rect) -> tauri::Result<
             .visible(false)
             .build()?,
     };
-    overlay.set_content_protected(false)?;
+    if protected {
+        verify_capture_affinity(&overlay)?;
+    } else {
+        overlay.set_content_protected(false)?;
+    }
     place(&overlay, bounds)?;
     overlay.set_ignore_cursor_events(true)?;
     let size = overlay.inner_size()?;
@@ -595,6 +605,7 @@ fn allowed(label: &str, action: &Action) -> bool {
         | Action::StartDeviceCode
         | Action::ForgetDevice
         | Action::DecidePairing { .. }
+        | Action::FollowWindow
         | Action::SelectMonitor { .. }
         | Action::ToggleLiveDraw => label == "settings",
         Action::ChangeColor { .. } => label == "draw-bar",
@@ -631,6 +642,8 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
             .then(|| local.pairing.as_ref()?.fingerprint())
             .flatten(),
         connected: local.pairing.as_ref().is_some_and(Pairing::connected),
+        can_follow_window: window.label() == "settings"
+            && local.pairing.as_ref().is_some_and(Pairing::offers_window),
         monitors: if window.label() == "settings"
             && local.pairing.as_ref().is_some_and(Pairing::offers_monitors)
         {
@@ -717,6 +730,13 @@ pub fn act(
             if let Some(pairing) = local.pairing.as_ref() {
                 pairing.decide(&fingerprint, allowed);
             }
+            return Ok(());
+        }
+        Action::FollowWindow => {
+            let pairing = local.pairing.clone().ok_or("No Helper session.")?;
+            drop(local);
+            pairing.enable_follow().map_err(str::to_owned)?;
+            let _ = window.hide();
             return Ok(());
         }
         Action::SelectMonitor { index } => {

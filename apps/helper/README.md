@@ -1,6 +1,6 @@
 # Run Chalk Helper for development
 
-The fixture runs without a call or browser pairing. The managed integration is opt-in and supports Chromium monitor shares only. Use the annotated preview or Document Picture-in-Picture when pairing or calibration fails. Window and tab projection and device-code sign-in are not available.
+The fixture runs without a call or browser pairing. Managed desktop ink requires a verified Chromium monitor or window share. Use the annotated preview or Document Picture-in-Picture when Helper cannot verify the source or exclude its ink from the outgoing video.
 
 ## Build and run
 
@@ -40,8 +40,13 @@ Set these build-time values before you build Helper:
 - `CHALK_HELPER_WEB_ORIGIN`: the exact Chalk HTTPS Origin, also allowed by the managed API.
 - `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY`: the base64url, unpadded Ed25519 public key for the managed Sync token issuer. Do not copy its private key to a Helper machine.
 - `CHALK_HELPER_SYNC_ORIGIN`: the exact WSS Origin for Sync, without a path or query.
+- `CHALK_HELPER_API_ORIGIN`: the exact HTTPS Origin for the managed API, without a path or query. This enables device-code sign-in.
 
 Set `VITE_CHALK_HELPER_INSTALL_URL` in the web app to enable the Helper offer. Run Helper without `--fixture`. In a call, share your monitor, compare the codes shown in the browser and Helper, and select the actual shared display in Helper. The browser briefly disables the outgoing track while it reads three landmarks from a local clone. Helper enables ink only after it verifies the OS protection setting and the browser confirms that the landmarks disappeared. If you see **Draw one mark**, click it to draw a fading mark on the selected display. Helper sends that mark through the same call and returns to click-through mode.
+
+For a window share, choose **Follow captured window** in Helper. The classic Chromium picker must identify the native window and the browser preview must match three locally sampled landmarks. Protected ink moves with the window. Helper hides ink when the window minimizes, moves off the current desktop, is substantially covered, or needs recalibration after a resize. A monitor share stays on the selected display; ink does not follow individual windows inside it. Tab shares and opaque native picker sessions use the preview. Helper does not request Accessibility. On macOS the native sample requires existing Screen Recording permission.
+
+If loopback is unavailable, choose **Get a device code** in Helper. Open the Helper controls on the signed-in browser that's sharing, enter that code, and compare the fingerprints before approving. Helper stores the credential in Keychain or Windows Credential Manager. Device-code attachment does not establish local calibration: keep using the browser preview for marks. Disconnect the current share with **Disconnect** or revoke the persistent registration under **Dashboard → Apps → Chalk Helper devices**.
 
 The local listener binds only `127.0.0.1:47361`. It requires the exact Origin and Host, a signed single-use pair ticket, and native consent. It renews the lease with fresh tickets while its browser and publication stay current. The remote Sync ticket has a separate audience and uses an Ed25519 proof bound to the server socket nonce.
 
