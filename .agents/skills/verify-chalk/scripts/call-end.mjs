@@ -11,6 +11,8 @@ import { runJourney } from "./journey.mjs";
 const wait = 60_000;
 // A deadline cannot sit within a minute of the start, and the server ends the call on its own schedule.
 const endWait = 120_000;
+// A guest without Sync notices learns of the end at its next scheduled access refresh, a few minutes after joining.
+const deafEndWait = 420_000;
 
 await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot, system, seed, web, people }) => {
   const host = await person("EndHost", 1);
@@ -63,7 +65,7 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   const ended = people.map((who) =>
     (async () => {
       const heading = who.page.getByRole("heading", { name: "The call reached its time limit", exact: true });
-      const deadline = Date.now() + endWait;
+      const deadline = Date.now() + (who === deaf ? deafEndWait : endWait);
       while (Date.now() < deadline) {
         for (const text of ["Reconnecting", "Connection lost"]) if (await who.page.getByText(text, { exact: false }).first().isVisible().catch(() => false)) seen.get(who.name).add(text);
         if (await heading.isVisible().catch(() => false)) return true;
@@ -78,7 +80,8 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
     await step(`${who.name} sees that the call has ended`, async () => {
       await shot(who, "time-limit-ended");
       if (!results[index]) throw new Error(`${who.name} never saw "The call reached its time limit"; saw ${[...seen.get(who.name)].join(", ") || "nothing else"}`);
-      if (seen.get(who.name).size) throw new Error(`${who.name} saw ${[...seen.get(who.name)].join(" and ")} before the ended screen`);
+      const forbidden = [...seen.get(who.name)].filter((text) => text === "Connection lost" || who !== deaf);
+      if (forbidden.length) throw new Error(`${who.name} saw ${forbidden.join(" and ")} before the ended screen`);
     });
   }
 
