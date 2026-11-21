@@ -23,8 +23,10 @@ export const symptom = "video.camera_stopped";
 const CALL_ENDED_MS = 10_000;
 /** How long after a reconnected transition the camera may take to come back and still be expected. */
 const RECONNECT_GRACE_MS = 10_000;
-/** Triggers that mean the participant or the lifecycle released the camera on purpose. */
-const DELIBERATE = new Set(["released", "unbound", "cleared", "cancelled", "device_switched"]);
+/** Triggers that only the leave/teardown path emits; they end the camera whoever asked for it. */
+const LIFECYCLE = new Set(["cleared", "cancelled"]);
+/** Triggers that end the camera on a product decision; intent tells whether the person asked. */
+const CONSENT = new Set(["released", "unbound", "device_switched"]);
 
 export const expected = "a live+bound camera stays live until a released/unbound/cleared/cancelled trigger the intent asked for, or the Episode's end";
 
@@ -47,23 +49,26 @@ export function decide({ readings }) {
 
   if (camera.kind !== "present") return { status: "unknown", reason: "the camera machine is not witnessed for this seat" };
 
-  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim: camera_bound).
-  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(byTime);
-  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(byTime);
-  const boundAt = (ms) => {
-    const b = bounds.filter((o) => o.window.from_ms <= ms).at(-1);
+  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim:
+  // camera_bound). Bound rows follow their transition's emit, so ordering is by seq, not wall time.
+  const bySeq = (a, b) => (a.value.seq ?? 0) - (b.value.seq ?? 0);
+  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(bySeq);
+  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(bySeq);
+  /** The bound bit as of just before seq `limit`. */
+  const boundBefore = (limit) => {
+    const b = bounds.filter((o) => (o.value.seq ?? 0) < limit).at(-1);
     return b !== undefined && b.claim === "true";
   };
   const last = transitions[transitions.length - 1];
-  /** Was the camera live with the bound bit true in the stretch that ended at `ms`? */
-  const liveBoundAt = (i) => transitions[i].claim === "live" && boundAt(i + 1 < transitions.length ? transitions[i + 1].window.from_ms : last.window.to_ms);
+  /** Was the camera live with the bound bit true in the stretch ending at transition `i + 1`? */
+  const liveBoundAt = (i) => transitions[i].claim === "live" && boundBefore(i + 1 < transitions.length ? (transitions[i + 1].value.seq ?? 0) : Number.MAX_SAFE_INTEGER);
   const everLive = transitions.some((o, i) => liveBoundAt(i));
   if (!everLive) return { status: "pass" };
 
   // The stop: the first transition that leaves a live+bound stretch, and stays out of live+bound.
   let stop = null;
   for (const [i, o] of transitions.entries()) {
-    if (i === 0 || transitions[i - 1].claim !== "live" || !boundAt(o.window.from_ms)) continue;
+    if (i === 0 || transitions[i - 1].claim !== "live" || !boundBefore(o.value.seq ?? 0)) continue;
     const back = transitions.slice(i + 1).some((n, j) => liveBoundAt(i + 1 + j));
     if (!back) { stop = o; break; }
   }
@@ -89,9 +94,10 @@ export function decide({ readings }) {
   const intentOff = intent.kind === "present" && intent.observations.some((o) => o.claim === "false" && o.value.source === "camera" && o.window.from_ms <= at);
   const intentOn = intent.kind === "present" && intent.observations.some((o) => o.claim === "true" && o.value.source === "camera" && o.window.from_ms <= at);
   const trigger = String(stop.value.trigger ?? "");
-  // A deliberate trigger names the product path that ended the camera; it is a fault only when the
-  // participant's intent said the camera should still be on.
-  const deliberate = DELIBERATE.has(trigger);
+  // A lifecycle trigger is the leave path's own ending. A consent trigger names a product decision;
+  // it is a fault only when the participant's intent said the camera should still be on.
+  const lifecycle = LIFECYCLE.has(trigger);
+  const consent = CONSENT.has(trigger);
 
   if (ended) {
     return {
@@ -111,7 +117,7 @@ export function decide({ readings }) {
       falsify: { absence: null, attribution: "the Episode continuing while the camera stayed down" },
     };
   }
-  if (deliberate && !intentOn) return { status: "pass" };
+  if (lifecycle || (consent && !intentOn)) return { status: "pass" };
 
   return {
     status: "finding",

@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "873f7f8dc427",
+  "schema_ver": "208f5d9b7bc6",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -320,7 +320,7 @@
             {
               "event": "video.camera",
               "source": "client",
-              "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+              "fields": ["to_state", "from_state", "trigger"]
             },
             {
               "event": "video.camera_bound",
@@ -338,18 +338,6 @@
               "event": "video.camera_track_muted",
               "source": "client",
               "fields": ["muted"]
-            }
-          ]
-        },
-        {
-          "fact": "video.camera_capture",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "video.camera_capture",
-              "source": "client",
-              "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "permission_probe", "policy_allows", "policy_probe", "duration_ms"]
             }
           ]
         },
@@ -410,16 +398,6 @@
           ]
         },
         {
-          "name": "video.camera_capture",
-          "fields": ["capture_error_name", "permission_before", "permission_after", "permission_probe", "policy_allows", "policy_probe"],
-          "emit_sites": [
-            {
-              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
-              "literal": "video.camera_capture"
-            }
-          ]
-        },
-        {
           "name": "sync.media.intent",
           "fields": ["operation_id", "source", "enabled"],
           "emit_sites": [
@@ -463,7 +441,7 @@
             {
               "event": "video.camera_capture",
               "source": "client",
-              "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "permission_probe", "policy_allows", "policy_probe", "duration_ms"]
+              "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "policy_allows", "duration_ms"]
             }
           ]
         },
@@ -475,7 +453,7 @@
             {
               "event": "video.camera",
               "source": "client",
-              "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+              "fields": ["to_state", "from_state", "trigger"]
             },
             {
               "event": "video.camera_bound",
@@ -504,7 +482,7 @@
             {
               "event": "video.media_state",
               "source": "client",
-              "fields": ["media_state_code", "device_state", "source"]
+              "fields": ["device_state"]
             }
           ]
         },
@@ -517,18 +495,6 @@
               "event": "sync.media.intent",
               "source": "sync",
               "fields": ["enabled", "source", "operation_id"]
-            }
-          ]
-        },
-        {
-          "fact": "video.camera_track_muted",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "video.camera_track_muted",
-              "source": "client",
-              "fields": ["muted"]
             }
           ]
         },
@@ -603,16 +569,6 @@
             {
               "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
               "literal": "sync.media.intent"
-            }
-          ]
-        },
-        {
-          "name": "video.camera_track_muted",
-          "fields": ["muted"],
-          "emit_sites": [
-            {
-              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
-              "literal": "video.camera_track_muted"
             }
           ]
         },
@@ -1278,7 +1234,7 @@
             {
               "event": "video.camera",
               "source": "client",
-              "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+              "fields": ["to_state", "from_state", "trigger"]
             },
             {
               "event": "video.camera_bound",

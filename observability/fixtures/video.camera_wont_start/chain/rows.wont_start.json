@@ -10,6 +10,28 @@
     "space_id": "d1000000-0000-4000-8000-000000000001",
     "tenant_id": "c1000000-0000-4000-8000-000000000001",
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "device_state": "idle",
+    "module": "sdk",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "kind": "fact",
+    "name": "video.media_state",
+    "event_id": "00000000-0000-4000-8000-000000000020",
+    "seq": 6
+  },
+  {
+    "clock_state": "unsynced",
+    "env": "test",
+    "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "est_server_ms": 1795599001000,
+    "generation": 1,
+    "participant_id": "a1000000-0000-4000-8000-000000000001",
+    "source_id": "e1000000-0000-4000-8000-000000000001",
+    "space_id": "d1000000-0000-4000-8000-000000000001",
+    "tenant_id": "c1000000-0000-4000-8000-000000000001",
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "platform": "web",
     "client_mono_ms": 1000,
@@ -35,6 +57,28 @@
     "space_id": "d1000000-0000-4000-8000-000000000001",
     "tenant_id": "c1000000-0000-4000-8000-000000000001",
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "camera_bound": false,
+    "module": "sdk",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "kind": "fact",
+    "name": "video.camera_bound",
+    "event_id": "00000000-0000-4000-8000-000000000006",
+    "seq": 1
+  },
+  {
+    "clock_state": "unsynced",
+    "env": "test",
+    "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "est_server_ms": 1795599001000,
+    "generation": 1,
+    "participant_id": "a1000000-0000-4000-8000-000000000001",
+    "source_id": "e1000000-0000-4000-8000-000000000001",
+    "space_id": "d1000000-0000-4000-8000-000000000001",
+    "tenant_id": "c1000000-0000-4000-8000-000000000001",
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "platform": "web",
     "client_mono_ms": 1000,
@@ -46,8 +90,8 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000006",
-    "seq": 1
+    "event_id": "00000000-0000-4000-8000-000000000007",
+    "seq": 2
   },
   {
     "clock_state": "synced",
@@ -72,8 +116,8 @@
     "trigger": "capture_requested",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000031",
-    "seq": 16
+    "event_id": "00000000-0000-4000-8000-000000000033",
+    "seq": 17
   },
   {
     "clock_state": "synced",
@@ -88,6 +132,7 @@
     "client_session_id": "00000000-0000-4000-8000-000000000004",
     "device_kind": "camera",
     "capture_error_name": "NotFoundError",
+    "permission_state": "granted",
     "module": "sdk",
     "platform": "web",
     "client_mono_ms": 1080,
@@ -96,8 +141,8 @@
     "clock_err_ms": 20,
     "kind": "fact",
     "name": "video.device_failed",
-    "event_id": "00000000-0000-4000-8000-000000000034",
-    "seq": 18
+    "event_id": "00000000-0000-4000-8000-000000000036",
+    "seq": 19
   },
   {
     "clock_state": "synced",
@@ -110,9 +155,10 @@
     "space_id": "d1000000-0000-4000-8000-000000000001",
     "tenant_id": "c1000000-0000-4000-8000-000000000001",
     "client_session_id": "00000000-0000-4000-8000-000000000004",
-    "permission_probe": "no_permissions_api",
-    "policy_probe": "no_policy_api",
+    "permission_before": "granted",
+    "policy_allows": true,
     "capture_error_name": "NotFoundError",
+    "permission_after": "granted",
     "module": "sdk",
     "platform": "web",
     "client_mono_ms": 1080,
@@ -122,11 +168,11 @@
     "outcome": "error",
     "reason_code": "video.device_not_found",
     "duration_ms": 0,
-    "op_id": "00000000-0000-4000-8000-000000000032",
+    "op_id": "00000000-0000-4000-8000-000000000034",
     "kind": "op",
     "name": "video.camera_capture",
-    "event_id": "00000000-0000-4000-8000-000000000035",
-    "seq": 19
+    "event_id": "00000000-0000-4000-8000-000000000037",
+    "seq": 20
   },
   {
     "clock_state": "synced",
@@ -151,8 +197,8 @@
     "trigger": "released",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000036",
-    "seq": 20
+    "event_id": "00000000-0000-4000-8000-000000000038",
+    "seq": 21
   },
   {
     "clock_state": "synced",
@@ -177,7 +223,7 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000037",
-    "seq": 21
+    "event_id": "00000000-0000-4000-8000-000000000039",
+    "seq": 22
   }
 ]

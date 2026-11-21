@@ -40,7 +40,7 @@ export function decide({ readings }) {
   const capture = readings["video.camera_capture"];
   const camera = readings["video.camera_state"];
   const intent = readings["video.capture_intent"];
-  const muted = readings["video.camera_track_muted"];
+  const muted = readings["video.camera_track_muted"] ?? { kind: "absent", observations: [] };
   const effects = readings["video.camera_effects"];
   const device = readings["video.device_failure"];
   const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
@@ -50,11 +50,14 @@ export function decide({ readings }) {
     return { status: "unknown", reason: "no capture op or camera transition is witnessed for this seat" };
   }
 
-  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim: camera_bound).
-  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(byTime);
-  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(byTime);
-  const boundAt = (ms) => {
-    const b = bounds.filter((o) => o.window.from_ms <= ms).at(-1);
+  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim:
+  // camera_bound). Bound rows follow their transition's emit, so ordering is by seq, not wall time.
+  const bySeq = (a, b) => (a.value.seq ?? 0) - (b.value.seq ?? 0);
+  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(bySeq);
+  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(bySeq);
+  /** The bound bit as of just before seq `limit`. */
+  const boundBefore = (limit) => {
+    const b = bounds.filter((o) => (o.value.seq ?? 0) < limit).at(-1);
     return b !== undefined && b.claim === "true";
   };
   const ops = [...capture.observations].sort(byTime);
@@ -68,7 +71,7 @@ export function decide({ readings }) {
   }
 
   // A live stretch was bound when the bound bit read true at any point before it left live.
-  const liveBound = transitions.some((o, i) => o.claim === "live" && boundAt(i + 1 < transitions.length ? transitions[i + 1].window.from_ms : at));
+  const liveBound = transitions.some((o, i) => o.claim === "live" && boundBefore(i + 1 < transitions.length ? (transitions[i + 1].value.seq ?? 0) : Number.MAX_SAFE_INTEGER));
   if (liveBound) return { status: "pass" };
   if (!transitions.some((o) => o.claim === "capturing")) return { status: "unknown", reason: "the camera never entered capturing" };
 
@@ -77,7 +80,7 @@ export function decide({ readings }) {
   const refusal = ops.find((o) => o.claim === "expected" && o.value.reason_code === "video.permission_denied");
   const ended = episodeEnded.kind === "present" && episodeEnded.observations.some((o) => Math.abs(o.window.from_ms - at) <= CALL_ENDED_MS);
 
-  const effectsRow = effects.kind === "present" ? effects.observations.find((o) => o.claim === "media_capture_failed") : null;
+  const effectsRow = effects.kind === "present" ? effects.observations.find((o) => o.claim === "failed" && o.value.media_state_code === "media_capture_failed") : null;
   const deviceRow = device.kind === "present" ? device.observations.find((o) => o.claim === "camera") : null;
   const mutedRow = muted.kind === "present" ? muted.observations.find((o) => o.claim === "true") : null;
   const intentOff = intent.kind === "present" && intent.observations.some((o) => o.claim === "false" && o.value.source === "camera");

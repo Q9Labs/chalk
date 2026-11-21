@@ -181,6 +181,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
   readonly #requestGenerations = new Map<string, number>();
   #camera: CameraState = { status: "idle" };
+  #cameraBoundEmitted: boolean | null = null;
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
   #ports: ConnectionPorts | null = null;
   #screenAudioTrack: MediaStreamTrack | null = null;
@@ -1075,10 +1076,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
     this.#camera = next;
     const obs = this.#obs();
-    if (previous.status !== next.status) {
-      obs?.transition("video.camera", previous.status, next.status, trigger);
-      if (this.#cameraBound(next)) obs?.fact("video.camera_bound", { camera_bound: true });
-    } else if (this.#cameraBound(previous) !== this.#cameraBound(next)) obs?.fact("video.camera_bound", { camera_bound: this.#cameraBound(next) });
+    if (previous.status !== next.status) obs?.transition("video.camera", previous.status, next.status, trigger);
+    const bound = this.#cameraBound(next);
+    if (bound !== this.#cameraBoundEmitted) {
+      this.#cameraBoundEmitted = bound;
+      obs?.fact("video.camera_bound", { camera_bound: bound });
+    }
     if (!sameOwner && "owner" in previous) {
       previous.owner.cancel();
       if (previous.status === "live") this.#selection.releaseTrack(previous.track);
@@ -1128,6 +1131,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (state.status === "live" && state.track !== track) throw this.#cancelledCaptureError();
     const onEnded = () => this.#handleCameraEnded(track);
     const onMuted = () => this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
+    this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded, onMuted }, "captured");
   }
   #handleCameraEnded(track: MediaStreamTrack): void {
@@ -1243,6 +1247,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               }
               const onEnded = () => this.#handleCameraEnded(track);
               const onMuted = () => this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
+              this.#obs()?.fact("video.camera_track_muted", { muted: track.muted });
               this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded, onMuted }, "captured");
               if (track.readyState !== "live") {
                 this.#transitionCamera({ status: "ended" }, "capture_not_live");
@@ -1402,7 +1407,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
           obs.fact("video.device_failed", {
             device_kind: "camera",
             capture_error_name: errorNameOf(cause),
-            ...(typeof fields.permission_after === "string" ? { permission_state: fields.permission_after === "denied" ? "denied" : "unknown" } : {}),
+            ...(typeof fields.permission_after === "string" ? { permission_state: fields.permission_after === "denied" || fields.permission_after === "granted" || fields.permission_after === "prompt" ? fields.permission_after : "unknown" } : {}),
           });
           // A refusal is expected(video.permission_denied) only when the probes show the person chose it: the
           // permission is denied, the block is not the system's, and no policy forbids camera.

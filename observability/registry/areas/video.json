@@ -1875,8 +1875,7 @@
           "fields": [
             "to_state",
             "from_state",
-            "trigger",
-            "camera_bound"
+            "trigger"
           ]
         },
         {
@@ -1908,9 +1907,7 @@
             "capture_error_name",
             "permission_before",
             "permission_after",
-            "permission_probe",
             "policy_allows",
-            "policy_probe",
             "duration_ms"
           ]
         }
@@ -1941,19 +1938,17 @@
       "name": "video.camera_effects",
       "kind": "event",
       "per": "seat",
-      "doc": "A camera-effects path failure; only code=media_capture_failed counts. Claim: media_state_code.",
+      "doc": "A media-plane diagnostic row; only device_state=failed counts. Claim: device_state.",
       "events": [
         {
           "event": "video.media_state",
           "source": "client",
-          "claim": "media_state_code",
+          "claim": "device_state",
           "failure_claims": [
-            "media_capture_failed"
+            "failed"
           ],
           "fields": [
-            "media_state_code",
-            "device_state",
-            "source"
+            "device_state"
           ]
         }
       ]
@@ -2489,15 +2484,6 @@
           "doc": "Whether the participant actually asked for the camera."
         },
         {
-          "fact": "video.camera_track_muted",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "video.camera_track_muted rows for {participant}",
-          "doc": "A muted camera."
-        },
-        {
           "fact": "video.episode_ended",
           "from": [
             "sync"
@@ -2536,15 +2522,6 @@
           "required": false,
           "query": "video.camera_track_muted rows for {participant}",
           "doc": "A mute the trigger can't explain."
-        },
-        {
-          "fact": "video.camera_capture",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "kernel video.camera_capture rows for {participant}",
-          "doc": "A capture op that ended it."
         },
         {
           "fact": "video.capture_intent",

@@ -1,6 +1,21 @@
 [
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "device_state": "idle",
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "clock_state": "unsynced",
+    "kind": "fact",
+    "name": "video.media_state",
+    "event_id": "00000000-0000-4000-8000-000000000020",
+    "seq": 6
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -19,6 +34,21 @@
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "camera_bound": false,
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "clock_state": "unsynced",
+    "kind": "fact",
+    "name": "video.camera_bound",
+    "event_id": "00000000-0000-4000-8000-000000000006",
+    "seq": 1
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -32,8 +62,8 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000006",
-    "seq": 1
+    "event_id": "00000000-0000-4000-8000-000000000007",
+    "seq": 2
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -52,13 +82,14 @@
     "trigger": "capture_requested",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000031",
-    "seq": 16
+    "event_id": "00000000-0000-4000-8000-000000000033",
+    "seq": 17
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
     "device_kind": "camera",
     "capture_error_name": "NotFoundError",
+    "permission_state": "granted",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -70,14 +101,15 @@
     "clock_err_ms": 20,
     "kind": "fact",
     "name": "video.device_failed",
-    "event_id": "00000000-0000-4000-8000-000000000034",
-    "seq": 18
+    "event_id": "00000000-0000-4000-8000-000000000036",
+    "seq": 19
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
-    "permission_probe": "no_permissions_api",
-    "policy_probe": "no_policy_api",
+    "permission_before": "granted",
+    "policy_allows": true,
     "capture_error_name": "NotFoundError",
+    "permission_after": "granted",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -90,11 +122,11 @@
     "outcome": "error",
     "reason_code": "video.device_not_found",
     "duration_ms": 0,
-    "op_id": "00000000-0000-4000-8000-000000000032",
+    "op_id": "00000000-0000-4000-8000-000000000034",
     "kind": "op",
     "name": "video.camera_capture",
-    "event_id": "00000000-0000-4000-8000-000000000035",
-    "seq": 19
+    "event_id": "00000000-0000-4000-8000-000000000037",
+    "seq": 20
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -113,8 +145,8 @@
     "trigger": "released",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000036",
-    "seq": 20
+    "event_id": "00000000-0000-4000-8000-000000000038",
+    "seq": 21
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -133,7 +165,7 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000037",
-    "seq": 21
+    "event_id": "00000000-0000-4000-8000-000000000039",
+    "seq": 22
   }
 ]

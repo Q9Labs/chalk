@@ -72,10 +72,17 @@ function rowsFor(/** @type {string} */ code, /** @type {string} */ run) {
   return { path: out, rows: stamped };
 }
 
-/** Builds or verifies a symptom's fixture from its stamped chain rows. */
+/** The Sync hop's stored rows: intent and Episode end, already in ledger shape. */
+function syncRows(/** @type {string} */ code) {
+  const path = `${CHAIN(code)}/sync-rows.json`;
+  return { path, rows: read(path) };
+}
+
+/** Builds or verifies a symptom's fixture from its stamped chain rows plus the Sync hop's rows. */
 function fixture(/** @type {string} */ code, /** @type {"positive" | "healthy"} */ kind, /** @type {string} */ run, /** @type {string} */ description) {
-  const { path, rows } = rowsFor(code, run);
-  const fixture = { description, asof_ms: WINDOW.to_ms, declaration: DECLARATION, chain: [path], rows };
+  const client = rowsFor(code, run);
+  const sync = syncRows(code);
+  const fixture = { description, asof_ms: WINDOW.to_ms, declaration: DECLARATION, chain: [client.path, sync.path], rows: [...client.rows, ...sync.rows] };
   const file = `observability/fixtures/${code}/${kind}.json`;
   const text = `${JSON.stringify(fixture, null, 2)}\n`;
   if (process.env.CHALK_CHAIN_WRITE === "1") writeFileSync(new URL(file, root), text);

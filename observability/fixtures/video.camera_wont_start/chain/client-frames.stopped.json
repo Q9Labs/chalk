@@ -1,6 +1,39 @@
 [
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "device_state": "idle",
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "clock_state": "unsynced",
+    "kind": "fact",
+    "name": "video.media_state",
+    "event_id": "00000000-0000-4000-8000-000000000020",
+    "seq": 6
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "clock_state": "unsynced",
+    "machine": "video.camera",
+    "from_state": "idle",
+    "to_state": "capturing",
+    "trigger": "capture_requested",
+    "kind": "transition",
+    "name": "video.camera",
+    "event_id": "00000000-0000-4000-8000-000000000031",
+    "seq": 17
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -19,6 +52,21 @@
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "camera_bound": false,
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1000,
+    "client_wall_ms": 1795599001000,
+    "clock_epoch": 0,
+    "clock_state": "unsynced",
+    "kind": "fact",
+    "name": "video.camera_bound",
+    "event_id": "00000000-0000-4000-8000-000000000006",
+    "seq": 1
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -32,33 +80,13 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000006",
-    "seq": 1
+    "event_id": "00000000-0000-4000-8000-000000000007",
+    "seq": 2
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
-    "module": "sdk",
-    "env": "test",
-    "platform": "web",
-    "client_mono_ms": 1080,
-    "client_wall_ms": 1795599001080,
-    "clock_epoch": 0,
-    "clock_state": "synced",
-    "est_server_ms": 1795600000020,
-    "clock_err_ms": 20,
-    "machine": "video.camera",
-    "from_state": "idle",
-    "to_state": "capturing",
-    "trigger": "capture_requested",
-    "kind": "transition",
-    "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000031",
-    "seq": 16
-  },
-  {
-    "client_session_id": "00000000-0000-4000-8000-000000000004",
-    "permission_probe": "no_permissions_api",
-    "policy_probe": "no_policy_api",
+    "permission_before": "granted",
+    "policy_allows": true,
     "module": "sdk",
     "env": "test",
     "platform": "web",
@@ -70,11 +98,28 @@
     "clock_err_ms": 20,
     "outcome": "ok",
     "duration_ms": 0,
-    "op_id": "00000000-0000-4000-8000-000000000032",
+    "op_id": "00000000-0000-4000-8000-000000000034",
     "kind": "op",
     "name": "video.camera_capture",
-    "event_id": "00000000-0000-4000-8000-000000000033",
-    "seq": 17
+    "event_id": "00000000-0000-4000-8000-000000000035",
+    "seq": 18
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "muted": false,
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1080,
+    "client_wall_ms": 1795599001080,
+    "clock_epoch": 0,
+    "clock_state": "synced",
+    "est_server_ms": 1795600000020,
+    "clock_err_ms": 20,
+    "kind": "fact",
+    "name": "video.camera_track_muted",
+    "event_id": "00000000-0000-4000-8000-000000000036",
+    "seq": 19
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -93,8 +138,25 @@
     "trigger": "captured",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000034",
-    "seq": 18
+    "event_id": "00000000-0000-4000-8000-000000000037",
+    "seq": 20
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "muted": false,
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1080,
+    "client_wall_ms": 1795599001080,
+    "clock_epoch": 0,
+    "clock_state": "synced",
+    "est_server_ms": 1795600000020,
+    "clock_err_ms": 20,
+    "kind": "fact",
+    "name": "video.camera_track_muted",
+    "event_id": "00000000-0000-4000-8000-000000000038",
+    "seq": 21
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -110,8 +172,8 @@
     "clock_err_ms": 20,
     "kind": "fact",
     "name": "video.camera_bound",
-    "event_id": "00000000-0000-4000-8000-000000000035",
-    "seq": 19
+    "event_id": "00000000-0000-4000-8000-000000000039",
+    "seq": 22
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -130,8 +192,25 @@
     "trigger": "track_ended",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000036",
-    "seq": 20
+    "event_id": "00000000-0000-4000-8000-000000000040",
+    "seq": 23
+  },
+  {
+    "client_session_id": "00000000-0000-4000-8000-000000000004",
+    "camera_bound": false,
+    "module": "sdk",
+    "env": "test",
+    "platform": "web",
+    "client_mono_ms": 1080,
+    "client_wall_ms": 1795599001080,
+    "clock_epoch": 0,
+    "clock_state": "synced",
+    "est_server_ms": 1795600000020,
+    "clock_err_ms": 20,
+    "kind": "fact",
+    "name": "video.camera_bound",
+    "event_id": "00000000-0000-4000-8000-000000000041",
+    "seq": 24
   },
   {
     "client_session_id": "00000000-0000-4000-8000-000000000004",
@@ -150,7 +229,7 @@
     "trigger": "cleared",
     "kind": "transition",
     "name": "video.camera",
-    "event_id": "00000000-0000-4000-8000-000000000037",
-    "seq": 21
+    "event_id": "00000000-0000-4000-8000-000000000042",
+    "seq": 25
   }
 ]

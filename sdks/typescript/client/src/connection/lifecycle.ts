@@ -1120,7 +1120,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             onTransportDiagnostic({ event: "media_state", phase });
             const step = snapshot.failure?.diagnostic?.media_error_step;
             const code = step === undefined ? undefined : MEDIA_STATE_CODES[step];
-            if (code !== undefined) telemetry?.obs.fact("video.media_state", { device_state: phase, media_state_code: code });
+            telemetry?.obs.fact("video.media_state", { device_state: phase, ...(code === undefined ? {} : { media_state_code: code }) });
           }
           model.mediaSnapshot = snapshot;
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");

@@ -45,7 +45,21 @@ defmodule ChalkSync.Transport.Socket.LiveRequests do
   # Stamps when Sync took a live target, on Sync's own clock and in the socket's trace. The client's
   # `media_intent` carries the same `operation_id`, which joins it to the SFU's `sfu.publication.held`
   # by participant and source. A retry sends the same `operation_id` again; the earliest stamp is the one to read.
+  # The same stamp goes to the evidence ledger so seat checks can read the participant's intent.
   defp stamp_intent(state, target) do
+    source = Map.get(@target_sources, to_string(target.name), "unknown")
+    episode = state.identity.episode
+
+    ChalkSync.Obs.fact("sync.media.intent", %{
+      tenant_id: episode.tenant_id,
+      space_id: episode.space_id,
+      episode_id: episode.episode_id,
+      participant_id: state.identity.participant_id,
+      operation_id: target.operation_id,
+      source: source,
+      enabled: target.enabled
+    })
+
     observability =
       Observability.phase(state.observability, "sync.media.intent", %{
         operation_id: target.operation_id,

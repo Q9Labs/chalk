@@ -18,7 +18,15 @@ const framesFile = (code: string, run: Run) => new URL(`client-frames.${run}.jso
 
 const WALL_ORIGIN = 1_795_599_000_000;
 
-beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
+beforeEach(() => {
+  vi.stubGlobal("fetch", async () => new Response(null, { status: 204 }));
+  // A platform that answers the capture probes: permission granted, no policy block.
+  vi.stubGlobal("navigator", {
+    ...(globalThis.navigator ?? {}),
+    permissions: { query: async () => ({ state: "granted" }) },
+  });
+  vi.stubGlobal("document", { permissionsPolicy: { allowsFeature: () => true } });
+});
 afterEach(() => vi.unstubAllGlobals());
 
 /** A telemetry platform on a fixed clock that keeps the frames it posts, so every run's wire rows are identical. */

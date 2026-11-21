@@ -1,5 +1,5 @@
 {
-  "schema_ver": "873f7f8dc427",
+  "schema_ver": "208f5d9b7bc6",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -3744,7 +3744,7 @@
           "source": "client",
           "claim": "outcome",
           "failure_claims": ["error"],
-          "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "permission_probe", "policy_allows", "policy_probe", "duration_ms"]
+          "fields": ["outcome", "reason_code", "capture_error_name", "permission_before", "permission_after", "policy_allows", "duration_ms"]
         }
       ],
       "doc": "The capture op's terminal outcome for a seat; only outcome=error is a failure. Claim: outcome."
@@ -3758,12 +3758,12 @@
         {
           "event": "video.media_state",
           "source": "client",
-          "claim": "media_state_code",
-          "failure_claims": ["media_capture_failed"],
-          "fields": ["media_state_code", "device_state", "source"]
+          "claim": "device_state",
+          "failure_claims": ["failed"],
+          "fields": ["device_state"]
         }
       ],
-      "doc": "A camera-effects path failure; only code=media_capture_failed counts. Claim: media_state_code."
+      "doc": "A media-plane diagnostic row; only device_state=failed counts. Claim: device_state."
     },
     {
       "name": "video.camera_state",
@@ -3776,7 +3776,7 @@
           "source": "client",
           "claim": "to_state",
           "failure_claims": [],
-          "fields": ["to_state", "from_state", "trigger", "camera_bound"]
+          "fields": ["to_state", "from_state", "trigger"]
         },
         {
           "event": "video.camera_bound",
@@ -4400,14 +4400,6 @@
           "doc": "A mute the trigger can't explain."
         },
         {
-          "fact": "video.camera_capture",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "kernel video.camera_capture rows for {participant}",
-          "doc": "A capture op that ended it."
-        },
-        {
           "fact": "video.capture_intent",
           "from": ["sync"],
           "required": false,
@@ -4479,14 +4471,6 @@
           "independent": 1,
           "query": "sync.media.intent rows for {participant}",
           "doc": "Whether the participant actually asked for the camera."
-        },
-        {
-          "fact": "video.camera_track_muted",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "video.camera_track_muted rows for {participant}",
-          "doc": "A muted camera."
         },
         {
           "fact": "video.episode_ended",
