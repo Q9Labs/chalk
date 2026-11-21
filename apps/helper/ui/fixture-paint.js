@@ -64,3 +64,50 @@ export function paintFixture(canvas, view) {
   }
   draw(view.draft, view.color);
 }
+
+export function paintLive(canvas, overlay) {
+  const ctx = canvas.getContext("2d");
+  if (!overlay) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const { width, height } = overlay.bounds;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  ctx.clearRect(0, 0, width, height);
+  if (overlay.kind === "probe") {
+    const size = Math.max(20, Math.round(Math.min(width, height) * 0.04));
+    for (const { x, y, rgb } of overlay.spec.points) {
+      ctx.fillStyle = `rgb(${rgb.join(",")})`;
+      ctx.fillRect(Math.round(width * x - size / 2), Math.round(height * y - size / 2), size, size);
+    }
+    return;
+  }
+  if (!shared) return;
+  const rect = { x: 0, y: 0, width, height };
+  const { scene } = overlay;
+  shared.paintAnnotation(ctx, {
+    rect,
+    clip: rect,
+    nowMs: scene.serverAtMs,
+    sharerId: scene.sharerId,
+    paused: scene.paused,
+    marks: scene.marks,
+    presence: scene.presence,
+  });
+  if (overlay.draft.length) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const point of overlay.draft) ctx.lineTo(point.x / 65535 * width, point.y / 65535 * height);
+    if (overlay.draft.length === 1) {
+      const [point] = overlay.draft;
+      ctx.lineTo(point.x / 65535 * width + 0.01, point.y / 65535 * height);
+    }
+    ctx.stroke();
+  }
+}

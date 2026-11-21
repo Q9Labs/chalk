@@ -350,6 +350,20 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("issueScreenAnnotationHelperPairTicket", "/v1/screen-annotation/helper/pair-ticket", {
+      payload: S.IssueScreenAnnotationHelperPairTicketRequestBodySchema,
+      success: S.IssueScreenAnnotationHelperPairTicketResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listAPIKeys", "/v1/tenants/:tenant_id/api-keys", {
       params: S.ListAPIKeysPathParamsSchema,
       query: S.ListAPIKeysQueryParamsSchema,

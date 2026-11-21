@@ -1,6 +1,6 @@
 import { canExtendCall, reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
-import { webAnnotation } from "../../lib/screen-annotation";
+import { callAnnotation } from "../../lib/screen-annotation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
 import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
@@ -49,6 +49,15 @@ export function LocalSpace({
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const tenantId = session.reloadMarker().tenantId;
   const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [credential.apiBaseURL, tenantId, session, client]);
+  const annotation = useMemo(
+    () =>
+      callAnnotation({
+        apiBaseUrl: credential.apiBaseURL,
+        mediaProof: session.mediaProof,
+        screenShare: () => client.getSnapshot().media.screenShare,
+      }),
+    [credential.apiBaseURL, session, client],
+  );
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -124,7 +133,7 @@ export function LocalSpace({
       >
         {homeError ? <p role="alert">{homeError}</p> : null}
         <Chalk
-          screenAnnotation={webAnnotation}
+          screenAnnotation={annotation}
           timeLimit={{
             message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",
             action: offerSignUp ? signUp : undefined,

@@ -1097,6 +1097,29 @@ export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
   }))();
 export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
 
+export const ScreenAnnotationHelperPairRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    challenge: Schema.String.check(Schema.isMinLength(1)),
+    helperPublicKey: Schema.String.check(Schema.isMinLength(1)),
+    layerId: Schema.String.check(Schema.isMinLength(1)),
+    publicationId: Schema.String.check(Schema.isMinLength(1)),
+    version: Schema.Number,
+  }))();
+export type ScreenAnnotationHelperPairRequest = typeof ScreenAnnotationHelperPairRequestSchema.Type;
+
+export const ScreenAnnotationHelperPairResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachment: Schema.Struct({
+      expiresAtMs: Schema.Number,
+      ticket: Schema.String,
+    }),
+    pair: Schema.Struct({
+      expiresAtMs: Schema.Number,
+      ticket: Schema.String,
+    }),
+  }))();
+export type ScreenAnnotationHelperPairResponse = typeof ScreenAnnotationHelperPairResponseSchema.Type;
+
 export const SetEpisodeDeadlineRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     deadline_at: DateTimeStringSchema,
@@ -3154,6 +3177,20 @@ export const IssueEpisodeParticipantSyncToken429ResponseHeadersSchema = /* @__PU
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type IssueEpisodeParticipantSyncToken429ResponseHeaders = typeof IssueEpisodeParticipantSyncToken429ResponseHeadersSchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicketRequestBodySchema = /* @__PURE__ */ (() => ScreenAnnotationHelperPairRequestSchema)();
+export type IssueScreenAnnotationHelperPairTicketRequestBody = typeof IssueScreenAnnotationHelperPairTicketRequestBodySchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicketResponseSchema = /* @__PURE__ */ (() => ScreenAnnotationHelperPairResponseSchema)();
+export type IssueScreenAnnotationHelperPairTicketResponse = typeof IssueScreenAnnotationHelperPairTicketResponseSchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicket429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type IssueScreenAnnotationHelperPairTicket429ResponseHeaders = typeof IssueScreenAnnotationHelperPairTicket429ResponseHeadersSchema.Type;
 
 export const LeaveSpacePublicInviteArrivalRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6981,6 +7018,9 @@ export const IssueEpisodeParticipantSyncTokenErrorSchema = Schema.Union([
 ]);
 export type IssueEpisodeParticipantSyncTokenError = typeof IssueEpisodeParticipantSyncTokenErrorSchema.Type;
 
+export const IssueScreenAnnotationHelperPairTicketErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
+export type IssueScreenAnnotationHelperPairTicketError = typeof IssueScreenAnnotationHelperPairTicketErrorSchema.Type;
+
 export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ArrivalInvalidHandleErrorSchema,
   ArrivalUnavailableErrorSchema,
@@ -7572,6 +7612,7 @@ export const ChalkOperationPolicies = {
   inspectMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  issueScreenAnnotationHelperPairTicket: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listMCPConnections: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

@@ -1,4 +1,5 @@
 param([switch]$Unprotected)
+$ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -TypeDefinition @'
 using System;
@@ -48,9 +49,7 @@ if (-not [ChalkMarker]::GetWindowDisplayAffinity($form.Handle, [ref]$actual) -or
     throw "Display affinity did not match the requested value."
 }
 $screen = [Windows.Forms.Screen]::PrimaryScreen.Bounds
-$center = @(
-    ($form.Left - $screen.Left + $form.Width / 2) / $screen.Width,
-    ($form.Top - $screen.Top + $form.Height / 2) / $screen.Height
-)
-@{ affinity = $actual; center = $center } | ConvertTo-Json -Compress
+$x = ($form.Left - $screen.Left + $form.Width / 2) / $screen.Width
+$y = ($form.Top - $screen.Top + $form.Height / 2) / $screen.Height
+@{ affinity = $actual; center = @($x, $y) } | ConvertTo-Json -Compress
 [Windows.Forms.Application]::Run($form)

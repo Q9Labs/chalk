@@ -1,4 +1,4 @@
-import { paintFixture } from "./fixture-paint.js";
+import { paintFixture, paintLive } from "./fixture-paint.js";
 
 const { invoke } = window.__TAURI__.core;
 const label = window.__TAURI_INTERNALS__.metadata.currentWindow.label;
@@ -104,6 +104,8 @@ if (isOverlay) {
       <button type="button" id="deny">Deny</button>
       <button type="button" id="allow">Allow</button>
     </div>
+    <button type="button" id="live-draw" hidden>Draw one mark</button>
+    <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
     <div class="setting"><span>Sharer control</span><div class="segment">${styleButtons()}</div></div>
     <div class="setting" id="shortcut" hidden><span>Draw shortcut</span><kbd>${navigator.platform.startsWith("Mac") ? "⌘ ⇧ 9" : "Ctrl Shift 9"}</kbd></div>
     <button type="button" id="update">Check for updates</button>
@@ -111,6 +113,7 @@ if (isOverlay) {
   </section>`;
   bindStyleButtons();
   control("check_for_update", "#update");
+  control("toggle_live_draw", "#live-draw");
   for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
     listen(id, "click", () => void run("decide_pairing", {
       fingerprint: root.querySelector("#fingerprint").textContent,
@@ -122,7 +125,9 @@ if (isOverlay) {
 async function refresh() {
   try {
     const view = await invoke("view");
-    if (isOverlay && view.segment) {
+    if (label === "ink-live") {
+      paintLive(root.querySelector("canvas"), view.overlay);
+    } else if (isOverlay && view.segment) {
       paintFixture(root.querySelector("canvas"), view);
     } else if (label === "hud") {
       const hud = root.querySelector(".hud");
@@ -137,6 +142,20 @@ async function refresh() {
       root.querySelector("#connection-help").textContent = view.connected
         ? "Use the preview in Chalk while this capture is unverified."
         : "Start sharing in Chalk to connect.";
+      root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
+      const displays = root.querySelector("#displays");
+      const options = root.querySelector("#display-options");
+      displays.hidden = view.monitors.length === 0;
+      if (JSON.stringify(view.monitors) !== options.dataset.monitors) {
+        options.dataset.monitors = JSON.stringify(view.monitors);
+        options.replaceChildren(...view.monitors.map((monitor, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = monitor;
+          button.addEventListener("click", () => void run("select_monitor", { index }).catch(showError));
+          return button;
+        }));
+      }
       root.querySelector(".approval").hidden = !view.fingerprint;
       root.querySelector("#fingerprint").textContent = view.fingerprint ?? "";
       if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;

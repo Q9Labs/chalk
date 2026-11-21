@@ -1,5 +1,6 @@
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "@q9labsai/chalk-react";
 import { z } from "zod";
+import { calibrateMonitor, probeSchema } from "./screen-annotation-helper-calibration";
 
 const loopback = "http://127.0.0.1:47361";
 const attachLifetimeMs = 60_000;
@@ -10,18 +11,41 @@ const deadline = z.number().int().positive();
 const challengeSchema = z.strictObject({ version: z.number().int().positive().max(255), helperPublicKey: secret, challenge: secret, expiresAtMs: deadline });
 const attachSchema = z.strictObject({ sessionSecret: secret, leaseExpiresAtMs: deadline, status: statusSchema });
 const statusEvent = z.strictObject({ type: z.literal("status"), status: statusSchema });
-const ticketFormat = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const frameCoordinate = z.number().int().min(0).max(65535);
+const penEvent = z.strictObject({
+  type: z.literal("pen"),
+  pen: z.strictObject({
+    fence: deadline,
+    width: z.number().int().min(32).max(3277),
+    points: z
+      .array(z.strictObject({ x: frameCoordinate, y: frameCoordinate }))
+      .min(1)
+      .max(384),
+  }),
+});
+const helperEvent = z.discriminatedUnion("type", [statusEvent, penEvent]);
+type HelperPen = z.infer<typeof penEvent>["pen"];
+const ticket = z.strictObject({
+  ticket: z
+    .string()
+    .max(4096)
+    .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
+  expiresAtMs: deadline,
+});
+const ticketsSchema = z.strictObject({ pair: ticket, attachment: ticket });
 
 type Challenge = z.infer<typeof challengeSchema>;
-type HelperListener = (status: ScreenAnnotationHelperStatus) => void;
+type Tickets = z.infer<typeof ticketsSchema>;
 type HelperPath = "/v1/challenge" | "/v1/attach" | "/v1/events" | "/v1/exchange";
 
 export interface HelperPairAuthority {
-  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; signal: AbortSignal }) => Promise<string>;
+  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; signal: AbortSignal }) => Promise<Tickets>;
   readonly lookupCode?: ScreenAnnotationHelper["lookupCode"];
 }
 
-export function createBrowserAnnotationHelper({ origin, installUrl, authority }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority }): ScreenAnnotationHelper {
+type CaptureTrack = (share: ScreenAnnotationHelperShare) => MediaStreamTrack | undefined;
+
+export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack }): ScreenAnnotationHelper {
   return {
     installUrl,
     lookupCode: authority.lookupCode,
@@ -46,16 +70,41 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority }:
           const session = AbortSignal.any([stop.signal, parent]);
           try {
             const attachSignal = AbortSignal.any([signal, session]);
-            const ticket = await authority.issueLocalTicket({ challenge, origin, share, signal: attachSignal });
-            if (ticket.length > 4096 || !ticketFormat.test(ticket) || !activeShare(share)) throw new Error("The Helper ticket could not be issued.");
-            // The Helper displays the same fingerprint and holds this response for its own native approval.
-            const attachment = await localRequest("/v1/attach", attachSignal, { version: 1, challenge: challenge.challenge, pairTicket: ticket }).then((response) => readJson(response, attachSchema));
+            const tickets = await authority.issueLocalTicket({ challenge, origin, share, signal: attachSignal });
+            if (!activeShare(share)) throw new Error("The screen share changed.");
+            const attachment = await localRequest("/v1/attach", attachSignal, {
+              version: 1,
+              challenge: challenge.challenge,
+              pairTicket: tickets.pair.ticket,
+              attachmentTicket: tickets.attachment.ticket,
+            }).then((response) => readJson(response, attachSchema));
+            const renewal = new AbortController();
+            const track = captureTrack?.(share);
             try {
-              const lease = AbortSignal.any([session, AbortSignal.timeout(remaining(attachment.leaseExpiresAtMs))]);
-              if (!activeShare(share) || lease.aborted) throw new Error("The Helper attachment is no longer valid.");
+              if (!activeShare(share) || session.aborted) throw new Error("The Helper attachment is no longer valid.");
               onStatus(attachment.status);
-              await watchStatuses(attachment.sessionSecret, lease, onStatus);
+              const live = AbortSignal.any([session, renewal.signal]);
+              const project = liveProjection({ track, share, currentTrack: () => captureTrack?.(share), attachmentSecret: attachment.sessionSecret, signal: live });
+              await project.describe();
+              await Promise.race([
+                project.failure,
+                watchEvents(attachment.sessionSecret, live, async (event) => {
+                  if (event.type === "pen") {
+                    await project.commit(event.pen);
+                  } else {
+                    onStatus(event.status);
+                    await project.observe(event.status);
+                  }
+                }),
+                renewLease({
+                  attachmentSecret: attachment.sessionSecret,
+                  expiresAtMs: Math.min(attachment.leaseExpiresAtMs, tickets.attachment.expiresAtMs),
+                  signal: live,
+                  issue: (signal) => authority.issueLocalTicket({ challenge, origin, share, signal }),
+                }),
+              ]);
             } finally {
+              renewal.abort();
               // A tab closing may prevent the delivery; the Helper's lease is the authority.
               void localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "disconnect" }, attachment.sessionSecret).catch(() => undefined);
             }
@@ -66,6 +115,192 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority }:
       };
     },
   };
+}
+
+export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack }): ScreenAnnotationHelper {
+  const api = new URL("/v1/screen-annotation/helper/pair-ticket", options.apiBaseUrl);
+  if (api.protocol !== "https:" || api.username || api.password) throw new Error("Invalid Helper API.");
+  return createBrowserAnnotationHelper({
+    origin: options.origin,
+    installUrl: options.installUrl,
+    captureTrack: options.captureTrack,
+    authority: {
+      async issueLocalTicket({ challenge, share, signal }) {
+        const proof = options.mediaProof();
+        if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
+        const response = await fetch(api, {
+          method: "POST",
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${proof}` },
+          body: JSON.stringify({
+            version: challenge.version,
+            challenge: challenge.challenge,
+            helperPublicKey: challenge.helperPublicKey,
+            layerId: share.layer.layer_id,
+            publicationId: share.layer.publication_id,
+          }),
+          signal,
+        });
+        if (!response.ok) throw new Error("The Helper ticket could not be issued.");
+        return readJson(response, ticketsSchema);
+      },
+    },
+  });
+}
+
+function liveProjection({
+  track,
+  share,
+  currentTrack,
+  attachmentSecret,
+  signal,
+}: {
+  readonly track: MediaStreamTrack | undefined;
+  readonly share: ScreenAnnotationHelperShare;
+  readonly currentTrack: () => MediaStreamTrack | undefined;
+  readonly attachmentSecret: string;
+  readonly signal: AbortSignal;
+}) {
+  const settings = track?.getSettings();
+  const monitor = share.surface === "monitor" && settings?.displaySurface === "monitor" && /(?:Chrome|Chromium)\//.test(navigator.userAgent) && Boolean(settings.width && settings.height);
+  let calibrated = false;
+  let sending = false;
+  let observed = false;
+  const exchange = (data: object, timeout = 1500) => localRequest("/v1/exchange", AbortSignal.any([signal, AbortSignal.timeout(timeout)]), data, attachmentSecret);
+  function checkSource() {
+    const current = track?.getSettings();
+    if (!track || track !== currentTrack() || track.readyState !== "live" || !activeShare(share) || current?.displaySurface !== "monitor" || current.width !== settings?.width || current.height !== settings?.height) {
+      throw new Error("The shared monitor changed.");
+    }
+  }
+  async function publish(): Promise<void> {
+    checkSource();
+    const snapshot = share.client.getSnapshot();
+    if (snapshot.status !== "ready" || !snapshot.state) throw new Error("The screen share is no longer active.");
+    const { layer, marks, paused, fence, access } = snapshot.state;
+    await exchange({
+      type: "scene",
+      layerId: layer.layer_id,
+      publicationId: layer.publication_id,
+      width: settings?.width,
+      height: settings?.height,
+      scene: { marks, presence: snapshot.presence, paused, fence, canDraw: access.can_draw, sharerId: layer.sharer_id, serverAtMs: Math.round(share.client.serverNowMs()) },
+    });
+  }
+  function pushLatest(onError: (reason: unknown) => void) {
+    let dirty = false;
+    const flush = async () => {
+      dirty = true;
+      if (sending) return;
+      sending = true;
+      try {
+        while (dirty && !signal.aborted) {
+          dirty = false;
+          await publish();
+        }
+      } catch (error) {
+        if (!signal.aborted) onError(error);
+      } finally {
+        sending = false;
+      }
+    };
+    const unsubscribe = share.client.subscribe(() => void flush());
+    const heartbeat = setInterval(() => void flush(), 1500);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+      },
+      { once: true },
+    );
+    void flush();
+  }
+  const failure = new AbortController();
+  const failed = new Promise<void>((_, reject) => {
+    failure.signal.addEventListener("abort", () => reject(failure.signal.reason), { once: true });
+  });
+  return {
+    failure: failed,
+    async commit(pen: HelperPen) {
+      checkSource();
+      const snapshot = share.client.getSnapshot();
+      if (!observed || snapshot.status !== "ready" || !snapshot.state || snapshot.state.fence !== pen.fence || !snapshot.state.access.can_draw) return;
+      await share.client.dispatch(
+        { layerId: share.layer.layer_id, fence: pen.fence },
+        {
+          kind: "commit",
+          draft: {
+            mark_id: crypto.randomUUID(),
+            lifetime: "fade",
+            color: "#ffffff",
+            width: pen.width,
+            shape: { kind: "pen", points: pen.points },
+          },
+        },
+      );
+    },
+    async describe() {
+      await exchange({ type: "capture", surface: monitor ? "monitor" : "unsupported", width: settings?.width ?? 1, height: settings?.height ?? 1 });
+    },
+    async observe(status: ScreenAnnotationHelperStatus) {
+      if (status === "calibrating" && !calibrated && monitor && track) {
+        checkSource();
+        calibrated = true;
+        await calibrateMonitor({
+          track,
+          signal,
+          start: (signal) => localRequest("/v1/exchange", signal, { type: "probe_start" }, attachmentSecret).then((response) => readJson(response, probeSchema)),
+          protect: async (nonce, signal) => {
+            await localRequest("/v1/exchange", signal, { type: "probe_protect", nonce }, attachmentSecret);
+          },
+          complete: async (nonce, signal) => {
+            checkSource();
+            await localRequest("/v1/exchange", signal, { type: "probe_complete", nonce }, attachmentSecret);
+          },
+          abort: async () => {
+            await localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "probe_abort" }, attachmentSecret);
+          },
+        });
+      } else if (status === "ready" && !observed) {
+        observed = true;
+        if (signal.aborted) return;
+        pushLatest((reason) => failure.abort(reason));
+      }
+    },
+  };
+}
+
+async function renewLease({ attachmentSecret, expiresAtMs, signal, issue }: { readonly attachmentSecret: string; readonly expiresAtMs: number; readonly signal: AbortSignal; readonly issue: (signal: AbortSignal) => Promise<Tickets> }): Promise<void> {
+  let expiry = expiresAtMs;
+  while (!signal.aborted) {
+    const delay = Math.max(0, remaining(expiry) - 20_000);
+    await new Promise<void>((resolve) => {
+      function done() {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", done);
+        resolve();
+      }
+      const timer = setTimeout(done, delay);
+      signal.addEventListener("abort", done, { once: true });
+    });
+    if (signal.aborted) return;
+    const refresh = AbortSignal.any([signal, AbortSignal.timeout(Math.min(networkTimeoutMs, remaining(expiry)))]);
+    const tickets = await issue(refresh);
+    await localRequest(
+      "/v1/exchange",
+      refresh,
+      {
+        type: "refresh",
+        pairTicket: tickets.pair.ticket,
+        attachmentTicket: tickets.attachment.ticket,
+      },
+      attachmentSecret,
+    );
+    expiry = Math.min(tickets.pair.expiresAtMs, tickets.attachment.expiresAtMs);
+  }
 }
 
 export function activeShare(share: ScreenAnnotationHelperShare): boolean {
@@ -132,7 +367,7 @@ async function readJson<T>(response: Response, schema: z.ZodType<T>): Promise<T>
   }
 }
 
-async function watchStatuses(attachmentSecret: string, signal: AbortSignal, onStatus: HelperListener): Promise<void> {
+async function watchEvents(attachmentSecret: string, signal: AbortSignal, observe: (event: z.infer<typeof helperEvent>) => void | Promise<void>): Promise<void> {
   const missedHeartbeat = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const renewHeartbeat = () => {
@@ -154,17 +389,18 @@ async function watchStatuses(attachmentSecret: string, signal: AbortSignal, onSt
         let boundary = buffered.indexOf("\n");
         while (boundary >= 0) {
           const line = buffered.slice(0, boundary).trimEnd();
-          if (line.length > 8192) throw new Error("Helper event is too large.");
+          if (line.length > 16384) throw new Error("Helper event is too large.");
           buffered = buffered.slice(boundary + 1);
           if (line.startsWith("data: ")) {
             const payload: unknown = JSON.parse(line.slice(6));
-            const event = statusEvent.parse(payload);
-            onStatus(event.status);
+            const event = helperEvent.parse(payload);
+            await observe(event);
+            if (event.type === "status" && (event.status === "disconnected" || event.status === "update_required")) return;
             renewHeartbeat();
           }
           boundary = buffered.indexOf("\n");
         }
-        if (buffered.length > 8192) throw new Error("Helper event is too large.");
+        if (buffered.length > 16384) throw new Error("Helper event is too large.");
       }
     } finally {
       await reader.cancel().catch(() => undefined);
@@ -175,5 +411,5 @@ async function watchStatuses(attachmentSecret: string, signal: AbortSignal, onSt
   } finally {
     clearTimeout(timer);
   }
-  onStatus("disconnected");
+  await observe({ type: "status", status: "disconnected" });
 }

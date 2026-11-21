@@ -17,6 +17,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use crate::{
     check_for_update,
     geometry::{Dock, Point, Rect, Segment},
+    live,
     pairing::Pairing,
 };
 
@@ -84,6 +85,9 @@ pub struct View {
     fixture: bool,
     fingerprint: Option<String>,
     connected: bool,
+    live_drawing_available: bool,
+    monitors: Vec<String>,
+    overlay: Option<live::Overlay>,
     update_status: Option<&'static str>,
 }
 
@@ -93,6 +97,8 @@ pub enum Action {
     ChangeStyle { style: Style },
     CheckForUpdate,
     DecidePairing { fingerprint: String, allowed: bool },
+    SelectMonitor { index: usize },
+    ToggleLiveDraw,
     ChangeColor { color: PenColor },
     ToggleDraw,
     CancelDraw,
@@ -175,6 +181,16 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                 .lock()
                 .expect("Helper state")
                 .pairing = Some(pairing.clone());
+            pairing.set_app(handle.clone());
+            let upkeep = pairing.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    if !upkeep.upkeep() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                }
+            });
             tauri::async_runtime::spawn(pairing.serve());
         }
     }
@@ -191,6 +207,7 @@ fn show_settings(app: &AppHandle) -> tauri::Result<()> {
             .inner_size(360.0, 284.0)
             .center()
             .content_protected(true)
+            .visible(false)
             .resizable(false)
             .build()?;
         verify_capture_affinity(&window)?;
@@ -237,15 +254,49 @@ fn floating(app: &AppHandle, label: &str, focusable: bool) -> tauri::Result<Webv
     Ok(window)
 }
 
+pub(crate) fn show_live_overlay(app: &AppHandle, bounds: Rect) -> tauri::Result<()> {
+    let overlay = match app.get_webview_window(live::OVERLAY) {
+        Some(overlay) => overlay,
+        None => window(app, live::OVERLAY)
+            .title("Chalk Helper calibration")
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .resizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .focused(false)
+            .focusable(false)
+            .visible(false)
+            .build()?,
+    };
+    overlay.set_content_protected(false)?;
+    place(&overlay, bounds)?;
+    overlay.set_ignore_cursor_events(true)?;
+    let size = overlay.inner_size()?;
+    let position = overlay.inner_position()?;
+    if size.width != bounds.width
+        || size.height != bounds.height
+        || position.x != bounds.x
+        || position.y != bounds.y
+    {
+        return Err(
+            std::io::Error::other("Monitor overlay does not align with the display.").into(),
+        );
+    }
+    overlay.show()
+}
+
 #[cfg(target_os = "windows")]
-fn verify_capture_affinity(window: &WebviewWindow) -> tauri::Result<()> {
+pub(crate) fn verify_capture_affinity(window: &WebviewWindow) -> tauri::Result<()> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
+        GetWindowDisplayAffinity, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
     };
     let handle = window.hwnd()?;
     let mut affinity = 0;
     // The HWND was created in this Tauri process and stays alive for this call.
-    if unsafe { GetWindowDisplayAffinity(handle.0, &mut affinity) } == 0
+    if unsafe { SetWindowDisplayAffinity(handle.0, WDA_EXCLUDEFROMCAPTURE) } == 0
+        || unsafe { GetWindowDisplayAffinity(handle.0, &mut affinity) } == 0
         || affinity != WDA_EXCLUDEFROMCAPTURE
     {
         let _ = window.hide();
@@ -254,13 +305,25 @@ fn verify_capture_affinity(window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "windows"))]
-fn verify_capture_affinity(_window: &WebviewWindow) -> tauri::Result<()> {
-    // AppKit sharingType is not proof against screen capture. No live native ink here.
+#[cfg(target_os = "macos")]
+pub(crate) fn verify_capture_affinity(window: &WebviewWindow) -> tauri::Result<()> {
+    use objc2_app_kit::{NSWindow, NSWindowSharingType};
+
+    // Called on the main thread with a live Tauri-owned NSWindow.
+    let native = unsafe { &*window.ns_window()?.cast::<NSWindow>() };
+    native.setSharingType(NSWindowSharingType::None);
+    if native.sharingType() != NSWindowSharingType::None {
+        return Err(std::io::Error::other("macOS did not apply capture exclusion.").into());
+    }
     Ok(())
 }
 
-fn monitor_bounds(monitor: &Monitor) -> Rect {
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub(crate) fn verify_capture_affinity(_window: &WebviewWindow) -> tauri::Result<()> {
+    Err(std::io::Error::other("Capture exclusion is unavailable.").into())
+}
+
+pub(crate) fn monitor_bounds(monitor: &Monitor) -> Rect {
     Rect {
         x: monitor.position().x,
         y: monitor.position().y,
@@ -523,18 +586,23 @@ fn segment_index(label: &str) -> Option<usize> {
 fn allowed(label: &str, action: &Action) -> bool {
     match action {
         Action::ChangeStyle { .. } => matches!(label, "settings" | "hud"),
-        Action::CheckForUpdate | Action::DecidePairing { .. } => label == "settings",
+        Action::CheckForUpdate
+        | Action::DecidePairing { .. }
+        | Action::SelectMonitor { .. }
+        | Action::ToggleLiveDraw => label == "settings",
         Action::ChangeColor { .. } => label == "draw-bar",
         Action::ToggleDraw
         | Action::ShowHudMenu
         | Action::BeginDrag
         | Action::Drag
         | Action::EndDrag => label == "hud",
-        Action::CancelDraw => label == "draw-bar" || segment_index(label).is_some(),
+        Action::CancelDraw => {
+            matches!(label, "draw-bar" | live::OVERLAY) || segment_index(label).is_some()
+        }
         Action::BeginStroke { .. }
         | Action::AddPoint { .. }
         | Action::FinishStroke
-        | Action::CancelStroke => segment_index(label).is_some(),
+        | Action::CancelStroke => label == live::OVERLAY || segment_index(label).is_some(),
     }
 }
 
@@ -549,12 +617,34 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
         drawing: false,
         paused: false,
         color: PenColor::White.hex(),
+        live_drawing_available: local.pairing.as_ref().is_some_and(Pairing::can_draw),
         hotkey: local.hotkey,
         fixture: local.fixture.is_some(),
         fingerprint: (window.label() == "settings")
             .then(|| local.pairing.as_ref()?.fingerprint())
             .flatten(),
         connected: local.pairing.as_ref().is_some_and(Pairing::connected),
+        monitors: if window.label() == "settings"
+            && local.pairing.as_ref().is_some_and(Pairing::offers_monitors)
+        {
+            window
+                .available_monitors()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .map(|(index, monitor)| {
+                    monitor
+                        .name()
+                        .cloned()
+                        .unwrap_or_else(|| format!("Display {}", index + 1))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
+        overlay: (window.label() == live::OVERLAY)
+            .then(|| local.pairing.as_ref()?.overlay())
+            .flatten(),
         update_status: local.update_status,
     };
     if let Some(fixture) = local.fixture.as_mut() {
@@ -587,6 +677,28 @@ pub fn act(
     }
     let app = window.app_handle();
     let mut local = state.0.lock().expect("Helper state");
+    if matches!(label, live::OVERLAY) || matches!(action, Action::ToggleLiveDraw) {
+        let pairing = local.pairing.clone().ok_or("No Helper session.")?;
+        let app = app.clone();
+        drop(local);
+        return app
+            .clone()
+            .run_on_main_thread(move || {
+                pairing.with_capture(|capture| match action {
+                    Action::ToggleLiveDraw => {
+                        let _ = capture.toggle_drawing(&app);
+                    }
+                    Action::BeginStroke { x, y } => capture.add_point(x, y, true),
+                    Action::AddPoint { x, y } => capture.add_point(x, y, false),
+                    Action::FinishStroke => capture.finish_stroke(&app),
+                    Action::CancelStroke | Action::CancelDraw => {
+                        let _ = capture.set_drawing(&app, false);
+                    }
+                    _ => {}
+                })
+            })
+            .map_err(|error| error.to_string());
+    }
     match action {
         Action::DecidePairing {
             fingerprint,
@@ -595,6 +707,22 @@ pub fn act(
             if let Some(pairing) = local.pairing.as_ref() {
                 pairing.decide(&fingerprint, allowed);
             }
+            return Ok(());
+        }
+        Action::SelectMonitor { index } => {
+            let monitors = window
+                .available_monitors()
+                .map_err(|error| error.to_string())?;
+            let bounds = monitors
+                .get(index)
+                .map(monitor_bounds)
+                .ok_or("The display changed.")?;
+            local
+                .pairing
+                .as_ref()
+                .ok_or("No Helper session.")?
+                .select_monitor(bounds)
+                .map_err(|_| "The display could not be selected.".to_owned())?;
             return Ok(());
         }
         Action::CheckForUpdate => {
