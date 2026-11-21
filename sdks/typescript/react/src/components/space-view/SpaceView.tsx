@@ -320,7 +320,7 @@ export function SpaceView({
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
-    ...(silentMicrophone.visible
+    ...(silentMicrophone.visible && !microphonePickerOpen
       ? [
           {
             id: "silent-microphone",
