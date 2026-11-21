@@ -17,7 +17,7 @@ import { openWorld } from "./proof/fixture-world.mjs";
 import { StoreError, openLive, realStores } from "./live/stores.mjs";
 import { renderJson } from "./output/json.mjs";
 import { UsageError } from "./output/page.mjs";
-import { USAGE, instant, parseQuery } from "./output/query.mjs";
+import { USAGE, instant, parseQuery, realDate } from "./output/query.mjs";
 import { handleKind, indexWorld, resolve } from "./output/resolve.mjs";
 import { measureRecord, renderText } from "./output/text.mjs";
 import { quoteArg, rangeView } from "./output/views.mjs";
@@ -56,7 +56,12 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
     if (live === null && query.options.fixture === null) {
       return { code: 69, out: "", err: "diagnose: the verdict commands need a world; pass --fixture nov18, --live --tenant <uuid> --episode <uuid>, or run `diagnose call <episode uuid>` for the single-call report\n" };
     }
-    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { now });
+    const opened =
+      live === null
+        ? { world: await fixtureWorld(query, cwd), notes: [] }
+        : live.env === undefined
+          ? await openLive(live, stores ?? realStores(process.env), { now })
+          : await platformLive(query, live, stores ?? realStores(process.env), { now });
     const session = await open(query, cwd, opened.world, checks);
     const dispatched = await dispatch(query, session);
     // A live read without --store keeps nothing, so its head says so and no line claims a verdict retained from an earlier run.
@@ -75,7 +80,24 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
 /** @param {Query} query */
 function validateLiveQuery(query) {
   if (query.options.fixture !== null) throw new UsageError("pass --live or --fixture, not both");
-  if (DISCOVERY_COMMANDS.has(query.command)) throw new UsageError("--live reads one Episode; use --fixture <world> for attempts, jobs or population views");
+  if (DISCOVERY_COMMANDS.has(query.command) && !(query.command === "platform")) throw new UsageError("--live reads one Episode or one platform day; use --fixture <world> for attempts, jobs or population views");
+}
+
+/**
+ * The live platform world behind `diagnose platform <environment> <date> --live --env <environment>`: the command's env and day
+ * name the item, and `--env` must agree with it.
+ * @param {Query} query
+ * @param {{ env: string }} live
+ * @param {import("./live/stores.mjs").Stores} stores
+ * @param {{ now: number }} options
+ */
+async function platformLive(query, live, stores, { now }) {
+  if (query.command !== "platform") throw new UsageError("--live --env reads a platform day: `diagnose platform <environment> <YYYY-MM-DD> --live --env <environment>`");
+  const [environment, date] = need(query.args, "an environment and a date");
+  if (!realDate(date)) throw new UsageError(`diagnose platform <environment> <YYYY-MM-DD>: the day is a UTC date like 2026-11-18`);
+  if (environment !== live.env) throw new UsageError(`--env ${live.env} but the command reads platform ${environment}; name the same environment`);
+  const { openPlatformLive } = await import("./platform-sources.mjs");
+  return openPlatformLive({ environment, day: date }, stores, { now });
 }
 
 /**
@@ -93,23 +115,28 @@ function liveTarget(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const [name, inline] = argv[index].split(/=(.*)/su);
     if (name === "--live") continue;
-    if (name === "--tenant" || name === "--episode") {
+    if (name === "--tenant" || name === "--episode" || name === "--env") {
       const value = inline ?? argv[(index += 1)];
       if (value === undefined || value === "") throw new UsageError(`${name} needs a value`);
       target[name.slice(2)] = value;
     } else rest.push(argv[index]);
   }
-  if (target.tenant === undefined || target.episode === undefined) throw new UsageError("--live needs --tenant <uuid> and --episode <uuid>");
-  return { live: { tenant: target.tenant, episode: target.episode }, rest };
+  if (target.env !== undefined && (target.tenant !== undefined || target.episode !== undefined)) {
+    throw new UsageError("--env reads a platform day; it does not combine with --tenant or --episode");
+  }
+  if (target.env === undefined && (target.tenant === undefined || target.episode === undefined)) {
+    throw new UsageError("--live needs --tenant <uuid> and --episode <uuid>, or --env <environment> for a platform day");
+  }
+  return { live: /** @type {{ tenant: string, episode: string } | { env: string }} */ (target.env === undefined ? { tenant: /** @type {string} */ (target.tenant), episode: /** @type {string} */ (target.episode) } : { env: target.env }), rest };
 }
 
 /**
  * The flags that name the world a view came from, so every printed `next:` command runs as printed against the same world.
- * @param {{ tenant: string, episode: string } | null} live
+ * @param {{ tenant: string, episode: string } | { env: string } | null} live
  * @param {Query["options"]} options
  */
 function worldSelector(live, options) {
-  const world = live === null ? ["--fixture", quoteArg(String(options.fixture))] : ["--live", "--tenant", live.tenant, "--episode", live.episode];
+  const world = live === null ? ["--fixture", quoteArg(String(options.fixture))] : "env" in live ? ["--live", "--env", live.env] : ["--live", "--tenant", live.tenant, "--episode", live.episode];
   for (const [flag, value] of /** @type {const} */ ([
     ["--store", options.store],
     ["--asof", options.asof],

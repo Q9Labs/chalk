@@ -108,6 +108,19 @@ export function realStores(env, fetchImpl = fetch) {
     async rows(episode, window) {
       return readAll((part) => ask(`where ['attributes.episode_id'] == ${quote(episode)}`, part), window);
     },
+    async platformRows(environment, window) {
+      const { platformApl } = await import("../platform-sources.mjs");
+      return readAll((part) => ask(platformApl(environment), part), window);
+    },
+    async mediaPlaneChanges(window) {
+      const url = databaseUrl();
+      const pg = connectionEnv(url, env);
+      const sql = `select json_agg(row_to_json(m)) from media_plane_changes m where m.changed_at >= ${quote(new Date(window.from_ms).toISOString())}::timestamptz and m.changed_at <= ${quote(new Date(window.to_ms).toISOString())}::timestamptz`;
+      const { stdout } = await run("psql", ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", sql], { env: pg, maxBuffer: 16 << 20 }).catch((error) => {
+        throw new StoreError(`Postgres refused the media_plane_changes read: ${psqlFailure(error)}`);
+      });
+      return JSON.parse(stdout.trim() || "null") ?? [];
+    },
   };
 }
 
