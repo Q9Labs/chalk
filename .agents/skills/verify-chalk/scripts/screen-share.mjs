@@ -2,10 +2,10 @@
 // Drives share → stop → share again in real browsers. One sharer and viewers, each in Chromium or WebKit; the viewers must see the
 // shared screen as live video, the tile must disappear when the sharer stops, and come back when they share again.
 //
-//   node .agents/skills/verify-chalk/scripts/screen-share.mjs <run-id> [--web <origin>] [--sharer chromium|webkit] [--viewers webkit,chromium] [--fault] [--devices on|off] [--stop-via toolbar|pill]
+//   node .agents/skills/verify-chalk/scripts/screen-share.mjs <run-id> [--web <origin>] [--sharer chromium|webkit] [--viewers webkit,chromium] [--fault [--fault-calls N|all]] [--devices on|off] [--stop-via toolbar|pill]
 //
-// --fault answers the sharer's first SFU "tracks_close" signal after the share is live with HTTP 404 (without forwarding it), as when the
-// SFU session is already gone. The stop must still succeed. Chromium's sharer captures its fake screen. Headless WebKit cannot answer
+// --fault answers the sharer's SFU "tracks_close" signals during the first stop with HTTP 404 without forwarding them (the first one by
+// default, every one with --fault-calls all), as when the SFU session is already gone. The stop must still succeed. Chromium's sharer captures its fake screen. Headless WebKit cannot answer
 // its display-capture prompt, so a WebKit sharer's getDisplayMedia returns an animated canvas stream (the log says so); everything after the capture is the real product path.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ const sharerEngine = option("--sharer", "chromium");
 const viewerEngines = option("--viewers", "webkit").split(",");
 const fault = process.argv.includes("--fault");
 const devices = option("--devices", "on"); // "on": the sharer's microphone and camera are on while sharing, as in a class; "off": the share is the only published media
+const faultCalls = option("--fault-calls", "1") === "all" ? Number.POSITIVE_INFINITY : Number(option("--fault-calls", "1")); // how many close calls --fault answers with 404: 1, or "all" for a media session that is gone for good
 const stopVia = option("--stop-via", "toolbar"); // the toolbar toggle, or the "Stop sharing" pill on the stage
 const waitMs = 60_000;
 const stopMs = 20_000;
@@ -74,7 +75,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     const request = route.request();
     if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
     signals.tracksClose += 1;
-    if (fault && signals.armed && signals.answered404 === 0) {
+    if (fault && signals.armed && signals.answered404 < faultCalls) {
       signals.answered404 += 1;
       note("intercepted tracks_close #" + signals.tracksClose + ": answered 404 without forwarding");
       return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "media.connection_not_found" }) });
@@ -190,7 +191,8 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     await step(fault ? "the sharer stops while the SFU answers 404 to the close call: the stop completes and every viewer's tile goes" : "the sharer stops: no error and every viewer's tile goes", async () => {
       signals.armed = true;
       const result = await stopShare("2-stopped");
-      if (fault && signals.answered404 !== 1) throw new Error(`the 404 was never injected (tracks_close seen ${signals.tracksClose} times)`);
+      signals.armed = false;
+      if (fault && signals.answered404 < 1) throw new Error(`the 404 was never injected (tracks_close seen ${signals.tracksClose} times)`);
       return { ...result, ...signals };
     });
     await step("the sharer shares again and every viewer sees live video", async () => {
