@@ -64,6 +64,18 @@ test("dev preflight rejects an occupied SFU UDP port before starting containers"
   assert.equal((await preflight(dev, options)).ok, true);
 });
 
+test("dev preflight reports a denied SFU UDP bind without claiming another listener", async () => {
+  const dev = { ...resolveDevConfig({ env: {} }), ports: { sfuMedia: 40000 } };
+  const error = Object.assign(new Error("bind EACCES 127.0.0.1:40000"), { code: "EACCES" });
+  await assert.rejects(
+    preflight(dev, {
+      requiredTools: [],
+      probe: (_port, _host, transport) => (transport === "udp" ? { available: false, error } : { available: true }),
+    }),
+    /cannot bind sfuMedia:40000\/udp: bind EACCES/,
+  );
+});
+
 test("ownership accepts a real forward-slash Node invocation with Windows recorded separators", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-owner-"));
   let child;

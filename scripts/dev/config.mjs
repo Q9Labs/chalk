@@ -270,7 +270,12 @@ export async function preflight(config, { which = async (tool) => commandExists(
     const host = name === "sfuMedia" ? config.sfuMedia?.bindIP : undefined;
     const result = await probe(port, host);
     if (!result.available) busy.push(`${name}:${port}`);
-    if (name === "sfuMedia" && !(await probe(port, host, "udp")).available) busy.push(`${name}:${port}/udp`);
+    if (name !== "sfuMedia") continue;
+    const udp = await probe(port, host, "udp");
+    if (udp.error?.code === "EACCES") {
+      throw failure(FailureKind.CONFIG, `cannot bind ${name}:${port}/udp: ${udp.error.message}`, { stage: "preflight", cause: udp.error });
+    }
+    if (!udp.available) busy.push(`${name}:${port}/udp`);
   }
   if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });
   try {
