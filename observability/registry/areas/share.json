@@ -2,20 +2,1971 @@
   "area": "share",
   "slice": 5,
   "title": "Screen share",
-  "prefixes": ["share"],
-  "fields": [],
-  "events": [],
-  "reasons": [],
-  "machines": [],
+  "prefixes": [
+    "share"
+  ],
+  "fields": [
+    {
+      "name": "error_name",
+      "type": "enum",
+      "values": [
+        "NotAllowedError",
+        "NotFoundError",
+        "NotReadableError",
+        "AbortError",
+        "InvalidStateError",
+        "NotSupportedError",
+        "SecurityError",
+        "OverconstrainedError",
+        "TypeError",
+        "OperationError",
+        "unknown"
+      ],
+      "sensitivity": null,
+      "doc": "The DOMException name a capture call rejected with, or the native adapter's mapped name. Never a message."
+    },
+    {
+      "name": "permission_block",
+      "type": "enum",
+      "values": [
+        "system",
+        "user",
+        "policy",
+        "none"
+      ],
+      "sensitivity": null,
+      "doc": "Where a capture refusal came from, when the browser can say. `system` is Chrome's 'denied by system' answer."
+    },
+    {
+      "name": "display_capture_allowed",
+      "type": "enum",
+      "values": [
+        "observed_true",
+        "observed_false",
+        "unavailable_no_policy_api",
+        "not_applicable"
+      ],
+      "sensitivity": null,
+      "doc": "What document.featurePolicy said about display-capture before the picker ran. observed_false is a host policy block; unavailable_no_policy_api means the browser has no Feature Policy (Safari, Firefox); not_applicable on native."
+    },
+    {
+      "name": "framed",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "window.self !== window.top when the capture ran: the app ran inside a frame, so a host page's allow= policy applies."
+    },
+    {
+      "name": "display_surface",
+      "type": "enum",
+      "values": [
+        "monitor",
+        "window",
+        "browser",
+        "unknown"
+      ],
+      "sensitivity": null,
+      "doc": "The displaySurface enum from the track's settings: which kind of surface the person picked. Never the surface's title."
+    },
+    {
+      "name": "share_view_state",
+      "type": "enum",
+      "values": [
+        "live",
+        "connecting",
+        "paused",
+        "low-quality",
+        "ended"
+      ],
+      "sensitivity": null,
+      "doc": "The state a share.view surface was in when shown: ScreenShareState plus ended on unmount."
+    },
+    {
+      "name": "hidden",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "The share tile was hidden in the viewer's layout (pinned off or scrolled out)."
+    },
+    {
+      "name": "pinned_other",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "The viewer pinned a different item, which is why this share tile was hidden."
+    },
+    {
+      "name": "pip",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "The share video element was the document's picture-in-picture element."
+    },
+    {
+      "name": "action",
+      "type": "enum",
+      "values": [
+        "share_start",
+        "share_stop"
+      ],
+      "sensitivity": null,
+      "doc": "The screen-share command a media_intent/media_result row describes."
+    },
+    {
+      "name": "media_error_kind",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The classified media error kind an sdk.telemetry media_result carries."
+    },
+    {
+      "name": "mid",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The RTP stream id a subscription or ingress row measures."
+    },
+    {
+      "name": "packets",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "Cumulative packet count an sfu.media.ingress or viewer call_stats row reports."
+    },
+    {
+      "name": "media_source",
+      "type": "enum",
+      "values": [
+        "camera",
+        "screen",
+        "mic"
+      ],
+      "sensitivity": null,
+      "doc": "The published media source an SFU row names."
+    },
+    {
+      "name": "publisher_id",
+      "type": "id",
+      "sensitivity": null,
+      "doc": "The Participant whose publication a viewer's subscription row forwards.",
+      "id_kind": "participant"
+    },
+    {
+      "name": "pause_reason",
+      "type": "enum",
+      "values": [
+        "congestion",
+        "viewer",
+        "source_inactive"
+      ],
+      "sensitivity": null,
+      "doc": "Why the SFU paused a subscription's forwarding."
+    },
+    {
+      "name": "peer_state",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The peer connection state an sfu.peer.state row reports."
+    },
+    {
+      "name": "platform_kind",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The platform a platform_changed or client row reports (web, ios, android)."
+    },
+    {
+      "name": "visibility_state",
+      "type": "enum",
+      "values": [
+        "visible",
+        "hidden",
+        "background"
+      ],
+      "sensitivity": null,
+      "doc": "The app's foreground state a platform_changed row reports."
+    },
+    {
+      "name": "stats",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The call_stats row's JSON-encoded per-track rollup; the rule reads packets per mid from it."
+    },
+    {
+      "name": "lease_state",
+      "type": "enum",
+      "values": [
+        "held",
+        "released",
+        "none"
+      ],
+      "sensitivity": null,
+      "doc": "What a sync_screen_share_leases read found: a live row, or none after release."
+    },
+    {
+      "name": "owner_participant_id",
+      "type": "id",
+      "sensitivity": null,
+      "doc": "The Participant a sync_screen_share_leases row names as its owner.",
+      "id_kind": "participant"
+    },
+    {
+      "name": "owner_generation",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The owner's participant generation a lease row holds."
+    },
+    {
+      "name": "lease_id",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The lease row's id, so two leases are never confused."
+    },
+    {
+      "name": "role",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The role a role_assigned row gave a Participant."
+    },
+    {
+      "name": "capability",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The moderation capability a Sync fact names."
+    },
+    {
+      "name": "live_target_source",
+      "type": "enum",
+      "values": [
+        "screen",
+        "camera",
+        "mic"
+      ],
+      "sensitivity": null,
+      "doc": "The media target a Sync live-target row changes."
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The sdk.telemetry row's type discriminator on legacy rows."
+    },
+    {
+      "name": "presented_frames",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The video element's presented-frame count, or unavailable(native_render) on native."
+    },
+    {
+      "name": "video_width",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The decoded frame width; 0 means nothing decoded."
+    },
+    {
+      "name": "rect_w",
+      "type": "number",
+      "sensitivity": null,
+      "doc": "The element's on-screen width in device pixels."
+    },
+    {
+      "name": "rect_h",
+      "type": "number",
+      "sensitivity": null,
+      "doc": "The element's on-screen height in device pixels."
+    },
+    {
+      "name": "on_screen",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "At least half the element's area is inside the viewport."
+    },
+    {
+      "name": "page_visible",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "The page is visible (document.visibilityState)."
+    },
+    {
+      "name": "covered",
+      "type": "bool",
+      "sensitivity": null,
+      "doc": "Another element covers the share's center point."
+    },
+    {
+      "name": "publication_id",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "The screen publication id the probe watches."
+    },
+    {
+      "name": "connection_id",
+      "type": "id",
+      "id_kind": "media_connection",
+      "sensitivity": null,
+      "doc": "The media connection an SFU row belongs to."
+    }
+  ],
+  "events": [
+    {
+      "name": "share.capture",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The client's getDisplayMedia call and its terminal outcome: the screen picker a Participant answered, or the rejection it hit. Duration separates a picker cancel from a policy block.",
+      "fields": {
+        "error_name": {},
+        "permission_block": {},
+        "display_capture_allowed": {},
+        "framed": {},
+        "display_surface": {},
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "\"share.capture\""
+        }
+      ]
+    },
+    {
+      "name": "share.track_ended",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The result of the client's attempt to report a track's ended event to Sync, replacing a discarded Effect.ignore.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "\"share.track_ended\""
+        }
+      ]
+    },
+    {
+      "name": "share.view",
+      "kind": "surface",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "A viewer's committed share surface: mounted while it shows a state, dismissed at unmount. One shown record per state change carries that state and the layout flags.",
+      "fields": {
+        "share_view_state": {
+          "required": true
+        },
+        "hidden": {},
+        "pinned_other": {},
+        "pip": {},
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/react/src/components/stage/StageContentTile.tsx",
+          "literal": "\"share.view\""
+        },
+        {
+          "path": "sdks/typescript/react/src/components/composite/ScreenShareView.tsx",
+          "literal": "\"share.view\""
+        },
+        {
+          "path": "sdks/typescript/react-native/src/stage/ContentTile.tsx",
+          "literal": "\"share.view\""
+        }
+      ]
+    },
+    {
+      "name": "share.start",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "decisions": [
+        "ok",
+        "refused",
+        "retryable_failure",
+        "terminal_failure"
+      ],
+      "doc": "Sync's final answer to an enable-screen live target: granted, refused with a named reason, or failed on a dependency.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+          "literal": "\"share.start\""
+        },
+        {
+          "path": "apps/sync/lib/chalk_sync/live/episode.ex",
+          "literal": "\"share.start\""
+        }
+      ]
+    },
+    {
+      "name": "share.stop",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "decisions": [
+        "ok",
+        "refused",
+        "retryable_failure",
+        "terminal_failure"
+      ],
+      "doc": "Sync's final answer to a disable-screen live target: the media_pause was committed, or it failed with a named reason.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+          "literal": "\"share.stop\""
+        }
+      ]
+    },
+    {
+      "name": "share.publish",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "decisions": [
+        "ok",
+        "refused"
+      ],
+      "doc": "The SFU's answer to a screen claim: the publication was accepted, or refused because a screen was already live or the node hit its packet ceiling.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "media_source": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/node_create.go",
+          "literal": "EventSharePublish"
+        }
+      ]
+    },
+    {
+      "name": "share.db.lease",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "checker"
+      ],
+      "doc": "A read of the sync_screen_share_leases row the checker itself takes: who owns the share lease, or that no row exists after release.",
+      "fields": {
+        "episode_id": {},
+        "lease_state": {
+          "required": true
+        },
+        "lease_id": {},
+        "owner_participant_id": {},
+        "owner_generation": {}
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/database.mjs",
+          "literal": "sync_screen_share_leases"
+        }
+      ]
+    },
+    {
+      "name": "client.media_intent",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The SDK asked Sync to change a media target; for the screen share these are the share_start and share_stop intents.",
+      "fields": {
+        "action": {
+          "required": true
+        },
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+          "literal": "\"media_intent\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "media_intent"
+        }
+      }
+    },
+    {
+      "name": "client.media_result",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The SDK's record of Sync's reply to a media command, including the passed-through reason_code. A copy of Sync's decision, never a second witness.",
+      "fields": {
+        "action": {
+          "required": true
+        },
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {},
+        "media_error_kind": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+          "literal": "\"media_result\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "media_result"
+        }
+      }
+    },
+    {
+      "name": "client.call_stats",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The client's periodic call stats rollup; the share checks read a viewer's inbound packets per mid and recv bitrate from its stats payload.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {},
+        "stats": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/call-stats.ts",
+          "literal": "\"call_stats\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "call_stats"
+        }
+      }
+    },
+    {
+      "name": "client.platform_changed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The client's foreground state changed; a viewer hidden before the window stays hidden until a later change.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {},
+        "platform_kind": {},
+        "visibility_state": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/sdktelemetry/spec.go",
+          "literal": "platform_changed"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "platform_changed"
+        }
+      }
+    },
+    {
+      "name": "client.sync_socket_open",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The viewer's Sync socket connected; tiles update from this point.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {},
+        "type": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/sdktelemetry/spec.go",
+          "literal": "sync_socket_open"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "sync_socket_open"
+        }
+      }
+    },
+    {
+      "name": "client.sync_socket_close",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The viewer's Sync socket closed; tiles freeze from this point until the next open.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "client_session_id": {},
+        "type": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/sdktelemetry/spec.go",
+          "literal": "sync_socket_close"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "sync_socket_close"
+        }
+      }
+    },
+    {
+      "name": "sync.role_assigned",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "Sync assigned a Participant a role; a capability_denied right after is a role race, not a fault.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "role": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/episodes/reducer.ex",
+          "literal": "role_assigned"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "role_assigned"
+        }
+      }
+    },
+    {
+      "name": "sync.participant_screen_share_stopped",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "A moderator's stopScreenOthers force-stopped a Participant's share; the stop was ordered, not a fault.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "capability": {}
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/facts.ex",
+          "literal": "participant_screen_share_stopped"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "participant_screen_share_stopped"
+        }
+      }
+    },
+    {
+      "name": "sfu.publication.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU accepted a publication and began forwarding it; with media_source=screen it is the share going live on the node.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "media_source": {},
+        "mid": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/trail.go",
+          "literal": "EventPublicationStarted"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.publication.started"
+        }
+      }
+    },
+    {
+      "name": "sfu.publication.stopped",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU ended a publication; with media_source=screen the share stopped on the node.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "media_source": {},
+        "mid": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/trail.go",
+          "literal": "EventPublicationStopped"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.publication.stopped"
+        }
+      }
+    },
+    {
+      "name": "sfu.media.ingress",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The node's periodic cumulative packet count per mid; growth on source=screen proves the sharer's device is sending.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "media_source": {},
+        "mid": {},
+        "packets": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/stats.go",
+          "literal": "EventMediaIngress"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.media.ingress"
+        }
+      }
+    },
+    {
+      "name": "sfu.subscription.started",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU began forwarding a publication to a viewer; the viewer and the publisher's mid name the link.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "publisher_id": {},
+        "media_source": {},
+        "mid": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/trail.go",
+          "literal": "EventSubscriptionStarted"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.started"
+        }
+      }
+    },
+    {
+      "name": "sfu.subscription.paused",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU paused forwarding to a viewer, with the reason: congestion, the viewer's own request, or an inactive source.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "publisher_id": {},
+        "media_source": {},
+        "mid": {},
+        "pause_reason": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/trail.go",
+          "literal": "EventSubscriptionPaused"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.paused"
+        }
+      }
+    },
+    {
+      "name": "sfu.subscription.stopped",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU stopped forwarding a publication to a viewer.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "publisher_id": {},
+        "media_source": {},
+        "mid": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/trail.go",
+          "literal": "EventSubscriptionStopped"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.subscription.stopped"
+        }
+      }
+    },
+    {
+      "name": "sfu.admission.refused",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "The SFU's existing refusal log; a copy of share.publish's refused decision, never a second witness.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "media_source": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/telemetry.go",
+          "literal": "EventAdmissionRefused"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.admission.refused"
+        }
+      }
+    },
+    {
+      "name": "sfu.peer.state",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sfu"
+      ],
+      "doc": "A peer's media connection state on the node; a share that never connected is slice 2's problem, not this one's.",
+      "fields": {
+        "participant_id": {},
+        "episode_id": {},
+        "connection_id": {},
+        "peer_state": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "EventPeerState"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sfu.peer.state"
+        }
+      }
+    },
+    {
+      "name": "video.render_probe",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "Slice 4's render probe on a video element: presented frames, geometry and visibility, every 5 s while the tile mounts the track. Declared by slice 5 until slice 4's area lands its own; the emitter is slice 4's probe.",
+      "fields": {
+        "participant_id": {},
+        "client_session_id": {},
+        "publication_id": {},
+        "presented_frames": {
+          "required": true
+        },
+        "video_width": {},
+        "rect_w": {},
+        "rect_h": {},
+        "on_screen": {},
+        "page_visible": {},
+        "covered": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/video-render-probe.ts",
+          "literal": "\"video.render_probe\""
+        }
+      ]
+    }
+  ],
+  "reasons": [
+    {
+      "code": "share.screen_share_in_use",
+      "outcome": "expected",
+      "doc": "Sync's lease refused the start because the Episode's one screen share is already held."
+    },
+    {
+      "code": "share.capability_denied",
+      "outcome": "expected",
+      "doc": "Sync refused the start because the Participant's role can't publish screen."
+    },
+    {
+      "code": "share.dependency_unavailable",
+      "outcome": "error",
+      "doc": "A Postgres write the share command needs failed; the command never reached its decision."
+    },
+    {
+      "code": "share.screen_share_active",
+      "outcome": "expected",
+      "doc": "The SFU refused the claim because a screen publication is already live."
+    },
+    {
+      "code": "share.screen_ceiling",
+      "outcome": "expected",
+      "doc": "The SFU refused the claim because the node is at its packet ceiling."
+    },
+    {
+      "code": "share.lease_not_owned",
+      "outcome": "error",
+      "doc": "The lease release deleted no row: the holder no longer owned it, so the row outlived the share."
+    },
+    {
+      "code": "share.role_race",
+      "outcome": "expected",
+      "doc": "The start hit capability_denied inside the role-change window; the Participant's role grant hadn't landed yet."
+    },
+    {
+      "code": "share.owner_live",
+      "outcome": "expected",
+      "doc": "The refusal was honest: the lease owner's screen ingress was still growing."
+    },
+    {
+      "code": "share.lease_draining",
+      "outcome": "expected",
+      "doc": "The lease owner went silent without stopping; its row drains on the 35 s expiry."
+    },
+    {
+      "code": "share.viewer_sync_closed",
+      "outcome": "expected",
+      "doc": "A viewer's Sync socket was closed across the stop, so their stale tile is slice 7's drop, not this fault."
+    },
+    {
+      "code": "share.viewer_hidden",
+      "outcome": "expected",
+      "doc": "The viewer's page was hidden or backgrounded across the window, so nothing had to render."
+    },
+    {
+      "code": "share.picture_in_picture",
+      "outcome": "expected",
+      "doc": "The share played in picture-in-picture; the page tile need not paint it."
+    },
+    {
+      "code": "share.pinned_other",
+      "outcome": "expected",
+      "doc": "The viewer pinned another item, which hid the share tile by their own choice."
+    },
+    {
+      "code": "share.congestion_paused",
+      "outcome": "expected",
+      "doc": "The SFU paused the viewer's subscription for congestion while their link was starved."
+    },
+    {
+      "code": "share.os_permission",
+      "outcome": "expected",
+      "doc": "The OS or browser's system policy denied capture; Chrome reports it as permission_block=system."
+    },
+    {
+      "code": "share.picker_cancelled",
+      "outcome": "expected",
+      "doc": "The Participant dismissed the screen picker; the refusal took as long as a real picker."
+    },
+    {
+      "code": "share.policy_blocked",
+      "outcome": "error",
+      "doc": "A Permissions-Policy denied display-capture before any picker ran."
+    },
+    {
+      "code": "share.refused_without_picker",
+      "outcome": "error",
+      "doc": "NotAllowedError arrived too fast for a picker with no system block and no policy block: the capture was refused silently."
+    },
+    {
+      "code": "share.no_user_activation",
+      "outcome": "error",
+      "doc": "InvalidStateError: the call ran without a live user activation."
+    },
+    {
+      "code": "share.unsupported",
+      "outcome": "error",
+      "doc": "The browser or context doesn't support display capture."
+    },
+    {
+      "code": "share.bad_constraints",
+      "outcome": "error",
+      "doc": "The getDisplayMedia call was malformed (OverconstrainedError or TypeError)."
+    },
+    {
+      "code": "share.capture_device",
+      "outcome": "error",
+      "doc": "The capture device or an unmapped error stopped the share before the picker could answer."
+    },
+    {
+      "code": "share.long_drop",
+      "outcome": "expected",
+      "doc": "The share stopped because the client's Sync link dropped for LONG_DROP_MS; slice 7 owns the drop."
+    },
+    {
+      "code": "share.moderation_pause",
+      "outcome": "expected",
+      "doc": "A moderator paused the Participant's screen share."
+    }
+  ],
+  "machines": [
+    {
+      "name": "share.client",
+      "doc": "The sharer-side screen share in the client: idle until a start intent, live once the revision settles, stopping on an off intent.",
+      "states": [
+        "off",
+        "starting",
+        "on",
+        "stopping"
+      ],
+      "initial": "off",
+      "edges": [
+        [
+          "off",
+          "starting"
+        ],
+        [
+          "starting",
+          "on"
+        ],
+        [
+          "starting",
+          "off"
+        ],
+        [
+          "starting",
+          "stopping"
+        ],
+        [
+          "on",
+          "stopping"
+        ],
+        [
+          "stopping",
+          "off"
+        ],
+        [
+          "stopping",
+          "on"
+        ],
+        [
+          "stopping",
+          "starting"
+        ]
+      ],
+      "triggers": [
+        "user_control",
+        "platform_ended",
+        "long_drop",
+        "moderation_pause",
+        "revision_confirmed",
+        "revision_failed"
+      ]
+    },
+    {
+      "name": "share.lease",
+      "doc": "The Episode's screen-share lease in Sync: held by one Participant until released or expired. Renew and rotate keep the lease held and emit no transition; their result is on the db row's renewed_until.",
+      "states": [
+        "none",
+        "held",
+        "released"
+      ],
+      "initial": "none",
+      "edges": [
+        [
+          "none",
+          "held"
+        ],
+        [
+          "held",
+          "released"
+        ]
+      ],
+      "triggers": [
+        "acquire",
+        "observed_acquire",
+        "release"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "name": "share.capture",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The Participant's screen-picker attempt and its terminal outcome. Claim: the op's outcome.",
+      "events": [
+        {
+          "event": "share.capture",
+          "source": "client",
+          "claim": "outcome",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "outcome",
+            "reason_code",
+            "duration_ms",
+            "error_name",
+            "permission_block",
+            "display_capture_allowed",
+            "framed",
+            "display_surface",
+            "op_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.command",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Sync's answer to a share_start or share_stop command, with the client's media_result copy of the same reply as one witness. Claim: the decision or outcome.",
+      "events": [
+        {
+          "event": "share.start",
+          "source": "sync",
+          "claim": "decision",
+          "failure_claims": [
+            "refused",
+            "retryable_failure",
+            "terminal_failure"
+          ],
+          "fields": [
+            "participant_id",
+            "est_server_ms",
+            "decision",
+            "reason_code",
+            "decision_id"
+          ]
+        },
+        {
+          "event": "share.stop",
+          "source": "sync",
+          "claim": "decision",
+          "failure_claims": [
+            "refused",
+            "retryable_failure",
+            "terminal_failure"
+          ],
+          "fields": [
+            "participant_id",
+            "est_server_ms",
+            "decision",
+            "reason_code",
+            "decision_id"
+          ]
+        },
+        {
+          "event": "client.media_result",
+          "source": "client",
+          "claim": "outcome",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "action",
+            "outcome",
+            "reason_code",
+            "media_error_kind",
+            "op_id",
+            "duration_ms"
+          ]
+        },
+        {
+          "event": "client.media_intent",
+          "source": "client",
+          "claim": "action",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "action",
+            "op_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.client_state",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The sharer-side share.client transitions. Claim: to_state.",
+      "events": [
+        {
+          "event": "share.client",
+          "source": "client",
+          "claim": "to_state",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "from_state",
+            "to_state",
+            "trigger",
+            "reason_code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.lease_state",
+      "kind": "state",
+      "per": "item",
+      "doc": "Who holds the Episode's screen-share lease: Sync's share.lease transitions and the lease table the checker reads. Claim: to_state or lease_state.",
+      "events": [
+        {
+          "event": "share.lease",
+          "source": "sync",
+          "claim": "to_state",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "from_state",
+            "to_state",
+            "trigger",
+            "reason_code"
+          ]
+        },
+        {
+          "event": "share.db.lease",
+          "source": "db",
+          "claim": "lease_state",
+          "fields": [
+            "episode_id",
+            "est_server_ms",
+            "lease_state",
+            "lease_id",
+            "owner_participant_id",
+            "owner_generation"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.publish",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The SFU's decision on the Participant's screen claim, with its admission.refused log as the same witness. Claim: the decision.",
+      "events": [
+        {
+          "event": "share.publish",
+          "source": "sfu",
+          "claim": "decision",
+          "failure_claims": [
+            "refused"
+          ],
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "decision",
+            "reason_code",
+            "decision_id"
+          ]
+        },
+        {
+          "event": "sfu.admission.refused",
+          "source": "sfu",
+          "claim": "reason_code",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "reason_code",
+            "media_source"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.live",
+      "kind": "aggregate",
+      "per": "seat",
+      "doc": "The sharer's screen picture reaching the node: publications and cumulative ingress on source=screen. Claim: packets for ingress rows.",
+      "events": [
+        {
+          "event": "sfu.publication.started",
+          "source": "sfu",
+          "claim": "media_source",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "media_source",
+            "mid",
+            "connection_id"
+          ]
+        },
+        {
+          "event": "sfu.publication.stopped",
+          "source": "sfu",
+          "claim": "media_source",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "media_source",
+            "mid",
+            "connection_id"
+          ]
+        },
+        {
+          "event": "sfu.media.ingress",
+          "source": "sfu",
+          "claim": "packets",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "media_source",
+            "mid",
+            "packets",
+            "connection_id"
+          ]
+        },
+        {
+          "event": "sfu.peer.state",
+          "source": "sfu",
+          "claim": "peer_state",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "peer_state",
+            "connection_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.forward",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A viewer's subscription to a screen publication: started, paused with its reason, stopped. Claim: the row's event state.",
+      "events": [
+        {
+          "event": "sfu.subscription.started",
+          "source": "sfu",
+          "claim": "media_source",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "publisher_id",
+            "media_source",
+            "mid",
+            "connection_id"
+          ]
+        },
+        {
+          "event": "sfu.subscription.paused",
+          "source": "sfu",
+          "claim": "pause_reason",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "publisher_id",
+            "media_source",
+            "mid",
+            "pause_reason",
+            "connection_id"
+          ]
+        },
+        {
+          "event": "sfu.subscription.stopped",
+          "source": "sfu",
+          "claim": "media_source",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "publisher_id",
+            "media_source",
+            "mid",
+            "connection_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.receive",
+      "kind": "aggregate",
+      "per": "seat",
+      "doc": "The viewer's inbound packets on the screen mid in a call_stats window, and their recv bitrate. Claim: packets.",
+      "events": [
+        {
+          "event": "client.call_stats",
+          "source": "client",
+          "claim": "stats",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "stats"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.view",
+      "kind": "event",
+      "per": "seat",
+      "doc": "What state a viewer's share surface showed. Claim: share_view_state.",
+      "events": [
+        {
+          "event": "share.view",
+          "source": "client",
+          "claim": "share_view_state",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "share_view_state",
+            "hidden",
+            "pinned_other",
+            "pip",
+            "surface_state",
+            "shown_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.client_presence",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The viewer's platform state and Sync socket: hidden, backgrounded, or disconnected while a share changed.",
+      "events": [
+        {
+          "event": "client.platform_changed",
+          "source": "client",
+          "claim": "visibility_state",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "visibility_state",
+            "platform_kind"
+          ]
+        },
+        {
+          "event": "client.sync_socket_open",
+          "source": "client",
+          "claim": "type",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "type"
+          ]
+        },
+        {
+          "event": "client.sync_socket_close",
+          "source": "client",
+          "claim": "type",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "type"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.moderation",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Sync's moderation evidence about a Participant: role assignments and a moderator's stop of their share.",
+      "events": [
+        {
+          "event": "sync.role_assigned",
+          "source": "sync",
+          "claim": "role",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "role"
+          ]
+        },
+        {
+          "event": "sync.participant_screen_share_stopped",
+          "source": "sync",
+          "claim": "capability",
+          "fields": [
+            "participant_id",
+            "episode_id",
+            "est_server_ms",
+            "capability"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.track_ended",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The client's report of a screen track's ended event reaching Sync.",
+      "events": [
+        {
+          "event": "share.track_ended",
+          "source": "client",
+          "claim": "outcome",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "outcome",
+            "reason_code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "share.render",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Slice 4's render probe on the share's video element. Claim: presented_frames (or its unavailable marker).",
+      "events": [
+        {
+          "event": "video.render_probe",
+          "source": "client",
+          "claim": "presented_frames",
+          "fields": [
+            "participant_id",
+            "client_session_id",
+            "est_server_ms",
+            "publication_id",
+            "presented_frames",
+            "video_width",
+            "rect_w",
+            "rect_h",
+            "on_screen",
+            "page_visible",
+            "covered"
+          ]
+        }
+      ]
+    }
+  ],
   "symptoms": [
+    {
+      "code": "share.start_failed",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The Participant picked a screen, but the share never went live for the Episode.",
+      "user_words": [
+        "I shared my screen but nothing happened",
+        "screen share won't start"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.capture",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'share.capture' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The picker attempt that started the share and its outcome."
+        },
+        {
+          "fact": "share.command",
+          "from": [
+            "sync",
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'share.start' or (event == 'sdk.telemetry' and type == 'media_result' and action == 'share_start')) | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Sync's share.start decision, or the client's media_result copy of it."
+        },
+        {
+          "fact": "share.publish",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'share.publish' or event == 'sfu.admission.refused') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The SFU's decision on the screen claim."
+        },
+        {
+          "fact": "share.live",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event in ('sfu.publication.started', 'sfu.media.ingress', 'sfu.peer.state') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The screen publication and its ingress on the node."
+        }
+      ],
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
+    },
+    {
+      "code": "share.capture_failed",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The screen picker failed for a reason other than the Participant's own cancel or an OS refusal.",
+      "user_words": [
+        "screen share button does nothing",
+        "the picker never comes up"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.capture",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'share.capture' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The picker attempt, its error name, duration and policy fields."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/space-client/share-capture.fault.test.ts"
+    },
+    {
+      "code": "share.blocked",
+      "item": "episode",
+      "per": "seat",
+      "doc": "A Participant was refused with screen_share_in_use while nobody was really sharing.",
+      "user_words": [
+        "it says someone else is sharing but nobody is"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.command",
+          "from": [
+            "sync",
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and (name == 'share.start' or name == 'share.stop' or (event == 'sdk.telemetry' and type == 'media_result' and action == 'share_start')) | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The refused share.start and the owner's earlier start and stop decisions."
+        },
+        {
+          "fact": "share.lease_state",
+          "from": [
+            "sync",
+            "db"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and (name == 'share.lease' or name == 'share.db.lease') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The lease transitions and the lease row itself: who held it and whether release worked."
+        },
+        {
+          "fact": "share.live",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event in ('sfu.publication.started', 'sfu.media.ingress') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Whether the owner's screen is still sending, or has drained."
+        },
+        {
+          "fact": "share.client_state",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'share.client' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Whether the owner asked to stop before the refusal."
+        },
+        {
+          "fact": "share.view",
+          "from": [
+            "client"
+          ],
+          "required": false,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'share.view' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "On the Cloudflare plane, a present viewer's share surface stands in for missing ingress."
+        }
+      ],
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
+    },
+    {
+      "code": "share.not_seen",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The share is live at the SFU, but a present viewer has no visible picture of it.",
+      "user_words": [
+        "I can't see their screen",
+        "the share is a black box"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.live",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event in ('sfu.publication.started', 'sfu.media.ingress') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The share is live: a started screen publication with ingress growth."
+        },
+        {
+          "fact": "share.forward",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event in ('sfu.subscription.started', 'sfu.subscription.paused', 'sfu.subscription.stopped') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The viewer's subscription to the screen mid and any pause."
+        },
+        {
+          "fact": "share.receive",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'sdk.telemetry' and type == 'call_stats') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The viewer's inbound packets on the screen mid."
+        },
+        {
+          "fact": "share.view",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'share.view' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The viewer's share surface state and its hidden, pinned and PiP flags."
+        },
+        {
+          "fact": "share.render",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'video.render_probe' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Slice 4's render probe on the share element: on screen, visible and presenting frames."
+        },
+        {
+          "fact": "share.client_presence",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'sdk.telemetry' and type in ('platform_changed', 'sync_socket_open', 'sync_socket_close')) | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The viewer's page visibility and Sync socket across the window."
+        }
+      ],
+      "fault_scenario": "observability/fixtures/share.not_seen/README.md"
+    },
+    {
+      "code": "share.frozen",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The viewer's share is on screen and packets arrive, but no new frame is presented.",
+      "user_words": [
+        "the share is frozen",
+        "their screen stopped moving"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.forward",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event in ('sfu.subscription.started', 'sfu.subscription.paused', 'sfu.subscription.stopped') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The viewer's subscription to the screen mid."
+        },
+        {
+          "fact": "share.receive",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'sdk.telemetry' and type == 'call_stats') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Packet growth on the screen mid inside a measured window."
+        },
+        {
+          "fact": "share.view",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'share.view' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The surface showing live or low-quality without PiP."
+        },
+        {
+          "fact": "share.render",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'video.render_probe' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Two on-screen probes 5 s apart with no presented-frame growth."
+        }
+      ],
+      "fault_scenario": "observability/fixtures/share.frozen/README.md"
+    },
     {
       "code": "share.wont_stop",
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant stopped sharing but others still see the share.",
-      "user_words": ["my screen is still being shared"],
-      "witnesses": [],
-      "fault_scenario": null
+      "doc": "The Participant asked to stop, and 5 s later Sync hasn't stopped it, the SFU still receives it, or a viewer still shows it.",
+      "user_words": [
+        "my screen is still being shared",
+        "I stopped sharing but they can still see it"
+      ],
+      "witnesses": [
+        {
+          "fact": "share.client_state",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'share.client' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "The on\u2192stopping transition that is the stop request and its trigger."
+        },
+        {
+          "fact": "share.command",
+          "from": [
+            "sync",
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'share.stop' or (event == 'sdk.telemetry' and type == 'media_result' and action == 'share_stop')) | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Sync's share.stop decision for this stop."
+        },
+        {
+          "fact": "share.live",
+          "from": [
+            "sfu"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event in ('sfu.media.ingress', 'sfu.publication.stopped') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Whether the sharer's screen ingress kept growing after the stop deadline."
+        },
+        {
+          "fact": "share.view",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'share.view' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A present viewer's last share state before the deadline."
+        },
+        {
+          "fact": "share.client_presence",
+          "from": [
+            "client"
+          ],
+          "required": false,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and (event == 'sdk.telemetry' and type in ('sync_socket_open', 'sync_socket_close')) | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A viewer whose Sync socket was closed across the stop is slice 7's stale tile."
+        },
+        {
+          "fact": "share.moderation",
+          "from": [
+            "sync"
+          ],
+          "required": false,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'participant_screen_share_stopped' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A moderation_pause stop is expected when Sync logged the moderator's stop."
+        }
+      ],
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
     }
   ]
 }

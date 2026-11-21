@@ -3,18 +3,42 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "4a214cd143b1"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded                   = "client.call_ended"
+	EventClientCallStats                   = "client.call_stats"
+	EventClientMediaIntent                 = "client.media_intent"
+	EventClientMediaResult                 = "client.media_result"
+	EventClientPlatformChanged             = "client.platform_changed"
+	EventClientSyncSocketClose             = "client.sync_socket_close"
+	EventClientSyncSocketOpen              = "client.sync_socket_open"
+	EventObsClockJump                      = "obs.clock_jump"
+	EventObsFlagsSnapshot                  = "obs.flags_snapshot"
+	EventSelftestAdmit                     = "selftest.admit"
+	EventSelftestBanner                    = "selftest.banner"
+	EventSelftestNote                      = "selftest.note"
+	EventSelftestWork                      = "selftest.work"
+	EventSfuAdmissionRefused               = "sfu.admission.refused"
+	EventSfuMediaIngress                   = "sfu.media.ingress"
+	EventSfuPeerState                      = "sfu.peer.state"
+	EventSfuPublicationStarted             = "sfu.publication.started"
+	EventSfuPublicationStopped             = "sfu.publication.stopped"
+	EventSfuSubscriptionPaused             = "sfu.subscription.paused"
+	EventSfuSubscriptionStarted            = "sfu.subscription.started"
+	EventSfuSubscriptionStopped            = "sfu.subscription.stopped"
+	EventShareCapture                      = "share.capture"
+	EventShareDbLease                      = "share.db.lease"
+	EventSharePublish                      = "share.publish"
+	EventShareStart                        = "share.start"
+	EventShareStop                         = "share.stop"
+	EventShareTrackEnded                   = "share.track_ended"
+	EventShareView                         = "share.view"
+	EventSyncEpisodeEnded                  = "sync.episode.ended"
+	EventSyncParticipantScreenShareStopped = "sync.participant_screen_share_stopped"
+	EventSyncRoleAssigned                  = "sync.role_assigned"
+	EventVideoRenderProbe                  = "video.render_probe"
 )
 
 // Machine names.
@@ -22,179 +46,329 @@ const (
 	MachineClientConnection = "client.connection"
 	MachineEpisodeLifecycle = "episode.lifecycle"
 	MachineSelftestDoor     = "selftest.door"
+	MachineShareClient      = "share.client"
+	MachineShareLease       = "share.lease"
 )
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled                  = "cancelled"
+	ReasonEndTimeLimit               = "end.time_limit"
+	ReasonSelftestBroken             = "selftest.broken"
+	ReasonSelftestBusy               = "selftest.busy"
+	ReasonShareBadConstraints        = "share.bad_constraints"
+	ReasonShareCapabilityDenied      = "share.capability_denied"
+	ReasonShareCaptureDevice         = "share.capture_device"
+	ReasonShareCongestionPaused      = "share.congestion_paused"
+	ReasonShareDependencyUnavailable = "share.dependency_unavailable"
+	ReasonShareLeaseDraining         = "share.lease_draining"
+	ReasonShareLeaseNotOwned         = "share.lease_not_owned"
+	ReasonShareLongDrop              = "share.long_drop"
+	ReasonShareModerationPause       = "share.moderation_pause"
+	ReasonShareNoUserActivation      = "share.no_user_activation"
+	ReasonShareOsPermission          = "share.os_permission"
+	ReasonShareOwnerLive             = "share.owner_live"
+	ReasonSharePickerCancelled       = "share.picker_cancelled"
+	ReasonSharePictureInPicture      = "share.picture_in_picture"
+	ReasonSharePinnedOther           = "share.pinned_other"
+	ReasonSharePolicyBlocked         = "share.policy_blocked"
+	ReasonShareRefusedWithoutPicker  = "share.refused_without_picker"
+	ReasonShareRoleRace              = "share.role_race"
+	ReasonShareScreenCeiling         = "share.screen_ceiling"
+	ReasonShareScreenShareActive     = "share.screen_share_active"
+	ReasonShareScreenShareInUse      = "share.screen_share_in_use"
+	ReasonShareUnsupported           = "share.unsupported"
+	ReasonShareViewerHidden          = "share.viewer_hidden"
+	ReasonShareViewerSyncClosed      = "share.viewer_sync_closed"
+	ReasonUnclassified               = "unclassified"
 )
 
 // Field names.
 const (
-	FieldAdmissionRequestID = "admission_request_id"
-	FieldAgentID            = "agent_id"
-	FieldAppBuild           = "app_build"
-	FieldAppVersion         = "app_version"
-	FieldAttempt            = "attempt"
-	FieldBannerKind         = "banner_kind"
-	FieldBatchID            = "batch_id"
-	FieldClientMonoMs       = "client_mono_ms"
-	FieldClientSessionID    = "client_session_id"
-	FieldClientWallMs       = "client_wall_ms"
-	FieldClockEpoch         = "clock_epoch"
-	FieldClockErrMs         = "clock_err_ms"
-	FieldClockState         = "clock_state"
-	FieldDecision           = "decision"
-	FieldDecisionID         = "decision_id"
-	FieldDeviceEphemeral    = "device_ephemeral"
-	FieldDeviceID           = "device_id"
-	FieldDropReason         = "drop_reason"
-	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDurationMs         = "duration_ms"
-	FieldEnd                = "end"
-	FieldEndReason          = "end_reason"
-	FieldEnv                = "env"
-	FieldEpisodeID          = "episode_id"
-	FieldEstServerMs        = "est_server_ms"
-	FieldEventID            = "event_id"
-	FieldFlags              = "flags"
-	FieldFlagsHash          = "flags_hash"
-	FieldFromState          = "from_state"
-	FieldGeneration         = "generation"
-	FieldItemCount          = "item_count"
-	FieldJobID              = "job_id"
-	FieldJourneyID          = "journey_id"
-	FieldJumpMs             = "jump_ms"
-	FieldKind               = "kind"
-	FieldMachine            = "machine"
-	FieldMediaConnectionID  = "media_connection_id"
-	FieldModule             = "module"
-	FieldName               = "name"
-	FieldNextSeq            = "next_seq"
-	FieldNoteKind           = "note_kind"
-	FieldOpID               = "op_id"
-	FieldOutcome            = "outcome"
-	FieldParentOpID         = "parent_op_id"
-	FieldParticipantID      = "participant_id"
-	FieldPlatform           = "platform"
-	FieldProviderMediaID    = "provider_media_id"
-	FieldReasonCode         = "reason_code"
-	FieldRecordingID        = "recording_id"
-	FieldReleaseSHA         = "release_sha"
-	FieldRequestID          = "request_id"
-	FieldSchemaVer          = "schema_ver"
-	FieldSDKVersion         = "sdk_version"
-	FieldSeq                = "seq"
-	FieldShownMs            = "shown_ms"
-	FieldSourceID           = "source_id"
-	FieldSpaceID            = "space_id"
-	FieldSpanID             = "span_id"
-	FieldSurfaceState       = "surface_state"
-	FieldSyncConnectionID   = "sync_connection_id"
-	FieldTenantID           = "tenant_id"
-	FieldToState            = "to_state"
-	FieldTraceID            = "trace_id"
-	FieldTrigger            = "trigger"
-	FieldUserID             = "user_id"
-	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldAction                = "action"
+	FieldAdmissionRequestID    = "admission_request_id"
+	FieldAgentID               = "agent_id"
+	FieldAppBuild              = "app_build"
+	FieldAppVersion            = "app_version"
+	FieldAttempt               = "attempt"
+	FieldBannerKind            = "banner_kind"
+	FieldBatchID               = "batch_id"
+	FieldCapability            = "capability"
+	FieldClientMonoMs          = "client_mono_ms"
+	FieldClientSessionID       = "client_session_id"
+	FieldClientWallMs          = "client_wall_ms"
+	FieldClockEpoch            = "clock_epoch"
+	FieldClockErrMs            = "clock_err_ms"
+	FieldClockState            = "clock_state"
+	FieldConnectionID          = "connection_id"
+	FieldCovered               = "covered"
+	FieldDecision              = "decision"
+	FieldDecisionID            = "decision_id"
+	FieldDeviceEphemeral       = "device_ephemeral"
+	FieldDeviceID              = "device_id"
+	FieldDisplayCaptureAllowed = "display_capture_allowed"
+	FieldDisplaySurface        = "display_surface"
+	FieldDropReason            = "drop_reason"
+	FieldDroppedSeqs           = "dropped_seqs"
+	FieldDurationMs            = "duration_ms"
+	FieldEnd                   = "end"
+	FieldEndReason             = "end_reason"
+	FieldEnv                   = "env"
+	FieldEpisodeID             = "episode_id"
+	FieldErrorName             = "error_name"
+	FieldEstServerMs           = "est_server_ms"
+	FieldEventID               = "event_id"
+	FieldFlags                 = "flags"
+	FieldFlagsHash             = "flags_hash"
+	FieldFramed                = "framed"
+	FieldFromState             = "from_state"
+	FieldGeneration            = "generation"
+	FieldHidden                = "hidden"
+	FieldItemCount             = "item_count"
+	FieldJobID                 = "job_id"
+	FieldJourneyID             = "journey_id"
+	FieldJumpMs                = "jump_ms"
+	FieldKind                  = "kind"
+	FieldLeaseID               = "lease_id"
+	FieldLeaseState            = "lease_state"
+	FieldLiveTargetSource      = "live_target_source"
+	FieldMachine               = "machine"
+	FieldMediaConnectionID     = "media_connection_id"
+	FieldMediaErrorKind        = "media_error_kind"
+	FieldMediaSource           = "media_source"
+	FieldMid                   = "mid"
+	FieldModule                = "module"
+	FieldName                  = "name"
+	FieldNextSeq               = "next_seq"
+	FieldNoteKind              = "note_kind"
+	FieldOnScreen              = "on_screen"
+	FieldOpID                  = "op_id"
+	FieldOutcome               = "outcome"
+	FieldOwnerGeneration       = "owner_generation"
+	FieldOwnerParticipantID    = "owner_participant_id"
+	FieldPackets               = "packets"
+	FieldPageVisible           = "page_visible"
+	FieldParentOpID            = "parent_op_id"
+	FieldParticipantID         = "participant_id"
+	FieldPauseReason           = "pause_reason"
+	FieldPeerState             = "peer_state"
+	FieldPermissionBlock       = "permission_block"
+	FieldPinnedOther           = "pinned_other"
+	FieldPip                   = "pip"
+	FieldPlatform              = "platform"
+	FieldPlatformKind          = "platform_kind"
+	FieldPresentedFrames       = "presented_frames"
+	FieldProviderMediaID       = "provider_media_id"
+	FieldPublicationID         = "publication_id"
+	FieldPublisherID           = "publisher_id"
+	FieldReasonCode            = "reason_code"
+	FieldRecordingID           = "recording_id"
+	FieldRectH                 = "rect_h"
+	FieldRectW                 = "rect_w"
+	FieldReleaseSHA            = "release_sha"
+	FieldRequestID             = "request_id"
+	FieldRole                  = "role"
+	FieldSchemaVer             = "schema_ver"
+	FieldSDKVersion            = "sdk_version"
+	FieldSeq                   = "seq"
+	FieldShareViewState        = "share_view_state"
+	FieldShownMs               = "shown_ms"
+	FieldSourceID              = "source_id"
+	FieldSpaceID               = "space_id"
+	FieldSpanID                = "span_id"
+	FieldStats                 = "stats"
+	FieldSurfaceState          = "surface_state"
+	FieldSyncConnectionID      = "sync_connection_id"
+	FieldTenantID              = "tenant_id"
+	FieldToState               = "to_state"
+	FieldTraceID               = "trace_id"
+	FieldTrigger               = "trigger"
+	FieldType                  = "type"
+	FieldUserID                = "user_id"
+	FieldVideoWidth            = "video_width"
+	FieldVisibilityState       = "visibility_state"
+	FieldWebhookDeliveryID     = "webhook_delivery_id"
 )
 
 var registryFields = map[string]fieldSpec{
-	"admission_request_id": {typ: "id", group: "trail", required: false},
-	"agent_id":             {typ: "id", group: "trail", required: false},
-	"app_build":            {typ: "string", group: "build", required: false},
-	"app_version":          {typ: "string", group: "build", required: false},
-	"attempt":              {typ: "int", group: "trail", required: false},
-	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
-	"batch_id":             {typ: "id", group: "delivery", required: false},
-	"client_mono_ms":       {typ: "number", group: "clock", required: false},
-	"client_session_id":    {typ: "id", group: "trail", required: false},
-	"client_wall_ms":       {typ: "int", group: "clock", required: false},
-	"clock_epoch":          {typ: "int", group: "clock", required: false},
-	"clock_err_ms":         {typ: "int", group: "clock", required: false},
-	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
-	"decision":             {typ: "string", group: "record", required: false},
-	"decision_id":          {typ: "id", group: "record", required: false},
-	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
-	"device_id":            {typ: "id", group: "trail", required: false},
-	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
-	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"duration_ms":          {typ: "int", group: "record", required: false},
-	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
-	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
-	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
-	"episode_id":           {typ: "id", group: "trail", required: false},
-	"est_server_ms":        {typ: "int", group: "clock", required: false},
-	"event_id":             {typ: "id", group: "delivery", required: true},
-	"flags":                {typ: "map", group: "event", required: false},
-	"flags_hash":           {typ: "string", group: "flags", required: false},
-	"from_state":           {typ: "string", group: "record", required: false},
-	"generation":           {typ: "int", group: "trail", required: false},
-	"item_count":           {typ: "int", group: "event", required: false},
-	"job_id":               {typ: "id", group: "trail", required: false},
-	"journey_id":           {typ: "id", group: "trail", required: false},
-	"jump_ms":              {typ: "int", group: "event", required: false},
-	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"machine":              {typ: "string", group: "record", required: false},
-	"media_connection_id":  {typ: "id", group: "trail", required: false},
-	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
-	"name":                 {typ: "string", group: "record", required: true},
-	"next_seq":             {typ: "int", group: "delivery", required: false},
-	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
-	"op_id":                {typ: "id", group: "record", required: false},
-	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
-	"parent_op_id":         {typ: "id", group: "record", required: false},
-	"participant_id":       {typ: "id", group: "trail", required: false},
-	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
-	"provider_media_id":    {typ: "id", group: "trail", required: false},
-	"reason_code":          {typ: "string", group: "record", required: false},
-	"recording_id":         {typ: "id", group: "trail", required: false},
-	"release_sha":          {typ: "string", group: "build", required: false},
-	"request_id":           {typ: "id", group: "trail", required: false},
-	"schema_ver":           {typ: "string", group: "build", required: true},
-	"sdk_version":          {typ: "string", group: "build", required: false},
-	"seq":                  {typ: "int", group: "delivery", required: true},
-	"shown_ms":             {typ: "int", group: "record", required: false},
-	"source_id":            {typ: "string", group: "delivery", required: true},
-	"space_id":             {typ: "id", group: "trail", required: false},
-	"span_id":              {typ: "id", group: "trail", required: false},
-	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
-	"sync_connection_id":   {typ: "id", group: "trail", required: false},
-	"tenant_id":            {typ: "id", group: "trail", required: false},
-	"to_state":             {typ: "string", group: "record", required: false},
-	"trace_id":             {typ: "id", group: "trail", required: false},
-	"trigger":              {typ: "string", group: "record", required: false},
-	"user_id":              {typ: "id", group: "trail", required: false},
-	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"action":                  {typ: "enum", group: "event", required: false, values: []string{"share_start", "share_stop"}},
+	"admission_request_id":    {typ: "id", group: "trail", required: false},
+	"agent_id":                {typ: "id", group: "trail", required: false},
+	"app_build":               {typ: "string", group: "build", required: false},
+	"app_version":             {typ: "string", group: "build", required: false},
+	"attempt":                 {typ: "int", group: "trail", required: false},
+	"banner_kind":             {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
+	"batch_id":                {typ: "id", group: "delivery", required: false},
+	"capability":              {typ: "string", group: "event", required: false},
+	"client_mono_ms":          {typ: "number", group: "clock", required: false},
+	"client_session_id":       {typ: "id", group: "trail", required: false},
+	"client_wall_ms":          {typ: "int", group: "clock", required: false},
+	"clock_epoch":             {typ: "int", group: "clock", required: false},
+	"clock_err_ms":            {typ: "int", group: "clock", required: false},
+	"clock_state":             {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"connection_id":           {typ: "id", group: "event", required: false},
+	"covered":                 {typ: "bool", group: "event", required: false},
+	"decision":                {typ: "string", group: "record", required: false},
+	"decision_id":             {typ: "id", group: "record", required: false},
+	"device_ephemeral":        {typ: "bool", group: "trail", required: false},
+	"device_id":               {typ: "id", group: "trail", required: false},
+	"display_capture_allowed": {typ: "enum", group: "event", required: false, values: []string{"observed_true", "observed_false", "unavailable_no_policy_api", "not_applicable"}},
+	"display_surface":         {typ: "enum", group: "event", required: false, values: []string{"monitor", "window", "browser", "unknown"}},
+	"drop_reason":             {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped_seqs":            {typ: "ranges", group: "delivery", required: false},
+	"duration_ms":             {typ: "int", group: "record", required: false},
+	"end":                     {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
+	"end_reason":              {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"env":                     {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_id":              {typ: "id", group: "trail", required: false},
+	"error_name":              {typ: "enum", group: "event", required: false, values: []string{"NotAllowedError", "NotFoundError", "NotReadableError", "AbortError", "InvalidStateError", "NotSupportedError", "SecurityError", "OverconstrainedError", "TypeError", "OperationError", "unknown"}},
+	"est_server_ms":           {typ: "int", group: "clock", required: false},
+	"event_id":                {typ: "id", group: "delivery", required: true},
+	"flags":                   {typ: "map", group: "event", required: false},
+	"flags_hash":              {typ: "string", group: "flags", required: false},
+	"framed":                  {typ: "bool", group: "event", required: false},
+	"from_state":              {typ: "string", group: "record", required: false},
+	"generation":              {typ: "int", group: "trail", required: false},
+	"hidden":                  {typ: "bool", group: "event", required: false},
+	"item_count":              {typ: "int", group: "event", required: false},
+	"job_id":                  {typ: "id", group: "trail", required: false},
+	"journey_id":              {typ: "id", group: "trail", required: false},
+	"jump_ms":                 {typ: "int", group: "event", required: false},
+	"kind":                    {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"lease_id":                {typ: "string", group: "event", required: false},
+	"lease_state":             {typ: "enum", group: "event", required: false, values: []string{"held", "released", "none"}},
+	"live_target_source":      {typ: "enum", group: "event", required: false, values: []string{"screen", "camera", "mic"}},
+	"machine":                 {typ: "string", group: "record", required: false},
+	"media_connection_id":     {typ: "id", group: "trail", required: false},
+	"media_error_kind":        {typ: "string", group: "event", required: false},
+	"media_source":            {typ: "enum", group: "event", required: false, values: []string{"camera", "screen", "mic"}},
+	"mid":                     {typ: "string", group: "event", required: false},
+	"module":                  {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
+	"name":                    {typ: "string", group: "record", required: true},
+	"next_seq":                {typ: "int", group: "delivery", required: false},
+	"note_kind":               {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
+	"on_screen":               {typ: "bool", group: "event", required: false},
+	"op_id":                   {typ: "id", group: "record", required: false},
+	"outcome":                 {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"owner_generation":        {typ: "int", group: "event", required: false},
+	"owner_participant_id":    {typ: "id", group: "event", required: false},
+	"packets":                 {typ: "int", group: "event", required: false},
+	"page_visible":            {typ: "bool", group: "event", required: false},
+	"parent_op_id":            {typ: "id", group: "record", required: false},
+	"participant_id":          {typ: "id", group: "trail", required: false},
+	"pause_reason":            {typ: "enum", group: "event", required: false, values: []string{"congestion", "viewer", "source_inactive"}},
+	"peer_state":              {typ: "string", group: "event", required: false},
+	"permission_block":        {typ: "enum", group: "event", required: false, values: []string{"system", "user", "policy", "none"}},
+	"pinned_other":            {typ: "bool", group: "event", required: false},
+	"pip":                     {typ: "bool", group: "event", required: false},
+	"platform":                {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"platform_kind":           {typ: "string", group: "event", required: false},
+	"presented_frames":        {typ: "string", group: "event", required: false},
+	"provider_media_id":       {typ: "id", group: "trail", required: false},
+	"publication_id":          {typ: "string", group: "event", required: false},
+	"publisher_id":            {typ: "id", group: "event", required: false},
+	"reason_code":             {typ: "string", group: "record", required: false},
+	"recording_id":            {typ: "id", group: "trail", required: false},
+	"rect_h":                  {typ: "number", group: "event", required: false},
+	"rect_w":                  {typ: "number", group: "event", required: false},
+	"release_sha":             {typ: "string", group: "build", required: false},
+	"request_id":              {typ: "id", group: "trail", required: false},
+	"role":                    {typ: "string", group: "event", required: false},
+	"schema_ver":              {typ: "string", group: "build", required: true},
+	"sdk_version":             {typ: "string", group: "build", required: false},
+	"seq":                     {typ: "int", group: "delivery", required: true},
+	"share_view_state":        {typ: "enum", group: "event", required: false, values: []string{"live", "connecting", "paused", "low-quality", "ended"}},
+	"shown_ms":                {typ: "int", group: "record", required: false},
+	"source_id":               {typ: "string", group: "delivery", required: true},
+	"space_id":                {typ: "id", group: "trail", required: false},
+	"span_id":                 {typ: "id", group: "trail", required: false},
+	"stats":                   {typ: "string", group: "event", required: false},
+	"surface_state":           {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"sync_connection_id":      {typ: "id", group: "trail", required: false},
+	"tenant_id":               {typ: "id", group: "trail", required: false},
+	"to_state":                {typ: "string", group: "record", required: false},
+	"trace_id":                {typ: "id", group: "trail", required: false},
+	"trigger":                 {typ: "string", group: "record", required: false},
+	"type":                    {typ: "string", group: "event", required: false},
+	"user_id":                 {typ: "id", group: "trail", required: false},
+	"video_width":             {typ: "int", group: "event", required: false},
+	"visibility_state":        {typ: "enum", group: "event", required: false, values: []string{"visible", "hidden", "background"}},
+	"webhook_delivery_id":     {typ: "id", group: "trail", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":                     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"client.call_stats":                     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}, "stats": {required: false}}},
+	"client.media_intent":                   {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"action": {required: true}, "participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}}},
+	"client.media_result":                   {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"action": {required: true}, "participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}, "media_error_kind": {required: false}}},
+	"client.platform_changed":               {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}, "platform_kind": {required: false}, "visibility_state": {required: true}}},
+	"client.sync_socket_close":              {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}, "type": {required: true}}},
+	"client.sync_socket_open":               {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}, "type": {required: true}}},
+	"obs.clock_jump":                        {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":                    {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":                        {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":                       {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":                         {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":                         {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sfu.admission.refused":                 {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "media_source": {required: false}}},
+	"sfu.media.ingress":                     {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "media_source": {required: false}, "mid": {required: false}, "packets": {required: true}}},
+	"sfu.peer.state":                        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "peer_state": {required: true}}},
+	"sfu.publication.started":               {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "media_source": {required: false}, "mid": {required: false}}},
+	"sfu.publication.stopped":               {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "media_source": {required: false}, "mid": {required: false}}},
+	"sfu.subscription.paused":               {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "publisher_id": {required: false}, "media_source": {required: false}, "mid": {required: false}, "pause_reason": {required: true}}},
+	"sfu.subscription.started":              {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "publisher_id": {required: false}, "media_source": {required: false}, "mid": {required: false}}},
+	"sfu.subscription.stopped":              {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "connection_id": {required: false}, "publisher_id": {required: false}, "media_source": {required: false}, "mid": {required: false}}},
+	"share.capture":                         {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"error_name": {required: false}, "permission_block": {required: false}, "display_capture_allowed": {required: false}, "framed": {required: false}, "display_surface": {required: false}, "participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}}},
+	"share.db.lease":                        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: false}, "lease_state": {required: true}, "lease_id": {required: false}, "owner_participant_id": {required: false}, "owner_generation": {required: false}}},
+	"share.publish":                         {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"ok", "refused"}, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "media_source": {required: false}}},
+	"share.start":                           {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"ok", "refused", "retryable_failure", "terminal_failure"}, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}}},
+	"share.stop":                            {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"ok", "refused", "retryable_failure", "terminal_failure"}, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}}},
+	"share.track_ended":                     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}}},
+	"share.view":                            {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"share_view_state": {required: true}, "hidden": {required: false}, "pinned_other": {required: false}, "pip": {required: false}, "participant_id": {required: false}, "episode_id": {required: false}, "client_session_id": {required: false}}},
+	"sync.episode.ended":                    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"sync.participant_screen_share_stopped": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "capability": {required: false}}},
+	"sync.role_assigned":                    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "episode_id": {required: false}, "role": {required: true}}},
+	"video.render_probe":                    {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"participant_id": {required: false}, "client_session_id": {required: false}, "publication_id": {required: false}, "presented_frames": {required: true}, "video_width": {required: false}, "rect_w": {required: false}, "rect_h": {required: false}, "on_screen": {required: false}, "page_visible": {required: false}, "covered": {required: false}}},
 }
 
 var registryMachines = map[string]machineSpec{
 	"client.connection": {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
 	"episode.lifecycle": {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
 	"selftest.door":     {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
+	"share.client":      {states: []string{"off", "starting", "on", "stopping"}, edges: [][2]string{{"off", "starting"}, {"starting", "on"}, {"starting", "off"}, {"starting", "stopping"}, {"on", "stopping"}, {"stopping", "off"}, {"stopping", "on"}, {"stopping", "starting"}}, triggers: []string{"user_control", "platform_ended", "long_drop", "moderation_pause", "revision_confirmed", "revision_failed"}},
+	"share.lease":       {states: []string{"none", "held", "released"}, edges: [][2]string{{"none", "held"}, {"held", "released"}}, triggers: []string{"acquire", "observed_acquire", "release"}},
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":                    "expected",
+	"end.time_limit":               "expected",
+	"selftest.broken":              "error",
+	"selftest.busy":                "expected",
+	"share.bad_constraints":        "error",
+	"share.capability_denied":      "expected",
+	"share.capture_device":         "error",
+	"share.congestion_paused":      "expected",
+	"share.dependency_unavailable": "error",
+	"share.lease_draining":         "expected",
+	"share.lease_not_owned":        "error",
+	"share.long_drop":              "expected",
+	"share.moderation_pause":       "expected",
+	"share.no_user_activation":     "error",
+	"share.os_permission":          "expected",
+	"share.owner_live":             "expected",
+	"share.picker_cancelled":       "expected",
+	"share.picture_in_picture":     "expected",
+	"share.pinned_other":           "expected",
+	"share.policy_blocked":         "error",
+	"share.refused_without_picker": "error",
+	"share.role_race":              "expected",
+	"share.screen_ceiling":         "expected",
+	"share.screen_share_active":    "expected",
+	"share.screen_share_in_use":    "expected",
+	"share.unsupported":            "error",
+	"share.viewer_hidden":          "expected",
+	"share.viewer_sync_closed":     "expected",
+	"unclassified":                 "error",
 }
 
 var registryIDKinds = []idKind{

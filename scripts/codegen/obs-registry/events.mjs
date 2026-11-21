@@ -168,12 +168,14 @@ function addSymptom(scope, declared) {
 
 const isEnvelopeField = (fields, name) => fields.get(name)?.owner.startsWith("envelope.") === true;
 
-function factEventProblems({ events, fields }, fact) {
+function factEventProblems({ events, machines, fields }, fact) {
   return fact.events.flatMap((entry) => {
-    const event = events.get(entry.event);
+    const event = events.get(entry.event) ?? machines.get(entry.event);
     if (!event) return [`fact ${fact.name} names unknown event ${entry.event}`];
-    const stray = entry.fields.filter((name) => !(name in event.fields) && !isEnvelopeField(fields, name));
-    const failures = entry.failure_claims.filter((claim) => !(event.fields[entry.claim]?.values ?? fields.get(entry.claim)?.values ?? [claim]).includes(claim));
+    // A machine's transition rows carry only the stamped record fields, so its own field set is empty.
+    const declared = event.fields ?? {};
+    const stray = entry.fields.filter((name) => !(name in declared) && !isEnvelopeField(fields, name));
+    const failures = entry.failure_claims.filter((claim) => !(declared[entry.claim]?.values ?? fields.get(entry.claim)?.values ?? [claim]).includes(claim));
     return [...stray.map((name) => `fact ${fact.name} field ${name} is neither on ${event.name} nor in the envelope`), ...failures.map((claim) => `fact ${fact.name} failure claim ${claim} is not a value of ${event.name}.${entry.claim}`)];
   });
 }

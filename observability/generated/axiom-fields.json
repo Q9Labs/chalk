@@ -1,12 +1,16 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "4a214cd143b1",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 98,
       "fields": [
+        {
+          "name": "action",
+          "type": "string"
+        },
         {
           "name": "admission_request_id",
           "type": "string"
@@ -29,6 +33,10 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "capability",
           "type": "string"
         },
         {
@@ -56,6 +64,14 @@
           "type": "string"
         },
         {
+          "name": "connection_id",
+          "type": "string"
+        },
+        {
+          "name": "covered",
+          "type": "boolean"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
@@ -69,6 +85,14 @@
         },
         {
           "name": "device_id",
+          "type": "string"
+        },
+        {
+          "name": "display_capture_allowed",
+          "type": "string"
+        },
+        {
+          "name": "display_surface",
           "type": "string"
         },
         {
@@ -100,6 +124,10 @@
           "type": "string"
         },
         {
+          "name": "error_name",
+          "type": "string"
+        },
+        {
           "name": "est_server_ms",
           "type": "integer"
         },
@@ -112,12 +140,20 @@
           "type": "string"
         },
         {
+          "name": "framed",
+          "type": "boolean"
+        },
+        {
           "name": "from_state",
           "type": "string"
         },
         {
           "name": "generation",
           "type": "integer"
+        },
+        {
+          "name": "hidden",
+          "type": "boolean"
         },
         {
           "name": "job_id",
@@ -136,11 +172,31 @@
           "type": "string"
         },
         {
+          "name": "lease_id",
+          "type": "string"
+        },
+        {
+          "name": "lease_state",
+          "type": "string"
+        },
+        {
           "name": "machine",
           "type": "string"
         },
         {
           "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "media_error_kind",
+          "type": "string"
+        },
+        {
+          "name": "media_source",
+          "type": "string"
+        },
+        {
+          "name": "mid",
           "type": "string"
         },
         {
@@ -156,12 +212,32 @@
           "type": "integer"
         },
         {
+          "name": "on_screen",
+          "type": "boolean"
+        },
+        {
           "name": "op_id",
           "type": "string"
         },
         {
           "name": "outcome",
           "type": "string"
+        },
+        {
+          "name": "owner_generation",
+          "type": "integer"
+        },
+        {
+          "name": "owner_participant_id",
+          "type": "string"
+        },
+        {
+          "name": "packets",
+          "type": "integer"
+        },
+        {
+          "name": "page_visible",
+          "type": "boolean"
         },
         {
           "name": "parent_op_id",
@@ -172,11 +248,47 @@
           "type": "string"
         },
         {
+          "name": "pause_reason",
+          "type": "string"
+        },
+        {
+          "name": "peer_state",
+          "type": "string"
+        },
+        {
+          "name": "permission_block",
+          "type": "string"
+        },
+        {
+          "name": "pinned_other",
+          "type": "boolean"
+        },
+        {
+          "name": "pip",
+          "type": "boolean"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
         {
+          "name": "platform_kind",
+          "type": "string"
+        },
+        {
+          "name": "presented_frames",
+          "type": "string"
+        },
+        {
           "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "publication_id",
+          "type": "string"
+        },
+        {
+          "name": "publisher_id",
           "type": "string"
         },
         {
@@ -188,11 +300,23 @@
           "type": "string"
         },
         {
+          "name": "rect_h",
+          "type": "float"
+        },
+        {
+          "name": "rect_w",
+          "type": "float"
+        },
+        {
           "name": "release_sha",
           "type": "string"
         },
         {
           "name": "request_id",
+          "type": "string"
+        },
+        {
+          "name": "role",
           "type": "string"
         },
         {
@@ -208,6 +332,10 @@
           "type": "integer"
         },
         {
+          "name": "share_view_state",
+          "type": "string"
+        },
+        {
           "name": "shown_ms",
           "type": "integer"
         },
@@ -221,6 +349,10 @@
         },
         {
           "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "stats",
           "type": "string"
         },
         {
@@ -248,7 +380,19 @@
           "type": "string"
         },
         {
+          "name": "type",
+          "type": "string"
+        },
+        {
           "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "video_width",
+          "type": "integer"
+        },
+        {
+          "name": "visibility_state",
           "type": "string"
         },
         {

@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "4a214cd143b1",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -289,20 +289,1193 @@
       "fault_scenario": null
     },
     {
+      "code": "share.blocked",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "share.command",
+          "from": ["sync", "client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.start",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "share.stop",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "client.media_result",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "outcome", "reason_code", "media_error_kind", "op_id", "duration_ms"]
+            },
+            {
+              "event": "client.media_intent",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "op_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.lease_state",
+          "from": ["sync", "db"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.lease",
+              "source": "sync",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "from_state", "to_state", "trigger", "reason_code"]
+            },
+            {
+              "event": "share.db.lease",
+              "source": "db",
+              "fields": ["episode_id", "est_server_ms", "lease_state", "lease_id", "owner_participant_id", "owner_generation"]
+            }
+          ]
+        },
+        {
+          "fact": "share.live",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.publication.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.publication.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.media.ingress",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "packets", "connection_id"]
+            },
+            {
+              "event": "sfu.peer.state",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "peer_state", "connection_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.client_state",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.client",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "from_state", "to_state", "trigger", "reason_code"]
+            }
+          ]
+        },
+        {
+          "fact": "share.view",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "share.view",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "share_view_state", "hidden", "pinned_other", "pip", "surface_state", "shown_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "share.start",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.start\""
+            },
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode.ex",
+              "literal": "\"share.start\""
+            }
+          ]
+        },
+        {
+          "name": "share.stop",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.stop\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_result",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id", "media_error_kind"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_result\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_intent",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_intent\""
+            }
+          ]
+        },
+        {
+          "name": "share.lease",
+          "fields": [],
+          "emit_sites": []
+        },
+        {
+          "name": "share.db.lease",
+          "fields": ["episode_id", "lease_state", "lease_id", "owner_participant_id", "owner_generation"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/database.mjs",
+              "literal": "sync_screen_share_leases"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStopped"
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.ingress",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid", "packets"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaIngress"
+            }
+          ]
+        },
+        {
+          "name": "sfu.peer.state",
+          "fields": ["participant_id", "episode_id", "connection_id", "peer_state"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventPeerState"
+            }
+          ]
+        },
+        {
+          "name": "share.client",
+          "fields": [],
+          "emit_sites": []
+        },
+        {
+          "name": "share.view",
+          "fields": ["share_view_state", "hidden", "pinned_other", "pip", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/stage/StageContentTile.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react/src/components/composite/ScreenShareView.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/stage/ContentTile.tsx",
+              "literal": "\"share.view\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/share.blocked.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.blocked/positive.json",
+        "healthy": "observability/fixtures/share.blocked/healthy.json"
+      },
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
+    },
+    {
+      "code": "share.capture_failed",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "share.capture",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.capture",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "outcome", "reason_code", "duration_ms", "error_name", "permission_block", "display_capture_allowed", "framed", "display_surface", "op_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "share.capture",
+          "fields": ["error_name", "permission_block", "display_capture_allowed", "framed", "display_surface", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "\"share.capture\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/share.capture_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.capture_failed/positive.json",
+        "healthy": "observability/fixtures/share.capture_failed/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/space-client/share-capture.fault.test.ts"
+    },
+    {
+      "code": "share.frozen",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "share.forward",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.subscription.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.subscription.paused",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "pause_reason", "connection_id"]
+            },
+            {
+              "event": "sfu.subscription.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "connection_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.receive",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.call_stats",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "stats"]
+            }
+          ]
+        },
+        {
+          "fact": "share.view",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.view",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "share_view_state", "hidden", "pinned_other", "pip", "surface_state", "shown_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "share.render",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "video.render_probe",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "publication_id", "presented_frames", "video_width", "rect_w", "rect_h", "on_screen", "page_visible", "covered"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "sfu.subscription.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.subscription.paused",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid", "pause_reason"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionPaused"
+            }
+          ]
+        },
+        {
+          "name": "sfu.subscription.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionStopped"
+            }
+          ]
+        },
+        {
+          "name": "client.call_stats",
+          "fields": ["participant_id", "episode_id", "client_session_id", "stats"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "\"call_stats\""
+            }
+          ]
+        },
+        {
+          "name": "share.view",
+          "fields": ["share_view_state", "hidden", "pinned_other", "pip", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/stage/StageContentTile.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react/src/components/composite/ScreenShareView.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/stage/ContentTile.tsx",
+              "literal": "\"share.view\""
+            }
+          ]
+        },
+        {
+          "name": "video.render_probe",
+          "fields": ["participant_id", "client_session_id", "publication_id", "presented_frames", "video_width", "rect_w", "rect_h", "on_screen", "page_visible", "covered"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/video-render-probe.ts",
+              "literal": "\"video.render_probe\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/share.frozen.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.frozen/positive.json",
+        "healthy": "observability/fixtures/share.frozen/healthy.json"
+      },
+      "fault_scenario": "observability/fixtures/share.frozen/README.md"
+    },
+    {
+      "code": "share.not_seen",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "share.live",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.publication.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.publication.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.media.ingress",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "packets", "connection_id"]
+            },
+            {
+              "event": "sfu.peer.state",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "peer_state", "connection_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.forward",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.subscription.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.subscription.paused",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "pause_reason", "connection_id"]
+            },
+            {
+              "event": "sfu.subscription.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "publisher_id", "media_source", "mid", "connection_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.receive",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.call_stats",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "stats"]
+            }
+          ]
+        },
+        {
+          "fact": "share.view",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.view",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "share_view_state", "hidden", "pinned_other", "pip", "surface_state", "shown_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "share.render",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "video.render_probe",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "publication_id", "presented_frames", "video_width", "rect_w", "rect_h", "on_screen", "page_visible", "covered"]
+            }
+          ]
+        },
+        {
+          "fact": "share.client_presence",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.platform_changed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "visibility_state", "platform_kind"]
+            },
+            {
+              "event": "client.sync_socket_open",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "type"]
+            },
+            {
+              "event": "client.sync_socket_close",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "type"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "sfu.publication.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStopped"
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.ingress",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid", "packets"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaIngress"
+            }
+          ]
+        },
+        {
+          "name": "sfu.peer.state",
+          "fields": ["participant_id", "episode_id", "connection_id", "peer_state"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventPeerState"
+            }
+          ]
+        },
+        {
+          "name": "sfu.subscription.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.subscription.paused",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid", "pause_reason"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionPaused"
+            }
+          ]
+        },
+        {
+          "name": "sfu.subscription.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "publisher_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventSubscriptionStopped"
+            }
+          ]
+        },
+        {
+          "name": "client.call_stats",
+          "fields": ["participant_id", "episode_id", "client_session_id", "stats"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "\"call_stats\""
+            }
+          ]
+        },
+        {
+          "name": "share.view",
+          "fields": ["share_view_state", "hidden", "pinned_other", "pip", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/stage/StageContentTile.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react/src/components/composite/ScreenShareView.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/stage/ContentTile.tsx",
+              "literal": "\"share.view\""
+            }
+          ]
+        },
+        {
+          "name": "video.render_probe",
+          "fields": ["participant_id", "client_session_id", "publication_id", "presented_frames", "video_width", "rect_w", "rect_h", "on_screen", "page_visible", "covered"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/video-render-probe.ts",
+              "literal": "\"video.render_probe\""
+            }
+          ]
+        },
+        {
+          "name": "client.platform_changed",
+          "fields": ["participant_id", "episode_id", "client_session_id", "platform_kind", "visibility_state"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "platform_changed"
+            }
+          ]
+        },
+        {
+          "name": "client.sync_socket_open",
+          "fields": ["participant_id", "episode_id", "client_session_id", "type"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "sync_socket_open"
+            }
+          ]
+        },
+        {
+          "name": "client.sync_socket_close",
+          "fields": ["participant_id", "episode_id", "client_session_id", "type"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "sync_socket_close"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/share.not_seen.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.not_seen/positive.json",
+        "healthy": "observability/fixtures/share.not_seen/healthy.json"
+      },
+      "fault_scenario": "observability/fixtures/share.not_seen/README.md"
+    },
+    {
+      "code": "share.start_failed",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "share.capture",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.capture",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "outcome", "reason_code", "duration_ms", "error_name", "permission_block", "display_capture_allowed", "framed", "display_surface", "op_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.command",
+          "from": ["sync", "client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.start",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "share.stop",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "client.media_result",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "outcome", "reason_code", "media_error_kind", "op_id", "duration_ms"]
+            },
+            {
+              "event": "client.media_intent",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "op_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.publish",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.publish",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "sfu.admission.refused",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "reason_code", "media_source"]
+            }
+          ]
+        },
+        {
+          "fact": "share.live",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.publication.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.publication.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.media.ingress",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "packets", "connection_id"]
+            },
+            {
+              "event": "sfu.peer.state",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "peer_state", "connection_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "share.capture",
+          "fields": ["error_name", "permission_block", "display_capture_allowed", "framed", "display_surface", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "\"share.capture\""
+            }
+          ]
+        },
+        {
+          "name": "share.start",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.start\""
+            },
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode.ex",
+              "literal": "\"share.start\""
+            }
+          ]
+        },
+        {
+          "name": "share.stop",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.stop\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_result",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id", "media_error_kind"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_result\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_intent",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_intent\""
+            }
+          ]
+        },
+        {
+          "name": "share.publish",
+          "fields": ["participant_id", "episode_id", "media_source"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/node_create.go",
+              "literal": "EventSharePublish"
+            }
+          ]
+        },
+        {
+          "name": "sfu.admission.refused",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/telemetry.go",
+              "literal": "EventAdmissionRefused"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStopped"
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.ingress",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid", "packets"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaIngress"
+            }
+          ]
+        },
+        {
+          "name": "sfu.peer.state",
+          "fields": ["participant_id", "episode_id", "connection_id", "peer_state"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventPeerState"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/share.start_failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.start_failed/positive.json",
+        "healthy": "observability/fixtures/share.start_failed/healthy.json"
+      },
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
+    },
+    {
       "code": "share.wont_stop",
       "area": "share",
       "slice": 5,
       "allowlisted": true,
       "item": "episode",
       "per": "seat",
-      "witnesses": [],
-      "events": [],
+      "witnesses": [
+        {
+          "fact": "share.client_state",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.client",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "from_state", "to_state", "trigger", "reason_code"]
+            }
+          ]
+        },
+        {
+          "fact": "share.command",
+          "from": ["sync", "client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.start",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "share.stop",
+              "source": "sync",
+              "fields": ["participant_id", "est_server_ms", "decision", "reason_code", "decision_id"]
+            },
+            {
+              "event": "client.media_result",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "outcome", "reason_code", "media_error_kind", "op_id", "duration_ms"]
+            },
+            {
+              "event": "client.media_intent",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "action", "op_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.live",
+          "from": ["sfu"],
+          "required": true,
+          "events": [
+            {
+              "event": "sfu.publication.started",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.publication.stopped",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "connection_id"]
+            },
+            {
+              "event": "sfu.media.ingress",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "media_source", "mid", "packets", "connection_id"]
+            },
+            {
+              "event": "sfu.peer.state",
+              "source": "sfu",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "peer_state", "connection_id"]
+            }
+          ]
+        },
+        {
+          "fact": "share.view",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "share.view",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "share_view_state", "hidden", "pinned_other", "pip", "surface_state", "shown_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "share.client_presence",
+          "from": ["client"],
+          "required": false,
+          "events": [
+            {
+              "event": "client.platform_changed",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "visibility_state", "platform_kind"]
+            },
+            {
+              "event": "client.sync_socket_open",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "type"]
+            },
+            {
+              "event": "client.sync_socket_close",
+              "source": "client",
+              "fields": ["participant_id", "client_session_id", "est_server_ms", "type"]
+            }
+          ]
+        },
+        {
+          "fact": "share.moderation",
+          "from": ["sync"],
+          "required": false,
+          "events": [
+            {
+              "event": "sync.role_assigned",
+              "source": "sync",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "role"]
+            },
+            {
+              "event": "sync.participant_screen_share_stopped",
+              "source": "sync",
+              "fields": ["participant_id", "episode_id", "est_server_ms", "capability"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "share.client",
+          "fields": [],
+          "emit_sites": []
+        },
+        {
+          "name": "share.start",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.start\""
+            },
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode.ex",
+              "literal": "\"share.start\""
+            }
+          ]
+        },
+        {
+          "name": "share.stop",
+          "fields": ["participant_id", "episode_id"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/live/episode/publication.ex",
+              "literal": "\"share.stop\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_result",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id", "media_error_kind"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_result\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_intent",
+          "fields": ["action", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/sync/v1-live-target-telemetry.ts",
+              "literal": "\"media_intent\""
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.started",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStarted"
+            }
+          ]
+        },
+        {
+          "name": "sfu.publication.stopped",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/trail.go",
+              "literal": "EventPublicationStopped"
+            }
+          ]
+        },
+        {
+          "name": "sfu.media.ingress",
+          "fields": ["participant_id", "episode_id", "connection_id", "media_source", "mid", "packets"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/stats.go",
+              "literal": "EventMediaIngress"
+            }
+          ]
+        },
+        {
+          "name": "sfu.peer.state",
+          "fields": ["participant_id", "episode_id", "connection_id", "peer_state"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "EventPeerState"
+            }
+          ]
+        },
+        {
+          "name": "share.view",
+          "fields": ["share_view_state", "hidden", "pinned_other", "pip", "participant_id", "episode_id", "client_session_id"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/react/src/components/stage/StageContentTile.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react/src/components/composite/ScreenShareView.tsx",
+              "literal": "\"share.view\""
+            },
+            {
+              "path": "sdks/typescript/react-native/src/stage/ContentTile.tsx",
+              "literal": "\"share.view\""
+            }
+          ]
+        },
+        {
+          "name": "client.platform_changed",
+          "fields": ["participant_id", "episode_id", "client_session_id", "platform_kind", "visibility_state"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "platform_changed"
+            }
+          ]
+        },
+        {
+          "name": "client.sync_socket_open",
+          "fields": ["participant_id", "episode_id", "client_session_id", "type"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "sync_socket_open"
+            }
+          ]
+        },
+        {
+          "name": "client.sync_socket_close",
+          "fields": ["participant_id", "episode_id", "client_session_id", "type"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/sdktelemetry/spec.go",
+              "literal": "sync_socket_close"
+            }
+          ]
+        },
+        {
+          "name": "sync.role_assigned",
+          "fields": ["participant_id", "episode_id", "role"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/episodes/reducer.ex",
+              "literal": "role_assigned"
+            }
+          ]
+        },
+        {
+          "name": "sync.participant_screen_share_stopped",
+          "fields": ["participant_id", "episode_id", "capability"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/facts.ex",
+              "literal": "participant_screen_share_stopped"
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/share.wont_stop.mjs",
       "fixtures": {
         "positive": "observability/fixtures/share.wont_stop/positive.json",
         "healthy": "observability/fixtures/share.wont_stop/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "apps/sync/test/chalk_sync/share_chain_test.exs"
     },
     {
       "code": "video.frozen",
