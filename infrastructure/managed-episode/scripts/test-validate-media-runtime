@@ -42,4 +42,10 @@ for value in true yes on 1 ' YES '; do
 done
 sed 's/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=false/' "$fixture/full.env" > "$fixture_api"
 check_refusal 'CHALK_SFU_ENABLED must be true'
+
+for flag in CHALK_SFU_COLOCATED_CAPTURE CHALK_SFU_CAPTURE_ENABLED CHALK_SFU_ENABLED; do
+  grep -v "^$flag=" "$fixture/full.env" > "$fixture_api"
+  printf '%s=true\n%s=true\n' "$flag" "$flag" >> "$fixture_api"
+  check_refusal "$flag must occur at most once"
+done
 echo 'PASS managed Chalk SFU runtime input contract'

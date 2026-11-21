@@ -62,6 +62,11 @@ if grep -Eq '__[A-Z0-9_]+__' "${api_env}"; then
   fail "API environment contains unresolved placeholders"
 fi
 
+duplicate_flag="$(awk -F= '
+  NF > 1 && $1 ~ /^CHALK_SFU_(ENABLED|CAPTURE_ENABLED|COLOCATED_CAPTURE)$/ && ++seen[$1] == 2 { print $1; exit }
+' "${api_env}")"
+[[ -z "${duplicate_flag}" ]] || fail "${duplicate_flag} must occur at most once"
+
 env_enabled CHALK_SFU_ENABLED || fail "CHALK_SFU_ENABLED must be true (true, yes, on, or 1)"
 for name in CHALK_SFU_APPLICATION_ID CHALK_SFU_NODES CHALK_SFU_SERVER_NAME CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
   require_env "$name"
