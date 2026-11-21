@@ -136,7 +136,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
   }
   await check("sign-in", async () => {
     const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
-    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, mediaPlane: config.orb ? config.mediaPlane : undefined, fetchImpl });
+    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, mediaPlane: seed.signInMediaPlane, fetchImpl });
     return `seeded guest arrival ${proof.state}`;
   });
   const result = { ok: checks.every((entry) => entry.ok), checks };

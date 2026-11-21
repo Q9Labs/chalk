@@ -1,6 +1,7 @@
 import { findExecutable } from "../lib/platform.mjs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
@@ -150,8 +151,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
   };
   const publicOrigin = publicOriginFromEnv(env);
-  const publicHost = publicOrigin ? new URL(publicOrigin).hostname : "";
-  const orb = publicHost.endsWith(".instabox.tech") || publicHost.endsWith(".trycloudflare.com");
+  // The Orb launcher writes its metadata before starting the stack; a tunnel URL is not an Orb.
+  const orb = existsSync(join(home, ".orb.json"));
   const hasEnvSfuCredential = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));

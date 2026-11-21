@@ -22,11 +22,11 @@ export function dashboardArtifactBindings(config) {
   };
 }
 
-export async function seedDashboard({ config, serviceToken }) {
-  async function api(path, body) {
+export async function seedDashboard({ config, serviceToken, systemToken }) {
+  async function api(path, body, { method = body ? "POST" : "GET", token = serviceToken } = {}) {
     const response = await fetch(`${config.urls.api}/v1${path}`, {
-      method: body ? "POST" : "GET",
-      headers: { Authorization: `Bearer ${serviceToken}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), ...(config.orb ? { "X-Chalk-Media-Providers": config.mediaPlane } : {}) },
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), ...(config.orb ? { "X-Chalk-Media-Providers": config.mediaPlane } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(15000),
     });
@@ -41,9 +41,11 @@ export async function seedDashboard({ config, serviceToken }) {
     name: "Ada's workspace",
     external_id: "google:local:fixture_ada",
     cors_allowed_origins: [...new Set([config.urls.web, config.publicOrigin || config.urls.web])],
-    default_media_plane: mediaPlane,
-    ...(mediaPlane === "cf_sfu" ? { media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
+    ...(mediaPlane === "cf_sfu" ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
   });
+  if (config.orb && owner.default_media_plane === "cf_sfu") {
+    await api(`/tenants/${owner.id}`, { default_media_plane: null }, { method: "PATCH", token: systemToken });
+  }
   const artifacts = {};
   const spaces = await api(`/tenants/${owner.id}/spaces?page_size=100`);
   for (const [index, name] of ["Product planning", "Design review", "Weekly catch-up"].entries()) {

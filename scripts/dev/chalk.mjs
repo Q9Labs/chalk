@@ -110,9 +110,9 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         const fixtureMarker = stableMarker;
         bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, mediaPlane: config.mediaPlane, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
         invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
-        await seedDashboard({ config, serviceToken: dashboardToken });
+        await seedDashboard({ config, serviceToken: dashboardToken, systemToken });
         // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
-        await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
+        await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin, signInMediaPlane: config.orb ? config.mediaPlane : undefined }, { redacted: false });
       }
       // Ready means the seeded guest is admitted through the web origin, not that a port answers.
       if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, mediaPlane: config.orb ? config.mediaPlane : undefined, fetchImpl: adapters.fetchImpl });
