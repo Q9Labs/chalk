@@ -81,6 +81,12 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     note("tracks_close #" + signals.tracksClose + " forwarded to the API");
     return route.continue();
   });
+  // Every SFU signalling call the sharer makes, in order, with the API's answer.
+  signals.ops = [];
+  sharer.page.on("response", (response) => {
+    if (!response.url().endsWith("/signal")) return;
+    signals.ops.push({ at: new Date().toISOString().slice(11, 23), op: response.request().postDataJSON()?.op, status: response.status() });
+  });
   sharer.page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => {
     const text = String(payload);
     if (socketFrames.length < 60 && /retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
@@ -148,7 +154,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     note("the share tile is gone for the sharer and every viewer", { afterMs: Date.now() - started });
     await sharer.page.waitForTimeout(3000); // a failed stop is retried by Sync and reported within about a second
     const statuses = await sharer.page.evaluate(visibleProblems);
-    note("sharer statuses after stop", { statuses, tracksClose: signals.tracksClose, answered404: signals.answered404 });
+    note("sharer statuses after stop", { statuses, tracksClose: signals.tracksClose, answered404: signals.answered404, toastHtml: await sharer.page.evaluate(() => document.querySelector('[role="alert"], [role="status"]')?.outerHTML.slice(0, 600)) });
     if (socketFrames.some(({ frame }) => /retry_exhausted/.test(frame))) throw new Error(`Sync reported retry_exhausted: ${JSON.stringify(socketFrames.at(-1))}`);
     const problems = statuses.filter((text) => /fail|error|couldn|unable|try again|retry|went wrong/i.test(text));
     if (problems.length) throw new Error(`the sharer sees an error after stop: ${JSON.stringify(problems)}`);
