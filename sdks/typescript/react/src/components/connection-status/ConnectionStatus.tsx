@@ -55,17 +55,14 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
       </style>
       {veiled ? <div aria-hidden="true" data-lifting={phase === "reconnected" || undefined} className="chalk-connection-dim" /> : null}
       {showCard ? (
-        <div
-          role={failed ? "alertdialog" : "status"}
-          aria-labelledby={failed ? "chalk-connection-lost-title" : undefined}
-          aria-describedby={failed ? "chalk-connection-lost-detail" : undefined}
-          data-part="connection-status"
-          className={failed ? "chalk-connection-card chalk-connection-card-lost" : "chalk-connection-card"}
-        >
+        <div data-part="connection-status" className={failed ? "chalk-connection-card chalk-connection-card-lost" : "chalk-connection-card"}>
+          {/* Keyed on the kind of card so the lost content mounts fresh: a role that changes on a live node is not announced, a new alertdialog is. */}
           {failed ? (
-            <FailedContent onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
+            <div key="lost" role="alertdialog" aria-labelledby="chalk-connection-lost-title" aria-describedby="chalk-connection-lost-detail" className="chalk-connection-body">
+              <FailedContent onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />
+            </div>
           ) : copy ? (
-            <>
+            <div key="waiting" role="status" className="chalk-connection-body">
               <h3>
                 <ConnectionRing />
                 {copy.title}
@@ -74,7 +71,7 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
                 </span>
               </h3>
               <p>{copy.detail}</p>
-            </>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -84,13 +81,24 @@ export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onR
 
 function FailedContent({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatusProps, "onRejoin" | "onLeave" | "onReportProblem">) {
   const content = useRef<HTMLDivElement>(null);
-  // The card's own button is what holds focus, so when it goes (Rejoin pressed, or the call returned) focus moves to the dock's Leave button instead of dropping to the page.
+  // The card's own button is what holds focus, so when it goes (Rejoin pressed, or the call returned) focus moves to the dock's Leave button instead of dropping to the page. Focus that was never in the card is left alone.
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Hand focus to a stable call control when the focused button leaves the page.
   useEffect(() => {
-    const frame = content.current?.closest(".chalk-frame");
+    const card = content.current;
+    if (!card) return;
+    const frame = card.closest(".chalk-frame");
+    let hadFocus = card.contains(document.activeElement);
+    const onFocusIn = () => void (hadFocus = true);
+    const onFocusOut = (event: FocusEvent) => {
+      if (event.relatedTarget instanceof Node && !card.contains(event.relatedTarget)) hadFocus = false;
+    };
+    card.addEventListener("focusin", onFocusIn);
+    card.addEventListener("focusout", onFocusOut);
     return () => {
+      card.removeEventListener("focusin", onFocusIn);
+      card.removeEventListener("focusout", onFocusOut);
       const active = document.activeElement;
-      if (active && active !== document.body) return;
+      if (!hadFocus || (active && active !== document.body)) return;
       frame?.querySelector<HTMLElement>('[data-part="dock-region"] button[aria-label="Leave call"]')?.focus();
     };
   }, []);
@@ -135,6 +143,7 @@ const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:70;
 .chalk-connection-card {position:absolute;z-index:71;left:50%;top:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);display:grid;justify-items:center;gap:var(--space-1-5);padding:var(--space-5) var(--space-6);border-radius:var(--corner-2xl);background:var(--chalk-surface);border:1px solid var(--chalk-line);box-shadow:var(--chalk-shadow);color:var(--chalk-text);text-align:center;animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
 .chalk-connection-dim.chalk-connection-dim,
 .chalk-connection-card:not(.chalk-connection-card-lost) {pointer-events:none;}
+.chalk-connection-body {display:grid;justify-items:center;gap:inherit;}
 .chalk-connection-card h3 {display:flex;gap:var(--space-2-5);align-items:center;font-size:var(--type-lead);font-weight:600;line-height:1.3;}
 .chalk-connection-card h3 .chalk-connection-ring {width:20px;height:20px;}
 .chalk-connection-time {color:var(--chalk-muted-text);font-weight:400;font-size:var(--type-body);font-variant-numeric:tabular-nums;}
