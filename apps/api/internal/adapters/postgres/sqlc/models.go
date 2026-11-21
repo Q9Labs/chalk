@@ -1599,10 +1599,10 @@ type TelemetryOutbox struct {
 	Retry       bool               `json:"retry"`
 }
 
-type TelemetryOutboxCapacity struct {
-	Singleton   bool  `json:"singleton"`
-	MaxBytes    int64 `json:"max_bytes"`
-	QueuedBytes int64 `json:"queued_bytes"`
+type TelemetryOutboxUsage struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	MaxBytes    int64       `json:"max_bytes"`
+	QueuedBytes int64       `json:"queued_bytes"`
 }
 
 type TelemetrySource struct {

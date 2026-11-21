@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "2637fcfa1f33",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],

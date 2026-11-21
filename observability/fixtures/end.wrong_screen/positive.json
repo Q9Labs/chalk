@@ -16,7 +16,9 @@
         "name": "Seat A",
         "role": "participant",
         "can_publish": true,
-        "generations": [1],
+        "generations": [
+          1
+        ],
         "connections": [],
         "window": {
           "from_ms": 1795596400000,
@@ -30,7 +32,10 @@
       }
     ]
   },
-  "chain": ["observability/fixtures/end.wrong_screen/chain/sync-rows.json", "observability/fixtures/end.wrong_screen/chain/api-rows.positive.json"],
+  "chain": [
+    "observability/fixtures/end.wrong_screen/chain/sync-rows.json",
+    "observability/fixtures/end.wrong_screen/chain/api-rows.positive.json"
+  ],
   "rows": [
     {
       "clock_state": "server",
@@ -69,7 +74,7 @@
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "platform": "web",
       "provider_media_id": "pm-chain-0001",
-      "schema_ver": "06a4092b8fb7",
+      "schema_ver": "2637fcfa1f33",
       "seq": 22,
       "source_id": "00000000-0000-4000-8000-000000000001",
       "space_id": "d1000000-0000-4000-8000-000000000001",
