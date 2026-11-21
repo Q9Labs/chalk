@@ -705,6 +705,9 @@ importers:
         specifier: workspace:^
         version: link:../../sdks/typescript/client
     devDependencies:
+      '@napi-rs/canvas':
+        specifier: 1.0.9
+        version: 1.0.9
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

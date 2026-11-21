@@ -33,6 +33,7 @@
     "@q9labsai/chalk-client": "workspace:^"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "1.0.9",
     "typescript": "^7.0.2"
   }
 }

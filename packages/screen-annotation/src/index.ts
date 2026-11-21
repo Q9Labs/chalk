@@ -1,2 +1,10 @@
 export { FRAME_UNITS, clampedFramePoint, containsPoint, contentRect, framePoint, intersectRects, projectFramePoint, simplifyStroke } from "./geometry";
 export type { AnnotationFit, AnnotationPoint, AnnotationRect } from "./geometry";
+export { ANNOTATION_FONT_FAMILY, HIGHLIGHTER_OPACITY, NOTE_COLOR, NOTE_OPACITY, annotationMarkOpacity, compareAnnotationMarks, layoutAnnotationText, projectAnnotationMark } from "./mark-geometry";
+export type { AnnotationMarkGeometry, AnnotationTextMeasure } from "./mark-geometry";
+export { createAnnotationPresenceTracker, LASER_TRAIL_MS } from "./presence";
+export type { AnnotationLaserSample, AnnotationPresence } from "./presence";
+export { annotationFont, canvasAnnotationTextMeasure, paintAnnotation } from "./paint";
+export type { AnnotationCanvasContext, PaintAnnotationOptions } from "./paint";
+export { hitTestAnnotation } from "./hit-test";
+export type { HitTestAnnotationOptions } from "./hit-test";
