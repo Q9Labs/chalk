@@ -1,7 +1,7 @@
 import { createContext, Fragment, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 /** Layers above the call, bottom to top. Sheets sit under the limbo and status overlays; menus and toasts sit above everything. */
-export type PortalLayer = "sheets" | "menus" | "toasts";
+export type PortalLayer = "annotation" | "sheets" | "menus" | "toasts";
 
 type Entry = { readonly key: number; readonly node: ReactNode };
 
@@ -13,7 +13,7 @@ type PortalStore = {
 };
 
 function createPortalStore(): PortalStore {
-  let layers: Readonly<Record<PortalLayer, readonly Entry[]>> = { sheets: [], menus: [], toasts: [] };
+  let layers: Readonly<Record<PortalLayer, readonly Entry[]>> = { annotation: [], sheets: [], menus: [], toasts: [] };
   const listeners = new Set<() => void>();
   const publish = (layer: PortalLayer, next: readonly Entry[]) => {
     layers = { ...layers, [layer]: next };

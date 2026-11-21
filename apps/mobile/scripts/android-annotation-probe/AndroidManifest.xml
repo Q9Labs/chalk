@@ -1,0 +1,14 @@
+<manifest package="ai.chalk.probe" xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+  <application android:label="Chalk Capture Probe" android:debuggable="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name="ai.chalk.probe.ProbeActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+    <service android:name="ai.chalk.probe.ProbeService" android:exported="false" android:foregroundServiceType="mediaProjection" />
+  </application>
+</manifest>
