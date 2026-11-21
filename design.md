@@ -148,7 +148,7 @@ Both call themes share one set of roles. Dark is the default. Light is a designe
 | Token         | Dark                      | Light              | Use                                                                     |
 | ------------- | ------------------------- | ------------------ | ----------------------------------------------------------------------- |
 | `canvas`      | `#000000`                 | `#F3F3F5`          | Call background and status pages                                        |
-| `surface`     | `#060606`                 | `#FFFFFF`          | Panel card, ready card, people pill, header buttons                     |
+| `surface`     | `#060606`                 | `#FFFFFF`          | Panel card, people pill, header buttons                                 |
 | `tile`        | `#060606`                 | `#E2E2E7`          | Tile background and the letterbox color of shared content               |
 | `raised`      | `#0C0C0C`                 | `#ECECF0`          | Round dock buttons, fields, chat bubbles, selected rows                 |
 | `popover`     | `#0C0C0C`                 | `#FFFFFF`          | Menus, popovers, toasts, floating chips                                 |
@@ -223,7 +223,7 @@ Call type scale. Text is Figtree with a line height of `1.4`, in sentence case.
 | -------------- | -------------------------------- | ----------------------------------------------------------- |
 | Status title   | `22px`, `600`                    | Status page sentence                                        |
 | Limbo title    | `20px`, `600`                    | Limbo message; the progress line beside a spinner is `17px` |
-| Card title     | `15px`, `600`                    | Call name, "Your call is ready", popover and dialog titles  |
+| Card title     | `15px`, `600`                    | Call name, popover and dialog titles                        |
 | Phone row      | `16px`, `400`                    | Rows in phone sheets                                        |
 | Body           | `14px`, `400` to `500`           | Menu rows, messages, toasts, fields                         |
 | Button         | `13px`, `600`                    | Pill buttons, chips, segmented controls                     |
@@ -266,8 +266,8 @@ Every call control follows the same rules, so a new control needs no new decisio
 
 The header is transparent over the canvas, `60px` high (`52px` on a phone), with `24px` of padding on the left and `16px` on the right. It carries no logo and no Invite button.
 
-- On the left, the call name and the timer form one button with a `14px` chevron after the timer. It has a `40px` pill shape, a `raised` hover background, a pressed state, the tooltip "Call details", and opens the call details popover. While recording, a `13px` "Rec" label with an `8px` red dot follows it.
-- When your own connection is weak, a `36px` pill on `raised` with a `line-strong` border appears beside the name with signal bars and "Weak connection" in `600`, or "Very poor connection" when the link is poor, and for a weak link the reason in `text-muted` (such as "Audio may break up"). Pressing it opens the call details popover. A weak link ends in a chevron; a poor link ends in "Details" and a chevron, or, when video is on, in a "Turn off video" action. A close button dismisses it. It enters over `160ms` with a `4px` rise, and with reduced motion it appears at once. On a phone it sits under the header, across the width, and the stage moves down to make room.
+- On the left, the call name and the timer form one button with a `14px` chevron after the timer. It has a `40px` pill shape, a `raised` hover background, a pressed state, the tooltip "Call details", and opens the call details popover. While recording, a `13px` "Rec" label with an `8px` red dot follows it. A phone hides the label, so there the timer turns `danger-text` instead.
+- When your own connection is weak, a borderless `32px` pill on `raised` appears beside the name with signal bars and "Weak connection", or "Very poor connection" in `danger-text`. It has no reason text, chevron or dismiss: the reason lives in its accessible name and in the Connection helper of the call details. When the link is poor and video is on, a "Turn off video" action follows it. It enters over `180ms` with a `4px` rise, and with reduced motion it appears at once. On a phone it sits under the header at the left edge.
 - On the right, the people pill is `40px` high on `surface`. It shows up to three overlapping `24px` faces (overlap `7px`, each ringed in the pill color) and the count in tabular figures, and it opens the People tab.
 - Next to it, one `40px` round button switches between Spotlight and Grid. Its tooltip names the layout it switches to.
 - On a phone, the header shows only the call name with its chevron and the timer. Tapping the name opens the call details as a bottom sheet.
@@ -281,7 +281,7 @@ The dock sits `20px` above the bottom edge (`42px` on a phone), centered, with `
 3. Reactions and board for everyone, and record for hosts, each a round button. Anyone can open the board; whether they can draw on it follows the host's drawing setting. While your hand is raised, the reactions button turns `warning` and its smile becomes a hand. The board button inverts while open. The record button never fills red: while recording it keeps its neutral fill and its glyph turns `danger-text`, and while a start or stop is pending the glyph breathes (it holds at 60% with reduced motion). Full screen has no button; Ctrl Cmd F toggles it.
 4. Leave. It is a round `danger` button with a white, level, filled hang-up handset, and it is the only red control in the dock. A guest who clicks it leaves at once and lands on the status page. A host gets a small menu above the button with "Leave call" and "End call for everyone" in `danger-text`.
 
-Round buttons sit in the bottom corners, `20px` from the edges. The link button at the bottom left toggles the "Your call is ready" card. For hosts on a laptop, the record button sits beside it, `72px` from the left edge, and inverts while recording. The chat button at the bottom right opens Chat and shows a `9px` blue dot for unread messages. A new message also shows a chat peek for four seconds above the chat button: a bubble with the sender's avatar, name, and first line, which opens Chat when clicked.
+One round button sits in the bottom right corner, `20px` from the edges. The chat button opens Chat and shows a `9px` blue dot for unread messages. A new message also shows a chat peek for four seconds above the chat button: a bubble with the sender's avatar, name, and first line, which opens Chat when clicked.
 
 **Reactions menu.** The first row is a "Raise hand" toggle, followed by a divider. It rests flat, fills on hover, turns yellow and reads "Lower hand" when on, and closes the menu when pressed. Six emoji follow as `40px` round buttons: thumbs up, heart, laughter, surprise, celebration, applause. A reaction floats up from the sender's tile and fades over two seconds.
 
@@ -356,12 +356,14 @@ The call name button opens one popover that holds everything about the call itse
 2. **Connection.** A row shows signal bars and "Connected", "Good", "Fair", "Unstable" or "Very poor" (green only when good), with the helper line, such as "Audio may break up", under it. The row expands to a list of round trip, upload, download, packet loss, region, video resolution, frame rate and codec, audio codec, and the selected microphone, speaker, and camera. A "Copy diagnostics" button at the end of the expanded section copies the list.
 3. **Appearance.** A Dark/Light segmented control switches the call theme at once.
 4. **Sounds.** A switch turns call sounds on or off.
-5. **Keyboard shortcuts.** This row opens a small dialog that lists them: Mute or unmute `⌘D`, Turn camera on or off `⌘E`, Raise or lower hand `⌃⌘H`, Open or close chat `⌃⌘C`, Open or close people `⌃⌘P`, Switch layout `⌃⌘L`, Talk while muted (hold Space), Show shortcuts `?`, and Close a menu or panel `Esc`. Other platforms show their own modifier keys.
-6. **Report a problem.** This row opens a short form with a "What went wrong?" text area and an "Include diagnostics" switch that is off by default and shows only when diagnostics exist. Send stays disabled until there is text. While it sends, the button reads "Sending…", and the dialog ends on "Sent" with the line "Thanks. We'll look into it." The status pages carry a quiet "Report a problem" link that opens the same form.
+5. **Keyboard shortcuts.** This row opens a small dialog that lists them: Mute or unmute `⌘D`, Turn camera on or off `⌘E`, Raise or lower hand `⌃⌘H`, Open or close chat `⌃⌘C`, Open or close people `⌃⌘P`, Switch layout `⌃⌘L`, Talk while muted (hold Space), Show shortcuts `?`, and Close a menu or panel `Esc`. Other platforms show their own modifier keys. A phone has no keyboard, so its sheet leaves the row out.
+6. **Report a problem.** This row shows whenever the app supports reports. It opens a short form with a "What went wrong?" text area and an "Include diagnostics" checkbox that is off by default, so diagnostics leave the call only when the person chooses. Send stays disabled until there is text. While it sends, the button reads "Sending…", and the dialog ends on "Sent" with the line "Thanks. We'll look into it." When reports are off or the report credential has expired, the dialog keeps the draft and says "Reporting is temporarily unavailable. Your draft is kept here." The status pages and the end screen carry a quiet "Report a problem" link that opens the same form.
+
+When the menu opens by itself for a host who is alone at call start, its title reads "Your call is ready" and the QR code is already open. Nothing else about it changes.
 
 The keyboard and report dialogs are `400px` wide, centered over the `scrim`, with a `16px` radius, a `line-strong` border, and a shadow of `0 16px 40px rgba(0,0,0,0.5)`. On a phone they are bottom sheets.
 
-**The copy control.** One control copies the link in the ready card, the popover, and the phone sheet. It is a `36px` round icon button. After a press, the copy icon morphs into a `success` check, with a crossfade, a scale from `0.4`, and a small turn over `200ms`. After two seconds it morphs back. A polite live region announces "Link copied".
+**The copy control.** One control copies the link in the call details and the phone sheet. Standing alone it is a `36px` round icon button with no text label. After a press, the copy icon morphs into a `success` check, with a crossfade, a scale from `0.4`, and a small turn over `200ms`. After two seconds it morphs back. A polite live region announces "Link copied". In the call details the whole "Copy invite link" row is the button: the link's slug and the copy icon sit at its end, and the icon morphs the same way. The site's and the dashboard's copy buttons use the same morph, and none of them changes its name or swaps its icon at once.
 
 ### Toasts and notices
 
@@ -378,9 +380,9 @@ A toast says one thing in at most two lines: a `20px` icon or `28px` avatar, a s
 - A banner under the header reads "Your browser paused the sound. Click to hear the call." It is an inverted `44px` pill.
 - When recording starts, everyone sees the "Recording started" toast, and someone who joins mid-recording gets the same notice. While a call is recorded, the header shows the Rec label (the timer turns red on a phone), and the Name needed, Joining, and Knocking cards carry the line "This call is recorded. By joining, you agree to be recorded."
 
-### The ready card
+### Alone at the start
 
-The "Your call is ready" card sits above the link button, `20px` from the left edge. It is `320px` wide and uses the `surface` fill, a one-pixel `line` border, and a `16px` radius. It shows the title, a close button, the line "Share this link with people you want in the call", and a `44px` link pill. The pill holds the link, a QR button that expands a `112px` QR code with its scan line, and the copy control. The card opens by itself when you are alone in the call and closes when anyone joins. The link button toggles it at any time. On a phone it is a bottom sheet.
+A host who is alone at the start of a call sees the call details open with the QR code expanded, so the link and the code are ready to share. It opens once the call is live, not while it is still joining or reconnecting, and it closes when the first person joins or when the host closes it. If the link is too long for a QR code, the QR area says "This link is too long for a QR code. Copy the link to share it." instead. On a phone it is the call details sheet.
 
 ### Limbo
 
@@ -395,13 +397,13 @@ Waiting states look like the call itself, blurred. A stand-in call (the header w
 | Reconnecting  | The real call under a `10px` blur and desaturation, with a spinner and "Reconnecting…"                                  |
 | Offline       | The same treatment, with "You're offline" and "You'll rejoin when your connection is back."                             |
 
-Reconnecting, offline and connection lost share one treatment. The header and the stage take the blur, a `60%` veil in the canvas color sits over them, and the card is centered on the call, never on a tile. The dock stays sharp above the veil, so Leave and the microphone still work. Open sheets close under the card and come back as they were when the call returns. While reconnecting with a queued chat message, the card adds "1 message will send when you're back". Queued actions send on their own, with no dialog.
+Reconnecting, offline and connection lost share one treatment. The header and the stage take the blur, a `60%` veil in the canvas color sits over them, and the card is centered on the call, never on a tile. The dock stays sharp above the veil, so Leave and the microphone still work. Open sheets close under the card and come back as they were when the call returns. While reconnecting with a queued chat message, the card adds "1 message will send when you're back". Queued actions send on their own, with no dialog. When reconnecting fails, the veil and the card stay and change in place to "Connection lost", with a Rejoin button, "Leave call", and "Report a problem" when a report can be sent. When the card closes, focus moves to the dock's Leave button.
 
 A call link paints the call canvas and a centered card with a spinner from its first frame, before the app has loaded, so opening an invite never shows a blank page in another color. Join call on the dashboard loads the call's code while the dashboard is idle and carries the call's name with the click, so the joining card appears at once and reads "Joining Product planning…" from its first frame. If the code is still loading, the pressed Join control swaps its icon for a spinner on the next frame and stays busy until the card shows. Every new web entry shows the device step, prefilled with the name and the last microphone and camera choice in this browser (both on the first time, so the preview shows you). A reload resumes the seat it held, muted and with the camera off. A host starting their own call goes straight in. When the blur ends, the filter is removed at once and a veil in the canvas color fades from `60%` to nothing over `300ms`, so the blur radius itself never animates. With reduced motion, the veil starts at full opacity and fades.
 
 ### The status page
 
-One full-canvas page covers every case where the call stops for you. It shows a centered sentence at `22px`, an optional muted line, and a row of `56px` round `raised` buttons with a `13px` label under each, `28px` apart. Below them, a quiet underlined "Report a problem" link opens the report form. The page has no call id, no statistics, and no countdown.
+One full-canvas page covers every case where the call stops for you. It shows a centered sentence at `22px`, an optional muted line, and a row of `56px` round `raised` buttons with a `13px` label under each, `28px` apart. Below them, a quiet underlined "Report a problem" link opens the report form. The page has no call id, no statistics, and no countdown, and it never prints the error code: a report always carries the code and its connection detail, with or without the optional diagnostics.
 
 | Case                    | Sentence                      | Line                                                                       | Buttons         |
 | ----------------------- | ----------------------------- | -------------------------------------------------------------------------- | --------------- |
@@ -574,7 +576,7 @@ The phone keeps the same hierarchy rather than shrinking the laptop UI. All size
 - The stage is `8px` from the sides, `52px` from the top, and `106px` from the bottom. Tiles have a `14px` radius.
 - Alone, you fill the stage. With two people, one person fills the stage and the other floats as a `96px` by `128px` tile at the bottom right, `12px` inside the corner, so it never covers the big tile's top-right menu. With more people, the strip sits below at `30%` of the stage height, and the content-aware placement works in portrait with a column minimum of `120px`. Grid uses the same planner with the phone tile minimums.
 - The header, dock, and More sheet are described above. The chrome does not fade on a phone.
-- People, Chat, call details, the microphone and camera pickers, reactions, the ready card, tile options, and More open as bottom sheets with a `24px` top radius, a `36px` by `5px` drag handle, and a scrim. A sheet traps focus, and Esc or a tap on the scrim closes it. A sheet opened from a sheet dims the one under it, and when one sheet hands off to the next the scrim stays steady instead of dropping out. The sheet stays pinned while its rows scroll, up to `88%` of the screen, and its bottom padding is the safe-area inset (at least `16px`) plus `8px`.
+- People, Chat, call details, the microphone and camera pickers, reactions, tile options, and More open as bottom sheets with a `24px` top radius, a `36px` by `5px` drag handle, and a scrim. A sheet traps focus, and Esc or a tap on the scrim closes it. A sheet opened from a sheet dims the one under it, and when one sheet hands off to the next the scrim stays steady instead of dropping out. The sheet stays pinned while its rows scroll, up to `88%` of the screen, and its bottom padding is the safe-area inset (at least `16px`) plus `8px`.
 - Drag a sheet down by its handle or heading (the top `76px`, never a row). It follows the finger one to one, moves a third as far upward, and fades the scrim with it. It closes when released past `30%` of its height or faster than `0.5px/ms`, and otherwise springs back in `240ms`. With reduced motion it snaps. Closing by drag gives the success haptic.
 - The reactions sheet has no scrim, so the call stays visible, and it closes `120ms` after an emoji is sent.
 - Nothing is hover-only. Tile actions open from a tap, share controls appear on a tap, and message reactions appear on a long press.
@@ -586,21 +588,21 @@ Motion confirms state changes and spatial relationships. It never performs decor
 
 Each role is one custom property in the shared styles, holding a duration and a curve, so a component writes `transition: opacity var(--chalk-motion-enter)` and never a raw timing. `expo` is `cubic-bezier(0.16, 1, 0.3, 1)` and `move` is `cubic-bezier(0.2, 0.8, 0.2, 1)`.
 
-| Motion                    | Token                                         | Duration         | Curve                                 |
-| ------------------------- | --------------------------------------------- | ---------------- | ------------------------------------- |
-| Hover and press           | `--chalk-motion-press`                        | `150ms`          | ease-out                              |
-| Tooltip                   | `--chalk-motion-tooltip`                      | `120ms`          | ease-out                              |
-| Switch and checkbox       | `--chalk-motion-toggle`                       | `180ms`          | expo                                  |
-| Menu and popover in, out  | `--chalk-motion-enter`, `--chalk-motion-exit` | `180ms`, `160ms` | expo, ease-out                        |
-| Toast in, toast out       | `--chalk-motion-toast`, `--chalk-motion-exit` | `200ms`, `160ms` | expo, ease-out                        |
-| Panel card and ready card | `--chalk-motion-card`                         | `200ms`          | expo                                  |
-| Phone sheet               | `--chalk-motion-sheet`                        | `240ms`          | expo                                  |
-| Copy icon morph           | `--chalk-motion-copy`                         | `200ms`          | expo                                  |
-| Stage move                | `--chalk-motion-move`                         | `220ms`          | move                                  |
-| Segmented control thumb   |                                               | `180ms`          | expo                                  |
-| Jump highlight            |                                               | `1600ms`         | ease-out (fades in, holds, fades out) |
-| Chrome idle fade          |                                               | `250ms`          | ease-out                              |
-| Limbo veil                |                                               | `300ms`          | ease-out                              |
+| Motion                   | Token                                         | Duration         | Curve                                 |
+| ------------------------ | --------------------------------------------- | ---------------- | ------------------------------------- |
+| Hover and press          | `--chalk-motion-press`                        | `150ms`          | ease-out                              |
+| Tooltip                  | `--chalk-motion-tooltip`                      | `120ms`          | ease-out                              |
+| Switch and checkbox      | `--chalk-motion-toggle`                       | `180ms`          | expo                                  |
+| Menu and popover in, out | `--chalk-motion-enter`, `--chalk-motion-exit` | `180ms`, `160ms` | expo, ease-out                        |
+| Toast in, toast out      | `--chalk-motion-toast`, `--chalk-motion-exit` | `200ms`, `160ms` | expo, ease-out                        |
+| Panel card               | `--chalk-motion-card`                         | `200ms`          | expo                                  |
+| Phone sheet              | `--chalk-motion-sheet`                        | `240ms`          | expo                                  |
+| Copy icon morph          | `--chalk-motion-copy`                         | `200ms`          | expo                                  |
+| Stage move               | `--chalk-motion-move`                         | `220ms`          | move                                  |
+| Segmented control thumb  |                                               | `180ms`          | expo                                  |
+| Jump highlight           |                                               | `1600ms`         | ease-out (fades in, holds, fades out) |
+| Chrome idle fade         |                                               | `250ms`          | ease-out                              |
+| Limbo veil               |                                               | `300ms`          | ease-out                              |
 
 - Animate transform and opacity only. Never animate width, height, top, left, or a box shadow. The one filter in the call is the static limbo blur.
 - Every change on the stage moves: a layout switch, someone joining or leaving, a share starting or stopping, a panel opening or closing, and the strip moving between below and beside. Each tile is keyed by its person or share and is placed in its final box at once. It then plays a transform from its old box to the new one (translate and scale) over `220ms`. The video element is never re-created or re-parented during the move. A new tile fades in from `97%` scale over `220ms`, and a leaving tile fades out over `160ms`.
@@ -635,7 +637,7 @@ Chalk targets WCAG 2.2 AA in the call, in both call themes, and on the site.
 - Keyboard users can operate every control: dock, split pills and carets, menus, tabs, rows, tiles, the composer, and the viewer. Focus order follows the visible layout. A menu, card, popover, sheet, dialog, or viewer moves focus inside, and returns it to the trigger on close. Sheets, dialogs, and the viewer trap focus. Arrow keys move through menus and tabs, and Esc closes the top layer.
 - Touch targets are at least `44px` square, and the phone dock uses `52px`.
 - A polite live region announces joins, leaves, raised hands, new messages, copies, share changes, and the start of recording. Errors and knocks use an assertive alert.
-- Never communicate microphone, camera, connection, or recording state through color alone. Off states use a slashed icon, hands use an icon and an order number, a weak connection uses bars and words, and recording backs its red timer with the trigger's name and tooltip, the start notice, and the Recording row that opens the call details.
+- Never communicate microphone, camera, connection, or recording state through color alone. Off states use a slashed icon, hands use an icon and an order number, a weak connection uses bars and words, and recording backs its red timer with the Rec label in the desktop header, the red elapsed time on a phone, the start notice, and the Record button's Stop name and tooltip.
 - Long and right-to-left names truncate with an ellipsis and set with `dir="auto"`.
 
 **Product language.** Copy is calm, direct, and role-neutral. The interface says "call": Join call, Leave call, End call for everyone, and The call ended. "Space" and "Episode" stay in code, API contracts, SDK types, and documentation, and never appear in the call. The call uses the terms People, Chat, Share, Board, Reactions, and Raise hand. Text is sentence case with no em dashes. Buttons name a verb and an object where that fits, and a label states the result when state changes, such as "Mute microphone" and "Turn off camera". An error says what happened, whether the call can continue, and what to do next. The call shows no provider names, implementation status, or SDK language.
