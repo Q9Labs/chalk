@@ -2,11 +2,17 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         println!("cargo:rerun-if-changed=native/window_mac.m");
-        for framework in ["CoreGraphics", "Foundation", "ScreenCaptureKit"] {
+        println!("cargo:rerun-if-changed=native/credentials_mac.m");
+        for framework in [
+            "CoreGraphics",
+            "ColorSync",
+            "Foundation",
+            "ScreenCaptureKit",
+        ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         cc::Build::new()
-            .file("native/window_mac.m")
+            .files(["native/window_mac.m", "native/credentials_mac.m"])
             .flags(["-fobjc-arc", "-mmacosx-version-min=14.0"])
             .compile("chalk_window");
     }

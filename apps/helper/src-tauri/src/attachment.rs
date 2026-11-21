@@ -55,6 +55,16 @@ fn prove(challenge: Challenge, ticket: &str, key: &Ed25519KeyPair) -> Result<Val
 pub async fn receive(
     ticket: String,
     key: Arc<Ed25519KeyPair>,
+    update: impl FnMut(Value) -> bool,
+) -> Result<(), &'static str> {
+    let (_sender, receiver) = tokio::sync::mpsc::channel(1);
+    receive_with_commands(ticket, key, receiver, update).await
+}
+
+pub async fn receive_with_commands(
+    ticket: String,
+    key: Arc<Ed25519KeyPair>,
+    mut commands: tokio::sync::mpsc::Receiver<Value>,
     mut update: impl FnMut(Value) -> bool,
 ) -> Result<(), &'static str> {
     let endpoint = Endpoint::configured()?;
@@ -81,13 +91,33 @@ pub async fn receive(
         .await
         .map_err(|_| "sync_unavailable")?;
 
-    while let Some(frame) = socket.next().await {
+    let mut accepted = false;
+    let mut heartbeat = tokio::time::interval(Duration::from_secs(2));
+    heartbeat.tick().await;
+    loop {
+        let frame = tokio::select! {
+            frame = socket.next() => frame,
+            command = commands.recv(), if accepted && !commands.is_closed() => {
+                let Some(command) = command else { break; };
+                socket.send(Message::Text(command.to_string().into())).await.map_err(|_| "sync_unavailable")?;
+                continue;
+            }
+            _ = heartbeat.tick(), if accepted => {
+                socket.send(Message::Text(crate::helper_scene::request().to_string().into())).await.map_err(|_| "sync_unavailable")?;
+                continue;
+            }
+        };
+        let Some(frame) = frame else {
+            break;
+        };
         match frame.map_err(|_| "sync_unavailable")? {
             Message::Text(frame) => {
                 let value: Value = serde_json::from_str(&frame).map_err(|_| "invalid_frame")?;
+                let snapshot = value["type"] == "annotation_state";
                 if !update(value) {
                     break;
                 }
+                accepted |= snapshot;
             }
             Message::Ping(_) => socket.flush().await.map_err(|_| "sync_unavailable")?,
             Message::Close(_) => break,

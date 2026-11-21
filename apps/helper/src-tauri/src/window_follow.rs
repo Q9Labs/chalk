@@ -231,8 +231,6 @@ mod platform {
             if ok == 0 {
                 return None;
             }
-            let mut covered = 0_i64;
-            let area = i64::from(width) * i64::from(height);
             let mut above = GetWindow(hwnd, GW_HWNDPREV);
             for _ in 0..128 {
                 if above.is_null() {
@@ -260,8 +258,7 @@ mod platform {
                         .min(other.bottom)
                         .saturating_sub(rect.top.max(other.top))
                         .max(0);
-                    covered += i64::from(w) * i64::from(h);
-                    if covered * 100 > area * 8 {
+                    if w > 0 && h > 0 {
                         return None;
                     }
                 }
@@ -394,4 +391,15 @@ mod tests {
         expected[90] = -expected[90];
         assert!(!landmarks_match(&pixels, &expected));
     }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[test]
+fn any_covering_pixels_prevent_overlay() {
+    extern "C" {
+        fn chalk_window_test_cover(width: u32, height: u32) -> bool;
+    }
+    // One visible pixel at the edge is still a covering window.
+    assert!(unsafe { chalk_window_test_cover(1, 8) });
+    assert!(!unsafe { chalk_window_test_cover(0, 8) });
 }

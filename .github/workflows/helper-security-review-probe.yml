@@ -1,0 +1,27 @@
+name: Chalk Helper review probes
+on:
+  push:
+    branches: [probe/helper-mac-review]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: cargo test --locked --manifest-path apps/helper/src-tauri/Cargo.toml
+  mac-window:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: |
+          swiftc apps/helper/probe/window-follow-review.swift -o window-fixture
+          clang -fobjc-arc -mmacosx-version-min=14.0 -framework Foundation -framework ScreenCaptureKit -framework CoreGraphics -framework ColorSync apps/helper/src-tauri/native/window_mac.m apps/helper/probe/window-follow-read.m -o window-read
+          node apps/helper/probe/window-follow-review.cjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: mac-window-follow
+          path: window-follow-review.json

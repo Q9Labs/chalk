@@ -4,8 +4,12 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use crate::window_follow;
-use crate::{geometry::Rect, live};
+use crate::{
+    geometry::Rect,
+    helper_scene::{self, Scene},
+    live,
+};
+use crate::{pairing_consent as consent, window_follow};
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
@@ -19,7 +23,6 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ring::{
-    digest::{digest, SHA256},
     rand::{SecureRandom, SystemRandom},
     signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519},
 };
@@ -27,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use tauri::AppHandle;
 use tokio::{
-    sync::{oneshot, Semaphore},
+    sync::{mpsc, oneshot, Semaphore},
     task::JoinHandle,
 };
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
@@ -59,12 +62,21 @@ struct Local {
 }
 
 struct Outstanding {
+    browser_public_key: String,
     challenge: String,
     until: Instant,
 }
 
-struct Approval {
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalPrompt {
     fingerprint: String,
+    confirmation_code: String,
+}
+
+struct Approval {
+    prompt: ApprovalPrompt,
+    attachment_hash: String,
     until: Instant,
     respond: oneshot::Sender<Option<String>>,
     ticket: Ticket,
@@ -74,6 +86,8 @@ struct Session {
     secret: String,
     until: Instant,
     ticket: Ticket,
+    attachment_hash: Option<String>,
+    commands: Option<mpsc::Sender<serde_json::Value>>,
     next_attachment: u64,
     attachment: Option<JoinHandle<()>>,
     status: &'static str,
@@ -86,7 +100,7 @@ impl Session {
     }
 
     fn usable(&self) -> bool {
-        self.until > Instant::now() && !matches!(self.status, "disconnected" | "update_required")
+        self.until > Instant::now() && self.status == "unbound"
     }
 }
 
@@ -96,6 +110,12 @@ impl Drop for Session {
             task.abort();
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ChallengeRequest {
+    browser_public_key: String,
 }
 
 #[derive(Serialize)]
@@ -112,8 +132,9 @@ struct ChallengeResponse {
 struct Attach {
     version: u8,
     challenge: String,
+    browser_proof: String,
     pair_ticket: String,
-    attachment_ticket: String,
+    attachment_hash: String,
 }
 
 #[derive(Deserialize)]
@@ -162,6 +183,9 @@ enum Exchange {
         landmarks: Vec<i8>,
     },
     ProbeStart,
+    ProbePainted {
+        nonce: String,
+    },
     WindowProbeStart,
     ProbeProtect {
         nonce: String,
@@ -170,14 +194,9 @@ enum Exchange {
         nonce: String,
     },
     ProbeAbort,
-    Scene {
-        #[serde(rename = "layerId")]
-        layer_id: String,
-        #[serde(rename = "publicationId")]
-        publication_id: String,
-        width: u32,
-        height: u32,
-        scene: live::Scene,
+    Authorize {
+        #[serde(rename = "attachmentTicket")]
+        attachment_ticket: String,
     },
     Refresh {
         #[serde(rename = "pairTicket")]
@@ -280,7 +299,7 @@ impl Pairing {
             .with_state(self)
     }
 
-    pub fn fingerprint(&self) -> Option<String> {
+    pub fn approval_prompt(&self) -> Option<ApprovalPrompt> {
         self.0
             .state
             .lock()
@@ -288,13 +307,13 @@ impl Pairing {
             .approval
             .as_ref()
             .filter(|approval| approval.until > Instant::now() && !approval.respond.is_closed())
-            .map(|approval| approval.fingerprint.clone())
+            .map(|approval| approval.prompt.clone())
     }
 
     pub fn decide(&self, fingerprint: &str, allowed: bool) {
         let mut state = self.0.state.lock().expect("pairing state");
         if state.approval.as_ref().is_some_and(|approval| {
-            approval.until > Instant::now() && approval.fingerprint == fingerprint
+            approval.until > Instant::now() && approval.prompt.fingerprint == fingerprint
         }) {
             if let Some(approval) = state.approval.take() {
                 let secret = allowed.then(random_secret).and_then(Result::ok);
@@ -303,9 +322,11 @@ impl Pairing {
                         secret,
                         until: approval.until,
                         ticket: approval.ticket,
+                        attachment_hash: Some(approval.attachment_hash),
+                        commands: None,
                         next_attachment: 0,
                         attachment: None,
-                        status: "unbound",
+                        status: "waiting_for_sync",
                         capture: live::Capture::default(),
                     });
                 }
@@ -320,7 +341,7 @@ impl Pairing {
             .expect("pairing state")
             .session
             .as_ref()
-            .is_some_and(|session| session.until > Instant::now())
+            .is_some_and(Session::usable)
     }
 
     pub fn set_app(&self, app: AppHandle) {
@@ -337,12 +358,13 @@ impl Pairing {
             let mut state = pairing.0.state.lock().expect("pairing state");
             let live = state.session.as_mut().filter(|session| session.usable());
             if let Some(session) = live {
+                session.capture.restore_visibility(&owner);
                 if session.capture.reconcile_window(&owner) {
                     return;
                 }
                 if session.capture.allows_window() {
                     session.capture.disable_stale_input(&owner);
-                    if !session.capture.projection_is_current(&owner) {
+                    if !session.capture.projection_is_current() {
                         session.capture.fail(&owner);
                     }
                     return;
@@ -363,6 +385,17 @@ impl Pairing {
         let mut state = self.0.state.lock().expect("pairing state");
         if let Some(session) = state.session.as_mut().filter(|session| session.usable()) {
             callback(&mut session.capture);
+            if let (Some(pen), Some(commands)) = (session.capture.drain_commit(), &session.commands)
+            {
+                let _ = commands.try_send(serde_json::json!({
+                    "type":"annotation_command", "operation_id": uuid::Uuid::new_v4(),
+                    "layer_id": session.ticket.layer_id, "fence": pen.fence,
+                    "command": {"kind":"commit", "draft":{
+                        "mark_id": uuid::Uuid::new_v4(), "lifetime":"fade", "color":"#ffffff",
+                        "width":pen.width, "shape":{"kind":"pen","points":pen.points}
+                    }}
+                }));
+            }
         }
     }
 
@@ -502,7 +535,7 @@ impl Pairing {
                 .and_then(|session| {
                     let capture = &mut session.capture;
                     if !matches!(action, Exchange::ProbeAbort | Exchange::WindowProbeStart)
-                        && !capture.projection_is_current(&owner)
+                        && !capture.projection_is_current()
                     {
                         if capture.window_id().is_some() {
                             capture.await_window(&owner);
@@ -518,6 +551,9 @@ impl Pairing {
                         Exchange::WindowProbeStart => capture
                             .start_window_probe(&owner)
                             .map(|spec| Json(spec).into_response()),
+                        Exchange::ProbePainted { nonce } => capture
+                            .painted(&nonce)
+                            .map(|()| StatusCode::NO_CONTENT.into_response()),
                         Exchange::ProbeProtect { nonce } => capture
                             .protect(&owner, &nonce)
                             .map(|()| StatusCode::NO_CONTENT.into_response()),
@@ -628,33 +664,72 @@ impl Pairing {
         let pairing = Arc::downgrade(&self.0);
         let key = Arc::clone(&self.0.key);
         let secret = session.secret.clone();
-        let layer = session.ticket.layer_id.clone();
-        session.attachment =
-            Some(tokio::spawn(async move {
-                let receive =
-                    crate::attachment::receive(token, key, |frame| match frame["type"].as_str() {
-                        Some("annotation_state") => {
-                            frame["state"]["layer"]["layer_id"].as_str() == Some(&layer)
-                        }
-                        Some("annotation_changed" | "annotation_presence") => {
-                            frame["layer_id"].as_str() == Some(&layer)
-                        }
-                        Some("annotation_closed") => false,
-                        _ => false,
-                    });
-                let result = tokio::time::timeout(lifetime, receive).await;
-                if let Some(pairing) = pairing.upgrade() {
-                    let mut state = pairing.state.lock().expect("pairing state");
-                    if let Some(session) = state.session.as_mut().filter(|session| {
-                        session.secret == secret && session.next_attachment == serial
-                    }) {
-                        session.status = match result {
-                            Ok(Err("update_required")) => "update_required",
-                            _ => "disconnected",
+        let (commands, receiver) = mpsc::channel(8);
+        session.commands = Some(commands.clone());
+        session.attachment = Some(tokio::spawn(async move {
+            let receive = crate::attachment::receive_with_commands(token, key, receiver, |frame| {
+                let Some(pairing) = pairing.upgrade() else {
+                    return false;
+                };
+                let mut state = pairing.state.lock().expect("pairing state");
+                let Some(session) = state.session.as_mut().filter(|session| {
+                    session.authorizes(&secret) && session.next_attachment == serial
+                }) else {
+                    return false;
+                };
+                match frame["type"].as_str() {
+                    Some("annotation_state") => {
+                        let Some(snapshot) = Scene::snapshot(
+                            &frame,
+                            &session.ticket.layer_id,
+                            &session.ticket.publication_id,
+                            &session.ticket.participant_id,
+                        ) else {
+                            return false;
                         };
+                        session.capture.accept_scene(snapshot);
+                        session.status = "unbound";
                     }
+                    Some("annotation_changed")
+                        if session.usable() && frame["layer_id"] == session.ticket.layer_id =>
+                    {
+                        if session
+                            .capture
+                            .scene_mut()
+                            .and_then(|scene| scene.apply(&frame))
+                            .is_none()
+                        {
+                            session.capture.suspend_scene();
+                            let _ = commands.try_send(helper_scene::request());
+                        }
+                    }
+                    Some("annotation_presence")
+                        if session.usable() && frame["layer_id"] == session.ticket.layer_id =>
+                    {
+                        if let Some(scene) = session.capture.scene_mut() {
+                            scene.presence(frame);
+                        }
+                    }
+                    Some("annotation_receipt") if session.usable() => {}
+                    _ => return false,
                 }
-            }));
+                true
+            });
+            let result = tokio::time::timeout(lifetime, receive).await;
+            if let Some(pairing) = pairing.upgrade() {
+                let mut state = pairing.state.lock().expect("pairing state");
+                if let Some(session) = state
+                    .session
+                    .as_mut()
+                    .filter(|session| session.secret == secret && session.next_attachment == serial)
+                {
+                    session.status = match result {
+                        Ok(Err("update_required")) => "update_required",
+                        _ => "disconnected",
+                    };
+                }
+            }
+        }));
     }
 
     fn session_until(&self, secret: &str) -> Option<Instant> {
@@ -685,12 +760,6 @@ fn random_secret() -> Result<String, StatusCode> {
         .fill(&mut bytes)
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
-}
-
-fn fingerprint(key: &str, challenge: &str) -> String {
-    let fingerprint = digest(&SHA256, format!("{key}.{challenge}").as_bytes());
-    let raw = fingerprint.as_ref();
-    format!("{:02X}{:02X}-{:02X}{:02X}", raw[0], raw[1], raw[2], raw[3])
 }
 
 fn exact_header<'a>(headers: &'a HeaderMap, name: header::HeaderName) -> Option<&'a HeaderValue> {
@@ -776,7 +845,11 @@ async fn request_boundary(
     response
 }
 
-async fn challenge(State(pairing): State<Pairing>) -> Result<Json<ChallengeResponse>, StatusCode> {
+async fn challenge(
+    State(pairing): State<Pairing>,
+    Json(request): Json<ChallengeRequest>,
+) -> Result<Json<ChallengeResponse>, StatusCode> {
+    consent::public_key(&request.browser_public_key).ok_or(StatusCode::BAD_REQUEST)?;
     let now = Instant::now();
     let mut state = pairing.0.state.lock().expect("pairing state");
     if state
@@ -795,6 +868,9 @@ async fn challenge(State(pairing): State<Pairing>) -> Result<Json<ChallengeRespo
         .as_ref()
         .filter(|challenge| challenge.until > now);
     let (challenge, expires_at_ms) = if let Some(existing) = existing {
+        if existing.browser_public_key != request.browser_public_key {
+            return Err(StatusCode::CONFLICT);
+        }
         (
             existing.challenge.clone(),
             utc_ms() + (existing.until - now).as_millis() as u64,
@@ -802,13 +878,14 @@ async fn challenge(State(pairing): State<Pairing>) -> Result<Json<ChallengeRespo
     } else {
         let challenge = random_secret()?;
         state.challenge = Some(Outstanding {
+            browser_public_key: request.browser_public_key,
             challenge: challenge.clone(),
             until: now + LIFETIME,
         });
         (challenge, utc_ms() + LIFETIME.as_millis() as u64)
     };
     Ok(Json(ChallengeResponse {
-        version: VERSION,
+        version: consent::VERSION,
         helper_public_key: pairing.0.helper_public_key.clone(),
         challenge,
         expires_at_ms,
@@ -819,16 +896,14 @@ async fn attach(
     State(pairing): State<Pairing>,
     Json(request): Json<Attach>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    if request.version != VERSION {
+    if request.version != consent::VERSION {
         return Err(StatusCode::UPGRADE_REQUIRED);
     }
+    consent::public_key(&request.attachment_hash).ok_or(StatusCode::BAD_REQUEST)?;
     let (ticket, ticket_until) = pairing
         .verify_ticket(&request.pair_ticket)
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    pairing
-        .verify_attachment(&request.attachment_ticket, &ticket)
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    let (receive, until) = {
+    let (receive, until, transcript, code) = {
         let mut state = pairing.0.state.lock().expect("pairing state");
         let challenge = state.challenge.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
         if challenge.until <= Instant::now()
@@ -837,16 +912,41 @@ async fn attach(
         {
             return Err(StatusCode::UNAUTHORIZED);
         }
+        let transcript = consent::transcript(
+            &request.challenge,
+            &challenge.browser_public_key,
+            &pairing.0.helper_public_key,
+            &request.pair_ticket,
+            &request.attachment_hash,
+        );
+        if !consent::verifies(
+            &challenge.browser_public_key,
+            &transcript,
+            &request.browser_proof,
+        ) {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        let code = consent::confirmation_code().map_err(|()| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let prompt = ApprovalPrompt {
+            fingerprint: consent::fingerprint(&transcript),
+            confirmation_code: code
+                .as_bytes()
+                .chunks(4)
+                .map(|part| std::str::from_utf8(part).expect("base32"))
+                .collect::<Vec<_>>()
+                .join("-"),
+        };
         let until = challenge.until.min(ticket_until);
         let (respond, receive) = oneshot::channel();
         state.challenge = None;
         state.approval = Some(Approval {
-            fingerprint: fingerprint(&pairing.0.helper_public_key, &request.challenge),
+            prompt,
+            attachment_hash: request.attachment_hash,
             until,
             respond,
             ticket,
         });
-        (receive, until)
+        (receive, until, transcript, code)
     };
     if let Some(app) = pairing.0.app.lock().expect("app handle").clone() {
         let owner = app.clone();
@@ -864,18 +964,17 @@ async fn attach(
         .as_mut()
         .filter(|session| session.secret == secret && session.until > now)
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    let lifetime = pairing
-        .verify_attachment(&request.attachment_ticket, &session.ticket)
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    pairing.connect_attachment(
-        session,
-        request.attachment_ticket,
-        lifetime.min(session.until - now),
-    );
     let lease_expires_at_ms =
         utc_ms() + session.until.saturating_duration_since(now).as_millis() as u64;
+    let confirmation = consent::confirmation(
+        &pairing.0.key,
+        &transcript,
+        &secret,
+        lease_expires_at_ms,
+        &code,
+    );
     Ok(Json(
-        serde_json::json!({ "sessionSecret": secret, "leaseExpiresAtMs": lease_expires_at_ms, "status": "unbound" }),
+        serde_json::json!({ "sessionSecret": secret, "leaseExpiresAtMs": lease_expires_at_ms, "confirmation": confirmation }),
     ))
 }
 
@@ -907,6 +1006,7 @@ async fn exchange(
         exchange,
         Exchange::ProbeStart
             | Exchange::WindowProbeStart
+            | Exchange::ProbePainted { .. }
             | Exchange::ProbeProtect { .. }
             | Exchange::ProbeComplete { .. }
             | Exchange::ProbeAbort
@@ -935,27 +1035,28 @@ async fn exchange(
                 .describe(&surface, width, height, window_id.as_deref())
                 .map_err(|()| StatusCode::CONFLICT)?;
         }
-        Exchange::Scene {
-            layer_id,
-            publication_id,
-            width,
-            height,
-            scene,
-        } => {
-            if !session.usable()
-                || layer_id != session.ticket.layer_id
-                || publication_id != session.ticket.publication_id
-                || !scene.valid_for(&session.ticket.participant_id)
-            {
-                return Err(StatusCode::CONFLICT);
+        Exchange::Authorize { attachment_ticket } => {
+            let hash = consent::hash_token(&attachment_ticket);
+            let valid_hash = session
+                .attachment_hash
+                .as_ref()
+                .is_some_and(|expected| bool::from(expected.as_bytes().ct_eq(hash.as_bytes())));
+            if !valid_hash {
+                return Err(StatusCode::UNAUTHORIZED);
             }
-            session
-                .capture
-                .update(scene, width, height)
-                .map_err(|()| StatusCode::CONFLICT)?;
+            let lifetime = pairing
+                .verify_attachment(&attachment_ticket, &session.ticket)
+                .ok_or(StatusCode::UNAUTHORIZED)?;
+            session.attachment_hash = None;
+            pairing.connect_attachment(
+                session,
+                attachment_ticket,
+                lifetime.min(session.until.saturating_duration_since(Instant::now())),
+            );
         }
         Exchange::ProbeStart
         | Exchange::WindowProbeStart
+        | Exchange::ProbePainted { .. }
         | Exchange::ProbeProtect { .. }
         | Exchange::ProbeComplete { .. }
         | Exchange::ProbeAbort
@@ -978,13 +1079,14 @@ async fn exchange(
                 ..ticket
             }) != session.ticket
                 || expires_at_ms <= session.ticket.expires_at_ms
-                || session.status == "update_required"
+                || !session.usable()
             {
                 return Err(StatusCode::UNAUTHORIZED);
             }
             session.ticket.expires_at_ms = expires_at_ms;
             session.until = until;
-            session.status = "unbound";
+            session.status = "waiting_for_sync";
+            session.capture.suspend_scene();
             pairing.connect_attachment(
                 session,
                 attachment_ticket,
@@ -1005,6 +1107,7 @@ async fn events(
         .ok_or(StatusCode::UNAUTHORIZED)?;
     let ticks = IntervalStream::new(tokio::time::interval(Duration::from_millis(80)));
     let mut last_status = "";
+    let mut sequence = 0;
     let mut last_heartbeat = Instant::now() - Duration::from_secs(5);
     let stream = ticks.map_while(move |_| {
         let mut state = pairing.0.state.lock().expect("pairing state");
@@ -1020,14 +1123,9 @@ async fn events(
         let event = if status != last_status || last_heartbeat.elapsed() >= Duration::from_secs(2) {
             last_status = status;
             last_heartbeat = Instant::now();
-            Event::default().data(serde_json::json!({"type":"status","status":status}).to_string())
-        } else if status == "ready" {
-            match session.capture.drain_commit() {
-                Some(pen) => {
-                    Event::default().data(serde_json::json!({"type":"pen","pen":pen}).to_string())
-                }
-                None => Event::default().comment("pulse"),
-            }
+            sequence += 1;
+            let signature = consent::signed_status(&pairing.0.key, &secret, sequence, status);
+            Event::default().data(serde_json::json!({"type":"status","status":status,"sequence":sequence,"signature":signature}).to_string())
         } else {
             Event::default().comment("pulse")
         };
@@ -1067,7 +1165,29 @@ mod tests {
         serde_json::from_slice(&to_bytes(response.into_body(), 8192).await.unwrap()).unwrap()
     }
 
-    fn signed_attach(challenge: &Value, issuer: &Ed25519KeyPair, audience: &str) -> String {
+    fn browser_key() -> Ed25519KeyPair {
+        let seed = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
+        Ed25519KeyPair::from_pkcs8(seed.as_ref()).unwrap()
+    }
+
+    fn hello(browser: &Ed25519KeyPair) -> Request<Body> {
+        request("POST", "/v1/challenge")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "browserPublicKey": URL_SAFE_NO_PAD.encode(browser.public_key())
+                })
+                .to_string(),
+            ))
+            .unwrap()
+    }
+
+    fn signed_attach(
+        challenge: &Value,
+        issuer: &Ed25519KeyPair,
+        browser: &Ed25519KeyPair,
+        audience: &str,
+    ) -> String {
         let protected =
             URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"chalk-helper-pair-ticket+jwt"}"#);
         let claims = json!({
@@ -1101,11 +1221,21 @@ mod tests {
         );
         let attachment = format!("{header}.{claims}");
         let proof = URL_SAFE_NO_PAD.encode(issuer.sign(attachment.as_bytes()));
+        let pair = format!("{signed}.{signature}");
+        let attachment_hash = consent::hash_token(&format!("{attachment}.{proof}"));
+        let transcript = consent::transcript(
+            challenge["challenge"].as_str().unwrap(),
+            &URL_SAFE_NO_PAD.encode(browser.public_key()),
+            challenge["helperPublicKey"].as_str().unwrap(),
+            &pair,
+            &attachment_hash,
+        );
         json!({
-            "version": 1,
+            "version": consent::VERSION,
             "challenge": challenge["challenge"],
-            "pairTicket": format!("{signed}.{signature}"),
-            "attachmentTicket": format!("{attachment}.{proof}")
+            "pairTicket": pair,
+            "attachmentHash": attachment_hash,
+            "browserProof": URL_SAFE_NO_PAD.encode(browser.sign(transcript.as_bytes()))
         })
         .to_string()
     }
@@ -1158,21 +1288,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn outstanding_challenge_is_not_given_to_another_tab() {
+        let (pairing, _) = issuer();
+        let router = pairing.router();
+        let first = router.clone().oneshot(hello(&browser_key())).await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let other_tab = router.oneshot(hello(&browser_key())).await.unwrap();
+        assert_eq!(other_tab.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
     async fn attachment_needs_a_signed_audience_bound_ticket_and_local_approval() {
         let (pairing, key) = issuer();
         let router = pairing.clone().router();
-        let hello = request("POST", "/v1/challenge")
-            .body(Body::empty())
-            .unwrap();
-        let challenge = body(router.clone().oneshot(hello).await.unwrap()).await;
-        assert_eq!(challenge["version"], 1);
+        let browser = browser_key();
+        let challenge = body(router.clone().oneshot(hello(&browser)).await.unwrap()).await;
+        assert_eq!(challenge["version"], consent::VERSION);
         let attach = |body: String| {
             request("POST", "/v1/attach")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body))
                 .unwrap()
         };
-        let wrong_audience = signed_attach(&challenge, &key, "screen_annotation_helper_v1");
+        let wrong_audience =
+            signed_attach(&challenge, &key, &browser, "screen_annotation_helper_v1");
         assert_eq!(
             router
                 .clone()
@@ -1183,12 +1322,15 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
 
-        let valid = signed_attach(&challenge, &key, AUDIENCE);
+        let valid = signed_attach(&challenge, &key, &browser, AUDIENCE);
         let mut pending = Box::pin(router.clone().oneshot(attach(valid.clone())));
         assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
             .await
             .is_err());
-        let code = pairing.fingerprint().expect("local consent required");
+        let code = pairing
+            .approval_prompt()
+            .expect("local consent required")
+            .fingerprint;
         assert_eq!(
             router
                 .clone()
@@ -1201,6 +1343,10 @@ mod tests {
         pairing.decide(&code, true);
         let session = body(pending.await.unwrap()).await;
         let secret = session["sessionSecret"].as_str().unwrap();
+        assert!(
+            !pairing.connected(),
+            "native Allow alone is not Sync acceptance"
+        );
         let authenticated = |method, path| {
             request(method, path).header(header::AUTHORIZATION, format!("Bearer {secret}"))
         };
@@ -1238,11 +1384,9 @@ mod tests {
     async fn denial_does_not_open_a_session_or_make_the_challenge_reusable() {
         let (pairing, key) = issuer();
         let router = pairing.clone().router();
-        let hello = request("POST", "/v1/challenge")
-            .body(Body::empty())
-            .unwrap();
-        let challenge = body(router.clone().oneshot(hello).await.unwrap()).await;
-        let signed = signed_attach(&challenge, &key, AUDIENCE);
+        let browser = browser_key();
+        let challenge = body(router.clone().oneshot(hello(&browser)).await.unwrap()).await;
+        let signed = signed_attach(&challenge, &key, &browser, AUDIENCE);
         let attach = || {
             request("POST", "/v1/attach")
                 .header(header::CONTENT_TYPE, "application/json")
@@ -1253,7 +1397,10 @@ mod tests {
         assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
             .await
             .is_err());
-        let fingerprint = pairing.fingerprint().expect("confirmation appears");
+        let fingerprint = pairing
+            .approval_prompt()
+            .expect("confirmation appears")
+            .fingerprint;
         pairing.decide(&fingerprint, false);
         assert_eq!(pending.await.unwrap().status(), StatusCode::UNAUTHORIZED);
         assert!(!pairing.connected());

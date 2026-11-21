@@ -4,13 +4,14 @@ use std::{
 };
 
 use ring::rand::{SecureRandom, SystemRandom};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 use crate::{
     desktop,
+    display_identity::Display,
     geometry::Rect,
+    helper_scene::Scene,
     window_follow::{self, Identity, Observation},
 };
 
@@ -23,6 +24,7 @@ pub struct Capture {
     frame: Option<(u32, u32)>,
     window: Option<FollowWindow>,
     selected: Option<Rect>,
+    display: Option<Display>,
     probe: Option<Probe>,
     ready: bool,
     unsupported: bool,
@@ -42,6 +44,7 @@ struct Probe {
     spec: ProbeSpec,
     started: Instant,
     protected: bool,
+    painted: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -55,36 +58,6 @@ struct Landmark {
     x: f64,
     y: f64,
     rgb: [u8; 3],
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Scene {
-    marks: Value,
-    presence: Value,
-    sharer_id: String,
-    paused: bool,
-    fence: u64,
-    can_draw: bool,
-    server_at_ms: u64,
-    #[serde(skip)]
-    observed_at: Option<Instant>,
-}
-
-impl Scene {
-    pub fn valid_for(&self, sharer: &str) -> bool {
-        self.sharer_id == sharer
-            && (1..=9_007_199_254_740_991).contains(&self.fence)
-            && (1..=9_007_199_254_740_991).contains(&self.server_at_ms)
-            && self
-                .marks
-                .as_array()
-                .is_some_and(|marks| marks.len() <= 512)
-            && self
-                .presence
-                .as_array()
-                .is_some_and(|presence| presence.len() <= 128)
-    }
 }
 
 #[derive(Serialize)]
@@ -109,9 +82,9 @@ pub struct InkPoint {
 
 #[derive(Clone, Serialize)]
 pub struct PenCommit {
-    fence: u64,
-    width: u32,
-    points: Vec<InkPoint>,
+    pub fence: u64,
+    pub width: u32,
+    pub points: Vec<InkPoint>,
 }
 
 impl Capture {
@@ -237,6 +210,7 @@ impl Capture {
             spec: spec.clone(),
             started: Instant::now(),
             protected: true,
+            painted: false,
         });
         Ok(spec)
     }
@@ -297,6 +271,7 @@ impl Capture {
         if !self.offers_monitors() || bounds.width < 320 || bounds.height < 240 {
             return Err(());
         }
+        self.display = Some(Display::at(bounds).ok_or(())?);
         self.selected = Some(bounds);
         Ok(())
     }
@@ -328,6 +303,7 @@ impl Capture {
             spec: spec.clone(),
             started: Instant::now(),
             protected: false,
+            painted: false,
         });
         if desktop::show_live_overlay(app, bounds, false).is_err() {
             self.fail(app);
@@ -336,7 +312,28 @@ impl Capture {
         Ok(spec)
     }
 
+    pub fn acknowledge_paint(&mut self, nonce: &str) {
+        if let Some(probe) = self
+            .probe
+            .as_mut()
+            .filter(|probe| probe.spec.nonce == nonce && probe.started.elapsed() < PROBE_LIMIT)
+        {
+            probe.painted = true;
+        }
+    }
+
+    pub fn painted(&self, nonce: &str) -> Result<(), ()> {
+        self.probe
+            .as_ref()
+            .filter(|probe| {
+                probe.painted && probe.spec.nonce == nonce && probe.started.elapsed() < PROBE_LIMIT
+            })
+            .map(|_| ())
+            .ok_or(())
+    }
+
     pub fn protect(&mut self, app: &AppHandle, nonce: &str) -> Result<(), ()> {
+        self.painted(nonce)?;
         let probe = self
             .probe
             .as_mut()
@@ -356,6 +353,7 @@ impl Capture {
     }
 
     pub fn complete(&mut self, app: &AppHandle, nonce: &str) -> Result<(), ()> {
+        self.painted(nonce)?;
         let probe = self
             .probe
             .as_ref()
@@ -366,7 +364,7 @@ impl Capture {
             })
             .ok_or(())?;
         let _ = probe;
-        if self.window.is_some() && !self.projection_is_current(app) {
+        if self.window.is_some() && !self.projection_is_current() {
             self.await_window(app);
             return Err(());
         }
@@ -403,14 +401,11 @@ impl Capture {
                 spec: probe.spec.clone(),
             });
         }
-        let mut scene = self.scene.clone().filter(|scene| {
-            self.ready
-                && scene
-                    .observed_at
-                    .is_some_and(|at| at.elapsed() < UPDATE_LIMIT)
-        })?;
-        let age = scene.observed_at?.elapsed().as_millis() as u64;
-        scene.server_at_ms = scene.server_at_ms.saturating_add(age);
+        let mut scene = self
+            .scene
+            .clone()
+            .filter(|scene| self.ready && scene.observed_at.elapsed() < UPDATE_LIMIT)?;
+        scene.render_now();
         let draft = self
             .draft
             .as_ref()
@@ -424,25 +419,44 @@ impl Capture {
         })
     }
 
-    pub fn update(&mut self, body: Scene, width: u32, height: u32) -> Result<(), ()> {
-        if !self.ready || self.frame != Some((width, height)) {
-            return Err(());
+    pub fn accept_scene(&mut self, snapshot: Scene) {
+        match &mut self.scene {
+            Some(scene) => scene.refresh(snapshot),
+            None => self.scene = Some(snapshot),
         }
-        self.scene = Some(Scene {
-            observed_at: Some(Instant::now()),
-            ..body
-        });
-        Ok(())
+    }
+
+    pub fn scene_mut(&mut self) -> Option<&mut Scene> {
+        self.scene.as_mut()
+    }
+
+    pub fn suspend_scene(&mut self) {
+        self.scene = None;
+        self.draft = None;
+        self.commits.clear();
+        self.drawing = false;
+        self.probe = None;
+    }
+
+    pub fn restore_visibility(&mut self, app: &AppHandle) {
+        if !self.ready || !self.projection_is_current() {
+            return;
+        }
+        if let (Some(bounds), Some(window)) = (self.selected, app.get_webview_window(OVERLAY)) {
+            if !window.is_visible().unwrap_or(false)
+                && desktop::show_live_overlay(app, bounds, true).is_err()
+            {
+                self.fail(app);
+            }
+        }
     }
 
     pub fn can_draw(&self) -> bool {
         self.ready
-            && self.scene.as_ref().is_some_and(|scene| {
-                scene.can_draw
-                    && scene
-                        .observed_at
-                        .is_some_and(|at| at.elapsed() < UPDATE_LIMIT)
-            })
+            && self
+                .scene
+                .as_ref()
+                .is_some_and(|scene| scene.can_draw && scene.observed_at.elapsed() < UPDATE_LIMIT)
     }
 
     pub fn toggle_drawing(&mut self, app: &AppHandle) -> Result<(), ()> {
@@ -523,18 +537,14 @@ impl Capture {
         }
     }
 
-    pub fn projection_is_current(&self, app: &AppHandle) -> bool {
+    pub fn projection_is_current(&self) -> bool {
         if let Some((id, identity)) = self.window_id() {
             return window_follow::observe(id).is_some_and(|current| {
                 current.identity == identity && Some(current.bounds) == self.selected
             });
         }
-        self.selected.is_some_and(|bounds| {
-            app.available_monitors().is_ok_and(|monitors| {
-                monitors
-                    .iter()
-                    .any(|monitor| desktop::monitor_bounds(monitor) == bounds)
-            })
+        self.display.as_ref().is_some_and(|selected| {
+            Display::at(selected.bounds).is_some_and(|current| selected.is_same(&current))
         })
     }
 
