@@ -51,16 +51,9 @@ func (c TenantConfig) Disabled() bool {
 	return c.Enabled != nil && !*c.Enabled
 }
 
-// TenantMediaDisabled is true when the Tenant's document parses and turns media off.
-func TenantMediaDisabled(raw json.RawMessage) bool {
-	config, err := ParseTenantConfig(raw)
-	return err == nil && config.Disabled()
-}
-
-// TenantRunsEveryProvider is true when Chalk runs every provider for the Tenant.
-// A Tenant with its own credentials serves only that provider, a disabled one
-// serves none, and a Tenant with no document gets the deployment's providers.
-func TenantRunsEveryProvider(raw json.RawMessage) bool {
+// TenantMediaEnabled allows the default when no config is stored. Invalid or
+// explicitly disabled config never enables media.
+func TenantMediaEnabled(raw json.RawMessage) bool {
 	config, err := ParseTenantConfig(raw)
 	if errors.Is(err, ErrMissingTenantConfig) {
 		return true

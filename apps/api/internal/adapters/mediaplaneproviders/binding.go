@@ -44,7 +44,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 }
 
 func (r Registry) hasMedia(tenant tenants.Tenant) bool {
-	return r.chalk != nil && !mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig)
+	return r.chalk != nil && mediaplane.TenantMediaEnabled(tenant.MediaPlaneProviderConfig)
 }
 
 func (r Registry) RefuseClient(_ context.Context, tenant tenants.Tenant, _ spaces.Space, clients mediaplane.ClientProviders) error {

@@ -27,3 +27,12 @@ func TestRetiredProvidersAreReadOnly(t *testing.T) {
 		})
 	}
 }
+
+func TestTenantMediaPolicyDoesNotEnableInvalidSettings(t *testing.T) {
+	if TenantMediaEnabled([]byte(`{"enabled":false,"provider":42}`)) {
+		t.Fatal("malformed legacy settings enabled media that had been denied")
+	}
+	if !TenantMediaEnabled(nil) {
+		t.Fatal("a Tenant without a media document must inherit the default")
+	}
+}

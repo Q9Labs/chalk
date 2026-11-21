@@ -25,6 +25,9 @@ case "$proof" in
     export CHALK_DASHBOARD_SFU_PORT=$((refresh_port + 5))
     export CHALK_JOIN_WEB_PORT=$((refresh_port + 3)) CHALK_JOIN_SYNC_PORT=$((refresh_port + 4))
     export DASHBOARD_ENGINE_ARTIFACT_SUFFIX=-refresh DASHBOARD_ENGINE_DEADLINE_SECONDS=600
+    # The cookie-budget proof keeps 12 Episodes open at once without carrying their media.
+    # Give the test node room for their reservations, not a production capacity exemption.
+    export SFU_PACKET_BUDGET=52000
     bash apps/web/tests/dashboard/real-engine.sh node apps/web/tests/dashboard/owner-refresh.mjs
     ;;
   board)

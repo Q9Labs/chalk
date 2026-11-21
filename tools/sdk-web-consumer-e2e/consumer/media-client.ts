@@ -1,4 +1,4 @@
-import type { SFUBootstrap, SFUIceServer, SFULocalTrack, SFURemoteTrack, SFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
+import type { SFUBootstrap, SFULocalTrack, SFURemoteTrack, SFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
 import { SFUError } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
@@ -25,13 +25,13 @@ type FixtureMediaClientInput = {
   readonly onScreenEnded: () => void;
 };
 
-type FixtureMediaAccess = { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: SFUBootstrap } | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: FixtureChalkSFUPayload };
-type FixtureChalkSFUPayload = {
-  readonly connectionId: string;
-  readonly episodeRef: string;
-  readonly iceServers: readonly SFUIceServer[];
-  readonly capabilities: { readonly serverLayerAdaptation: boolean; readonly iceRestart: boolean; readonly pullPublished: boolean };
+type FixtureMediaAccess = {
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly provider: "chalk_sfu";
+  readonly clientPayload: FixtureBootstrap;
 };
+type FixtureBootstrap = Pick<SFUBootstrap, "connectionId">;
 
 export class FixtureMediaClient {
   readonly #credential: () => Promise<string>;
@@ -47,7 +47,7 @@ export class FixtureMediaClient {
   readonly #peers = new Map<string, PeerState>();
   readonly #received = new Map<string, SFURemoteTrack>();
   readonly #signalingURL: string;
-  #bootstrap: SFUBootstrap;
+  #bootstrap: FixtureBootstrap;
   #remotePublications: readonly MediaPublication[] = [];
   #snapshot: SFUSnapshot;
   #socket: WebSocket | null = null;
@@ -453,7 +453,7 @@ export class FixtureMediaClient {
   }
 }
 
-function fixtureBootstrap(input: SFUBootstrap | FixtureMediaAccess): SFUBootstrap {
+function fixtureBootstrap(input: SFUBootstrap | FixtureMediaAccess): FixtureBootstrap {
   if (!("provider" in input)) return input;
   if (input.provider !== "chalk_sfu") throw new TypeError("The fixture media client only supports Chalk SFU access");
   return input.clientPayload;

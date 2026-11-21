@@ -79,7 +79,11 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if url == "" {
 		return fmt.Errorf("%s required", config.DatabaseURL)
 	}
-	policy := spaces.PlanePolicy{}
+	paused, err := config.LoadNewEpisodesPaused()
+	if err != nil {
+		return err
+	}
+	policy := spaces.PlanePolicy{NewEpisodesPaused: paused}
 
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()

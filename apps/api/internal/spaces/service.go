@@ -1,6 +1,7 @@
 package spaces
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -194,6 +195,7 @@ type CreateSpaceInput struct {
 	CreatedByUserID               utilities.ID
 	RequestKey                    string
 	RequestFingerprint            [32]byte
+	replayFingerprints            [][32]byte
 }
 
 type UpdateSpaceInput struct {
@@ -275,10 +277,8 @@ func (s Service) WithNewEpisodeSwitch(killSwitch NewEpisodeSwitch) Service {
 	return s
 }
 
-// WithNewSpaceDefaults sets what a Create Space request gets for the fields it
-// omits. It changes new Spaces only: Spaces and Tenants that store no plane keep
-// resolving to the deployment default. The Tenant reader decides per Tenant
-// whether the new-Space plane applies.
+// WithNewSpaceDefaults sets the artifact policies for new Spaces whose request
+// does not name a media plane or supply those policies.
 func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults, tenants TenantReader) Service {
 	s.newSpace = defaults
 	s.tenants = tenants
@@ -296,10 +296,12 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if !explicitPlane {
 		input.MediaPlane = mediaplane.ProviderChalkSFU.SettingName()
 	}
-	if !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
+	recordingPolicySet := input.RecordingPolicySet
+	transcriptionPolicySet := input.TranscriptionPolicySet
+	if !explicitPlane && !recordingPolicySet && s.newSpace.RecordingPolicy != "" {
 		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
 	}
-	if !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
+	if !explicitPlane && !transcriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
 		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
@@ -312,11 +314,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
 			return Space{}, ErrInvalidRequestKey
 		}
-		fingerprint, err := createFingerprint(input)
-		if err != nil {
+		if err := input.setCreateFingerprints(recordingPolicySet, transcriptionPolicySet); err != nil {
 			return Space{}, err
 		}
-		input.RequestFingerprint = fingerprint
 		idempotent, ok := s.repository.(IdempotentRepository)
 		if !ok {
 			return Space{}, errors.New("space idempotency repository unavailable")
@@ -684,4 +684,50 @@ func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 		return [32]byte{}, err
 	}
 	return sha256.Sum256(payload), nil
+}
+
+// setCreateFingerprints keeps old keys replayable even though both the stored
+// default and the normalized request's default plane have changed.
+func (input *CreateSpaceInput) setCreateFingerprints(recordingPolicySet, transcriptionPolicySet bool) error {
+	fingerprint, err := createFingerprint(*input)
+	if err != nil {
+		return err
+	}
+	input.RequestFingerprint = fingerprint
+	legacy := *input
+	legacy.MediaPlane = mediaplane.PlaneCloudflare
+	old, err := createFingerprint(legacy)
+	if err != nil {
+		return err
+	}
+	input.replayFingerprints = [][32]byte{old}
+	if recordingPolicySet == input.RecordingPolicySet && transcriptionPolicySet == input.TranscriptionPolicySet {
+		return nil
+	}
+	// Older deployments did not apply configured artifact defaults when a Space
+	// inherited the platform media plane.
+	if !recordingPolicySet {
+		legacy.RecordingPolicy, legacy.RecordingPolicySet = artifactpolicy.RecordingDisabled, false
+	}
+	if !transcriptionPolicySet {
+		legacy.TranscriptionPolicy, legacy.TranscriptionPolicySet = artifactpolicy.TranscriptionDisabled, false
+	}
+	old, err = createFingerprint(legacy)
+	if err != nil {
+		return err
+	}
+	input.replayFingerprints = append(input.replayFingerprints, old)
+	return nil
+}
+
+func (input CreateSpaceInput) MatchesRequestFingerprint(stored []byte) bool {
+	if bytes.Equal(stored, input.RequestFingerprint[:]) {
+		return true
+	}
+	for _, fingerprint := range input.replayFingerprints {
+		if bytes.Equal(stored, fingerprint[:]) {
+			return true
+		}
+	}
+	return false
 }

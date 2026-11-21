@@ -46,7 +46,7 @@ func (p PlanePolicy) Paused(live bool) PlanePolicy {
 
 // AllowsNewEpisodes ignores client capability and SFU capacity.
 func (p PlanePolicy) AllowsNewEpisodes(tenant tenants.Tenant) bool {
-	return !p.NewEpisodesPaused && !mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig)
+	return !p.NewEpisodesPaused && mediaplane.TenantMediaEnabled(tenant.MediaPlaneProviderConfig)
 }
 
 // TenantPlaneStore reads a Tenant and writes its default plane with operator authority.
@@ -157,7 +157,7 @@ func (o PlaneOperator) AdoptStoredChalkSFU(ctx context.Context, tenantID, spaceI
 }
 
 func (o PlaneOperator) checkServes(tenant tenants.Tenant, plane *mediaplane.Provider) error {
-	if plane != nil && *plane == mediaplane.ProviderChalkSFU && !mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig) {
+	if plane != nil && *plane == mediaplane.ProviderChalkSFU && !mediaplane.TenantMediaEnabled(tenant.MediaPlaneProviderConfig) {
 		return ErrTenantCannotServePlane
 	}
 	return nil

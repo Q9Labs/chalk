@@ -94,8 +94,8 @@ type ChalkSFUConfig struct {
 	RequestTimeout    time.Duration
 }
 
-// loadNewEpisodesPaused reads the kill switch. It is on unless set to off.
-func loadNewEpisodesPaused() (bool, error) {
+// LoadNewEpisodesPaused reads the kill switch. It is on unless set to off.
+func LoadNewEpisodesPaused() (bool, error) {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv(ChalkSFUNewEpisodes)))
 	switch value {
 	case "", "on", "true":
@@ -129,7 +129,7 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}
-	newEpisodesPaused, err := loadNewEpisodesPaused()
+	newEpisodesPaused, err := LoadNewEpisodesPaused()
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}

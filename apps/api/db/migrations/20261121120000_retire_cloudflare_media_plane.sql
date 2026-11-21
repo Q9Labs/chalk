@@ -1,4 +1,21 @@
 -- +goose Up
+-- End legacy Episodes with the previous release, while it can still clean up
+-- the provider. No-presence Episodes are still active until explicitly ended.
+-- +goose StatementBegin
+do $$
+begin
+    if exists (
+        select 1 from episodes
+        where status in ('active', 'ending')
+          and coalesce(config_snapshot #>> '{media_plane_binding,provider}',
+                       config_snapshot ->> 'media_plane') in ('cf_sfu', 'cf_rtk')
+    ) then
+        raise exception 'End active or ending Cloudflare Episodes before retiring Cloudflare media';
+    end if;
+end;
+$$;
+-- +goose StatementEnd
+
 -- Keep the columns and the setting witness for the previous API release.
 -- Do not change Episode snapshots, recording references, or existing audit rows.
 select set_config('chalk.plane_actor', 'migration', true);
