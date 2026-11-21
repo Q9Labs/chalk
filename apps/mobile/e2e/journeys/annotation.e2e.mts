@@ -47,3 +47,23 @@ test("viewer cannot draw while paused or after presenter revokes access", async 
   await screen.getByRole("button", "Request to draw").tap();
   await expect(screen.getByText("Request sent")).toBeVisible();
 });
+
+test("Android sharer can pause and clear without drawing the capture back into Chalk", { platforms: ["android"] }, async ({ app, screen }) => {
+  await app.open();
+  await screen.getByRole("button", "Annotate").tap();
+  await screen.getByRole("button", "Fade").tap();
+  const title = await screen.getByText("Layout review").boundingBox();
+  if (!title) throw new Error("The shared frame is not visible");
+  const from = { x: title.x, y: title.y + title.height + 34 };
+  await screen.swipe({ from, to: { x: from.x + 95, y: from.y + 45 }, duration: 420 });
+  await expect(screen.getByText("1 committed marks")).toBeVisible();
+
+  await screen.getByRole("button", "Switch to sharer").tap();
+  await expect(screen.getByText("Layout review")).not.toBeVisible();
+  await screen.getByRole("button", "Pause marks").tap();
+  await expect(screen.getByRole("button", "Resume marks")).toBeVisible();
+  await screen.getByRole("button", "Clear all marks").tap();
+  await expect(screen.getByText("0 committed marks")).toBeVisible();
+  await screen.getByRole("button", "Resume marks").tap();
+  await expect(screen.getByRole("button", "Pause marks")).toBeVisible();
+});

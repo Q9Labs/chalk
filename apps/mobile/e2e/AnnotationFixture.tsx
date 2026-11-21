@@ -2,8 +2,12 @@ import type { ScreenAnnotationClient, ScreenAnnotationMark, ScreenAnnotationSnap
 import { annotationRendererUrl } from "@q9labsai/chalk-react-native/dev";
 import { ScreenAnnotationLayer } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { DeviceLayoutProvider } from "../../../sdks/typescript/react-native/src/frame/device-layout";
 import { Portal, PortalHost, PortalProvider } from "../../../sdks/typescript/react-native/src/frame/portal";
+import { ToastProvider } from "../../../sdks/typescript/react-native/src/primitives/toast/ToastStack";
+import { AndroidShareAnnotationControls } from "../../../sdks/typescript/react-native/src/screen-annotation/AnnotationDock";
 
 const publicationId = "fixture-screen";
 const sharerId = "a35a71ce-912f-4c14-a283-dd2eaa6490e8";
@@ -69,6 +73,7 @@ function createFixture() {
         redo = [];
         update({ fence: state.fence + 1, marks: [] });
       }
+      if (command.kind === "pause") update({ paused: command.paused, fence: state.fence + 1 });
       if (command.kind === "request_draw") update({
         access: { ...state.access, requests: [{ request_id: "test-request", participant_id: viewer.id, expires_at_ms: Date.now() + 30_000 }] },
       });
@@ -80,6 +85,7 @@ function createFixture() {
     count: () => state.marks.length,
     pause: () => update({ paused: !state.paused, fence: state.fence + 1 }),
     access: () => update({ access: { ...state.access, can_draw: !state.access.can_draw, requests: [] }, fence: state.fence + 1 }),
+    present: (presenting: boolean) => update({ access: { ...state.access, can_moderate: presenting } }),
   };
 }
 
@@ -89,6 +95,7 @@ function AnnotationFixture(): React.JSX.Element {
   const frameWidth = Math.min(width - 32, 750);
   const frame = { x: 0, y: 0, width: frameWidth, height: frameWidth * 0.625 };
   const [rendererUrl, setRendererUrl] = useState<string | null>(null);
+  const [presenting, setPresenting] = useState(false);
   const count = useSyncExternalStore(fixture.client.subscribe, fixture.count, fixture.count);
   useEffect(() => {
     let active = true;
@@ -100,7 +107,9 @@ function AnnotationFixture(): React.JSX.Element {
   return <View style={styles.screen}>
     <Text style={styles.title}>Maya’s screen</Text>
     <Text testID="fixture.committed" style={styles.caption}>{count} committed marks</Text>
-    <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
+    {presenting ? (
+      <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} />
+    ) : <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
       <ScreenAnnotationLayer
         client={fixture.client}
         person={viewer}
@@ -115,17 +124,23 @@ function AnnotationFixture(): React.JSX.Element {
         </View>}
         controls={(tray) => <Portal layer="annotation"><View pointerEvents="box-none" style={styles.tray}>{tray}</View></Portal>}
       />
-    </View>
+    </View>}
     <View style={styles.controls}>
       <Pressable accessibilityRole="button" onPress={fixture.pause}><Text style={styles.caption}>Toggle presenter pause</Text></Pressable>
       <Pressable accessibilityRole="button" onPress={fixture.access}><Text style={styles.caption}>Toggle viewer access</Text></Pressable>
     </View>
+    {Platform.OS === "android" ? <Pressable accessibilityRole="button" onPress={() => {
+      fixture.present(!presenting);
+      setPresenting(!presenting);
+    }}><Text style={styles.caption}>{presenting ? "Switch to viewer" : "Switch to sharer"}</Text></Pressable> : null}
     <PortalHost layer="annotation" />
   </View>;
 }
 
 export function AnnotationFixtureApp() {
-  return <PortalProvider><AnnotationFixture /></PortalProvider>;
+  return <SafeAreaProvider><DeviceLayoutProvider><PortalProvider><ToastProvider>
+    <AnnotationFixture />
+  </ToastProvider></PortalProvider></DeviceLayoutProvider></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({

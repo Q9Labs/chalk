@@ -1,5 +1,5 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
@@ -11,6 +11,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
+import { AndroidShareAnnotationControls } from "../screen-annotation/AnnotationDock";
 import type { StageAnnotation } from "../screen-annotation/model";
 import { useTheme } from "../theme/theme";
 import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
@@ -93,8 +94,7 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
   }, [structure.board, view.setBoardOpen, view.setFollowing]);
 
   const boardVisible = view.boardOpen ?? structure.board;
-  const ownShareVisible = useOwnShareAnnotation(annotation, structure.ownShare, structure.selfId);
-  const sharer = structure.sharer ?? (ownShareVisible ? structure.selfId : null);
+  const { sharer } = structure;
   const content = useMemo<SharedContent | null>(() => (boardVisible ? { kind: "board" } : sharer !== null ? { kind: "screen", sharerId: sharer } : null), [boardVisible, sharer]);
   const pinned = view.pinned !== null && present.includes(view.pinned) ? view.pinned : null;
   const items = useMemo(
@@ -133,23 +133,13 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
   return (
     <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {items.map((item) => (
-        <StageTile annotation={annotation} content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={followTile} onTileOptions={openTile} following={view.following} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
+        <StageTile annotation={structure.ownShare ? undefined : annotation} content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={followTile} onTileOptions={openTile} following={view.following} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
       ))}
+      {annotation && structure.ownShare && structure.selfId ? <AndroidShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
   );
 });
-
-function useOwnShareAnnotation(annotation: StageAnnotation | undefined, publicationId: string | null, participantId: string | null): boolean {
-  const client = annotation?.client;
-  const subscribe = useCallback((listener: () => void) => client && publicationId ? client.subscribe(listener) : () => undefined, [client, publicationId]);
-  const get = useCallback(() => {
-    if (!client || !publicationId || (annotation?.publicationId && annotation.publicationId !== publicationId)) return false;
-    const snapshot = client.getSnapshot();
-    return snapshot.status === "ready" && snapshot.state?.layer.publication_id === publicationId && snapshot.state.layer.sharer_id === participantId;
-  }, [client, annotation?.publicationId, publicationId, participantId]);
-  return useSyncExternalStore(subscribe, get, get);
-}
 
 function itemKey(item: StageItem): string {
   return item.kind === "person" ? `person:${item.id}` : item.kind;

@@ -1,20 +1,19 @@
 import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDeviceLayout } from "../frame/device-layout";
 import { LandscapeControlsContext } from "../frame/call-controls";
 import { useDevScenario } from "../dev-scenario";
-import { frameRegions } from "../frame/regions";
-import { Portal } from "../frame/portal";
 import { useMeasuredRef } from "../frame/measurement";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { NameTag } from "../primitives/NameTag";
 import { ScreenAnnotationLayer } from "../screen-annotation/ScreenAnnotationLayer";
+import { AnnotationDock } from "../screen-annotation/AnnotationDock";
 import { matchLayer, type StageAnnotation } from "../screen-annotation/model";
 import { useNativeAnnotationSource } from "../screen-annotation/use-native-annotation-source";
 import { useTheme } from "../theme/theme";
@@ -48,16 +47,10 @@ export const ContentTile = memo(function ContentTile({ annotation, content, inne
 
 function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: { readonly annotation?: StageAnnotation; readonly sharerId: string; readonly inner: Frame; readonly mini: boolean; readonly onShowInSpotlight: () => void }): React.JSX.Element {
   const { colors } = useTheme();
-  const selectScreen = useMemo(() => (snapshot: SpaceSnapshot) => {
-    if (Platform.OS === "android" && snapshot.self.participantId === sharerId) return snapshot.media.screenShare.track;
-    return snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null;
-  }, [sharerId]);
-  const selectPublication = useMemo(() => (snapshot: SpaceSnapshot) => {
-    if (Platform.OS === "android" && snapshot.self.participantId === sharerId) {
-      return snapshot.participants.roster.find((person) => person.participantId === sharerId)?.media.screenSharePublicationId ?? null;
-    }
-    return snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.publicationId ?? null;
-  }, [sharerId]);
+  const selectScreen = useMemo(() => (snapshot: SpaceSnapshot) =>
+    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null, [sharerId]);
+  const selectPublication = useMemo(() => (snapshot: SpaceSnapshot) =>
+    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.publicationId ?? null, [sharerId]);
   const selectPlayable = useMemo(() => (snapshot: SpaceSnapshot) => !snapshot.media.remote.some((media) =>
     media.participantId === sharerId && media.source === "screen" && media.pausedForNetwork), [sharerId]);
   const playable = useSpaceSelector(selectPlayable);
@@ -87,8 +80,6 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
 
 function AnnotationScreenShare({ annotation, inner, publicationId, selfId, streamURL }: { readonly annotation: StageAnnotation; readonly inner: Frame; readonly publicationId: string; readonly selfId: string; readonly streamURL: string }): React.JSX.Element {
   const { client, actions } = annotation;
-  const device = useDeviceLayout();
-  const dock = frameRegions(device.arrangement, device.width, device.height, device.insets).dock;
   const toasts = useToasts();
   const roster = useSpaceSelector(selectRoster);
   const access = useSpaceSelector(selectAccess);
@@ -117,9 +108,7 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
     source={source}
     viewport={viewport}
     video={(rect) => <RtcVideoView objectFit="contain" streamURL={streamURL} style={[styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]} />}
-    controls={(tray: ReactNode) => tray ? <Portal layer="annotation">
-      <View pointerEvents="box-none" style={[styles.annotationTray, { bottom: device.height - dock.y + 8, left: device.insets.left + 8, right: device.insets.right + 8 }]}>{tray}</View>
-    </Portal> : null}
+    controls={(tray: ReactNode) => tray ? <AnnotationDock>{tray}</AnnotationDock> : null}
     reportError={(message) => toasts.show({ kind: "error", dismissible: true, message })}
   />;
 }
@@ -206,5 +195,4 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
 const styles = StyleSheet.create({
   tile: { flex: 1, overflow: "hidden", borderRadius: radii.tilePhone },
   box: { position: "absolute", overflow: "hidden" },
-  annotationTray: { position: "absolute", maxHeight: "50%", alignItems: "center" },
 });
