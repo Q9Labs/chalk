@@ -82,12 +82,17 @@ bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
             }
             if (target == nil || error != nil) { dispatch_semaphore_signal(ready); return; }
             SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:target];
+            // Capture at the window's aspect ratio. ScreenCaptureKit may pad
+            // a square output before our own landmark resampling.
+            CGRect frame = target.frame;
+            CGFloat longest = MAX(frame.size.width, frame.size.height);
+            if (longest <= 0) { dispatch_semaphore_signal(ready); return; }
+            CGFloat sampleScale = (4.0 * size) / longest;
             SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
-            config.width = size;
-            config.height = size;
+            config.width = MAX(1, llround(frame.size.width * sampleScale));
+            config.height = MAX(1, llround(frame.size.height * sampleScale));
             config.showsCursor = NO;
             config.ignoreShadowsSingleWindow = YES;
-            config.preservesAspectRatio = NO;
             [SCScreenshotManager captureImageWithFilter:filter configuration:config completionHandler:^(CGImageRef image, NSError *captureError) {
                 if (image && !captureError) {
                     NSMutableData *local = [NSMutableData dataWithLength:size * size * 4];

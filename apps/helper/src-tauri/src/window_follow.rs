@@ -101,7 +101,9 @@ fn landmarks_match(pixels: &[u8], expected: &[i8]) -> bool {
                     disagreed += 1;
                 }
             }
-            distinct >= 5 && disagreed * 5 <= distinct
+            // Native and browser downsampling can put a sharp edge in
+            // adjacent cells. Still require 75% agreement in each region.
+            distinct >= 5 && disagreed * 4 <= distinct
         })
 }
 
@@ -359,7 +361,7 @@ mod tests {
     #[test]
     fn window_match_requires_three_textured_landmarks_of_the_same_orientation() {
         let mut pixels = vec![0; SAMPLES];
-        assert!(!landmarks_match(&pixels, &vec![0; LANDMARK_COUNT]));
+        assert!(!landmarks_match(&pixels, &[0; LANDMARK_COUNT]));
         for (left, top) in [(3, 3), (48, 3), (3, 48)] {
             for y in 0..5 {
                 for x in 0..5 {
@@ -385,9 +387,11 @@ mod tests {
             }
         }
         assert!(landmarks_match(&pixels, &expected));
-        for edge in &mut expected[80..] {
+        for edge in &mut expected[80..90] {
             *edge = -*edge;
         }
+        assert!(landmarks_match(&pixels, &expected));
+        expected[90] = -expected[90];
         assert!(!landmarks_match(&pixels, &expected));
     }
 }
