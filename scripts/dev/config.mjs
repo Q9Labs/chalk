@@ -1,5 +1,5 @@
 import { findExecutable } from "../lib/platform.mjs";
-import { createServer } from "node:net";
+import { createServer, isIPv4 } from "node:net";
 import { homedir } from "node:os";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -114,6 +114,16 @@ function publicOriginFromEnv(env) {
   return url.origin;
 }
 
+function sfuMediaFromEnv(env) {
+  const announceIP = env.CHALK_DEV_SFU_ANNOUNCE_IP?.trim();
+  if (!announceIP) return { announceIP: "127.0.0.1", bindIP: "127.0.0.1", includeLoopback: true };
+  const firstOctet = Number(announceIP.split(".")[0]);
+  if (!isIPv4(announceIP) || firstOctet === 0 || firstOctet === 127 || firstOctet >= 224) {
+    throw failure(FailureKind.CONFIG, "CHALK_DEV_SFU_ANNOUNCE_IP must be a non-loopback unicast IPv4 address", { stage: "config" });
+  }
+  return { announceIP, bindIP: "0.0.0.0", includeLoopback: false };
+}
+
 function numberFromEnv(env, name, fallback) {
   const raw = env[name];
   if (raw === undefined || raw === "") return fallback;
@@ -189,6 +199,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
     metro: { port: numberFromEnv(env, "RCT_METRO_PORT", metroPort) },
     ports,
+    sfuMedia: sfuMediaFromEnv(env),
     publicOrigin,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
@@ -228,7 +239,7 @@ export async function preflight(config, { which = async (tool) => commandExists(
   const busy = [];
   for (const [name, port] of Object.entries(config.ports)) {
     if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
-    const result = await probe(port);
+    const result = await probe(port, name === "sfuMedia" ? config.sfuMedia?.bindIP : undefined);
     if (!result.available) busy.push(`${name}:${port}`);
   }
   if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });

@@ -91,6 +91,8 @@ The core profile starts Postgres, Redis, API, and Sync containers. SDK watchers 
 
 All default host listeners are loopback-only. The API reads dashboard artifacts from a dedicated read-only mount, served only inside its container. It does not connect to the host web server. Setting `PUBLIC_ORIGIN` explicitly opts the web dev server into listening on all interfaces for a reverse proxy or Orb. That exposes the passwordless fixture dashboard to reachable peers; use this only in an isolated development environment.
 
+For calls from another machine, set `CHALK_DEV_SFU_ANNOUNCE_IP` to the dev host's reachable IPv4 address in addition to setting the HTTPS `PUBLIC_ORIGIN`. This publishes only the SFU media port on all IPv4 interfaces, over UDP and TCP. Allow that port (`CHALK_DEV_SFU_MEDIA_PORT`, default `50000`) through the firewall to the test clients, and forward it unchanged if using NAT. The HTTPS proxy does not carry WebRTC media. Leave the announce address unset for same-machine browsers and Orbs that expose only the web origin.
+
 Backend edits keep the web server running. Sync fetches dependencies at startup and when `apps/sync/mix.exs` or `apps/sync/mix.lock` changes. Source-only edits compile incrementally.
 
 Choose a profile when needed:

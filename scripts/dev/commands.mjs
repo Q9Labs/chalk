@@ -23,8 +23,9 @@ for the media smoke test.
 
 doctor is a read-only check that this instance is worth driving; it exits 0 only when every check passes.
 down stops the runtime and removes what start created (database, Redis volume, runtime files); it keeps .logs and .verify.
-Set PUBLIC_ORIGIN to the address browsers use. WebRTC media stays on the host loopback;
-run call browsers on the same machine.`;
+Set PUBLIC_ORIGIN to the web address browsers use. For remote calls, set
+CHALK_DEV_SFU_ANNOUNCE_IP to a reachable IPv4 address and allow the SFU media
+port over UDP and TCP. Without it, media stays on the host loopback.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {

@@ -12,9 +12,38 @@ import { dashboardArtifactBindings } from "./dashboard-seed.mjs";
 import { previewAudio, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { executeDevCommand } from "./exec.mjs";
 import { resolveDevConfig } from "./config.mjs";
+import { startChalkSfu } from "./chalk-sfu.mjs";
 import { spawnCommand, killTree } from "../lib/platform.mjs";
 
 const config = resolveDevConfig({ env: {} });
+
+test("dev SFU publishes reachable media only when an announce address is set", async () => {
+  for (const announceIP of [undefined, "192.0.2.42"]) {
+    const dev = resolveDevConfig({ env: { PUBLIC_ORIGIN: "https://chalk.example.test", CHALK_DEV_SFU_ANNOUNCE_IP: announceIP } });
+    let launch;
+    await startChalkSfu(dev, {
+      network: "test",
+      versions: { go: "test" },
+      runResource: async (_command, args) => {
+        if (args.includes("--detach")) launch = args;
+      },
+    });
+    const bind = announceIP ? "0.0.0.0" : "127.0.0.1";
+    const port = dev.ports.sfuMedia;
+    assert.deepEqual(
+      launch.flatMap((arg, index) => (arg === "--publish" ? [launch[index + 1]] : [])),
+      [`${bind}:${port}:${port}/udp`, `${bind}:${port}:${port}/tcp`],
+    );
+    assert.ok(launch.includes(`SFU_ANNOUNCE_IPS=${announceIP || bind}`));
+    assert.ok(launch.includes(`SFU_ICE_LOOPBACK=${!announceIP}`));
+  }
+});
+
+test("dev SFU rejects announce addresses that cannot identify an IPv4 host", () => {
+  for (const address of ["chalk.example.test", "::1", "127.0.0.2", "0.0.0.0", "239.0.0.1"]) {
+    assert.throws(() => resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: address } }), /CHALK_DEV_SFU_ANNOUNCE_IP must be a non-loopback unicast IPv4 address/);
+  }
+});
 
 test("ownership accepts a real forward-slash Node invocation with Windows recorded separators", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-owner-"));
