@@ -1,6 +1,8 @@
 import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, LASER_TRAIL_MS, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { frameProvesStroke, type StrokeProof } from "./baked-stroke-proof";
+import { createBakedVideoSurface } from "./baked-video";
 import { loadAnnotationFont } from "./font";
 import { addGesturePoint, clampPoint, gestureDraft, localPoint, sameRect, type Gesture } from "./gesture";
 import { canDraw, decodedSize, matchesTarget, targetOf, videoMatchesTrack, type AnnotationAuthor, type AnnotationBrush } from "./model";
@@ -20,7 +22,14 @@ export interface ScreenAnnotationLayerProps {
   };
 }
 
-type Preview = { readonly draft: ScreenAnnotationDraft; readonly expiresAt: number; readonly revision?: number };
+type Preview = {
+  readonly draft: ScreenAnnotationDraft;
+  readonly author: AnnotationAuthor;
+  readonly startedBaked: boolean;
+  readonly proof: StrokeProof | null;
+  readonly expiresAt: number;
+  revision?: number;
+};
 type TextAnchor = { readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
 
 function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, track: MediaStreamTrack, fit: AnnotationFit) {
@@ -41,7 +50,9 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const gesture = useRef<Gesture | null>(null);
   const cursor = useRef<ScreenAnnotationCursor | null>(null);
   const localPresenceAt = useRef(0);
-  const optimistic = useRef<Preview | null>(null);
+  const optimistic = useRef(new Map<string, Preview>());
+  const videoSurface = useRef<ReturnType<typeof createBakedVideoSurface>>(null);
+  const paintCurrent = useRef<() => void>(() => undefined);
   const tracker = useRef(createAnnotationPresenceTracker());
   const refresh = useRef<() => void>(() => undefined);
   const previewUpdate = useRef<number>(-Infinity);
@@ -49,6 +60,29 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const actor = input?.actor;
   const drawing = Boolean(input && actor && canDraw(state, actor.participant_id));
   const target = targetOf(state);
+  const baked = state.layer.burned_in === true;
+
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Keep frame capture attached across Sync and pointer updates.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!baked || !canvas || !video || typeof video.requestVideoFrameCallback !== "function") return;
+    const surface = createBakedVideoSurface(canvas.ownerDocument);
+    if (!surface) return;
+    videoSurface.current = surface;
+    let callback = video.requestVideoFrameCallback(onFrame);
+    function onFrame() {
+      if (!video || !surface) return;
+      callback = video.requestVideoFrameCallback(onFrame);
+      if (!videoMatchesTrack(video, track) || !decodedSize(video)) return;
+      surface.capture(video);
+      paintCurrent.current();
+    }
+    return () => {
+      video.cancelVideoFrameCallback(callback);
+      videoSurface.current = null;
+    };
+  }, [baked, track, videoRef]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Paint the canvas on committed state, geometry, animation and pointer changes; release observers and frames on teardown.
   useEffect(() => {
@@ -59,6 +93,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     if (!canvas || !window || !context) return;
     let raf = 0;
     const paint = () => {
+      window.cancelAnimationFrame(raf);
       raf = 0;
       const mapped = geometry(canvas, video, track, fit);
       if (!mapped) {
@@ -74,30 +109,40 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       context.setTransform(width / clip.width, 0, 0, height / clip.height, 0, 0);
       context.clearRect(0, 0, clip.width, clip.height);
       const nowMs = client.serverNowMs();
-      const preview = optimistic.current;
-      if (preview && (preview.expiresAt <= nowMs || (preview.revision !== undefined && state.revision >= preview.revision) || state.marks.some((mark) => mark.draft.mark_id === preview.draft.mark_id))) optimistic.current = null;
-      const ownDraft = gesture.current ? gestureDraft(gesture.current) : (optimistic.current?.draft ?? null);
-      const remote = state.layer.burned_in ? [] : presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
-      const local =
-        actor && drawing && (cursor.current || ownDraft)
-          ? [
-              {
-                type: "annotation_presence",
-                layer_id: state.layer.layer_id,
-                fence: state.fence,
-                author: actor,
-                server_at_ms: localPresenceAt.current,
-                expires_at_ms: nowMs + 1000,
-                cursor: state.layer.burned_in ? null : cursor.current,
-                draft: ownDraft,
-              } satisfies ScreenAnnotationPresence,
-            ]
-          : [];
-      const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS
-        ? cursor.current?.point : undefined;
-      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...local], nowMs), localTouch, nowMs });
-      const expiring = state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
-      if (expiring || optimistic.current || localTouch || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS)) schedule();
+      const surface = videoSurface.current;
+      const image = surface?.image();
+      if (image) {
+        context.fillStyle = "#000";
+        context.fillRect(0, 0, clip.width, clip.height);
+        context.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      }
+      const pending = [];
+      const marks = new Map(state.marks.map((mark) => [mark.draft.mark_id, mark]));
+      const decoded = image && optimistic.current.size ? surface?.pixels() : null;
+      for (const [id, preview] of optimistic.current) {
+        const committed = marks.get(id);
+        preview.revision ??= committed?.created_revision;
+        const known = preview.revision !== undefined && state.revision >= preview.revision;
+        const removed = known && !committed;
+        const expired = committed?.expires_at_ms != null && committed.expires_at_ms <= nowMs;
+        const proved = decoded && preview.proof && frameProvesStroke(decoded, preview.proof);
+        const oldDataPreview = !preview.startedBaked && preview.expiresAt <= nowMs;
+        if (removed || expired || proved || (!baked && committed) || oldDataPreview) {
+          optimistic.current.delete(id);
+          continue;
+        }
+        pending.push(localSample(preview.author, preview.draft, null));
+      }
+      function localSample(author: AnnotationAuthor, draft: ScreenAnnotationDraft | null, point: ScreenAnnotationCursor | null): ScreenAnnotationPresence {
+        return { type: "annotation_presence", layer_id: state.layer.layer_id, fence: state.fence, author, server_at_ms: localPresenceAt.current, expires_at_ms: nowMs + 1000, cursor: point, draft };
+      }
+      const remote = baked ? [] : presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
+      const draft = gesture.current ? gestureDraft(gesture.current) : null;
+      if (actor && drawing && (cursor.current || draft)) pending.push(localSample(actor, draft, baked ? null : cursor.current));
+      const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS ? cursor.current?.point : undefined;
+      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...pending], nowMs), localTouch, nowMs });
+      const expiring = !baked && (state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs));
+      if (expiring || (!baked && optimistic.current.size > 0) || localTouch || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS)) schedule();
     };
     const schedule = () => {
       if (!raf) raf = window.requestAnimationFrame(paint);
@@ -110,6 +155,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     video?.addEventListener("playing", schedule);
     window.addEventListener("resize", schedule);
     refresh.current = schedule;
+    paintCurrent.current = paint;
     schedule();
     let active = true;
     void loadAnnotationFont(canvas.ownerDocument, fontUrl).then(
@@ -128,8 +174,9 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       window.removeEventListener("resize", schedule);
       window.cancelAnimationFrame(raf);
       refresh.current = () => undefined;
+      paintCurrent.current = () => undefined;
     };
-  }, [client, state, presence, fontUrl, track, videoRef, fit, actor, drawing]);
+  }, [client, state, presence, fontUrl, track, videoRef, fit, actor, drawing, baked]);
 
   const { layerId, fence } = target;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Cancel latest-value presence and input on disable or when the gesture's authority is retired.
@@ -138,7 +185,6 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     return () => {
       gesture.current = null;
       cursor.current = null;
-      optimistic.current = null;
       const previous = { layerId, fence };
       if (matchesTarget(client, previous)) client.setPresence(previous, null, null);
     };
@@ -162,15 +208,29 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     if (!input || !actor) return;
     const live = matchesTarget(client, target);
     if (!live || !canDraw(live, actor.participant_id)) return;
-    const preview = command.kind === "commit" ? { draft: command.draft, expiresAt: client.serverNowMs() + 1000 } : null;
-    if (preview) optimistic.current = preview;
+    const preview =
+      command.kind === "commit"
+        ? ({
+            draft: command.draft,
+            author: actor,
+            startedBaked: baked,
+            proof: baked ? (videoSurface.current?.baselineFor(command.draft) ?? null) : null,
+            expiresAt: client.serverNowMs() + 1000,
+          } satisfies Preview)
+        : null;
+    if (preview) optimistic.current.set(preview.draft.mark_id, preview);
     refresh.current();
     try {
       const result = await client.dispatch(target, command);
-      if (preview && optimistic.current === preview) optimistic.current = result.kind === "accepted" ? { ...preview, revision: result.revision } : null;
+      if (preview && optimistic.current.get(preview.draft.mark_id) === preview) {
+        if (result.kind === "accepted") {
+          const accepted: Preview = preview;
+          accepted.revision = result.revision;
+        } else optimistic.current.delete(preview.draft.mark_id);
+      }
       if (result.kind !== "accepted" && matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     } catch {
-      if (optimistic.current === preview) optimistic.current = null;
+      if (preview && optimistic.current.get(preview.draft.mark_id) === preview) optimistic.current.delete(preview.draft.mark_id);
       if (matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     }
     refresh.current();
