@@ -398,7 +398,8 @@ type Querier interface {
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)
 	RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg RecoverExpiredTranscriptionCleanupJobsParams) ([]TranscriptionCleanupJob, error)
 	// Hands back a lease the worker never used. The claim's attempt is refunded
-	// because no work ran, and the job is claimable again at once.
+	// because no work ran. The job waits 30 seconds so a chunk the API can never
+	// hand out is retried at a bounded rate instead of on every claim.
 	ReleaseArtifactJob(ctx context.Context, arg ReleaseArtifactJobParams) (ArtifactJob, error)
 	ReleaseChatAttachmentUploadFinalize(ctx context.Context, arg ReleaseChatAttachmentUploadFinalizeParams) (int64, error)
 	ReleaseRecordingCaptureCommand(ctx context.Context, arg ReleaseRecordingCaptureCommandParams) (RecordingCaptureCommand, error)

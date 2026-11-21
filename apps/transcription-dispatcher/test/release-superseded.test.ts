@@ -33,6 +33,17 @@ describe("a release the control API has superseded", () => {
     expect(isReleaseSuperseded(error)).toBe(false);
   });
 
+  it("does not wait for the body of a refusal that cannot be a drain", async () => {
+    const openEnded = new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 503 });
+    const outcome = await Promise.race([
+      clientAnswering(openEnded)
+        .claim({ limit: 1, context: journey })
+        .catch((caught: unknown) => caught),
+      new Promise((resolve) => setTimeout(() => resolve("stalled"), 500)),
+    ]);
+    expect(outcome).toBeInstanceOf(ControlApiError);
+  });
+
   it("ends the drain quietly: no claim retry, no error, nothing processed", async () => {
     const events: string[] = [];
     let claims = 0;

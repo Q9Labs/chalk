@@ -144,7 +144,7 @@ export class RecorderControlApiClient implements ControlApi {
       throw new TypeError(`fetch failed: ${method} ${path} (${networkCauseCode(error)})`, { cause: error });
     }
     if (!response.ok) {
-      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, isRetryableStatus(response.status), await errorCodeOf(response));
+      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, isRetryableStatus(response.status), response.status === 409 ? await errorCodeOf(response) : undefined);
     }
     return parseResponse(response);
   }

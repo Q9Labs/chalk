@@ -52,7 +52,7 @@ func (s Service) Retry(ctx context.Context, input RetryInput) (Job, error) {
 }
 
 // Release hands back a lease whose work never started, so the chunk is
-// claimable again at once and the claim's attempt is not spent.
+// claimable again shortly and the claim's attempt is not spent.
 func (s Service) Release(ctx context.Context, input LeaseInput) (Job, error) {
 	if s.artifacts == nil {
 		return Job{}, ErrArtifactRepository

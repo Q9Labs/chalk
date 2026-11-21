@@ -914,7 +914,7 @@ func (q *Queries) RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExp
 const releaseArtifactJob = `-- name: ReleaseArtifactJob :one
 update artifact_jobs
 set state = 'retryable', attempt_count = attempt_count - 1,
-    available_at = $1::timestamptz, lease_token_hash = null, lease_owner = null,
+    available_at = $1::timestamptz + interval '30 seconds', lease_token_hash = null, lease_owner = null,
     lease_expires_at = null, updated_at = now()
 where id = $2 and state = 'leased' and attempt_count = $3
   and lease_owner = $4 and lease_token_hash = $5
@@ -930,7 +930,8 @@ type ReleaseArtifactJobParams struct {
 }
 
 // Hands back a lease the worker never used. The claim's attempt is refunded
-// because no work ran, and the job is claimable again at once.
+// because no work ran. The job waits 30 seconds so a chunk the API can never
+// hand out is retried at a bounded rate instead of on every claim.
 func (q *Queries) ReleaseArtifactJob(ctx context.Context, arg ReleaseArtifactJobParams) (ArtifactJob, error) {
 	row := q.db.QueryRow(ctx, releaseArtifactJob,
 		arg.Now,

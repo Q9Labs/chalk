@@ -66,8 +66,8 @@ func TestReleasingAnUnusedLeaseRefundsTheAttempt(t *testing.T) {
 	if job.State != "retryable" || job.Attempt != 1 || job.LeaseOwner != "" || job.LeaseExpiresAt != nil {
 		t.Fatalf("released job = state %q attempt %d owner %q lease %v, want retryable, attempt 1 and no lease", job.State, job.Attempt, job.LeaseOwner, job.LeaseExpiresAt)
 	}
-	if job.AvailableAt.After(time.Now().Add(time.Second)) {
-		t.Fatalf("released job is available at %v, want now", job.AvailableAt)
+	if wait := time.Until(job.AvailableAt); wait < 25*time.Second || wait > 35*time.Second {
+		t.Fatalf("released job is available in %v, want about 30s", wait)
 	}
 	if _, err := repository.Release(ctx, lease); !errors.Is(err, transcripts.ErrStaleLease) {
 		t.Fatalf("second release: %v, want a stale lease", err)
