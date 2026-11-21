@@ -5,8 +5,8 @@
 //   node .agents/skills/verify-chalk/scripts/screen-share.mjs <run-id> [--web <origin>] [--sharer chromium|webkit] [--viewers webkit,chromium] [--fault] [--devices on|off] [--stop-via toolbar|pill]
 //
 // --fault answers the sharer's first SFU "tracks_close" signal after the share is live with HTTP 404 (without forwarding it), as when the
-// SFU session is already gone. The stop must still succeed. Chromium's sharer captures its fake screen. WebKit has no automatable display
-// capture, so a WebKit sharer publishes an animated canvas through getDisplayMedia when the browser has none (the log says so).
+// SFU session is already gone. The stop must still succeed. Chromium's sharer captures its fake screen. Headless WebKit cannot answer
+// its display-capture prompt, so a WebKit sharer's getDisplayMedia returns an animated canvas stream (the log says so); everything after the capture is the real product path.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runJourney } from "./journey.mjs";
@@ -41,7 +41,7 @@ const shareTile = (name) => {
 const visibleProblems = () => [...document.querySelectorAll('[role="alert"], [role="status"], [data-sonner-toast], [data-part*="toast"]')].map((node) => node.textContent?.trim()).filter(Boolean);
 
 const syntheticDisplay = () => {
-  if (typeof navigator.mediaDevices?.getDisplayMedia === "function") return;
+  // Headless WebKit exposes getDisplayMedia but never answers its permission prompt, so the call hangs.
   window.__syntheticDisplay = true;
   navigator.mediaDevices.getDisplayMedia = async () => {
     const canvas = Object.assign(document.createElement("canvas"), { width: 1280, height: 720 });
