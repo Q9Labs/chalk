@@ -699,6 +699,16 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/screen-annotation:
+    dependencies:
+      '@q9labsai/chalk-client':
+        specifier: workspace:^
+        version: link:../../sdks/typescript/client
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
   packages/transcript-language:
     devDependencies:
       '@types/node':
