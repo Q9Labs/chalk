@@ -47,6 +47,7 @@ CHALK_PUBLIC_INVITE_VERIFICATION_KEYS="$(node --input-type=module -e 'process.st
 export CHALK_PUBLIC_INVITE_VERIFICATION_KEYS
 # Enable the real historical-artifact routes without contacting vendor services.
 export CHALK_RECORDING_ENABLED=true
+export CHALK_SFU_CAPTURE_ENABLED=false
 export CHALK_TRANSCRIPTION_ENABLED=true
 export CHALK_R2_BUCKET=dashboard-proof
 export CHALK_R2_ENDPOINT=http://127.0.0.1:${dashboard_vendor_port}

@@ -55,14 +55,13 @@ if grep -Eq '__[A-Z0-9_]+__' "${api_env}"; then
   fail "API environment contains unresolved placeholders"
 fi
 
-[[ "$(env_value "${api_env}" CHALK_SFU_ENABLED || true)" == true ]] || fail "CHALK_SFU_ENABLED must be true"
+case "$(env_value "${api_env}" CHALK_SFU_ENABLED | awk '{sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print tolower($0)}')" in
+  true|yes|on|1) ;;
+  *) fail "CHALK_SFU_ENABLED must be true (true, yes, on, or 1)" ;;
+esac
 for name in CHALK_SFU_APPLICATION_ID CHALK_SFU_NODES CHALK_SFU_SERVER_NAME CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
   require_env "$name"
 done
-
-if [[ "$(env_value "${api_env}" CHALK_RECORDING_ENABLED || true)" == true ]]; then
-  [[ "$(env_value "${api_env}" CHALK_SFU_CAPTURE_ENABLED || true)" == true ]] || fail "Recording requires CHALK_SFU_CAPTURE_ENABLED=true"
-fi
 
 # TURN can serve Chalk SFU peers on networks that cannot reach its public media port.
 turn_key_set=false

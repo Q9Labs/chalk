@@ -250,3 +250,24 @@ values(gen_random_uuid(),'${freshRecordingId}','${firstTenant}',0,1,0,1000,0,100
   assert.equal((await tenantFor("malik")).recording_render_mode, "on_demand");
   console.log("PASS: dashboard recording mode persists through the real API and stays inside the signed-in Tenant");
 }
+
+export async function archivedRecordingChecks({ sql, post }, { ada, firstTenant, foreign, session, spaceId }) {
+  const recordingId = crypto.randomUUID();
+  const episodeId = foreign.episodeId;
+  const key = `tenants/${firstTenant}/recordings/${recordingId}/archive.mp4`;
+  sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,storage_key)
+    values('${recordingId}','${firstTenant}','${spaceId}','${episodeId}','completed','r2','${key}')`);
+
+  const history = await ada.request(`/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${episodeId}`);
+  assert.equal(history.status, 200, await history.clone().text());
+  assert.ok((await history.json()).recordings.some((recording) => recording.id === recordingId && recording.exportStatus === "ready"));
+
+  const link = await post(ada, "/dashboard-api/past-session", { action: "recording-url", spaceId, episodeId, recordingId, download: true }, session.csrfToken);
+  assert.equal(link.status, 200, await link.clone().text());
+  const { url } = await link.json();
+  assert.ok(new URL(url).searchParams.get("X-Amz-Signature"));
+  const download = await fetch(url);
+  assert.equal(download.status, 200);
+  assert.equal(await download.text(), "archived recording fixture");
+  console.log("PASS: completed Recordings can be listed and downloaded with Chalk SFU capture off");
+}

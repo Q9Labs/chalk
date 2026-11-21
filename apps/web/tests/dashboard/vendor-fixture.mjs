@@ -9,6 +9,9 @@ const server = createServer((request, response) => {
     const body = readFileSync("artifacts/dashboard-transcript.json");
     return response.writeHead(200, { "Content-Type": "application/json", "Content-Length": body.length }).end(body);
   }
+  if (request.method === "GET" && new URL(request.url, "http://localhost").pathname.endsWith("/archive.mp4")) {
+    return response.writeHead(200, { "Content-Type": "video/mp4" }).end("archived recording fixture");
+  }
   response.writeHead(404).end();
 });
 server.listen(Number(process.env.CHALK_DASHBOARD_VENDOR_PORT || 18081), "127.0.0.1");

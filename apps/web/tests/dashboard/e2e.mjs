@@ -3,11 +3,11 @@ import { startHarness } from "./e2e-harness.mjs";
 import { signInChecks } from "./e2e-sign-in.mjs";
 import { ownerChecks } from "./e2e-owner.mjs";
 import { keyChecks, knockChecks, webhookChecks } from "./e2e-developer.mjs";
-import { historyChecks, transcriptChecks } from "./e2e-history.mjs";
+import { archivedRecordingChecks, historyChecks, transcriptChecks } from "./e2e-history.mjs";
 import { endChecks, homeChecks } from "./e2e-isolation.mjs";
 
 // Each part reads what earlier parts left in `state` and returns what later parts need.
-const PARTS = [signInChecks, ownerChecks, knockChecks, keyChecks, webhookChecks, historyChecks, transcriptChecks, homeChecks, endChecks];
+const PARTS = [signInChecks, ownerChecks, knockChecks, keyChecks, webhookChecks, historyChecks, transcriptChecks, homeChecks, archivedRecordingChecks, endChecks];
 
 async function refreshCostRun(h) {
   const { refreshCost } = await import("./refresh-cost.mjs");

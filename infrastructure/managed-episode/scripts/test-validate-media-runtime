@@ -27,10 +27,14 @@ check_refusal 'CHALK_SFU_ENABLED must be true'
 printf 'CHALK_SFU_ENABLED=true\n' >> "$fixture_api"
 check_refusal 'CHALK_SFU_APPLICATION_ID must occur'
 
-cp "$fixture/full.env" "$fixture_api"
-check_refusal 'sync.env'
 sed 's/^CHALK_RECORDING_ENABLED=false$/CHALK_RECORDING_ENABLED=true/' "$fixture/full.env" > "$fixture_api"
-check_refusal 'Recording requires CHALK_SFU_CAPTURE_ENABLED=true'
-printf 'CHALK_SFU_CAPTURE_ENABLED=true\n' >> "$fixture_api"
+printf 'CHALK_SFU_CAPTURE_ENABLED=false\n' >> "$fixture_api"
 check_refusal 'sync.env'
+
+for value in true yes on 1 ' YES '; do
+  sed "s/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=$value/" "$fixture/full.env" > "$fixture_api"
+  check_refusal 'sync.env'
+done
+sed 's/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=false/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'CHALK_SFU_ENABLED must be true'
 echo 'PASS managed Chalk SFU runtime input contract'
