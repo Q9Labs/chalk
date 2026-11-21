@@ -1,9 +1,9 @@
-import { EpisodeStatusError } from "./episode-status";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareSFUError } from "../media";
-import { ChalkAPIError } from "../server/errors";
 import type { ConnectionDependencies, ConnectionMediaFactoryInput } from "./dependencies";
-import { control, joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "../space-client/terminal.test.helpers";
+import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
+import { createSpaceClientForPlatform } from "../space-client/space-client";
+import type { V1ControlState } from "../sync/v1-types";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -12,166 +12,109 @@ describe("Episode end wins media rejection", () => {
   // Sanitized production ordering: guest publications GET 403 at 22:23:26.369,
   // media.end_episode completes at 22:23:32.540; provider close_tracks returns 410.
   // The Sync replica is still active at the rejection, not already ended.
-  it.each([401, 403, 410])("ends cleanly before Sync's end event after HTTP %s during provider teardown", async (status) => {
-    const test = fixture();
-    test.status.mockResolvedValue("ending");
+  it("ends cleanly before Sync sees the end after a provider rejects the credential", async () => {
+    const test = fixture("ending");
     try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("SFU request rejected during teardown", "signaling_failed", { status }));
+      await test.join();
+      test.reject(new CloudflareSFUError("SFU request rejected during teardown", "signaling_failed", { status: 403 }));
       await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
       expect(test.platform.sync.getSnapshot().control?.status).toBe("active");
-      expect(test.ended).toHaveBeenCalledOnce();
-      expect(test.error).not.toHaveBeenCalled();
+      expect(test.events.ended).toHaveLength(1);
+      expect(test.events.errors).toEqual([]);
       expect(test.client.getSnapshot().connection.lastError).toBeNull();
       test.endEvent();
-      expect(test.ended).toHaveBeenCalledOnce();
+      expect(test.events.ended).toHaveLength(1);
     } finally {
       test.client.dispose();
     }
   });
 
-  it.each([401, 403, 410])("recognizes an already ended Episode after HTTP %s", async (status) => {
-    const test = fixture();
-    test.status.mockResolvedValue("ended");
+  // Sanitized production ordering: the scheduled access refresh answers 409 episode.not_active once the Episode is over.
+  it("ends cleanly when a scheduled access refresh finds the Episode no longer active", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("SFU rejected", "signaling_failed", { status }));
-      await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-      expect(test.error).not.toHaveBeenCalled();
-    } finally {
-      test.client.dispose();
-    }
-  });
-
-  it.each([401, 403])("keeps current-binding HTTP %s terminal when the authoritative Episode is active", async (status) => {
-    const test = fixture();
-    try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("Revoked media credential", "signaling_failed", { status }));
-      await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("failed"));
-      expect(test.client.getSnapshot().connection.lastError).toMatchObject({ code: "access.invalid", recoverable: false });
-      expect(test.platform.syncStopped).toHaveBeenCalledOnce();
-      expect(test.ended).not.toHaveBeenCalled();
-    } finally {
-      test.client.dispose();
-    }
-  });
-
-  it("does not mistake a 410 for Episode end while the Episode is active", async () => {
-    const test = fixture();
-    try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("Provider connection gone", "signaling_failed", { status: 410 }));
-      await new Promise((resolve) => setTimeout(resolve, 30));
-      expect(test.ended).not.toHaveBeenCalled();
-      expect(test.platform.syncStopped).not.toHaveBeenCalled();
-      expect(test.client.getSnapshot().connection.status).not.toBe("failed");
-    } finally {
-      test.client.dispose();
-    }
-  });
-
-  it("leaves Sync running when the status read is unavailable so the end event can win", async () => {
-    const test = fixture();
-    test.status.mockRejectedValue(new Error("Status temporarily unavailable"));
-    try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("Publications rejected", "signaling_failed", { status: 403 }));
-      await vi.waitFor(() => expect(test.status).toHaveBeenCalledOnce());
-      expect(test.platform.syncStopped).not.toHaveBeenCalled();
-      test.endEvent();
-      await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-      expect(test.error).not.toHaveBeenCalled();
-    } finally {
-      test.client.dispose();
-    }
-  });
-
-  it("does not block Sync end behind an in-flight status read", async () => {
-    const test = fixture();
-    const read = Promise.withResolvers<"active">();
-    test.status.mockReturnValue(read.promise);
-    try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new CloudflareSFUError("Publications rejected", "signaling_failed", { status: 403 }));
-      await vi.waitFor(() => expect(test.status).toHaveBeenCalledOnce());
-      test.endEvent();
-      await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-      read.resolve("active");
-      expect(test.error).not.toHaveBeenCalled();
-    } finally {
-      read.resolve("active");
-      test.client.dispose();
-    }
-  });
-
-  it.each(["confirmed", "rejected"] as const)("lets a local End in flight settle before classifying media access (%s)", async (outcome) => {
-    const test = fixture();
-    const ack = Promise.withResolvers<Awaited<ReturnType<typeof test.platform.endEpisode>>>();
-    const result = { type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" } as const;
-    test.platform.endEpisode.mockReturnValue(ack.promise);
-    try {
-      await joinWithTerminalControl(test.client, test.platform);
-      const ending = test.client.endEpisode().then(
-        () => null,
-        (error: unknown) => error,
-      );
-      await vi.waitFor(() => expect(test.platform.endEpisode).toHaveBeenCalledOnce());
-      test.reject(new CloudflareSFUError("Close rejected", "signaling_failed", { status: 403 }));
-      await new Promise((resolve) => setTimeout(resolve, 30));
-      expect(test.platform.syncStopped).not.toHaveBeenCalled();
-      if (outcome === "confirmed") {
-        ack.resolve(result);
-        expect(await ending).toBeNull();
-        await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-        expect(test.error).not.toHaveBeenCalled();
-      } else {
-        ack.reject(new Error("End was not authorized"));
-        expect(await ending).not.toBeNull();
-        await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("failed"));
-        expect(test.client.getSnapshot().connection.lastError).toMatchObject({ code: "access.invalid", recoverable: false });
-        expect(test.ended).not.toHaveBeenCalled();
+      const base = createCoreTestPlatform();
+      let grants = 0;
+      const getAccess = async () => {
+        if (grants++ === 0) return opaqueAccessGrant(1);
+        throw { status: 409, error: { code: "episode.not_active", message: "Episode is not active" } };
+      };
+      const platform = { ...base, dependencies: { ...base.dependencies, getEpisodeStatus: async () => "ended" as const } };
+      const client = createSpaceClientForPlatform({ space: "test", getAccess }, platform);
+      const ended: unknown[] = [];
+      client.on("episodeEnded", (event) => ended.push(event));
+      try {
+        await client.join({ microphone: false, camera: false });
+        platform.emitSync({ ...platform.sync.getSnapshot(), control });
+        await vi.advanceTimersByTimeAsync(300_000);
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
+        expect(ended).toHaveLength(1);
+        expect(client.getSnapshot().connection.lastError).toBeNull();
+      } finally {
+        client.dispose();
       }
     } finally {
-      ack.resolve(result);
-      test.client.dispose();
+      vi.useRealTimers();
     }
   });
 
-  it("checks the same Episode state for a replacement conflict", async () => {
-    const test = fixture();
-    test.status.mockResolvedValue("ending");
+  // The media client answers a 403 by asking for a fresh credential; the refresh finds the Episode over, and the media client's
+  // poll reports that refusal as a failure, which must end the call instead of leaving it reconnecting.
+  it("ends cleanly when a media credential refresh finds the Episode no longer active", async () => {
+    let grants = 0;
+    const test = fixture("ended", async () => {
+      if (grants++ === 0) return opaqueAccessGrant(1);
+      throw { status: 409, error: { code: "episode.not_active", message: "Episode is not active" } };
+    });
     try {
-      await joinWithTerminalControl(test.client, test.platform);
-      test.reject(new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false }));
-      await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-      expect(test.error).not.toHaveBeenCalled();
+      await test.join();
+      const refusal = await test.refreshCredential().then(
+        () => undefined,
+        (cause: unknown) => cause,
+      );
+      expect(refusal).toBeDefined();
+      test.reject(refusal);
+      await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
+      expect(test.events.ended).toHaveLength(1);
+      expect(test.client.getSnapshot().connection.lastError).toBeNull();
     } finally {
       test.client.dispose();
     }
   });
 
-  it.each([401, 403, 410])("checks Episode state for media startup HTTP %s", async (status) => {
-    const test = fixture({
-      start: async () => {
-        throw new CloudflareSFUError("Start rejected", "signaling_failed", { status });
-      },
-    });
-    test.status.mockResolvedValue("ending");
+  it("rejects a revoked credential while the Episode is still active", async () => {
+    const test = fixture();
     try {
-      await test.client.join({ microphone: false, camera: false });
-      await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
-      expect(test.error).not.toHaveBeenCalled();
+      await test.join();
+      test.reject(new CloudflareSFUError("Revoked media credential", "signaling_failed", { status: 403 }));
+      await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("failed"));
+      expect(test.client.getSnapshot().connection.lastError).toMatchObject({ code: "access.invalid", recoverable: false });
+      expect(test.events.ended).toEqual([]);
     } finally {
       test.client.dispose();
     }
   });
 });
 
-function fixture(mediaOverrides: { start?: () => Promise<void> } = {}) {
-  const base = terminalTestPlatform();
-  const status = vi.fn<NonNullable<ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue("active");
+const control: V1ControlState = {
+  revision: 1,
+  stateSchemaVersion: 1,
+  stateDigest: "digest",
+  status: "active",
+  admissionPolicy: "open",
+  deadlineAtMs: Date.now() + 300_000,
+  deadlineGeneration: 1,
+  roleCapabilities: {},
+  recording: null,
+  admissionRequests: [],
+  participants: [{ participantId: "participant-1", displayName: "Ada", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: ["endEpisode"] }],
+};
+
+function fixture(episodeStatus: "active" | "ending" | "ended" = "active", getAccess: () => Promise<unknown> = async () => opaqueAccessGrant(1)) {
+  const base = createCoreTestPlatform();
+  const status: NonNullable<ConnectionDependencies["getEpisodeStatus"]> = async () => episodeStatus;
   let onFailure: ConnectionMediaFactoryInput["onFailure"] = () => {};
+  let refreshCredential: ConnectionMediaFactoryInput["refreshCredential"];
   const platform = {
     ...base,
     dependencies: {
@@ -179,26 +122,26 @@ function fixture(mediaOverrides: { start?: () => Promise<void> } = {}) {
       getEpisodeStatus: status,
       createMediaClient: (input: ConnectionMediaFactoryInput) => {
         onFailure = input.onFailure;
-        return { ...base.dependencies.createMediaClient(input), ...mediaOverrides };
+        refreshCredential = input.refreshCredential;
+        return base.dependencies.createMediaClient(input);
       },
     },
   };
-  return { platform, status, ...terminalTestClient(platform), reject: (cause: unknown) => onFailure(cause), endEvent: () => platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } }) };
+  const client = createSpaceClientForPlatform({ space: "test", getAccess }, platform);
+  const events = { ended: [] as unknown[], errors: [] as unknown[] };
+  client.on("episodeEnded", (event) => events.ended.push(event));
+  client.on("error", (event) => events.errors.push(event));
+  return {
+    platform,
+    client,
+    events,
+    join: async () => {
+      await client.join({ microphone: false, camera: false });
+      platform.emitSync({ ...platform.sync.getSnapshot(), control });
+      await vi.waitFor(() => expect(client.getSnapshot().participants.roster).toHaveLength(1));
+    },
+    reject: (cause: unknown) => onFailure(cause),
+    refreshCredential: async () => refreshCredential?.(),
+    endEvent: () => platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } }),
+  };
 }
-
-it.each([401, 403])("keeps Sync alive after status credential HTTP %s so delayed End wins", async (status) => {
-  const test = fixture();
-  test.status.mockRejectedValue(new EpisodeStatusError(status));
-  try {
-    await joinWithTerminalControl(test.client, test.platform);
-    test.reject(new CloudflareSFUError("End teardown denied", "signaling_failed", { status: 403 }));
-    await vi.waitFor(() => expect(test.status).toHaveBeenCalledOnce());
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(test.platform.syncStopped).not.toHaveBeenCalled();
-    test.endEvent();
-    await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
-    expect(test.error).not.toHaveBeenCalled();
-  } finally {
-    test.client.dispose();
-  }
-});

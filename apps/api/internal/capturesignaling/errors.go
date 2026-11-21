@@ -29,18 +29,6 @@ var (
 	ErrUnavailable            = errors.New("capture signaling persistence is unavailable")
 )
 
-// ConflictError reports a reused command identity with a different request.
-// The idempotency key is not included in the error text.
-type ConflictError struct {
-	Operation captureplane.OperationKind
-}
-
-func (e ConflictError) Error() string {
-	return fmt.Sprintf("capture signaling operation %s has a conflicting request", e.Operation)
-}
-
-func (e ConflictError) Unwrap() error { return ErrConflict }
-
 // FenceError reports an authority or lease fence rejected by persistence.
 type FenceError struct {
 	Kind string

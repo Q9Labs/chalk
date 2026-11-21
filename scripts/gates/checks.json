@@ -3,7 +3,7 @@
     {
       "id": "hook:pre-commit/fast-gate",
       "owner": "Developer workflow",
-      "catches": "Unformatted code, hygiene breaks, leaked secrets, broken document links and tracker drift in staged files reach a commit.",
+      "catches": "Unformatted code, lint violations, hygiene breaks, leaked secrets, broken document links and tracker drift reach a commit.",
       "runs": ["commit"],
       "blocks": "commit",
       "minutes": 0.2,
@@ -35,6 +35,16 @@
       "owner": "Repository",
       "catches": "A script nothing calls, or a workflow that names a path that no longer exists.",
       "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:oxlint",
+      "owner": "Code quality",
+      "catches": "JavaScript and TypeScript correctness violations and tests that are focused, disabled, commented out, duplicated by title, or missing assertions.",
+      "runs": ["commit", "pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
       "record": "unmeasured",
@@ -481,69 +491,25 @@
       "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
     },
     {
-      "id": "workflow:formal-episode-lifecycle.yml#check",
+      "id": "workflow:formal-models.yml#select",
       "owner": "Sync",
-      "catches": "A change to the Episode lifecycle or admission code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "catches": "A formal model whose covered paths changed but that the matrix selection left out.",
       "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
-    },
-    {
-      "id": "workflow:formal-screen-share-lease.yml#check",
-      "owner": "Sync",
-      "catches": "A change to the screen-share lease code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
-    },
-    {
-      "id": "workflow:formal-external-operations.yml#check",
-      "owner": "Sync",
-      "catches": "A change to the external-operation queue, publication grants or role transitions that breaks the model-checked invariants or drifts from the model.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "Runs TLC for about 2 minutes only when a covered Sync file or the model changes, so it cannot be a required context for every pull request."
-    },
-    {
-      "id": "workflow:formal-public-invite-access.yml#check",
-      "owner": "Call",
-      "catches": "A change to the public invite, arrival or access code that breaks a model-checked rule or drifts from the TLA+ model.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
-    },
-    {
-      "id": "workflow:formal-recording-pipeline.yml#check",
-      "owner": "Recording",
-      "catches": "A change to the recording pipeline that breaks a model-checked rule or drifts from the TLA+ model.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
-    },
-    {
-      "id": "workflow:gate.yml#ready-cap",
-      "owner": "Gate",
-      "catches": "Too many pull requests ready at once: it sends a newly ready pull request back to draft before the Gate starts.",
-      "runs": ["pull_request"],
       "blocks": "action",
-      "minutes": 0.3,
+      "minutes": null,
       "record": "unmeasured",
-      "sample": "New with the ready cap; no history yet."
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "workflow:formal-models.yml#check",
+      "owner": "Sync",
+      "catches": "A change to a file a TLA+ model covers that breaks a model-checked rule, or lets the model's code anchors drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet.",
+      "reason": "It runs only the models whose covered files changed, so it cannot be a required context on every pull request; the sync-entry-leave model stays merge-blocking as the Gate's formal-sync lane."
     },
     {
       "id": "workflow:gate.yml#changes",
@@ -1520,7 +1486,7 @@
       "id": "workflow:windows.yml#windows",
       "owner": "Gate",
       "catches": "A script, path or line ending that works on Linux and macOS but breaks a developer on native Windows.",
-      "runs": ["pull_request", "merge_queue", "push", "manual"],
+      "runs": ["pull_request", "push", "manual"],
       "blocks": "advisory",
       "minutes": null,
       "record": "unmeasured",
@@ -1596,39 +1562,6 @@
       "minutes": null,
       "record": "never-failed",
       "sample": "14 nightly values between 0.3 and 0.5 s."
-    },
-    {
-      "id": "workflow:formal-client-recovery.yml#check",
-      "owner": "Call",
-      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the SDK connection and recovery lifecycle (join, Sync and media recovery, access refresh, terminal frames, Leave), or lets the model drift from the code.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
-    },
-    {
-      "id": "workflow:formal-media-control.yml#check",
-      "owner": "Call",
-      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the media-control model, or lets the model drift from the code.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
-    },
-    {
-      "id": "workflow:formal-telemetry-delivery.yml#check",
-      "owner": "Call",
-      "catches": "A change to a covered file that breaks a rule of the TLA+ model of client telemetry delivery (ack safety, delivery conservation, honest gaps, the P0 reserve), or a trace of the real outbox that the model cannot replay.",
-      "runs": ["pull_request", "manual"],
-      "blocks": "advisory",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "No failure history recorded in the register yet.",
-      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
     },
     {
       "id": "workflow:infrastructure-drift.yml#drift",

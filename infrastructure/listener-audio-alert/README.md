@@ -1,6 +1,6 @@
 # Listener audio check
 
-`listener-audio-check.mjs` runs every five minutes from the [listener audio workflow](../../.github/workflows/listener-audio-check.yml). It queries the last ten minutes of production API logs in Axiom and posts to Oncall when an Episode meets the rule of a signal. The signals are a small table at the top of the script (event name, optional trigger, optional `minParticipants`), so a new one is one entry.
+`listener-audio-check.mjs` runs every five minutes from the [listener audio workflow](../../.github/workflows/listener-audio-check.yml). It queries the last ten minutes of production API logs in Axiom and posts to Oncall when an Episode meets the rule of a signal. The signals are a small table at the top of the script (event name, optional type, optional `minParticipants`), so a new one is one entry.
 
 - `api_unpulled` (`media.listener_publication_unpulled`): one event pages. Only Cloudflare SFU emits it, so it is blind to `chalk_sfu`; delete the entry when M13 removes Cloudflare.
 - `client_audio_stuck:<provider>` (`sdk.telemetry` with type `audio_receive_stuck`): works for both providers. It pages only when at least two distinct participants reported it, because one client can repeat or mis-report (production once showed 52 reports across 26 Episodes in one afternoon). Reports with no participant hash never count as a participant.
@@ -16,7 +16,7 @@ Secrets: `CHALK_AXIOM_QUERY_TOKEN` (query permission on the API log dataset), `C
 Run the workflow by hand with `drill` set to send one marked test to Oncall; it needs only the webhook. Oncall acts only on checks in its registry ([Q9Labs/oncall apps.ts](https://github.com/Q9Labs/oncall/blob/master/apps.ts)), so the `listener-audio` scope must be registered there for Chalk. Posting alone does not make the alarm operational.
 
 ```sh
-node --test infrastructure/listener-audio-alert/listener-audio-check.test.mjs
+node --test infrastructure/listener-audio-alert/
 ```
 
 To undo, delete the workflow and this folder, remove the Alarm subsection in the observability docs, and remove the two dedicated Axiom secrets. Keep the shared `ONCALL_WEBHOOK_URL`. Remove the Oncall registration separately.

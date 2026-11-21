@@ -16,6 +16,7 @@ type TranscriptWorkerService interface {
 	Claim(context.Context, transcripts.ClaimInput) (transcripts.Assignment, error)
 	Heartbeat(context.Context, transcripts.LeaseInput, time.Time) (transcripts.Job, error)
 	Retry(context.Context, transcripts.RetryInput) (transcripts.Job, error)
+	Release(context.Context, transcripts.LeaseInput) (transcripts.Job, error)
 	Complete(context.Context, transcripts.LeaseInput) (transcripts.Job, error)
 	Cancel(context.Context, transcripts.CancelInput) (transcripts.Job, error)
 	AcceptResult(context.Context, transcripts.ResultInput) (transcripts.Result, error)

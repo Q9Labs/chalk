@@ -160,7 +160,7 @@ test("missing secrets name requirements and drill requires only webhook", async 
 
 test("HTTP, JSON, malformed and network failures fail safely", async () => {
   const args = { token: "fake", dataset: "fake", ...window };
-  await assert.rejects(readSignals({ ...args, fetchImpl: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
+  await assert.rejects(readSignals({ ...args, fetchImpl: async () => ({ ok: false, status: 403 }) }), /^Error: Axiom query answered HTTP 403$/);
   await assert.rejects(readSignals({ ...args, fetchImpl: async () => ok({}) }), /malformed tabular/);
   await assert.rejects(
     readSignals({

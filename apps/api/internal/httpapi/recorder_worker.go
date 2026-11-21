@@ -51,17 +51,6 @@ type RecorderCapturePlanService interface {
 
 var _ RecorderWorkerService = recordingpipeline.Service{}
 
-// NewRecorderWorkerRouter creates the private router used by recorder worker
-// traffic. It intentionally does not install the public CORS, system-token,
-// or user-authentication middleware from NewRouter.
-func NewRecorderWorkerRouter(service RecorderWorkerService, verifier RecorderWorkerVerifier, plans ...RecorderCapturePlanService) http.Handler {
-	controls := RecorderWorkerControlServices{}
-	if len(plans) > 0 {
-		controls.CapturePlans = plans[0]
-	}
-	return NewRecorderWorkerRouterWithControls(service, verifier, controls)
-}
-
 type RecorderWorkerControlServices struct {
 	Logger             *slog.Logger
 	CapturePlans       RecorderCapturePlanService
@@ -124,10 +113,6 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 		claimRequestID, err := utilities.ParseID(body.ClaimRequestID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid claim request id")
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		leaseToken, err := utilities.NewID()
@@ -242,10 +227,6 @@ func recorderWorkerHeartbeatHandler(service RecorderWorkerService) http.HandlerF
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
 		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
 		job, err := service.Heartbeat(request.Context(), lease)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
@@ -272,10 +253,6 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Heartbeat(request.Context(), lease)
@@ -313,10 +290,6 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 				return
 			}
 			availableAt = parsed
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
 		}
 		input := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail}
 		if identity.Role == workeridentity.RoleCapture {
@@ -359,10 +332,6 @@ func recorderWorkerRelinquishCaptureHandler(service RecorderWorkerService) http.
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture relinquish")
 			return
 		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
 		job, err := service.RelinquishCapture(request.Context(), lease)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
@@ -395,10 +364,6 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 			return
 		}
 		if lease.Observed, ok = recorderWorkerObservations(w, body.Observed); !ok {
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		var job recordingpipeline.Job
@@ -473,10 +438,6 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
 				ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
 			})
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		health, err := service.UpsertPoolHealth(request.Context(), recordingpipeline.PoolHealth{Role: recorderWorkerPoolRole(identity.Role), AdmissionOpen: body.AdmissionOpen, ReadyCapacity: body.ReadyCapacity, Reason: strings.TrimSpace(body.Reason), ObservedAt: observedAt})

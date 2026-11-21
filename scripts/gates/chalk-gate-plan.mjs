@@ -6,9 +6,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DIAGNOSE_CALL_INPUTS, DIAGNOSE_CALL_TESTS } from "../diagnose-call/inputs.mjs";
+import { loadManifest, pathPrefix } from "../../tools/formal/manifest.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { ratchetArgsFor } from "./ratchet-scope.mjs";
 import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 
 export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
@@ -21,7 +23,7 @@ const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
 // except for the data files below, which only the always-selected checks lane reads.
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
-const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
+const gateDataFiles = new Set([".fallowrc.json", ".oxlintrc.json", "scripts/gates/design-tokens-baseline.json"]);
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release, proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
@@ -58,20 +60,15 @@ const proofTestRoots = [
 ];
 // plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
 const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
-// The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
-const formalSyncPaths = [
-  "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex",
-  "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres.ex",
-  "tools/formal/sync-entry-leave",
-  "tools/formal/tla2tools.sh",
-];
+// The Sync modules the entry and Leave model anchors to, read from the canonical model
+// registry (tools/formal/manifest.json) so this lane, the model workflow and the
+// sync-entry-leave-formal skill share one list.
+function formalSyncPaths(root) {
+  const manifest = loadManifest(root);
+  const model = manifest.models.find((model) => model.id === "sync-entry-leave" && model.ci === "gate");
+  if (!model) throw new GatePlanningError("formal-manifest", 'tools/formal/manifest.json has no sync-entry-leave model with ci "gate"');
+  return [...model.paths.map(pathPrefix), `tools/formal/${model.id}`, "tools/formal/tla2tools.sh", "tools/formal/manifest.json", "tools/formal/manifest.mjs"];
+}
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -153,11 +150,11 @@ function isKnownPath(file, workspaces, narrow) {
   if (isGateDefinition(file, narrow)) return true;
   // No lane reads these, so a full gate would run the same lanes as the always-on ones.
   if (narrow && (startsWithAny(file, ["infrastructure/observability", "infrastructure/host-change-alert"]) || file === "e2e.config.ts")) return true;
-  if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
+  if (isDocumentation(file) || gateDataFiles.has(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
   if (startsWithAny(file, ["apps/api", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "features.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
-  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
+  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json"].includes(file);
 }
 
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
@@ -477,7 +474,7 @@ export function createGatePlan(files, options = {}) {
   const serviceGates = servicesExternal ? [] : [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
   const base = options.base ?? "origin/master";
   const scope = options.scope ?? "staged";
-  // A changed Fallow configuration is not source, but only a whole-repository audit exercises it.
+  const ratchetArgs = ratchetArgsFor({ scope, base, event: options.event, full: explicitFull });
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
@@ -486,9 +483,8 @@ export function createGatePlan(files, options = {}) {
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
-  const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
+  const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths(options.repositoryRoot ?? repositoryRoot)));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
-  // The ratchet counts every JavaScript and TypeScript test file. Edits to scripts/gates select the full gate, so its baseline is covered.
   const mockCallInputs = full || dependencyChange || nonDocumentationFiles.some((file) => /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
@@ -500,19 +496,11 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "scripts/test/no-network.test.mjs",
       "scripts/lib/platform.test.mjs",
-      "scripts/gates/chalk-gate-plan.test.mjs",
-      "scripts/gates/chalk-gate-plan-release.test.mjs",
-      "scripts/gates/feature-map.test.mjs",
-      "scripts/gates/ready-cap.test.mjs",
-      "scripts/gates/references.test.mjs",
-      "scripts/gates/ratchets.test.mjs",
-      "scripts/gates/analysis.test.mjs",
-      "scripts/gates/ast-grep.test.mjs",
-      "scripts/gates/mock-calls.test.mjs",
+      ...["chalk-gate-plan", "chalk-gate-plan-release", "feature-map", "references", "ratchets", "analysis", "ast-grep", "mock-calls", "select-leak-shards"].map((name) => `scripts/gates/${name}.test.mjs`),
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
-    task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
+    task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs", ...ratchetArgs]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", ["node", "scripts/test/run.mjs", "node", "--test", ...workflowGraphNodeTests]),
     task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", [
@@ -524,10 +512,11 @@ export function createGatePlan(files, options = {}) {
     task("secrets", "Secret scan", true, "always required for the selected diff", ["node", "scripts/gates/gitleaks.mjs"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
+    task("oxlint", "JavaScript, TypeScript and test lint", true, "always required", ["pnpm", "run", "lint:oxlint"]),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
-    task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity"]),
-    task("dead-code", "No new unreachable Go function", full || sourceFiles.some((file) => file.endsWith(".go")), full ? fullReason : "Go source changed", ["node", "scripts/gates/analysis.mjs", "dead-code"]),
-    task("duplication", "Clone count does not rise", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "duplication"]),
+    task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity", ...ratchetArgs]),
+    task("dead-code", "No new unreachable Go function", full || nonDocumentationFiles.some((file) => file.endsWith(".go")), full ? fullReason : "Go source changed", ["node", "scripts/gates/analysis.mjs", "dead-code", ...ratchetArgs]),
+    task("duplication", "Clone count does not rise", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "duplication", ...ratchetArgs]),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
     task("formal-sync", "Sync entry and Leave model check", formalSync, formalSync ? "Sync entry or Leave inputs changed" : "Sync entry and Leave are unaffected", ["bash", "tools/formal/sync-entry-leave/run.sh"]),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
@@ -634,7 +623,7 @@ export function gatePlanOptions(context, environment = process.env) {
     scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
     base: context.base ?? environment.GATE_BASE_REF ?? "origin/master",
     target: resolveGateTarget(environment.GATE_TARGET, context.target),
-    event: environment.GATE_EVENT,
+    event: environment.GATE_EVENT ?? environment.GITHUB_EVENT_NAME,
     services: environment.GATE_SERVICES === "external" ? "external" : "local",
     snapshot: snapshotForScope(context.scope),
     workspaceConcurrency: workspaceConcurrencyFrom(environment.GATE_WORKSPACE_CONCURRENCY),
@@ -748,7 +737,7 @@ export function selectCiJobs(base, plan = ciJobs) {
 }
 
 // Format is always on so documentation-only changes are still checked.
-export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format"]);
+export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format", "oxlint"]);
 
 // The proof file is untrusted input from an earlier run: any doubt about it means no sharing, never a skipped check.
 function applyProof(jobs, base, proofPath) {

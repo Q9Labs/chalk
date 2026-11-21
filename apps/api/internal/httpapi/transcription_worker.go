@@ -216,8 +216,16 @@ func workerJobResponse(job transcripts.Job) workerJobResponseBody {
 
 // writeWorkloadUnauthorized answers 401 and logs why the workload was refused.
 // The log names one reason from the fixed list the authorizer returns, never
-// the error text or any request header.
+// the error text or any request header. A validly signed request from an older
+// release is not a fault: a deploy replaced it, so it gets a distinct 409 and
+// an Info line, and the worker stops on its own.
 func writeWorkloadUnauthorized(w http.ResponseWriter, r *http.Request, rejection error) {
+	if errors.Is(rejection, errWorkloadSuperseded) {
+		observability.RequestLogger(r.Context()).InfoContext(r.Context(), "workload release superseded", "event", "workload.release_superseded",
+			"method", r.Method, "route", r.URL.Path)
+		writeError(w, http.StatusConflict, "workload.release_superseded", "Workload release was superseded")
+		return
+	}
 	reason := "unrecognized"
 	for _, known := range workloadRejectionReasons {
 		if errors.Is(rejection, known) {

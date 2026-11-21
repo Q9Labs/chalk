@@ -1,0 +1,8 @@
+# Each line names a broken code variant and the rule it must violate, so a
+# "the model passed" claim also proves the model can catch the bug.
+# Format: <break><TAB><rule><TAB><the code edit it mirrors>.
+retire_to_confirmed	RetiringKeepsCourse	a late publish response flips a retiring publication back to confirmed, so stop() and a pause lose to the response
+resume_new_handle	ResumedKeepsHandle	resuming a held publication mints a new SFU publication instead of reusing the parked handle, leaking one publication per pause/resume
+confirm_without_handle	ConfirmedHasHandle	the confirm path stores no handle, so later retire/hold steps have no publication id to close
+stop_resurrect	RetiredStaysRetired	a publish response landing after stop() recreates the publication the client already dropped
+spawn_while_live	AtMostOneLive	the reusable find is skipped, so a second publish runs while the source already has a live publication

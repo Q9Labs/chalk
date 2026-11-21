@@ -170,7 +170,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				"status", recorder.status,
 				"bytes", recorder.bytes,
 				"duration_ms", milliseconds(duration),
-				"outcome", requestOutcome(recorder.status),
+				"outcome", requestOutcome(recorder.status, recorder.errorCode),
 			}
 			if tenantID := requestTenantID(r.Context()); tenantID != "" {
 				attrs = append(attrs, "tenant_id", tenantID)
@@ -180,6 +180,8 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			}
 			attrs = append(attrs, recorder.upstream...)
 			switch {
+			case isExpectedRefusal(recorder.errorCode):
+				logger.InfoContext(r.Context(), "http request", attrs...)
 			case recorder.status >= http.StatusInternalServerError:
 				logger.ErrorContext(r.Context(), "http request", attrs...)
 			case recorder.status >= http.StatusBadRequest:
@@ -252,7 +254,16 @@ func requestIncludedBySampleRate(rate float64) bool {
 	return rand.Float64() < rate
 }
 
-func requestOutcome(status int) string {
+// expectedRefusals are error codes for a refusal that is a routine outcome, such as a worker from a replaced release being told to stop.
+// Their requests are logged at Info and do not count as errors.
+var expectedRefusals = map[string]bool{"workload.release_superseded": true}
+
+func isExpectedRefusal(code string) bool { return expectedRefusals[code] }
+
+func requestOutcome(status int, errorCode string) string {
+	if isExpectedRefusal(errorCode) {
+		return "expected"
+	}
 	if status >= http.StatusBadRequest || status == 0 {
 		return "error"
 	}

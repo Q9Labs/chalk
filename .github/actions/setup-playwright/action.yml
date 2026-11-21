@@ -34,6 +34,7 @@ runs:
       shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
       run: |
         set -euo pipefail
         read -ra browsers <<< "${BROWSERS}"
@@ -51,24 +52,30 @@ runs:
         fi
         echo "Missing system packages: ${#packages[@]}"
 
-        # The Azure Ubuntu mirror sometimes serves packages at a few kB/s, which stalled this step for 20 minutes.
-        # apt runs under a root timeout, because a timeout outside sudo cannot stop it, and the retry drops that mirror.
+        # The hosted Azure and AWS EC2 Ubuntu mirrors sometimes serve packages at a few kB/s, which stalled this step
+        # for 20 minutes. apt runs under a root timeout, because a timeout outside sudo cannot stop it, and the retry
+        # drops those mirrors, falling back to the main archive when nothing else remains.
         install_once() {
+          local apt_timeout="$1"
           if (( ${#packages[@]} > 0 )); then
-            sudo timeout --kill-after=10s 3m sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
+            sudo timeout --kill-after=10s "${apt_timeout}" sh -c 'apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
           fi
-          timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
+          if [[ "${CACHE_HIT}" != "true" ]]; then
+            timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
+          fi
         }
         for attempt in 1 2; do
-          if install_once; then
+          apt_timeout="$([[ "${attempt}" == 1 ]] && echo 2m || echo 4m)"
+          if install_once "${apt_timeout}"; then
             break
           fi
           if [[ "${attempt}" == 2 ]]; then
             echo "::error title=Playwright setup failed::Both install attempts failed or ran out of time."
             exit 1
           fi
-          echo "::warning title=Playwright setup retried::The first install attempt failed or ran out of time. Retrying without the Azure Ubuntu mirror."
-          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          echo "::warning title=Playwright setup retried::The first install attempt failed or ran out of time. Retrying without the Azure and EC2 Ubuntu mirrors."
+          sudo sed -i -e '/azure\.archive\.ubuntu\.com/d' -e '/ec2\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          grep -q '[^[:space:]]' /etc/apt/apt-mirrors.txt || echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo dpkg --configure -a
         done
 

@@ -89,15 +89,25 @@ type providerObservationPageResponse struct {
 func NewProviderBridgeHandler(service ProviderBridgeService, verifier SyncPeerVerifier) http.Handler {
 	router := chi.NewRouter()
 	router.Use(requireSyncPeer(verifier))
-	router.Post("/internal/v1/sync/provider-operations/{operation_id}", handleProviderOperation(service))
-	router.Get("/internal/v1/sync/media-observations", handleProviderObservations(service))
-	router.Get("/internal/v1/sync/provider-bridge/ready", handleProviderBridgeReadiness(service))
+	var operation, observations, readiness http.HandlerFunc = unavailableProviderBridge, unavailableProviderBridge, unavailableProviderBridge
+	if service != nil {
+		operation = handleProviderOperation(service)
+		observations = handleProviderObservations(service)
+		readiness = handleProviderBridgeReadiness(service)
+	}
+	router.Post("/internal/v1/sync/provider-operations/{operation_id}", operation)
+	router.Get("/internal/v1/sync/media-observations", observations)
+	router.Get("/internal/v1/sync/provider-bridge/ready", readiness)
 	return router
+}
+
+func unavailableProviderBridge(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 }
 
 func handleProviderBridgeReadiness(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
-		if service == nil || service.Ready(request.Context()) != nil {
+		if service.Ready(request.Context()) != nil {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 			return
 		}
@@ -108,12 +118,11 @@ func handleProviderBridgeReadiness(service ProviderBridgeService) http.HandlerFu
 }
 
 func requireSyncPeer(verifier SyncPeerVerifier) func(http.Handler) http.Handler {
+	if verifier == nil {
+		return func(http.Handler) http.Handler { return http.HandlerFunc(unavailableProviderBridge) }
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			if verifier == nil {
-				writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
-				return
-			}
 			if err := verifier.Verify(request); err != nil {
 				writeError(w, http.StatusUnauthorized, "sync.unauthorized", "Sync authentication required")
 				return
@@ -125,11 +134,6 @@ func requireSyncPeer(verifier SyncPeerVerifier) func(http.Handler) http.Handler 
 
 func handleProviderOperation(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
-			return
-		}
-
 		body, err := decodeProviderOperationBody(w, request)
 		if err != nil {
 			writeProviderBridgeError(w, err)
@@ -160,11 +164,6 @@ func handleProviderOperation(service ProviderBridgeService) http.HandlerFunc {
 
 func handleProviderObservations(service ProviderBridgeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
-			return
-		}
-
 		tenantID, episodeID, after, limit, err := providerObservationQuery(request)
 		if err != nil {
 			writeProviderBridgeError(w, err)

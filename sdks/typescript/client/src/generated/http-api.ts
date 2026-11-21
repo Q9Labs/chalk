@@ -6,30 +6,6 @@ import { arriveBySpacePublicInviteEndpoint, createPublicSpaceEndpoint, getSpaceP
 
 const defaultGroup = HttpApiGroup.make("default")
   .add(
-    HttpApiEndpoint.post("addCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks", {
-      params: S.AddCloudflareSFUTracksPathParamsSchema,
-      query: S.AddCloudflareSFUTracksQueryParamsSchema,
-      payload: S.AddCloudflareSFUTracksRequestBodySchema,
-      success: S.AddCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.post("approveMCPConsentRequest", "/v1/mcp-oauth/requests/approve", {
       payload: S.ApproveMCPConsentRequestRequestBodySchema,
       success: S.ApproveMCPConsentRequestResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -42,29 +18,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.put("closeCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks/close", {
-      params: S.CloseCloudflareSFUTracksPathParamsSchema,
-      payload: S.CloseCloudflareSFUTracksRequestBodySchema,
-      success: S.CloseCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -375,26 +328,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.get("listCloudflareSFUPublications", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/publications", {
-      params: S.ListCloudflareSFUPublicationsPathParamsSchema,
-      success: S.ListCloudflareSFUPublicationsResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("listMCPConnections", "/v1/tenants/:tenant_id/mcp-connections", {
       params: S.ListMCPConnectionsPathParamsSchema,
       query: S.ListMCPConnectionsQueryParamsSchema,
@@ -407,27 +340,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("listSFUSubscriptions", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/subscriptions", {
-      params: S.ListSFUSubscriptionsPathParamsSchema,
-      success: S.ListSFUSubscriptionsResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -504,46 +416,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WebhookIdempotencyExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
         S.WebhookEventErasedErrorSchema.pipe(HttpApiSchema.status(410)),
         S.WebhookEndpointRevisionConflictErrorSchema.pipe(HttpApiSchema.status(412)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("renegotiateCloudflareSFU", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/renegotiate", {
-      params: S.RenegotiateCloudflareSFUPathParamsSchema,
-      payload: S.RenegotiateCloudflareSFURequestBodySchema,
-      success: S.RenegotiateCloudflareSFUResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("reportConnectionFailure", "/v1/tenants/:tenant_id/connection-reports", {
-      params: S.ReportConnectionFailurePathParamsSchema,
-      payload: S.ReportConnectionFailureRequestBodySchema,
-      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -719,29 +591,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.put("updateCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks/update", {
-      params: S.UpdateCloudflareSFUTracksPathParamsSchema,
-      payload: S.UpdateCloudflareSFUTracksRequestBodySchema,
-      success: S.UpdateCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.patch("updateWebhookEndpoint", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id", {
       params: S.UpdateWebhookEndpointPathParamsSchema,
       headers: S.UpdateWebhookEndpointRequestHeadersSchema,
@@ -770,23 +619,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WebhookIdempotencyExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
         S.WebhookEventErasedErrorSchema.pipe(HttpApiSchema.status(410)),
         S.WebhookEndpointRevisionConflictErrorSchema.pipe(HttpApiSchema.status(412)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("uploadCallStats", "/v1/tenants/:tenant_id/call-stats", {
-      params: S.UploadCallStatsPathParamsSchema,
-      payload: S.UploadCallStatsRequestBodySchema,
-      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),

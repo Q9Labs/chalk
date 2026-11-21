@@ -164,7 +164,7 @@ export type CloudflareSFUSnapshot = {
 export type CloudflareSFULocalOfferDiagnostic = {
   readonly event: "local_offer_pending";
   readonly where: "sdp_operation_start" | "remote_offer";
-  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "outside_sdk";
+  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "receive_transport" | "outside_sdk";
   readonly pendingMs: number | null;
 };
 export type CloudflareSFUClientOptions = {
@@ -212,8 +212,6 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly participantId: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly requestTimeoutMs?: number;
-  /** Send every signaling call to the one `signal` route. Set it only when the API advertised `unifiedSignaling` for this connection. */
-  readonly unifiedSignaling?: boolean;
   /**
    * The https origin of the direct door, from the grant. A probe of it starts with the transport; signalling goes there while it
    * answers and replays on `apiBaseURL` when a call cannot reach the API through it. Absent: every call uses `apiBaseURL`.

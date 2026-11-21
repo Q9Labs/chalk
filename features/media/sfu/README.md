@@ -40,7 +40,7 @@ Run heavy runs on Instabox (`box run -- '...'` from the repository root), not a 
 
 1. **Loopback integration** starts the real HTTP service and two real Pion peers and asserts payloads, close, inspect, duplicate create, a wrong client certificate, a cross-Tenant pull and that nothing leaks at the end. `cd features/media/sfu && go test -race -count=1 ./...`; `scripts/gate.sh` runs it with format, tidy and vet, and the repo gate runs it as the `sfu` lane.
 2. **Live smoke** (`scripts/live-smoke <staging|production> --confirm <env>`) runs `TestLiveSmoke` against a deployed node through the operator certificate and an SSH tunnel, and prints `<env>-live-smoke: PASS` or `FAIL: <reason>`. Production's run is the M7 hard condition.
-3. **Live staging soak** (`TestLiveSmokeClasses` in `tests/live_smoke_test.go`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/sfu/capacity-calibration.md#soak-acceptance). It skips without `SFU_LIVE_URL`; the knobs and defaults are listed above the test. `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the CPU file the test reads:
+3. **Live staging soak** (`TestLiveSmokeClasses` in `tests/live_smoke_test.go`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/plans/sfu-capacity-calibration.md#soak-acceptance). It skips without `SFU_LIVE_URL`; the knobs and defaults are listed above the test. `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the CPU file the test reads:
 
    ```sh
    ssh root@<node> 'bash -s -- 10' < features/media/sfu/scripts/node-cpu-capture > cpu.jsonl &

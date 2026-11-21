@@ -11,7 +11,7 @@ import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findChalkSfuSpace, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
+import { findChalkSfuSpace, chalkSfuPlane, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 import { createEpisodeWhenSpaceClears } from "./space-clears.mjs";
 
@@ -68,7 +68,7 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
 // Otherwise a Space ID variable reuses the Space an operator moved.
 async function pinnedSpace(run, plane, policy, pinName) {
   const kind = chalkSfuSpaceKind(policy);
-  if (plane === "chalk_sfu" && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
+  if (plane === chalkSfuPlane && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
     const found = await findChalkSfuSpace(run.apiRequest, run.tenantPath, kind);
     check(found, `The proof Space for ${pinName} or ${chalkSfuSpaces[kind].slug} does not exist: run the chalk-sfu-spaces proof first`, "media-plane-config");
     return found;

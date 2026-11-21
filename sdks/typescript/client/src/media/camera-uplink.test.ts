@@ -2,14 +2,58 @@ import { describe, expect, it } from "vitest";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 
 describe("camera uplink policy", () => {
-  it("pauses only the extra layer below the full-camera budget", () => {
+  it.each([666_000, 999_999, 400_000])("keeps the half-size layer on when %i bit/s cannot carry the full-size layer", (bitrate) => {
     const policy = new CameraUplinkPolicy();
-    expect(policy.sample(800_000, true)).toBe(false);
-    expect(policy.sample(400_000, false)).toBe(false);
-    expect(policy.sample(1_500_000, true)).toBe(true);
+    for (let i = 0; i < 20; i++) expect(policy.sample(bitrate, true)).toBe(true);
   });
 
-  it("requires five consecutive healthy samples to restore the extra layer", () => {
+  it("restores the half-size layer at once when the estimate collapses", () => {
+    expect(new CameraUplinkPolicy().sample(666_000, false)).toBe(true);
+  });
+
+  it("pauses the half-size layer only after five consecutive constrained samples", () => {
+    const policy = new CameraUplinkPolicy();
+    for (let i = 0; i < 4; i++) expect(policy.sample(1_200_000, true)).toBe(true);
+    expect(policy.sample(1_200_000, true)).toBe(false);
+  });
+
+  it("holds the layer in the band between starved and pausable", () => {
+    const policy = new CameraUplinkPolicy();
+    for (let i = 0; i < 20; i++) expect(policy.sample(1_100_000, true)).toBe(true);
+    for (let i = 0; i < 20; i++) expect(policy.sample(1_100_000, false)).toBe(false);
+  });
+
+  it("restarts the pause count after a starved or missing sample", () => {
+    for (const interruption of [800_000, undefined, 1_100_000]) {
+      const policy = new CameraUplinkPolicy();
+      for (let i = 0; i < 4; i++) policy.sample(1_200_000, true);
+      policy.sample(interruption, true);
+      expect(policy.sample(1_200_000, true)).toBe(true);
+    }
+  });
+
+  it.each([
+    [1_199_999, true, true],
+    [1_200_000, true, false],
+    [1_499_999, true, false],
+    [1_500_000, true, true],
+    [1_999_999, false, false],
+    [2_000_000, false, true],
+  ])("at %i bit/s with the half-size layer %s settles on %s after five samples", (bitrate, lowActive, settled) => {
+    const policy = new CameraUplinkPolicy();
+    let result = lowActive;
+    for (let i = 0; i < 5; i++) result = policy.sample(bitrate, lowActive);
+    expect(result).toBe(settled);
+  });
+
+  it("does not pause on a brief dip", () => {
+    const policy = new CameraUplinkPolicy();
+    for (let i = 0; i < 4; i++) policy.sample(1_200_000, true);
+    policy.sample(1_600_000, true);
+    for (let i = 0; i < 4; i++) expect(policy.sample(1_200_000, true)).toBe(true);
+  });
+
+  it("requires five consecutive healthy samples to restore the half-size layer", () => {
     const policy = new CameraUplinkPolicy();
     for (let i = 0; i < 4; i++) expect(policy.sample(2_000_000, false)).toBe(false);
     expect(policy.sample(2_000_000, false)).toBe(true);

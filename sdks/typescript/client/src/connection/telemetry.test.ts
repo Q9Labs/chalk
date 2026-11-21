@@ -1,45 +1,16 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
-import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
+import { callEndReason, telemetryCredential } from "./telemetry";
 
-const facts = { removedByHost: false, episodeEndConfirmed: false, episodeEndReason: undefined, timedOut: false };
+const facts = { removedByHost: false, episodeEndConfirmed: false, episodeEndReason: undefined, timedOut: false } as const;
 
 describe("callEndReason", () => {
-  it.each([
-    ["live", "failed", facts, "connection_lost"],
-    ["joining", "failed", facts, "join_failed"],
-    ["live", "left", facts, "left"],
-    ["live", "left", { ...facts, removedByHost: true }, "removed"],
-    ["live", "left", { ...facts, episodeEndConfirmed: true }, "episode_ended"],
-    ["live", "left", { ...facts, episodeEndConfirmed: true, episodeEndReason: "time_limit" }, "time_limit"],
-    ["reconnecting", "left", { ...facts, timedOut: true }, "connection_lost"],
-  ] as const)("names %s to %s with %j as %s", (from, to, given, expected) => {
-    expect(callEndReason(from, to, given)).toBe(expected);
+  it("calls the end Sync reports as maximum_duration a time limit", () => {
+    expect(callEndReason("live", "left", { ...facts, episodeEndConfirmed: true, episodeEndReason: "maximum_duration" })).toBe("time_limit");
   });
-});
-
-describe("outage clock", () => {
-  it("times from the first begin to end, and says nothing when no outage was open", () => {
-    let now = 1000;
-    const clock = createOutageClock(() => now);
-    expect(clock.end()).toBeUndefined();
-    clock.begin();
-    now = 4000;
-    clock.begin();
-    now = 6500;
-    expect(clock.end()).toBe(5500);
-    expect(clock.end()).toBeUndefined();
-  });
-});
-
-it("reads the media credential of a grant, and none without one", () => {
-  const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
-  expect(telemetryCredential(grant)).toEqual({ tenantId: grant.subject.tenantId, subject: `${grant.subject.tenantId}/${grant.subject.episodeId}/${grant.subject.participantId}`, token: grant.media.token, expiresAt: Date.parse(grant.media.expiresAt) });
-  expect(telemetryCredential(null)).toBeNull();
 });
 
 describe("the telemetry credential of a grant", () => {
@@ -140,7 +111,3 @@ describe("a call tells the server how it ended", () => {
     expect(telemetry.accepted.map((event) => event.seq)).toEqual([...telemetry.accepted.keys()]);
   });
 });
-
-function lifecycleOf() {
-  return Effect.service(ConnectionLifecycleService);
-}

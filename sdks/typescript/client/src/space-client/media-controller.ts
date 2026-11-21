@@ -12,14 +12,13 @@ import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
-import { structurallyEqual } from "./structural-equal";
+import { MEDIA_SOURCES, confirmedLocalMediaState, livePublication, pausedPublicationIds, sameMediaSlice, screenLocalMedia } from "./media-snapshot";
 import { makeScopedFork, type ScopedFork } from "./scoped-fork";
 import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
-const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions, SpaceSnapshot } from "./types";
 const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
@@ -164,6 +163,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #now: () => number;
   readonly #fork: ScopedFork<Clock.Clock>;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
+  #microphoneSwitchRevision: number | undefined;
+  #microphoneNoiseSuppression: MediaTrackConstraints["noiseSuppression"];
   readonly #idleReleases = new Map<"microphone" | "camera", unknown>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
@@ -240,10 +241,37 @@ class MediaControllerRuntime implements MediaControllerEffects {
   captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
-    Effect.sync(() => {
+    Effect.suspend(() => {
+      const snapshot = this.#store.getSnapshot();
+      const state = this.#sources.microphone;
+      const revision = state.desired.revision;
+      const sameDevice = snapshot.media.selection.microphone === deviceId;
+      // Retry the same failed live switch, but never after a newer on/off intent.
+      const retry = sameDevice && this.#microphoneSwitchRevision === revision && state.result.revision === revision && state.result.status === "failed";
+      if (sameDevice && !retry) return Effect.void;
       this.#selection.selectCapture("microphone", deviceId);
       this.#store.select("microphone", deviceId);
+      if (!sameDevice) this.#microphoneSwitchRevision = undefined;
+      return this.#applyMicrophoneSelection(snapshot, revision, retry);
     }).pipe(Effect.mapError(normalizeMediaError));
+  #applyMicrophoneSelection(snapshot: SpaceSnapshot, revision: number, retry: boolean): ClientEffect<void> {
+    const consent = this.#hasConsent("microphone");
+    const active = consent && (snapshot.media.local.microphone.state === "enabled" || this.#pendingSources.has("microphone"));
+    const switching = snapshot.connection.status === "live" && (active || retry);
+    if (!switching && consent) return Effect.void;
+    this.#releaseSelectedMicrophone();
+    if (!switching) return Effect.void;
+
+    // The old device is gone. Handle a failed acquire like a failed turn-on, not like an edit to a live source.
+    this.#sources.microphone.localEnabled = false;
+    return this.#act("microphone", true, undefined, { revision, retry });
+  }
+  #releaseSelectedMicrophone(): void {
+    const track = this.#track("microphone");
+    if (!track) return;
+    this.#microphoneNoiseSuppression = track.getConstraints?.().noiseSuppression ?? this.#microphoneNoiseSuppression;
+    this.#selection.releaseTrack(track);
+  }
   selectCamera = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
       const changed = this.#store.getSnapshot().media.selection.camera !== deviceId;
@@ -510,25 +538,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
     for (const check of this.#readinessChecks) check();
     return desired;
   }
-  #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
+  #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions, microphoneSwitch?: { revision: number; retry: boolean }): ClientEffect<void> {
     return Effect.suspend(() => {
       if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
+      if (microphoneSwitch && (this.#sources.microphone.desired.revision !== microphoneSwitch.revision || (!microphoneSwitch.retry && !this.#hasConsent("microphone")))) return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
+      if (microphoneSwitch) this.#microphoneSwitchRevision = desired.revision;
       if (!enabled) this.#sources[source].offDebt = "owed";
       else this.#cancelOffRetry(source);
-      const ready =
-        enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
-          ? this.#awaitLive(source, desired.revision).pipe(
-              Effect.tapError((cause) =>
-                Effect.sync(() => {
-                  if (this.#sources[source].desired.revision === desired.revision) {
-                    const cancelled = this.#recordIntent(source, false);
-                    this.#sources[source].result = { revision: cancelled.revision, status: "failed", cause, cleanup: false };
-                  }
-                }),
-              ),
-            )
-          : Effect.void;
+      const ready = this.#awaitDeviceIntent(source, desired);
       return this.#pending(
         source,
         ready.pipe(
@@ -550,6 +568,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       );
     }).pipe(Effect.mapError(normalizeMediaError));
+  }
+  #awaitDeviceIntent(source: MediaSource, desired: MediaIntent): ClientEffect<void> {
+    if (!desired.enabled || source === "screen" || this.#store.getSnapshot().connection.status === "live") return Effect.void;
+    return this.#awaitLive(source, desired.revision).pipe(
+      Effect.tapError((cause) =>
+        Effect.sync(() => {
+          if (this.#sources[source].desired.revision !== desired.revision) return;
+          const cancelled = this.#recordIntent(source, false);
+          this.#sources[source].result = { revision: cancelled.revision, status: "failed", cause, cleanup: false };
+        }),
+      ),
+    );
   }
   #work(source: MediaSource): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
@@ -1329,8 +1359,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
+    const noiseSuppression = this.#microphoneNoiseSuppression;
+    const audio = source === "microphone" && (noiseSuppression === undefined ? true : { noiseSuppression });
     return this.#captureStream(
-      (captureSignal) => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, source)),
+      (captureSignal) => this.#selection.getUserMedia({ audio, video: source === "camera" }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, source)),
       (stream) =>
         this.#refreshDevices().pipe(
           Effect.ignore,
@@ -1708,21 +1740,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!sameMediaSlice(current.media, media)) this.#store.update("media", media);
   }
 }
-function pausedPublicationIds(snapshot: ConnectionMediaSnapshot | undefined): ReadonlySet<string> {
-  return new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
-}
-function liveTrack(track: MediaStreamTrack): boolean {
-  return track.enabled && track.readyState === "live" && !track.muted;
-}
-function livePublication(publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
-  return !!publication?.enabled && liveTrack(publication.track);
-}
-function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boolean, pending: boolean, confirmed: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource]["state"] {
-  if (!desired) return convergence === "failed" ? "failed" : "disabled";
-  if (convergence) return convergence;
-  if (!live && track && liveTrack(track)) return "requesting";
-  return confirmed ? "enabled" : pending ? "requesting" : "disabled";
-}
 /** Sync answered the on with a refusal; a lost connection, a left call or a timeout is not one. */
 function refusedBySync(cause: unknown): boolean {
   return cause instanceof V1SyncError && cause.code === "terminal_failure";
@@ -1744,33 +1761,6 @@ function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"micro
   releaseTracks(devices, complete ? unused : [...unused, ...retained]);
   if (!complete) throw new TypeError("Media capture did not return every requested track");
   return selected;
-}
-function screenLocalMedia(track: MediaStreamTrack | null, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
-  if (snapshot?.connection.phase === "stopped") return Object.freeze({ source: "screen", state: "unavailable", track: null });
-  const publication = snapshot?.localTracks.find((candidate) => candidate.source === "screen");
-  return Object.freeze({ source: "screen", state: pending ? "requesting" : screenLocalMediaState(track, publication?.enabled, connectionState), track });
-}
-function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"]["screen"]["state"] {
-  if (enabled === false) {
-    if (track?.enabled === false || connectionState === "live") return "disabled";
-  }
-  if (enabled) return "enabled";
-  if (track) return "requesting";
-  return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
-}
-function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
-  if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;
-  for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && structurallyEqual(left.remote, right.remote) && structurallyEqual(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
-}
-function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean {
-  return left?.tier === right?.tier && left?.reason === right?.reason;
-}
-function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
-  return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
-}
-function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
-  return left.source === right.source && left.state === right.state && left.track === right.track;
 }
 function mediaDevicesOfKind(devices: readonly MediaDeviceInfo[], kind: MediaDeviceKind): MediaSlice["devices"]["microphones"] {
   return Object.freeze(devices.filter((device) => device.kind === kind).map((device) => Object.freeze({ deviceId: device.deviceId, label: device.label })));

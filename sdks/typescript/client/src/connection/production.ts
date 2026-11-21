@@ -84,7 +84,6 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
       episodeId: subject.episodeId,
       participantId: subject.participantId,
       // The grant decides, so an older API without the capability keeps the per-operation routes.
-      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       // The grant advertises the direct door; the Tunnel (apiBaseURL) stays the fallback, and `off` keeps every call on it.
       ...(directPath === "auto" && bootstrap.capabilities?.directSignalingUrl ? { directBaseURL: bootstrap.capabilities.directSignalingUrl } : {}),
       ...(input.onTransportPath ? { onPath: input.onTransportPath } : {}),

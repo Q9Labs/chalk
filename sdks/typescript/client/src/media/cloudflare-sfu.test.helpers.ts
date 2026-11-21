@@ -1,6 +1,6 @@
 import { afterEach, vi } from "vitest";
 import type { TransportDiagnostic } from "../transport-diagnostics";
-import { CloudflareSFUClient, CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import { CloudflareSFUClient, CloudflareSFUError } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 /** The part of a fake peer connection that the fake transport drives when the SFU hands out a remote track. */
@@ -42,7 +42,6 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
     readonly force: boolean;
   }[] = [];
-  blockPublicationList = false;
   listSubscriptions: CloudflareSFUSignalingTransport["listSubscriptions"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
@@ -53,8 +52,6 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
   failCloseCount = 0;
   readonly omittedRemoteTrackNames = new Set<string>();
   readonly failedRemoteTrackNames = new Map<string, string>();
-  readonly #withdrawnRemoteTrackKeys = new Set<string>();
-  readonly #withdrawnLocalPublications = new Set<string>();
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
   readonly remotePullFailures: unknown[] = [];
@@ -65,17 +62,13 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
   readonly publicationListSnapshots: CloudflareSFUPublicationSnapshot[] = [];
   maxLocalMids: number | null = null;
   snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
-  readonly #blockedConnections = new Map<string, () => void>();
   readonly #localMids = new Set<string>();
-  readonly #publicationListResolvers: (() => void)[] = [];
   readonly #peer: () => TransportPeer | undefined;
   constructor(peer: () => TransportPeer | undefined) {
     this.#peer = peer;
   }
   async addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
     this.addInputs.push(input);
-    const unblock = this.#blockedConnections.get(input.connectionId);
-    if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     return input.tracks.some((track) => track.location === "remote") ? this.#pullRemote(input) : this.#publishLocal(input);
   }
   #throwQueuedRemotePullFailure(): void {
@@ -107,12 +100,9 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   #pullRemote(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): CloudflareSFUTracksResponse {
     this.#throwQueuedRemotePullFailure();
-    const withdrawn = (track: { readonly sessionId?: string; readonly trackName: string }) => this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`);
-    const tracks = input.tracks
-      .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !withdrawn(track))
-      .map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
+    const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
     const trackErrors = input.tracks.flatMap((track) => {
-      const code = this.failedRemoteTrackNames.get(track.trackName) ?? (withdrawn(track) ? "publication_unavailable" : undefined);
+      const code = this.failedRemoteTrackNames.get(track.trackName);
       return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
     });
     if (this.reverseRemoteTracks) tracks.reverse();
@@ -135,7 +125,6 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     for (const track of tracks) {
       if (!track.source) continue;
       this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
-      this.#withdrawnLocalPublications.delete(track.publicationId);
       this.#localPublicationRevision++;
     }
     return {
@@ -150,22 +139,10 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
       this.failCloseCount--;
       throw new CloudflareSFUError("close unavailable", "signaling_failed", { status: 503 });
     }
-    if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
-      throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
-    }
     for (const track of input.tracks) {
       if (this.localPublications.delete(track.publicationId)) this.#localPublicationRevision++;
     }
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
-  }
-  withdrawPublication(publicationId: string): void {
-    const publication = this.localPublications.get(publicationId);
-    if (!publication) return;
-    const { connectionId, trackName } = parseCloudflareSFUPublicationID(publicationId);
-    this.localPublications.delete(publicationId);
-    this.#localPublicationRevision++;
-    this.#withdrawnLocalPublications.add(publicationId);
-    this.#withdrawnRemoteTrackKeys.add(`${connectionId}|${trackName}`);
   }
   readonly updateInputs: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0][] = [];
   failTrackUpdates = false;
@@ -188,36 +165,13 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     this.renegotiateInputs.push(input);
     if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
   }
-  pullPublishedCalls = 0;
-  async pullPublishedAudio(input: { readonly connectionId: string }): ReturnType<NonNullable<CloudflareSFUSignalingTransport["pullPublishedAudio"]>> {
-    this.pullPublishedCalls++;
-    const snapshot = this.#currentSnapshot();
-    const audio = snapshot.publications.filter((publication) => publication.participantId !== "participant-1" && (publication.source === "microphone" || publication.source === "screen_audio"));
-    if (audio.length === 0) return { snapshot, response: {} };
-    const tracks = audio.map((publication): CloudflareSFUTrackRequest => {
-      const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
-      return { location: "remote", sessionId: connectionId, trackName };
-    });
-    return { snapshot, response: await this.addTracks({ connectionId: input.connectionId, tracks, allowPartialRemoteTracks: true }) };
-  }
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
     this.listPublicationCalls++;
     const next = this.publicationListSnapshots.shift();
-    if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
     return next ?? this.#currentSnapshot();
   }
   #currentSnapshot(): CloudflareSFUPublicationSnapshot {
     return { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
-  }
-  blockConnection(connectionId: string): void {
-    this.#blockedConnections.set(connectionId, () => undefined);
-  }
-  releaseConnection(connectionId: string): void {
-    this.#blockedConnections.get(connectionId)?.();
-    this.#blockedConnections.delete(connectionId);
-  }
-  releasePublicationList(): void {
-    this.#publicationListResolvers.shift()?.();
   }
 }
 export class FakeTrack extends EventTarget {
@@ -252,19 +206,6 @@ export class FakeTrack extends EventTarget {
     this.readyState = "ended";
     this.dispatchEvent(new Event("ended"));
   }
-}
-
-export function receiverExpired(status = 410): CloudflareSFUError {
-  return new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: true });
-}
-
-/** Rejects every addTracks request that `shouldFail` accepts with a fresh `error()` and passes the rest to the fake. */
-export function failAddTracks(transport: FakeTransport, shouldFail: (input: Parameters<FakeTransport["addTracks"]>[0]) => boolean, error: () => Error): void {
-  const addTracks = transport.addTracks.bind(transport);
-  vi.spyOn(transport, "addTracks").mockImplementation(async (input) => {
-    if (shouldFail(input)) throw error();
-    return addTracks(input);
-  });
 }
 
 export interface HarnessOptions extends Pick<ConstructorParameters<typeof CloudflareSFUClient>[0], "telemetry"> {

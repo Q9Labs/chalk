@@ -1,5 +1,7 @@
 # Flow 2: a student joins
 
+> Persona note: "teacher", "student", "class" and "the host" are an illustrative classroom scenario; the product roles are owner, collaborator and observer. See [the statecharts index](../README.md).
+
 A student opens an invite link, waits for the host when the room needs approval, joins, and may reload the page in the call. `StudentJoins.tla` is the TLA+ model, `StudentJoins.cfg` lists the rules TLC checks, `StudentJoins.view.mjs` gives the chart its words, `chart.mmd` is the Mermaid text and `chart.svg` is the rendered chart. The header of `StudentJoins.tla` names the code that each step mirrors.
 
 Make the files again with the `/statechart` skill from this folder, then render `chart.mmd` with `pele@1.9.0` as the skill's render reference describes. Use a new `OUT` folder outside the repo and copy `chart.mmd` here.

@@ -17,6 +17,8 @@ export function identityPaths(config) {
     apiKey: join(root, "api-server-key.pem"),
     syncCertificate: join(root, "sync-client.pem"),
     syncKey: join(root, "sync-client-key.pem"),
+    sfuCertificate: join(root, "sfu-server.pem"),
+    sfuKey: join(root, "sfu-server-key.pem"),
   };
 }
 

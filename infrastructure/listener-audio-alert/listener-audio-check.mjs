@@ -107,7 +107,16 @@ export async function readSignals({ fetchImpl = fetch, token, dataset, startTime
   } catch {
     throw new Error("Axiom query request failed");
   }
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}`);
+  if (!response.ok) {
+    // Axiom answers a bad query with a JSON reason. Keep the first line only: the rest echoes the submitted APL.
+    let reason = "";
+    try {
+      const body = JSON.parse(await response.text());
+      const raw = body?.detail?.message ?? body?.message;
+      if (typeof raw === "string") reason = raw.split("\n", 1)[0].replaceAll(dataset, "<dataset>").replaceAll(token, "<token>").slice(0, 200);
+    } catch {}
+    throw new Error(`Axiom query answered HTTP ${response.status}${reason ? `: ${reason}` : ""}`);
+  }
   let body;
   try {
     body = await response.json();

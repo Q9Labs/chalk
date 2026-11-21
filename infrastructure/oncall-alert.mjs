@@ -10,5 +10,7 @@ export async function postToOncall({ fetchImpl, url, incidents, drill }) {
   } catch {
     throw new Error("Oncall webhook request failed");
   }
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  // T3 answers 409 when the Oncall task is disabled: nothing is listening, and no incident is open.
+  // The status alone names it, so a refusal never waits on its body.
+  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}${response.status === 409 ? " (the Oncall task is disabled)" : ""}`);
 }

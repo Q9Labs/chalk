@@ -27,6 +27,8 @@ import { useConnectionPhase } from "../connection-status/use-connection-phase";
 import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
 import { useHeldWhile } from "../../internal/useHeldWhile";
 import { useSeenConnected } from "../../internal/useSeenConnected";
+import { useMicrophoneNotice } from "./useMicrophoneNotice";
+import { useBoardNotices } from "./useBoardNotices";
 import { useCallToasts } from "../toast-stack/useCallToasts";
 import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
@@ -34,7 +36,7 @@ import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { NoticeButton } from "../toast-stack/NoticeButton";
-import { BoardToastContext, type BoardToast } from "@q9labsai/chalk-whiteboard/react";
+import { BoardToastContext } from "@q9labsai/chalk-whiteboard/react";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "../stage/SpaceStage";
@@ -153,6 +155,7 @@ export function SpaceView({
   const participantsSlice = useHeldWhile(useParticipants(), connectionLost);
   const callLink = useCallLink(participantsSlice.roster.length <= 1);
   const media = useHeldWhile(useMedia(), connectionLost);
+  const microphoneNotice = useMicrophoneNotice(connection.status, media.local.microphone);
   const mediaRequest = media.incomingRequests[0];
   const offline = useOffline();
   const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
@@ -287,40 +290,27 @@ export function SpaceView({
       ? null
       : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
-  const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
-  const boardToastCount = useRef(0);
-  const [previousBoardOpen, setPreviousBoardOpen] = useState(whiteboard?.isOpen);
-  if (previousBoardOpen !== whiteboard?.isOpen) {
-    setPreviousBoardOpen(whiteboard?.isOpen);
-    if (!whiteboard?.isOpen) setBoardToasts([]);
-  }
-  const showBoardToast = useCallback((toast: BoardToast | null) => {
-    if (!toast) {
-      setBoardToasts([]);
-      return;
-    }
-    boardToastCount.current += 1;
-    const id = `board-${boardToastCount.current}`;
-    setBoardToasts((current) => [...current.slice(-2), { ...toast, id }]);
-  }, []);
+  const { boardToasts, showBoardToast, dismissBoardToast } = useBoardNotices(whiteboard?.isOpen);
   const dismissCommandError = () => {
     if (commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(null);
     onDismissCommandError?.();
   };
   const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: Infinity, message: `${callLimitMessage(limitWarning.minutes)} ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
-  const toasts = [
+  const toasts: Toast[] = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
+    ...microphoneNotice.toasts,
   ];
   const dismissToast = (id: string) => {
     if (id.startsWith("time-limit-")) setLimitWarning(null);
     else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
-    else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
+    else if (id === microphoneNotice.id) microphoneNotice.dismiss();
+    else if (id.startsWith("board-")) dismissBoardToast(id);
     else callToasts.dismiss(id);
   };
   const [foldedNotices, setFoldedNotices] = useState<readonly string[]>([]);
@@ -410,6 +400,7 @@ export function SpaceView({
                   callLinkOpen={callLinkOpen ?? callLink.open}
                   onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
                   buttons={buttons}
+                  microphonePicker={microphoneNotice.picker}
                   activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                   onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                   onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}

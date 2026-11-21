@@ -147,7 +147,9 @@ func (c *captureTrackClock) normalize(packet *rtp.Packet, kind captureplane.Trac
 			break
 		}
 	}
-	media := c.baseMS + ticks*1000/rate + correction
+	// Bundle bounds are whole milliseconds, but RTP retains fractional time.
+	// Round the bound up so the frozen presentation covers the packet's start.
+	media := c.baseMS + (ticks*1000+rate-1)/rate + correction
 	timestamp := uint32(c.baseMS*rate/1000) + uint32(ticks) + uint32(correction*rate/1000)
 	return media, timestamp
 }

@@ -11,6 +11,7 @@ name: Boot smoke
 on:
   merge_group:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - scripts/dev/**
       - .agents/skills/verify-chalk/**
@@ -23,12 +24,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: boot-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: boot-smoke-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
     name: Select boot smoke
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:

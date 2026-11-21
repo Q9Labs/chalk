@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "off"
+  },
+  "rules": {
+    "no-debugger": "error",
+    "no-eval": "error",
+    "no-empty": [
+      "error",
+      {
+        "allowEmptyCatch": true
+      }
+    ],
+    "no-var": "error",
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "no-dupe-keys": "error",
+    "no-unreachable": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.{ts,tsx,mjs,js}"],
+      "plugins": ["vitest"],
+      "rules": {
+        "vitest/no-focused-tests": "error",
+        "vitest/no-disabled-tests": "error",
+        "vitest/no-commented-out-tests": "error",
+        "vitest/no-identical-title": "error",
+        "vitest/expect-expect": [
+          "error",
+          {
+            "assertFunctionNames": [
+              "expect",
+              "expectTypeOf",
+              "assert",
+              "assertType",
+              "expectAcknowledgedEnd",
+              "expectCode",
+              "expectExplicitMuteToKeepBundleTransport",
+              "expectMessage",
+              "expectOutcome",
+              "expectStalledRequestRecovers",
+              "exerciseConflictingControlEvidence",
+              "unmuteDuringSwap",
+              "runProof"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/scripts/call-performance-measure.mjs"],
+      "rules": {
+        "no-empty": "off"
+      }
+    }
+  ]
+}

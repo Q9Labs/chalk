@@ -36,6 +36,7 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache: false
+      - uses: ./.github/actions/setup-scanners
       - name: Scan every OSV finding
         id: osv
         continue-on-error: true

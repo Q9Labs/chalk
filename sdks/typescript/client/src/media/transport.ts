@@ -9,16 +9,14 @@ import * as apiUrls from "../api-urls";
 import { trimTrailingSlashes } from "../urls";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
-/** One SFU signaling call. The per-operation routes carry it in the URL; the unified `signal` route carries it in the body. */
 type SignalOp = "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
-/** Method, per-operation path and failure step of each call. */
-const ROUTES: Readonly<Record<SignalOp, readonly ["GET" | "POST" | "PUT", string, MediaFailureStep]>> = {
-  publications: ["GET", "publications", "sfu_publications"],
-  subscriptions: ["GET", "subscriptions", "sfu_subscriptions"],
-  tracks: ["POST", "tracks", "sfu_tracks"],
-  tracks_close: ["PUT", "tracks/close", "sfu_close_tracks"],
-  tracks_update: ["PUT", "tracks/update", "sfu_tracks"],
-  renegotiate: ["POST", "renegotiate", "sfu_renegotiate"],
+const FAILURE_STEPS: Readonly<Record<SignalOp, MediaFailureStep>> = {
+  publications: "sfu_publications",
+  subscriptions: "sfu_subscriptions",
+  tracks: "sfu_tracks",
+  tracks_close: "sfu_close_tracks",
+  tracks_update: "sfu_tracks",
+  renegotiate: "sfu_renegotiate",
 };
 /** The calls that change nothing, so a second send cannot do harm. The unified route carries them as POST, so the operation decides, not the method. */
 const READS: ReadonlySet<SignalOp> = new Set(["publications", "subscriptions"]);
@@ -64,27 +62,16 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       if (op) notifyObserver(() => performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } }));
     }
   };
-  /**
-   * Sends one signaling call. `query` holds the options the per-operation tracks route reads from its query string;
-   * the unified route reads them from the body. The unified route is used only when the API advertised it for this connection.
-   */
-  const request = async <T>(op: SignalOp, body?: Readonly<Record<string, unknown>>, query: Readonly<Record<string, string | true>> = {}): Promise<T> => {
+  const request = async <T>(op: SignalOp, fields?: Readonly<Record<string, unknown>>): Promise<T> => {
     try {
       let token = await freshToken(op);
-      const [method, path] = ROUTES[op];
-      const targetAt = (origin: string) => {
-        const mediaPath = apiUrls.mediaSignalling(origin, subject);
-        return options.unifiedSignaling
-          ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
-          : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };
-      };
+      const body = JSON.stringify({ op, ...fields });
       const send = (origin: string): Promise<T> =>
         withDeadline(timeoutMs, async (signal) => {
-          const target = targetAt(origin);
           const startedAt = performance.now();
-          const response = await fetch(target.url, {
-            method: target.method,
-            ...(target.body === undefined ? {} : { body: target.body }),
+          const response = await fetch(`${apiUrls.mediaSignalling(origin, subject)}/signal`, {
+            method: "POST",
+            body,
             signal,
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}) },
           }).catch((error: unknown) => {
@@ -129,24 +116,26 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       announce("tunnel", direct !== null);
       return await sendWithRegrant(base);
     } catch (error) {
-      markMediaFailure(error, ROUTES[op][2]);
+      markMediaFailure(error, FAILURE_STEPS[op]);
       throw error;
     }
   };
   return {
     addTracks: async (input) => {
-      const response = await request<TracksWireResponse>(
-        "tracks",
-        { connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks },
-        { ...(input.allowPartialRemoteTracks ? { allow_partial_remote_tracks: true as const } : {}), ...(input.replacementCause ? { replacement_cause: input.replacementCause } : {}) },
-      );
+      const response = await request<TracksWireResponse>("tracks", {
+        connection_id: input.connectionId,
+        session_description: input.sessionDescription,
+        tracks: input.tracks,
+        ...(input.allowPartialRemoteTracks ? { allow_partial_remote_tracks: true } : {}),
+        ...(input.replacementCause ? { replacement_cause: input.replacementCause } : {}),
+      });
       return tracksResponse(response);
     },
     closeTracks: async (input) =>
       request<CloudflareSFUTracksResponse>("tracks_close", {
         connection_id: input.connectionId,
         session_description: input.sessionDescription,
-        tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
+        close_tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
         force: input.force,
         ...(input.receiveOnly ? { receive_only: true } : {}),
       }),
@@ -184,7 +173,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     },
     listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
     pullPublishedAudio: async (input) => {
-      const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks", { connection_id: input.connectionId, tracks: [], pull_published_audio: true }, { allow_partial_remote_tracks: true });
+      const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks", { connection_id: input.connectionId, tracks: [], pull_published_audio: true, allow_partial_remote_tracks: true });
       if (!publications) throw new CloudflareSFUError("The pull-published response carried no publications", "signaling_failed");
       return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };
     },
@@ -234,12 +223,6 @@ function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublic
       ...(publication.paused ? { paused: true } : {}),
     })),
   };
-}
-/** The unified route names the close list `close_tracks`, because `tracks` there is the list of tracks to add or update. */
-function unifiedBody(op: SignalOp, body: Readonly<Record<string, unknown>> | undefined): Readonly<Record<string, unknown>> | undefined {
-  if (op !== "tracks_close" || !body) return body;
-  const { tracks, ...rest } = body;
-  return { ...rest, close_tracks: tracks };
 }
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {
   const controller = new AbortController();

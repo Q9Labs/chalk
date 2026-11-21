@@ -174,30 +174,7 @@ func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[down
 }
 
 func requireChatParticipant(verifier ChatParticipantVerifier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-			if verifier == nil {
-				writeServiceUnavailable(response)
-				return
-			}
-			token, ok := bearerToken(request.Header.Get("Authorization"))
-			if !ok {
-				writeUnauthenticated(response)
-				return
-			}
-			subject, valid, err := verifier.VerifyParticipant(request.Context(), token)
-			if err != nil {
-				writeServiceUnavailable(response)
-				return
-			}
-			if !valid {
-				writeUnauthenticated(response)
-				return
-			}
-			ctx := context.WithValue(request.Context(), chatSubjectContextKey{}, subject)
-			next.ServeHTTP(response, request.WithContext(ctx))
-		})
-	}
+	return requireSyncParticipant(verifier, chatSubjectContextKey{})
 }
 
 func decodeInitiateChatAttachmentRequest(request *http.Request) (initiateChatAttachmentRequest, error) {

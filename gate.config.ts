@@ -41,11 +41,16 @@ function chalkPlan(context: GateContext) {
   return createGatePlan([...context.allChangedFiles], gatePlanOptions(context));
 }
 
+// An exclusive lane runs alone: it binds a port, writes a shared output (build artifacts, packed tarballs), or
+// saturates the machine (vitest workers, the dashboard stack). Every other lane only reads the worktree and git
+// state or writes to its own temp dir, so the checks group runs it through the worker pool.
+const exclusiveLaneIds = new Set(["services", "tests", "browser-tests", "camera-proof", "dashboard-engine", "dashboard-refresh", "board-local", "sfu", "call-leaks", "build", "call-performance", "publint", "attw"]);
+
 const chalkLanes = taskIds.map((id) =>
   lanes.custom({
     id,
     title: `Chalk ${id}`,
-    exclusive: true,
+    exclusive: exclusiveLaneIds.has(id),
     triggers: alwaysTaskIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
@@ -79,7 +84,8 @@ export default defineGate({
     infra: ["infrastructure/"],
     contract: ["contract/"],
   },
-  concurrency: 1,
+  // CI runs three lanes at once; commit.mjs --local sets GATE_LANE_CONCURRENCY=1 so a small machine stays serial.
+  concurrency: Number(process.env.GATE_LANE_CONCURRENCY ?? 3),
   // CI sets GATE_LANE_GROUP to run one lane group per job.
   lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." }), lanes.designTokens(designTokenOptions)], process.env.GATE_LANE_GROUP),
 });

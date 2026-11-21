@@ -19,8 +19,6 @@ name: Gate
 # Two sizes: the API gate and the browser-tests lane use that label (Instabox 4x8, $0.034 an hour). Every other job uses
 # CHALK_GATE_RUNNER_SMALL (Instabox 2x4, $0.017 an hour; every lane but those two peaked between 0.5 and 3.1 GB of its 3.9 GB on 15 Nov 2026), and
 # CHALK_GATE_RUNNER when that is empty. A manual run's runner_small input does the same for that run; runner alone sends every job to one label.
-# Only so many pull requests against master are ready at once (scripts/gates/ready-cap.mjs). Ready cap runs first when a
-# pull request is marked ready; over the cap it comments, Select gate jobs stands down, and Root gate fails until the pull request is a draft again.
 
 on:
   pull_request:
@@ -59,44 +57,9 @@ env:
   PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
 
 jobs:
-  # Pushes to a ready pull request are not counted again: only the moment it becomes ready is. If this job fails (an API error),
-  # Select gate jobs still runs, so a broken cap never stops the Gate.
-  ready-cap:
-    name: Ready cap
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft != true && contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action) }}
-    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner_small || inputs.runner || vars.CHALK_GATE_RUNNER && (vars.CHALK_GATE_RUNNER_SMALL || vars.CHALK_GATE_RUNNER)) || 'ubuntu-slim' }}
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: write
-    outputs:
-      capped: ${{ steps.cap.outputs.capped }}
-    steps:
-      - name: Check out the cap script
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: |
-            .tool-versions
-            scripts/gates/ready-cap.mjs
-
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: .tool-versions
-
-      - name: Refuse the pull request when too many are ready
-        id: cap
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHALK_READY_CAP: ${{ vars.CHALK_READY_CAP }}
-        run: node scripts/gates/ready-cap.mjs --pr "${{ github.event.pull_request.number }}" --enforce
-
   changes:
     name: Select gate jobs
-    needs: ready-cap
-    # always(), not !cancelled(): cancelling a run while Ready cap is still queued must not skip selection, because a skipped
-    # selection skips every required job, and a skipped required job counts as passed.
-    if: ${{ always() && github.event.pull_request.draft != true && needs.ready-cap.outputs.capped != 'true' }}
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner_small || inputs.runner || vars.CHALK_GATE_RUNNER && (vars.CHALK_GATE_RUNNER_SMALL || vars.CHALK_GATE_RUNNER)) || 'ubuntu-slim' }}
     timeout-minutes: 10
     permissions:
@@ -130,6 +93,7 @@ jobs:
           exit 1
       # A fetch that stalls on GitHub's side would hold the job until its timeout (one merge group lost 27 minutes that way).
       # The first attempt fails after 3 minutes without failing the job; the second attempt is the same checkout again.
+      # Blobless: the diff and merge-base walk only commits and trees, so no blob leaves GitHub until a lane reads it.
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,6 +101,7 @@ jobs:
         continue-on-error: true
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
@@ -144,6 +109,7 @@ jobs:
         timeout-minutes: 3
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -202,11 +168,8 @@ jobs:
     timeout-minutes: ${{ fromJSON(needs.changes.outputs.group_timeouts || '{}')[matrix.group] || 57 }}
     strategy:
       fail-fast: false
-      # One run holds at most eight root runners, so a full run takes 10 of the organisation's 20 hosted-runner slots
-      # (eight root groups, API and Sync). Four left the last groups of a full run waiting 6 to 10 minutes for a slot
-      # while the slots were free (runner queue was under 10 seconds for the first four), and the work is the same
-      # whichever order it runs in. The matrix lists the slowest groups first so they start first.
-      max-parallel: 8
+      # Allow all 10 root groups to start together so build and call-leaks-3 do not stall 3 to 4 minutes behind a smaller cap.
+      max-parallel: 10
       matrix:
         group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
@@ -233,6 +196,7 @@ jobs:
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
+      # Blobless: gitleaks fetches only the blobs its commit range touches, and osv lazily fetches the base tree it diffs.
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,6 +204,7 @@ jobs:
         continue-on-error: true
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
@@ -247,6 +212,7 @@ jobs:
         timeout-minutes: 3
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - uses: ./.github/actions/setup-js
 
@@ -293,9 +259,6 @@ jobs:
             ~/go/pkg/mod
           key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
           restore-keys: go-root-checks-${{ runner.os }}-
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
 
       # The Sync model check (formal-sync) needs Java and the SFU promotion tests need gpg. The hosted image has both; the Instabox snapshot has neither.
       - name: Install Java and gpg for the checks lane
@@ -382,30 +345,25 @@ jobs:
         with:
           name: scorecard-${{ matrix.group == 'build' && 'web' || 'sfu' }}
           path: artifacts/scorecard-*.json
+          overwrite: true
           if-no-files-found: ignore
 
       - name: Save leak shard report
         if: always() && startsWith(matrix.group, 'call-leaks-')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.group }}
+          name: ${{ matrix.group }}-attempt-${{ github.run_attempt }}
           path: artifacts/${{ matrix.group }}.json
+          overwrite: true
           if-no-files-found: error
 
   root:
     name: Root gate
-    needs: [ready-cap, changes, root-lanes]
-    if: ${{ always() && (needs.changes.result != 'skipped' || needs.ready-cap.outputs.capped == 'true') }}
+    needs: [changes, root-lanes]
+    if: ${{ always() && needs.changes.result != 'skipped' }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner_small || inputs.runner || vars.CHALK_GATE_RUNNER && (vars.CHALK_GATE_RUNNER_SMALL || vars.CHALK_GATE_RUNNER)) || 'ubuntu-slim' }}
     timeout-minutes: 10
     steps:
-      # A skipped required job counts as passed, so a pull request over the cap must fail here, not just skip the Gate.
-      - name: Refuse a pull request over the ready cap
-        if: needs.ready-cap.outputs.capped == 'true'
-        run: |
-          echo "::error title=Over the ready cap::Too many pull requests are ready against master. Run 'gh pr ready --undo ${{ github.event.pull_request.number }}' and see the Ready cap comment."
-          exit 1
-
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -427,8 +385,8 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: call-leaks-*
-          path: artifacts
-          merge-multiple: true
+          path: artifacts/leak-shards
+          merge-multiple: false
 
       - name: Require complete leak journey coverage
         if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
@@ -436,14 +394,7 @@ jobs:
           LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
           ROOT_LANES_RESULT: ${{ needs.root-lanes.result }}
         run: |
-          missing=0
-          for shard in 1 2 3; do
-            if [[ ! -f "artifacts/call-leaks-${shard}.json" ]]; then
-              echo "::error::Shard call-leaks-${shard} left no report. Its job was never created, or it failed before it saved one (root lane groups: ${ROOT_LANES_RESULT})."
-              missing=1
-            fi
-          done
-          [[ "${missing}" == "0" ]]
+          node scripts/gates/select-leak-shards.mjs artifacts/leak-shards artifacts
           node --input-type=module <<'JS'
           const shards = JSON.parse(process.env.LEAK_GROUPS).filter((group) => group.startsWith("call-leaks-"));
           if (shards.length && JSON.stringify(shards.sort()) !== JSON.stringify(["call-leaks-1", "call-leaks-2", "call-leaks-3"])) throw new Error("Incomplete leak shard plan");
@@ -493,16 +444,18 @@ jobs:
         timeout-minutes: 3
         continue-on-error: true
         with:
-          # The vulnerability check compares a pull request with its merge base.
+          # The vulnerability check compares a pull request with its merge base; it fetches the blobs it reads on demand.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
         with:
-          # The vulnerability check compares a pull request with its merge base.
+          # The vulnerability check compares a pull request with its merge base; it fetches the blobs it reads on demand.
           fetch-depth: 0
+          filter: blob:none
 
       - uses: ./.github/actions/setup-js
 

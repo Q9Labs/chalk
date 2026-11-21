@@ -553,12 +553,7 @@ func (d *CaptureDaemon) reportAttemptFailure(ctx context.Context, lease recordin
 		cause = errors.New("capture attempt failed without a cause")
 	}
 	availableAt := d.config.Now().UTC().Add(d.config.AttemptRetryDelay)
-	_, reportErr := d.control.Fail(ctx, recordingpipeline.FailureInput{
-		LeaseInput:  lease,
-		AvailableAt: availableAt,
-		ErrorCode:   defaultCaptureFailureCode,
-		ErrorDetail: boundedFailureDetail(cause),
-	})
+	_, reportErr := d.control.Fail(ctx, captureFailureInput(lease, availableAt, cause))
 	if reportErr != nil {
 		return fmt.Errorf("report recorder capture failure: %w", errors.Join(cause, reportErr))
 	}

@@ -108,6 +108,7 @@ type ArtifactRepository interface {
 	Claim(context.Context, ClaimInput) (Assignment, error)
 	Heartbeat(context.Context, LeaseInput, time.Time) (Job, error)
 	Retry(context.Context, RetryInput) (Job, error)
+	Release(context.Context, LeaseInput) (Job, error)
 	Complete(context.Context, LeaseInput) (Job, error)
 	Cancel(context.Context, CancelInput) (Job, error)
 	Requeue(context.Context, utilities.ID, time.Time) (Job, error)

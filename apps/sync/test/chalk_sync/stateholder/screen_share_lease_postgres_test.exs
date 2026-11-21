@@ -106,6 +106,42 @@ defmodule ChalkSync.Stateholder.Postgres.ScreenShareLeasePostgresTest do
              )
   end
 
+  test "a takeover after expiry starts a fresh full lease, not the inherited cap", %{
+    connections: [first, second],
+    fixture: fixture
+  } do
+    [owner, contender] = fixture.identities
+
+    assert {:ok, _lease} =
+             ScreenShareLease.acquire(
+               first,
+               fixture.episode,
+               owner.participant_id,
+               owner.participant_generation,
+               now: @now,
+               renewal_ms: 20_000,
+               hard_lifetime_ms: 30_000
+             )
+
+    takeover_at = DateTime.add(@now, 21_000, :millisecond)
+
+    assert {:ok, takeover} =
+             ScreenShareLease.acquire(
+               second,
+               fixture.episode,
+               contender.participant_id,
+               contender.participant_generation,
+               now: takeover_at,
+               renewal_ms: 20_000,
+               hard_lifetime_ms: 30_000
+             )
+
+    # ReshareGetsFullLease (tools/formal/screen-share-lease): a fresh share
+    # starts its own hard cap instead of inheriting the expired one.
+    assert DateTime.diff(takeover.renewed_until, takeover_at, :millisecond) == 20_000
+    assert DateTime.diff(takeover.hard_expires_at, takeover_at, :millisecond) == 30_000
+  end
+
   defp seed_fixture(connection) do
     episode = %EpisodeKey{
       tenant_id: UUID.generate(),

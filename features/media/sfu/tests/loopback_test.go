@@ -342,40 +342,6 @@ func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.S
 
 // subscribeKnownMedia pulls the publisher's two tracks on connection conn and answers the SFU's
 // offer through Renegotiate. The returned receiver records what arrives.
-func subscribeKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope, publisherConn string) (*peer, *receiver) {
-	t.Helper()
-	bob := newPeer(t)
-	received := collect(bob)
-	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{OperationID: op(),
-		Scope: scope,
-		Tracks: []protocol.Track{
-			{Location: protocol.LocationRemote, SessionID: publisherConn, TrackName: audioName},
-			{Location: protocol.LocationRemote, SessionID: publisherConn, TrackName: videoName, Simulcast: &protocol.Simulcast{PreferredRID: "h", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}},
-		},
-	}, &pulled)
-	if pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" || !pulled.RequiresImmediateRenegotiation || len(pulled.Tracks) != 2 || len(pulled.TrackErrors) != 0 {
-		t.Fatalf("pull response: %+v", pulled)
-	}
-	mids := map[string]bool{}
-	for _, track := range pulled.Tracks {
-		if track.Location != protocol.LocationRemote || track.SessionID != publisherConn || track.Mid == "" || mids[track.Mid] {
-			t.Fatalf("pulled track identity: %+v", track)
-		}
-		mids[track.Mid] = true
-	}
-	if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := bob.pc.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	answerSDP := bob.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: answerSDP}, nil)
-	return bob, received
-}
-
 func eventually(t *testing.T, what string, timeout time.Duration, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

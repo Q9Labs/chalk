@@ -11,7 +11,7 @@ The workflow runs only while `CHALK_ALCHEMY_DRIFT_ENABLED=true`, on its schedule
 and on manual dispatch alike. Its dedicated `CHALK_ALCHEMY_DRIFT_ROLE_ARN` secret
 names a role that trusts GitHub's OIDC provider for this repository's
 default-branch workflow (`aud=sts.amazonaws.com`, `sub` of the master ref only).
-Do not reuse a deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The active cutover list is the seeded production stages in `registry.ts` (recorder runtime downloads and the transcription dispatcher); retired Nightly is excluded. Recorder runtime downloads is a seeded stack that the drift scan checks like any other:
+Do not reuse a deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The active cutover list is the seeded production stages in `registry.ts` (transcription dispatcher, recorder runtime downloads, SFU, SFU standby and recorder); retired Nightly is excluded. Every seeded stack is checked by the same drift scan:
 
 | Boundary                                   | Actions                                                                                                                                                                                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -29,6 +29,7 @@ Do not reuse a deploy role. It needs the following access for each future seeded
 | Recorder download distributions            | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource` on the runtime downloads distribution and the recorder archives distribution                                                |
 | Recorder download distribution parts       | `cloudfront:GetOriginAccessControl(Config)`, `GetPublicKey(Config)`, `GetKeyGroup(Config)` on `*`, because the scan reads them through ids stored in state                                                                     |
 | Recorder download buckets                  | `s3:GetBucketPolicy`, `s3:GetBucketLocation` on the production releases bucket and the recorder artifacts bucket                                                                                                               |
+| Recorder encryption key                    | `kms:DescribeKey`, `kms:GetKeyPolicy`, `kms:GetKeyRotationStatus`, `kms:ListResourceTags` on the recorder key; `kms:ListAliases` for the alias read                                                                            |
 
 Provider state reads use existing recorded identities, not account-wide adoption
 or list/inventory operations. No workload mutation, state bootstrap, state
@@ -59,9 +60,16 @@ see which action was denied. IAM changes take up to a minute to reach every endp
 once before you read a fresh denial as a policy gap. Confirm access with one clean manual
 run (`gh workflow run infrastructure-drift.yml --ref master`) before you enable the variable.
 
-Future SFU/recorder/media-relay cutovers also need their protected read-capable
-DigitalOcean/Cloudflare token secrets on the check step. SFU uses DigitalOcean
-resource reads and Cloudflare DNS reads; recorder uses its separate pool-token
-resource reads and Cloudflare R2 bucket/CORS/lifecycle reads; media relay uses
-Calls TURN key reads. Do not grant every future provider in advance: configure
-only the registered production cutovers before enabling their checks.
+SFU, SFU standby and recorder plans load their private stack inputs, so the check step reads
+them from the `CHALK_SFU_INPUTS`, `CHALK_SFU_STANDBY_INPUTS` and `CHALK_RECORDER_INPUTS` secrets
+(JSON files with no credentials) and writes each to a mode-0600 file for the one stack. A stack
+whose secret is missing is `check-failed`. Credentials come from read-only provider tokens:
+`DIGITALOCEAN_TOKEN` for SFU, `CHALK_CAPTURE_DIGITALOCEAN_TOKEN` and `CHALK_RENDER_DIGITALOCEAN_TOKEN`
+for the recorder pools, and `CLOUDFLARE_API_TOKEN` with `CLOUDFLARE_ACCOUNT_ID` for the recorder R2
+bucket. The DigitalOcean tokens are custom-scoped read tokens (droplet, firewall, tag, ssh_key,
+image, project and vpc read), never a full-access token. Without vpc read, DigitalOcean leaves
+`vpc_uuid` out of the Droplet and every SFU host reports drift. The workflow prefers
+`CHALK_DRIFT_CLOUDFLARE_API_TOKEN` (Account: Workers R2 Storage Read) over the shared
+`CLOUDFLARE_API_TOKEN`, a Pages deploy token that cannot read R2, so the recorder check fails. Media relay uses Calls TURN key reads. Do not
+grant every future provider in advance: configure only the registered production cutovers before
+enabling their checks.

@@ -22,7 +22,7 @@ function advanced(row, before) {
 }
 
 // Within one connection, a stream moves when its counters grew between two samples. growing counts such streams.
-export function growing(rows, previous, kind, source) {
+function growing(rows, previous, kind, source) {
   return rows.filter((row) => {
     if (!isStream(row, kind, source)) return false;
     const before = previous.find(sameStream(row));

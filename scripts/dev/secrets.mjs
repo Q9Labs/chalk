@@ -63,7 +63,7 @@ function fieldValue(item, wanted) {
 }
 
 // Headless boxes pass the non-production credential in the API's own variables, so they need no 1Password CLI.
-export function sfuCredentialsFromEnv(env = process.env) {
+function sfuCredentialsFromEnv(env = process.env) {
   const appId = env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim();
   const appSecret = env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim();
   if (!appId && !appSecret) return undefined;

@@ -8,7 +8,7 @@ const logs = mkdtempSync(path.join(tmpdir(), "chalk-mutations-"));
 const go = (name) => ({ cwd: "apps/api", command: ["go", "test", "-count=1", "-v", "-vet=off", `./internal/${name}`] });
 const vitest = (workspace, file) => ({ command: ["node", "scripts/test/run.mjs", "pnpm", "--dir", workspace, "exec", "vitest", "run", file, "--maxWorkers=1"] });
 const mix = (file) => ({ cwd: "apps/sync", command: ["mix", "test", file, "--max-cases", "1"] });
-const cases = [
+const suite = [
   {
     name: "media-credential-signature",
     file: "apps/api/internal/accessgrants/verifier.go",
@@ -56,7 +56,7 @@ const cases = [
     file: "apps/sync/lib/chalk_sync/whiteboard_v1/authority.ex",
     from: '{_episode, "left"} -> {:error, {:permission_denied, :participant_inactive}}',
     to: '{_episode, "joining"} -> {:error, {:permission_denied, :participant_inactive}}',
-    ...mix("test/chalk_sync/whiteboard_v1/authority_test.exs"),
+    ...mix("test/chalk_sync/whiteboard_v1/authority/removal_test.exs"),
   },
   {
     name: "ended-reconnect-terminal-state",
@@ -131,6 +131,13 @@ const cases = [
   },
 ];
 
+const requested = process.argv.slice(2);
+const unknown = requested.filter((name) => !suite.some((mutation) => mutation.name === name));
+if (unknown.length > 0) {
+  console.error(`Unknown mutations: ${unknown.join(", ")}`);
+  process.exit(1);
+}
+const cases = requested.length === 0 ? suite : suite.filter((mutation) => requested.includes(mutation.name));
 const baselines = new Set();
 let killed = 0;
 for (const mutation of cases) {

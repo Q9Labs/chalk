@@ -755,6 +755,7 @@ type RecordingPipeline struct {
 	CaptureTrackCount       pgtype.Int4        `json:"capture_track_count"`
 	CapturePacketCount      pgtype.Int8        `json:"capture_packet_count"`
 	CaptureCompleteness     pgtype.Text        `json:"capture_completeness"`
+	FailureWebhookEnqueued  bool               `json:"failure_webhook_enqueued"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	// Immutable recording clock origin established by the first authoritative capture-ready callback.

@@ -1,5 +1,7 @@
 # Flow 5: the host removes or demotes a student
 
+> Persona note: "teacher", "student", "class" and "the host" are an illustrative classroom scenario; the product roles are owner, collaborator and observer. See [the statecharts index](../README.md).
+
 A host removes a student, or changes the student's role from collaborator to observer. `HostActsOnStudent.tla` is the TLA+ model, `HostActsOnStudent.cfg` lists the rules TLC checks, `HostActsOnStudent.view.mjs` gives the chart its words, `chart.mmd` is the Mermaid text and `chart.svg` is the rendered chart. The header of `HostActsOnStudent.tla` names the code that each step mirrors.
 
 Make the files again with the `/statechart` skill from this folder, then render `chart.mmd` with `pele@1.9.0` as the skill's render reference describes. Use a new `OUT` folder outside the repo and copy `chart.mmd` here.

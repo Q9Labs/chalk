@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/talktime"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -13,6 +15,7 @@ import (
 
 type episodeTalkTimeQuerier interface {
 	ListEpisodeTalkTimeRecordings(context.Context, sqlc.ListEpisodeTalkTimeRecordingsParams) ([]sqlc.ListEpisodeTalkTimeRecordingsRow, error)
+	ListRecordingDeferredArtifactStates(context.Context, sqlc.ListRecordingDeferredArtifactStatesParams) ([]sqlc.ListRecordingDeferredArtifactStatesRow, error)
 }
 
 type EpisodeTalkTimeRepository struct {
@@ -28,13 +31,25 @@ func (r EpisodeTalkTimeRepository) ListRecordings(ctx context.Context, tenantID,
 	if err != nil {
 		return nil, fmt.Errorf("list Episode Recordings with transcripts: %w", err)
 	}
+	recordingIDs := make([]pgtype.UUID, 0, len(rows))
+	for _, row := range rows {
+		recordingIDs = append(recordingIDs, row.RecordingID)
+	}
+	states, err := r.queries.ListRecordingDeferredArtifactStates(ctx, sqlc.ListRecordingDeferredArtifactStatesParams{TenantID: uuid(tenantID), RecordingIds: recordingIDs})
+	if err != nil {
+		return nil, fmt.Errorf("list Episode Recording transcription preparation: %w", err)
+	}
+	preparation := make(map[pgtype.UUID]recordingpipeline.TranscriptionPreparationStatus, len(states))
+	for _, state := range states {
+		preparation[state.RecordingID] = recordingpipeline.TranscriptionPreparationStatus(state.TranscriptionPreparationStatus)
+	}
 	result := make([]talktime.Recording, 0, len(rows))
 	for _, row := range rows {
 		recording := talktime.Recording{
-			ID:                     utilities.IDFromBytes(row.RecordingID.Bytes),
-			Status:                 row.RecordingStatus,
-			StartedAt:              timestamp(row.StartedAt),
-			AutomaticTranscription: row.TranscriptionMode == string(artifactpolicy.TranscriptionAutomatic),
+			ID:                       utilities.IDFromBytes(row.RecordingID.Bytes),
+			StartedAt:                timestamp(row.StartedAt),
+			AutomaticTranscription:   row.TranscriptionMode == string(artifactpolicy.TranscriptionAutomatic),
+			TranscriptionPreparation: preparation[row.RecordingID],
 		}
 		if row.TranscriptionStatus != "" {
 			transcript := transcripts.Transcript{

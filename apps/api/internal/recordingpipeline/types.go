@@ -20,7 +20,6 @@ const (
 	// staging, and encoding for a maximum-length Recording.
 	MaximumRenderDuration          = 7 * MaximumRecordingDuration
 	MaximumInputBitrateBPS         = int64(4_000_000)
-	MaximumInputBitrateTotalBPS    = int64(MaximumEpisodes) * MaximumInputBitrateBPS
 	DefaultPayloadSchemaVersion    = 1
 	DefaultCaptureAttemptLimit     = 10
 	DefaultRenderAttemptLimit      = 3

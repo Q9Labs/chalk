@@ -64,7 +64,7 @@ function page<N extends PageName>() {
   });
 }
 
-/** The dashboard's pages, one entry each. `functions/dashboard-api/<name>.ts` exists for every name here, as `routes.test.ts` checks. */
+/** The dashboard's pages, one entry each. `functions/dashboard-api/<name>.ts` exists for every name here. */
 export const pages: Record<PageName, Route> = {
   home: page<"home">()({ query: pageQuery, read: ({ engine }, q) => homePage(engine, q.cursor), action: homeAction, act: ({ engine }, a) => homeMutation(engine, a) }),
   "home-status": page<"home-status">()({ query: homeStatusQuery, read: ({ engine }, q) => homeStatus(engine, q) }),

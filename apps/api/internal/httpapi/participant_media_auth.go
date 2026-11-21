@@ -18,12 +18,11 @@ type ActiveParticipantAuthorizer interface {
 }
 
 func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(http.Handler) http.Handler {
+	if verifier == nil {
+		return unavailableMiddleware
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if verifier == nil {
-				writeServiceUnavailable(w)
-				return
-			}
 			credential, ok := bearerToken(r.Header.Get("Authorization"))
 			if !ok {
 				writeUnauthenticated(w)
@@ -70,12 +69,19 @@ func (v telemetryCredentialVerifier) Verify(ctx context.Context, credential stri
 }
 
 func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
+	credential := requireParticipantMediaCredential(verifier)
+	active := requireActiveParticipant(authorizer)
 	return func(next http.Handler) http.Handler {
-		return requireParticipantMediaCredential(verifier)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if authorizer == nil {
-				writeServiceUnavailable(w)
-				return
-			}
+		return credential(active(next))
+	}
+}
+
+func requireActiveParticipant(authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
+	if authorizer == nil {
+		return unavailableMiddleware
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			subject, ok := accessgrants.SubjectFromContext(r.Context())
 			if !ok {
 				writeUnauthenticated(w)
@@ -95,8 +101,44 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 				return
 			}
 			next.ServeHTTP(w, r)
-		}))
+		})
 	}
+}
+
+type syncParticipantVerifier[Subject any] interface {
+	VerifyParticipant(context.Context, string) (Subject, bool, error)
+}
+
+func requireSyncParticipant[Subject any](verifier syncParticipantVerifier[Subject], contextKey any) func(http.Handler) http.Handler {
+	if verifier == nil {
+		return unavailableMiddleware
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, ok := bearerToken(r.Header.Get("Authorization"))
+			if !ok {
+				writeUnauthenticated(w)
+				return
+			}
+			subject, valid, err := verifier.VerifyParticipant(r.Context(), token)
+			if err != nil {
+				writeServiceUnavailable(w)
+				return
+			}
+			if !valid {
+				writeUnauthenticated(w)
+				return
+			}
+			ctx := context.WithValue(r.Context(), contextKey, subject)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func unavailableMiddleware(http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeServiceUnavailable(w)
+	})
 }
 
 func requireParticipantMediaRoute(

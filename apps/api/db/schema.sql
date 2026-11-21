@@ -2607,6 +2607,7 @@ create table recording_pipelines (
     capture_track_count integer check (capture_track_count is null or capture_track_count >= 0),
     capture_packet_count bigint check (capture_packet_count is null or capture_packet_count >= 0),
     capture_completeness text check (capture_completeness is null or capture_completeness in ('complete', 'partial')),
+    failure_webhook_enqueued boolean not null default false,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     constraint recording_pipelines_stop_pair_check check ((stop_operation_id is null) = (stop_requested_at is null))
@@ -3324,6 +3325,26 @@ create index webhook_events_linked_user_id_idx
     where linked_user_id is not null and erased_at is null;
 create index webhook_events_retention_idx
     on webhook_events(occurred_at, tenant_id, id);
+
+create function enqueue_recording_failure_webhook_once() returns trigger language plpgsql as $$
+begin
+    -- The capture can outlive webhook retention. Keep the enqueue fact with
+    -- the Recording, not the event that the webhook worker will prune.
+    update recording_pipelines
+    set failure_webhook_enqueued = true
+    where recording_id = new.resource_id and tenant_id = new.tenant_id
+        and not failure_webhook_enqueued;
+    if found then
+        return new;
+    end if;
+    return null;
+end;
+$$;
+
+create trigger webhook_events_recording_failure_once
+    before insert on webhook_events
+    for each row when (new.event_name = 'recording.failed')
+    execute function enqueue_recording_failure_webhook_once();
 
 create table webhook_deliveries (
     id uuid primary key,

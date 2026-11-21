@@ -1,5 +1,7 @@
 # Flow 3: the network drops mid-class and recovers
 
+> Persona note: "teacher", "student", "class" and "the host" are an illustrative classroom scenario; the product roles are owner, collaborator and observer. See [the statecharts index](../README.md).
+
 A student's connection drops, or their device goes to sleep, and the call has to take them back. `NetworkDrops.tla` is the TLA+ model, `NetworkDrops.cfg` lists the rules TLC checks, `NetworkDrops.view.mjs` gives the chart its words, `chart.mmd` is the Mermaid text and `chart.svg` is the rendered chart. The header of `NetworkDrops.tla` names the code that each step mirrors.
 
 Make the files again with the `/statechart` skill from this folder, then render `chart.mmd` with `pele@1.9.0` as the skill's render reference describes. Use a new `OUT` folder outside the repo and copy `chart.mmd` here.

@@ -59,7 +59,7 @@ func (l liveLoad) shareOn() time.Duration {
 
 func liveLoadFromEnv(t *testing.T) liveLoad {
 	t.Helper()
-	// The defaults are the staging soak in docs/sfu/capacity-calibration.md: three classes of three
+	// The defaults are the staging soak in docs/plans/sfu-capacity-calibration.md: three classes of three
 	// Participants with two cameras each, held for five hours, sampled every ten seconds.
 	load := liveLoad{classes: 3, participants: 3, cameras: 2, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
 		sharePeriod: 4 * time.Minute, hold: soakHold, every: 10 * time.Second, expectBudget: stagingBudget,
