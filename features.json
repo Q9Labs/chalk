@@ -247,6 +247,19 @@
       ]
     },
     {
+      "name": "screen-annotation",
+      "summary": "Projects publication-bound marks onto a shared screen and reproduces committed marks in recording exports.",
+      "paths": [
+        "contract/schema/screen-annotation-v1.json",
+        "docs/plans/screen-annotation.md",
+        "packages/screen-annotation",
+        "sdks/typescript/client/src/screen-annotation",
+        "apps/recording-renderer/src/compose/annotation-sidecar.ts",
+        "apps/recording-renderer/src/compose/annotation-timeline.ts",
+        "scripts/ui-check/screen-annotation"
+      ]
+    },
+    {
       "name": "whiteboard",
       "summary": "Stores and synchronizes the Space whiteboard scene.",
       "paths": [
