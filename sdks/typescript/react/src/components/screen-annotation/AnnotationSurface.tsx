@@ -2,13 +2,17 @@ import { captureAnnotationVideoFrame, type AnnotationFit } from "@q9labsai/chalk
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { ChalkTooltip } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
-import { AnnotationAccess, annotationControl, type AnnotationPerson } from "./AnnotationAccess";
+import { AnnotationAccess, type AnnotationPerson } from "./AnnotationAccess";
 import { AnnotationPictureInPicture } from "./AnnotationPictureInPicture";
 import { AnnotationTabCue } from "./AnnotationTabCue";
 import { AnnotationHelperOffer } from "./AnnotationHelperOffer";
+import { AnnotationSharerControl } from "./AnnotationSharerControl";
+import { AnnotationStyles } from "./AnnotationStyles";
 import { ScreenAnnotationLayer } from "./ScreenAnnotationLayer";
 import { ScreenAnnotationToolbar } from "./ScreenAnnotationToolbar";
+import { readSharerLayout } from "./sharer-layout";
 import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationFrame, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
 
 export interface AnnotationPresentationContext {
@@ -74,6 +78,8 @@ function ActiveAnnotationSurface({
   const [toolsOpen, setToolsOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [layout, setLayout] = useState(readSharerLayout);
+  const dockRef = useRef<HTMLDivElement>(null);
   const saving = useRef(false);
   const boardRetry = useRef<{ frame: ScreenAnnotationFrame; target: ScreenAnnotationTarget; action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]> } | null>(null);
   const target = targetOf(state);
@@ -127,6 +133,15 @@ function ActiveAnnotationSurface({
   };
 
   const annotationProps = { client, state, presence, fontUrl };
+  const annotateLabel = showToolbar ? "Hide tools" : "Annotate";
+  const annotateButton =
+    editable && safePreview ? (
+      <button type="button" className="chalk-ann-btn" data-tone={showToolbar ? undefined : "primary"} aria-expanded={showToolbar} onClick={() => setToolsOpen(!toolsOpen)}>
+        <StageIcon name="pen" size={15} />
+        <span className="chalk-ann-label">{annotateLabel}</span>
+      </button>
+    ) : null;
+  const annotate = annotateButton && isLocal ? <ChalkTooltip trigger={annotateButton}>{annotateLabel}</ChalkTooltip> : annotateButton;
   return (
     <>
       {safePreview && canvasHost
@@ -136,22 +151,18 @@ function ActiveAnnotationSurface({
           )
         : null}
       {primary ? (
-        <div data-part="screen-annotation-controls" className="pointer-events-none absolute inset-x-2 bottom-12 z-30 grid justify-items-center gap-1.5">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5">
-            {editable && safePreview ? (
-              <button type="button" className={annotationControl} aria-expanded={showToolbar} onClick={() => setToolsOpen(!toolsOpen)}>
-                <StageIcon name="pen" size={14} /> {showToolbar ? "Hide tools" : "Annotate"}
-              </button>
-            ) : null}
-            <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} />
-            {isLocal && canPopOut ? <AnnotationPictureInPicture {...annotationProps} track={track} inTab={safePreview} /> : null}
-          </div>
-          {isLocal && !canPopOut ? <p className={annotationControl}>Share a tab or window for a marks preview.</p> : null}
+        <div ref={dockRef} data-part="screen-annotation-controls" className="chalk-ann-dock" data-local={isLocal ? "" : undefined} data-stack={isLocal && layout.edge === "bottom" ? "top" : undefined}>
+          <AnnotationStyles />
+          {isLocal && !canPopOut ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
+          {feedback ? (
+            <p role={feedback.error ? "alert" : "status"} className="chalk-ann-chip" data-tone={feedback.error ? "error" : undefined}>
+              {feedback.message}
+            </p>
+          ) : null}
           {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
           {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
           {showToolbar || showOwnClear || state.access.can_moderate ? (
             <div
-              className="pointer-events-auto min-w-0 max-w-full"
               onKeyDown={(event) => {
                 if (event.key === "Escape" && showToolbar) setToolsOpen(false);
               }}
@@ -170,11 +181,19 @@ function ActiveAnnotationSurface({
               />
             </div>
           ) : null}
-          {feedback ? (
-            <p role={feedback.error ? "alert" : "status"} className={annotationControl}>
-              {feedback.message}
-            </p>
-          ) : null}
+          {isLocal ? (
+            <AnnotationSharerControl dockRef={dockRef} layout={layout} onLayout={setLayout}>
+              {annotate}
+              <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} side={layout.edge === "bottom" ? "top" : "bottom"} hints />
+              {canPopOut ? <AnnotationPictureInPicture {...annotationProps} track={track} inTab={safePreview} hints /> : null}
+            </AnnotationSharerControl>
+          ) : (
+            <div className="chalk-ann-bar">
+              {annotate}
+              {annotate ? <span aria-hidden="true" className="chalk-ann-sep" /> : null}
+              <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} />
+            </div>
+          )}
         </div>
       ) : null}
     </>

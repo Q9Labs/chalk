@@ -26,8 +26,6 @@ const stamps = [
   { value: "heart", glyph: "♥", label: "Heart" },
 ] satisfies readonly { value: AnnotationStamp; glyph: string; label: string }[];
 
-const toolButton = "grid h-8 min-w-8 shrink-0 place-items-center rounded-full px-1 text-inherit hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--chalk-focus)] aria-pressed:bg-white aria-pressed:text-black disabled:opacity-40";
-
 export interface ScreenAnnotationToolbarProps {
   readonly brush: AnnotationBrush;
   readonly defaultColor: string;
@@ -46,30 +44,37 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, enabled, busy, ca
   const widthId = useId();
   const paint = brush.color ?? defaultColor;
   return (
-    <div role="toolbar" aria-label="Annotation tools" data-part="screen-annotation-toolbar" className="flex w-fit max-w-full flex-wrap items-center justify-center gap-0.5 rounded-[22px] bg-[var(--chalk-overlay-strong)] p-1 text-[var(--chalk-on-overlay)] shadow-lg ring-1 ring-white/15">
+    <div role="toolbar" aria-label="Annotation tools" data-part="screen-annotation-toolbar" className="chalk-ann-bar">
       {enabled ? (
         <>
           <ChalkPopover
             label="Ink colour and width"
             side="top"
             trigger={
-              <button type="button" className={toolButton} aria-label="Ink colour and width">
-                <span aria-hidden="true" className="size-3.5 rounded-full ring-1 ring-white/80" style={{ backgroundColor: paint }} />
+              <button type="button" className="chalk-ann-btn" aria-label="Ink colour and width">
+                <span aria-hidden="true" className="chalk-ann-dot" style={{ backgroundColor: paint }} />
               </button>
             }
           >
-            <div className="grid min-w-40 gap-3 p-2">
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor={colorId}>Ink colour</label>
-                <input id={colorId} type="color" value={paint} onChange={(event) => onBrushChange({ ...brush, color: event.target.value })} />
+            <div className="chalk-ann-panel">
+              <div className="grid gap-2">
+                <div className="chalk-ann-row-between">
+                  <label htmlFor={colorId} className="chalk-ann-heading">
+                    Ink colour
+                  </label>
+                  <input id={colorId} type="color" value={paint} onChange={(event) => onBrushChange({ ...brush, color: event.target.value })} />
+                </div>
+                <button type="button" className="chalk-ann-small" onClick={() => onBrushChange({ ...brush, color: undefined })}>
+                  Use my colour
+                </button>
               </div>
-              <button type="button" className="text-left underline" onClick={() => onBrushChange({ ...brush, color: undefined })}>
-                Use my colour
-              </button>
-              <label htmlFor={widthId}>Stroke width</label>
-              <input id={widthId} type="range" min={32} max={3277} step={1} value={brush.width} onChange={(event) => onBrushChange({ ...brush, width: event.target.valueAsNumber })} />
+              <label htmlFor={widthId} className="chalk-ann-slider">
+                <span className="chalk-ann-heading">Stroke width</span>
+                <input id={widthId} type="range" min={32} max={3277} step={1} value={brush.width} onChange={(event) => onBrushChange({ ...brush, width: event.target.valueAsNumber })} />
+              </label>
             </div>
           </ChalkPopover>
+          <span aria-hidden="true" className="chalk-ann-sep" />
           {tools.map(({ tool, label, icon }) => {
             const glyph = <HugeiconsIcon icon={icon} size={17} aria-hidden="true" />;
             return tool === "stamp" ? (
@@ -78,21 +83,14 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, enabled, busy, ca
                 label="Choose stamp"
                 side="top"
                 trigger={
-                  <button type="button" aria-label="Stamps" className={toolButton} aria-pressed={brush.tool === tool}>
+                  <button type="button" aria-label="Stamps" className="chalk-ann-btn" aria-pressed={brush.tool === tool}>
                     {glyph}
                   </button>
                 }
               >
-                <div className="flex gap-1 p-1" role="group" aria-label="Choose stamp">
+                <div className="chalk-ann-stamps" role="group" aria-label="Choose stamp">
                   {stamps.map((stamp) => (
-                    <button
-                      key={stamp.value}
-                      type="button"
-                      className="grid size-8 place-items-center rounded hover:bg-[var(--chalk-tile)]"
-                      aria-label={stamp.label + " stamp"}
-                      aria-pressed={brush.tool === tool && brush.stamp === stamp.value}
-                      onClick={() => onBrushChange({ ...brush, tool, stamp: stamp.value })}
-                    >
+                    <button key={stamp.value} type="button" className="chalk-ann-stamp" aria-label={stamp.label + " stamp"} aria-pressed={brush.tool === tool && brush.stamp === stamp.value} onClick={() => onBrushChange({ ...brush, tool, stamp: stamp.value })}>
                       {stamp.glyph}
                     </button>
                   ))}
@@ -104,11 +102,13 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, enabled, busy, ca
               </AnnotationButton>
             );
           })}
-          <button type="button" aria-label="Keep new marks" aria-pressed={brush.keep} className={toolButton + " px-2 text-xs font-semibold"} onClick={() => onBrushChange({ ...brush, keep: !brush.keep })}>
+          <span aria-hidden="true" className="chalk-ann-sep" />
+          <button type="button" aria-label="Keep new marks" aria-pressed={brush.keep} className="chalk-ann-btn" onClick={() => onBrushChange({ ...brush, keep: !brush.keep })}>
             {brush.keep ? "Keep" : "Fade"}
           </button>
         </>
       ) : null}
+      {enabled ? <span aria-hidden="true" className="chalk-ann-sep" /> : null}
       {canEdit ? (
         <>
           <AnnotationButton label="Undo mark" onClick={() => onCommand({ kind: "undo" })}>
@@ -117,6 +117,7 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, enabled, busy, ca
           <AnnotationButton label="Redo mark" onClick={() => onCommand({ kind: "redo" })}>
             <HugeiconsIcon icon={Redo02Icon} size={17} aria-hidden="true" />
           </AnnotationButton>
+          <span aria-hidden="true" className="chalk-ann-sep" />
         </>
       ) : null}
       {canModerate ? (
@@ -124,16 +125,16 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, enabled, busy, ca
           label="Clear marks"
           side="top"
           trigger={
-            <button type="button" aria-label="Clear marks" className={toolButton}>
+            <button type="button" aria-label="Clear marks" className="chalk-ann-btn">
               <HugeiconsIcon icon={Delete02Icon} size={17} aria-hidden="true" />
             </button>
           }
         >
-          <div className="grid gap-2 p-2">
-            <button type="button" className="text-left hover:underline" onClick={() => onCommand({ kind: "clear", scope: { kind: "mine" } })}>
+          <div className="chalk-ann-panel">
+            <button type="button" className="chalk-ann-small" onClick={() => onCommand({ kind: "clear", scope: { kind: "mine" } })}>
               Clear my marks
             </button>
-            <button type="button" className="text-left hover:underline" onClick={() => onCommand({ kind: "clear", scope: { kind: "all" } })}>
+            <button type="button" className="chalk-ann-small" onClick={() => onCommand({ kind: "clear", scope: { kind: "all" } })}>
               Clear all marks
             </button>
           </div>
@@ -161,7 +162,7 @@ function AnnotationButton({ label, pressed, disabled, onClick, children }: { rea
   return (
     <ChalkTooltip
       trigger={
-        <button type="button" className={toolButton} aria-label={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+        <button type="button" className="chalk-ann-btn" aria-label={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}>
           {children}
         </button>
       }
