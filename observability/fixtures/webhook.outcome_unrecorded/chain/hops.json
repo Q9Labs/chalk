@@ -1,0 +1,22 @@
+{
+ "hops": [
+  {
+   "hop": "a",
+   "test": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go",
+   "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/adapters/postgres -run '^TestObsChainWebhookOutcomeUnrecorded$' -count=1",
+   "writes": [
+    "stack-rows.positive.json",
+    "stack-rows.healthy.json"
+   ]
+  },
+  {
+   "hop": "b",
+   "test": "scripts/diagnose-call/proof/webhooks-chain.test.mjs",
+   "command": "CHALK_OBS_SYMPTOM=webhook.outcome_unrecorded node --test scripts/diagnose-call/proof/webhooks-chain.test.mjs",
+   "writes": [
+    "../positive.json",
+    "../healthy.json"
+   ]
+  }
+ ]
+}

@@ -7,10 +7,14 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -101,6 +105,17 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	for {
 		if err := d.runBatch(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			d.logger.ErrorContext(ctx, "webhook dispatcher cycle failed", "error", err)
+			var cycle *cycleError
+			stage, class := "deliver", errorClass(err)
+			fields := []slog.Attr{obs.F(obs.FieldStage, stage), obs.F(obs.FieldErrorClass, class)}
+			if errors.As(err, &cycle) {
+				stage = cycle.stage
+				fields = []slog.Attr{obs.F(obs.FieldStage, stage), obs.F(obs.FieldErrorClass, class)}
+				if !cycle.deliveryID.IsZero() {
+					fields = append(fields, obs.F(obs.FieldWebhookDeliveryID, cycle.deliveryID.String()))
+				}
+			}
+			obs.Fact(ctx, obs.EventAPIWebhookDispatchCycleFailed, fields...)
 		}
 		select {
 		case <-ctx.Done():
@@ -147,38 +162,101 @@ func (d *Dispatcher) recordHealth(ctx context.Context) {
 	RecordHealthMetrics(ctx, health)
 }
 
+// cycleError marks which runBatch stage failed, so the cycle-failed fact names it; a deliver-stage failure also
+// names the delivery whose work failed.
+type cycleError struct {
+	stage      string
+	err        error
+	deliveryID utilities.ID
+}
+
+func (e *cycleError) Error() string { return e.err.Error() }
+func (e *cycleError) Unwrap() error { return e.err }
+
+// deliveryError keeps a claim's identity on the error its delivery returned, so the cycle failure can name it.
+type deliveryError struct {
+	deliveryID utilities.ID
+	err        error
+}
+
+// errorClass buckets a cycle failure for the fact; error text stays out of records.
+func errorClass(err error) string {
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr), errors.Is(err, pgx.ErrNoRows), errors.Is(err, pgx.ErrTxClosed):
+		return "postgres"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		var netErr net.Error
+		if errors.As(err, &netErr) {
+			return "network"
+		}
+		return "internal"
+	}
+}
+
 func (d *Dispatcher) runBatch(ctx context.Context) error {
 	recovered, err := d.repository.RecoverExpired(ctx)
 	if err != nil {
-		return err
+		return &cycleError{stage: "recover_expired", err: err}
 	}
 	recordLeaseRecoveries(ctx, recovered)
 	claims, err := d.repository.Claim(ctx, d.owner, d.batch, DefaultLeaseDuration)
 	if err != nil {
-		return err
+		return &cycleError{stage: "claim", err: err}
 	}
 	var wait sync.WaitGroup
-	errorsByClaim := make(chan error, len(claims))
+	errorsByClaim := make(chan deliveryError, len(claims))
 	for _, claim := range claims {
 		claim := claim
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
 			if err := d.deliver(ctx, claim); err != nil {
-				errorsByClaim <- err
+				errorsByClaim <- deliveryError{deliveryID: claim.DeliveryID, err: err}
 			}
 		}()
 	}
 	wait.Wait()
 	close(errorsByClaim)
-	var batchErrors []error
-	for err := range errorsByClaim {
-		batchErrors = append(batchErrors, err)
+	var batchErrors []deliveryError
+	for failed := range errorsByClaim {
+		batchErrors = append(batchErrors, failed)
 	}
-	return errors.Join(batchErrors...)
+	if len(batchErrors) == 0 {
+		return nil
+	}
+	joined := make([]error, 0, len(batchErrors))
+	for _, failed := range batchErrors {
+		joined = append(joined, failed.err)
+	}
+	return &cycleError{stage: "deliver", err: errors.Join(joined...), deliveryID: batchErrors[0].deliveryID}
 }
 
 func (d *Dispatcher) deliver(ctx context.Context, claim Claim) error {
+	err := obs.Op(ctx, obs.EventAPIWebhookDeliveryAttempt, func(ctx context.Context, scope *obs.Scope) error {
+		return d.deliverAttempt(ctx, scope, claim)
+	},
+		obs.F(obs.FieldTenantID, claim.TenantID.String()),
+		obs.F(obs.FieldWebhookDeliveryID, claim.DeliveryID.String()),
+		obs.F(obs.FieldAttemptID, claim.AttemptID.String()),
+		obs.F(obs.FieldAttemptNumber, claim.AttemptNumber),
+		obs.F(obs.FieldWebhookEndpointID, claim.EndpointID.String()),
+		obs.F(obs.FieldWebhookEventID, claim.EventID.String()),
+		obs.F(obs.FieldEventName, string(claim.EventName)),
+	)
+	// A Classified with no inner error is the attempt's delivery outcome (a 4xx,
+	// timeout or transport code the op must record), not a dispatcher failure, so
+	// it must not reach the cycle's error set.
+	var outcome *obs.Classified
+	if errors.As(err, &outcome) && outcome.Err == nil {
+		return nil
+	}
+	return err
+}
+
+func (d *Dispatcher) deliverAttempt(ctx context.Context, scope *obs.Scope, claim Claim) error {
 	links := make([]trace.Link, 0, 1)
 	if traceID, err := trace.TraceIDFromHex(claim.ProducingTraceID); err == nil {
 		if spanID, spanErr := trace.SpanIDFromHex(claim.ProducingSpanID); spanErr == nil {
@@ -198,25 +276,25 @@ func (d *Dispatcher) deliver(ctx context.Context, claim Claim) error {
 	if err := d.repository.RecordAttemptTrace(ctx, claim, spanContext.TraceID().String(), spanContext.SpanID().String()); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "record attempt trace")
-		return err
+		return obs.Failure("webhook.attempt_trace_failed", err)
 	}
 	recordFirstAttemptLatency(ctx, claim, d.now())
 	urlBytes, err := d.protector.Unprotect(URLScope(claim.TenantID, claim.EndpointID, claim.EndpointRevisionID), claim.URLCiphertext)
 	if err != nil {
 		recordCryptoFailure(ctx, "decrypt_url")
-		return d.completeAttempt(ctx, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
+		return d.completeAttempt(ctx, scope, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
 	}
 	current, err := d.protector.Unprotect(SecretScope(claim.TenantID, claim.EndpointID), claim.CurrentSecretCiphertext)
 	if err != nil {
 		recordCryptoFailure(ctx, "decrypt_current_secret")
-		return d.completeAttempt(ctx, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
+		return d.completeAttempt(ctx, scope, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
 	}
 	secrets := [][]byte{current}
 	if len(claim.PreviousSecretCiphertext) > 0 && claim.PreviousSecretExpiresAt != nil && d.now().Before(*claim.PreviousSecretExpiresAt) {
 		previous, decryptErr := d.protector.Unprotect(SecretScope(claim.TenantID, claim.EndpointID), claim.PreviousSecretCiphertext)
 		if decryptErr != nil {
 			recordCryptoFailure(ctx, "decrypt_previous_secret")
-			return d.completeAttempt(ctx, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
+			return d.completeAttempt(ctx, scope, span, claim, AttemptResult{Retryable: true, ErrorCode: "encryption_failed", FinishedAt: d.now()})
 		}
 		secrets = append(secrets, previous)
 	}
@@ -233,21 +311,38 @@ func (d *Dispatcher) deliver(ctx context.Context, claim Claim) error {
 			result.ErrorCode = "network_failed"
 		}
 	}
-	return d.completeAttempt(ctx, span, claim, result)
+	return d.completeAttempt(ctx, scope, span, claim, result)
 }
 
-func (d *Dispatcher) completeAttempt(ctx context.Context, span trace.Span, claim Claim, result AttemptResult) error {
+func (d *Dispatcher) completeAttempt(ctx context.Context, scope *obs.Scope, span trace.Span, claim Claim, result AttemptResult) error {
+	scope.Set(
+		obs.F(obs.FieldHTTPStatusClass, statusClassMetric(result.HTTPStatus)),
+		obs.F(obs.FieldHTTPStatus, result.HTTPStatus),
+		obs.F(obs.FieldLatencyMilliseconds, result.Latency.Milliseconds()),
+	)
 	if err := d.repository.Complete(ctx, claim, result); err != nil {
-		d.logger.WarnContext(ctx, "webhook delivery completion failed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "error_code", boundedErrorCode(result.ErrorCode), "error", err)
+		d.logger.WarnContext(ctx, "webhook delivery completion failed", "event", "webhook.delivery.complete_failed", "tenant_id", claim.TenantID.String(), "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "error_code", boundedErrorCode(result.ErrorCode), "http_status", result.HTTPStatus, "http_status_class", statusClassMetric(result.HTTPStatus), "error", err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "complete delivery")
-		return err
+		// A completion failure is the attempt's own outcome, not a batch failure: a nil
+		// inner error keeps it out of the cycle's error set while the op records the code.
+		if errors.Is(err, ErrDeliveryLeaseLost) {
+			return &obs.Classified{Outcome: "error", Code: "webhook.lease_lost"}
+		}
+		return &obs.Classified{Outcome: "error", Code: "webhook.complete_failed"}
 	}
 	recordAttemptMetrics(ctx, claim, result)
 	d.logger.InfoContext(ctx, "webhook delivery attempt completed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "event_name", boundedMetricEventName(claim.EventName), "api_version", boundedMetricAPIVersion(claim.APIVersion), "outcome", attemptMetricOutcome(result), "error_code", boundedErrorCode(result.ErrorCode), "http_status_class", statusClassMetric(result.HTTPStatus))
 	span.SetAttributes(attribute.String("webhook.outcome", attemptMetricOutcome(result)), attribute.String("webhook.error_code", boundedErrorCode(result.ErrorCode)), attribute.String("http.response.status_class", statusClassMetric(result.HTTPStatus)))
 	if !result.Success {
 		span.SetStatus(codes.Error, boundedErrorCode(result.ErrorCode))
+		code := boundedErrorCode(result.ErrorCode)
+		if code == "" {
+			code = "other"
+		}
+		// The delivery's own outcome, not a dispatcher failure: the Classified has
+		// no inner error so `deliver` keeps it out of the cycle's error set.
+		return &obs.Classified{Outcome: "error", Code: "webhook." + code}
 	}
 	return nil
 }

@@ -31,6 +31,20 @@ func requestTenantID(ctx context.Context) string {
 	return tenantID.String()
 }
 
+// requestRouteID returns a matched route's path parameter when it parses as an
+// id, so path text never reaches a log.
+func requestRouteID(ctx context.Context, name string) string {
+	routeContext := chi.RouteContext(ctx)
+	if routeContext == nil {
+		return ""
+	}
+	id, err := utilities.ParseID(routeContext.URLParam(name))
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
+
 // requestRoute returns the matched route pattern, or "unmatched" when none matched.
 // The pattern is a fixed set of registered routes, so it is safe as a metric attribute.
 func requestRoute(ctx context.Context) string {

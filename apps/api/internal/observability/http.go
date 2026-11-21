@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
@@ -81,6 +82,7 @@ var upstreamCodePattern = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
 type failureRecorder interface {
 	recordErrorCode(code string)
 	recordUpstream(attrs []any)
+	recordPrincipal(scheme, keyID string)
 }
 
 // RecordErrorCode tells the request log which API error code the response
@@ -89,6 +91,16 @@ type failureRecorder interface {
 func RecordErrorCode(w http.ResponseWriter, code string) {
 	if recorder, ok := findFailureRecorder(w); ok {
 		recorder.recordErrorCode(code)
+	}
+}
+
+// RecordPrincipal tells the request log how the request authenticated. scheme is
+// the registry auth_scheme value (api_key, session, bearer or none); keyID is the
+// API key row id, never the secret. Writers that do not belong to the request
+// logger are skipped.
+func RecordPrincipal(w http.ResponseWriter, scheme, keyID string) {
+	if recorder, ok := findFailureRecorder(w); ok {
+		recorder.recordPrincipal(scheme, keyID)
 	}
 }
 
@@ -117,14 +129,20 @@ func findFailureRecorder(w http.ResponseWriter) (failureRecorder, bool) {
 
 type responseRecorder struct {
 	http.ResponseWriter
-	status    int
-	bytes     int
-	errorCode string
-	upstream  []any
+	status     int
+	bytes      int
+	errorCode  string
+	upstream   []any
+	authScheme string
+	apiKeyID   string
 }
 
 func (r *responseRecorder) recordErrorCode(code string) { r.errorCode = code }
 func (r *responseRecorder) recordUpstream(attrs []any)  { r.upstream = attrs }
+func (r *responseRecorder) recordPrincipal(scheme, keyID string) {
+	r.authScheme = scheme
+	r.apiKeyID = keyID
+}
 
 type RequestLogConfig struct {
 	Mode          RequestLogMode
@@ -174,6 +192,12 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			}
 			if tenantID := requestTenantID(r.Context()); tenantID != "" {
 				attrs = append(attrs, "tenant_id", tenantID)
+			}
+			if recorder.authScheme != "" {
+				attrs = append(attrs, "auth_scheme", recorder.authScheme)
+			}
+			if recorder.apiKeyID != "" {
+				attrs = append(attrs, "api_key_id", recorder.apiKeyID)
 			}
 			if recorder.errorCode != "" {
 				attrs = append(attrs, "error_code", recorder.errorCode)
@@ -261,10 +285,20 @@ func requestOutcome(status int) string {
 
 // LogAccessGrantFailure records only bounded stages and public error codes.
 // Neither caller-controlled credentials nor underlying error text belongs here.
-func LogAccessGrantFailure(ctx context.Context, stage, code string) {
+func LogAccessGrantFailure(ctx context.Context, stage, code, grantKind string) {
 	logger, _ := ctx.Value(requestLoggerContextKey{}).(*slog.Logger)
 	if logger == nil {
 		logger = slog.Default()
 	}
-	logger.WarnContext(ctx, "access grant rejected", "event", "access_grant.rejected", "reason", stage, "code", code)
+	attrs := []any{"event", "access_grant.rejected", "reason", stage, "code", code, "grant_kind", grantKind}
+	if principal, ok := authentication.PrincipalFromContext(ctx); ok && principal.Kind == authentication.PrincipalAPIKey {
+		attrs = append(attrs, "api_key_id", principal.APIKeyID.String())
+	}
+	if tenantID := requestTenantID(ctx); tenantID != "" {
+		attrs = append(attrs, "tenant_id", tenantID)
+	}
+	if participantID := requestRouteID(ctx, "participant_id"); participantID != "" {
+		attrs = append(attrs, "participant_id", participantID)
+	}
+	logger.WarnContext(ctx, "access grant rejected", attrs...)
 }

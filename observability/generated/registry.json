@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "5a1c1c781f2f",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -349,6 +349,24 @@
       "scope": "tenant",
       "companions": [],
       "legacy_hash_field": null
+    },
+    {
+      "kind": "webhook_event",
+      "prefix": "whe",
+      "field": "webhook_event_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "webhook_attempt",
+      "prefix": "wha",
+      "field": "attempt_id",
+      "canonical": "uuid",
+      "scope": "webhook_delivery",
+      "companions": [],
+      "legacy_hash_field": null
     }
   ],
   "session_meanings": [
@@ -544,6 +562,15 @@
   ],
   "fields": [
     {
+      "name": "admission",
+      "type": "enum",
+      "values": ["direct", "knock"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Whether an Episode admission was a direct admit or a knock."
+    },
+    {
       "name": "admission_request_id",
       "type": "id",
       "id_kind": "admission_request",
@@ -560,6 +587,31 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The tenant's identifier for the agent."
+    },
+    {
+      "name": "api_key_id",
+      "type": "id",
+      "id_kind": "api_key",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The API key row the request or decision names."
+    },
+    {
+      "name": "api_start",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Marks an api.starting row as an API start marker."
+    },
+    {
+      "name": "api_version",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The webhook payload version an endpoint revision requests."
     },
     {
       "name": "app_build",
@@ -584,6 +636,49 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "Which run of a job or which try of an op this is, starting at 1."
+    },
+    {
+      "name": "attempt_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "How many attempts the delivery has made."
+    },
+    {
+      "name": "attempt_id",
+      "type": "id",
+      "id_kind": "webhook_attempt",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "One webhook delivery attempt row."
+    },
+    {
+      "name": "attempt_number",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Which attempt of its delivery this row is, 1-based."
+    },
+    {
+      "name": "attempt_outcome",
+      "type": "enum",
+      "values": ["succeeded", "failed", "lease_expired"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The attempt's recorded outcome in webhook_delivery_attempts."
+    },
+    {
+      "name": "auth_scheme",
+      "type": "enum",
+      "values": ["api_key", "session", "bearer", "none"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "How the request authenticated: a tenant API key, a Dashboard session, a bearer grant, or nothing."
     },
     {
       "name": "banner_kind",
@@ -654,6 +749,47 @@
       "doc": "Whether est_server_ms can be trusted."
     },
     {
+      "name": "code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The API error code an access grant rejection carries."
+    },
+    {
+      "name": "created_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the row was created, Unix milliseconds."
+    },
+    {
+      "name": "credential_kind",
+      "type": "enum",
+      "values": ["api_key", "session", "access_grant", "mcp"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The kind of credential tenant.authorize checked."
+    },
+    {
+      "name": "current",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Whether this revision is the endpoint's current one."
+    },
+    {
+      "name": "deadline_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the Episode's deadline scheduler was due to end it, Unix milliseconds."
+    },
+    {
       "name": "decision",
       "type": "string",
       "required": false,
@@ -669,6 +805,23 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The decision."
+    },
+    {
+      "name": "deleted_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the row was deleted, Unix milliseconds."
+    },
+    {
+      "name": "delivery_state",
+      "type": "enum",
+      "values": ["pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The delivery's state in webhook_deliveries."
     },
     {
       "name": "device_ephemeral",
@@ -713,6 +866,14 @@
       "doc": "An op's duration, or how long a state lasted."
     },
     {
+      "name": "enabled",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Whether the endpoint row was enabled at the snapshot time."
+    },
+    {
       "name": "end",
       "type": "enum",
       "values": ["closed", "abandoned"],
@@ -729,6 +890,14 @@
       "sensitivity": null,
       "owner": "areas/end",
       "doc": "Why a call or an Episode ended. The server and the client use different values, so each event narrows the list."
+    },
+    {
+      "name": "ended_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the Episode ended, Unix milliseconds."
     },
     {
       "name": "env",
@@ -749,6 +918,22 @@
       "doc": "The Episode."
     },
     {
+      "name": "error_class",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The bounded class of a cycle failure error, never its text."
+    },
+    {
+      "name": "error_code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The delivery or request error code; see the delivery client's bounded vocabulary and the API's public error codes."
+    },
+    {
       "name": "est_server_ms",
       "type": "int",
       "required": false,
@@ -764,6 +949,39 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "One record. Minted by the kernel when the record is made."
+    },
+    {
+      "name": "event_name",
+      "type": "enum",
+      "values": [
+        "space.created",
+        "space.updated",
+        "space.archived",
+        "space.restored",
+        "episode.started",
+        "episode.ended",
+        "participant.joined",
+        "participant.left",
+        "recording.started",
+        "recording.completed",
+        "recording.failed",
+        "transcript.started",
+        "transcript.completed",
+        "transcript.failed",
+        "endpoint.test"
+      ],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The webhook event name a lifecycle transition commits or a subscription lists."
+    },
+    {
+      "name": "finished_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When an attempt finished, Unix milliseconds."
     },
     {
       "name": "flags",
@@ -798,6 +1016,48 @@
       "doc": "Which join of the Participant seat this is."
     },
     {
+      "name": "grant_kind",
+      "type": "enum",
+      "values": ["initial", "renewal"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Whether an issueAccessGrant call was a Participant's first grant or a media-token renewal."
+    },
+    {
+      "name": "host_boot_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The host boot identity the API start marker carries."
+    },
+    {
+      "name": "http_status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The HTTP status the receiver answered."
+    },
+    {
+      "name": "http_status_class",
+      "type": "enum",
+      "values": ["2xx", "3xx", "4xx", "5xx", "none"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The class of the receiver's HTTP status; none when no response arrived."
+    },
+    {
+      "name": "immediate",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Whether the secret rotation took effect at once, dropping the grace period."
+    },
+    {
       "name": "item_count",
       "type": "int",
       "required": false,
@@ -813,6 +1073,14 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The background job."
+    },
+    {
+      "name": "joined_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the Participant joined, Unix milliseconds."
     },
     {
       "name": "journey_id",
@@ -832,6 +1100,30 @@
       "doc": "How far the wall clock stepped against the monotonic clock."
     },
     {
+      "name": "key_created_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the API key row was created, Unix milliseconds."
+    },
+    {
+      "name": "key_expires_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the API key expires, Unix milliseconds."
+    },
+    {
+      "name": "key_prefix",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The lookup prefix of an API key; a lookup index, never the secret."
+    },
+    {
       "name": "kind",
       "type": "enum",
       "values": ["op", "transition", "decision", "surface", "fact"],
@@ -839,6 +1131,54 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "op, transition, decision, surface or fact."
+    },
+    {
+      "name": "last_used_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the API key last authenticated successfully, Unix milliseconds."
+    },
+    {
+      "name": "latency_milliseconds",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The receiver round-trip time recorded on the attempt."
+    },
+    {
+      "name": "lease_expires_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the delivering claim's lease expires, Unix milliseconds."
+    },
+    {
+      "name": "left_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the Participant left, Unix milliseconds."
+    },
+    {
+      "name": "limit",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The configured live Episode limit the decision enforced."
+    },
+    {
+      "name": "live_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The live Episode count the live-limit decision counted."
     },
     {
       "name": "machine",
@@ -859,6 +1199,14 @@
       "doc": "Chalk's media connection."
     },
     {
+      "name": "method",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The HTTP method of a request."
+    },
+    {
       "name": "module",
       "type": "enum",
       "values": ["api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"],
@@ -868,12 +1216,37 @@
       "doc": "The emitting program."
     },
     {
+      "name": "mutation_created_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the API key mutation request row was created, Unix milliseconds."
+    },
+    {
+      "name": "mutation_kind",
+      "type": "enum",
+      "values": ["create", "rotate"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The API key mutation an api_key_mutation_requests row records."
+    },
+    {
       "name": "name",
       "type": "string",
       "required": true,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The registry event name. A transition's name is its machine."
+    },
+    {
+      "name": "next_attempt_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the delivery is next scheduled, Unix milliseconds."
     },
     {
       "name": "next_seq",
@@ -891,6 +1264,14 @@
       "sensitivity": null,
       "owner": "areas/selftest",
       "doc": "Which self-test note."
+    },
+    {
+      "name": "occurred_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the event or transition occurred, Unix milliseconds."
     },
     {
       "name": "op_id",
@@ -911,6 +1292,15 @@
       "doc": "An op's terminal outcome."
     },
     {
+      "name": "parent_delivery_id",
+      "type": "id",
+      "id_kind": "webhook_delivery",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The delivery an erased delivery's redelivery names as parent."
+    },
+    {
       "name": "parent_op_id",
       "type": "id",
       "id_kind": "operation",
@@ -929,6 +1319,14 @@
       "doc": "The Participant seat in the Episode."
     },
     {
+      "name": "path",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The URL path of a request; ids in it are the resource ids the route acts on."
+    },
+    {
       "name": "platform",
       "type": "enum",
       "values": ["web", "ios", "android", "server", "lambda", "node"],
@@ -936,6 +1334,30 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "Where the program runs."
+    },
+    {
+      "name": "policy",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The rate-limit policy name that refused the request."
+    },
+    {
+      "name": "previous_boot_end_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When this host's previous boot's log ended, Unix milliseconds; null when unknown."
+    },
+    {
+      "name": "previous_secret_expires_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When a rotated webhook endpoint's previous secret stopped being valid, Unix milliseconds."
     },
     {
       "name": "provider_media_id",
@@ -946,6 +1368,14 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The media provider's session id."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The bounded stage an access grant rejection names."
     },
     {
       "name": "reason_code",
@@ -982,6 +1412,64 @@
       "doc": "The request attempt."
     },
     {
+      "name": "request_logs",
+      "type": "enum",
+      "values": ["off", "errors", "slow", "sampled", "all"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The API request-log mode the process booted with."
+    },
+    {
+      "name": "required_scope",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The scope tenant.authorize required and the credential lacked."
+    },
+    {
+      "name": "resource_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The id of the resource a webhook event is about: a Space, Episode, Participant or endpoint id."
+    },
+    {
+      "name": "resource_type",
+      "type": "enum",
+      "values": ["space", "episode", "participant", "endpoint", "recording", "transcript"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The kind of resource a webhook event is about."
+    },
+    {
+      "name": "retry_after_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The Retry-After the rate-limit refusal sent, in milliseconds."
+    },
+    {
+      "name": "revoked_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the API key was revoked, Unix milliseconds."
+    },
+    {
+      "name": "route",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The matched route pattern of an HTTP request, such as createEpisode."
+    },
+    {
       "name": "schema_ver",
       "type": "string",
       "required": true,
@@ -990,12 +1478,28 @@
       "doc": "The registry's content hash, so a reader knows which catalogue the record was written against."
     },
     {
+      "name": "scopes",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The API key's scopes, comma-separated."
+    },
+    {
       "name": "sdk_version",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "The Chalk SDK version inside the host app."
+    },
+    {
+      "name": "semantic_transition_key",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The dedupe key a webhook event row carries for its semantic transition."
     },
     {
       "name": "seq",
@@ -1040,6 +1544,39 @@
       "doc": "The W3C span."
     },
     {
+      "name": "stage",
+      "type": "enum",
+      "values": ["recover_expired", "claim", "deliver"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "Which part of a dispatcher cycle failed."
+    },
+    {
+      "name": "started_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When an attempt, Episode or boot started, Unix milliseconds."
+    },
+    {
+      "name": "status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The HTTP status the API answered."
+    },
+    {
+      "name": "subscribed",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The event names the endpoint revision subscribed to, comma-separated."
+    },
+    {
       "name": "surface_state",
       "type": "enum",
       "values": ["shown", "dismissed"],
@@ -1058,6 +1595,14 @@
       "doc": "The Sync websocket."
     },
     {
+      "name": "target_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "How many endpoint targets a fanout decision committed."
+    },
+    {
       "name": "tenant_id",
       "type": "id",
       "id_kind": "tenant",
@@ -1065,6 +1610,14 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The tenant."
+    },
+    {
+      "name": "terminal_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the delivery reached a terminal state, Unix milliseconds."
     },
     {
       "name": "to_state",
@@ -1092,6 +1645,14 @@
       "doc": "What caused a transition, from the machine's trigger list."
     },
     {
+      "name": "updated_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "When the row was last updated, Unix milliseconds."
+    },
+    {
       "name": "user_id",
       "type": "id",
       "id_kind": "user",
@@ -1108,6 +1669,24 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The webhook delivery."
+    },
+    {
+      "name": "webhook_endpoint_id",
+      "type": "id",
+      "id_kind": "webhook_endpoint",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The webhook endpoint."
+    },
+    {
+      "name": "webhook_event_id",
+      "type": "id",
+      "id_kind": "webhook_event",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/webhooks",
+      "doc": "The committed webhook_events row."
     }
   ],
   "reasons": [
@@ -1124,6 +1703,118 @@
       "area": "end",
       "test_only": false,
       "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+    },
+    {
+      "code": "integration.capacity_exceeded",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The Episode's capacity refused the admission."
+    },
+    {
+      "code": "integration.episode_ended",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The Episode had already ended when the admission was refused."
+    },
+    {
+      "code": "integration.episode_full",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The Episode held at least 500 live Participants, so its capacity refused the admission."
+    },
+    {
+      "code": "integration.exhausted",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The rate limiter's token bucket was empty, so the request was refused 429."
+    },
+    {
+      "code": "integration.expired",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The API key was past its expiry."
+    },
+    {
+      "code": "integration.hash_mismatch",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The key's secret did not match the stored hash."
+    },
+    {
+      "code": "integration.limiter_unavailable",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The rate limiter could not answer, so the request was refused 503."
+    },
+    {
+      "code": "integration.live_episode_limit",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The Tenant was at its live Episode limit and every counted Episode was still live."
+    },
+    {
+      "code": "integration.live_episode_limit_reached",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The Tenant's live Episode limit refused the create."
+    },
+    {
+      "code": "integration.lookup_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The API key lookup failed inside the API."
+    },
+    {
+      "code": "integration.malformed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The presented credential was not a parseable API key."
+    },
+    {
+      "code": "integration.revoked",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The API key was revoked."
+    },
+    {
+      "code": "integration.scope_missing",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The credential lacks the scope the route needs."
+    },
+    {
+      "code": "integration.scopes_invalid",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The API key's stored scopes failed validation inside the API."
+    },
+    {
+      "code": "integration.tenant_mismatch",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The credential belongs to a different Tenant than the path's."
+    },
+    {
+      "code": "integration.unknown_prefix",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The key's prefix matched no API key row."
     },
     {
       "code": "selftest.broken",
@@ -1145,9 +1836,494 @@
       "area": "core",
       "test_only": false,
       "doc": "An error that no classifier named. Counted as unexplained, so a rise is a gap in the catalogue."
+    },
+    {
+      "code": "webhook.attempt_trace_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The attempt's trace link could not be recorded, so the attempt did not start."
+    },
+    {
+      "code": "webhook.complete_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The attempt's outcome write did not commit."
+    },
+    {
+      "code": "webhook.connect_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The TCP connection to the receiver failed."
+    },
+    {
+      "code": "webhook.deploy_restart",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "A deploy restarted the API while the attempt ran, so its outcome was never recorded."
+    },
+    {
+      "code": "webhook.dns_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver's host name did not resolve."
+    },
+    {
+      "code": "webhook.encryption_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The URL or secret ciphertext could not be unprotected."
+    },
+    {
+      "code": "webhook.http_2xx",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver answered a non-success 2xx status, which the delivery client does not accept."
+    },
+    {
+      "code": "webhook.http_3xx",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver answered a redirect; the delivery client does not follow it."
+    },
+    {
+      "code": "webhook.http_4xx",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver refused the signed request."
+    },
+    {
+      "code": "webhook.http_5xx",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver failed the request; the delivery retries."
+    },
+    {
+      "code": "webhook.invalid_http_status",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver answered a status outside 100-599."
+    },
+    {
+      "code": "webhook.lease_expired",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The attempt's lease expired before its outcome committed."
+    },
+    {
+      "code": "webhook.lease_lost",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The delivery's lease was lost while the attempt completed."
+    },
+    {
+      "code": "webhook.network_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The request failed on the network."
+    },
+    {
+      "code": "webhook.not_subscribed",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "No endpoint of the Tenant was enabled, current and subscribed to the event at the transition."
+    },
+    {
+      "code": "webhook.other",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "A delivery error outside the bounded vocabulary."
+    },
+    {
+      "code": "webhook.receiver_slow",
+      "outcome": "expected",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The endpoint or the Tenant's concurrency budget stayed saturated by slow in-flight attempts for the whole wait."
+    },
+    {
+      "code": "webhook.request_invalid",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The delivery request could not be built."
+    },
+    {
+      "code": "webhook.response_headers_too_large",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver's response headers exceeded the bound."
+    },
+    {
+      "code": "webhook.response_too_large",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver's response body exceeded the bound."
+    },
+    {
+      "code": "webhook.retention_expired",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The delivery passed the 72 h horizon without a terminal state."
+    },
+    {
+      "code": "webhook.secret_rotated",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The endpoint's secret rotated while the attempt was in flight."
+    },
+    {
+      "code": "webhook.ssrf_blocked",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The endpoint URL resolved to an address delivery refuses."
+    },
+    {
+      "code": "webhook.timeout",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The receiver did not answer in time."
+    },
+    {
+      "code": "webhook.tls_failed",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The TLS handshake with the receiver failed."
+    },
+    {
+      "code": "webhook.unsafe_url",
+      "outcome": "error",
+      "area": "webhooks",
+      "test_only": false,
+      "doc": "The endpoint URL is not one the delivery client will call."
     }
   ],
   "events": [
+    {
+      "name": "api.api_key.authenticate",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["accepted", "rejected"],
+      "fields": {
+        "key_prefix": {
+          "required": false
+        },
+        "api_key_id": {
+          "required": false
+        },
+        "tenant_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/apikeys/service.go",
+          "literal": "obs.EventAPIAPIKeyAuthenticate"
+        }
+      ],
+      "doc": "An API key presented on a request was authenticated. Rejected names why the credential was refused."
+    },
+    {
+      "name": "api.episode.admission.capacity",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["refused"],
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "episode_id": {
+          "required": true
+        },
+        "admission": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/episode_lifecycle_create.go",
+          "literal": "obs.EventAPIEpisodeAdmissionCapacity"
+        }
+      ],
+      "doc": "The Episode's capacity check refused an admission, recorded for refusals only. The query can't say which limit failed; the checker counts Participants itself."
+    },
+    {
+      "name": "api.episode.create.live_limit",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["refused"],
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "live_count": {
+          "required": true
+        },
+        "limit": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/tenant_limits.go",
+          "literal": "obs.EventAPIEpisodeCreateLiveLimit"
+        }
+      ],
+      "doc": "The Tenant's live Episode limit refused an Episode creation, recorded for refusals only."
+    },
+    {
+      "name": "api.ratelimit.check",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["accepted", "refused"],
+      "fields": {
+        "policy": {
+          "required": true
+        },
+        "api_key_id": {
+          "required": false
+        },
+        "tenant_id": {
+          "required": false
+        },
+        "retry_after_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/rate_limit.go",
+          "literal": "obs.EventAPIRatelimitCheck"
+        }
+      ],
+      "doc": "A write or read policy's check decided the request, accepted or refused."
+    },
+    {
+      "name": "api.tenant.authorize",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["refused"],
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "required_scope": {
+          "required": true
+        },
+        "credential_kind": {
+          "required": true
+        },
+        "api_key_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/authorization/tenant.go",
+          "literal": "obs.EventAPITenantAuthorize"
+        }
+      ],
+      "doc": "A credential was refused authorization for the Tenant in its path, recorded for refusals only."
+    },
+    {
+      "name": "api.webhook.delivery.attempt",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_delivery_id": {
+          "required": true
+        },
+        "attempt_id": {
+          "required": true
+        },
+        "attempt_number": {
+          "required": true
+        },
+        "webhook_endpoint_id": {
+          "required": false
+        },
+        "webhook_event_id": {
+          "required": false
+        },
+        "event_name": {
+          "required": false
+        },
+        "http_status_class": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        },
+        "latency_milliseconds": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/webhooks/dispatcher.go",
+          "literal": "obs.EventAPIWebhookDeliveryAttempt"
+        }
+      ],
+      "doc": "One delivery attempt the dispatcher ran, ending ok on a 2xx or error(<code>) otherwise."
+    },
+    {
+      "name": "api.webhook.dispatch.cycle_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "stage": {
+          "required": true
+        },
+        "error_class": {
+          "required": true
+        },
+        "tenant_id": {
+          "required": false
+        },
+        "webhook_delivery_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/webhooks/dispatcher.go",
+          "literal": "obs.EventAPIWebhookDispatchCycleFailed"
+        }
+      ],
+      "doc": "One dispatcher cycle stage failed. Loop-level failures carry no Tenant; claim-stage ones do."
+    },
+    {
+      "name": "api.webhook.endpoint.secret_rotated",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_endpoint_id": {
+          "required": true
+        },
+        "immediate": {
+          "required": true
+        },
+        "previous_secret_expires_at_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/webhooks.go",
+          "literal": "obs.EventAPIWebhookEndpointSecretRotated"
+        }
+      ],
+      "doc": "An endpoint's signing secret rotated, emitted after the rotation commit."
+    },
+    {
+      "name": "api.webhook.event.fanout",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "webhooks",
+      "test_only": false,
+      "decisions": ["committed", "duplicate", "no_targets"],
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "event_name": {
+          "required": true
+        },
+        "resource_type": {
+          "required": true
+        },
+        "resource_id": {
+          "required": true
+        },
+        "target_count": {
+          "required": false
+        },
+        "webhook_event_id": {
+          "required": false
+        },
+        "journey_id": {
+          "required": false
+        },
+        "episode_id": {
+          "required": false
+        },
+        "space_id": {
+          "required": false
+        },
+        "participant_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/webhook_producer.go",
+          "literal": "obs.EventAPIWebhookEventFanout"
+        }
+      ],
+      "doc": "The API's webhook producer ran after the transition's commit and recorded what it wrote to webhook_events."
+    },
     {
       "name": "client.call_ended",
       "kind": "fact",
@@ -1178,6 +2354,175 @@
         }
       },
       "doc": "The SDK decided which end screen the call gets. The client kernel records it where the connection chooses the end screen, and the API logs it as a kernel row. An SDK release before the client kernel sent it as an sdk.telemetry row of type call_ended, which the legacy match still reads."
+    },
+    {
+      "name": "integration.db.api_key",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "api_key_id": {
+          "required": true
+        },
+        "key_prefix": {
+          "required": true
+        },
+        "scopes": {
+          "required": true
+        },
+        "key_created_ms": {
+          "required": true
+        },
+        "revoked_at_ms": {
+          "required": false
+        },
+        "key_expires_at_ms": {
+          "required": false
+        },
+        "last_used_at_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "integration.db.api_key"
+        }
+      ],
+      "doc": "One api_keys row the revoke route owns, read by the checker. The secret hash is never read."
+    },
+    {
+      "name": "integration.db.key_mutation",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "mutation_kind": {
+          "required": true
+        },
+        "mutation_created_ms": {
+          "required": true
+        },
+        "api_key_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "integration.db.key_mutation"
+        }
+      ],
+      "doc": "One api_key_mutation_requests row: a create or rotate the Tenant ran."
+    },
+    {
+      "name": "integration.log.grant_rejected",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "reason": {
+          "required": true
+        },
+        "code": {
+          "required": true
+        },
+        "tenant_id": {
+          "required": false
+        },
+        "participant_id": {
+          "required": false
+        },
+        "api_key_id": {
+          "required": false
+        },
+        "grant_kind": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "integration.log.grant_rejected"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "access_grant.rejected"
+        }
+      },
+      "doc": "An access_grant.rejected request-log row: an issueAccessGrant call refused, with its grant kind."
+    },
+    {
+      "name": "integration.log.http_request",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "method": {
+          "required": true
+        },
+        "path": {
+          "required": true
+        },
+        "status": {
+          "required": true
+        },
+        "route": {
+          "required": false
+        },
+        "error_code": {
+          "required": false
+        },
+        "tenant_id": {
+          "required": false
+        },
+        "api_key_id": {
+          "required": false
+        },
+        "auth_scheme": {
+          "required": false
+        },
+        "episode_id": {
+          "required": false
+        },
+        "participant_id": {
+          "required": false
+        },
+        "space_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "integration.log.http_request"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "http.request"
+        }
+      },
+      "doc": "One http.request request-log row, with the auth principal the middleware recorded."
     },
     {
       "name": "obs.clock_jump",
@@ -1297,6 +2642,463 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "webhook.db.attempt",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_delivery_id": {
+          "required": true
+        },
+        "attempt_id": {
+          "required": true
+        },
+        "attempt_number": {
+          "required": true
+        },
+        "attempt_outcome": {
+          "required": true
+        },
+        "started_at_ms": {
+          "required": true
+        },
+        "finished_at_ms": {
+          "required": false
+        },
+        "latency_milliseconds": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        },
+        "http_status_class": {
+          "required": false
+        },
+        "error_code": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.attempt"
+        }
+      ],
+      "doc": "One webhook_delivery_attempts row, read by the checker."
+    },
+    {
+      "name": "webhook.db.delivery",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_delivery_id": {
+          "required": true
+        },
+        "delivery_state": {
+          "required": true
+        },
+        "webhook_endpoint_id": {
+          "required": true
+        },
+        "webhook_event_id": {
+          "required": true
+        },
+        "event_name": {
+          "required": true
+        },
+        "resource_id": {
+          "required": true
+        },
+        "occurred_at_ms": {
+          "required": true
+        },
+        "attempt_count": {
+          "required": true
+        },
+        "created_at_ms": {
+          "required": true
+        },
+        "next_attempt_at_ms": {
+          "required": false
+        },
+        "lease_expires_at_ms": {
+          "required": false
+        },
+        "terminal_at_ms": {
+          "required": false
+        },
+        "parent_delivery_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.delivery"
+        }
+      ],
+      "doc": "One webhook_deliveries row joined to its event, read by the checker."
+    },
+    {
+      "name": "webhook.db.endpoint",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_endpoint_id": {
+          "required": true
+        },
+        "enabled": {
+          "required": true
+        },
+        "current": {
+          "required": true
+        },
+        "subscribed": {
+          "required": true
+        },
+        "created_at_ms": {
+          "required": true
+        },
+        "updated_at_ms": {
+          "required": true
+        },
+        "occurred_at_ms": {
+          "required": true
+        },
+        "deleted_at_ms": {
+          "required": false
+        },
+        "api_version": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.endpoint"
+        }
+      ],
+      "doc": "An endpoint row's state at one revision, with the window it was current from, read by the checker."
+    },
+    {
+      "name": "webhook.db.episode",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "episode_id": {
+          "required": true
+        },
+        "space_id": {
+          "required": true
+        },
+        "created_at_ms": {
+          "required": true
+        },
+        "started_at_ms": {
+          "required": false
+        },
+        "ended_at_ms": {
+          "required": false
+        },
+        "deadline_at_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.episode"
+        }
+      ],
+      "doc": "One episodes row the checker counts for live-limit, capacity and create-refusal evidence."
+    },
+    {
+      "name": "webhook.db.event",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_event_id": {
+          "required": true
+        },
+        "event_name": {
+          "required": true
+        },
+        "resource_id": {
+          "required": true
+        },
+        "occurred_at_ms": {
+          "required": true
+        },
+        "journey_id": {
+          "required": false
+        },
+        "semantic_transition_key": {
+          "required": false
+        },
+        "api_version": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.event"
+        }
+      ],
+      "doc": "One committed webhook_events row, read by the checker."
+    },
+    {
+      "name": "webhook.db.lifecycle",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "event_name": {
+          "required": true
+        },
+        "resource_id": {
+          "required": true
+        },
+        "occurred_at_ms": {
+          "required": true
+        },
+        "episode_id": {
+          "required": false
+        },
+        "participant_id": {
+          "required": false
+        },
+        "space_id": {
+          "required": false
+        },
+        "generation": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.lifecycle"
+        }
+      ],
+      "doc": "One lifecycle transition in Postgres: an Episode's start or end, a Participant's join or leave, read by the checker."
+    },
+    {
+      "name": "webhook.db.participant",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "participant_id": {
+          "required": true
+        },
+        "episode_id": {
+          "required": true
+        },
+        "created_at_ms": {
+          "required": true
+        },
+        "joined_at_ms": {
+          "required": false
+        },
+        "left_at_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.participant"
+        }
+      ],
+      "doc": "One participants row the checker counts for capacity and admission-retry evidence."
+    },
+    {
+      "name": "webhook.db.retry",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "webhook_delivery_id": {
+          "required": true
+        },
+        "next_attempt_at_ms": {
+          "required": true
+        },
+        "occurred_at_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.retry"
+        }
+      ],
+      "doc": "A webhook.delivery.retry_scheduled journey-ledger row, with the next_attempt_at the scheduler wrote."
+    },
+    {
+      "name": "webhook.db.space",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "tenant_id": {
+          "required": true
+        },
+        "space_id": {
+          "required": true
+        },
+        "created_at_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.db.space"
+        }
+      ],
+      "doc": "One spaces row, create-refusal evidence the checker reads."
+    },
+    {
+      "name": "webhook.log.api_start",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "api_start": {
+          "required": true
+        },
+        "request_logs": {
+          "required": true
+        },
+        "previous_boot_end_ms": {
+          "required": false
+        },
+        "host_boot_id": {
+          "required": false
+        },
+        "tenant_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.log.api_start"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "api.starting"
+        }
+      },
+      "doc": "The API's start marker, projected from the api.starting log row. Until slice 14's release markers land it is this slice's restart witness, and it carries the request_log mode."
+    },
+    {
+      "name": "webhook.log.complete_failed",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "webhooks",
+      "test_only": false,
+      "fields": {
+        "attempt_id": {
+          "required": true
+        },
+        "webhook_delivery_id": {
+          "required": true
+        },
+        "http_status_class": {
+          "required": true
+        },
+        "tenant_id": {
+          "required": false
+        },
+        "http_status": {
+          "required": false
+        },
+        "error_code": {
+          "required": false
+        },
+        "journey_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/live/webhooks.mjs",
+          "literal": "webhook.log.complete_failed"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "webhook.delivery.complete_failed"
+        }
+      },
+      "doc": "The dispatcher's completion-failed log for an attempt whose terminal write did not commit."
     }
   ],
   "machines": [
@@ -1429,6 +3231,166 @@
       "doc": "The Episode's authoritative end. Claim: the end reason."
     },
     {
+      "name": "integration.api_key",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "integration.db.api_key",
+          "source": "db",
+          "claim": "api_key_id",
+          "failure_claims": [],
+          "fields": ["tenant_id", "api_key_id", "key_prefix", "scopes", "key_created_ms", "revoked_at_ms", "key_expires_at_ms", "last_used_at_ms"]
+        }
+      ],
+      "doc": "An api_keys row: revocation, expiry and last success, independent of the auth decision because the revoke route writes it."
+    },
+    {
+      "name": "integration.auth",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.api_key.authenticate",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["decision", "reason_code", "api_key_id", "tenant_id"]
+        }
+      ],
+      "doc": "An api_key.authenticate decision: accepted or refused with its reason."
+    },
+    {
+      "name": "integration.authorize",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.tenant.authorize",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["decision", "reason_code", "required_scope", "credential_kind", "api_key_id", "tenant_id"]
+        }
+      ],
+      "doc": "A tenant.authorize refusal: the scope the credential lacked or the Tenant it mismatched."
+    },
+    {
+      "name": "integration.capacity",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.episode.admission.capacity",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["decision", "reason_code", "admission", "episode_id", "tenant_id"]
+        }
+      ],
+      "doc": "An episode.admission.capacity refusal and whether the admission was direct or a knock."
+    },
+    {
+      "name": "integration.grant_rejected",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "integration.log.grant_rejected",
+          "source": "api",
+          "claim": "code",
+          "failure_claims": [],
+          "fields": ["reason", "code", "grant_kind", "tenant_id", "participant_id", "api_key_id"]
+        }
+      ],
+      "doc": "An access_grant.rejected row: an issueAccessGrant refusal and its grant kind."
+    },
+    {
+      "name": "integration.key_mutation",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "integration.db.key_mutation",
+          "source": "db",
+          "claim": "mutation_kind",
+          "failure_claims": [],
+          "fields": ["tenant_id", "mutation_kind", "mutation_created_ms", "api_key_id"]
+        }
+      ],
+      "doc": "A create or rotate the Tenant ran on its API keys; the rotation witness behind the unknown_prefix hypothesis."
+    },
+    {
+      "name": "integration.live_limit",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.episode.create.live_limit",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["decision", "reason_code", "live_count", "limit", "tenant_id"]
+        }
+      ],
+      "doc": "An episode.create.live_limit refusal and the live count it enforced."
+    },
+    {
+      "name": "integration.rate_limit",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.ratelimit.check",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["decision", "reason_code", "policy", "api_key_id", "tenant_id", "retry_after_ms"]
+        }
+      ],
+      "doc": "A ratelimit.check refusal and the policy that refused it."
+    },
+    {
+      "name": "integration.request",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "integration.log.http_request",
+          "source": "api",
+          "claim": "status",
+          "failure_claims": [],
+          "fields": ["method", "path", "route", "status", "error_code", "outcome", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"]
+        }
+      ],
+      "doc": "An http.request row: the request, its status and the principal that presented."
+    },
+    {
+      "name": "integration.request_log_mode",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.log.api_start",
+          "source": "api",
+          "claim": "request_logs",
+          "failure_claims": [],
+          "fields": ["request_logs", "api_start", "tenant_id"]
+        }
+      ],
+      "doc": "The request-log mode the API booted with, until C1's obs.flags_snapshot carries it for every record."
+    },
+    {
       "name": "join.leave",
       "area": "join",
       "kind": "event",
@@ -1451,6 +3413,246 @@
       "per": "any",
       "events": [],
       "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+    },
+    {
+      "name": "webhook.attempt",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.attempt",
+          "source": "db",
+          "claim": "attempt_outcome",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"]
+        }
+      ],
+      "doc": "A webhook_delivery_attempts row: the attempt's outcome, status and timing."
+    },
+    {
+      "name": "webhook.attempt_op",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.webhook.delivery.attempt",
+          "source": "api",
+          "claim": "outcome",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "outcome", "http_status_class", "http_status", "latency_milliseconds", "reason_code", "duration_ms"]
+        }
+      ],
+      "doc": "The dispatcher's attempt op, the in-flight witness beside the attempt table row."
+    },
+    {
+      "name": "webhook.complete_failed",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.log.complete_failed",
+          "source": "api",
+          "claim": "attempt_id",
+          "failure_claims": [],
+          "fields": ["attempt_id", "webhook_delivery_id", "http_status_class", "http_status", "error_code", "tenant_id", "journey_id"]
+        }
+      ],
+      "doc": "A completion-failed dispatcher log for one attempt, with the status class the receiver had answered."
+    },
+    {
+      "name": "webhook.cycle",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.webhook.dispatch.cycle_failed",
+          "source": "api",
+          "claim": "stage",
+          "failure_claims": [],
+          "fields": ["stage", "error_class", "tenant_id", "webhook_delivery_id"]
+        }
+      ],
+      "doc": "A dispatcher cycle failure, by stage. Loop-level failures carry no Tenant; the checker's reader joins them to the Tenant day."
+    },
+    {
+      "name": "webhook.delivery",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.delivery",
+          "source": "db",
+          "claim": "delivery_state",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_delivery_id", "delivery_state", "webhook_endpoint_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "next_attempt_at_ms", "attempt_count", "lease_expires_at_ms", "terminal_at_ms", "parent_delivery_id", "created_at_ms"]
+        }
+      ],
+      "doc": "A webhook_deliveries row: its state, schedule, lease and attempt count."
+    },
+    {
+      "name": "webhook.endpoint",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.endpoint",
+          "source": "db",
+          "claim": "enabled",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_endpoint_id", "enabled", "current", "subscribed", "created_at_ms", "updated_at_ms", "occurred_at_ms", "deleted_at_ms", "api_version"]
+        }
+      ],
+      "doc": "An endpoint's enable, delete and subscription state at a revision, so the rule can tell whether an endpoint subscribed at the transition."
+    },
+    {
+      "name": "webhook.episode",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.episode",
+          "source": "db",
+          "claim": "episode_id",
+          "failure_claims": [],
+          "fields": ["tenant_id", "episode_id", "space_id", "created_at_ms", "started_at_ms", "ended_at_ms", "deadline_at_ms"]
+        }
+      ],
+      "doc": "An episodes row for the checker's own counts: live-limit, capacity and create-refusal evidence."
+    },
+    {
+      "name": "webhook.event",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.event",
+          "source": "db",
+          "claim": "event_name",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "journey_id", "semantic_transition_key", "api_version"]
+        }
+      ],
+      "doc": "A committed webhook_events row for the Tenant."
+    },
+    {
+      "name": "webhook.fanout",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.webhook.event.fanout",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["tenant_id", "event_name", "resource_type", "resource_id", "decision", "target_count", "webhook_event_id", "journey_id"]
+        }
+      ],
+      "doc": "The API producer's fanout decision for one transition: committed, duplicate or no_targets."
+    },
+    {
+      "name": "webhook.marker",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.log.api_start",
+          "source": "api",
+          "claim": "api_start",
+          "failure_claims": [],
+          "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"]
+        }
+      ],
+      "doc": "An API start marker. Until slice 14's release.marker lands, the api.starting row is the deploy-restart witness; a complete api-source window with no marker proves no restart."
+    },
+    {
+      "name": "webhook.participant",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.participant",
+          "source": "db",
+          "claim": "participant_id",
+          "failure_claims": [],
+          "fields": ["tenant_id", "participant_id", "episode_id", "created_at_ms", "joined_at_ms", "left_at_ms"]
+        }
+      ],
+      "doc": "A participants row for capacity and admission-retry counts."
+    },
+    {
+      "name": "webhook.retry",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.retry",
+          "source": "db",
+          "claim": "next_attempt_at_ms",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_delivery_id", "next_attempt_at_ms", "occurred_at_ms"]
+        }
+      ],
+      "doc": "A retry_scheduled ledger row with the next_attempt_at the scheduler set."
+    },
+    {
+      "name": "webhook.secret_rotation",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.webhook.endpoint.secret_rotated",
+          "source": "api",
+          "claim": "immediate",
+          "failure_claims": [],
+          "fields": ["tenant_id", "webhook_endpoint_id", "immediate", "previous_secret_expires_at_ms"]
+        }
+      ],
+      "doc": "An endpoint secret rotation, the witness that falsifies a stale-secret hypothesis."
+    },
+    {
+      "name": "webhook.space",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.space",
+          "source": "db",
+          "claim": "space_id",
+          "failure_claims": [],
+          "fields": ["tenant_id", "space_id", "created_at_ms"]
+        }
+      ],
+      "doc": "A spaces row, the createSpace success the checker counts."
+    },
+    {
+      "name": "webhook.transition",
+      "area": "webhooks",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "webhook.db.lifecycle",
+          "source": "db",
+          "claim": "event_name",
+          "failure_claims": [],
+          "fields": ["tenant_id", "event_name", "resource_id", "occurred_at_ms", "episode_id", "participant_id", "space_id", "generation"]
+        }
+      ],
+      "doc": "A lifecycle transition a subscribed endpoint should hear about: episode.started, episode.ended, participant.joined or participant.left, from the authoritative Postgres rows."
     }
   ],
   "symptoms": [
@@ -1636,6 +3838,209 @@
       "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
     },
     {
+      "code": "integration.credential_refused",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "API-key requests were refused and the Tenant had no API-key success within 5 min after the first refusal.",
+      "user_words": ["our backend's key stopped working", "we get 401 on every call"],
+      "witnesses": [
+        {
+          "fact": "integration.auth",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where name == 'api.api_key.authenticate'",
+          "doc": "Authenticate decisions, the refusal and the success witness."
+        },
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'http.request'",
+          "doc": "Request rows with auth_scheme; a 2xx by api_key is a second success witness."
+        },
+        {
+          "fact": "integration.api_key",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres api_keys | where tenant_id == '{tenant}'",
+          "doc": "Revocation, expiry and last_used_at, independent of the decision."
+        },
+        {
+          "fact": "integration.request_log_mode",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'api.starting'",
+          "doc": "Whether request rows exist at all for the window."
+        },
+        {
+          "fact": "integration.authorize",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.tenant.authorize'",
+          "doc": "Authorization refusals, a refusal witness when auth passed."
+        },
+        {
+          "fact": "integration.key_mutation",
+          "from": ["db"],
+          "required": false,
+          "independent": 1,
+          "query": "postgres api_key_mutation_requests | where tenant_id == '{tenant}'",
+          "doc": "Rotations behind the unknown_prefix hypothesis."
+        }
+      ],
+      "rule": "observability/rules/integration.credential_refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.credential_refused/positive.json",
+        "healthy": "observability/fixtures/integration.credential_refused/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
+      "code": "integration.episode_create_refused",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "A createSpace or createEpisode call was refused or failed and no Space or Episode in the same Space followed within 60 s.",
+      "user_words": ["creating an episode fails", "our space creation was refused"],
+      "witnesses": [
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'http.request'",
+          "doc": "The refused create requests and any 2xx retry."
+        },
+        {
+          "fact": "webhook.space",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres spaces | where tenant_id == '{tenant}'",
+          "doc": "Space rows the checker counts itself."
+        },
+        {
+          "fact": "webhook.episode",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres episodes | where tenant_id == '{tenant}'",
+          "doc": "Episode rows: create evidence, live-limit count, deadline leaks."
+        },
+        {
+          "fact": "integration.live_limit",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.episode.create.live_limit'",
+          "doc": "The live-limit decision for tenant.live_episode_limit_reached refusals."
+        },
+        {
+          "fact": "webhook.participant",
+          "from": ["db"],
+          "required": false,
+          "independent": 1,
+          "query": "postgres participants | where tenant_id == '{tenant}'",
+          "doc": "Whether counted Episodes still held live Participants."
+        }
+      ],
+      "rule": "observability/rules/integration.episode_create_refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.episode_create_refused/positive.json",
+        "healthy": "observability/fixtures/integration.episode_create_refused/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
+      "code": "integration.grant_not_issued",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "An admitEpisodeParticipant or initial issueAccessGrant was refused or failed and was not retried successfully within 120 s.",
+      "user_words": ["participants can't get into the episode", "grant calls are being rejected"],
+      "witnesses": [
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'http.request'",
+          "doc": "The refused admissions and grants, plus 2xx retries."
+        },
+        {
+          "fact": "integration.grant_rejected",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where event == 'access_grant.rejected'",
+          "doc": "Grant refusals with their grant kind."
+        },
+        {
+          "fact": "integration.rate_limit",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where name == 'api.ratelimit.check'",
+          "doc": "Rate-limit refusals and Retry-After."
+        },
+        {
+          "fact": "integration.request_log_mode",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'api.starting'",
+          "doc": "Whether all write requests were counted; a 429 under lesser logging is a gap."
+        },
+        {
+          "fact": "webhook.participant",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres participants | where tenant_id == '{tenant}'",
+          "doc": "Participants created in the retry window, and the 500-live-Participant count."
+        },
+        {
+          "fact": "webhook.episode",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres episodes | where tenant_id == '{tenant}'",
+          "doc": "Whether the Episode had ended when the admission was refused."
+        },
+        {
+          "fact": "integration.capacity",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.episode.admission.capacity'",
+          "doc": "The capacity refusal decision."
+        },
+        {
+          "fact": "integration.api_key",
+          "from": ["db"],
+          "required": false,
+          "independent": 1,
+          "query": "postgres api_keys | where tenant_id == '{tenant}'",
+          "doc": "Key rows, to group refusals by caller."
+        }
+      ],
+      "rule": "observability/rules/integration.grant_not_issued.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.grant_not_issued/positive.json",
+        "healthy": "observability/fixtures/integration.grant_not_issued/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
@@ -1739,6 +4144,202 @@
         "healthy": "observability/fixtures/video.frozen/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "webhook.delivery_stalled",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "A delivery waits in pending or retry_wait more than 120 s past its scheduled time, or sits delivering past a 60 s-expired lease.",
+      "user_words": ["webhooks stopped arriving", "deliveries are queued but nothing sends"],
+      "witnesses": [
+        {
+          "fact": "webhook.delivery",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_deliveries + events | where tenant_id == '{tenant}'",
+          "doc": "Delivery states, schedules and leases."
+        },
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_delivery_attempts | where tenant_id == '{tenant}'",
+          "doc": "When attempts started and finished, for the wait and the receiver-slow count."
+        },
+        {
+          "fact": "webhook.retry",
+          "from": ["db"],
+          "required": false,
+          "independent": 1,
+          "query": "postgres observability_journey_events | where tenant_id == '{tenant}' and kind == 'webhook.delivery.retry_scheduled'",
+          "doc": "The scheduled retry time the ledger recorded."
+        },
+        {
+          "fact": "webhook.cycle",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.webhook.dispatch.cycle_failed'",
+          "doc": "Dispatcher loop failures; absence on a covered window proves the loop ran."
+        },
+        {
+          "fact": "webhook.marker",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'api.starting'",
+          "doc": "API start markers; a restart moves the stall's start. Incomplete coverage is the gap."
+        }
+      ],
+      "rule": "observability/rules/webhook.delivery_stalled.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.delivery_stalled/positive.json",
+        "healthy": "observability/fixtures/webhook.delivery_stalled/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.event_missing",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "A lifecycle transition in the last 30 days, older than 30 s, has no matching webhook_events row although an endpoint subscribed (or the event is written unconditionally).",
+      "user_words": ["our webhook endpoint never got the event", "an episode started and we heard nothing"],
+      "witnesses": [
+        {
+          "fact": "webhook.transition",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook transitions | where tenant_id == '{tenant}' and occurred_at_ms >= {from} and occurred_at_ms <= {to}",
+          "doc": "The lifecycle transition population from episodes and participants."
+        },
+        {
+          "fact": "webhook.event",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_events | where tenant_id == '{tenant}' and occurred_at >= {from}",
+          "doc": "The committed event rows the transitions should match."
+        },
+        {
+          "fact": "webhook.endpoint",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_endpoints + revisions | where tenant_id == '{tenant}'",
+          "doc": "Which endpoints were enabled and subscribed when."
+        },
+        {
+          "fact": "webhook.fanout",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.webhook.event.fanout' and tenant_id == '{tenant}'",
+          "doc": "The producer's own decisions; a duplicate decision prints as a fact."
+        }
+      ],
+      "rule": "observability/rules/webhook.event_missing.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.event_missing/positive.json",
+        "healthy": "observability/fixtures/webhook.event_missing/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.not_delivered",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "A delivery exhausted its attempts. The last attempt's code says whether the Tenant's receiver refused it, could not be reached, or the API failed it.",
+      "user_words": ["webhook deliveries keep failing", "our endpoint rejected the events"],
+      "witnesses": [
+        {
+          "fact": "webhook.delivery",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_deliveries + events | where tenant_id == '{tenant}'",
+          "doc": "The exhausted deliveries."
+        },
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_delivery_attempts | where tenant_id == '{tenant}'",
+          "doc": "The attempts' statuses and error codes."
+        },
+        {
+          "fact": "webhook.secret_rotation",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where name == 'api.webhook.endpoint.secret_rotated' and tenant_id == '{tenant}'",
+          "doc": "Rotations that falsify the stale-secret hypothesis."
+        }
+      ],
+      "rule": "observability/rules/webhook.not_delivered.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.not_delivered/positive.json",
+        "healthy": "observability/fixtures/webhook.not_delivered/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.outcome_unrecorded",
+      "area": "webhooks",
+      "slice": 12,
+      "item": "tenant",
+      "per": "item",
+      "doc": "An attempt's outcome was never recorded (outcome=lease_expired): the receiver's answer is unknown and a redelivery may duplicate.",
+      "user_words": ["did you deliver that event or not"],
+      "witnesses": [
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres webhook_delivery_attempts | where tenant_id == '{tenant}' and attempt_outcome == 'lease_expired'",
+          "doc": "The lease_expired attempt population."
+        },
+        {
+          "fact": "webhook.attempt_op",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where name == 'api.webhook.delivery.attempt'",
+          "doc": "The dispatcher's op, which may still know the receiver's answer."
+        },
+        {
+          "fact": "webhook.complete_failed",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "api log | where event == 'webhook.delivery.complete_failed'",
+          "doc": "The completion-failed log, with the status class."
+        },
+        {
+          "fact": "webhook.marker",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "api log | where event == 'api.starting'",
+          "doc": "A restart inside the attempt window explains the lost outcome."
+        }
+      ],
+      "rule": "observability/rules/webhook.outcome_unrecorded.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.outcome_unrecorded/positive.json",
+        "healthy": "observability/fixtures/webhook.outcome_unrecorded/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
     }
   ],
   "incomplete": [

@@ -3,18 +3,42 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "5a1c1c781f2f"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventAPIAPIKeyAuthenticate           = "api.api_key.authenticate"
+	EventAPIEpisodeAdmissionCapacity     = "api.episode.admission.capacity"
+	EventAPIEpisodeCreateLiveLimit       = "api.episode.create.live_limit"
+	EventAPIRatelimitCheck               = "api.ratelimit.check"
+	EventAPITenantAuthorize              = "api.tenant.authorize"
+	EventAPIWebhookDeliveryAttempt       = "api.webhook.delivery.attempt"
+	EventAPIWebhookDispatchCycleFailed   = "api.webhook.dispatch.cycle_failed"
+	EventAPIWebhookEndpointSecretRotated = "api.webhook.endpoint.secret_rotated"
+	EventAPIWebhookEventFanout           = "api.webhook.event.fanout"
+	EventClientCallEnded                 = "client.call_ended"
+	EventIntegrationDbAPIKey             = "integration.db.api_key"
+	EventIntegrationDbKeyMutation        = "integration.db.key_mutation"
+	EventIntegrationLogGrantRejected     = "integration.log.grant_rejected"
+	EventIntegrationLogHTTPRequest       = "integration.log.http_request"
+	EventObsClockJump                    = "obs.clock_jump"
+	EventObsFlagsSnapshot                = "obs.flags_snapshot"
+	EventSelftestAdmit                   = "selftest.admit"
+	EventSelftestBanner                  = "selftest.banner"
+	EventSelftestNote                    = "selftest.note"
+	EventSelftestWork                    = "selftest.work"
+	EventSyncEpisodeEnded                = "sync.episode.ended"
+	EventWebhookDbAttempt                = "webhook.db.attempt"
+	EventWebhookDbDelivery               = "webhook.db.delivery"
+	EventWebhookDbEndpoint               = "webhook.db.endpoint"
+	EventWebhookDbEpisode                = "webhook.db.episode"
+	EventWebhookDbEvent                  = "webhook.db.event"
+	EventWebhookDbLifecycle              = "webhook.db.lifecycle"
+	EventWebhookDbParticipant            = "webhook.db.participant"
+	EventWebhookDbRetry                  = "webhook.db.retry"
+	EventWebhookDbSpace                  = "webhook.db.space"
+	EventWebhookLogAPIStart              = "webhook.log.api_start"
+	EventWebhookLogCompleteFailed        = "webhook.log.complete_failed"
 )
 
 // Machine names.
@@ -26,161 +50,359 @@ const (
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled                          = "cancelled"
+	ReasonEndTimeLimit                       = "end.time_limit"
+	ReasonIntegrationCapacityExceeded        = "integration.capacity_exceeded"
+	ReasonIntegrationEpisodeEnded            = "integration.episode_ended"
+	ReasonIntegrationEpisodeFull             = "integration.episode_full"
+	ReasonIntegrationExhausted               = "integration.exhausted"
+	ReasonIntegrationExpired                 = "integration.expired"
+	ReasonIntegrationHashMismatch            = "integration.hash_mismatch"
+	ReasonIntegrationLimiterUnavailable      = "integration.limiter_unavailable"
+	ReasonIntegrationLiveEpisodeLimit        = "integration.live_episode_limit"
+	ReasonIntegrationLiveEpisodeLimitReached = "integration.live_episode_limit_reached"
+	ReasonIntegrationLookupFailed            = "integration.lookup_failed"
+	ReasonIntegrationMalformed               = "integration.malformed"
+	ReasonIntegrationRevoked                 = "integration.revoked"
+	ReasonIntegrationScopeMissing            = "integration.scope_missing"
+	ReasonIntegrationScopesInvalid           = "integration.scopes_invalid"
+	ReasonIntegrationTenantMismatch          = "integration.tenant_mismatch"
+	ReasonIntegrationUnknownPrefix           = "integration.unknown_prefix"
+	ReasonSelftestBroken                     = "selftest.broken"
+	ReasonSelftestBusy                       = "selftest.busy"
+	ReasonUnclassified                       = "unclassified"
+	ReasonWebhookAttemptTraceFailed          = "webhook.attempt_trace_failed"
+	ReasonWebhookCompleteFailed              = "webhook.complete_failed"
+	ReasonWebhookConnectFailed               = "webhook.connect_failed"
+	ReasonWebhookDeployRestart               = "webhook.deploy_restart"
+	ReasonWebhookDnsFailed                   = "webhook.dns_failed"
+	ReasonWebhookEncryptionFailed            = "webhook.encryption_failed"
+	ReasonWebhookHTTP2xx                     = "webhook.http_2xx"
+	ReasonWebhookHTTP3xx                     = "webhook.http_3xx"
+	ReasonWebhookHTTP4xx                     = "webhook.http_4xx"
+	ReasonWebhookHTTP5xx                     = "webhook.http_5xx"
+	ReasonWebhookInvalidHTTPStatus           = "webhook.invalid_http_status"
+	ReasonWebhookLeaseExpired                = "webhook.lease_expired"
+	ReasonWebhookLeaseLost                   = "webhook.lease_lost"
+	ReasonWebhookNetworkFailed               = "webhook.network_failed"
+	ReasonWebhookNotSubscribed               = "webhook.not_subscribed"
+	ReasonWebhookOther                       = "webhook.other"
+	ReasonWebhookReceiverSlow                = "webhook.receiver_slow"
+	ReasonWebhookRequestInvalid              = "webhook.request_invalid"
+	ReasonWebhookResponseHeadersTooLarge     = "webhook.response_headers_too_large"
+	ReasonWebhookResponseTooLarge            = "webhook.response_too_large"
+	ReasonWebhookRetentionExpired            = "webhook.retention_expired"
+	ReasonWebhookSecretRotated               = "webhook.secret_rotated"
+	ReasonWebhookSsrfBlocked                 = "webhook.ssrf_blocked"
+	ReasonWebhookTimeout                     = "webhook.timeout"
+	ReasonWebhookTlsFailed                   = "webhook.tls_failed"
+	ReasonWebhookUnsafeURL                   = "webhook.unsafe_url"
 )
 
 // Field names.
 const (
-	FieldAdmissionRequestID = "admission_request_id"
-	FieldAgentID            = "agent_id"
-	FieldAppBuild           = "app_build"
-	FieldAppVersion         = "app_version"
-	FieldAttempt            = "attempt"
-	FieldBannerKind         = "banner_kind"
-	FieldBatchID            = "batch_id"
-	FieldClientMonoMs       = "client_mono_ms"
-	FieldClientSessionID    = "client_session_id"
-	FieldClientWallMs       = "client_wall_ms"
-	FieldClockEpoch         = "clock_epoch"
-	FieldClockErrMs         = "clock_err_ms"
-	FieldClockState         = "clock_state"
-	FieldDecision           = "decision"
-	FieldDecisionID         = "decision_id"
-	FieldDeviceEphemeral    = "device_ephemeral"
-	FieldDeviceID           = "device_id"
-	FieldDropReason         = "drop_reason"
-	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDurationMs         = "duration_ms"
-	FieldEnd                = "end"
-	FieldEndReason          = "end_reason"
-	FieldEnv                = "env"
-	FieldEpisodeID          = "episode_id"
-	FieldEstServerMs        = "est_server_ms"
-	FieldEventID            = "event_id"
-	FieldFlags              = "flags"
-	FieldFlagsHash          = "flags_hash"
-	FieldFromState          = "from_state"
-	FieldGeneration         = "generation"
-	FieldItemCount          = "item_count"
-	FieldJobID              = "job_id"
-	FieldJourneyID          = "journey_id"
-	FieldJumpMs             = "jump_ms"
-	FieldKind               = "kind"
-	FieldMachine            = "machine"
-	FieldMediaConnectionID  = "media_connection_id"
-	FieldModule             = "module"
-	FieldName               = "name"
-	FieldNextSeq            = "next_seq"
-	FieldNoteKind           = "note_kind"
-	FieldOpID               = "op_id"
-	FieldOutcome            = "outcome"
-	FieldParentOpID         = "parent_op_id"
-	FieldParticipantID      = "participant_id"
-	FieldPlatform           = "platform"
-	FieldProviderMediaID    = "provider_media_id"
-	FieldReasonCode         = "reason_code"
-	FieldRecordingID        = "recording_id"
-	FieldReleaseSHA         = "release_sha"
-	FieldRequestID          = "request_id"
-	FieldSchemaVer          = "schema_ver"
-	FieldSDKVersion         = "sdk_version"
-	FieldSeq                = "seq"
-	FieldShownMs            = "shown_ms"
-	FieldSourceID           = "source_id"
-	FieldSpaceID            = "space_id"
-	FieldSpanID             = "span_id"
-	FieldSurfaceState       = "surface_state"
-	FieldSyncConnectionID   = "sync_connection_id"
-	FieldTenantID           = "tenant_id"
-	FieldToState            = "to_state"
-	FieldTraceID            = "trace_id"
-	FieldTrigger            = "trigger"
-	FieldUserID             = "user_id"
-	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldAdmission                 = "admission"
+	FieldAdmissionRequestID        = "admission_request_id"
+	FieldAgentID                   = "agent_id"
+	FieldAPIKeyID                  = "api_key_id"
+	FieldAPIStart                  = "api_start"
+	FieldAPIVersion                = "api_version"
+	FieldAppBuild                  = "app_build"
+	FieldAppVersion                = "app_version"
+	FieldAttempt                   = "attempt"
+	FieldAttemptCount              = "attempt_count"
+	FieldAttemptID                 = "attempt_id"
+	FieldAttemptNumber             = "attempt_number"
+	FieldAttemptOutcome            = "attempt_outcome"
+	FieldAuthScheme                = "auth_scheme"
+	FieldBannerKind                = "banner_kind"
+	FieldBatchID                   = "batch_id"
+	FieldClientMonoMs              = "client_mono_ms"
+	FieldClientSessionID           = "client_session_id"
+	FieldClientWallMs              = "client_wall_ms"
+	FieldClockEpoch                = "clock_epoch"
+	FieldClockErrMs                = "clock_err_ms"
+	FieldClockState                = "clock_state"
+	FieldCode                      = "code"
+	FieldCreatedAtMs               = "created_at_ms"
+	FieldCredentialKind            = "credential_kind"
+	FieldCurrent                   = "current"
+	FieldDeadlineAtMs              = "deadline_at_ms"
+	FieldDecision                  = "decision"
+	FieldDecisionID                = "decision_id"
+	FieldDeletedAtMs               = "deleted_at_ms"
+	FieldDeliveryState             = "delivery_state"
+	FieldDeviceEphemeral           = "device_ephemeral"
+	FieldDeviceID                  = "device_id"
+	FieldDropReason                = "drop_reason"
+	FieldDroppedSeqs               = "dropped_seqs"
+	FieldDurationMs                = "duration_ms"
+	FieldEnabled                   = "enabled"
+	FieldEnd                       = "end"
+	FieldEndReason                 = "end_reason"
+	FieldEndedAtMs                 = "ended_at_ms"
+	FieldEnv                       = "env"
+	FieldEpisodeID                 = "episode_id"
+	FieldErrorClass                = "error_class"
+	FieldErrorCode                 = "error_code"
+	FieldEstServerMs               = "est_server_ms"
+	FieldEventID                   = "event_id"
+	FieldEventName                 = "event_name"
+	FieldFinishedAtMs              = "finished_at_ms"
+	FieldFlags                     = "flags"
+	FieldFlagsHash                 = "flags_hash"
+	FieldFromState                 = "from_state"
+	FieldGeneration                = "generation"
+	FieldGrantKind                 = "grant_kind"
+	FieldHostBootID                = "host_boot_id"
+	FieldHTTPStatus                = "http_status"
+	FieldHTTPStatusClass           = "http_status_class"
+	FieldImmediate                 = "immediate"
+	FieldItemCount                 = "item_count"
+	FieldJobID                     = "job_id"
+	FieldJoinedAtMs                = "joined_at_ms"
+	FieldJourneyID                 = "journey_id"
+	FieldJumpMs                    = "jump_ms"
+	FieldKeyCreatedMs              = "key_created_ms"
+	FieldKeyExpiresAtMs            = "key_expires_at_ms"
+	FieldKeyPrefix                 = "key_prefix"
+	FieldKind                      = "kind"
+	FieldLastUsedAtMs              = "last_used_at_ms"
+	FieldLatencyMilliseconds       = "latency_milliseconds"
+	FieldLeaseExpiresAtMs          = "lease_expires_at_ms"
+	FieldLeftAtMs                  = "left_at_ms"
+	FieldLimit                     = "limit"
+	FieldLiveCount                 = "live_count"
+	FieldMachine                   = "machine"
+	FieldMediaConnectionID         = "media_connection_id"
+	FieldMethod                    = "method"
+	FieldModule                    = "module"
+	FieldMutationCreatedMs         = "mutation_created_ms"
+	FieldMutationKind              = "mutation_kind"
+	FieldName                      = "name"
+	FieldNextAttemptAtMs           = "next_attempt_at_ms"
+	FieldNextSeq                   = "next_seq"
+	FieldNoteKind                  = "note_kind"
+	FieldOccurredAtMs              = "occurred_at_ms"
+	FieldOpID                      = "op_id"
+	FieldOutcome                   = "outcome"
+	FieldParentDeliveryID          = "parent_delivery_id"
+	FieldParentOpID                = "parent_op_id"
+	FieldParticipantID             = "participant_id"
+	FieldPath                      = "path"
+	FieldPlatform                  = "platform"
+	FieldPolicy                    = "policy"
+	FieldPreviousBootEndMs         = "previous_boot_end_ms"
+	FieldPreviousSecretExpiresAtMs = "previous_secret_expires_at_ms"
+	FieldProviderMediaID           = "provider_media_id"
+	FieldReason                    = "reason"
+	FieldReasonCode                = "reason_code"
+	FieldRecordingID               = "recording_id"
+	FieldReleaseSHA                = "release_sha"
+	FieldRequestID                 = "request_id"
+	FieldRequestLogs               = "request_logs"
+	FieldRequiredScope             = "required_scope"
+	FieldResourceID                = "resource_id"
+	FieldResourceType              = "resource_type"
+	FieldRetryAfterMs              = "retry_after_ms"
+	FieldRevokedAtMs               = "revoked_at_ms"
+	FieldRoute                     = "route"
+	FieldSchemaVer                 = "schema_ver"
+	FieldScopes                    = "scopes"
+	FieldSDKVersion                = "sdk_version"
+	FieldSemanticTransitionKey     = "semantic_transition_key"
+	FieldSeq                       = "seq"
+	FieldShownMs                   = "shown_ms"
+	FieldSourceID                  = "source_id"
+	FieldSpaceID                   = "space_id"
+	FieldSpanID                    = "span_id"
+	FieldStage                     = "stage"
+	FieldStartedAtMs               = "started_at_ms"
+	FieldStatus                    = "status"
+	FieldSubscribed                = "subscribed"
+	FieldSurfaceState              = "surface_state"
+	FieldSyncConnectionID          = "sync_connection_id"
+	FieldTargetCount               = "target_count"
+	FieldTenantID                  = "tenant_id"
+	FieldTerminalAtMs              = "terminal_at_ms"
+	FieldToState                   = "to_state"
+	FieldTraceID                   = "trace_id"
+	FieldTrigger                   = "trigger"
+	FieldUpdatedAtMs               = "updated_at_ms"
+	FieldUserID                    = "user_id"
+	FieldWebhookDeliveryID         = "webhook_delivery_id"
+	FieldWebhookEndpointID         = "webhook_endpoint_id"
+	FieldWebhookEventID            = "webhook_event_id"
 )
 
 var registryFields = map[string]fieldSpec{
-	"admission_request_id": {typ: "id", group: "trail", required: false},
-	"agent_id":             {typ: "id", group: "trail", required: false},
-	"app_build":            {typ: "string", group: "build", required: false},
-	"app_version":          {typ: "string", group: "build", required: false},
-	"attempt":              {typ: "int", group: "trail", required: false},
-	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
-	"batch_id":             {typ: "id", group: "delivery", required: false},
-	"client_mono_ms":       {typ: "number", group: "clock", required: false},
-	"client_session_id":    {typ: "id", group: "trail", required: false},
-	"client_wall_ms":       {typ: "int", group: "clock", required: false},
-	"clock_epoch":          {typ: "int", group: "clock", required: false},
-	"clock_err_ms":         {typ: "int", group: "clock", required: false},
-	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
-	"decision":             {typ: "string", group: "record", required: false},
-	"decision_id":          {typ: "id", group: "record", required: false},
-	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
-	"device_id":            {typ: "id", group: "trail", required: false},
-	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
-	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"duration_ms":          {typ: "int", group: "record", required: false},
-	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
-	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
-	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
-	"episode_id":           {typ: "id", group: "trail", required: false},
-	"est_server_ms":        {typ: "int", group: "clock", required: false},
-	"event_id":             {typ: "id", group: "delivery", required: true},
-	"flags":                {typ: "map", group: "event", required: false},
-	"flags_hash":           {typ: "string", group: "flags", required: false},
-	"from_state":           {typ: "string", group: "record", required: false},
-	"generation":           {typ: "int", group: "trail", required: false},
-	"item_count":           {typ: "int", group: "event", required: false},
-	"job_id":               {typ: "id", group: "trail", required: false},
-	"journey_id":           {typ: "id", group: "trail", required: false},
-	"jump_ms":              {typ: "int", group: "event", required: false},
-	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"machine":              {typ: "string", group: "record", required: false},
-	"media_connection_id":  {typ: "id", group: "trail", required: false},
-	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
-	"name":                 {typ: "string", group: "record", required: true},
-	"next_seq":             {typ: "int", group: "delivery", required: false},
-	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
-	"op_id":                {typ: "id", group: "record", required: false},
-	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
-	"parent_op_id":         {typ: "id", group: "record", required: false},
-	"participant_id":       {typ: "id", group: "trail", required: false},
-	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
-	"provider_media_id":    {typ: "id", group: "trail", required: false},
-	"reason_code":          {typ: "string", group: "record", required: false},
-	"recording_id":         {typ: "id", group: "trail", required: false},
-	"release_sha":          {typ: "string", group: "build", required: false},
-	"request_id":           {typ: "id", group: "trail", required: false},
-	"schema_ver":           {typ: "string", group: "build", required: true},
-	"sdk_version":          {typ: "string", group: "build", required: false},
-	"seq":                  {typ: "int", group: "delivery", required: true},
-	"shown_ms":             {typ: "int", group: "record", required: false},
-	"source_id":            {typ: "string", group: "delivery", required: true},
-	"space_id":             {typ: "id", group: "trail", required: false},
-	"span_id":              {typ: "id", group: "trail", required: false},
-	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
-	"sync_connection_id":   {typ: "id", group: "trail", required: false},
-	"tenant_id":            {typ: "id", group: "trail", required: false},
-	"to_state":             {typ: "string", group: "record", required: false},
-	"trace_id":             {typ: "id", group: "trail", required: false},
-	"trigger":              {typ: "string", group: "record", required: false},
-	"user_id":              {typ: "id", group: "trail", required: false},
-	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"admission":                     {typ: "enum", group: "event", required: false, values: []string{"direct", "knock"}},
+	"admission_request_id":          {typ: "id", group: "trail", required: false},
+	"agent_id":                      {typ: "id", group: "trail", required: false},
+	"api_key_id":                    {typ: "id", group: "event", required: false},
+	"api_start":                     {typ: "bool", group: "event", required: false},
+	"api_version":                   {typ: "int", group: "event", required: false},
+	"app_build":                     {typ: "string", group: "build", required: false},
+	"app_version":                   {typ: "string", group: "build", required: false},
+	"attempt":                       {typ: "int", group: "trail", required: false},
+	"attempt_count":                 {typ: "int", group: "event", required: false},
+	"attempt_id":                    {typ: "id", group: "event", required: false},
+	"attempt_number":                {typ: "int", group: "event", required: false},
+	"attempt_outcome":               {typ: "enum", group: "event", required: false, values: []string{"succeeded", "failed", "lease_expired"}},
+	"auth_scheme":                   {typ: "enum", group: "event", required: false, values: []string{"api_key", "session", "bearer", "none"}},
+	"banner_kind":                   {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
+	"batch_id":                      {typ: "id", group: "delivery", required: false},
+	"client_mono_ms":                {typ: "number", group: "clock", required: false},
+	"client_session_id":             {typ: "id", group: "trail", required: false},
+	"client_wall_ms":                {typ: "int", group: "clock", required: false},
+	"clock_epoch":                   {typ: "int", group: "clock", required: false},
+	"clock_err_ms":                  {typ: "int", group: "clock", required: false},
+	"clock_state":                   {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"code":                          {typ: "string", group: "event", required: false},
+	"created_at_ms":                 {typ: "int", group: "event", required: false},
+	"credential_kind":               {typ: "enum", group: "event", required: false, values: []string{"api_key", "session", "access_grant", "mcp"}},
+	"current":                       {typ: "bool", group: "event", required: false},
+	"deadline_at_ms":                {typ: "int", group: "event", required: false},
+	"decision":                      {typ: "string", group: "record", required: false},
+	"decision_id":                   {typ: "id", group: "record", required: false},
+	"deleted_at_ms":                 {typ: "int", group: "event", required: false},
+	"delivery_state":                {typ: "enum", group: "event", required: false, values: []string{"pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"}},
+	"device_ephemeral":              {typ: "bool", group: "trail", required: false},
+	"device_id":                     {typ: "id", group: "trail", required: false},
+	"drop_reason":                   {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped_seqs":                  {typ: "ranges", group: "delivery", required: false},
+	"duration_ms":                   {typ: "int", group: "record", required: false},
+	"enabled":                       {typ: "bool", group: "event", required: false},
+	"end":                           {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
+	"end_reason":                    {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"ended_at_ms":                   {typ: "int", group: "event", required: false},
+	"env":                           {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_id":                    {typ: "id", group: "trail", required: false},
+	"error_class":                   {typ: "string", group: "event", required: false},
+	"error_code":                    {typ: "string", group: "event", required: false},
+	"est_server_ms":                 {typ: "int", group: "clock", required: false},
+	"event_id":                      {typ: "id", group: "delivery", required: true},
+	"event_name":                    {typ: "enum", group: "event", required: false, values: []string{"space.created", "space.updated", "space.archived", "space.restored", "episode.started", "episode.ended", "participant.joined", "participant.left", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed", "endpoint.test"}},
+	"finished_at_ms":                {typ: "int", group: "event", required: false},
+	"flags":                         {typ: "map", group: "event", required: false},
+	"flags_hash":                    {typ: "string", group: "flags", required: false},
+	"from_state":                    {typ: "string", group: "record", required: false},
+	"generation":                    {typ: "int", group: "trail", required: false},
+	"grant_kind":                    {typ: "enum", group: "event", required: false, values: []string{"initial", "renewal"}},
+	"host_boot_id":                  {typ: "string", group: "event", required: false},
+	"http_status":                   {typ: "int", group: "event", required: false},
+	"http_status_class":             {typ: "enum", group: "event", required: false, values: []string{"2xx", "3xx", "4xx", "5xx", "none"}},
+	"immediate":                     {typ: "bool", group: "event", required: false},
+	"item_count":                    {typ: "int", group: "event", required: false},
+	"job_id":                        {typ: "id", group: "trail", required: false},
+	"joined_at_ms":                  {typ: "int", group: "event", required: false},
+	"journey_id":                    {typ: "id", group: "trail", required: false},
+	"jump_ms":                       {typ: "int", group: "event", required: false},
+	"key_created_ms":                {typ: "int", group: "event", required: false},
+	"key_expires_at_ms":             {typ: "int", group: "event", required: false},
+	"key_prefix":                    {typ: "string", group: "event", required: false},
+	"kind":                          {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"last_used_at_ms":               {typ: "int", group: "event", required: false},
+	"latency_milliseconds":          {typ: "int", group: "event", required: false},
+	"lease_expires_at_ms":           {typ: "int", group: "event", required: false},
+	"left_at_ms":                    {typ: "int", group: "event", required: false},
+	"limit":                         {typ: "int", group: "event", required: false},
+	"live_count":                    {typ: "int", group: "event", required: false},
+	"machine":                       {typ: "string", group: "record", required: false},
+	"media_connection_id":           {typ: "id", group: "trail", required: false},
+	"method":                        {typ: "string", group: "event", required: false},
+	"module":                        {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
+	"mutation_created_ms":           {typ: "int", group: "event", required: false},
+	"mutation_kind":                 {typ: "enum", group: "event", required: false, values: []string{"create", "rotate"}},
+	"name":                          {typ: "string", group: "record", required: true},
+	"next_attempt_at_ms":            {typ: "int", group: "event", required: false},
+	"next_seq":                      {typ: "int", group: "delivery", required: false},
+	"note_kind":                     {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
+	"occurred_at_ms":                {typ: "int", group: "event", required: false},
+	"op_id":                         {typ: "id", group: "record", required: false},
+	"outcome":                       {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"parent_delivery_id":            {typ: "id", group: "event", required: false},
+	"parent_op_id":                  {typ: "id", group: "record", required: false},
+	"participant_id":                {typ: "id", group: "trail", required: false},
+	"path":                          {typ: "string", group: "event", required: false},
+	"platform":                      {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"policy":                        {typ: "string", group: "event", required: false},
+	"previous_boot_end_ms":          {typ: "int", group: "event", required: false},
+	"previous_secret_expires_at_ms": {typ: "int", group: "event", required: false},
+	"provider_media_id":             {typ: "id", group: "trail", required: false},
+	"reason":                        {typ: "string", group: "event", required: false},
+	"reason_code":                   {typ: "string", group: "record", required: false},
+	"recording_id":                  {typ: "id", group: "trail", required: false},
+	"release_sha":                   {typ: "string", group: "build", required: false},
+	"request_id":                    {typ: "id", group: "trail", required: false},
+	"request_logs":                  {typ: "enum", group: "event", required: false, values: []string{"off", "errors", "slow", "sampled", "all"}},
+	"required_scope":                {typ: "string", group: "event", required: false},
+	"resource_id":                   {typ: "string", group: "event", required: false},
+	"resource_type":                 {typ: "enum", group: "event", required: false, values: []string{"space", "episode", "participant", "endpoint", "recording", "transcript"}},
+	"retry_after_ms":                {typ: "int", group: "event", required: false},
+	"revoked_at_ms":                 {typ: "int", group: "event", required: false},
+	"route":                         {typ: "string", group: "event", required: false},
+	"schema_ver":                    {typ: "string", group: "build", required: true},
+	"scopes":                        {typ: "string", group: "event", required: false},
+	"sdk_version":                   {typ: "string", group: "build", required: false},
+	"semantic_transition_key":       {typ: "string", group: "event", required: false},
+	"seq":                           {typ: "int", group: "delivery", required: true},
+	"shown_ms":                      {typ: "int", group: "record", required: false},
+	"source_id":                     {typ: "string", group: "delivery", required: true},
+	"space_id":                      {typ: "id", group: "trail", required: false},
+	"span_id":                       {typ: "id", group: "trail", required: false},
+	"stage":                         {typ: "enum", group: "event", required: false, values: []string{"recover_expired", "claim", "deliver"}},
+	"started_at_ms":                 {typ: "int", group: "event", required: false},
+	"status":                        {typ: "int", group: "event", required: false},
+	"subscribed":                    {typ: "string", group: "event", required: false},
+	"surface_state":                 {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"sync_connection_id":            {typ: "id", group: "trail", required: false},
+	"target_count":                  {typ: "int", group: "event", required: false},
+	"tenant_id":                     {typ: "id", group: "trail", required: false},
+	"terminal_at_ms":                {typ: "int", group: "event", required: false},
+	"to_state":                      {typ: "string", group: "record", required: false},
+	"trace_id":                      {typ: "id", group: "trail", required: false},
+	"trigger":                       {typ: "string", group: "record", required: false},
+	"updated_at_ms":                 {typ: "int", group: "event", required: false},
+	"user_id":                       {typ: "id", group: "trail", required: false},
+	"webhook_delivery_id":           {typ: "id", group: "trail", required: false},
+	"webhook_endpoint_id":           {typ: "id", group: "event", required: false},
+	"webhook_event_id":              {typ: "id", group: "event", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"api.api_key.authenticate":            {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"accepted", "rejected"}, fields: map[string]fieldRule{"key_prefix": {required: false}, "api_key_id": {required: false}, "tenant_id": {required: false}}},
+	"api.episode.admission.capacity":      {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"refused"}, fields: map[string]fieldRule{"tenant_id": {required: true}, "episode_id": {required: true}, "admission": {required: true}}},
+	"api.episode.create.live_limit":       {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"refused"}, fields: map[string]fieldRule{"tenant_id": {required: true}, "live_count": {required: true}, "limit": {required: true}}},
+	"api.ratelimit.check":                 {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"accepted", "refused"}, fields: map[string]fieldRule{"policy": {required: true}, "api_key_id": {required: false}, "tenant_id": {required: false}, "retry_after_ms": {required: false}}},
+	"api.tenant.authorize":                {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"refused"}, fields: map[string]fieldRule{"tenant_id": {required: true}, "required_scope": {required: true}, "credential_kind": {required: true}, "api_key_id": {required: false}}},
+	"api.webhook.delivery.attempt":        {kind: "op", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_delivery_id": {required: true}, "attempt_id": {required: true}, "attempt_number": {required: true}, "webhook_endpoint_id": {required: false}, "webhook_event_id": {required: false}, "event_name": {required: false}, "http_status_class": {required: false}, "http_status": {required: false}, "latency_milliseconds": {required: false}}},
+	"api.webhook.dispatch.cycle_failed":   {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"stage": {required: true}, "error_class": {required: true}, "tenant_id": {required: false}, "webhook_delivery_id": {required: false}}},
+	"api.webhook.endpoint.secret_rotated": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_endpoint_id": {required: true}, "immediate": {required: true}, "previous_secret_expires_at_ms": {required: false}}},
+	"api.webhook.event.fanout":            {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"committed", "duplicate", "no_targets"}, fields: map[string]fieldRule{"tenant_id": {required: true}, "event_name": {required: true}, "resource_type": {required: true}, "resource_id": {required: true}, "target_count": {required: false}, "webhook_event_id": {required: false}, "journey_id": {required: false}, "episode_id": {required: false}, "space_id": {required: false}, "participant_id": {required: false}}},
+	"client.call_ended":                   {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"integration.db.api_key":              {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "api_key_id": {required: true}, "key_prefix": {required: true}, "scopes": {required: true}, "key_created_ms": {required: true}, "revoked_at_ms": {required: false}, "key_expires_at_ms": {required: false}, "last_used_at_ms": {required: false}}},
+	"integration.db.key_mutation":         {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "mutation_kind": {required: true}, "mutation_created_ms": {required: true}, "api_key_id": {required: false}}},
+	"integration.log.grant_rejected":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"reason": {required: true}, "code": {required: true}, "tenant_id": {required: false}, "participant_id": {required: false}, "api_key_id": {required: false}, "grant_kind": {required: false}}},
+	"integration.log.http_request":        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"method": {required: true}, "path": {required: true}, "status": {required: true}, "route": {required: false}, "error_code": {required: false}, "tenant_id": {required: false}, "api_key_id": {required: false}, "auth_scheme": {required: false}, "episode_id": {required: false}, "participant_id": {required: false}, "space_id": {required: false}}},
+	"obs.clock_jump":                      {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":                  {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":                      {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":                     {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":                       {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":                       {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":                  {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"webhook.db.attempt":                  {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_delivery_id": {required: true}, "attempt_id": {required: true}, "attempt_number": {required: true}, "attempt_outcome": {required: true}, "started_at_ms": {required: true}, "finished_at_ms": {required: false}, "latency_milliseconds": {required: false}, "http_status": {required: false}, "http_status_class": {required: false}, "error_code": {required: false}}},
+	"webhook.db.delivery":                 {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_delivery_id": {required: true}, "delivery_state": {required: true}, "webhook_endpoint_id": {required: true}, "webhook_event_id": {required: true}, "event_name": {required: true}, "resource_id": {required: true}, "occurred_at_ms": {required: true}, "attempt_count": {required: true}, "created_at_ms": {required: true}, "next_attempt_at_ms": {required: false}, "lease_expires_at_ms": {required: false}, "terminal_at_ms": {required: false}, "parent_delivery_id": {required: false}}},
+	"webhook.db.endpoint":                 {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_endpoint_id": {required: true}, "enabled": {required: true}, "current": {required: true}, "subscribed": {required: true}, "created_at_ms": {required: true}, "updated_at_ms": {required: true}, "occurred_at_ms": {required: true}, "deleted_at_ms": {required: false}, "api_version": {required: false}}},
+	"webhook.db.episode":                  {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "episode_id": {required: true}, "space_id": {required: true}, "created_at_ms": {required: true}, "started_at_ms": {required: false}, "ended_at_ms": {required: false}, "deadline_at_ms": {required: false}}},
+	"webhook.db.event":                    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_event_id": {required: true}, "event_name": {required: true}, "resource_id": {required: true}, "occurred_at_ms": {required: true}, "journey_id": {required: false}, "semantic_transition_key": {required: false}, "api_version": {required: false}}},
+	"webhook.db.lifecycle":                {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "event_name": {required: true}, "resource_id": {required: true}, "occurred_at_ms": {required: true}, "episode_id": {required: false}, "participant_id": {required: false}, "space_id": {required: false}, "generation": {required: false}}},
+	"webhook.db.participant":              {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "participant_id": {required: true}, "episode_id": {required: true}, "created_at_ms": {required: true}, "joined_at_ms": {required: false}, "left_at_ms": {required: false}}},
+	"webhook.db.retry":                    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "webhook_delivery_id": {required: true}, "next_attempt_at_ms": {required: true}, "occurred_at_ms": {required: true}}},
+	"webhook.db.space":                    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"tenant_id": {required: true}, "space_id": {required: true}, "created_at_ms": {required: true}}},
+	"webhook.log.api_start":               {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"api_start": {required: true}, "request_logs": {required: true}, "previous_boot_end_ms": {required: false}, "host_boot_id": {required: false}, "tenant_id": {required: false}}},
+	"webhook.log.complete_failed":         {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"attempt_id": {required: true}, "webhook_delivery_id": {required: true}, "http_status_class": {required: true}, "tenant_id": {required: false}, "http_status": {required: false}, "error_code": {required: false}, "journey_id": {required: false}}},
 }
 
 var registryMachines = map[string]machineSpec{
@@ -190,11 +412,53 @@ var registryMachines = map[string]machineSpec{
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":                              "expected",
+	"end.time_limit":                         "expected",
+	"integration.capacity_exceeded":          "error",
+	"integration.episode_ended":              "expected",
+	"integration.episode_full":               "expected",
+	"integration.exhausted":                  "error",
+	"integration.expired":                    "error",
+	"integration.hash_mismatch":              "error",
+	"integration.limiter_unavailable":        "error",
+	"integration.live_episode_limit":         "expected",
+	"integration.live_episode_limit_reached": "error",
+	"integration.lookup_failed":              "error",
+	"integration.malformed":                  "error",
+	"integration.revoked":                    "error",
+	"integration.scope_missing":              "error",
+	"integration.scopes_invalid":             "error",
+	"integration.tenant_mismatch":            "error",
+	"integration.unknown_prefix":             "error",
+	"selftest.broken":                        "error",
+	"selftest.busy":                          "expected",
+	"unclassified":                           "error",
+	"webhook.attempt_trace_failed":           "error",
+	"webhook.complete_failed":                "error",
+	"webhook.connect_failed":                 "error",
+	"webhook.deploy_restart":                 "expected",
+	"webhook.dns_failed":                     "error",
+	"webhook.encryption_failed":              "error",
+	"webhook.http_2xx":                       "error",
+	"webhook.http_3xx":                       "error",
+	"webhook.http_4xx":                       "error",
+	"webhook.http_5xx":                       "error",
+	"webhook.invalid_http_status":            "error",
+	"webhook.lease_expired":                  "error",
+	"webhook.lease_lost":                     "error",
+	"webhook.network_failed":                 "error",
+	"webhook.not_subscribed":                 "expected",
+	"webhook.other":                          "error",
+	"webhook.receiver_slow":                  "expected",
+	"webhook.request_invalid":                "error",
+	"webhook.response_headers_too_large":     "error",
+	"webhook.response_too_large":             "error",
+	"webhook.retention_expired":              "error",
+	"webhook.secret_rotated":                 "error",
+	"webhook.ssrf_blocked":                   "error",
+	"webhook.timeout":                        "error",
+	"webhook.tls_failed":                     "error",
+	"webhook.unsafe_url":                     "error",
 }
 
 var registryIDKinds = []idKind{
@@ -226,6 +490,8 @@ var registryIDKinds = []idKind{
 	{kind: "diagnostic_upload", prefix: "dg", field: "diagnostic_upload_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "api_key", prefix: "ak", field: "api_key_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "webhook_endpoint", prefix: "wh", field: "webhook_endpoint_id", canonical: "uuid", legacyHashField: ""},
+	{kind: "webhook_event", prefix: "whe", field: "webhook_event_id", canonical: "uuid", legacyHashField: ""},
+	{kind: "webhook_attempt", prefix: "wha", field: "attempt_id", canonical: "uuid", legacyHashField: ""},
 }
 
 var registrySessionMeanings = []sessionMeaning{

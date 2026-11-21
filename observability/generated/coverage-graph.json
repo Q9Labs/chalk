@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "5a1c1c781f2f",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -218,6 +218,478 @@
       "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
     },
     {
+      "code": "integration.credential_refused",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "integration.auth",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "api.api_key.authenticate",
+              "source": "api",
+              "fields": ["decision", "reason_code", "api_key_id", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "integration.log.http_request",
+              "source": "api",
+              "fields": ["method", "path", "route", "status", "error_code", "outcome", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.api_key",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "integration.db.api_key",
+              "source": "db",
+              "fields": ["tenant_id", "api_key_id", "key_prefix", "scopes", "key_created_ms", "revoked_at_ms", "key_expires_at_ms", "last_used_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.request_log_mode",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.log.api_start",
+              "source": "api",
+              "fields": ["request_logs", "api_start", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.authorize",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.tenant.authorize",
+              "source": "api",
+              "fields": ["decision", "reason_code", "required_scope", "credential_kind", "api_key_id", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.key_mutation",
+          "from": ["db"],
+          "required": false,
+          "events": [
+            {
+              "event": "integration.db.key_mutation",
+              "source": "db",
+              "fields": ["tenant_id", "mutation_kind", "mutation_created_ms", "api_key_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "api.api_key.authenticate",
+          "fields": ["key_prefix", "api_key_id", "tenant_id"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/apikeys/service.go",
+              "literal": "obs.EventAPIAPIKeyAuthenticate"
+            }
+          ]
+        },
+        {
+          "name": "integration.log.http_request",
+          "fields": ["method", "path", "status", "route", "error_code", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.log.http_request"
+            }
+          ]
+        },
+        {
+          "name": "integration.db.api_key",
+          "fields": ["tenant_id", "api_key_id", "key_prefix", "scopes", "key_created_ms", "revoked_at_ms", "key_expires_at_ms", "last_used_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.db.api_key"
+            }
+          ]
+        },
+        {
+          "name": "webhook.log.api_start",
+          "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.log.api_start"
+            }
+          ]
+        },
+        {
+          "name": "api.tenant.authorize",
+          "fields": ["tenant_id", "required_scope", "credential_kind", "api_key_id"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/authorization/tenant.go",
+              "literal": "obs.EventAPITenantAuthorize"
+            }
+          ]
+        },
+        {
+          "name": "integration.db.key_mutation",
+          "fields": ["tenant_id", "mutation_kind", "mutation_created_ms", "api_key_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.db.key_mutation"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/integration.credential_refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.credential_refused/positive.json",
+        "healthy": "observability/fixtures/integration.credential_refused/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
+      "code": "integration.episode_create_refused",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "integration.log.http_request",
+              "source": "api",
+              "fields": ["method", "path", "route", "status", "error_code", "outcome", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.space",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.space",
+              "source": "db",
+              "fields": ["tenant_id", "space_id", "created_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.episode",
+              "source": "db",
+              "fields": ["tenant_id", "episode_id", "space_id", "created_at_ms", "started_at_ms", "ended_at_ms", "deadline_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.live_limit",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.episode.create.live_limit",
+              "source": "api",
+              "fields": ["decision", "reason_code", "live_count", "limit", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.participant",
+          "from": ["db"],
+          "required": false,
+          "events": [
+            {
+              "event": "webhook.db.participant",
+              "source": "db",
+              "fields": ["tenant_id", "participant_id", "episode_id", "created_at_ms", "joined_at_ms", "left_at_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "integration.log.http_request",
+          "fields": ["method", "path", "status", "route", "error_code", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.log.http_request"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.space",
+          "fields": ["tenant_id", "space_id", "created_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.space"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.episode",
+          "fields": ["tenant_id", "episode_id", "space_id", "created_at_ms", "started_at_ms", "ended_at_ms", "deadline_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.episode"
+            }
+          ]
+        },
+        {
+          "name": "api.episode.create.live_limit",
+          "fields": ["tenant_id", "live_count", "limit"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/tenant_limits.go",
+              "literal": "obs.EventAPIEpisodeCreateLiveLimit"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.participant",
+          "fields": ["tenant_id", "participant_id", "episode_id", "created_at_ms", "joined_at_ms", "left_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.participant"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/integration.episode_create_refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.episode_create_refused/positive.json",
+        "healthy": "observability/fixtures/integration.episode_create_refused/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
+      "code": "integration.grant_not_issued",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "integration.request",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "integration.log.http_request",
+              "source": "api",
+              "fields": ["method", "path", "route", "status", "error_code", "outcome", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.grant_rejected",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "integration.log.grant_rejected",
+              "source": "api",
+              "fields": ["reason", "code", "grant_kind", "tenant_id", "participant_id", "api_key_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.rate_limit",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "api.ratelimit.check",
+              "source": "api",
+              "fields": ["decision", "reason_code", "policy", "api_key_id", "tenant_id", "retry_after_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.request_log_mode",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.log.api_start",
+              "source": "api",
+              "fields": ["request_logs", "api_start", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.participant",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.participant",
+              "source": "db",
+              "fields": ["tenant_id", "participant_id", "episode_id", "created_at_ms", "joined_at_ms", "left_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.episode",
+              "source": "db",
+              "fields": ["tenant_id", "episode_id", "space_id", "created_at_ms", "started_at_ms", "ended_at_ms", "deadline_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.capacity",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.episode.admission.capacity",
+              "source": "api",
+              "fields": ["decision", "reason_code", "admission", "episode_id", "tenant_id"]
+            }
+          ]
+        },
+        {
+          "fact": "integration.api_key",
+          "from": ["db"],
+          "required": false,
+          "events": [
+            {
+              "event": "integration.db.api_key",
+              "source": "db",
+              "fields": ["tenant_id", "api_key_id", "key_prefix", "scopes", "key_created_ms", "revoked_at_ms", "key_expires_at_ms", "last_used_at_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "integration.log.http_request",
+          "fields": ["method", "path", "status", "route", "error_code", "tenant_id", "api_key_id", "auth_scheme", "episode_id", "participant_id", "space_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.log.http_request"
+            }
+          ]
+        },
+        {
+          "name": "integration.log.grant_rejected",
+          "fields": ["reason", "code", "tenant_id", "participant_id", "api_key_id", "grant_kind"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.log.grant_rejected"
+            }
+          ]
+        },
+        {
+          "name": "api.ratelimit.check",
+          "fields": ["policy", "api_key_id", "tenant_id", "retry_after_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/rate_limit.go",
+              "literal": "obs.EventAPIRatelimitCheck"
+            }
+          ]
+        },
+        {
+          "name": "webhook.log.api_start",
+          "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.log.api_start"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.participant",
+          "fields": ["tenant_id", "participant_id", "episode_id", "created_at_ms", "joined_at_ms", "left_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.participant"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.episode",
+          "fields": ["tenant_id", "episode_id", "space_id", "created_at_ms", "started_at_ms", "ended_at_ms", "deadline_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.episode"
+            }
+          ]
+        },
+        {
+          "name": "api.episode.admission.capacity",
+          "fields": ["tenant_id", "episode_id", "admission"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/episode_lifecycle_create.go",
+              "literal": "obs.EventAPIEpisodeAdmissionCapacity"
+            }
+          ]
+        },
+        {
+          "name": "integration.db.api_key",
+          "fields": ["tenant_id", "api_key_id", "key_prefix", "scopes", "key_created_ms", "revoked_at_ms", "key_expires_at_ms", "last_used_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "integration.db.api_key"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/integration.grant_not_issued.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/integration.grant_not_issued/positive.json",
+        "healthy": "observability/fixtures/integration.grant_not_issued/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/httpapi/obs_chain_test.go"
+    },
+    {
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
@@ -319,6 +791,430 @@
         "healthy": "observability/fixtures/video.frozen/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "webhook.delivery_stalled",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "webhook.delivery",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.delivery",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "delivery_state", "webhook_endpoint_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "next_attempt_at_ms", "attempt_count", "lease_expires_at_ms", "terminal_at_ms", "parent_delivery_id", "created_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.attempt",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.retry",
+          "from": ["db"],
+          "required": false,
+          "events": [
+            {
+              "event": "webhook.db.retry",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "next_attempt_at_ms", "occurred_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.cycle",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.webhook.dispatch.cycle_failed",
+              "source": "api",
+              "fields": ["stage", "error_class", "tenant_id", "webhook_delivery_id"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.marker",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.log.api_start",
+              "source": "api",
+              "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "webhook.db.delivery",
+          "fields": ["tenant_id", "webhook_delivery_id", "delivery_state", "webhook_endpoint_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "attempt_count", "created_at_ms", "next_attempt_at_ms", "lease_expires_at_ms", "terminal_at_ms", "parent_delivery_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.delivery"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.attempt",
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.attempt"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.retry",
+          "fields": ["tenant_id", "webhook_delivery_id", "next_attempt_at_ms", "occurred_at_ms"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.retry"
+            }
+          ]
+        },
+        {
+          "name": "api.webhook.dispatch.cycle_failed",
+          "fields": ["stage", "error_class", "tenant_id", "webhook_delivery_id"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/webhooks/dispatcher.go",
+              "literal": "obs.EventAPIWebhookDispatchCycleFailed"
+            }
+          ]
+        },
+        {
+          "name": "webhook.log.api_start",
+          "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.log.api_start"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/webhook.delivery_stalled.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.delivery_stalled/positive.json",
+        "healthy": "observability/fixtures/webhook.delivery_stalled/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.event_missing",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "webhook.transition",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.lifecycle",
+              "source": "db",
+              "fields": ["tenant_id", "event_name", "resource_id", "occurred_at_ms", "episode_id", "participant_id", "space_id", "generation"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.event",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.event",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "journey_id", "semantic_transition_key", "api_version"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.endpoint",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.endpoint",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_endpoint_id", "enabled", "current", "subscribed", "created_at_ms", "updated_at_ms", "occurred_at_ms", "deleted_at_ms", "api_version"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.fanout",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.webhook.event.fanout",
+              "source": "api",
+              "fields": ["tenant_id", "event_name", "resource_type", "resource_id", "decision", "target_count", "webhook_event_id", "journey_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "webhook.db.lifecycle",
+          "fields": ["tenant_id", "event_name", "resource_id", "occurred_at_ms", "episode_id", "participant_id", "space_id", "generation"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.lifecycle"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.event",
+          "fields": ["tenant_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "journey_id", "semantic_transition_key", "api_version"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.event"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.endpoint",
+          "fields": ["tenant_id", "webhook_endpoint_id", "enabled", "current", "subscribed", "created_at_ms", "updated_at_ms", "occurred_at_ms", "deleted_at_ms", "api_version"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.endpoint"
+            }
+          ]
+        },
+        {
+          "name": "api.webhook.event.fanout",
+          "fields": ["tenant_id", "event_name", "resource_type", "resource_id", "target_count", "webhook_event_id", "journey_id", "episode_id", "space_id", "participant_id"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/webhook_producer.go",
+              "literal": "obs.EventAPIWebhookEventFanout"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/webhook.event_missing.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.event_missing/positive.json",
+        "healthy": "observability/fixtures/webhook.event_missing/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.not_delivered",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "webhook.delivery",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.delivery",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "delivery_state", "webhook_endpoint_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "next_attempt_at_ms", "attempt_count", "lease_expires_at_ms", "terminal_at_ms", "parent_delivery_id", "created_at_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.attempt",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.secret_rotation",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "api.webhook.endpoint.secret_rotated",
+              "source": "api",
+              "fields": ["tenant_id", "webhook_endpoint_id", "immediate", "previous_secret_expires_at_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "webhook.db.delivery",
+          "fields": ["tenant_id", "webhook_delivery_id", "delivery_state", "webhook_endpoint_id", "webhook_event_id", "event_name", "resource_id", "occurred_at_ms", "attempt_count", "created_at_ms", "next_attempt_at_ms", "lease_expires_at_ms", "terminal_at_ms", "parent_delivery_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.delivery"
+            }
+          ]
+        },
+        {
+          "name": "webhook.db.attempt",
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.attempt"
+            }
+          ]
+        },
+        {
+          "name": "api.webhook.endpoint.secret_rotated",
+          "fields": ["tenant_id", "webhook_endpoint_id", "immediate", "previous_secret_expires_at_ms"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/postgres/webhooks.go",
+              "literal": "obs.EventAPIWebhookEndpointSecretRotated"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/webhook.not_delivered.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.not_delivered/positive.json",
+        "healthy": "observability/fixtures/webhook.not_delivered/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
+    },
+    {
+      "code": "webhook.outcome_unrecorded",
+      "area": "webhooks",
+      "slice": 12,
+      "allowlisted": false,
+      "item": "tenant",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "webhook.attempt",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.db.attempt",
+              "source": "db",
+              "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.attempt_op",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "api.webhook.delivery.attempt",
+              "source": "api",
+              "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "outcome", "http_status_class", "http_status", "latency_milliseconds", "reason_code", "duration_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.complete_failed",
+          "from": ["api"],
+          "required": false,
+          "events": [
+            {
+              "event": "webhook.log.complete_failed",
+              "source": "api",
+              "fields": ["attempt_id", "webhook_delivery_id", "http_status_class", "http_status", "error_code", "tenant_id", "journey_id"]
+            }
+          ]
+        },
+        {
+          "fact": "webhook.marker",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "webhook.log.api_start",
+              "source": "api",
+              "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "webhook.db.attempt",
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "attempt_outcome", "started_at_ms", "finished_at_ms", "latency_milliseconds", "http_status", "http_status_class", "error_code"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.db.attempt"
+            }
+          ]
+        },
+        {
+          "name": "api.webhook.delivery.attempt",
+          "fields": ["tenant_id", "webhook_delivery_id", "attempt_id", "attempt_number", "webhook_endpoint_id", "webhook_event_id", "event_name", "http_status_class", "http_status", "latency_milliseconds"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/webhooks/dispatcher.go",
+              "literal": "obs.EventAPIWebhookDeliveryAttempt"
+            }
+          ]
+        },
+        {
+          "name": "webhook.log.complete_failed",
+          "fields": ["attempt_id", "webhook_delivery_id", "http_status_class", "tenant_id", "http_status", "error_code", "journey_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.log.complete_failed"
+            }
+          ]
+        },
+        {
+          "name": "webhook.log.api_start",
+          "fields": ["api_start", "request_logs", "previous_boot_end_ms", "host_boot_id", "tenant_id"],
+          "emit_sites": [
+            {
+              "path": "scripts/diagnose-call/live/webhooks.mjs",
+              "literal": "webhook.log.api_start"
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/webhook.outcome_unrecorded.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/webhook.outcome_unrecorded/positive.json",
+        "healthy": "observability/fixtures/webhook.outcome_unrecorded/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/webhook_obs_chain_test.go"
     }
   ]
 }

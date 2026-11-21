@@ -53,7 +53,9 @@
     { "kind": "flags", "prefix": "fl", "field": "flags_hash", "canonical": "hex16", "authority": "the kernel's flags snapshot", "doc": "One flags snapshot: the hash of the canonical flag map a record ran under. The obs.flags_snapshot fact holds the map itself." },
     { "kind": "diagnostic_upload", "prefix": "dg", "field": "diagnostic_upload_id", "canonical": "uuid", "authority": "the API, when it issues the upload", "scope": "tenant", "doc": "One diagnostic bundle a client uploaded after a problem report or a live request (slice 13)." },
     { "kind": "api_key", "prefix": "ak", "field": "api_key_id", "canonical": "uuid", "authority": "api_keys.id", "scope": "tenant", "doc": "A tenant API key, by its row id. The secret and its hash are credentials: never logged." },
-    { "kind": "webhook_endpoint", "prefix": "wh", "field": "webhook_endpoint_id", "canonical": "uuid", "authority": "webhook_endpoints.id", "scope": "tenant", "doc": "A tenant's webhook endpoint. Each delivery to it is a whd_." }
+    { "kind": "webhook_endpoint", "prefix": "wh", "field": "webhook_endpoint_id", "canonical": "uuid", "authority": "webhook_endpoints.id", "scope": "tenant", "doc": "A tenant's webhook endpoint. Each delivery to it is a whd_." },
+    { "kind": "webhook_event", "prefix": "whe", "field": "webhook_event_id", "canonical": "uuid", "authority": "webhook_events.id", "scope": "tenant", "doc": "A committed webhook event row a delivery carries." },
+    { "kind": "webhook_attempt", "prefix": "wha", "field": "attempt_id", "canonical": "uuid", "authority": "webhook_delivery_attempts.id", "scope": "webhook_delivery", "doc": "One attempt of a webhook delivery." }
   ],
   "session_meanings": [
     { "meaning": "episode", "kind": "episode", "lookup": true, "doc": "The dashboard calls an Episode a session. Read session:<id> there as an Episode." },

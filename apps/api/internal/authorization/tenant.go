@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -66,9 +68,9 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 		}
 		return nil
 	case authentication.PrincipalAPIKey:
-		return authorizeTenantCredential(principal, principal.APIKeyID, tenantID, permission.Scope)
+		return authorizeTenantCredential(ctx, principal, "api_key", principal.APIKeyID, tenantID, permission.Scope)
 	case authentication.PrincipalOAuth:
-		return authorizeTenantCredential(principal, principal.GrantID, tenantID, permission.Scope)
+		return authorizeTenantCredential(ctx, principal, "mcp", principal.GrantID, tenantID, permission.Scope)
 	case authentication.PrincipalUser:
 		return p.authorizeTenantUser(ctx, principal, tenantID, permission.MinimumRole)
 	default:
@@ -78,18 +80,34 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 
 // authorizeTenantCredential covers tenant-bound credentials (API keys and MCP
 // OAuth grants): the Tenant must match and the credential must hold the scope.
-func authorizeTenantCredential(principal authentication.Principal, credentialID utilities.ID, tenantID utilities.ID, scope authentication.Scope) error {
+func authorizeTenantCredential(ctx context.Context, principal authentication.Principal, credentialKind string, credentialID utilities.ID, tenantID utilities.ID, scope authentication.Scope) error {
 	if credentialID.IsZero() || principal.TenantID.IsZero() {
 		return ErrUnauthenticated
 	}
 	if principal.TenantID.String() != tenantID.String() {
+		authorizeTenantDecision(ctx, "tenant_mismatch", tenantID, credentialKind, string(scope), credentialID)
 		return ErrForbidden
 	}
 	if !principal.HasScope(scope) {
+		authorizeTenantDecision(ctx, "scope_missing", tenantID, credentialKind, string(scope), credentialID)
 		return ErrForbidden
 	}
 
 	return nil
+}
+
+// authorizeTenantDecision records a tenant.authorize refusal against the path's
+// Tenant. credentialID is the API key id for api_key credentials, else zero.
+func authorizeTenantDecision(ctx context.Context, reason string, tenantID utilities.ID, credentialKind, scope string, credentialID utilities.ID) {
+	attrs := []slog.Attr{
+		obs.F(obs.FieldTenantID, tenantID.String()),
+		obs.F(obs.FieldCredentialKind, credentialKind),
+		obs.F(obs.FieldRequiredScope, scope),
+	}
+	if credentialKind == "api_key" && !credentialID.IsZero() {
+		attrs = append(attrs, obs.F(obs.FieldAPIKeyID, credentialID.String()))
+	}
+	obs.Decision(ctx, obs.EventAPITenantAuthorize, "refused", "integration."+reason, attrs...)
 }
 
 func (p TenantPolicy) authorizeTenantUser(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, minimumRole memberships.Role) error {

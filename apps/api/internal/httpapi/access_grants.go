@@ -65,10 +65,14 @@ func issueAccessGrantEndpoint(
 		decodeIssueAccessGrantRequest,
 		func(ctx context.Context, request issueAccessGrantRequest) (_ accessGrantResponse, failure error) {
 			stage := "tenant_authorization"
+			grantKind := "initial"
+			if strings.TrimSpace(request.Body.CurrentMediaToken) != "" || !request.Body.ReplaceMediaConnection || request.Body.ExpectedMediaConnectionID != nil {
+				grantKind = "renewal"
+			}
 			defer func() {
 				if failure != nil {
 					apiErr := episodeLifecycleRules.apiError(failure)
-					observability.LogAccessGrantFailure(ctx, stage, apiErr.Code)
+					observability.LogAccessGrantFailure(ctx, stage, apiErr.Code, grantKind)
 				}
 			}()
 			if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {

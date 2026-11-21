@@ -1,0 +1,105 @@
+{
+ "description": "integration.credential_refused healthy: rows the real fault scenario's API and Postgres emitted, read back through the tenant-day live reader.",
+ "asof_ms": 1795604000000,
+ "declaration": {
+  "kind": "tenant",
+  "id": "c2000000-0000-4000-8000-00000000000c",
+  "tenant": "c2000000-0000-4000-8000-00000000000c",
+  "day": "2026-11-20",
+  "window": {
+   "from_ms": 1795600000000,
+   "to_ms": 1795604000000
+  }
+ },
+ "chain": [
+  "observability/fixtures/integration.credential_refused/chain/stack-rows.healthy.json"
+ ],
+ "rows": [
+  {
+   "api_key_id": "00000000-0000-4000-8000-000000000001",
+   "auth_scheme": "api_key",
+   "clock_state": "server",
+   "env": "test",
+   "est_server_ms": 1795600180000,
+   "event_id": "00000000-0000-4000-8000-000000000002",
+   "kind": "fact",
+   "method": "POST",
+   "module": "api",
+   "name": "integration.log.http_request",
+   "outcome": "ok",
+   "path": "/v1/tenants/c2000000-0000-4000-8000-00000000000c/spaces/00000000-0000-4000-8000-000000000003/episodes",
+   "route": "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes",
+   "seq": 1,
+   "source_id": "00000000-0000-4000-8000-000000000004",
+   "space_id": "00000000-0000-4000-8000-000000000003",
+   "status": 201,
+   "tenant_id": "c2000000-0000-4000-8000-00000000000c"
+  },
+  {
+   "api_key_id": "00000000-0000-4000-8000-000000000001",
+   "clock_state": "server",
+   "decision": "accepted",
+   "decision_id": "00000000-0000-4000-8000-000000000005",
+   "env": "test",
+   "est_server_ms": 1795600205000,
+   "event_id": "00000000-0000-4000-8000-000000000006",
+   "key_prefix": "chain-prefix-007",
+   "kind": "decision",
+   "module": "api",
+   "name": "api.api_key.authenticate",
+   "schema_ver": "5a1c1c781f2f",
+   "seq": 2,
+   "source_id": "00000000-0000-4000-8000-000000000004",
+   "tenant_id": "c2000000-0000-4000-8000-00000000000c"
+  },
+  {
+   "api_key_id": "00000000-0000-4000-8000-000000000001",
+   "clock_state": "server",
+   "env": "test",
+   "est_server_ms": 1795600060000,
+   "event_id": "00000000-0000-4000-8000-000000000008",
+   "key_created_ms": 1795600060000,
+   "key_expires_at_ms": 1795601800000,
+   "key_prefix": "chain-prefix-007",
+   "kind": "fact",
+   "last_used_at_ms": 1795600300000,
+   "module": "api",
+   "name": "integration.db.api_key",
+   "scopes": "episodes:write",
+   "seq": 3,
+   "source_id": "00000000-0000-4000-8000-000000000004",
+   "tenant_id": "c2000000-0000-4000-8000-00000000000c"
+  },
+  {
+   "api_key_id": "00000000-0000-4000-8000-000000000001",
+   "clock_state": "server",
+   "env": "test",
+   "est_server_ms": 1795600060000,
+   "event_id": "00000000-0000-4000-8000-000000000009",
+   "kind": "fact",
+   "module": "api",
+   "mutation_created_ms": 1795600060000,
+   "mutation_kind": "create",
+   "name": "integration.db.key_mutation",
+   "seq": 4,
+   "source_id": "00000000-0000-4000-8000-000000000004",
+   "tenant_id": "c2000000-0000-4000-8000-00000000000c"
+  },
+  {
+   "api_start": true,
+   "clock_state": "server",
+   "env": "test",
+   "est_server_ms": 1795600280000,
+   "event_id": "00000000-0000-4000-8000-000000000010",
+   "host_boot_id": "chain",
+   "kind": "fact",
+   "module": "api",
+   "name": "webhook.log.api_start",
+   "previous_boot_end_ms": 1795604000000,
+   "request_logs": "all",
+   "seq": 5,
+   "source_id": "00000000-0000-4000-8000-000000000004",
+   "tenant_id": "c2000000-0000-4000-8000-00000000000c"
+  }
+ ]
+}

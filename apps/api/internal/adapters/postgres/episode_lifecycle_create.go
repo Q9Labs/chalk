@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -219,6 +220,7 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 			IntentPayloadBytes: int64(len(payload)), MaxActiveParticipants: episodes.MaximumActiveParticipants,
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 		}); errors.Is(err, pgx.ErrNoRows) {
+			admissionCapacityDecision(ctx, input, "direct")
 			return episodes.ErrCapacityExceeded
 		} else if err != nil {
 			return fmt.Errorf("reserve participant admission capacity: %w", err)
@@ -307,6 +309,7 @@ func createKnockAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx,
 		RequestedPayloadBytes: int64(len(requestedPayload)), JoinPayloadBytes: int64(len(joinPayload)), TenantID: uuid(input.TenantID),
 		SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), MaxActiveParticipants: episodes.MaximumActiveParticipants,
 	}); errors.Is(err, pgx.ErrNoRows) {
+		admissionCapacityDecision(ctx, input, "knock")
 		return episodes.ErrCapacityExceeded
 	} else if err != nil {
 		return fmt.Errorf("reserve knock admission capacity: %w", err)
@@ -418,4 +421,15 @@ func configAdmissionMode(raw json.RawMessage) (string, error) {
 		return "", episodes.ErrInvalidAdmissionPolicy
 	}
 	return policy.Mode, nil
+}
+
+// admissionCapacityDecision records the episode.admission.capacity refusal. The
+// reserve query cannot say which limit failed; the checker counts Participants
+// itself from Postgres.
+func admissionCapacityDecision(ctx context.Context, input episodes.AdmitParticipantInput, admission string) {
+	obs.Decision(ctx, obs.EventAPIEpisodeAdmissionCapacity, "refused", "integration.capacity_exceeded",
+		obs.F(obs.FieldTenantID, input.TenantID.String()),
+		obs.F(obs.FieldEpisodeID, input.EpisodeID.String()),
+		obs.F(obs.FieldAdmission, admission),
+	)
 }

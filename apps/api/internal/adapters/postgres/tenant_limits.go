@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -21,6 +22,11 @@ func (r EpisodeLifecycleRepository) checkLiveEpisodeLimit(ctx context.Context, q
 		return fmt.Errorf("count tenant live Episodes: %w", err)
 	}
 	if count >= int64(r.tenantLimits.MaxLiveEpisodes) {
+		obs.Decision(ctx, obs.EventAPIEpisodeCreateLiveLimit, "refused", "integration.live_episode_limit_reached",
+			obs.F(obs.FieldTenantID, tenantID.String()),
+			obs.F(obs.FieldLiveCount, count),
+			obs.F(obs.FieldLimit, int64(r.tenantLimits.MaxLiveEpisodes)),
+		)
 		return tenantlimits.ErrLiveEpisodeLimitReached
 	}
 	return nil

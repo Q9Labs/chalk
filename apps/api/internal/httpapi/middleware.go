@@ -10,6 +10,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
 type APIKeyAuthenticator interface {
@@ -42,6 +43,7 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
+				observability.RecordPrincipal(w, authSchemeOf(principal), apiKeyIDOf(principal))
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -54,6 +56,7 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 				address, _ := netip.ParseAddr(clientIP(r, clientIPs))
 				principal, err := apiKeys.Authenticate(r.Context(), apikeys.AuthenticateInput{RawKey: credential, IPAddress: address})
 				if err != nil {
+					observability.RecordPrincipal(w, "api_key", "")
 					if errors.Is(err, apikeys.ErrUnauthenticated) {
 						writeUnauthenticated(w)
 					} else {
@@ -61,14 +64,37 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 					}
 					return
 				}
+				observability.RecordPrincipal(w, "api_key", principal.APIKeyID.String())
 				ctx := authentication.ContextWithPrincipal(r.Context(), principal)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
+			observability.RecordPrincipal(w, "none", "")
 			writeUnauthenticated(w)
 		})
 	}
+}
+
+// authSchemeOf maps the request's principal to the registry auth_scheme value.
+func authSchemeOf(principal authentication.Principal) string {
+	switch principal.Kind {
+	case authentication.PrincipalAPIKey:
+		return "api_key"
+	case authentication.PrincipalUser:
+		return "session"
+	case authentication.PrincipalOAuth, authentication.PrincipalService, authentication.PrincipalSystem:
+		return "bearer"
+	default:
+		return "none"
+	}
+}
+
+func apiKeyIDOf(principal authentication.Principal) string {
+	if principal.Kind != authentication.PrincipalAPIKey {
+		return ""
+	}
+	return principal.APIKeyID.String()
 }
 
 func writeUnauthenticated(w http.ResponseWriter) {

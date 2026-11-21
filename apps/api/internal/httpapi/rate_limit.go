@@ -10,9 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -152,6 +155,7 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 	if decision.State != ratelimit.Allowed {
 		return rateLimitFailure(r.Context(), w, policy, decision)
 	}
+	rateLimitAccepted(r.Context(), policy.Name)
 	return nil
 }
 
@@ -259,6 +263,7 @@ func remoteIP(remoteAddr string) string {
 func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) APIError {
 	if decision.State != ratelimit.Exhausted {
 		recordRateLimiterUnavailable(ctx, policy.Name)
+		rateLimitDecision(ctx, "limiter_unavailable", policy.Name, 0)
 		w.Header().Del(ratelimit.HeaderLimit)
 		w.Header().Del(ratelimit.HeaderRemaining)
 		w.Header().Del(ratelimit.HeaderRetryAfter)
@@ -268,6 +273,7 @@ func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelim
 	if retryAfter < 1 {
 		retryAfter = 1
 	}
+	rateLimitDecision(ctx, "exhausted", policy.Name, retryAfter)
 
 	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
 	if policy.Cost > 0 {
@@ -277,6 +283,39 @@ func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelim
 			"policy", policy.Name, "cost", policy.Units(), "retry_after_seconds", retryAfter)
 	}
 	return apiErrorRateLimited
+}
+
+// rateLimitAttrs carries the check's context: the policy, the API key when the request
+// presented one, and the Tenant the credential or grant names.
+func rateLimitAttrs(ctx context.Context, policy string) []slog.Attr {
+	attrs := []slog.Attr{obs.F(obs.FieldPolicy, policy)}
+	if principal, ok := authentication.PrincipalFromContext(ctx); ok {
+		if principal.Kind == authentication.PrincipalAPIKey {
+			attrs = append(attrs, obs.F(obs.FieldAPIKeyID, principal.APIKeyID.String()))
+		}
+		if !principal.TenantID.IsZero() {
+			attrs = append(attrs, obs.F(obs.FieldTenantID, principal.TenantID.String()))
+		}
+	} else if subject, ok := accessgrants.SubjectFromContext(ctx); ok {
+		attrs = append(attrs, obs.F(obs.FieldTenantID, subject.TenantID.String()))
+	}
+	return attrs
+}
+
+// rateLimitAccepted records the ratelimit.check decision the limiter allowed, so the
+// journal shows the check ran even when nothing was refused.
+func rateLimitAccepted(ctx context.Context, policy string) {
+	obs.Decision(ctx, obs.EventAPIRatelimitCheck, "accepted", "", rateLimitAttrs(ctx, policy)...)
+}
+
+// rateLimitDecision records a ratelimit.check refusal: the policy, the API key when
+// the request presented one, and the Tenant the credential or grant names.
+func rateLimitDecision(ctx context.Context, reason, policy string, retryAfterSeconds int) {
+	attrs := rateLimitAttrs(ctx, policy)
+	if retryAfterSeconds > 0 {
+		attrs = append(attrs, obs.F(obs.FieldRetryAfterMs, int64(retryAfterSeconds)*1000))
+	}
+	obs.Decision(ctx, obs.EventAPIRatelimitCheck, "refused", "integration."+reason, attrs...)
 }
 
 func recordRateLimiterUnavailable(ctx context.Context, policy string) {

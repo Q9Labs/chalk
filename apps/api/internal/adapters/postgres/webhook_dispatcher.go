@@ -83,7 +83,11 @@ func (r WebhookDispatchRepository) RecoverExpired(ctx context.Context) (int64, e
 		} else if err != pgx.ErrNoRows {
 			return 0, err
 		}
-		if err := insertWebhookJourneyEvent(ctx, tx, branchID, id(lease.journeyID), int64(3+int(lease.attemptNumber)*2), journeyName, state, parentID, "", "", map[string]any{"attempt_number": lease.attemptNumber, "delivery_id": deliveryID.String(), "error_code": "lease_expired", "status_class": "none"}); err != nil {
+		retryAttributes := map[string]any{"attempt_number": lease.attemptNumber, "delivery_id": deliveryID.String(), "error_code": "lease_expired", "status_class": "none"}
+		if journeyName == "webhook.delivery.retry_scheduled" && next != nil {
+			retryAttributes["next_attempt_at"] = next.UTC().Format(time.RFC3339)
+		}
+		if err := insertWebhookJourneyEvent(ctx, tx, branchID, id(lease.journeyID), int64(3+int(lease.attemptNumber)*2), journeyName, state, parentID, "", "", retryAttributes); err != nil {
 			return 0, err
 		}
 	}
@@ -237,7 +241,11 @@ func (r WebhookDispatchRepository) Complete(ctx context.Context, claim webhooks.
 	} else if state == "retry_wait" {
 		journeyName = "webhook.delivery.retry_scheduled"
 	}
-	if err := insertWebhookJourneyEvent(ctx, tx, branchID, claim.JourneyID, int64(3+claim.AttemptNumber*2), journeyName, state, claim.AttemptJourneyEventID, "", "", map[string]any{"attempt_number": claim.AttemptNumber, "delivery_id": claim.DeliveryID.String(), "error_code": result.ErrorCode, "status_class": statusClass(result.HTTPStatus)}); err != nil {
+	attemptAttributes := map[string]any{"attempt_number": claim.AttemptNumber, "delivery_id": claim.DeliveryID.String(), "error_code": result.ErrorCode, "status_class": statusClass(result.HTTPStatus)}
+	if journeyName == "webhook.delivery.retry_scheduled" && next != nil {
+		attemptAttributes["next_attempt_at"] = next.UTC().Format(time.RFC3339)
+	}
+	if err := insertWebhookJourneyEvent(ctx, tx, branchID, claim.JourneyID, int64(3+claim.AttemptNumber*2), journeyName, state, claim.AttemptJourneyEventID, "", "", attemptAttributes); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

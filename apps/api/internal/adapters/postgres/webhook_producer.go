@@ -3,10 +3,12 @@ package postgres
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -23,19 +25,47 @@ type webhookProduction struct {
 }
 
 type webhookCommitMetric struct {
-	EventName webhooks.EventName
-	Fanout    int
+	TenantID                  utilities.ID
+	EventName                 webhooks.EventName
+	ResourceType              string
+	ResourceID                utilities.ID
+	JourneyID, WebhookEventID utilities.ID
+	Outcome                   string
+	Fanout                    int
 }
 
 func (m webhookCommitMetric) Record(ctx context.Context) {
-	if m.EventName != "" {
-		webhooks.RecordEventMetrics(ctx, m.EventName, webhooks.APIVersion, m.Fanout)
+	if m.EventName == "" {
+		return
 	}
+	webhooks.RecordEventMetrics(ctx, m.EventName, webhooks.APIVersion, m.Fanout)
+	attrs := []slog.Attr{
+		obs.F(obs.FieldTenantID, m.TenantID.String()),
+		obs.F(obs.FieldEventName, string(m.EventName)),
+		obs.F(obs.FieldResourceType, m.ResourceType),
+		obs.F(obs.FieldResourceID, m.ResourceID.String()),
+	}
+	switch m.ResourceType {
+	case "episode":
+		attrs = append(attrs, obs.F(obs.FieldEpisodeID, m.ResourceID.String()))
+	case "space":
+		attrs = append(attrs, obs.F(obs.FieldSpaceID, m.ResourceID.String()))
+	case "participant":
+		attrs = append(attrs, obs.F(obs.FieldParticipantID, m.ResourceID.String()))
+	}
+	if m.Outcome == "committed" {
+		attrs = append(attrs, obs.F(obs.FieldTargetCount, m.Fanout), obs.F(obs.FieldWebhookEventID, m.WebhookEventID.String()))
+	}
+	if m.JourneyID != (utilities.ID{}) {
+		attrs = append(attrs, obs.F(obs.FieldJourneyID, m.JourneyID.String()))
+	}
+	obs.Decision(ctx, obs.EventAPIWebhookEventFanout, m.Outcome, "", attrs...)
 }
 
 func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduction) (webhookCommitMetric, error) {
 	queries := sqlc.New(tx)
 	tenantID := production.TenantID
+	metric := webhookCommitMetric{TenantID: tenantID, EventName: production.EventName, ResourceType: production.ResourceType, ResourceID: production.ResourceID}
 	// Producers only read endpoint revisions. Share their fence with other
 	// producers; endpoint mutations keep the exclusive Tenant lock.
 	if err := queries.EnsureWebhookTenantState(ctx, uuid(tenantID)); err != nil {
@@ -45,13 +75,18 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 		return webhookCommitMetric{}, err
 	}
 	targets, err := queries.ListMatchingWebhookTargets(ctx, sqlc.ListMatchingWebhookTargetsParams{TenantID: uuid(tenantID), ApiVersion: webhooks.APIVersion, EventName: string(production.EventName)})
-	if err != nil || len(targets) == 0 {
+	if err != nil {
 		return webhookCommitMetric{}, err
+	}
+	if len(targets) == 0 {
+		metric.Outcome = "no_targets"
+		return metric, nil
 	}
 	metadata, err := webhookEventMetadata(ctx, tenantID, production.EventName, production.OccurredAt)
 	if err != nil {
 		return webhookCommitMetric{}, err
 	}
+	metric.JourneyID = metadata.JourneyID
 	production.OccurredAt = metadata.OccurredAt
 	body, digest, err := production.Body(metadata)
 	if err != nil {
@@ -64,11 +99,13 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 	metadata.ParentJourneyEventID = rootID
 	event, err := queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{ID: uuid(metadata.ID), TenantID: uuid(tenantID), EventName: string(production.EventName), ApiVersion: webhooks.APIVersion, OccurredAt: timestamptz(&production.OccurredAt), Body: body, BodySha256: digest[:], SemanticTransitionKey: production.SemanticKey, ResourceType: production.ResourceType, ResourceID: uuid(production.ResourceID), LinkedUserID: uuid(production.LinkedUserID), JourneyID: uuid(metadata.JourneyID), ParentJourneyEventID: uuid(metadata.ParentJourneyEventID), ProducingTraceID: optionalText(metadata.ProducingTraceID), ProducingSpanID: optionalText(metadata.ProducingSpanID)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return webhookCommitMetric{}, nil
+		metric.Outcome = "duplicate"
+		return metric, nil
 	}
 	if err != nil {
 		return webhookCommitMetric{}, err
 	}
+	metric.WebhookEventID = utilities.IDFromBytes(event.ID.Bytes)
 	if err := insertWebhookAPIRootJourneyEvent(ctx, tx, rootID, metadata.JourneyID, production.EventName, metadata.ProducingTraceID, metadata.ProducingSpanID); err != nil {
 		return webhookCommitMetric{}, err
 	}
@@ -92,7 +129,9 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 			return webhookCommitMetric{}, err
 		}
 	}
-	return webhookCommitMetric{EventName: production.EventName, Fanout: len(targets)}, nil
+	metric.Outcome = "committed"
+	metric.Fanout = len(targets)
+	return metric, nil
 }
 
 func webhookEventMetadata(ctx context.Context, tenantID utilities.ID, name webhooks.EventName, occurredAt time.Time) (webhooks.EventMetadata, error) {

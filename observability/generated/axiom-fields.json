@@ -1,12 +1,16 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "5a1c1c781f2f",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 128,
       "fields": [
+        {
+          "name": "admission",
+          "type": "string"
+        },
         {
           "name": "admission_request_id",
           "type": "string"
@@ -14,6 +18,18 @@
         {
           "name": "agent_id",
           "type": "string"
+        },
+        {
+          "name": "api_key_id",
+          "type": "string"
+        },
+        {
+          "name": "api_start",
+          "type": "boolean"
+        },
+        {
+          "name": "api_version",
+          "type": "integer"
         },
         {
           "name": "app_build",
@@ -26,6 +42,26 @@
         {
           "name": "attempt",
           "type": "integer"
+        },
+        {
+          "name": "attempt_count",
+          "type": "integer"
+        },
+        {
+          "name": "attempt_id",
+          "type": "string"
+        },
+        {
+          "name": "attempt_number",
+          "type": "integer"
+        },
+        {
+          "name": "attempt_outcome",
+          "type": "string"
+        },
+        {
+          "name": "auth_scheme",
+          "type": "string"
         },
         {
           "name": "batch_id",
@@ -56,11 +92,39 @@
           "type": "string"
         },
         {
+          "name": "code",
+          "type": "string"
+        },
+        {
+          "name": "created_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "credential_kind",
+          "type": "string"
+        },
+        {
+          "name": "current",
+          "type": "boolean"
+        },
+        {
+          "name": "deadline_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "decision",
           "type": "string"
         },
         {
           "name": "decision_id",
+          "type": "string"
+        },
+        {
+          "name": "deleted_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "delivery_state",
           "type": "string"
         },
         {
@@ -84,12 +148,20 @@
           "type": "integer"
         },
         {
+          "name": "enabled",
+          "type": "boolean"
+        },
+        {
           "name": "end",
           "type": "string"
         },
         {
           "name": "end_reason",
           "type": "string"
+        },
+        {
+          "name": "ended_at_ms",
+          "type": "integer"
         },
         {
           "name": "env",
@@ -100,12 +172,28 @@
           "type": "string"
         },
         {
+          "name": "error_class",
+          "type": "string"
+        },
+        {
+          "name": "error_code",
+          "type": "string"
+        },
+        {
           "name": "est_server_ms",
           "type": "integer"
         },
         {
           "name": "event_id",
           "type": "string"
+        },
+        {
+          "name": "event_name",
+          "type": "string"
+        },
+        {
+          "name": "finished_at_ms",
+          "type": "integer"
         },
         {
           "name": "flags_hash",
@@ -120,8 +208,32 @@
           "type": "integer"
         },
         {
+          "name": "grant_kind",
+          "type": "string"
+        },
+        {
+          "name": "host_boot_id",
+          "type": "string"
+        },
+        {
+          "name": "http_status",
+          "type": "integer"
+        },
+        {
+          "name": "http_status_class",
+          "type": "string"
+        },
+        {
+          "name": "immediate",
+          "type": "boolean"
+        },
+        {
           "name": "job_id",
           "type": "string"
+        },
+        {
+          "name": "joined_at_ms",
+          "type": "integer"
         },
         {
           "name": "journey_id",
@@ -132,8 +244,44 @@
           "type": "integer"
         },
         {
+          "name": "key_created_ms",
+          "type": "integer"
+        },
+        {
+          "name": "key_expires_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "key_prefix",
+          "type": "string"
+        },
+        {
           "name": "kind",
           "type": "string"
+        },
+        {
+          "name": "last_used_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "latency_milliseconds",
+          "type": "integer"
+        },
+        {
+          "name": "lease_expires_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "left_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "limit",
+          "type": "integer"
+        },
+        {
+          "name": "live_count",
+          "type": "integer"
         },
         {
           "name": "machine",
@@ -144,7 +292,19 @@
           "type": "string"
         },
         {
+          "name": "method",
+          "type": "string"
+        },
+        {
           "name": "module",
+          "type": "string"
+        },
+        {
+          "name": "mutation_created_ms",
+          "type": "integer"
+        },
+        {
+          "name": "mutation_kind",
           "type": "string"
         },
         {
@@ -152,7 +312,15 @@
           "type": "string"
         },
         {
+          "name": "next_attempt_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "next_seq",
+          "type": "integer"
+        },
+        {
+          "name": "occurred_at_ms",
           "type": "integer"
         },
         {
@@ -164,6 +332,10 @@
           "type": "string"
         },
         {
+          "name": "parent_delivery_id",
+          "type": "string"
+        },
+        {
           "name": "parent_op_id",
           "type": "string"
         },
@@ -172,11 +344,31 @@
           "type": "string"
         },
         {
+          "name": "path",
+          "type": "string"
+        },
+        {
           "name": "platform",
           "type": "string"
         },
         {
+          "name": "policy",
+          "type": "string"
+        },
+        {
+          "name": "previous_boot_end_ms",
+          "type": "integer"
+        },
+        {
+          "name": "previous_secret_expires_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "provider_media_id",
+          "type": "string"
+        },
+        {
+          "name": "reason",
           "type": "string"
         },
         {
@@ -196,11 +388,47 @@
           "type": "string"
         },
         {
+          "name": "request_logs",
+          "type": "string"
+        },
+        {
+          "name": "required_scope",
+          "type": "string"
+        },
+        {
+          "name": "resource_id",
+          "type": "string"
+        },
+        {
+          "name": "resource_type",
+          "type": "string"
+        },
+        {
+          "name": "retry_after_ms",
+          "type": "integer"
+        },
+        {
+          "name": "revoked_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "route",
+          "type": "string"
+        },
+        {
           "name": "schema_ver",
           "type": "string"
         },
         {
+          "name": "scopes",
+          "type": "string"
+        },
+        {
           "name": "sdk_version",
+          "type": "string"
+        },
+        {
+          "name": "semantic_transition_key",
           "type": "string"
         },
         {
@@ -224,6 +452,22 @@
           "type": "string"
         },
         {
+          "name": "stage",
+          "type": "string"
+        },
+        {
+          "name": "started_at_ms",
+          "type": "integer"
+        },
+        {
+          "name": "status",
+          "type": "integer"
+        },
+        {
+          "name": "subscribed",
+          "type": "string"
+        },
+        {
           "name": "surface_state",
           "type": "string"
         },
@@ -232,8 +476,16 @@
           "type": "string"
         },
         {
+          "name": "target_count",
+          "type": "integer"
+        },
+        {
           "name": "tenant_id",
           "type": "string"
+        },
+        {
+          "name": "terminal_at_ms",
+          "type": "integer"
         },
         {
           "name": "to_state",
@@ -248,11 +500,23 @@
           "type": "string"
         },
         {
+          "name": "updated_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "user_id",
           "type": "string"
         },
         {
           "name": "webhook_delivery_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_endpoint_id",
+          "type": "string"
+        },
+        {
+          "name": "webhook_event_id",
           "type": "string"
         }
       ]

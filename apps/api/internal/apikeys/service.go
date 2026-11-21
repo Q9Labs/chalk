@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -221,21 +223,34 @@ func (s Service) Authenticate(ctx context.Context, input AuthenticateInput) (pri
 
 	prefix, _, ok := parseCredential(input.RawKey)
 	if !ok {
+		s.authenticateDecision(ctx, "rejected", "malformed", utilities.ID{}, utilities.ID{}, "")
 		return authentication.Principal{}, ErrUnauthenticated
 	}
 	record, err := s.repository.GetByPrefix(ctx, prefix)
 	if errors.Is(err, ErrAPIKeyNotFound) {
 		credentialMatches(input.RawKey, "")
+		s.authenticateDecision(ctx, "rejected", "unknown_prefix", utilities.ID{}, utilities.ID{}, prefix)
 		return authentication.Principal{}, ErrUnauthenticated
 	}
 	if err != nil {
+		s.authenticateDecision(ctx, "rejected", "lookup_failed", utilities.ID{}, utilities.ID{}, prefix)
 		return authentication.Principal{}, fmt.Errorf("get api key by prefix: %w", err)
 	}
-	if !credentialMatches(input.RawKey, record.KeyHash) || activeAt(record, s.now()) != nil {
+	if !credentialMatches(input.RawKey, record.KeyHash) {
+		s.authenticateDecision(ctx, "rejected", "hash_mismatch", record.ID, record.TenantID, prefix)
+		return authentication.Principal{}, ErrUnauthenticated
+	}
+	if err := activeAt(record, s.now()); err != nil {
+		reason := "revoked"
+		if errors.Is(err, ErrAPIKeyExpired) {
+			reason = "expired"
+		}
+		s.authenticateDecision(ctx, "rejected", reason, record.ID, record.TenantID, prefix)
 		return authentication.Principal{}, ErrUnauthenticated
 	}
 	scopes, err := EffectiveScopes(record.Scopes)
 	if err != nil || record.ID.IsZero() || record.TenantID.IsZero() {
+		s.authenticateDecision(ctx, "rejected", "scopes_invalid", record.ID, record.TenantID, prefix)
 		return authentication.Principal{}, ErrUnauthenticated
 	}
 
@@ -245,10 +260,32 @@ func (s Service) Authenticate(ctx context.Context, input AuthenticateInput) (pri
 	} else {
 		s.recordUsageTouch(ctx, UsageTouchSucceeded)
 	}
+	s.authenticateDecision(ctx, "accepted", "", record.ID, record.TenantID, prefix)
 	return authentication.Principal{
 		Kind: authentication.PrincipalAPIKey, TenantID: record.TenantID,
 		APIKeyID: record.ID, Scopes: scopes,
 	}, nil
+}
+
+// authenticateDecision records the api_key.authenticate registry decision. The key's
+// Tenant is known only when a key row was found; the request row carries the path's
+// Tenant for refusals that name no key.
+func (s Service) authenticateDecision(ctx context.Context, decision, reason string, keyID, tenantID utilities.ID, keyPrefix string) {
+	attrs := []slog.Attr{}
+	if keyPrefix != "" {
+		attrs = append(attrs, obs.F(obs.FieldKeyPrefix, keyPrefix))
+	}
+	if !keyID.IsZero() {
+		attrs = append(attrs, obs.F(obs.FieldAPIKeyID, keyID.String()))
+	}
+	if !tenantID.IsZero() {
+		attrs = append(attrs, obs.F(obs.FieldTenantID, tenantID.String()))
+	}
+	if reason == "" {
+		obs.Decision(ctx, obs.EventAPIAPIKeyAuthenticate, decision, "", attrs...)
+		return
+	}
+	obs.Decision(ctx, obs.EventAPIAPIKeyAuthenticate, decision, "integration."+reason, attrs...)
 }
 
 func validName(value string) (string, error) {

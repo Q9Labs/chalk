@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"log/slog"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -387,6 +389,15 @@ func (r WebhookRepository) RotateSecret(ctx context.Context, tenantID, endpointI
 	if err := tx.Commit(ctx); err != nil {
 		return webhooks.RotateResult{}, err
 	}
+	attrs := []slog.Attr{
+		obs.F(obs.FieldTenantID, tenantID.String()),
+		obs.F(obs.FieldWebhookEndpointID, endpointID.String()),
+		obs.F(obs.FieldImmediate, immediate),
+	}
+	if result.PreviousSecretExpiresAt != nil {
+		attrs = append(attrs, obs.F(obs.FieldPreviousSecretExpiresAtMs, result.PreviousSecretExpiresAt.UnixMilli()))
+	}
+	obs.Fact(ctx, obs.EventAPIWebhookEndpointSecretRotated, attrs...)
 	return result, nil
 }
 
