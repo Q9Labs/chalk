@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { proveSeededSignIn } from "./chalk-signin.mjs";
+import { proveSeededSignIn, waitForSeededSpaceIdle } from "./chalk-signin.mjs";
 import { chalkSfuPlane } from "./config.mjs";
 
 async function withArrivalServer(firstStatus, code, check, failures = 1) {
@@ -40,6 +40,22 @@ test("a reload proof survives the preceding guest's Episode ending", async () =>
     },
     5,
   );
+});
+
+test("the boot browser waits for the Doctor guest's Episode to finish after reload", async () => {
+  const statuses = ["active", "ending", "ended"];
+  await waitForSeededSpaceIdle({
+    origin: "http://chalk.example.test",
+    seed: { tenantId: "tenant", spaceId: "space", systemToken: "test-token" },
+    retryDelayMs: 1,
+    fetchImpl: async (url, options) => {
+      assert.equal(url.pathname + url.search, "/v1/tenants/tenant/spaces/space/episodes?page_size=1");
+      assert.equal(options.headers.Authorization, "Bearer test-token");
+      assert.ok(statuses.length > 0, "stops reading after the Episode ends");
+      return Response.json({ episodes: [{ status: statuses.shift() }] });
+    },
+  });
+  assert.deepEqual(statuses, []);
 });
 
 test("a rejected invite is not retried as a transient Episode transition", async () => {
