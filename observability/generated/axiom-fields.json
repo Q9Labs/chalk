@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "aae5df74a4de",
   "datasets": [
     {
       "dataset": "lifecycle",
@@ -260,7 +260,7 @@
     {
       "dataset": "requests",
       "budget": 256,
-      "used": 60,
+      "used": 76,
       "fields": [
         {
           "name": "admission_request_id",
@@ -287,6 +287,14 @@
           "type": "string"
         },
         {
+          "name": "bucket_start_ms",
+          "type": "integer"
+        },
+        {
+          "name": "bytes",
+          "type": "integer"
+        },
+        {
           "name": "client_mono_ms",
           "type": "float"
         },
@@ -308,6 +316,10 @@
         },
         {
           "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "content_class",
           "type": "string"
         },
         {
@@ -339,6 +351,10 @@
           "type": "integer"
         },
         {
+          "name": "edge_status",
+          "type": "integer"
+        },
+        {
           "name": "end",
           "type": "string"
         },
@@ -348,6 +364,10 @@
         },
         {
           "name": "episode_id",
+          "type": "string"
+        },
+        {
+          "name": "error_code",
           "type": "string"
         },
         {
@@ -371,6 +391,10 @@
           "type": "integer"
         },
         {
+          "name": "host",
+          "type": "string"
+        },
+        {
           "name": "job_id",
           "type": "string"
         },
@@ -391,6 +415,10 @@
           "type": "string"
         },
         {
+          "name": "method",
+          "type": "string"
+        },
+        {
           "name": "module",
           "type": "string"
         },
@@ -407,6 +435,10 @@
           "type": "string"
         },
         {
+          "name": "origin_status",
+          "type": "integer"
+        },
+        {
           "name": "outcome",
           "type": "string"
         },
@@ -416,6 +448,14 @@
         },
         {
           "name": "participant_id",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "path_class",
           "type": "string"
         },
         {
@@ -443,6 +483,14 @@
           "type": "string"
         },
         {
+          "name": "requests",
+          "type": "integer"
+        },
+        {
+          "name": "route",
+          "type": "string"
+        },
+        {
           "name": "schema_ver",
           "type": "string"
         },
@@ -453,6 +501,10 @@
         {
           "name": "seq",
           "type": "integer"
+        },
+        {
+          "name": "service_version",
+          "type": "string"
         },
         {
           "name": "shown_ms",
@@ -468,6 +520,14 @@
         },
         {
           "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "integer"
+        },
+        {
+          "name": "status_class",
           "type": "string"
         },
         {
@@ -492,6 +552,10 @@
         },
         {
           "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "ua_class",
           "type": "string"
         },
         {
@@ -754,8 +818,20 @@
     {
       "dataset": "infra",
       "budget": 256,
-      "used": 61,
+      "used": 108,
       "fields": [
+        {
+          "name": "acquire_count",
+          "type": "integer"
+        },
+        {
+          "name": "acquired_conns",
+          "type": "integer"
+        },
+        {
+          "name": "active_backends",
+          "type": "integer"
+        },
         {
           "name": "admission_request_id",
           "type": "string"
@@ -781,6 +857,46 @@
           "type": "string"
         },
         {
+          "name": "blocker_application_name",
+          "type": "string"
+        },
+        {
+          "name": "blocker_usename",
+          "type": "string"
+        },
+        {
+          "name": "blocker_xact_age_ms",
+          "type": "integer"
+        },
+        {
+          "name": "bucket_start_ms",
+          "type": "integer"
+        },
+        {
+          "name": "canceled_acquire_count",
+          "type": "integer"
+        },
+        {
+          "name": "chalk_alert_reason",
+          "type": "string"
+        },
+        {
+          "name": "chalk_alert_rule",
+          "type": "string"
+        },
+        {
+          "name": "chalk_alert_stream",
+          "type": "string"
+        },
+        {
+          "name": "chalk_alert_value",
+          "type": "integer"
+        },
+        {
+          "name": "changed_at_ms",
+          "type": "integer"
+        },
+        {
           "name": "client_mono_ms",
           "type": "float"
         },
@@ -802,6 +918,26 @@
         },
         {
           "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "commit",
+          "type": "string"
+        },
+        {
+          "name": "component",
+          "type": "string"
+        },
+        {
+          "name": "constructing_conns",
+          "type": "integer"
+        },
+        {
+          "name": "db_reach",
+          "type": "string"
+        },
+        {
+          "name": "db_status",
           "type": "string"
         },
         {
@@ -833,6 +969,14 @@
           "type": "integer"
         },
         {
+          "name": "empty_acquire_count",
+          "type": "integer"
+        },
+        {
+          "name": "empty_acquire_wait_ms",
+          "type": "integer"
+        },
+        {
           "name": "end",
           "type": "string"
         },
@@ -853,6 +997,10 @@
           "type": "string"
         },
         {
+          "name": "finished_ms",
+          "type": "integer"
+        },
+        {
           "name": "flags",
           "type": "map"
         },
@@ -869,6 +1017,26 @@
           "type": "integer"
         },
         {
+          "name": "host",
+          "type": "string"
+        },
+        {
+          "name": "host_boot_id",
+          "type": "string"
+        },
+        {
+          "name": "http_status",
+          "type": "integer"
+        },
+        {
+          "name": "idle_conns",
+          "type": "integer"
+        },
+        {
+          "name": "idle_in_tx_backends",
+          "type": "integer"
+        },
+        {
           "name": "job_id",
           "type": "string"
         },
@@ -881,11 +1049,35 @@
           "type": "string"
         },
         {
+          "name": "lock_status",
+          "type": "string"
+        },
+        {
+          "name": "lock_waiters",
+          "type": "integer"
+        },
+        {
           "name": "machine",
           "type": "string"
         },
         {
+          "name": "marker_kind",
+          "type": "string"
+        },
+        {
+          "name": "max_conns",
+          "type": "integer"
+        },
+        {
+          "name": "max_lock_wait_ms",
+          "type": "integer"
+        },
+        {
           "name": "media_connection_id",
+          "type": "string"
+        },
+        {
+          "name": "media_plane_scope",
           "type": "string"
         },
         {
@@ -897,11 +1089,23 @@
           "type": "string"
         },
         {
+          "name": "new_plane",
+          "type": "string"
+        },
+        {
           "name": "next_seq",
           "type": "integer"
         },
         {
+          "name": "old_plane",
+          "type": "string"
+        },
+        {
           "name": "op_id",
+          "type": "string"
+        },
+        {
+          "name": "origin_reach",
           "type": "string"
         },
         {
@@ -921,6 +1125,10 @@
           "type": "string"
         },
         {
+          "name": "previous_boot_end",
+          "type": "string"
+        },
+        {
           "name": "provider_media_id",
           "type": "string"
         },
@@ -933,12 +1141,24 @@
           "type": "string"
         },
         {
+          "name": "release_id",
+          "type": "string"
+        },
+        {
           "name": "release_sha",
           "type": "string"
         },
         {
           "name": "request_id",
           "type": "string"
+        },
+        {
+          "name": "run_id",
+          "type": "string"
+        },
+        {
+          "name": "sample_seq",
+          "type": "integer"
         },
         {
           "name": "schema_ver",
@@ -951,6 +1171,10 @@
         {
           "name": "seq",
           "type": "integer"
+        },
+        {
+          "name": "service_version",
+          "type": "string"
         },
         {
           "name": "shown_ms",
@@ -969,6 +1193,18 @@
           "type": "string"
         },
         {
+          "name": "started_ms",
+          "type": "integer"
+        },
+        {
+          "name": "stmt_status",
+          "type": "string"
+        },
+        {
+          "name": "stmt_top",
+          "type": "string"
+        },
+        {
           "name": "surface_state",
           "type": "string"
         },
@@ -977,7 +1213,15 @@
           "type": "string"
         },
         {
+          "name": "target",
+          "type": "string"
+        },
+        {
           "name": "tenant_id",
+          "type": "string"
+        },
+        {
+          "name": "tick_status",
           "type": "string"
         },
         {
@@ -985,11 +1229,19 @@
           "type": "string"
         },
         {
+          "name": "total_conns",
+          "type": "integer"
+        },
+        {
           "name": "trace_id",
           "type": "string"
         },
         {
           "name": "trigger",
+          "type": "string"
+        },
+        {
+          "name": "uptime_status",
           "type": "string"
         },
         {

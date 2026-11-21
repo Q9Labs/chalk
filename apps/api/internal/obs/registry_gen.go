@@ -3,18 +3,31 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "aae5df74a4de"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventAPIHTTPRequest      = "api.http_request"
+	EventAPIServiceVersion   = "api.service_version"
+	EventClientCallEnded     = "client.call_ended"
+	EventClientFlagsSnapshot = "client.flags_snapshot"
+	EventDbHealthSample      = "db.health_sample"
+	EventDbMediaPlaneChange  = "db.media_plane_change"
+	EventEdgeCollectorTick   = "edge.collector_tick"
+	EventEdgeHTTPRollup      = "edge.http_rollup"
+	EventEdgeUptimeCheck     = "edge.uptime_check"
+	EventHostDbReachable     = "host.db_reachable"
+	EventHostRuntimeHealth   = "host.runtime_health"
+	EventObsClockJump        = "obs.clock_jump"
+	EventObsFlagsSnapshot    = "obs.flags_snapshot"
+	EventReleaseMarker       = "release.marker"
+	EventReleaseStarted      = "release.started"
+	EventSelftestAdmit       = "selftest.admit"
+	EventSelftestBanner      = "selftest.banner"
+	EventSelftestNote        = "selftest.note"
+	EventSelftestWork        = "selftest.work"
+	EventSyncEpisodeEnded    = "sync.episode.ended"
+	EventSyncServiceVersion  = "sync.service_version"
 )
 
 // Machine names.
@@ -26,161 +39,297 @@ const (
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled            = "cancelled"
+	ReasonEndTimeLimit         = "end.time_limit"
+	ReasonReleaseDeployRestart = "release.deploy_restart"
+	ReasonSelftestBroken       = "selftest.broken"
+	ReasonSelftestBusy         = "selftest.busy"
+	ReasonUnclassified         = "unclassified"
 )
 
 // Field names.
 const (
-	FieldAdmissionRequestID = "admission_request_id"
-	FieldAgentID            = "agent_id"
-	FieldAppBuild           = "app_build"
-	FieldAppVersion         = "app_version"
-	FieldAttempt            = "attempt"
-	FieldBannerKind         = "banner_kind"
-	FieldBatchID            = "batch_id"
-	FieldClientMonoMs       = "client_mono_ms"
-	FieldClientSessionID    = "client_session_id"
-	FieldClientWallMs       = "client_wall_ms"
-	FieldClockEpoch         = "clock_epoch"
-	FieldClockErrMs         = "clock_err_ms"
-	FieldClockState         = "clock_state"
-	FieldDecision           = "decision"
-	FieldDecisionID         = "decision_id"
-	FieldDeviceEphemeral    = "device_ephemeral"
-	FieldDeviceID           = "device_id"
-	FieldDropReason         = "drop_reason"
-	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDurationMs         = "duration_ms"
-	FieldEnd                = "end"
-	FieldEndReason          = "end_reason"
-	FieldEnv                = "env"
-	FieldEpisodeID          = "episode_id"
-	FieldEstServerMs        = "est_server_ms"
-	FieldEventID            = "event_id"
-	FieldFlags              = "flags"
-	FieldFlagsHash          = "flags_hash"
-	FieldFromState          = "from_state"
-	FieldGeneration         = "generation"
-	FieldItemCount          = "item_count"
-	FieldJobID              = "job_id"
-	FieldJourneyID          = "journey_id"
-	FieldJumpMs             = "jump_ms"
-	FieldKind               = "kind"
-	FieldMachine            = "machine"
-	FieldMediaConnectionID  = "media_connection_id"
-	FieldModule             = "module"
-	FieldName               = "name"
-	FieldNextSeq            = "next_seq"
-	FieldNoteKind           = "note_kind"
-	FieldOpID               = "op_id"
-	FieldOutcome            = "outcome"
-	FieldParentOpID         = "parent_op_id"
-	FieldParticipantID      = "participant_id"
-	FieldPlatform           = "platform"
-	FieldProviderMediaID    = "provider_media_id"
-	FieldReasonCode         = "reason_code"
-	FieldRecordingID        = "recording_id"
-	FieldReleaseSHA         = "release_sha"
-	FieldRequestID          = "request_id"
-	FieldSchemaVer          = "schema_ver"
-	FieldSDKVersion         = "sdk_version"
-	FieldSeq                = "seq"
-	FieldShownMs            = "shown_ms"
-	FieldSourceID           = "source_id"
-	FieldSpaceID            = "space_id"
-	FieldSpanID             = "span_id"
-	FieldSurfaceState       = "surface_state"
-	FieldSyncConnectionID   = "sync_connection_id"
-	FieldTenantID           = "tenant_id"
-	FieldToState            = "to_state"
-	FieldTraceID            = "trace_id"
-	FieldTrigger            = "trigger"
-	FieldUserID             = "user_id"
-	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldAcquireCount           = "acquire_count"
+	FieldAcquiredConns          = "acquired_conns"
+	FieldActiveBackends         = "active_backends"
+	FieldAdmissionRequestID     = "admission_request_id"
+	FieldAgentID                = "agent_id"
+	FieldAppBuild               = "app_build"
+	FieldAppVersion             = "app_version"
+	FieldAttempt                = "attempt"
+	FieldBannerKind             = "banner_kind"
+	FieldBatchID                = "batch_id"
+	FieldBlockerApplicationName = "blocker_application_name"
+	FieldBlockerUsename         = "blocker_usename"
+	FieldBlockerXactAgeMs       = "blocker_xact_age_ms"
+	FieldBucketStartMs          = "bucket_start_ms"
+	FieldBytes                  = "bytes"
+	FieldCanceledAcquireCount   = "canceled_acquire_count"
+	FieldChalkAlertReason       = "chalk_alert_reason"
+	FieldChalkAlertRule         = "chalk_alert_rule"
+	FieldChalkAlertStream       = "chalk_alert_stream"
+	FieldChalkAlertValue        = "chalk_alert_value"
+	FieldChangedAtMs            = "changed_at_ms"
+	FieldClientMonoMs           = "client_mono_ms"
+	FieldClientSessionID        = "client_session_id"
+	FieldClientWallMs           = "client_wall_ms"
+	FieldClockEpoch             = "clock_epoch"
+	FieldClockErrMs             = "clock_err_ms"
+	FieldClockState             = "clock_state"
+	FieldCommit                 = "commit"
+	FieldComponent              = "component"
+	FieldConstructingConns      = "constructing_conns"
+	FieldContentClass           = "content_class"
+	FieldDbReach                = "db_reach"
+	FieldDbStatus               = "db_status"
+	FieldDecision               = "decision"
+	FieldDecisionID             = "decision_id"
+	FieldDeviceEphemeral        = "device_ephemeral"
+	FieldDeviceID               = "device_id"
+	FieldDropReason             = "drop_reason"
+	FieldDroppedSeqs            = "dropped_seqs"
+	FieldDurationMs             = "duration_ms"
+	FieldEdgeStatus             = "edge_status"
+	FieldEmptyAcquireCount      = "empty_acquire_count"
+	FieldEmptyAcquireWaitMs     = "empty_acquire_wait_ms"
+	FieldEnd                    = "end"
+	FieldEndReason              = "end_reason"
+	FieldEnv                    = "env"
+	FieldEpisodeID              = "episode_id"
+	FieldErrorCode              = "error_code"
+	FieldEstServerMs            = "est_server_ms"
+	FieldEventID                = "event_id"
+	FieldFinishedMs             = "finished_ms"
+	FieldFlags                  = "flags"
+	FieldFlagsHash              = "flags_hash"
+	FieldFromState              = "from_state"
+	FieldGeneration             = "generation"
+	FieldHost                   = "host"
+	FieldHostBootID             = "host_boot_id"
+	FieldHTTPStatus             = "http_status"
+	FieldIdleConns              = "idle_conns"
+	FieldIdleInTxBackends       = "idle_in_tx_backends"
+	FieldItemCount              = "item_count"
+	FieldJobID                  = "job_id"
+	FieldJourneyID              = "journey_id"
+	FieldJumpMs                 = "jump_ms"
+	FieldKind                   = "kind"
+	FieldLockStatus             = "lock_status"
+	FieldLockWaiters            = "lock_waiters"
+	FieldMachine                = "machine"
+	FieldMarkerKind             = "marker_kind"
+	FieldMaxConns               = "max_conns"
+	FieldMaxLockWaitMs          = "max_lock_wait_ms"
+	FieldMediaConnectionID      = "media_connection_id"
+	FieldMediaPlaneScope        = "media_plane_scope"
+	FieldMethod                 = "method"
+	FieldModule                 = "module"
+	FieldName                   = "name"
+	FieldNewPlane               = "new_plane"
+	FieldNextSeq                = "next_seq"
+	FieldNoteKind               = "note_kind"
+	FieldOldPlane               = "old_plane"
+	FieldOpID                   = "op_id"
+	FieldOriginReach            = "origin_reach"
+	FieldOriginStatus           = "origin_status"
+	FieldOutcome                = "outcome"
+	FieldParentOpID             = "parent_op_id"
+	FieldParticipantID          = "participant_id"
+	FieldPath                   = "path"
+	FieldPathClass              = "path_class"
+	FieldPlatform               = "platform"
+	FieldPreviousBootEnd        = "previous_boot_end"
+	FieldProviderMediaID        = "provider_media_id"
+	FieldReasonCode             = "reason_code"
+	FieldRecordingID            = "recording_id"
+	FieldReleaseID              = "release_id"
+	FieldReleaseSHA             = "release_sha"
+	FieldRequestID              = "request_id"
+	FieldRequests               = "requests"
+	FieldRoute                  = "route"
+	FieldRunID                  = "run_id"
+	FieldSampleSeq              = "sample_seq"
+	FieldSchemaVer              = "schema_ver"
+	FieldSDKVersion             = "sdk_version"
+	FieldSeq                    = "seq"
+	FieldServiceName            = "service_name"
+	FieldServiceVersion         = "service_version"
+	FieldShownMs                = "shown_ms"
+	FieldSourceID               = "source_id"
+	FieldSpaceID                = "space_id"
+	FieldSpanID                 = "span_id"
+	FieldStartedMs              = "started_ms"
+	FieldStatus                 = "status"
+	FieldStatusClass            = "status_class"
+	FieldStmtStatus             = "stmt_status"
+	FieldStmtTop                = "stmt_top"
+	FieldSurfaceState           = "surface_state"
+	FieldSyncConnectionID       = "sync_connection_id"
+	FieldTarget                 = "target"
+	FieldTenantID               = "tenant_id"
+	FieldTickStatus             = "tick_status"
+	FieldToState                = "to_state"
+	FieldTotalConns             = "total_conns"
+	FieldTraceID                = "trace_id"
+	FieldTrigger                = "trigger"
+	FieldUaClass                = "ua_class"
+	FieldUptimeStatus           = "uptime_status"
+	FieldUserID                 = "user_id"
+	FieldWebhookDeliveryID      = "webhook_delivery_id"
 )
 
 var registryFields = map[string]fieldSpec{
-	"admission_request_id": {typ: "id", group: "trail", required: false},
-	"agent_id":             {typ: "id", group: "trail", required: false},
-	"app_build":            {typ: "string", group: "build", required: false},
-	"app_version":          {typ: "string", group: "build", required: false},
-	"attempt":              {typ: "int", group: "trail", required: false},
-	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
-	"batch_id":             {typ: "id", group: "delivery", required: false},
-	"client_mono_ms":       {typ: "number", group: "clock", required: false},
-	"client_session_id":    {typ: "id", group: "trail", required: false},
-	"client_wall_ms":       {typ: "int", group: "clock", required: false},
-	"clock_epoch":          {typ: "int", group: "clock", required: false},
-	"clock_err_ms":         {typ: "int", group: "clock", required: false},
-	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
-	"decision":             {typ: "string", group: "record", required: false},
-	"decision_id":          {typ: "id", group: "record", required: false},
-	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
-	"device_id":            {typ: "id", group: "trail", required: false},
-	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
-	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"duration_ms":          {typ: "int", group: "record", required: false},
-	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
-	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
-	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
-	"episode_id":           {typ: "id", group: "trail", required: false},
-	"est_server_ms":        {typ: "int", group: "clock", required: false},
-	"event_id":             {typ: "id", group: "delivery", required: true},
-	"flags":                {typ: "map", group: "event", required: false},
-	"flags_hash":           {typ: "string", group: "flags", required: false},
-	"from_state":           {typ: "string", group: "record", required: false},
-	"generation":           {typ: "int", group: "trail", required: false},
-	"item_count":           {typ: "int", group: "event", required: false},
-	"job_id":               {typ: "id", group: "trail", required: false},
-	"journey_id":           {typ: "id", group: "trail", required: false},
-	"jump_ms":              {typ: "int", group: "event", required: false},
-	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"machine":              {typ: "string", group: "record", required: false},
-	"media_connection_id":  {typ: "id", group: "trail", required: false},
-	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
-	"name":                 {typ: "string", group: "record", required: true},
-	"next_seq":             {typ: "int", group: "delivery", required: false},
-	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
-	"op_id":                {typ: "id", group: "record", required: false},
-	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
-	"parent_op_id":         {typ: "id", group: "record", required: false},
-	"participant_id":       {typ: "id", group: "trail", required: false},
-	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
-	"provider_media_id":    {typ: "id", group: "trail", required: false},
-	"reason_code":          {typ: "string", group: "record", required: false},
-	"recording_id":         {typ: "id", group: "trail", required: false},
-	"release_sha":          {typ: "string", group: "build", required: false},
-	"request_id":           {typ: "id", group: "trail", required: false},
-	"schema_ver":           {typ: "string", group: "build", required: true},
-	"sdk_version":          {typ: "string", group: "build", required: false},
-	"seq":                  {typ: "int", group: "delivery", required: true},
-	"shown_ms":             {typ: "int", group: "record", required: false},
-	"source_id":            {typ: "string", group: "delivery", required: true},
-	"space_id":             {typ: "id", group: "trail", required: false},
-	"span_id":              {typ: "id", group: "trail", required: false},
-	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
-	"sync_connection_id":   {typ: "id", group: "trail", required: false},
-	"tenant_id":            {typ: "id", group: "trail", required: false},
-	"to_state":             {typ: "string", group: "record", required: false},
-	"trace_id":             {typ: "id", group: "trail", required: false},
-	"trigger":              {typ: "string", group: "record", required: false},
-	"user_id":              {typ: "id", group: "trail", required: false},
-	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"acquire_count":            {typ: "int", group: "event", required: false},
+	"acquired_conns":           {typ: "int", group: "event", required: false},
+	"active_backends":          {typ: "int", group: "event", required: false},
+	"admission_request_id":     {typ: "id", group: "trail", required: false},
+	"agent_id":                 {typ: "id", group: "trail", required: false},
+	"app_build":                {typ: "string", group: "build", required: false},
+	"app_version":              {typ: "string", group: "build", required: false},
+	"attempt":                  {typ: "int", group: "trail", required: false},
+	"banner_kind":              {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
+	"batch_id":                 {typ: "id", group: "delivery", required: false},
+	"blocker_application_name": {typ: "string", group: "event", required: false},
+	"blocker_usename":          {typ: "string", group: "event", required: false},
+	"blocker_xact_age_ms":      {typ: "int", group: "event", required: false},
+	"bucket_start_ms":          {typ: "int", group: "event", required: false},
+	"bytes":                    {typ: "int", group: "event", required: false},
+	"canceled_acquire_count":   {typ: "int", group: "event", required: false},
+	"chalk_alert_reason":       {typ: "string", group: "event", required: false},
+	"chalk_alert_rule":         {typ: "string", group: "event", required: false},
+	"chalk_alert_stream":       {typ: "string", group: "event", required: false},
+	"chalk_alert_value":        {typ: "int", group: "event", required: false},
+	"changed_at_ms":            {typ: "int", group: "event", required: false},
+	"client_mono_ms":           {typ: "number", group: "clock", required: false},
+	"client_session_id":        {typ: "id", group: "trail", required: false},
+	"client_wall_ms":           {typ: "int", group: "clock", required: false},
+	"clock_epoch":              {typ: "int", group: "clock", required: false},
+	"clock_err_ms":             {typ: "int", group: "clock", required: false},
+	"clock_state":              {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"commit":                   {typ: "string", group: "event", required: false},
+	"component":                {typ: "string", group: "event", required: false},
+	"constructing_conns":       {typ: "int", group: "event", required: false},
+	"content_class":            {typ: "enum", group: "event", required: false, values: []string{"html", "other"}},
+	"db_reach":                 {typ: "enum", group: "event", required: false, values: []string{"up", "down"}},
+	"db_status":                {typ: "enum", group: "event", required: false, values: []string{"ok", "unavailable(ping_timeout)", "unavailable(connect_failed)"}},
+	"decision":                 {typ: "string", group: "record", required: false},
+	"decision_id":              {typ: "id", group: "record", required: false},
+	"device_ephemeral":         {typ: "bool", group: "trail", required: false},
+	"device_id":                {typ: "id", group: "trail", required: false},
+	"drop_reason":              {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped_seqs":             {typ: "ranges", group: "delivery", required: false},
+	"duration_ms":              {typ: "int", group: "record", required: false},
+	"edge_status":              {typ: "int", group: "event", required: false},
+	"empty_acquire_count":      {typ: "int", group: "event", required: false},
+	"empty_acquire_wait_ms":    {typ: "int", group: "event", required: false},
+	"end":                      {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
+	"end_reason":               {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"env":                      {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_id":               {typ: "id", group: "trail", required: false},
+	"error_code":               {typ: "string", group: "event", required: false},
+	"est_server_ms":            {typ: "int", group: "clock", required: false},
+	"event_id":                 {typ: "id", group: "delivery", required: true},
+	"finished_ms":              {typ: "int", group: "event", required: false},
+	"flags":                    {typ: "map", group: "event", required: false},
+	"flags_hash":               {typ: "string", group: "flags", required: false},
+	"from_state":               {typ: "string", group: "record", required: false},
+	"generation":               {typ: "int", group: "trail", required: false},
+	"host":                     {typ: "string", group: "event", required: false},
+	"host_boot_id":             {typ: "string", group: "event", required: false},
+	"http_status":              {typ: "int", group: "event", required: false},
+	"idle_conns":               {typ: "int", group: "event", required: false},
+	"idle_in_tx_backends":      {typ: "int", group: "event", required: false},
+	"item_count":               {typ: "int", group: "event", required: false},
+	"job_id":                   {typ: "id", group: "trail", required: false},
+	"journey_id":               {typ: "id", group: "trail", required: false},
+	"jump_ms":                  {typ: "int", group: "event", required: false},
+	"kind":                     {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"lock_status":              {typ: "enum", group: "event", required: false, values: []string{"ok", "failed"}},
+	"lock_waiters":             {typ: "int", group: "event", required: false},
+	"machine":                  {typ: "string", group: "record", required: false},
+	"marker_kind":              {typ: "enum", group: "event", required: false, values: []string{"deploy", "rollback", "auto_rollback", "failed"}},
+	"max_conns":                {typ: "int", group: "event", required: false},
+	"max_lock_wait_ms":         {typ: "int", group: "event", required: false},
+	"media_connection_id":      {typ: "id", group: "trail", required: false},
+	"media_plane_scope":        {typ: "enum", group: "event", required: false, values: []string{"space", "tenant", "kill_switch"}},
+	"method":                   {typ: "string", group: "event", required: false},
+	"module":                   {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
+	"name":                     {typ: "string", group: "record", required: true},
+	"new_plane":                {typ: "string", group: "event", required: false},
+	"next_seq":                 {typ: "int", group: "delivery", required: false},
+	"note_kind":                {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
+	"old_plane":                {typ: "string", group: "event", required: false},
+	"op_id":                    {typ: "id", group: "record", required: false},
+	"origin_reach":             {typ: "enum", group: "event", required: false, values: []string{"up", "down"}},
+	"origin_status":            {typ: "int", group: "event", required: false},
+	"outcome":                  {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"parent_op_id":             {typ: "id", group: "record", required: false},
+	"participant_id":           {typ: "id", group: "trail", required: false},
+	"path":                     {typ: "string", group: "event", required: false},
+	"path_class":               {typ: "enum", group: "event", required: false, values: []string{"asset", "health", "space_page", "other"}},
+	"platform":                 {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"previous_boot_end":        {typ: "string", group: "event", required: false},
+	"provider_media_id":        {typ: "id", group: "trail", required: false},
+	"reason_code":              {typ: "string", group: "record", required: false},
+	"recording_id":             {typ: "id", group: "trail", required: false},
+	"release_id":               {typ: "string", group: "event", required: false},
+	"release_sha":              {typ: "string", group: "build", required: false},
+	"request_id":               {typ: "id", group: "trail", required: false},
+	"requests":                 {typ: "int", group: "event", required: false},
+	"route":                    {typ: "string", group: "event", required: false},
+	"run_id":                   {typ: "string", group: "event", required: false},
+	"sample_seq":               {typ: "int", group: "event", required: false},
+	"schema_ver":               {typ: "string", group: "build", required: true},
+	"sdk_version":              {typ: "string", group: "build", required: false},
+	"seq":                      {typ: "int", group: "delivery", required: true},
+	"service_name":             {typ: "string", group: "event", required: false},
+	"service_version":          {typ: "string", group: "event", required: false},
+	"shown_ms":                 {typ: "int", group: "record", required: false},
+	"source_id":                {typ: "string", group: "delivery", required: true},
+	"space_id":                 {typ: "id", group: "trail", required: false},
+	"span_id":                  {typ: "id", group: "trail", required: false},
+	"started_ms":               {typ: "int", group: "event", required: false},
+	"status":                   {typ: "int", group: "event", required: false},
+	"status_class":             {typ: "enum", group: "event", required: false, values: []string{"s2xx", "s3xx", "s4xx", "s5xx"}},
+	"stmt_status":              {typ: "enum", group: "event", required: false, values: []string{"ok", "unavailable(extension_missing)", "unavailable(permission_denied)", "unavailable(unreachable)"}},
+	"stmt_top":                 {typ: "string", group: "event", required: false},
+	"surface_state":            {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"sync_connection_id":       {typ: "id", group: "trail", required: false},
+	"target":                   {typ: "string", group: "event", required: false},
+	"tenant_id":                {typ: "id", group: "trail", required: false},
+	"tick_status":              {typ: "string", group: "event", required: false},
+	"to_state":                 {typ: "string", group: "record", required: false},
+	"total_conns":              {typ: "int", group: "event", required: false},
+	"trace_id":                 {typ: "id", group: "trail", required: false},
+	"trigger":                  {typ: "string", group: "record", required: false},
+	"ua_class":                 {typ: "enum", group: "event", required: false, values: []string{"bot", "browser"}},
+	"uptime_status":            {typ: "enum", group: "event", required: false, values: []string{"ok", "failed", "unavailable(fetch_failed)"}},
+	"user_id":                  {typ: "id", group: "trail", required: false},
+	"webhook_delivery_id":      {typ: "id", group: "trail", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"api.http_request":      {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"status": {required: true}, "status_class": {required: true}, "route": {required: false}, "method": {required: false}, "error_code": {required: false}, "service_version": {required: false}, "path": {required: false}, "bytes": {required: false}}},
+	"api.service_version":   {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"service_version": {required: true}}},
+	"client.call_ended":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"client.flags_snapshot": {kind: "fact", dataset: "infra", side: "client", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"db.health_sample":      {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"sample_seq": {required: true}, "db_status": {required: true}, "db_reach": {required: true}, "max_conns": {required: true}, "total_conns": {required: true}, "acquired_conns": {required: true}, "idle_conns": {required: true}, "constructing_conns": {required: true}, "acquire_count": {required: true}, "empty_acquire_count": {required: true}, "empty_acquire_wait_ms": {required: true}, "canceled_acquire_count": {required: true}, "active_backends": {required: true}, "idle_in_tx_backends": {required: true}, "lock_waiters": {required: true}, "max_lock_wait_ms": {required: true}, "blocker_application_name": {required: false}, "blocker_usename": {required: false}, "blocker_xact_age_ms": {required: false}, "lock_status": {required: true}, "stmt_status": {required: true}, "stmt_top": {required: false}}},
+	"db.media_plane_change": {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"media_plane_scope": {required: true}, "old_plane": {required: true}, "new_plane": {required: true}, "changed_at_ms": {required: true}}},
+	"edge.collector_tick":   {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"bucket_start_ms": {required: true}, "host": {required: true}, "tick_status": {required: true}}},
+	"edge.http_rollup":      {kind: "fact", dataset: "requests", side: "server", testOnly: false, fields: map[string]fieldRule{"bucket_start_ms": {required: true}, "host": {required: true}, "path_class": {required: true}, "edge_status": {required: true}, "origin_status": {required: true}, "method": {required: true}, "content_class": {required: true}, "ua_class": {required: true}, "requests": {required: true}}},
+	"edge.uptime_check":     {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"target": {required: true}, "uptime_status": {required: true}, "http_status": {required: true}, "origin_reach": {required: true}}},
+	"host.db_reachable":     {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"db_reach": {required: true}, "chalk_alert_rule": {required: true}, "chalk_alert_value": {required: true}, "chalk_alert_reason": {required: false}, "chalk_alert_stream": {required: false}}},
+	"host.runtime_health":   {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"origin_reach": {required: true}, "chalk_alert_rule": {required: true}, "chalk_alert_value": {required: true}, "chalk_alert_reason": {required: true}, "chalk_alert_stream": {required: false}}},
+	"obs.clock_jump":        {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":    {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"release.marker":        {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"component": {required: true}, "release_id": {required: true}, "commit": {required: true}, "marker_kind": {required: true}, "started_ms": {required: true}, "finished_ms": {required: true}, "run_id": {required: false}}},
+	"release.started":       {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"release_id": {required: true}, "host_boot_id": {required: true}, "previous_boot_end": {required: true}}},
+	"selftest.admit":        {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":       {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":         {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":         {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":    {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"sync.service_version":  {kind: "fact", dataset: "infra", side: "server", testOnly: false, fields: map[string]fieldRule{"service_version": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{
@@ -190,11 +339,12 @@ var registryMachines = map[string]machineSpec{
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":              "expected",
+	"end.time_limit":         "expected",
+	"release.deploy_restart": "expected",
+	"selftest.broken":        "error",
+	"selftest.busy":          "expected",
+	"unclassified":           "error",
 }
 
 var registryIDKinds = []idKind{

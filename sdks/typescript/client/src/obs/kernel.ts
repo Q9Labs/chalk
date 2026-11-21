@@ -251,7 +251,7 @@ export function createKernel(options: KernelOptions): Kernel {
 
     setFlags(flags) {
       currentFlagsHash = flagsHash(flags);
-      send("fact", "obs.flags_snapshot", { flags }, {});
+      send("fact", "client.flags_snapshot", { flags }, {});
     },
 
     inFlight: () => [...inFlight.values()],

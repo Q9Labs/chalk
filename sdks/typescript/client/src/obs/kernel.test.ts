@@ -154,7 +154,7 @@ describe("modes and the envelope", () => {
     const flags = { "media.kill_switch": false, max_participants: 50 };
     kernel.setFlags(flags);
     kernel.fact("selftest.note", { note_kind: "a" });
-    expect(records[0]).toMatchObject({ name: "obs.flags_snapshot", flags, flags_hash: flagsHash(flags) });
+    expect(records[0]).toMatchObject({ name: "client.flags_snapshot", flags, flags_hash: flagsHash(flags) });
     expect(records[1]).toMatchObject({ flags_hash: flagsHash(flags) });
   });
 

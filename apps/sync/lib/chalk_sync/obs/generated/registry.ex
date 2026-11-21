@@ -2,9 +2,52 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "06a4092b8fb7"
+  @schema_ver "aae5df74a4de"
 
   @events %{
+    "api.http_request" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "status" => %{
+          "required" => true
+        },
+        "status_class" => %{
+          "required" => true
+        },
+        "route" => %{
+          "required" => false
+        },
+        "method" => %{
+          "required" => false
+        },
+        "error_code" => %{
+          "required" => false
+        },
+        "service_version" => %{
+          "required" => false
+        },
+        "path" => %{
+          "required" => false
+        },
+        "bytes" => %{
+          "required" => false
+        }
+      }
+    },
+    "api.service_version" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "service_version" => %{
+          "required" => true
+        }
+      }
+    },
     "client.call_ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -17,6 +60,229 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      }
+    },
+    "client.flags_snapshot" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "flags" => %{
+          "required" => true
+        }
+      }
+    },
+    "db.health_sample" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "sample_seq" => %{
+          "required" => true
+        },
+        "db_status" => %{
+          "required" => true
+        },
+        "db_reach" => %{
+          "required" => true
+        },
+        "max_conns" => %{
+          "required" => true
+        },
+        "total_conns" => %{
+          "required" => true
+        },
+        "acquired_conns" => %{
+          "required" => true
+        },
+        "idle_conns" => %{
+          "required" => true
+        },
+        "constructing_conns" => %{
+          "required" => true
+        },
+        "acquire_count" => %{
+          "required" => true
+        },
+        "empty_acquire_count" => %{
+          "required" => true
+        },
+        "empty_acquire_wait_ms" => %{
+          "required" => true
+        },
+        "canceled_acquire_count" => %{
+          "required" => true
+        },
+        "active_backends" => %{
+          "required" => true
+        },
+        "idle_in_tx_backends" => %{
+          "required" => true
+        },
+        "lock_waiters" => %{
+          "required" => true
+        },
+        "max_lock_wait_ms" => %{
+          "required" => true
+        },
+        "blocker_application_name" => %{
+          "required" => false
+        },
+        "blocker_usename" => %{
+          "required" => false
+        },
+        "blocker_xact_age_ms" => %{
+          "required" => false
+        },
+        "lock_status" => %{
+          "required" => true
+        },
+        "stmt_status" => %{
+          "required" => true
+        },
+        "stmt_top" => %{
+          "required" => false
+        }
+      }
+    },
+    "db.media_plane_change" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "media_plane_scope" => %{
+          "required" => true
+        },
+        "old_plane" => %{
+          "required" => true
+        },
+        "new_plane" => %{
+          "required" => true
+        },
+        "changed_at_ms" => %{
+          "required" => true
+        }
+      }
+    },
+    "edge.collector_tick" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "bucket_start_ms" => %{
+          "required" => true
+        },
+        "host" => %{
+          "required" => true
+        },
+        "tick_status" => %{
+          "required" => true
+        }
+      }
+    },
+    "edge.http_rollup" => %{
+      "kind" => "fact",
+      "dataset" => "requests",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "bucket_start_ms" => %{
+          "required" => true
+        },
+        "host" => %{
+          "required" => true
+        },
+        "path_class" => %{
+          "required" => true
+        },
+        "edge_status" => %{
+          "required" => true
+        },
+        "origin_status" => %{
+          "required" => true
+        },
+        "method" => %{
+          "required" => true
+        },
+        "content_class" => %{
+          "required" => true
+        },
+        "ua_class" => %{
+          "required" => true
+        },
+        "requests" => %{
+          "required" => true
+        }
+      }
+    },
+    "edge.uptime_check" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "target" => %{
+          "required" => true
+        },
+        "uptime_status" => %{
+          "required" => true
+        },
+        "http_status" => %{
+          "required" => true
+        },
+        "origin_reach" => %{
+          "required" => true
+        }
+      }
+    },
+    "host.db_reachable" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "db_reach" => %{
+          "required" => true
+        },
+        "chalk_alert_rule" => %{
+          "required" => true
+        },
+        "chalk_alert_value" => %{
+          "required" => true
+        },
+        "chalk_alert_reason" => %{
+          "required" => false
+        },
+        "chalk_alert_stream" => %{
+          "required" => false
+        }
+      }
+    },
+    "host.runtime_health" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "origin_reach" => %{
+          "required" => true
+        },
+        "chalk_alert_rule" => %{
+          "required" => true
+        },
+        "chalk_alert_value" => %{
+          "required" => true
+        },
+        "chalk_alert_reason" => %{
+          "required" => true
+        },
+        "chalk_alert_stream" => %{
+          "required" => false
         }
       }
     },
@@ -38,6 +304,52 @@ defmodule ChalkSync.Obs.Registry do
       "decisions" => [],
       "fields" => %{
         "flags" => %{
+          "required" => true
+        }
+      }
+    },
+    "release.marker" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "component" => %{
+          "required" => true
+        },
+        "release_id" => %{
+          "required" => true
+        },
+        "commit" => %{
+          "required" => true
+        },
+        "marker_kind" => %{
+          "required" => true
+        },
+        "started_ms" => %{
+          "required" => true
+        },
+        "finished_ms" => %{
+          "required" => true
+        },
+        "run_id" => %{
+          "required" => false
+        }
+      }
+    },
+    "release.started" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "release_id" => %{
+          "required" => true
+        },
+        "host_boot_id" => %{
+          "required" => true
+        },
+        "previous_boot_end" => %{
           "required" => true
         }
       }
@@ -97,10 +409,39 @@ defmodule ChalkSync.Obs.Registry do
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
         }
       }
+    },
+    "sync.service_version" => %{
+      "kind" => "fact",
+      "dataset" => "infra",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "service_version" => %{
+          "required" => true
+        }
+      }
     }
   }
 
   @fields %{
+    "acquire_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "acquired_conns" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "active_backends" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "admission_request_id" => %{
       "type" => "id",
       "group" => "trail",
@@ -143,6 +484,72 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "blocker_application_name" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "blocker_usename" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "blocker_xact_age_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "bucket_start_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "bytes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "canceled_acquire_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "chalk_alert_reason" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "chalk_alert_rule" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "chalk_alert_stream" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "chalk_alert_value" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "changed_at_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "client_mono_ms" => %{
       "type" => "number",
       "group" => "clock",
@@ -178,6 +585,42 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "clock",
       "required" => true,
       "values" => ["server", "synced", "unsynced"]
+    },
+    "commit" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "component" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "constructing_conns" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "content_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["html", "other"]
+    },
+    "db_reach" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["up", "down"]
+    },
+    "db_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "unavailable(ping_timeout)", "unavailable(connect_failed)"]
     },
     "decision" => %{
       "type" => "string",
@@ -221,6 +664,24 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "edge_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "empty_acquire_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "empty_acquire_wait_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "end" => %{
       "type" => "enum",
       "group" => "delivery",
@@ -245,6 +706,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "error_code" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "est_server_ms" => %{
       "type" => "int",
       "group" => "clock",
@@ -255,6 +722,12 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "id",
       "group" => "delivery",
       "required" => true,
+      "values" => nil
+    },
+    "finished_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
       "values" => nil
     },
     "flags" => %{
@@ -278,6 +751,36 @@ defmodule ChalkSync.Obs.Registry do
     "generation" => %{
       "type" => "int",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "host" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "host_boot_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "http_status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "idle_conns" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "idle_in_tx_backends" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -311,15 +814,57 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => ["op", "transition", "decision", "surface", "fact"]
     },
+    "lock_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "failed"]
+    },
+    "lock_waiters" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "machine" => %{
       "type" => "string",
       "group" => "record",
       "required" => false,
       "values" => nil
     },
+    "marker_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["deploy", "rollback", "auto_rollback", "failed"]
+    },
+    "max_conns" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "max_lock_wait_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "media_connection_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "media_plane_scope" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["space", "tenant", "kill_switch"]
+    },
+    "method" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -335,6 +880,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => true,
       "values" => nil
     },
+    "new_plane" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "next_seq" => %{
       "type" => "int",
       "group" => "delivery",
@@ -347,9 +898,27 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => ["a", "b"]
     },
+    "old_plane" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "op_id" => %{
       "type" => "id",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "origin_reach" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["up", "down"]
+    },
+    "origin_status" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -371,11 +940,29 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "path" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "path_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["asset", "health", "space_page", "other"]
+    },
     "platform" => %{
       "type" => "enum",
       "group" => "build",
       "required" => false,
       "values" => ["web", "ios", "android", "server", "lambda", "node"]
+    },
+    "previous_boot_end" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
     },
     "provider_media_id" => %{
       "type" => "id",
@@ -395,6 +982,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "release_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "release_sha" => %{
       "type" => "string",
       "group" => "build",
@@ -404,6 +997,30 @@ defmodule ChalkSync.Obs.Registry do
     "request_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "requests" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "route" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "run_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "sample_seq" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -423,6 +1040,18 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "int",
       "group" => "delivery",
       "required" => true,
+      "values" => nil
+    },
+    "service_name" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "service_version" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
       "values" => nil
     },
     "shown_ms" => %{
@@ -449,6 +1078,36 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "started_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "status" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "status_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["s2xx", "s3xx", "s4xx", "s5xx"]
+    },
+    "stmt_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "unavailable(extension_missing)", "unavailable(permission_denied)", "unavailable(unreachable)"]
+    },
+    "stmt_top" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "surface_state" => %{
       "type" => "enum",
       "group" => "record",
@@ -461,15 +1120,33 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "target" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "tenant_id" => %{
       "type" => "id",
       "group" => "trail",
       "required" => false,
       "values" => nil
     },
+    "tick_status" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "to_state" => %{
       "type" => "string",
       "group" => "record",
+      "required" => false,
+      "values" => nil
+    },
+    "total_conns" => %{
+      "type" => "int",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },
@@ -484,6 +1161,18 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "record",
       "required" => false,
       "values" => nil
+    },
+    "ua_class" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["bot", "browser"]
+    },
+    "uptime_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "failed", "unavailable(fetch_failed)"]
     },
     "user_id" => %{
       "type" => "id",
@@ -544,6 +1233,7 @@ defmodule ChalkSync.Obs.Registry do
   @reasons %{
     "cancelled" => "expected",
     "end.time_limit" => "expected",
+    "release.deploy_restart" => "expected",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
     "unclassified" => "error"

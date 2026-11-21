@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "aae5df74a4de",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -544,6 +544,30 @@
   ],
   "fields": [
     {
+      "name": "acquire_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Delta of cumulative pool Acquire calls since the previous sample."
+    },
+    {
+      "name": "acquired_conns",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Pool connections checked out at this sample."
+    },
+    {
+      "name": "active_backends",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "pg_stat_activity sessions for application_name chalk-api in state active at this sample."
+    },
+    {
       "name": "admission_request_id",
       "type": "id",
       "id_kind": "admission_request",
@@ -604,6 +628,94 @@
       "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel."
     },
     {
+      "name": "blocker_application_name",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "application_name of the session blocking the oldest chalk-api Lock waiter, when the role may see it."
+    },
+    {
+      "name": "blocker_usename",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "usename of the session blocking the oldest chalk-api Lock waiter, when the role may see it."
+    },
+    {
+      "name": "blocker_xact_age_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Age in milliseconds of the blocking session's transaction."
+    },
+    {
+      "name": "bucket_start_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Unix milliseconds a five-minute UTC edge rollup bucket begins."
+    },
+    {
+      "name": "bytes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Response body bytes on an api.http_request row."
+    },
+    {
+      "name": "canceled_acquire_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Delta of acquires canceled while waiting since the previous sample."
+    },
+    {
+      "name": "chalk_alert_reason",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "A collector row's machine-readable reason, such as healthy, api_unhealthy or tunnel_unhealthy."
+    },
+    {
+      "name": "chalk_alert_rule",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The alert rule name a production-state collector row was written under."
+    },
+    {
+      "name": "chalk_alert_stream",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The collector stream a production-state row belongs to."
+    },
+    {
+      "name": "chalk_alert_value",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "A collector row's measured value; for database-unreachable and runtime-health 1 is unhealthy and 0 is healthy."
+    },
+    {
+      "name": "changed_at_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Unix milliseconds a media_plane_changes row was recorded."
+    },
+    {
       "name": "client_mono_ms",
       "type": "number",
       "required": false,
@@ -652,6 +764,57 @@
       "sensitivity": null,
       "owner": "envelope.clock",
       "doc": "Whether est_server_ms can be trusted."
+    },
+    {
+      "name": "commit",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The source revision a release marker deploys, or unavailable(pages_rollback) when a Pages rollback cannot name one."
+    },
+    {
+      "name": "component",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The deployable a release marker describes: api, sync, web, recorder or an infrastructure stack name."
+    },
+    {
+      "name": "constructing_conns",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Pool connections being built at this sample."
+    },
+    {
+      "name": "content_class",
+      "type": "enum",
+      "values": ["html", "other"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether the edge response content type was text/html."
+    },
+    {
+      "name": "db_reach",
+      "type": "enum",
+      "values": ["up", "down"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The reachability claim compared across witnesses: down when the sample could not reach Postgres, up when it could; the host collector's chalk_alert_value projects to the same vocabulary."
+    },
+    {
+      "name": "db_status",
+      "type": "enum",
+      "values": ["ok", "unavailable(ping_timeout)", "unavailable(connect_failed)"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether the health poller's dedicated connection could open or ping Postgres in this sample."
     },
     {
       "name": "decision",
@@ -713,6 +876,30 @@
       "doc": "An op's duration, or how long a state lasted."
     },
     {
+      "name": "edge_status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The HTTP status Cloudflare answered the client with."
+    },
+    {
+      "name": "empty_acquire_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Delta of acquires that waited for a connection since the previous sample."
+    },
+    {
+      "name": "empty_acquire_wait_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Delta of cumulative milliseconds waited for an empty pool since the previous sample."
+    },
+    {
       "name": "end",
       "type": "enum",
       "values": ["closed", "abandoned"],
@@ -749,6 +936,14 @@
       "doc": "The Episode."
     },
     {
+      "name": "error_code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "A fixed error code on a request log row, never a raw error string."
+    },
+    {
       "name": "est_server_ms",
       "type": "int",
       "required": false,
@@ -764,6 +959,14 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "One record. Minted by the kernel when the record is made."
+    },
+    {
+      "name": "finished_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Unix milliseconds when a deploy or rollback attempt finished."
     },
     {
       "name": "flags",
@@ -796,6 +999,46 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "Which join of the Participant seat this is."
+    },
+    {
+      "name": "host",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The hostname the edge served requests for."
+    },
+    {
+      "name": "host_boot_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The host's identifier for this process boot, supplied by the environment."
+    },
+    {
+      "name": "http_status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The HTTP status an uptime probe received, or 0 when the fetch threw."
+    },
+    {
+      "name": "idle_conns",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Pool connections idle at this sample."
+    },
+    {
+      "name": "idle_in_tx_backends",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "pg_stat_activity sessions for application_name chalk-api idle in transaction at this sample."
     },
     {
       "name": "item_count",
@@ -841,12 +1084,54 @@
       "doc": "op, transition, decision, surface or fact."
     },
     {
+      "name": "lock_status",
+      "type": "enum",
+      "values": ["ok", "failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether the pg_stat_activity and pg_blocking_pids read inside this sample succeeded."
+    },
+    {
+      "name": "lock_waiters",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "chalk-api backends with wait_event_type Lock at this sample."
+    },
+    {
       "name": "machine",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "A transition's machine."
+    },
+    {
+      "name": "marker_kind",
+      "type": "enum",
+      "values": ["deploy", "rollback", "auto_rollback", "failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "What the release marker records: a deploy, an operator or automatic rollback, or a failed deploy attempt."
+    },
+    {
+      "name": "max_conns",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "pgxpool MaxConns at this sample."
+    },
+    {
+      "name": "max_lock_wait_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Longest milliseconds a chalk-api Lock waiter has been waiting, measured from its query_start."
     },
     {
       "name": "media_connection_id",
@@ -857,6 +1142,23 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "Chalk's media connection."
+    },
+    {
+      "name": "media_plane_scope",
+      "type": "enum",
+      "values": ["space", "tenant", "kill_switch"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The scope a media-plane change applies to."
+    },
+    {
+      "name": "method",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "An HTTP method token."
     },
     {
       "name": "module",
@@ -876,6 +1178,14 @@
       "doc": "The registry event name. A transition's name is its machine."
     },
     {
+      "name": "new_plane",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The media plane a media_plane_changes row moved to."
+    },
+    {
       "name": "next_seq",
       "type": "int",
       "required": false,
@@ -893,6 +1203,14 @@
       "doc": "Which self-test note."
     },
     {
+      "name": "old_plane",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The media plane a media_plane_changes row moved away from."
+    },
+    {
       "name": "op_id",
       "type": "id",
       "id_kind": "operation",
@@ -900,6 +1218,23 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The op."
+    },
+    {
+      "name": "origin_reach",
+      "type": "enum",
+      "values": ["up", "down"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The origin claim compared across witnesses: down when an uptime probe failed or could not fetch, up when the target answered; the host collector's chalk_alert_value projects to the same vocabulary."
+    },
+    {
+      "name": "origin_status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The HTTP status the origin answered Cloudflare with, or 0 when the origin could not be reached."
     },
     {
       "name": "outcome",
@@ -929,6 +1264,23 @@
       "doc": "The Participant seat in the Episode."
     },
     {
+      "name": "path",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The request URL path on an api.http_request row; the route carries the cardinality-safe shape."
+    },
+    {
+      "name": "path_class",
+      "type": "enum",
+      "values": ["asset", "health", "space_page", "other"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The request-path class an edge rollup counts: static assets, health probes, Space pages or the rest."
+    },
+    {
       "name": "platform",
       "type": "enum",
       "values": ["web", "ios", "android", "server", "lambda", "node"],
@@ -936,6 +1288,14 @@
       "sensitivity": null,
       "owner": "envelope.build",
       "doc": "Where the program runs."
+    },
+    {
+      "name": "previous_boot_end",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "How the host says the previous boot of this service ended, supplied by the environment."
     },
     {
       "name": "provider_media_id",
@@ -965,6 +1325,14 @@
       "doc": "The recording."
     },
     {
+      "name": "release_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The immutable release identifier the deployment controller or Pages produced and services report as their version."
+    },
+    {
       "name": "release_sha",
       "type": "string",
       "required": false,
@@ -980,6 +1348,38 @@
       "sensitivity": null,
       "owner": "envelope.trail",
       "doc": "The request attempt."
+    },
+    {
+      "name": "requests",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Requests one edge rollup row counted."
+    },
+    {
+      "name": "route",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The matched API route pattern a request log row belongs to."
+    },
+    {
+      "name": "run_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The CI run or deployment request id the marker was posted from."
+    },
+    {
+      "name": "sample_seq",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Position of one db.health_sample in its poller's per-boot sequence; consecutive samples have adjacent seqs from one source_id."
     },
     {
       "name": "schema_ver",
@@ -1004,6 +1404,22 @@
       "sensitivity": null,
       "owner": "envelope.delivery",
       "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
+    },
+    {
+      "name": "service_name",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The service a boot or sample belongs to, such as api or sync."
+    },
+    {
+      "name": "service_version",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The OpenTelemetry service.version a row was emitted with, projected by the reader."
     },
     {
       "name": "shown_ms",
@@ -1040,6 +1456,48 @@
       "doc": "The W3C span."
     },
     {
+      "name": "started_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Unix milliseconds when a deploy or rollback attempt began."
+    },
+    {
+      "name": "status",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "An HTTP response status code."
+    },
+    {
+      "name": "status_class",
+      "type": "enum",
+      "values": ["s2xx", "s3xx", "s4xx", "s5xx"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The HTTP status class of a request row, so a 5xx marks a failure some finding must explain."
+    },
+    {
+      "name": "stmt_status",
+      "type": "enum",
+      "values": ["ok", "unavailable(extension_missing)", "unavailable(permission_denied)", "unavailable(unreachable)"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether pg_stat_statements was readable in this sample."
+    },
+    {
+      "name": "stmt_top",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Up to five pg_stat_statements deltas as queryid:calls:total_exec_ms separated by semicolons, largest total_exec_ms first. Never query text."
+    },
+    {
       "name": "surface_state",
       "type": "enum",
       "values": ["shown", "dismissed"],
@@ -1058,6 +1516,14 @@
       "doc": "The Sync websocket."
     },
     {
+      "name": "target",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "The uptime check name a probe ran, such as API readiness."
+    },
+    {
       "name": "tenant_id",
       "type": "id",
       "id_kind": "tenant",
@@ -1067,12 +1533,28 @@
       "doc": "The tenant."
     },
     {
+      "name": "tick_status",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether the edge collector finished a bucket for a host: ok or error(code)."
+    },
+    {
       "name": "to_state",
       "type": "string",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The state after a transition."
+    },
+    {
+      "name": "total_conns",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Pool connections open at this sample."
     },
     {
       "name": "trace_id",
@@ -1090,6 +1572,24 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "What caused a transition, from the machine's trigger list."
+    },
+    {
+      "name": "ua_class",
+      "type": "enum",
+      "values": ["bot", "browser"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether the request's user agent matched the known-bot list."
+    },
+    {
+      "name": "uptime_status",
+      "type": "enum",
+      "values": ["ok", "failed", "unavailable(fetch_failed)"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/platform",
+      "doc": "Whether an uptime probe reached its target: ok, an unexpected HTTP status, or the fetch itself failed."
     },
     {
       "name": "user_id",
@@ -1126,6 +1626,13 @@
       "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
     },
     {
+      "code": "release.deploy_restart",
+      "outcome": "expected",
+      "area": "platform",
+      "test_only": false,
+      "doc": "The surge is a deploy's own restart window: edge 502 or 530 with origin 0 or api 503 inside the marker's span, exactly one release.started of the new release, and quiet buckets after."
+    },
+    {
       "code": "selftest.broken",
       "outcome": "error",
       "area": "selftest",
@@ -1148,6 +1655,74 @@
     }
   ],
   "events": [
+    {
+      "name": "api.http_request",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": ["api"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "status": {
+          "required": true
+        },
+        "status_class": {
+          "required": true
+        },
+        "route": {
+          "required": false
+        },
+        "method": {
+          "required": false
+        },
+        "error_code": {
+          "required": false
+        },
+        "service_version": {
+          "required": false
+        },
+        "path": {
+          "required": false
+        },
+        "bytes": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/observability/http.go",
+          "literal": "\"http.request\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "http.request"
+        }
+      },
+      "doc": "The API's per-request log row with its status, route and duration; the request witness for lock waits and post-change failures."
+    },
+    {
+      "name": "api.service_version",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "service_version": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/platform-sources.mjs",
+          "literal": "\"api.service_version\""
+        }
+      ],
+      "doc": "The reader's projection of an API row's OpenTelemetry service.version, one per row and time, so the running release is witnessed continuously. Emitted by the evidence reader, never a program."
+    },
     {
       "name": "client.call_ended",
       "kind": "fact",
@@ -1180,6 +1755,319 @@
       "doc": "The SDK decided which end screen the call gets. The client kernel records it where the connection chooses the end screen, and the API logs it as a kernel row. An SDK release before the client kernel sent it as an sdk.telemetry row of type call_ended, which the legacy match still reads."
     },
     {
+      "name": "client.flags_snapshot",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "client",
+      "modules": [],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "flags": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/obs/kernel.ts",
+          "literal": "\"client.flags_snapshot\""
+        }
+      ],
+      "doc": "The full flags map behind the flags_hash a Chalk client kernel stamps on this and every later record, with the client build's release_sha. Logged at boot, at join and whenever the flags change."
+    },
+    {
+      "name": "db.health_sample",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["api"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "sample_seq": {
+          "required": true
+        },
+        "db_status": {
+          "required": true
+        },
+        "db_reach": {
+          "required": true
+        },
+        "max_conns": {
+          "required": true
+        },
+        "total_conns": {
+          "required": true
+        },
+        "acquired_conns": {
+          "required": true
+        },
+        "idle_conns": {
+          "required": true
+        },
+        "constructing_conns": {
+          "required": true
+        },
+        "acquire_count": {
+          "required": true
+        },
+        "empty_acquire_count": {
+          "required": true
+        },
+        "empty_acquire_wait_ms": {
+          "required": true
+        },
+        "canceled_acquire_count": {
+          "required": true
+        },
+        "active_backends": {
+          "required": true
+        },
+        "idle_in_tx_backends": {
+          "required": true
+        },
+        "lock_waiters": {
+          "required": true
+        },
+        "max_lock_wait_ms": {
+          "required": true
+        },
+        "blocker_application_name": {
+          "required": false
+        },
+        "blocker_usename": {
+          "required": false
+        },
+        "blocker_xact_age_ms": {
+          "required": false
+        },
+        "lock_status": {
+          "required": true
+        },
+        "stmt_status": {
+          "required": true
+        },
+        "stmt_top": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/postgres/health_poller.go",
+          "literal": "obs.EventDbHealthSample"
+        }
+      ],
+      "doc": "One Postgres health sample from the API's dedicated poller connection: reachability, pool statistics, lock waiters and statement deltas."
+    },
+    {
+      "name": "db.media_plane_change",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "media_plane_scope": {
+          "required": true
+        },
+        "old_plane": {
+          "required": true
+        },
+        "new_plane": {
+          "required": true
+        },
+        "changed_at_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/platform-sources.mjs",
+          "literal": "\"db.media_plane_change\""
+        }
+      ],
+      "doc": "The checker's read of one media_plane_changes row: the anchor a media-plane change leaves for release.failures_after_change. Emitted by the evidence reader, never a program."
+    },
+    {
+      "name": "edge.collector_tick",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "bucket_start_ms": {
+          "required": true
+        },
+        "host": {
+          "required": true
+        },
+        "tick_status": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "infrastructure/uptime-worker/src/edge.ts",
+          "literal": "\"edge.collector_tick\""
+        }
+      ],
+      "doc": "One edge collector tick per host and bucket: ok proves the bucket was read and a zero count there is real."
+    },
+    {
+      "name": "edge.http_rollup",
+      "kind": "fact",
+      "dataset": "requests",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "bucket_start_ms": {
+          "required": true
+        },
+        "host": {
+          "required": true
+        },
+        "path_class": {
+          "required": true
+        },
+        "edge_status": {
+          "required": true
+        },
+        "origin_status": {
+          "required": true
+        },
+        "method": {
+          "required": true
+        },
+        "content_class": {
+          "required": true
+        },
+        "ua_class": {
+          "required": true
+        },
+        "requests": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "infrastructure/uptime-worker/src/edge.ts",
+          "literal": "\"edge.http_rollup\""
+        }
+      ],
+      "doc": "One edge rollup row: requests the collector counted for a five-minute UTC bucket by host, path class, edge and origin status, method, content and agent class."
+    },
+    {
+      "name": "edge.uptime_check",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "target": {
+          "required": true
+        },
+        "uptime_status": {
+          "required": true
+        },
+        "http_status": {
+          "required": true
+        },
+        "origin_reach": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "infrastructure/uptime-worker/src/index.ts",
+          "literal": "\"edge.uptime_check\""
+        }
+      ],
+      "doc": "One uptime probe result per cycle: whether the target answered healthy, its HTTP status and the probe duration."
+    },
+    {
+      "name": "host.db_reachable",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "db_reach": {
+          "required": true
+        },
+        "chalk_alert_rule": {
+          "required": true
+        },
+        "chalk_alert_value": {
+          "required": true
+        },
+        "chalk_alert_reason": {
+          "required": false
+        },
+        "chalk_alert_stream": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "infrastructure/observability/production-alerts/collector_health.go",
+          "literal": "ruleDatabase"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "chalk_alert_rule": "database-unreachable"
+        }
+      },
+      "doc": "The production host collector's per-minute database-unreachable row; the reader projects chalk_alert_value onto db_reach so its claim matches the API sample's."
+    },
+    {
+      "name": "host.runtime_health",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "origin_reach": {
+          "required": true
+        },
+        "chalk_alert_rule": {
+          "required": true
+        },
+        "chalk_alert_value": {
+          "required": true
+        },
+        "chalk_alert_reason": {
+          "required": true
+        },
+        "chalk_alert_stream": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "infrastructure/observability/production-alerts/collector_health.go",
+          "literal": "ruleRuntimeHealth"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "chalk_alert_rule": "runtime-health"
+        }
+      },
+      "doc": "The production host collector's per-minute runtime-health row; the reader projects chalk_alert_value onto origin_reach so its claim matches the uptime probe's."
+    },
+    {
       "name": "obs.clock_jump",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1208,8 +2096,92 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/obs/flags.go",
+          "literal": "EventObsFlagsSnapshot"
+        }
+      ],
       "doc": "The full flags map behind the flags_hash the kernel stamps on this and every later record. Logged at boot, at join and whenever the flags change."
+    },
+    {
+      "name": "release.marker",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["checker"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "component": {
+          "required": true
+        },
+        "release_id": {
+          "required": true
+        },
+        "commit": {
+          "required": true
+        },
+        "marker_kind": {
+          "required": true
+        },
+        "started_ms": {
+          "required": true
+        },
+        "finished_ms": {
+          "required": true
+        },
+        "run_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/releases/release-marker.mjs",
+          "literal": "\"release.marker\""
+        }
+      ],
+      "doc": "A deploy or rollback marker posted by the release tooling after its result is known: the one CI decision the GitHub record and this row copy."
+    },
+    {
+      "name": "release.started",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": ["api", "sync", "recorder_capture", "recorder_render"],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "release_id": {
+          "required": true
+        },
+        "host_boot_id": {
+          "required": true
+        },
+        "previous_boot_end": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/cmd/main.go",
+          "literal": "obs.EventReleaseStarted"
+        },
+        {
+          "path": "apps/api/internal/observability/worker.go",
+          "literal": "obs.EventReleaseStarted"
+        },
+        {
+          "path": "apps/sync/lib/chalk_sync/application.ex",
+          "literal": "\"release.started\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "name": "release.started"
+        }
+      },
+      "doc": "One service boot reporting the release it runs and how the previous boot ended. Sync emits it as a zero-length span, which the legacy match reads."
     },
     {
       "name": "selftest.admit",
@@ -1297,6 +2269,27 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "sync.service_version",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "server",
+      "modules": [],
+      "area": "platform",
+      "test_only": false,
+      "fields": {
+        "service_version": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "scripts/diagnose-call/platform-sources.mjs",
+          "literal": "\"sync.service_version\""
+        }
+      ],
+      "doc": "The reader's projection of a Sync row's OpenTelemetry service.version, one per row and time. Emitted by the evidence reader, never a program."
     }
   ],
   "machines": [
@@ -1397,6 +2390,168 @@
       "doc": "One move of a viewer's board camera. Claim: what moved it (user_pan, follow, fit and so on)."
     },
     {
+      "name": "db.change",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "db.media_plane_change",
+          "source": "db",
+          "claim": "media_plane_scope",
+          "failure_claims": [],
+          "fields": ["media_plane_scope", "old_plane", "new_plane", "changed_at_ms", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One media_plane_changes row read at check time: a media-plane change anchor, including the DB kill switch."
+    },
+    {
+      "name": "db.lock",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "db.health_sample",
+          "source": "api",
+          "claim": "lock_waiters",
+          "failure_claims": [],
+          "fields": ["sample_seq", "db_status", "lock_waiters", "max_lock_wait_ms", "blocker_application_name", "blocker_usename", "blocker_xact_age_ms", "lock_status", "source_id", "seq", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "chalk-api backends waiting on a lock and the blocking session's identity, from the poller's pg_stat_activity and pg_blocking_pids read."
+    },
+    {
+      "name": "db.pool",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "db.health_sample",
+          "source": "api",
+          "claim": "total_conns",
+          "failure_claims": [],
+          "fields": [
+            "sample_seq",
+            "db_status",
+            "max_conns",
+            "total_conns",
+            "acquired_conns",
+            "idle_conns",
+            "constructing_conns",
+            "acquire_count",
+            "empty_acquire_count",
+            "empty_acquire_wait_ms",
+            "canceled_acquire_count",
+            "active_backends",
+            "idle_in_tx_backends",
+            "stmt_status",
+            "stmt_top",
+            "source_id",
+            "seq",
+            "est_server_ms",
+            "env"
+          ]
+        }
+      ],
+      "doc": "The API's Postgres pool state in one sample: fullness and acquire deltas from pgxpool Stat, plus the server-side chalk-api session counts."
+    },
+    {
+      "name": "db.reachable",
+      "area": "platform",
+      "kind": "state",
+      "per": "item",
+      "events": [
+        {
+          "event": "db.health_sample",
+          "source": "api",
+          "claim": "db_reach",
+          "failure_claims": ["down"],
+          "fields": ["sample_seq", "db_status", "db_reach", "source_id", "seq", "est_server_ms", "env", "module"]
+        },
+        {
+          "event": "host.db_reachable",
+          "source": "host",
+          "claim": "db_reach",
+          "failure_claims": ["down"],
+          "fields": ["db_reach", "chalk_alert_rule", "chalk_alert_value", "chalk_alert_reason", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "Whether Postgres could be reached, claimed by the API's health sample over its own connection and by the host collector's independent read. Claim vocabulary for both: 0 reachable, 1 unreachable, so a contradiction prints as a disagree line."
+    },
+    {
+      "name": "edge.bucket",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "edge.http_rollup",
+          "source": "edge",
+          "claim": "requests",
+          "failure_claims": [],
+          "fields": ["bucket_start_ms", "host", "path_class", "edge_status", "origin_status", "method", "content_class", "ua_class", "requests", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One edge rollup row over a five-minute bucket: request counts by host, path class, edge status, origin status, method, content and agent class."
+    },
+    {
+      "name": "edge.host_runtime",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "host.runtime_health",
+          "source": "host",
+          "claim": "chalk_alert_reason",
+          "failure_claims": [],
+          "fields": ["chalk_alert_rule", "chalk_alert_value", "chalk_alert_reason", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "The host collector's runtime-health reason for a host, the detail that names a failed API process or tunnel."
+    },
+    {
+      "name": "edge.origin_up",
+      "area": "platform",
+      "kind": "state",
+      "per": "item",
+      "events": [
+        {
+          "event": "edge.uptime_check",
+          "source": "edge",
+          "claim": "origin_reach",
+          "failure_claims": ["down"],
+          "fields": ["target", "uptime_status", "http_status", "origin_reach", "est_server_ms", "env"]
+        },
+        {
+          "event": "host.runtime_health",
+          "source": "host",
+          "claim": "origin_reach",
+          "failure_claims": ["down"],
+          "fields": ["origin_reach", "chalk_alert_rule", "chalk_alert_value", "chalk_alert_reason", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "Whether the origin answers the edge, claimed by the uptime probes and by the host collector's runtime-health row. Claim vocabulary for both: 0 up, 1 down or unhealthy, so a contradiction prints as a disagree line."
+    },
+    {
+      "name": "edge.tick",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "edge.collector_tick",
+          "source": "edge",
+          "claim": "tick_status",
+          "failure_claims": [],
+          "fields": ["bucket_start_ms", "host", "tick_status", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One collector tick per host and bucket; an ok tick proves the bucket was really read, so a zero count there is a measured zero."
+    },
+    {
       "name": "end.client_screen",
       "area": "end",
       "kind": "event",
@@ -1429,6 +2584,38 @@
       "doc": "The Episode's authoritative end. Claim: the end reason."
     },
     {
+      "name": "flags.boot",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "release.started",
+          "source": "api",
+          "claim": "host_boot_id",
+          "failure_claims": [],
+          "fields": ["release_id", "host_boot_id", "previous_boot_end", "source_id", "module", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One service boot, keyed by its host_boot_id, so a flags snapshot and a release marker can be placed in the same boot's window."
+    },
+    {
+      "name": "flags.snapshot",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "obs.flags_snapshot",
+          "source": "api",
+          "claim": "flags_hash",
+          "failure_claims": [],
+          "fields": ["flags", "flags_hash", "source_id", "module", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One boot's full flags snapshot and its flags_hash; two boots of the same service with different hashes are a config change."
+    },
+    {
       "name": "join.leave",
       "area": "join",
       "kind": "event",
@@ -1443,6 +2630,84 @@
       "per": "item",
       "events": [],
       "doc": "The terminal state of a post-call job, read from its Postgres row. Claim: succeeded or the failure state."
+    },
+    {
+      "name": "release.client",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "client.flags_snapshot",
+          "source": "client",
+          "claim": "release_sha",
+          "failure_claims": [],
+          "fields": ["release_sha", "client_session_id", "device_id", "flags", "est_server_ms", "env", "module"]
+        }
+      ],
+      "doc": "The release_sha a Chalk web client's kernel stamped on a boot or join record, the witness for a Pages deploy that did not take."
+    },
+    {
+      "name": "release.marker",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "release.marker",
+          "source": "release",
+          "claim": "marker_kind",
+          "failure_claims": ["failed"],
+          "fields": ["component", "release_id", "commit", "marker_kind", "started_ms", "finished_ms", "run_id", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "A deploy or rollback marker for one component: the authoritative release change record."
+    },
+    {
+      "name": "release.request",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.http_request",
+          "source": "api",
+          "claim": "status_class",
+          "failure_claims": ["s5xx"],
+          "fields": ["status", "status_class", "route", "method", "error_code", "service_version", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "One API request and its status; a 5xx is a failure some finding must explain."
+    },
+    {
+      "name": "release.running",
+      "area": "platform",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "api.http_request",
+          "source": "api",
+          "claim": "service_version",
+          "failure_claims": [],
+          "fields": ["service_version", "status", "status_class", "route", "est_server_ms", "env"]
+        },
+        {
+          "event": "api.service_version",
+          "source": "api",
+          "claim": "service_version",
+          "failure_claims": [],
+          "fields": ["service_version", "est_server_ms", "env"]
+        },
+        {
+          "event": "sync.service_version",
+          "source": "sync",
+          "claim": "service_version",
+          "failure_claims": [],
+          "fields": ["service_version", "est_server_ms", "env"]
+        }
+      ],
+      "doc": "The release a service is actually running, from its rows' service.version, so a version other than the deployed release proves the deploy did not take."
     },
     {
       "name": "report.problem",
@@ -1578,6 +2843,179 @@
       "fault_scenario": null
     },
     {
+      "code": "db.lock_wait",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "API database connections wait on a lock another session holds, so writes stall.",
+      "user_words": ["writes hang", "saving takes forever"],
+      "witnesses": [
+        {
+          "fact": "db.lock",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'db.health_sample'",
+          "doc": "The poller's lock waiters and blocker identity."
+        },
+        {
+          "fact": "release.request",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' and event == 'http.request'",
+          "doc": "Support only: request durations while waiters hold."
+        }
+      ],
+      "rule": "observability/rules/db.lock_wait.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/db.lock_wait/positive.json",
+        "healthy": "observability/fixtures/db.lock_wait/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/health_poller_fault_test.go"
+    },
+    {
+      "code": "db.pool_saturated",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "Every pool connection is busy and API requests queue for one or time out waiting.",
+      "user_words": ["API calls are hanging", "requests time out"],
+      "witnesses": [
+        {
+          "fact": "db.pool",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'db.health_sample'",
+          "doc": "The poller's per-sample pool Stat deltas and server-side session counts."
+        }
+      ],
+      "rule": "observability/rules/db.pool_saturated.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/db.pool_saturated/positive.json",
+        "healthy": "observability/fixtures/db.pool_saturated/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/health_poller_fault_test.go"
+    },
+    {
+      "code": "db.unreachable",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "The API cannot open or ping Postgres; a dead database can't look like an empty day.",
+      "user_words": ["the database is down", "nothing works at all"],
+      "witnesses": [
+        {
+          "fact": "db.reachable",
+          "from": ["api", "host"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and (name == 'db.health_sample' or chalk_alert_rule == 'database-unreachable')",
+          "doc": "The API's own sample and the host collector's independent minute row; both are required."
+        }
+      ],
+      "rule": "observability/rules/db.unreachable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/db.unreachable/positive.json",
+        "healthy": "observability/fixtures/db.unreachable/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/adapters/postgres/health_poller_fault_test.go"
+    },
+    {
+      "code": "edge.asset_failures",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "Static asset requests fail at the edge (404 or 5xx); a page whose bundle is missing can't report itself.",
+      "user_words": ["the page is blank", "the app doesn't load"],
+      "witnesses": [
+        {
+          "fact": "edge.bucket",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' and name == 'edge.http_rollup'",
+          "doc": "Per-bucket asset-class failures."
+        },
+        {
+          "fact": "edge.tick",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'edge.collector_tick'",
+          "doc": "Buckets count only where an ok tick exists for that host."
+        },
+        {
+          "fact": "release.marker",
+          "from": ["release"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.marker'",
+          "doc": "A web marker under two hours old shapes the hypothesis toward a stale tab."
+        }
+      ],
+      "rule": "observability/rules/edge.asset_failures.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/edge.asset_failures/positive.json",
+        "healthy": "observability/fixtures/edge.asset_failures/healthy.json"
+      },
+      "fault_scenario": "infrastructure/uptime-worker/edge.chain.test.mjs"
+    },
+    {
+      "code": "edge.origin_unreachable",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "Cloudflare answers 5xx because the origin is down or unreachable; the host collector and uptime probes say where the break is.",
+      "user_words": ["the site is down", "everything 502s"],
+      "witnesses": [
+        {
+          "fact": "edge.bucket",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' and name == 'edge.http_rollup'",
+          "doc": "Per-bucket non-health traffic and edge statuses."
+        },
+        {
+          "fact": "edge.tick",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'edge.collector_tick'",
+          "doc": "Buckets count only where an ok tick exists for that host."
+        },
+        {
+          "fact": "edge.origin_up",
+          "from": ["edge", "host"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and (name == 'edge.uptime_check' or chalk_alert_rule == 'runtime-health')",
+          "doc": "Uptime probes and the host collector's runtime-health row; a contradiction between them prints as a disagree line."
+        },
+        {
+          "fact": "edge.host_runtime",
+          "from": ["host"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and chalk_alert_rule == 'runtime-health'",
+          "doc": "The runtime-health reason that names the tunnel or the API process."
+        }
+      ],
+      "rule": "observability/rules/edge.origin_unreachable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/edge.origin_unreachable/positive.json",
+        "healthy": "observability/fixtures/edge.origin_unreachable/healthy.json"
+      },
+      "fault_scenario": "infrastructure/uptime-worker/edge.chain.test.mjs"
+    },
+    {
       "code": "end.time_limit",
       "area": "end",
       "slice": 8,
@@ -1634,6 +3072,47 @@
         "healthy": "observability/fixtures/end.wrong_screen/healthy.json"
       },
       "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
+    },
+    {
+      "code": "flags.unrecorded_change",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "A service booted with different config switches and no release marker explains the change.",
+      "user_words": ["someone flipped a flag off deploy"],
+      "witnesses": [
+        {
+          "fact": "flags.snapshot",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'obs.flags_snapshot' and module == 'api'",
+          "doc": "Each boot's flags map and flags_hash."
+        },
+        {
+          "fact": "flags.boot",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.started'",
+          "doc": "Each boot's start record; a boot without a snapshot is itself a gap."
+        },
+        {
+          "fact": "release.marker",
+          "from": ["release"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.marker'",
+          "doc": "Markers that may explain a changed boot; proven absence makes the change unrecorded."
+        }
+      ],
+      "rule": "observability/rules/flags.unrecorded_change.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/flags.unrecorded_change/positive.json",
+        "healthy": "observability/fixtures/flags.unrecorded_change/healthy.json"
+      },
+      "fault_scenario": "apps/api/cmd/boot_facts_fault_test.go"
     },
     {
       "code": "join.no_media",
@@ -1707,6 +3186,120 @@
         "healthy": "observability/fixtures/rejoin.refused/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "release.failures_after_change",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "API or Sync 5xx surge within 60 minutes after a marker, a media-plane change or a boot config change.",
+      "user_words": ["the deploy broke the API", "errors right after the release"],
+      "witnesses": [
+        {
+          "fact": "release.marker",
+          "from": ["release"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.marker'",
+          "doc": "Deploy, rollback, auto_rollback and failed markers of every component."
+        },
+        {
+          "fact": "db.change",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres media_plane_changes | where changed_at >= '{from}' and changed_at <= '{to}'",
+          "doc": "Media-plane changes read at check time, including the DB kill switch."
+        },
+        {
+          "fact": "edge.bucket",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' and name == 'edge.http_rollup'",
+          "doc": "Edge 5xx per bucket and host, counted only where an ok tick exists; required."
+        },
+        {
+          "fact": "release.request",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' and event == 'http.request' and status >= 500",
+          "doc": "API request 5xx; counted only where the edge bucket cannot be used, never added to edge counts."
+        },
+        {
+          "fact": "edge.tick",
+          "from": ["edge"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'edge.collector_tick'",
+          "doc": "The ok tick that makes a bucket's zero count real."
+        },
+        {
+          "fact": "flags.snapshot",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'obs.flags_snapshot' and module == 'api'",
+          "doc": "Boots whose flags_hash differs from the previous boot are anchors."
+        },
+        {
+          "fact": "flags.boot",
+          "from": ["api"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.started'",
+          "doc": "Boots for the deploy_restart span and config-change anchors."
+        }
+      ],
+      "rule": "observability/rules/release.failures_after_change.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/release.failures_after_change/positive.json",
+        "healthy": "observability/fixtures/release.failures_after_change/healthy.json"
+      },
+      "fault_scenario": "apps/api/internal/observability/http_fault_test.go"
+    },
+    {
+      "code": "release.version_skew",
+      "area": "platform",
+      "slice": 14,
+      "item": "platform",
+      "per": "item",
+      "doc": "A component runs, or the Chalk web app reports, a release other than the one the marker deployed.",
+      "user_words": ["the deploy did not take", "old code is still running"],
+      "witnesses": [
+        {
+          "fact": "release.marker",
+          "from": ["release"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_INFRA_DATASET | where env == '{environment}' and name == 'release.marker'",
+          "doc": "The expected release per component, from deploy and rollback markers."
+        },
+        {
+          "fact": "release.running",
+          "from": ["api", "sync"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom $CHALK_REQUESTS_DATASET | where env == '{environment}' | project service_version, _time",
+          "doc": "The release each api or sync row was emitted with."
+        },
+        {
+          "fact": "release.client",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom $CHALK_LIFECYCLE_DATASET | where env == '{environment}' and name == 'client.flags_snapshot' and module == 'sdk'",
+          "doc": "Client boots reporting the release_sha of the web bundle they loaded; optional because client rows are per seat."
+        }
+      ],
+      "rule": "observability/rules/release.version_skew.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/release.version_skew/positive.json",
+        "healthy": "observability/fixtures/release.version_skew/healthy.json"
+      },
+      "fault_scenario": "scripts/releases/release-marker.chain.test.mjs"
     },
     {
       "code": "share.wont_stop",

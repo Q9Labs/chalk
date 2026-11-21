@@ -2,7 +2,9 @@
   "area": "obs",
   "slice": 0,
   "title": "The kernel itself",
-  "prefixes": ["obs"],
+  "prefixes": [
+    "obs"
+  ],
   "fields": [
     {
       "name": "flags",
@@ -30,14 +32,21 @@
           "required": true
         }
       },
-      "emit_sites": []
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/obs/flags.go",
+          "literal": "EventObsFlagsSnapshot"
+        }
+      ]
     },
     {
       "name": "obs.clock_jump",
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": ["sdk"],
+      "modules": [
+        "sdk"
+      ],
       "doc": "The client's wall clock stepped, so its clock samples were dropped and clock_epoch moved on.",
       "fields": {
         "jump_ms": {
