@@ -17,14 +17,13 @@ defmodule ChalkSync.Application do
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
         {ChalkSync.Transport.DirectLimits, []},
-        {ChalkSync.ScreenAnnotation.Presence, []},
         whiteboard_authority_child(),
         whiteboard_views_child(),
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
         whiteboard_fanout_child(),
-        annotation_fanout_child(),
+        annotation_presence_child(),
         annotation_housekeeping_child(),
         lifecycle_consumer_child(),
         external_operation_consumer_children(),
@@ -138,10 +137,19 @@ defmodule ChalkSync.Application do
     end
   end
 
-  defp annotation_fanout_child do
+  defp annotation_presence_child do
+    presence = ChalkSync.ScreenAnnotation.Presence
+
     if database_workers?() do
-      {ChalkSync.ScreenAnnotation.Fanout,
-       url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
+      children = [
+        {presence, []},
+        {ChalkSync.ScreenAnnotation.Fanout,
+         url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
+      ]
+
+      %{id: presence, start: {Supervisor, :start_link, [children, [strategy: :rest_for_one]]}}
+    else
+      {presence, local_only: true}
     end
   end
 

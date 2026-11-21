@@ -1,71 +1,80 @@
 defmodule ChalkSync.ScreenAnnotation.Fanout do
   @moduledoc "Committed layer invalidations and disposable cross-node presence."
 
-  use GenServer
+  @behaviour Postgrex.SimpleConnection
 
   alias ChalkSync.Database
   alias ChalkSync.ScreenAnnotation.Presence
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
+  alias Postgrex.SimpleConnection
 
   @control_channel "chalk_screen_annotation"
   @presence_channel "chalk_annotation_presence"
   @batch_ms 34
 
-  def start_link(options),
-    do: GenServer.start_link(__MODULE__, options, name: Keyword.get(options, :name, __MODULE__))
+  def child_spec(options),
+    do: %{id: __MODULE__, start: {__MODULE__, :start_link, [options]}}
 
-  @impl true
-  def init(options) do
+  def start_link(options) do
     {:ok, opts} = Database.connection_options(Keyword.fetch!(options, :url))
+    source = Keyword.fetch!(options, :source_id)
 
-    {:ok, notifications} =
-      Postgrex.Notifications.start_link(Keyword.put(opts, :auto_reconnect, true))
-
-    control_ref = Database.listen(notifications, @control_channel)
-    presence_ref = Database.listen(notifications, @presence_channel)
-    {:ok, publisher} = Postgrex.start_link(opts)
-
-    # Publication uses a worker separate from the listener. A slow database
-    # network write must not delay access revocation processing.
-    {:ok, relay} =
-      Task.start_link(fn -> relay_loop(publisher, Keyword.fetch!(options, :source_id)) end)
-
-    {:ok,
-     %{
-       notifications: notifications,
-       control_ref: control_ref,
-       presence_ref: presence_ref,
-       relay: relay,
-       source_id: Keyword.fetch!(options, :source_id)
-     }}
+    SimpleConnection.start_link(
+      __MODULE__,
+      {opts, source},
+      opts ++
+        [name: Keyword.get(options, :name, __MODULE__), auto_reconnect: true, sync_connect: false]
+    )
   end
 
   @impl true
-  def handle_info(
-        {:notification, notifications, ref, @control_channel, payload},
-        %{notifications: notifications, control_ref: ref} = state
-      ) do
+  def init({opts, source}) do
+    :ok = Presence.watch_listener()
+    {:ok, publisher} = Postgrex.start_link(opts)
+
+    # A slow presence write must not delay access revocations on the listener.
+    {:ok, _relay} = Task.start_link(fn -> relay_loop(publisher, source) end)
+    {:ok, source}
+  end
+
+  @impl true
+  def handle_connect(source),
+    do: {:query, "LISTEN #{@control_channel}; LISTEN #{@presence_channel}", source}
+
+  @impl true
+  def handle_result([%{command: :listen}, %{command: :listen}], source) do
+    :ok = Presence.listener_status(:ready)
+    {:noreply, source}
+  end
+
+  def handle_result(%Postgrex.Error{} = error, _source), do: raise(error)
+
+  @impl true
+  def handle_disconnect(source) do
+    :ok = Presence.listener_status(:offline)
+    {:noreply, source}
+  end
+
+  @impl true
+  def notify(@control_channel, payload, _source) do
     with [tenant, space, episode, kind] when kind in ["control", "marks"] <-
            String.split(payload, ":"),
          {:ok, key} <- episode_key([tenant, space, episode]) do
       Presence.change(key, kind == "control")
     end
 
-    {:noreply, state}
+    :ok
   end
 
-  def handle_info(
-        {:notification, notifications, ref, @presence_channel, payload},
-        %{notifications: notifications, presence_ref: ref} = state
-      ) do
+  def notify(@presence_channel, payload, local_source) do
     with {:ok, [source, episode, frame]} <- JSON.decode(payload),
-         false <- source == state.source_id,
+         false <- source == local_source,
          {:ok, key} <- episode_key(episode) do
       Presence.relay(key, frame)
     end
 
-    {:noreply, state}
+    :ok
   end
 
   defp relay_loop(publisher, source) do

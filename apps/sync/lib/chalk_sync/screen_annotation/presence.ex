@@ -8,7 +8,10 @@ defmodule ChalkSync.ScreenAnnotation.Presence do
   @interval 34
   @relay_batch_size 128
 
-  def start_link(_opts), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+
+  def watch_listener, do: GenServer.call(__MODULE__, :watch_listener)
+  def listener_status(status), do: GenServer.call(__MODULE__, {:listener_status, status})
 
   def join(episode, participant_id),
     do: GenServer.call(__MODULE__, {:join, episode, participant_id, self()})
@@ -36,12 +39,31 @@ defmodule ChalkSync.ScreenAnnotation.Presence do
   def relay(episode, frame), do: GenServer.cast(__MODULE__, {:relay, episode, frame})
 
   @impl true
-  def init(_) do
+  def init(opts) do
     Process.send_after(self(), :sweep, 1_000)
-    {:ok, %{sockets: %{}, rates: %{}, relays: %{}}}
+
+    state = %{
+      sockets: %{},
+      rates: %{},
+      relays: %{},
+      listener: nil,
+      local_only?: opts[:local_only]
+    }
+
+    {:ok, state}
   end
 
   @impl true
+  def handle_call(:watch_listener, {pid, _tag}, state) do
+    if state.listener, do: Process.demonitor(elem(state.listener, 1), [:flush])
+    listener = {pid, Process.monitor(pid), :offline}
+    {:reply, :ok, reset_witnesses(%{state | listener: listener})}
+  end
+
+  def handle_call({:listener_status, status}, {pid, _tag}, %{listener: {pid, ref, _}} = state) do
+    {:reply, :ok, reset_witnesses(%{state | listener: {pid, ref, status}})}
+  end
+
   def handle_call({:join, episode, participant_id, pid}, _from, state) do
     {:reply, :ok, register(state, episode, participant_id, pid)}
   end
@@ -54,8 +76,12 @@ defmodule ChalkSync.ScreenAnnotation.Presence do
 
   def handle_call({:confirm, pid, epoch, witness}, _from, state) do
     case state.sockets[pid] do
-      %{epoch: ^epoch} -> {:reply, :ok, put_in(state.sockets[pid].witness, witness)}
-      _ -> {:reply, :stale, state}
+      %{epoch: ^epoch} ->
+        witness = if listener_ready?(state), do: witness
+        {:reply, :ok, put_in(state.sockets[pid].witness, witness)}
+
+      _ ->
+        {:reply, :stale, state}
     end
   end
 
@@ -121,11 +147,25 @@ defmodule ChalkSync.ScreenAnnotation.Presence do
     {:noreply, %{state | rates: rates, relays: relays}}
   end
 
+  def handle_info({:DOWN, ref, :process, pid, _reason}, %{listener: {pid, ref, _}} = state),
+    do: {:noreply, reset_witnesses(%{state | listener: nil})}
+
   def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
     case state.sockets[pid] do
       %{ref: ^ref} -> {:noreply, remove(state, pid)}
       _ -> {:noreply, state}
     end
+  end
+
+  defp listener_ready?(%{listener: {_pid, _ref, :ready}}), do: true
+  defp listener_ready?(%{listener: nil, local_only?: true}), do: true
+  defp listener_ready?(_state), do: false
+
+  defp reset_witnesses(state) do
+    sockets =
+      Map.new(state.sockets, fn {pid, socket} -> {pid, invalidate_socket(socket, pid, true)} end)
+
+    %{state | sockets: sockets, relays: %{}}
   end
 
   defp invalidate_socket(socket, pid, invalidates?) do

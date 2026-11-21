@@ -126,5 +126,33 @@ defmodule ChalkSync.ScreenAnnotation.Proof do
     UUID.load!(<<ms::48, 7::4, a::12, 2::2, b::62>>)
   end
 
+  def bind_frame(publication),
+    do:
+      command(nil, nil, %{
+        "kind" => "bind",
+        "publication_id" => publication,
+        "frame" => %{"width" => 1920, "height" => 1080}
+      })
+
+  def command(layer, fence, command) do
+    %{
+      "type" => "annotation_command",
+      "layer_id" => layer,
+      "fence" => fence,
+      "command" => command,
+      "operation_id" => operation_id(System.system_time(:millisecond))
+    }
+  end
+
+  def draft do
+    %{
+      "mark_id" => UUID.generate(),
+      "lifetime" => "keep",
+      "color" => "#e55050",
+      "width" => 128,
+      "shape" => %{"kind" => "stamp", "at" => %{"x" => 1024, "y" => 1024}, "stamp" => "check"}
+    }
+  end
+
   defp uuid(value), do: UUID.dump!(value)
 end

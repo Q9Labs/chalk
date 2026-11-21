@@ -17,9 +17,11 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   def enter(state), do: state
 
+  def initial_snapshot(state), do: refresh(state, true)
+
   def handle(frame, %{phase: :live, screen_annotation: true} = state) do
     case frame["type"] do
-      "annotation_state_request" -> refresh(state, true)
+      "annotation_state_request" -> request_state(state)
       "annotation_command" -> command(frame, state)
       "annotation_presence" -> update_presence(frame, state)
     end
@@ -29,7 +31,12 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   def tick(%{phase: :live, screen_annotation: true} = state) do
     Process.send_after(self(), :annotation_tick, @poll_ms)
-    refresh(state, false)
+    now = System.monotonic_time(:millisecond)
+
+    case Map.get(state, :annotation_snapshot_request) do
+      {due, true} when now >= due -> send_requested_snapshot(state, now)
+      _ -> refresh(state, false)
+    end
   end
 
   def tick(state), do: {:ok, state}
@@ -50,6 +57,24 @@ defmodule ChalkSync.Transport.Socket.Annotation do
   end
 
   def drain_presence(state), do: {:ok, state}
+
+  defp request_state(state) do
+    now = System.monotonic_time(:millisecond)
+
+    case Map.get(state, :annotation_snapshot_request) do
+      {due, _pending} when now < due ->
+        {:ok, Map.put(state, :annotation_snapshot_request, {due, true})}
+
+      _ ->
+        send_requested_snapshot(state, now)
+    end
+  end
+
+  defp send_requested_snapshot(state, now) do
+    # The next poll serves one waiting replica if more requests arrive during this interval.
+    state = Map.put(state, :annotation_snapshot_request, {now + @poll_ms, false})
+    refresh(state, true)
+  end
 
   defp command(frame, state) do
     now = System.monotonic_time(:millisecond)
