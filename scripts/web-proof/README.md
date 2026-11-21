@@ -56,8 +56,9 @@ Load the stack's `proof.env`, unset `CHALK_PROOF_SPACE_ID_CHALK_SFU`, and point
 `NODE_EXTRA_CA_CERTS` at the stack's `web-ca.crt`. Run
 `xvfb-run -a node scripts/web-proof/listen-only.mjs`. The proof switches Edge
 to a real background tab and injects the visibility change in WebKit. Both
-use real media and wait over five minutes. The report and screenshots go
-under `.private/web-proof/`.
+use real media and wait over five minutes. Only a grant renewal observed before
+the tab is restored counts as a background renewal. The report and screenshots
+go under `.private/web-proof/`.
 
 ## Student before owner
 

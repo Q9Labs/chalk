@@ -19,6 +19,11 @@ const runId = `listen-only-${randomUUID()}`;
 const directory = resolve(process.env.CHALK_LISTEN_ONLY_DIRECTORY ?? `.private/web-proof/${runId}`);
 const report = {};
 const browsers = [];
+const interruption = new AbortController();
+const { signal } = interruption;
+const stop = (name) => interruption.abort(name);
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
 let edgeProcess;
 let edgeProfile;
 let run;
@@ -34,7 +39,8 @@ try {
   // Own a fresh Space so cleanup never changes a shared invite.
   assert.ok(!process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU && process.env.CHALK_PROOF_SPACE_BY_SLUG !== "true");
   const config = await loadConfig({ capabilities: false });
-  run = await createRun(config, directory, undefined, runId);
+  signal.throwIfAborted();
+  run = await createRun(config, directory, signal, runId);
   await createProofKey(run);
   const space = await createSpace(run, "chalk_sfu");
   await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
@@ -43,7 +49,9 @@ try {
   maskCredentials({ inviteToken: url.hash.slice(1), canonicalCredential: invite.canonical_url });
   const entry = new URL(url.pathname + url.search + url.hash, config.web_url).href;
   stage = "join";
-  const [edge, safari] = await Promise.all([launchEdge(), webkit.launch({ headless: false }).then(keepBrowser)]);
+  signal.throwIfAborted();
+  const safari = keepBrowser(await webkit.launch({ headless: false, handleSIGINT: false, handleSIGTERM: false }));
+  const edge = await launchEdge();
   const listeners = await Promise.all([join(edge.contexts()[0], entry, "Edge listener", 1), join(await safari.newContext({ ...devices["iPad Pro 11"], ignoreHTTPSErrors: true }), entry, "WebKit listener", 2)]);
   await Promise.all(listeners.map(checkEmptyJoin));
   stage = "background through grant renewal";
@@ -57,7 +65,7 @@ try {
 } catch (error) {
   failed = true;
   // Locator errors may include an invite URL. Save the step results, not raw errors.
-  report.error = { stage, name: error.name };
+  report.error = { stage, name: signal.aborted ? "AbortError" : error.name };
 } finally {
   await Promise.allSettled(browsers.map((browser) => browser.close()));
   if (edgeProcess?.exitCode === null && edgeProcess.signalCode === null) {
@@ -73,11 +81,15 @@ try {
       report.cleanup = "failed";
       failed = true;
     }
+    if (signal.aborted) report.interruptedBy = signal.reason;
+    failed ||= signal.aborted;
     await save(`${directory}/listen-only-report.json`, { ...report, result: failed ? "failed" : "passed" });
   }
+  process.off("SIGINT", stop);
+  process.off("SIGTERM", stop);
 }
 console.log(`Listen-only proof ${failed ? "failed" : "passed"}: ${directory}/listen-only-report.json`);
-process.exitCode = failed ? 1 : 0;
+process.exitCode = signal.reason === "SIGINT" ? 130 : signal.reason === "SIGTERM" ? 143 : failed ? 1 : 0;
 
 function keepBrowser(browser) {
   browsers.push(browser);
@@ -95,7 +107,7 @@ async function launchEdge() {
       for (let attempt = 0; attempt < 40; attempt++) {
         const endpoint = await readFile(joinPath(edgeProfile, "DevToolsActivePort"), "utf8").catch(() => "");
         if (endpoint) return keepBrowser(await chromium.connectOverCDP(`http://127.0.0.1:${endpoint.split("\n")[0]}`, { noDefaults: true }));
-        await delay(150);
+        await delay(150, undefined, { signal });
       }
       throw new Error("Edge did not start");
     })(),
@@ -195,9 +207,13 @@ async function backgroundThroughRefresh(participant, hide) {
   const restore = await hide(participant);
   evidence.wentHidden = await waitFor(page, () => document.hidden, 5_000);
   const transitionsAtHide = await page.evaluate(() => window.proofVisibility.length);
-  const started = Date.now();
+  const refreshesAtHide = evidence.refreshes.length;
+  const started = performance.now();
   console.log(`${name}: empty transport connected=${evidence.emptyConnected}, hidden=${evidence.wentHidden}`);
-  await delay(hiddenMs);
+  await run.wait(hiddenMs);
+  // Snapshot response events before the visibility callback can trigger a refresh.
+  const refreshesWhileHidden = evidence.refreshes.length - refreshesAtHide;
+  evidence.hiddenDurationMs = Math.round(performance.now() - started);
   await restore();
   const foreground = await waitFor(page, () => !document.hidden, 5_000);
   await Promise.all(responses);
@@ -209,10 +225,10 @@ async function backgroundThroughRefresh(participant, hide) {
     }),
     transitionsAtHide,
   );
-  evidence.hiddenDurationMs = Date.now() - started;
   Object.assign(evidence, state);
   evidence.journeys.background = evidence.wentHidden && state.continuouslyHidden && foreground && !state.reconnected && state.peerStates.join() === "connected";
-  evidence.journeys.refresh = evidence.refreshes.length > 0 && evidence.refreshes.every(({ status, sameBinding, extendedExpiry }) => status === 201 && sameBinding && extendedExpiry) && evidence.mediaErrors.length === 0;
+  evidence.hiddenRefreshCount = evidence.wentHidden && state.continuouslyHidden ? refreshesWhileHidden : 0;
+  evidence.journeys.refresh = evidence.hiddenRefreshCount > 0 && evidence.refreshes.every(({ status, sameBinding, extendedExpiry }) => status === 201 && sameBinding && extendedExpiry) && evidence.mediaErrors.length === 0;
   await page.screenshot({ path: `${directory}/${name}-returned.png` });
 }
 
@@ -239,8 +255,9 @@ async function checkDelivery({ page, name, evidence, responses }) {
 async function waitFor(page, predicate, timeout) {
   const deadline = Date.now() + timeout;
   do {
+    signal.throwIfAborted();
     if (await page.evaluate(predicate)) return true;
-    await delay(100);
+    await delay(100, undefined, { signal });
   } while (Date.now() < deadline);
   return false;
 }
