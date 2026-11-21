@@ -1,6 +1,7 @@
 import { FailureKind, failure } from "./model.mjs";
+import { cloudflareSfuPlane } from "./config.mjs";
 
-export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, mediaPlane = "cf_sfu", fetchImpl = fetch, fresh = false } = {}) {
+export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, mediaPlane = cloudflareSfuPlane, fetchImpl = fetch, fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
   const marker = fixtureMarker || runtimeMarker(runtimeId);
   const tenantName = `Chalk local dev ${marker}`;
@@ -13,7 +14,7 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
       body: {
         name: tenantName,
         default_media_plane: mediaPlane,
-        ...(mediaPlane === "cf_sfu" ? { media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
+        ...(mediaPlane === cloudflareSfuPlane ? { media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
       },
     });
   }

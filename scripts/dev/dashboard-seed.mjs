@@ -2,6 +2,7 @@ import { writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { randomUUID } from "node:crypto";
 import { writeJsonAtomic } from "./json-file.mjs";
 import { runChecked } from "./chalk-resources.mjs";
+import { cloudflareSfuPlane } from "./config.mjs";
 
 export const dashboardServiceScopes =
   "tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete";
@@ -41,9 +42,9 @@ export async function seedDashboard({ config, serviceToken, systemToken }) {
     name: "Ada's workspace",
     external_id: "google:local:fixture_ada",
     cors_allowed_origins: [...new Set([config.urls.web, config.publicOrigin || config.urls.web])],
-    ...(mediaPlane === "cf_sfu" ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
+    ...(mediaPlane === cloudflareSfuPlane ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
   });
-  if (config.orb && owner.default_media_plane === "cf_sfu") {
+  if (config.orb && owner.default_media_plane === cloudflareSfuPlane) {
     await api(`/tenants/${owner.id}`, { default_media_plane: null }, { method: "PATCH", token: systemToken });
   }
   const artifacts = {};

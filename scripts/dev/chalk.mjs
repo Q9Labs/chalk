@@ -9,6 +9,7 @@ import { containerArguments, containerEnvironment, containerNames, imageName } f
 import { spawnService, stopProcessGroup, waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
+import { orbSfuAPIEnvironment } from "./orb-sfu.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
@@ -105,7 +106,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs, fetchImpl: adapters.fetchImpl });
       if (spec.id === "api") {
         const runtimeId = context.runtime.runtimeId || "local";
-        const stableMarker = stableFixtureMarker(config.orb ? `${config.root}:chalk_sfu` : config.root);
+        const stableMarker = stableFixtureMarker(config.orb ? `${config.root}:${config.mediaPlane}` : config.root);
         if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
         const fixtureMarker = stableMarker;
         bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, mediaPlane: config.mediaPlane, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
@@ -154,24 +155,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
         CHALK_DEFAULT_MEDIA_PLANE: config.mediaPlane,
-        ...(config.orb
-          ? {
-              CHALK_NEW_SPACE_MEDIA_PLANE: config.mediaPlane,
-              CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
-              CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
-              CHALK_SFU_ENABLED: "true",
-              CHALK_SFU_CAPTURE_ENABLED: "true",
-              CHALK_SFU_ALLOWED_SPACES: "*",
-              CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
-              CHALK_SFU_CLIENT_SUNSET: "2000-01-01T00:00:00Z",
-              CHALK_SFU_APPLICATION_ID: "chalk-orb",
-              CHALK_SFU_NODES: "orb=https://sfu:8443",
-              CHALK_SFU_SERVER_NAME: "sfu",
-              CHALK_SFU_CA_FILE: config.identity.caCertificate,
-              CHALK_SFU_CLIENT_CERT_FILE: config.identity.apiCertificate,
-              CHALK_SFU_CLIENT_KEY_FILE: config.identity.apiKey,
-            }
-          : {}),
+        ...orbSfuAPIEnvironment(config),
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,

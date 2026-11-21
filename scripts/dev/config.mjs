@@ -22,6 +22,8 @@ export const DevCommand = Object.freeze({
 const commands = new Set(Object.values(DevCommand));
 const { metro: metroPort, ...localPorts } = ports;
 const defaultPorts = Object.freeze(localPorts);
+export const chalkSfuPlane = "chalk_sfu";
+export const cloudflareSfuPlane = "cf_sfu";
 const toolByProfile = Object.freeze({
   core: ["node", "pnpm", "docker", "op"],
   mobile: ["node", "pnpm", "docker", "op", "adb", "java"],
@@ -135,6 +137,11 @@ function userStateRoot({ env, platform, home }) {
   return join(env.XDG_STATE_HOME || join(home, ".local", "state"), "chalk");
 }
 
+function devRequiredTools(profile, env, orb) {
+  const hasCloudflareCredentials = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
+  return orb || hasCloudflareCredentials ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile];
+}
+
 export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
   if (!Object.hasOwn(toolByProfile, profile)) throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
@@ -153,7 +160,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   const publicOrigin = publicOriginFromEnv(env);
   // The Orb launcher writes its metadata before starting the stack; a tunnel URL is not an Orb.
   const orb = existsSync(join(home, ".orb.json"));
-  const hasEnvSfuCredential = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
   return {
@@ -193,7 +199,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     ports,
     publicOrigin,
     orb,
-    mediaPlane: orb ? "chalk_sfu" : "cf_sfu",
+    mediaPlane: orb ? chalkSfuPlane : cloudflareSfuPlane,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
@@ -202,7 +208,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || (orb || hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile]),
+    requiredTools: requiredTools || devRequiredTools(profile, env, orb),
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),

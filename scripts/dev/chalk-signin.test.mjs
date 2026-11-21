@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { proveSeededSignIn } from "./chalk-signin.mjs";
+import { chalkSfuPlane, cloudflareSfuPlane } from "./config.mjs";
 
 async function withArrivalServer(firstStatus, code, check, failures = 1) {
   let arrivals = 0;
@@ -54,17 +55,17 @@ test("an Orb admits the seeded guest on Chalk SFU, never on Cloudflare", async (
     calls.push(options);
     if (!options.method) return new Response("<html></html>", { headers: { "content-type": "text/html" } });
     if (options.method === "DELETE") return new Response(null, { status: 200 });
-    return Response.json({ state: "admitted", arrival_handle: "proof", access: { media: { provider: "cf_sfu" } } }, { status: 201 });
+    return Response.json({ state: "admitted", arrival_handle: "proof", access: { media: { provider: cloudflareSfuPlane } } }, { status: 201 });
   };
   await assert.rejects(
     proveSeededSignIn({
       origin: "https://3070-example.instabox.tech",
       invite: { path: "/seeded-invite", code: "seeded-invite" },
-      mediaPlane: "chalk_sfu",
+      mediaPlane: chalkSfuPlane,
       fetchImpl,
     }),
     /expected chalk_sfu/,
   );
-  assert.equal(calls[1].headers["X-Chalk-Media-Providers"], "chalk_sfu");
+  assert.equal(calls[1].headers["X-Chalk-Media-Providers"], chalkSfuPlane);
   assert.equal(calls[2].method, "DELETE");
 });
