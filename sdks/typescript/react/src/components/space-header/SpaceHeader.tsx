@@ -19,13 +19,9 @@ const { Component: CallDetails, preload: preloadDetails } = preloadable(() => im
 const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
-  const { spaceName, duration = 0, layout = "focus", onLayoutChange, className } = props;
+  const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
-  // Recording shows only here: the call menu trigger's elapsed time turns red, at every width, and the menu opens on the Recording row.
-  const recording = props.isRecording === true;
-  const timerStyle = recording || (remaining !== null && remaining <= 60) ? { color: "var(--chalk-danger-text)" } : remaining === null ? undefined : { color: "var(--chalk-warning)" };
-  const triggerLabel = recording ? "Call details, recording" : "Call details";
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);
@@ -51,33 +47,36 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   useCallShortcuts(props.shortcuts, showShortcuts);
   const narrowWindow = useMediaQuery("(max-width: 640px)");
   const phone = useNarrowCall() || narrowWindow;
+  // Desktop shows recording as the Rec pill beside the name; the pill is hidden on phones, so there the elapsed time turns red instead.
+  const timerStyle = (isRecording && phone) || (remaining !== null && remaining <= 60) ? { color: "var(--chalk-danger-text)" } : remaining === null ? undefined : { color: "var(--chalk-warning)" };
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />
     </svg>
   );
   const trigger = (
-    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label={triggerLabel} className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
+    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
       <span dir="auto">{spaceName}</span>
-      <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
+      <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
         {timer}
       </span>
       {chevron}
     </button>
   );
-  const content = (
+  const content = (hideShortcuts: boolean) => (
     <Suspense fallback={null}>
       <CallDetails
         {...props}
         onClose={() => changeOpen(false)}
         revealConnection={revealConnection}
+        hideShortcuts={hideShortcuts}
         revealQr={inviteOpen && !revealConnection}
         sounds={sounds}
         onSoundsChange={setSounds}
-        onReport={() => {
+        onDialog={(kind) => {
           changeOpen(false);
-          if (props.onOpenReportProblem) props.onOpenReportProblem();
-          else setDialog({ kind: "report", open: true });
+          if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
+          else setDialog({ kind, open: true });
         }}
       />
     </Suspense>
@@ -111,28 +110,34 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               data-part="call-name"
               title={spaceName}
               className="chalk-call-name chalk-call-name-phone"
-              aria-label={triggerLabel}
+              aria-label="Call details"
               aria-haspopup="dialog"
               aria-expanded={open}
               onPointerDown={() => void preloadDetails()}
               onClick={() => changeOpen(true)}
             >
               <span dir="auto">{spaceName}</span>
-              <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
+              <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
                 {timer}
               </span>
               {chevron}
             </button>
             <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={inviteOpen ? "Your call is ready" : spaceName} accessibleLabel="Call details">
-              {content}
+              {content(true)}
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip={recording ? "Recording" : "Call details"} trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
-            {content}
+          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
+            {content(false)}
           </ChalkPopover>
         )}
         {phone ? null : noticeSlot}
+        {isRecording ? (
+          <span className="chalk-shell-recording">
+            <i />
+            Rec
+          </span>
+        ) : null}
       </div>
       {phone ? noticeSlot : null}
       {props.notices}
