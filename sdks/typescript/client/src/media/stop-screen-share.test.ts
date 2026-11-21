@@ -83,6 +83,9 @@ class FakePeerConnection extends EventTarget {
   readonly offerOptions: (RTCOfferOptions | undefined)[] = [];
   async createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit> {
     this.offerOptions.push(options);
+    // Chrome cannot offer once every section is stopped: the BUNDLE group is gone with them.
+    const sections = this.getTransceivers();
+    if (sections.length > 0 && sections.every((section) => (section.direction as string) === "stopped")) throw new DOMException("max-bundle configured but session description has no BUNDLE group.", "OperationError");
     if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
@@ -233,4 +236,41 @@ it("stops sharing through the forced close and the Sync target when the SFU sess
   await h.client.setLocalSourceIntent("screen", true);
   await expect(h.client.setLocalPublicationTarget({ operationId: "screen-again", participantId: "participant-1", source: "screen", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
   expect(h.client.getSnapshot().localTracks.find((track) => track.source === "screen")).toMatchObject({ enabled: true });
+});
+
+/** The calls the media controller makes when the user stops a screen share: the pause starts first and the local stop starts while it is in flight. */
+async function stopScreenAsTheController(h: Harness): Promise<void> {
+  void h.client.setLocalSourceIntent("screen", false, "user_pause").catch(() => undefined);
+  const pause = h.client.closeForcedLocalPublication("screen", "user_pause");
+  const localStop = h.client.clearPreparedLocalTrack("screen");
+  await expect(pause).resolves.toBeUndefined();
+  await expect(localStop).resolves.toBeUndefined();
+  await expect(h.client.setLocalPublicationTarget({ operationId: "screen-stop", participantId: "participant-1", source: "screen", enabled: false })).resolves.toMatchObject({ outcome: expect.stringMatching(/^(confirmed|satisfied)$/) });
+}
+
+async function shareAgain(h: Harness): Promise<void> {
+  h.client.prepareLocalTrack("screen", new FakeTrack("screen-2", "video") as unknown as MediaStreamTrack);
+  await h.client.setLocalSourceIntent("screen", true);
+  await expect(h.client.setLocalPublicationTarget({ operationId: "screen-again", participantId: "participant-1", source: "screen", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+  expect(h.client.getSnapshot().localTracks.find((track) => track.source === "screen")).toMatchObject({ enabled: true });
+}
+
+it("stops a screen share that is the only section and so carries the BUNDLE tag, then shares again", async () => {
+  let replacements = 1;
+  const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`) });
+  await h.client.start(fakeStream());
+  await startScreen(h);
+  await stopScreenAsTheController(h);
+  await shareAgain(h);
+});
+
+it("stops sharing when the SFU answers every close call with 404, then shares again", async () => {
+  let replacements = 1;
+  const h = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++replacements}`) });
+  await h.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+  await startScreen(h);
+  const close = vi.spyOn(h.transport, "closeTracks").mockRejectedValue(GONE());
+  await stopScreenAsTheController(h);
+  close.mockRestore();
+  await shareAgain(h);
 });

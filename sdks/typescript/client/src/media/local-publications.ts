@@ -135,9 +135,10 @@ export class LocalPublicationLedger {
     const bundleTag = bundleTagOf(publication.connection);
     return !bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag);
   }
-  keepBundleOnUserPause(publication: OwnedLocalPublication, closed: boolean): boolean {
-    const { lifecycle, state } = publication;
-    return !closed && lifecycle.kind === "retiring" && lifecycle.cause === "user_pause" && (state.source === "microphone" || state.source === "camera") && this.carriesBundle(publication);
+  // A section that carries the BUNDLE tag is never stopped while its connection lives: Chrome cannot offer once every section is
+  // stopped (a screen share alone is that section) and the SFU expires the session when the tag goes.
+  keepBundle(publication: OwnedLocalPublication, closed: boolean): boolean {
+    return !closed && publication.lifecycle.kind === "retiring" && this.carriesBundle(publication);
   }
   // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
   // session_error; closing MID 1 kept MID 0 and the session working.
@@ -193,20 +194,21 @@ export class LocalPublicationLedger {
     });
     return run;
   }
-  retireOwned(reportFailure: (error: unknown) => void, options?: { readonly sources?: readonly MediaPublicationSource[]; readonly goneIsComplete?: boolean }): Promise<void> {
-    const publications = this.retiring(options?.sources);
-    const retirement = this.#runRetirement(publications, reportFailure, options?.goneIsComplete === true);
+  retireOwned(reportFailure: (error: unknown) => void, sources?: readonly MediaPublicationSource[]): Promise<void> {
+    const publications = this.retiring(sources);
+    const retirement = this.#runRetirement(publications, reportFailure);
     // Observe shutdown and intent callers even when they do not await cleanup.
     void retirement.catch(() => {});
     return (this.retirement = retirement);
   }
-  async #runRetirement(publications: readonly OwnedLocalPublication[], reportFailure: (error: unknown) => void, goneIsComplete: boolean): Promise<void> {
+  /** A close the SFU answers with 404 or 410 found the publication already gone, which is what retiring it wanted. */
+  async #runRetirement(publications: readonly OwnedLocalPublication[], reportFailure: (error: unknown) => void): Promise<void> {
     const errors: unknown[] = [];
     for (const publication of publications) {
       try {
         await this.#ops.serialize(() => this.#ops.closePublication(publication), true);
       } catch (error) {
-        if (goneIsComplete && this.retireGone(publication, error)) continue;
+        if (this.retireGone(publication, error)) continue;
         errors.push(error);
         if (!this.#ops.stopped()) reportFailure(error);
       }

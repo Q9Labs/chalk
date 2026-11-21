@@ -506,7 +506,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #retireLocalRecoveryPublications(source: MediaPublicationSource): Promise<void> {
-    return this.#retireOwnedPublications(() => {}, { sources: [source], goneIsComplete: true });
+    return this.#retireOwnedPublications(() => {}, [source]);
   }
   #finishPublicationPoll(generation: number): void {
     if (generation !== this.#generation) return;
@@ -579,7 +579,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
     if (publication.lifecycle.kind !== "confirmed") return;
     this.#locals.markRetiring(publication, "user_pause");
-    await this.#retireOwnedPublications(undefined, { sources: [source], goneIsComplete: true });
+    await this.#retireOwnedPublications(undefined, [source]);
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
@@ -604,7 +604,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#locals.held(target.source, this.#connection)) return { outcome, errorCode: null };
     this.#pauseLocalSource(target.source);
     try {
-      await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
+      await this.#retireOwnedPublications();
       return { outcome, errorCode: null };
     } catch (error) {
       return mediaTargetFailure(error);
@@ -721,7 +721,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#pauseLocalSource(state.source, "discovery_absent");
-    await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
+    await this.#retireOwnedPublications();
   }
   #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause", options: { readonly group?: boolean } = {}): void {
     const sources = options.group === false ? [source] : localSourceGroup(source);
@@ -737,8 +737,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  #retireOwnedPublications(reportFailure: (error: unknown) => void = this.#reportError.bind(this), options?: { readonly sources?: readonly MediaPublicationSource[]; readonly goneIsComplete?: boolean }): Promise<void> {
-    return this.#locals.retireOwned(reportFailure, options);
+  #retireOwnedPublications(reportFailure: (error: unknown) => void = this.#reportError.bind(this), sources?: readonly MediaPublicationSource[]): Promise<void> {
+    return this.#locals.retireOwned(reportFailure, sources);
   }
   async #closeOwnedPublicationKeepingBundleTransport(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<void> {
     if (!phase.detached && !connectionIsClosed(publication.connection)) {
@@ -791,7 +791,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     )
       return true;
     // The close offer carries every closed section. Past the size budget it could reach the node's cap, so close without SDP and let the next pull or publish replace the connection.
-    const keep = this.#locals.keepBundleOnUserPause(publication, connectionIsClosed(publication.connection)) || (!connectionIsClosed(publication.connection) && shouldReplaceForOfferSize(await this.#measureLocalOffer(publication.connection)));
+    const keep = this.#locals.keepBundle(publication, connectionIsClosed(publication.connection)) || (!connectionIsClosed(publication.connection) && shouldReplaceForOfferSize(await this.#measureLocalOffer(publication.connection)));
     if (keep) await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
     return keep;
   }
