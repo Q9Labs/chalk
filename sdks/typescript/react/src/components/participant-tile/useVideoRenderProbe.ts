@@ -100,7 +100,7 @@ export function useVideoRenderProbe(
     const [tileState, shown, reason] = surfaceKey.split("|");
     const handle = showVideoTile({
       tile_state: tileState as VideoTileState,
-      status_shown: shown === "true" ? true : undefined,
+      status_shown: shown === "true",
       tile_reason: reason || undefined,
       ...(options.publicationId ? { publication_id: options.publicationId } : {}),
     });
