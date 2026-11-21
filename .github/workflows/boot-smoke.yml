@@ -1,8 +1,8 @@
 name: Boot smoke
 
-# Starts the whole dev stack (web, API, Sync, Postgres, Redis) from an empty machine with `pnpm dev`, checks it with
+# Starts the whole dev stack (web, API, Sync, Postgres, Redis, Chalk SFU) from an empty machine with `pnpm dev`, checks it with
 # `pnpm dev:doctor`, drives one call with fake media through the Chalk SFU, and tears it down.
-# No Gate lane boots the dev stack or reaches the SFU with secrets, so this is the only check of both.
+# The other Gate lanes do not start the full dev stack or drive a call on it.
 # A merge group runs it when it changes any file in `the paths in the Select step` below, because `merge_group` has no path filter. A pull
 # request runs it only when it changes the dev stack itself (`scripts/dev`, the verify-chalk skill, this file, the tool
 # versions), so ordinary application changes boot once, at the merge group. It is not a required check, so a failure never
@@ -64,7 +64,6 @@ jobs:
     if: ${{ needs.changes.outputs.boot == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -123,9 +122,9 @@ jobs:
           cp -r .logs .verify/ci/logs 2>/dev/null || true
           # The evidence is downloadable from a public repository, so drop any file that holds a credential.
           token=$(node -p 'require("./.private/chalk-dev/seed.json").systemToken' 2>/dev/null || true)
-          for secret in "$token"; do
-            [ -n "$secret" ] && grep -rlaF -- "$secret" .verify | xargs -r rm -f
-          done
+          if [ -n "$token" ]; then
+            { grep -rlaF -- "$token" .verify || true; } | xargs -r rm -f
+          fi
           node scripts/dev/verify-stack.mjs --teardown
 
       # .verify is a hidden directory, which upload-artifact skips unless told otherwise; without that no run ever
