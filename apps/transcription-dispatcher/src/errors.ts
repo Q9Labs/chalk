@@ -61,13 +61,21 @@ export class AssignmentError extends Error {
 export class ControlApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
+  /** The API's own error code from the response body, when it sent one. */
+  readonly code: string | undefined;
 
-  constructor(message: string, status: number, retryable = false) {
+  constructor(message: string, status: number, retryable = false, code?: string) {
     super(message);
     this.name = "ControlApiError";
     this.status = status;
     this.retryable = retryable;
+    this.code = code;
   }
+}
+
+/** A deploy replaced this worker's release. This is routine: the worker stops and the new release carries on. */
+export function isReleaseSuperseded(error: unknown): boolean {
+  return error instanceof ControlApiError && error.status === 409 && error.code === "workload.release_superseded";
 }
 
 /** The control plane refused a completion or retry because the lease moved on or the work finished already. */

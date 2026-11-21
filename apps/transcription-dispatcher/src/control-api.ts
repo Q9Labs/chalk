@@ -18,6 +18,13 @@ function contextHeaders(context: JourneyContext): Record<string, string> {
   };
 }
 
+async function errorCodeOf(response: Response): Promise<string | undefined> {
+  const body = await parseResponse(response);
+  if (typeof body !== "object" || body === null || !("error" in body)) return undefined;
+  const error = body.error;
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
+}
+
 async function parseResponse(response: Response): Promise<unknown> {
   if (response.status === 204) return undefined;
   try {
@@ -137,7 +144,7 @@ export class RecorderControlApiClient implements ControlApi {
       throw new TypeError(`fetch failed: ${method} ${path} (${networkCauseCode(error)})`, { cause: error });
     }
     if (!response.ok) {
-      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, isRetryableStatus(response.status));
+      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, isRetryableStatus(response.status), response.status === 409 ? await errorCodeOf(response) : undefined);
     }
     return parseResponse(response);
   }

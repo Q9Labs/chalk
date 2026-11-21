@@ -18,6 +18,14 @@ This runbook keeps the rules for releasing transcript-first transcription to pro
 
 Use [Nightly and Promote](managed-release.md). Never publish a ZIP, deploy it by hand or bypass the guarded Alchemy driver, because those paths skip the build binding, proof and rollback guards. Promote copies the exact verified ZIP bytes and never rebuilds them. Rollback selects the prior recorded ZIP and image pins. Each environment keeps its own redacted Alchemy stack inputs, SSM references, audience, roles, queues and alarms. The driver checks a complete in-memory plan, applies that same object, verifies the exact ZIP hash and requires a second all-no-op plan. An environment with no Alchemy state fails before deployment.
 
+## Replacing the running release
+
+The dispatcher is one Lambda function that a release updates in place (code and `CHALK_RELEASE_ID` together, no alias or published version). Its wake-ups come from the API and the one-minute scheduler. The API and the dispatcher do not switch to a release at the same instant, and an invocation that started before the update keeps its old release until it ends. Every call carries the release in its signed headers.
+
+A correctly signed call from another release is a routine outcome, not a fault. The API answers it `409 workload.release_superseded` and logs one Info line, `workload.release_superseded`, with no Warn or Error. The release is still part of the signature, so a call that names another release without a valid signature stays `401 workload.unauthorized` (Warn). The dispatcher treats the 409 on a claim as a drain: that queue logs `<queue>_release_superseded`, claims nothing and the invocation returns normally, so there is no Lambda error, asynchronous retry or dead-letter message. Work an old invocation had already leased is refused the same way when it reports back, so its lease expires and the new release claims the chunk again. The next scheduler tick reconciles anything a stopped wake-up would have started.
+
+A `workload.unauthorized` log means a bad signature, environment, role, audience or replayed nonce, and it needs a look.
+
 ## Disable and recovery
 
 `CHALK_TRANSCRIPTION_ENABLED=false` stops new transcription jobs. It does not prove that queued jobs have drained. To recover:

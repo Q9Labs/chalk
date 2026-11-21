@@ -268,6 +268,18 @@ where id = sqlc.arg(id) and state in ('pending', 'retryable', 'leased')
       and lease_expires_at > sqlc.arg(now)::timestamptz))
 returning *;
 
+-- name: ReleaseArtifactJob :one
+-- Hands back a lease the worker never used. The claim's attempt is refunded
+-- because no work ran. The job waits 30 seconds so a chunk the API can never
+-- hand out is retried at a bounded rate instead of on every claim.
+update artifact_jobs
+set state = 'retryable', attempt_count = attempt_count - 1,
+    available_at = sqlc.arg(now)::timestamptz + interval '30 seconds', lease_token_hash = null, lease_owner = null,
+    lease_expires_at = null, updated_at = now()
+where id = sqlc.arg(id) and state = 'leased' and attempt_count = sqlc.arg(attempt)
+  and lease_owner = sqlc.arg(lease_owner) and lease_token_hash = sqlc.arg(lease_token_hash)
+returning *;
+
 -- name: RequeueArtifactJob :one
 update artifact_jobs
 set state = 'retryable', available_at = sqlc.arg(available_at), error_code = null,

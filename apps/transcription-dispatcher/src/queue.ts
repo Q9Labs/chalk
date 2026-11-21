@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { safeErrorCode } from "./errors.js";
+import { isReleaseSuperseded, safeErrorCode } from "./errors.js";
 import type { DispatcherContext, DispatcherDependencies, DispatcherEvent, DispatcherLogger, JourneyContext } from "./types.js";
 
 export interface RunSummary {
@@ -54,7 +54,14 @@ export async function drainQueue<Assignment>(queue: JobQueue<Assignment>, limit:
     logger.info(`${queue.logPrefix}_timeout_reserve_reached`);
     return { claimed: 0, completed: 0, failed: 0 };
   }
-  const assignments = await queue.claim(limit, journey);
+  let assignments: Assignment[];
+  try {
+    assignments = await queue.claim(limit, journey);
+  } catch (error) {
+    if (!isReleaseSuperseded(error)) throw error;
+    logger.info(`${queue.logPrefix}_release_superseded`);
+    return { claimed: 0, completed: 0, failed: 0 };
+  }
   logger.info(`${queue.logPrefix}_claimed`, { count: assignments.length });
   let completed = 0;
   let failed = 0;
