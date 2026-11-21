@@ -196,6 +196,17 @@ defmodule ChalkSync.Obs do
     send_record("fact", name, fields, %{})
   end
 
+  @doc """
+  Builds a registry-checked fact without emitting it, so the caller commits it with the state change it witnesses. Nothing else
+  sends this record: the caller must store it (see `ChalkSync.Obs.EvidenceSink.enqueue!/2`).
+  """
+  @spec stage(String.t(), fields()) :: map()
+  def stage(name, fields) do
+    fields = normalize(fields)
+    violate(Check.event_problems(name, "fact", fields))
+    build_record("fact", name, fields, %{})
+  end
+
   @doc "Records the full flags map and stamps its hash on every later record. Call it at boot and on change."
   @spec set_flags(%{optional(String.t()) => String.t() | boolean() | integer() | nil}) :: :ok
   def set_flags(flags) do
@@ -237,6 +248,22 @@ defmodule ChalkSync.Obs do
   end
 
   defp send_record(kind, name, fields, own) do
+    counters = :persistent_term.get(@counters)
+    record = build_record(kind, name, fields, own)
+
+    try do
+      :telemetry.execute(@event, %{seq: record["seq"]}, record)
+    rescue
+      exception ->
+        if closed?(),
+          do: reraise(exception, __STACKTRACE__),
+          else: :atomics.add(counters, @export_failures, 1)
+    end
+
+    :ok
+  end
+
+  defp build_record(kind, name, fields, own) do
     config = config()
     env = Keyword.get(config, :env, "local")
     counters = :persistent_term.get(@counters)
@@ -259,22 +286,10 @@ defmodule ChalkSync.Obs do
     unless env in Registry.environments(),
       do: violate(["obs config needs a registry env, not #{inspect(env)}"])
 
-    record =
-      fields
-      |> Map.merge(envelope)
-      |> Map.merge(own)
-      |> Map.merge(%{"kind" => kind, "name" => name})
-
-    try do
-      :telemetry.execute(@event, %{seq: record["seq"]}, record)
-    rescue
-      exception ->
-        if closed?(),
-          do: reraise(exception, __STACKTRACE__),
-          else: :atomics.add(counters, @export_failures, 1)
-    end
-
-    :ok
+    fields
+    |> Map.merge(envelope)
+    |> Map.merge(own)
+    |> Map.merge(%{"kind" => kind, "name" => name})
   end
 
   defp system_ms, do: System.system_time(:millisecond)

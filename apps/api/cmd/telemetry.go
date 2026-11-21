@@ -36,14 +36,17 @@ func startTelemetry(cfg config.ObservabilityConfig) (observability.AxiomEvidence
 }
 
 func startEvidenceRelay(ctx context.Context, ledger postgres.TelemetryLedger, sink observability.AxiomEvidence, logger *slog.Logger) func() {
+	// Without an Axiom ingest grant the evidence still has to leave the queue, so it goes to the
+	// service log, where the same rows reach whatever the installation reads logs from.
+	export := observability.EvidenceExport(sink.Export)
 	if !sink.Enabled() {
-		return func() {}
+		export = observability.LogEvidence(logger)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sink.Run(ctx, ledger.RelayEvidence, logger)
+		observability.RunEvidenceRelay(ctx, ledger.RelayEvidence, export, logger)
 	}()
 	return func() {
 		cancel()

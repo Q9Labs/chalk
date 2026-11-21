@@ -35,3 +35,18 @@ describe("end.wrong_screen's window around the end", () => {
     assert.equal(findingsAt(125_000, -60_000), 0);
   });
 });
+
+describe("end.wrong_screen's pass", () => {
+  /** @type {import("./rows.mjs").Fixture} */
+  const healthy = JSON.parse(readFileSync(new URL(`../../../observability/fixtures/${CODE}/healthy.json`, import.meta.url), "utf8"));
+  /** @param {string} reason */
+  const withScreen = (reason) => {
+    const rows = healthy.rows.map((row) => (eventOf(row) === "client.call_ended" ? { ...row, end_reason: reason } : row));
+    return ruleResult(judgeFixture({ ...healthy, rows }, CATALOGUE, CODE).verdict, CODE);
+  };
+
+  it("needs the Episode-ended screen: a leave, a removal or a closed page leaves the seat unchecked", () => {
+    for (const reason of ["episode_ended", "time_limit"]) assert.deepEqual(withScreen(reason), { findings: 0, checked: 1, eligible: 1 }, reason);
+    for (const reason of ["left", "removed", "page_closed"]) assert.deepEqual(withScreen(reason), { findings: 0, checked: 0, eligible: 1 }, reason);
+  });
+});

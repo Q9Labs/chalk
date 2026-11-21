@@ -4,6 +4,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Obs
+  alias ChalkSync.Obs.EvidenceSink
   alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Control
@@ -187,6 +189,20 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     end
   end
 
+  # The Episode's end is committed together with the record that Sync saw it, so a crash or a failed
+  # insert cannot leave an ended Episode with no witness (observability/rules/end.wrong_screen.mjs).
+  defp witness_episode_end(connection, episode, end_reason) do
+    record =
+      Obs.stage("sync.episode.ended", %{
+        tenant_id: episode.tenant_id,
+        space_id: episode.space_id,
+        episode_id: episode.episode_id,
+        end_reason: end_reason
+      })
+
+    EvidenceSink.enqueue!(connection, record)
+  end
+
   defp complete_external_episode(connection, episode, external, end_reason) do
     webhook_object =
       case Postgrex.query!(
@@ -195,6 +211,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
              Scope.episode(episode) ++ [end_reason]
            ).rows do
         [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
+          witness_episode_end(connection, episode, end_reason)
+
           %{
             id: UUID.load!(id),
             space_id: UUID.load!(space_id),

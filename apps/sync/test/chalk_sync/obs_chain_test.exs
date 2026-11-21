@@ -82,6 +82,38 @@ defmodule ChalkSync.ObsChainTest do
     end
   end
 
+  test "an end whose witness cannot be stored is not committed", ctx do
+    tenant = UUID.dump!(ctx.seed.episode.tenant_id)
+
+    Postgrex.query!(
+      ctx.connection,
+      "insert into telemetry_outbox_usage (tenant_id, max_bytes) values ($1, 0)",
+      [tenant]
+    )
+
+    on_exit(fn ->
+      Postgrex.query!(ctx.connection, "delete from telemetry_outbox_usage where tenant_id = $1", [
+        tenant
+      ])
+    end)
+
+    end_episode_result(ctx.seed.episode, "maximum_duration")
+
+    %{rows: [[status]]} =
+      Postgrex.query!(ctx.connection, "select status from episodes where id = $1", [
+        UUID.dump!(ctx.seed.episode.episode_id)
+      ])
+
+    assert status != "ended"
+
+    assert %{rows: [[0]]} =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*)::int from telemetry_outbox where tenant_id = $1",
+               [tenant]
+             )
+  end
+
   defp assert_end_record(ctx) do
     end_episode(ctx.seed.episode, "maximum_duration")
 
@@ -154,13 +186,16 @@ defmodule ChalkSync.ObsChainTest do
   end
 
   defp end_episode(episode, reason) do
+    {:ok, %{result: :applied}} = end_episode_result(episode, reason)
+  end
+
+  defp end_episode_result(episode, reason) do
     {:ok, operation} =
       Operation.new("obs_chain_" <> UUID.generate(), :tenant_end_episode, %{"reason" => reason})
 
     {:ok, %{external_operation_id: id}} = Postgres.begin_internal_operation(episode, operation)
 
-    {:ok, %{result: :applied}} =
-      Postgres.finalize_operation(episode, id, {:applied, :episode_ended, %{"reason" => reason}})
+    Postgres.finalize_operation(episode, id, {:applied, :episode_ended, %{"reason" => reason}})
   end
 
   defp stored_reason(ctx) do

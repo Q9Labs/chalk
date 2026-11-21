@@ -149,10 +149,14 @@ func axiomEvidencePayload(rows []json.RawMessage) ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// Run drains ready groups and backs off between idle or failed reads.
-func (s AxiomEvidence) Run(ctx context.Context, relay func(context.Context, func(context.Context, []json.RawMessage) error) (int, error), logger *slog.Logger) {
+// EvidenceExport hands a batch of stored evidence rows to the place they are read from. A nil
+// error means every row was taken; the relay deletes the rows only then.
+type EvidenceExport func(ctx context.Context, rows []json.RawMessage) error
+
+// RunEvidenceRelay drains ready groups into export and backs off between idle or failed reads.
+func RunEvidenceRelay(ctx context.Context, relay func(context.Context, func(context.Context, []json.RawMessage) error) (int, error), export EvidenceExport, logger *slog.Logger) {
 	for ctx.Err() == nil {
-		count, err := relay(ctx, s.Export)
+		count, err := relay(ctx, export)
 		if count > 0 {
 			continue
 		}

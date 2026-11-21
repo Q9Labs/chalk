@@ -5,8 +5,9 @@
  *
  * The witnesses are in areas/end.json: `end.episode` from Sync (sync.episode.ended) and `end.client_screen` from the seat's client
  * (client.call_ended). A client screen counts when its time, widened by the row's clock error, falls in a window around the end. A
- * seat passes only when both witnesses are present and its client showed an end screen in that window, none of them a failure
- * screen: an end nobody witnessed, or a seat with no end screen, is unknown, never healthy. A client row with no server time can't
+ * seat passes only when both witnesses are present and its client showed the Episode-ended screen (episode_ended or time_limit) in
+ * that window, none of them a failure screen: an end nobody witnessed, or a seat whose client left, was removed or closed its page
+ * without showing that screen, is unknown, never healthy. A client row with no server time can't
  * be placed, so the adapter drops it and the seat stays unchecked. A seat that left well before the end never sees the end screen,
  * so the check does not apply to it.
  */
@@ -19,6 +20,8 @@
 export const symptom = "end.wrong_screen";
 
 const FAILURE_SCREENS = new Set(["connection_lost", "join_failed"]);
+/** The reasons that mean the client showed the Episode-ended screen. A seat that left, was removed or closed its page saw no end screen. */
+const ENDED_SCREENS = new Set(["episode_ended", "time_limit"]);
 /** Media is revoked as part of ending, so a client can fail a little before the end commits. */
 const BEFORE_MS = 10_000;
 /** A client that loses the end notice keeps going until its own recovery gives up. */
@@ -49,7 +52,7 @@ export function decide({ readings }) {
   const at = server.window.from_ms;
   const near = screen.observations.filter((o) => o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
   const wrong = near.find((o) => FAILURE_SCREENS.has(o.claim));
-  if (!wrong) return near.length > 0 ? { status: "pass" } : { status: "unknown", reason: "the seat showed no end screen around the Episode's end" };
+  if (!wrong) return near.some((o) => ENDED_SCREENS.has(o.claim)) ? { status: "pass" } : { status: "unknown", reason: "the seat showed no Episode-ended screen around the Episode's end" };
   return {
     status: "finding",
     outcome: "broken",

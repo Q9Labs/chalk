@@ -3,6 +3,11 @@ defmodule ChalkSync.Obs.EvidenceSink do
   Enqueues Episode-scoped kernel records in the same Postgres outbox as SDK
   telemetry. No Axiom credential is needed in Sync. The API relay retries the
   committed payload without changing its event ID.
+
+  A record emitted with `ChalkSync.Obs.fact/2` is enqueued here after the fact, once, and a
+  failed insert loses it. A record that must survive a crash, such as the Episode's end, is
+  built with `ChalkSync.Obs.stage/2` and enqueued with `enqueue!/2` inside the transaction
+  that commits the state it witnesses.
   """
 
   require Logger
@@ -26,6 +31,25 @@ defmodule ChalkSync.Obs.EvidenceSink do
     end
   end
 
+  @doc """
+  Inserts the record in the outbox through `connection`, which is a Postgrex connection or the
+  transaction connection of the state change the record witnesses. A failure raises, so that
+  transaction rolls back.
+  """
+  @spec enqueue!(DBConnection.conn(), map()) :: :ok
+  def enqueue!(connection, %{"tenant_id" => tenant} = record) do
+    payload = JSON.encode!([%{service: %{name: "chalk-sync"}, attributes: record}])
+
+    Postgrex.query!(
+      connection,
+      "insert into telemetry_outbox (tenant_id, payload) values ($1, $2::text::jsonb)",
+      [UUID.dump!(tenant), payload],
+      timeout: 1_000
+    )
+
+    :ok
+  end
+
   @doc false
   def handle_event(
         _event,
@@ -34,17 +58,7 @@ defmodule ChalkSync.Obs.EvidenceSink do
         _config
       ) do
     scope = %EpisodeKey{tenant_id: tenant, space_id: space, episode_id: episode}
-    payload = JSON.encode!([%{service: %{name: "chalk-sync"}, attributes: record}])
-
-    case Postgrex.query(
-           Database.connection(scope),
-           "insert into telemetry_outbox (tenant_id, payload) values ($1, $2::text::jsonb)",
-           [UUID.dump!(tenant), payload],
-           timeout: 1_000
-         ) do
-      {:ok, _result} -> :ok
-      {:error, _reason} -> enqueue_failed()
-    end
+    enqueue!(Database.connection(scope), record)
   rescue
     _exception -> enqueue_failed()
   catch

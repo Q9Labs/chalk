@@ -13,14 +13,7 @@ import (
 
 func TestTelemetryBacklogBackpressuresWithoutAcknowledging(t *testing.T) {
 	pool, seed := committedTelemetryTenant(t)
-	var bounded bool
-	if err := pool.QueryRow(t.Context(), `select to_regclass('telemetry_outbox_capacity') is not null`).Scan(&bounded); err != nil {
-		t.Fatal(err)
-	}
-	if bounded {
-		mustExec(t, pool, `update telemetry_outbox_capacity set max_bytes = queued_bytes`)
-		t.Cleanup(func() { mustExec(t, pool, `update telemetry_outbox_capacity set max_bytes = 67108864`) })
-	}
+	mustExec(t, pool, `insert into telemetry_outbox_usage (tenant_id, max_bytes) values ($1, 0)`, uuid(seed.tenant))
 	owner := seed.join(t, 0)
 	source := ledgertest.SourceID(1)
 	request := ledgertest.Batch(t, source, 1, "", ledgertest.Record(0))
@@ -31,7 +24,7 @@ func TestTelemetryBacklogBackpressuresWithoutAcknowledging(t *testing.T) {
 	if _, found, err := ledger.Source(t.Context(), seed.tenant, source); found || err != nil {
 		t.Fatalf("source found = %v, err = %v; want the ledger write rolled back", found, err)
 	}
-	mustExec(t, pool, `update telemetry_outbox_capacity set max_bytes = 67108864`)
+	mustExec(t, pool, `update telemetry_outbox_usage set max_bytes = default where tenant_id = $1`, uuid(seed.tenant))
 	if retry, err := ledger.Admit(t.Context(), owner, request, time.Now(), sdktelemetry.Stamp{}); err != nil || len(retry.New) != 1 {
 		t.Fatalf("retry = %+v, err = %v; want evidence admitted as new", retry, err)
 	}
@@ -80,5 +73,38 @@ func TestTelemetryRelayRetriesRefusedPayloadsSeparately(t *testing.T) {
 	_, _ = ledger.RelayEvidence(t.Context(), export)
 	if shipped, err := ledger.RelayEvidence(t.Context(), export); shipped != 1 || err != nil {
 		t.Fatalf("shipped = %d, err = %v; a refused payload must not hold back its neighbour", shipped, err)
+	}
+}
+
+// The outbox counts its bytes per Tenant, in a table the Tenant purge selects by tenant_id. A counter
+// outside the Tenant would be a retained row that every erase of a Tenant with pending evidence changes,
+// and the purge rolls back when a retained row changes.
+func TestTelemetryOutboxCountsBytesPerTenantInATableThePurgeErases(t *testing.T) {
+	pool, seed := committedTelemetryTenant(t)
+	queued := func() int64 {
+		var bytes int64
+		if err := pool.QueryRow(t.Context(), `select coalesce(sum(queued_bytes), 0) from telemetry_outbox_usage where tenant_id = $1`, uuid(seed.tenant)).Scan(&bytes); err != nil {
+			t.Fatal(err)
+		}
+		return bytes
+	}
+	mustExec(t, pool, `insert into telemetry_outbox (tenant_id, payload) values ($1, '[{"a":1}]'), ($1, '[{"a":2}]')`, uuid(seed.tenant))
+	both := queued()
+	mustExec(t, pool, `delete from telemetry_outbox where tenant_id = $1 and payload = '[{"a":1}]'`, uuid(seed.tenant))
+	if one := queued(); one <= 0 || one*2 != both {
+		t.Fatalf("queued bytes = %d after one of two equal rows left, want half of %d", one, both)
+	}
+	mustExec(t, pool, `delete from telemetry_outbox where tenant_id = $1`, uuid(seed.tenant))
+	if left := queued(); left != 0 {
+		t.Fatalf("queued bytes = %d with the outbox empty, want 0", left)
+	}
+	catalog, err := loadPurgeCatalog(t.Context(), pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range catalog.Tables {
+		if table.Name == "telemetry_outbox_usage" && !table.has("tenant_id") {
+			t.Fatal("telemetry_outbox_usage has no tenant_id, so the purge would retain a row the outbox changes")
+		}
 	}
 }
