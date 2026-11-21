@@ -13,7 +13,7 @@ import { orbSfuAPIEnvironment } from "./orb-sfu.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
-import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
+import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings, dashboardOAuthBindings } from "./dashboard-seed.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
   const config = {
@@ -151,10 +151,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_REQUEST_LOGS: "all",
         // The API builds public invite links from the first origin, so it is the one a browser uses (the public origin when there is one).
         CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.public, config.urls.web])].join(","),
-        // AI apps sign in to the local MCP server here and consent in the dashboard. Without OAuth the dashboard's
-        // connected apps list answers 503, so AI apps showed "Couldn't load" on every local stack and Orb.
-        CHALK_OAUTH_ISSUER: config.urls.api,
-        CHALK_OAUTH_CONSENT_URL: `${config.urls.public}/dashboard/connect`,
+        ...dashboardOAuthBindings(config),
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
