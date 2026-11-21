@@ -10,5 +10,9 @@ export async function postToOncall({ fetchImpl, url, incidents, drill }) {
   } catch {
     throw new Error("Oncall webhook request failed");
   }
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  if (!response.ok) {
+    // T3 answers 409 {"error":"hook_disabled"} when the Oncall task is disabled: nothing is listening, and the incident is not already open.
+    const code = await response.json().then((body) => body?.error, () => undefined);
+    throw new Error(`Oncall webhook answered HTTP ${response.status}${typeof code === "string" && /^[a-z_]{1,40}$/.test(code) ? ` (${code})` : ""}`);
+  }
 }
