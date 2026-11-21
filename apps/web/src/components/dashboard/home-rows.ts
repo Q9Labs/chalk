@@ -27,9 +27,6 @@ const usedAt = (call: HomeCallDTO): string => call.lastActiveAt ?? call.createdA
  * in that same order of last use, so the first page holds the calls used most recently, however old they are.
  */
 export const listed = (home: Home): Row[] => home.rows.filter((row) => !row.archived).sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || newestFirst(a, b));
-/** How many rows Home shows at first, and how many more each Show more calls adds. A call in use now always shows. */
-export const SHOWN_ROWS = 5;
-export const shownRows = (rows: Row[], limit: number) => Math.max(limit, rows.filter((row) => row.live).length);
 export const rowsOf = (page: HomeDTO): Row[] => page.calls.map((call) => ({ ...call, live: page.live.find((item) => item.spaceId === call.id)?.episode ?? null }));
 
 /** One status answer applied by Space ID: whether each call is archived, its activity, and its live Episode. */

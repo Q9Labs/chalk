@@ -6,7 +6,7 @@ import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { newCallIntent, startCall as startOwnedCall } from "./language-choice";
-import { type Row, type Home, merge, capped, listed, SHOWN_ROWS, shownRows, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { type Row, type Home, merge, capped, listed, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
 import { useJoinCall, usePendingJoin } from "./join-call";
 import { JoinLinkField, RenameDialog } from "./HomeDialogs";
@@ -28,9 +28,8 @@ function useCallActions(update: UpdateHome, join: (call: CallDTO) => void) {
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       join(call);
-    } catch {
-      // The reason belongs to the engine; the person needs the outcome and a way to retry.
-      toast("Couldn’t start a call", { icon: "alert", action: { label: "Try again", onClick: () => void startCall() } });
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
     } finally {
       setStarting(false);
     }
@@ -67,7 +66,6 @@ function useCallActions(update: UpdateHome, join: (call: CallDTO) => void) {
 type HomeBodyProps = { readonly state: Load<Home>; readonly reload: () => void; readonly update: UpdateHome; readonly onRename: (call: HomeCallDTO) => void; readonly onArchive: (call: Row) => void };
 
 function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps) {
-  const [limit, setLimit] = useState(SHOWN_ROWS);
   return (
     <>
       {state.kind === "loading" ? (
@@ -84,19 +82,11 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
       ) : (
         <>
           <div className="list calls">
-            {listed(state.data)
-              .slice(0, shownRows(listed(state.data), limit))
-              .map((call) => (
-                <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
-              ))}
+            {listed(state.data).map((call) => (
+              <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
+            ))}
           </div>
-          {listed(state.data).length > shownRows(listed(state.data), limit) ? (
-            <div className="more-row">
-              <button type="button" className="btn sec sm" onClick={() => setLimit((value) => value + SHOWN_ROWS)}>
-                Show more calls
-              </button>
-            </div>
-          ) : state.data.rows.length >= HOME_STATUS_ROWS ? (
+          {state.data.rows.length >= HOME_STATUS_ROWS ? (
             <p className="help">Home shows your 300 most recent calls.</p>
           ) : state.data.nextCursor ? (
             <MoreButton
@@ -112,7 +102,6 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
                   },
                   { refresh: false },
                 );
-                setLimit((value) => value + SHOWN_ROWS);
               }}
             />
           ) : null}
@@ -138,7 +127,8 @@ export function HomePage() {
   const joinCall = useJoinCall();
   const { starting, startCall, archive } = useCallActions(update, joinCall);
   // The button keeps working until the call page has taken over, so Start a call never looks idle between the two.
-  const opening = starting || usePendingJoin() !== null;
+  const joining = usePendingJoin() !== null;
+  const opening = starting || joining;
 
   return (
     <div className="wrap">
