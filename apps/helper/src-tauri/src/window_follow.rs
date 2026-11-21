@@ -44,6 +44,10 @@ impl From<NativeBounds> for Observation {
     }
 }
 
+pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    platform::ignore_overlay(window)
+}
+
 pub fn request_capture_access() -> bool {
     platform::request_capture_access()
 }
@@ -112,9 +116,18 @@ mod platform {
     use super::{NativeBounds, SIZE};
 
     extern "C" {
+        fn chalk_window_ignore_overlay(window: *mut std::ffi::c_void) -> bool;
         fn chalk_window_request_capture_access() -> bool;
         fn chalk_window_bounds(id: u32, output: *mut NativeBounds) -> bool;
         fn chalk_window_sample(id: u32, output: *mut u8, size: usize) -> bool;
+    }
+
+    pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+        if unsafe { chalk_window_ignore_overlay(window.ns_window()?) } {
+            Ok(())
+        } else {
+            Err(std::io::Error::other("The Helper overlay has no native window identity.").into())
+        }
     }
 
     pub fn request_capture_access() -> bool {
@@ -142,6 +155,7 @@ mod platform {
 mod platform {
     use super::{NativeBounds, SIZE};
     use std::mem::{size_of, size_of_val};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use windows_sys::Win32::{
         Foundation::{CloseHandle, FILETIME, HWND, RECT},
         Graphics::{
@@ -157,6 +171,13 @@ mod platform {
             GetWindow, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, GW_HWNDPREV,
         },
     };
+
+    static LIVE_OVERLAY: AtomicUsize = AtomicUsize::new(0);
+
+    pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+        LIVE_OVERLAY.store(window.hwnd()?.0 as usize, Ordering::Relaxed);
+        Ok(())
+    }
 
     fn handle(id: u64) -> HWND {
         usize::try_from(id).unwrap_or_default() as HWND
@@ -244,9 +265,7 @@ mod platform {
                             | u64::from(birth.dwLowDateTime),
                     });
                 }
-                let mut other_pid = 0;
-                GetWindowThreadProcessId(above, &mut other_pid);
-                if other_pid != std::process::id() && visible(above) {
+                if above as usize != LIVE_OVERLAY.load(Ordering::Relaxed) && visible(above) {
                     let other = frame(above)?;
                     let w = rect
                         .right
@@ -339,6 +358,10 @@ mod platform {
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod platform {
     use super::NativeBounds;
+
+    pub fn ignore_overlay(_: &tauri::WebviewWindow) -> tauri::Result<()> {
+        Err(std::io::Error::other("The Helper overlay has no native window identity.").into())
+    }
 
     pub fn request_capture_access() -> bool {
         false

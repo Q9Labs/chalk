@@ -302,7 +302,8 @@ pub(crate) fn show_live_overlay(
             std::io::Error::other("Monitor overlay does not align with the display.").into(),
         );
     }
-    overlay.show()
+    overlay.show()?;
+    crate::window_follow::ignore_overlay(&overlay)
 }
 
 #[cfg(target_os = "windows")]

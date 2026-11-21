@@ -4,6 +4,7 @@ fn main() {
         println!("cargo:rerun-if-changed=native/window_mac.m");
         println!("cargo:rerun-if-changed=native/credentials_mac.m");
         for framework in [
+            "AppKit",
             "CoreGraphics",
             "ColorSync",
             "Foundation",

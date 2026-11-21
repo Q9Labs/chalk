@@ -179,12 +179,14 @@ pub fn unseal(name: &[u16], ciphertext: &[u8]) -> Result<Vec<u8>, &'static str> 
     if ciphertext.len() != SEALED_BYTES {
         return Err(ERROR);
     }
-    let key = Handle::storage()?.key(name)?.ok_or(ERROR)?;
+    let provider = Handle::storage()?;
+    let key = provider.key(name)?.ok_or(ERROR)?;
     with_padding(key, ciphertext, false)
 }
 
 pub fn forget(name: &[u16]) -> Result<(), &'static str> {
-    if let Some(mut key) = Handle::storage()?.key(name)? {
+    let provider = Handle::storage()?;
+    if let Some(mut key) = provider.key(name)? {
         if unsafe { NCryptDeleteKey(key.0, 0) } != 0 {
             return Err(ERROR);
         }

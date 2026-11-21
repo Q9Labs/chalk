@@ -17,8 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: |
+          defaults write com.apple.dock autohide -bool true
+          killall Dock || true
           swiftc apps/helper/probe/window-follow-review.swift -o window-fixture
-          clang -fobjc-arc -mmacosx-version-min=14.0 -framework Foundation -framework ScreenCaptureKit -framework CoreGraphics -framework ColorSync apps/helper/src-tauri/native/window_mac.m apps/helper/probe/window-follow-read.m -o window-read
+          clang -fobjc-arc -mmacosx-version-min=14.0 -framework AppKit -framework Foundation -framework ScreenCaptureKit -framework CoreGraphics -framework ColorSync apps/helper/src-tauri/native/window_mac.m apps/helper/probe/window-follow-read.m -o window-read
           node apps/helper/probe/window-follow-review.cjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
