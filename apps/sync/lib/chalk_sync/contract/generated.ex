@@ -142,6 +142,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "directed_request",
           "delivery_ack",
           "request_ack",
+          "live_request_ack",
           "reaction_send",
           "chat_send",
           "chat_page_request",
@@ -662,6 +663,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "live_target" -> decode_live_target(frame)
         "directed_request" -> decode_directed_request(frame)
         "request_ack" -> decode_request_ack(frame)
+        "live_request_ack" -> decode_live_request_ack(frame)
         "reaction_send" -> decode_reaction_send(frame)
         "chat_reaction_set" -> decode_chat_reaction_set(frame)
         "chat_send" -> decode_chat_send(frame)
@@ -870,6 +872,12 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   end
   defp decode_request_ack(_frame), do: {:error, :invalid_request_ack}
 
+  defp decode_live_request_ack(%{"request_id" => request_id} = frame) do
+    if exact_keys?(frame, ["type", "request_id"]) and valid_request_id?(request_id), do: {:ok,
+        {:live_request_ack, request_id}}, else: {:error, :invalid_live_request_ack}
+  end
+  defp decode_live_request_ack(_frame), do: {:error, :invalid_live_request_ack}
+
   defp decode_reaction_send(%{"operation_id" => operation_id, "reaction" => reaction} = frame) do
     if exact_keys?(frame, ["type", "operation_id", "reaction"]) and
         valid_request_id?(operation_id) and reaction in @reactions, do: {:ok, {:reaction_send,
@@ -948,6 +956,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       do: valid_directed_request_delivery?(frame)
   def valid_server_frame?(%{"type" => "directed_request_result"} = frame),
       do: valid_directed_request_result?(frame)
+  def valid_server_frame?(%{"type" => "live_request"} = frame), do: valid_live_request?(frame)
   def valid_server_frame?(%{"type" => "reaction"} = frame), do: valid_reaction?(frame) and
       server_frame_within_limit?(frame, @limits["collaborationFrameBytes"])
   def valid_server_frame?(%{"type" => "reaction_result"} = frame),
@@ -1006,6 +1015,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         else: base
     base = if Map.has_key?(frame, "connection_quality"), do: base ++ ["connection_quality"],
         else: base
+    base = if Map.has_key?(frame, "live_introspection"), do: base ++ ["live_introspection"],
+        else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
     base = if Map.has_key?(frame, "participant_identity_id"),
@@ -1023,9 +1034,12 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["media_off_reason"] == true
     valid_quality = not Map.has_key?(frame, "connection_quality") or
         frame["connection_quality"] == true
+    valid_introspection = not Map.has_key?(frame, "live_introspection") or
+        frame["live_introspection"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_off_reason and valid_quality and valid_generation and valid_identity
+        valid_off_reason and valid_quality and valid_introspection and valid_generation and
+        valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,
@@ -1418,6 +1432,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       do: correlation_exact_keys?(frame, ["type", "request_id", "result"]) and
       valid_request_id?(id) and result in @directed_request_results
   defp valid_directed_request_result?(_frame), do: false
+  defp valid_live_request?(%{"request_id" => id, "expires_at_ms" => expires_at} = frame),
+      do: correlation_exact_keys?(frame, ["type", "request_id", "expires_at_ms"]) and
+      valid_request_id?(id) and valid_positive_integer?(expires_at)
+  defp valid_live_request?(_frame), do: false
 
   defp valid_reaction?(%{"event_id" => event_id, "participant_id" => participant_id,
       "display_name" => display_name, "reaction" => reaction, "occurred_at" => occurred_at,

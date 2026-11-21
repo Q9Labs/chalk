@@ -150,6 +150,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
       |> Map.put(:entry_confirmation, state.entry_confirmation)
       |> Map.put(:media_off_reason, state.media_off_reason)
       |> Map.put(:connection_quality, state.connection_quality)
+      |> Map.put(:live_introspection, state.live_introspection)
       |> Map.put(
         :entry_generation,
         state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)

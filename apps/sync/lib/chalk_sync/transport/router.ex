@@ -95,6 +95,7 @@ defmodule ChalkSync.Transport.Router do
               conn.query_params["participant_device_admissions"] in ["1", "2"],
             media_off_reason: conn.query_params["media_off_reason"] == "1",
             connection_quality: conn.query_params["connection_quality"] == "1",
+            live_introspection: conn.query_params["live_introspection"] == "1",
             participant_self_identity: conn.query_params["participant_device_admissions"] == "2",
             entry_generation: entry_generation(conn.query_params["entry_generation"]),
             connection_attributes: with_ingress(connection_attributes, direct),

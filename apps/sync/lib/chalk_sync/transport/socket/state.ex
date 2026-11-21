@@ -35,6 +35,7 @@ defmodule ChalkSync.Transport.Socket.State do
       participant_self_identity: Map.get(opts, :participant_self_identity, false),
       media_off_reason: Map.get(opts, :media_off_reason, false),
       connection_quality: Map.get(opts, :connection_quality, false),
+      live_introspection: Map.get(opts, :live_introspection, false),
       participant_devices: Map.get(opts, :participant_devices, false),
       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),

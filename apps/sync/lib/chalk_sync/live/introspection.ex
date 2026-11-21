@@ -48,11 +48,15 @@ defmodule ChalkSync.Live.Introspection do
   defp do_deliver(tenant_id, episode_id, request_id) do
     with {:ok, request} <- fetch_request(tenant_id, episode_id, request_id) do
       {delivery, sockets, unavailable_reason} =
-        send_frames(%EpisodeKey{
-          tenant_id: tenant_id,
-          space_id: request.space_id,
-          episode_id: episode_id
-        }, request, request_id)
+        send_frames(
+          %EpisodeKey{
+            tenant_id: tenant_id,
+            space_id: request.space_id,
+            episode_id: episode_id
+          },
+          request,
+          request_id
+        )
 
       record_delivery(tenant_id, episode_id, request_id, delivery, sockets, unavailable_reason)
 
@@ -68,7 +72,7 @@ defmodule ChalkSync.Live.Introspection do
         |> put_present(:sockets, sockets)
         |> put_present(:unavailable_reason, unavailable_reason)
 
-      Obs.decision("live_request.deliver", delivery, fields, unavailable_reason)
+      Obs.decision("live_request.deliver", delivery, fields)
     end
 
     :ok
