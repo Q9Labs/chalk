@@ -18,6 +18,7 @@ const option = (name, fallback) => {
 const sharerEngine = option("--sharer", "chromium");
 const viewerEngines = option("--viewers", "webkit").split(",");
 const fault = process.argv.includes("--fault");
+const stopVia = option("--stop-via", "toolbar"); // the toolbar toggle, or the "Stop sharing" pill on the stage
 const waitMs = 60_000;
 const stopMs = 20_000;
 
@@ -68,7 +69,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
   const socketFrames = [];
 
   if (sharerEngine === "webkit") await sharer.context.addInitScript(syntheticDisplay);
-  await sharer.context.route("**/signal", async (route) => {
+  if (fault) await sharer.context.route("**/signal", async (route) => {
     const request = route.request();
     if (request.method() !== "POST" || request.postDataJSON()?.op !== "tracks_close") return route.continue();
     signals.tracksClose += 1;
@@ -94,6 +95,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
 
   // While sharing, the stage also shows a "Stop sharing" pill; the toolbar toggle is the one with the aria-label.
   const toolbarStop = sharer.page.getByLabel("Stop sharing", { exact: true });
+  const stagePill = sharer.page.getByTestId("stage").getByRole("button", { name: "Stop sharing", exact: true });
   const screenLabel = "Screen share tile for Sharer";
   const state = async (who) => who.page.evaluate(shareTile, "Sharer");
   const hasLiveShare = async (who) => {
@@ -132,7 +134,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     const started = Date.now();
     note("Sharer presses Stop sharing");
     await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
-    await toolbarStop.click();
+    await (stopVia === "pill" ? stagePill : toolbarStop).click();
     const stopped = sharer.page.getByLabel("Share screen", { exact: true });
     try {
       await stopped.waitFor({ timeout: stopMs });
