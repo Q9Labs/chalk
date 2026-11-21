@@ -83,7 +83,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
   });
   sharer.page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => {
     const text = String(payload);
-    if (/retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
+    if (socketFrames.length < 60 && /retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
   }));
 
   // While sharing, the stage also shows a "Stop sharing" pill; the toolbar toggle is the one with the aria-label.
@@ -136,12 +136,22 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
       await shot(sharer, `${label}-stop-failed`);
       throw new Error(`stop did not complete in ${stopMs} ms; visible: ${JSON.stringify(problems)}; sync frames: ${JSON.stringify(socketFrames.slice(-3))}`);
     }
-    const problems = await sharer.page.evaluate(visibleProblems);
+    note("Sharer shows Share screen", { afterMs: Date.now() - started });
+    for (const who of everyone) {
+      await shareGone(who).catch(async (error) => {
+        const statuses = await sharer.page.evaluate(visibleProblems);
+        note(`${who.name} still shows the share tile after stop`, { statuses, tracksClose: signals.tracksClose, socketFrames });
+        await shot(sharer, `${label}-stop-failed`);
+        throw new Error(`${who.name} still shows the share tile ${stopMs} ms after stop; sharer statuses ${JSON.stringify(statuses)}; sync frames ${JSON.stringify(socketFrames.slice(-3))}; ${error.message.split("\n")[0]}`);
+      });
+    }
+    note("the share tile is gone for the sharer and every viewer", { afterMs: Date.now() - started });
+    await sharer.page.waitForTimeout(3000); // a failed stop is retried by Sync and reported within about a second
+    const statuses = await sharer.page.evaluate(visibleProblems);
+    note("sharer statuses after stop", { statuses, tracksClose: signals.tracksClose, answered404: signals.answered404 });
     if (socketFrames.some(({ frame }) => /retry_exhausted/.test(frame))) throw new Error(`Sync reported retry_exhausted: ${JSON.stringify(socketFrames.at(-1))}`);
+    const problems = statuses.filter((text) => /fail|error|couldn|unable|try again|retry|went wrong/i.test(text));
     if (problems.length) throw new Error(`the sharer sees an error after stop: ${JSON.stringify(problems)}`);
-    note("Sharer shows Share screen, no error", { stopMs: Date.now() - started });
-    for (const who of viewers) await shareGone(who);
-    note("every viewer's share tile is gone");
     for (const who of everyone) await shot(who, label);
     return { stopMs: Date.now() - started };
   };
