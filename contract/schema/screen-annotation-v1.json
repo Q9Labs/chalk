@@ -8,6 +8,16 @@
       "version": 1,
       "welcome": "screen_annotation"
     },
+    "helperAttachment": {
+      "path": "/v1/screen-annotation/helper",
+      "audience": "screen_annotation_helper_v1",
+      "version": 1,
+      "leaseMs": 60000,
+      "proofDomain": "chalk.screen_annotation.helper.v1",
+      "proof": "Ed25519 over UTF-8 proofDomain + LF + nonce + LF + base64url(SHA-256(ticket)), without padding",
+      "confirmationKey": "cnf.jwk (OKP Ed25519)",
+      "commands": ["commit", "erase", "undo", "redo", "clear", "pause"]
+    },
     "limits": {
       "commandBytes": 16384,
       "presenceBytes": 8192,
@@ -889,6 +899,27 @@
             }
           ]
         }
+      }
+    },
+    "HelperChallenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "nonce"],
+      "properties": {
+        "type": { "enum": ["annotation_helper_challenge"] },
+        "version": { "enum": [1] },
+        "nonce": { "type": "string", "minLength": 43, "maxLength": 43 }
+      }
+    },
+    "HelperAttach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "ticket", "proof"],
+      "properties": {
+        "type": { "enum": ["annotation_helper_attach"] },
+        "version": { "enum": [1] },
+        "ticket": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "proof": { "type": "string", "minLength": 86, "maxLength": 86 }
       }
     },
     "ClientFrame": {

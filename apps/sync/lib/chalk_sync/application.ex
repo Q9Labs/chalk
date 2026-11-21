@@ -24,6 +24,7 @@ defmodule ChalkSync.Application do
         {ChalkSync.Operations, []},
         fanout_child(),
         whiteboard_fanout_child(),
+        annotation_fanout_child(),
         lifecycle_consumer_child(),
         external_operation_consumer_children(),
         retention_scheduler_child(),
@@ -132,6 +133,13 @@ defmodule ChalkSync.Application do
   defp whiteboard_fanout_child do
     if database_workers?() do
       {ChalkSync.WhiteboardV1.Fanout,
+       url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
+    end
+  end
+
+  defp annotation_fanout_child do
+    if database_workers?() do
+      {ChalkSync.ScreenAnnotation.Fanout,
        url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
     end
   end

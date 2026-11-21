@@ -62,23 +62,7 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
           {:error, "capacity"}
 
         true ->
-          mark = %{
-            "draft" => draft,
-            "author" => actor.author,
-            "created_revision" => layer.revision + 1,
-            "committed_at_ms" => now,
-            "expires_at_ms" =>
-              if(draft["lifetime"] == "fade", do: now + @limits["committedFadeTtlMs"])
-          }
-
-          next = put_in(layer.marks[id], mark)
-
-          next =
-            if draft["lifetime"] == "keep",
-              do: remember(next, actor.id, "upsert", mark),
-              else: drop_redo(next, actor.id)
-
-          change(next, %{"kind" => "upsert", "mark" => mark})
+          record_mark(layer, draft, actor, now)
       end
     end
   end
@@ -196,34 +180,55 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
     end
   end
 
+  defp record_mark(layer, draft, actor, now) do
+    mark = %{
+      "draft" => draft,
+      "author" => actor.author,
+      "created_revision" => layer.revision + 1,
+      "committed_at_ms" => now,
+      "expires_at_ms" => if(draft["lifetime"] == "fade", do: now + @limits["committedFadeTtlMs"])
+    }
+
+    next = put_in(layer.marks[draft["mark_id"]], mark)
+
+    next =
+      if draft["lifetime"] == "keep",
+        do: remember(next, actor.id, "upsert", mark),
+        else: drop_redo(next, actor.id)
+
+    change(next, %{"kind" => "upsert", "mark" => mark})
+  end
+
   defp undo_or_redo(layer, id, key) do
-    case Map.get(history(layer, id), key) do
+    history = history(layer, id)
+
+    case history[key] do
       [] ->
         {:ok, layer}
 
       [%{"kind" => kind, "mark" => mark} = action | remaining] ->
-        other = if key == "undo", do: "redo", else: "undo"
-        upsert? = (key == "redo" and kind == "upsert") or (key == "undo" and kind == "remove")
-        mark_id = mark["draft"]["mark_id"]
-
-        if upsert? and map_size(layer.marks) >= @limits["activeMarks"] do
-          {:error, "capacity"}
-        else
-          history =
-            history(layer, id) |> Map.put(key, remaining) |> Map.update!(other, &[action | &1])
-
-          next = put_in(layer.history[id], history)
-
-          if upsert? do
-            change(put_in(next.marks[mark_id], mark), %{"kind" => "upsert", "mark" => mark})
-          else
-            change(%{next | marks: Map.delete(next.marks, mark_id)}, %{
-              "kind" => "remove",
-              "mark_id" => mark_id
-            })
-          end
-        end
+        reverse = if key == "undo", do: "redo", else: "undo"
+        next = history |> Map.put(key, remaining) |> Map.update!(reverse, &[action | &1])
+        layer = put_in(layer.history[id], next)
+        replay_mark(layer, mark, {key, kind})
     end
+  end
+
+  defp replay_mark(layer, mark, direction)
+       when direction in [{"redo", "upsert"}, {"undo", "remove"}] do
+    if map_size(layer.marks) < @limits["activeMarks"] do
+      change(put_in(layer.marks[mark["draft"]["mark_id"]], mark), %{
+        "kind" => "upsert",
+        "mark" => mark
+      })
+    else
+      {:error, "capacity"}
+    end
+  end
+
+  defp replay_mark(layer, mark, _direction) do
+    id = mark["draft"]["mark_id"]
+    change(%{layer | marks: Map.delete(layer.marks, id)}, %{"kind" => "remove", "mark_id" => id})
   end
 
   defp remember(layer, id, kind, mark) do

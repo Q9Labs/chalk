@@ -9,10 +9,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
+  alias ChalkSync.ScreenAnnotation.Presence, as: AnnotationPresence
   alias ChalkSync.Stateholder
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.DirectLimits
-  alias ChalkSync.ScreenAnnotation.Presence, as: AnnotationPresence
   alias ChalkSync.Transport.Socket.Acknowledgements
   alias ChalkSync.Transport.Socket.Annotation
   alias ChalkSync.Transport.Socket.Collaboration

@@ -1,8 +1,9 @@
 defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
   use ChalkSync.WhiteboardV1.PostgresRepositoryCase, async: false
 
+  alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.ScreenAnnotation.Repository
+  alias ChalkSync.ScreenAnnotation.{Proof, Repository}
   alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.UUID
 
@@ -20,6 +21,14 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
 
     on_exit(fn ->
       params = [uuid(host.episode.tenant_id), uuid(host.episode.episode_id)]
+
+      Postgrex.query!(
+        connection,
+        "delete from sync_screen_annotation_layers where tenant_id = $1 and episode_id = $2",
+        params
+      )
+
+      Proof.cleanup_journey(connection, host.episode.episode_id)
 
       Postgrex.query!(
         connection,
@@ -51,7 +60,11 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
     assert {:error, "invalid_target"} =
              Repository.command(host, bind_frame(publication(1, "screen-audio")))
 
-    assert {:ok, %{"layer_id" => layer, "revision" => 1}} = Repository.command(host, binding)
+    trace = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    context = Observability.context([{"traceparent", trace}])
+
+    assert {:ok, %{"layer_id" => layer, "revision" => 1}} =
+             Repository.command(host, binding, context)
 
     assert {:ok, %{"layer_id" => ^layer, "revision" => 1}} =
              Repository.command(host, bind_frame(publication))
@@ -65,6 +78,7 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
 
     assert {:ok, %{"layer_id" => next}} = Repository.command(host, bind_frame(replacement))
     refute next == layer
+    Proof.assert_lifecycle_evidence(connection, host.episode.episode_id, layer)
   end
 
   test "draw grants are shared, and stale fences cannot restore cleared ink or claim a receipt",

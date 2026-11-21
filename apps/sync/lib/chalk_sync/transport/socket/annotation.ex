@@ -3,16 +3,14 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   alias ChalkSync.Contract.GeneratedScreenAnnotationV1, as: Schema
   alias ChalkSync.Observability
-  alias ChalkSync.ScreenAnnotation.{Layer, Presence, Repository}
+  alias ChalkSync.ScreenAnnotation.{Attachment, Layer, Presence, Repository}
   alias ChalkSync.Transport.Socket.Frames
-  alias ChalkSync.WhiteboardV1.Fanout
 
   @limits Schema.limits()
   @poll_ms 1_000
 
   def enter(%{screen_annotation: true, identity: identity} = state) do
-    Fanout.subscribe_annotation(identity.episode)
-    :ok = Presence.join(identity.episode)
+    :ok = Presence.join(identity.episode, identity.participant_id)
     Process.send_after(self(), :annotation_tick, @poll_ms)
     state
   end
@@ -59,15 +57,26 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
     result =
       if length(recent) < 24 do
-        Repository.command(state.identity, frame, state.observability)
+        Repository.command(
+          state.identity,
+          frame,
+          state.observability,
+          Map.get(state, :attachment)
+        )
       else
         {:error, "rate_limited"}
       end
 
+    response = receipt(result)
+
+    :telemetry.execute([:chalk, :sync, :annotation, :command], %{count: 1}, %{
+      outcome: response["kind"]
+    })
+
     receipt = %{
       "type" => "annotation_receipt",
       "operation_id" => frame["operation_id"],
-      "result" => receipt(result)
+      "result" => response
     }
 
     timestamps = if length(recent) < 24, do: [now | recent], else: recent
@@ -92,7 +101,7 @@ defmodule ChalkSync.Transport.Socket.Annotation do
           "expires_at_ms" => now + @limits["ephemeralTtlMs"]
         })
 
-      Presence.publish(state.identity.episode, sample)
+      Presence.publish(sample)
     end
 
     {:ok, state}
@@ -108,13 +117,36 @@ defmodule ChalkSync.Transport.Socket.Annotation do
   defp matching?(_witness, _frame, _now), do: false
 
   defp refresh(state, forced?) do
+    epoch = Presence.begin_refresh(state.identity)
+
     case Repository.read(state.identity) do
-      {:ok, actor, layer, now, share} -> project(state, forced?, actor, layer, now, share)
-      _failure -> project(state, forced?, nil, nil, System.system_time(:millisecond), nil)
+      {:ok, actor, layer, now, share} ->
+        if not Map.has_key?(state, :attachment) or
+             Attachment.matches?(layer, state.attachment, now) do
+          project(state, forced?, actor, layer, now, share, epoch)
+        else
+          end_attachment(state, epoch)
+        end
+
+      _failure when is_map_key(state, :attachment) ->
+        end_attachment(state, epoch)
+
+      {:error, "not_active"} ->
+        project(state, forced?, nil, nil, System.system_time(:millisecond), nil, epoch)
+
+      _failure ->
+        suspend(state, forced?, System.system_time(:millisecond), epoch)
     end
   end
 
-  defp project(state, forced?, _actor, nil, now, share) do
+  defp end_attachment(state, epoch) do
+    _ = Presence.confirm(epoch, nil)
+    {:stop, :normal, {1008, "annotation attachment ended"}, state}
+  end
+
+  defp project(state, forced?, _actor, nil, now, share, epoch) do
+    _ = Presence.confirm(epoch, nil)
+
     closing =
       case state.annotation do
         %{layer: id, publication: publication} ->
@@ -133,7 +165,7 @@ defmodule ChalkSync.Transport.Socket.Annotation do
     push(%{state | annotation: nil}, frames)
   end
 
-  defp project(state, forced?, actor, layer, now, share) do
+  defp project(state, forced?, actor, layer, now, share, epoch) do
     id = layer.binding["layer_id"]
     access = Layer.access(layer, actor)
 
@@ -142,14 +174,33 @@ defmodule ChalkSync.Transport.Socket.Annotation do
       publication: share.publication,
       fence: layer.fence,
       revision: layer.revision,
-      until: share.until,
+      until: min(share.until, witness_deadline(state, now)),
       author: actor.author,
       can_draw: access["can_draw"]
     }
 
-    frames = projection_frames(state.annotation, witness, layer, actor, now, forced?)
-    push(%{state | annotation: witness}, frames)
+    case Presence.confirm(epoch, witness) do
+      :ok ->
+        frames = projection_frames(state.annotation, witness, layer, actor, now, forced?)
+        push(%{state | annotation: witness}, frames)
+
+      :stale ->
+        suspend(state, forced?, now, epoch)
+    end
   end
+
+  # A read that raced an invalidation is not evidence that the layer closed.
+  # Withdraw the projection until the next committed witness instead.
+  defp suspend(state, forced?, now, epoch) do
+    _ = Presence.confirm(epoch, nil)
+    frames = if forced? or state.annotation, do: [snapshot(nil, now)], else: []
+    push(%{state | annotation: nil}, frames)
+  end
+
+  defp witness_deadline(%{attachment: attachment}, now),
+    do: min(attachment.expires_at_ms, now + 2 * @poll_ms)
+
+  defp witness_deadline(_state, now), do: now + 2 * @poll_ms
 
   defp projection_frames(previous, witness, layer, actor, now, forced?) do
     case previous do

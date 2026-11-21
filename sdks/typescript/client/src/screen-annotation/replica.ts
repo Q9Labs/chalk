@@ -25,8 +25,10 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   readonly #presence = new Map<string, Wire["ServerPresence"]>();
   #snapshot: ScreenAnnotationSnapshot = { status: "connecting" };
   #live = false;
+  #retryAfterReconnect = false;
   #sample: Sample | null = null;
   #sampleTimer: ReturnType<typeof setTimeout> | undefined;
+  #stateExpiryTimer: ReturnType<typeof setTimeout> | undefined;
   #expiryTimer: ReturnType<typeof setTimeout> | undefined;
   #clockOffset = Date.now() - performance.now();
 
@@ -45,6 +47,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
 
   enterLive(negotiated: boolean): void {
     this.#live = negotiated;
+    this.#retryAfterReconnect = negotiated;
     if (negotiated) this.#requestState();
     else this.#reset("unavailable", true);
   }
@@ -62,7 +65,8 @@ export class AnnotationReplica implements ScreenAnnotationClient {
         this.#anchorClock(frame.server_at_ms, recovering);
         this.#clearPresence();
         this.#set({ status: "ready", state: frame.state, presence: [] });
-        if (recovering) {
+        if (this.#retryAfterReconnect) {
+          this.#retryAfterReconnect = false;
           // Only an outstanding delivery is retried. The exact original bytes
           // (including address, fence and ID) are immutable across reconnects.
           for (const pending of this.#pending.values()) this.#send(pending.wire);
@@ -228,8 +232,39 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   }
 
   #set(snapshot: ScreenAnnotationSnapshot): void {
+    if (snapshot.status !== "ready" || snapshot.state !== this.#state()) {
+      clearTimeout(this.#stateExpiryTimer);
+      if (snapshot.status === "ready" && snapshot.state) {
+        snapshot = { ...snapshot, state: this.#expireState(snapshot.state) };
+      }
+    }
     this.#snapshot = snapshot;
     for (const listener of this.#listeners) listener();
+  }
+
+  #expireState(state: Wire["State"]): Wire["State"] {
+    const now = this.serverNowMs();
+    let nextExpiry = Infinity;
+    const fresh = (value: { readonly expires_at_ms: number | null }): boolean => {
+      const expiry = value.expires_at_ms;
+      if (expiry === null) return true;
+      if (expiry <= now) return false;
+      nextExpiry = Math.min(nextExpiry, expiry);
+      return true;
+    };
+    const marks = state.marks.filter(fresh);
+    const requests = state.access.requests.filter(fresh);
+    if (Number.isFinite(nextExpiry)) {
+      this.#stateExpiryTimer = setTimeout(
+        () => {
+          if (this.#snapshot.status === "ready" && this.#snapshot.state) {
+            this.#set({ ...this.#snapshot, state: { ...this.#snapshot.state } });
+          }
+        },
+        Math.ceil(nextExpiry - now),
+      );
+    }
+    return { ...state, marks, access: { ...state.access, requests } };
   }
 }
 

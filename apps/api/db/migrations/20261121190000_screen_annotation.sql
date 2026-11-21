@@ -100,9 +100,10 @@ $$;
 create function sync_screen_annotation_layer_changed() returns trigger language plpgsql as $$
 begin
     if tg_op = 'DELETE' then
-        perform pg_notify('chalk_screen_annotation', concat_ws(':', old.tenant_id, old.space_id, old.episode_id));
+        perform pg_notify('chalk_screen_annotation', concat_ws(':', old.tenant_id, old.space_id, old.episode_id, 'control'));
     else
-        perform pg_notify('chalk_screen_annotation', concat_ws(':', new.tenant_id, new.space_id, new.episode_id));
+        perform pg_notify('chalk_screen_annotation', concat_ws(':', new.tenant_id, new.space_id, new.episode_id,
+            case when tg_op = 'INSERT' or old.fence is distinct from new.fence then 'control' else 'marks' end));
     end if;
     return null;
 end;

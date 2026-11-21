@@ -37,6 +37,7 @@ ${renderAttribute("metadata", metadata).join("\n")}
 ${renderAttribute("definitions", schema.$defs).join("\n")}
   def negotiation, do: @metadata["negotiation"]
   def limits, do: @metadata["limits"]
+  def helper_attachment, do: @metadata["helperAttachment"]
   def definitions, do: @definitions
 end
 `);

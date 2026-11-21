@@ -2,9 +2,9 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
   @moduledoc "Transactional publication, generation, draw-policy and fence authority for screen annotations."
 
   alias ChalkSync.Contract.GeneratedScreenAnnotationV1, as: Schema
-  alias ChalkSync.Observability
   alias ChalkSync.Database
-  alias ChalkSync.ScreenAnnotation.{Layer, Protocol, SQL}
+  alias ChalkSync.Observability
+  alias ChalkSync.ScreenAnnotation.{Attachment, Authority, Layer, Protocol, SQL}
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.PostgresRepository.{Mutations, Store}
   alias ChalkSync.WhiteboardV1.SQL, as: WhiteboardSQL
@@ -13,16 +13,16 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
   @max_actor_receipts 240
 
   def read(identity) do
-    case read(Database.connection(identity.episode), identity) do
+    case Authority.read(Database.connection(identity.episode), identity) do
       {:ok, actor, share, layer, now} ->
-        {:ok, actor, valid_layer(layer, share, now), now, share}
+        {:ok, actor, Authority.valid_layer(layer, share, now), now, share}
 
       failure ->
         failure
     end
   end
 
-  def command(identity, frame, context \\ nil) do
+  def command(identity, frame, context \\ nil, attachment \\ nil) do
     Store.transaction(identity, fn connection ->
       params = Store.context(identity)
 
@@ -31,113 +31,18 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
         Postgrex.query!(connection, SQL.lock_publication_head(), params)
         Postgrex.query!(connection, SQL.lock_lease(), params)
         Postgrex.query!(connection, SQL.lock_layer(), params)
-        commit(connection, identity, frame, context)
+        commit(connection, identity, frame, context, attachment)
       else
         _ -> {:error, "not_active"}
       end
     end)
   end
 
-  defp read(connection, identity) do
-    params =
-      Store.context(identity) ++
-        [Store.uuid(identity.participant_id), identity.participant_generation]
-
-    case Postgrex.query(connection, SQL.read(), params, log: nil) do
-      {:ok, %{rows: [row]}} -> decode(row, identity)
-      {:ok, %{rows: []}} -> {:error, "not_active"}
-      {:error, _reason} -> {:retryable, :storage_unavailable}
-    end
-  end
-
-  defp decode([name, capabilities, draw?, policy, explicit | row], identity) do
-    [owner, generation, until, publication | row] = row
-
-    [
-      id,
-      bound_publication,
-      sharer,
-      bound_generation,
-      frame,
-      revision,
-      fence,
-      paused,
-      marks,
-      requests,
-      history,
-      last_change,
-      now
-    ] = row
-
-    actor = %{
-      id: identity.participant_id,
-      generation: identity.participant_generation,
-      author: Layer.contributor(identity.participant_id, name),
-      manager: "manageWhiteboard" in capabilities,
-      can_draw: draw?,
-      draw_policy: policy,
-      explicit_grant: explicit
-    }
-
-    share =
-      if is_binary(publication) and is_binary(owner) and
-           generation_matches?(publication, generation) do
-        %{owner: owner, generation: generation, publication: publication, until: until}
-      end
-
-    layer =
-      if id do
-        %{
-          binding: %{
-            "layer_id" => id,
-            "publication_id" => bound_publication,
-            "sharer_id" => sharer,
-            "frame" => frame
-          },
-          generation: bound_generation,
-          revision: revision,
-          fence: fence,
-          paused: paused,
-          marks: marks,
-          requests: requests,
-          history: history,
-          last_change: last_change
-        }
-      end
-
-    {:ok, actor, share, layer, now}
-  end
-
-  # The provider's v1 publication reference is the generation witness. A legacy
-  # reference may still be played, but cannot prove ownership for annotation.
-  defp generation_matches?("chalk_pub_v1." <> encoded, generation) do
-    with {:ok, payload} <- Base.url_decode64(encoded, padding: false),
-         {:ok, %{"g" => ^generation, "c" => connection, "t" => track, "m" => mid}} <-
-           JSON.decode(payload) do
-      Enum.all?([connection, track, mid], &(is_binary(&1) and &1 != ""))
-    else
-      _ -> false
-    end
-  end
-
-  defp generation_matches?(_publication, _generation), do: false
-
-  defp valid_layer(
-         %{
-           binding: %{"publication_id" => publication, "sharer_id" => owner},
-           generation: generation
-         } = layer,
-         %{publication: publication, owner: owner, generation: generation},
-         now
-       ),
-       do: Layer.prune(layer, now)
-
-  defp valid_layer(_layer, _share, _now), do: nil
-
-  defp commit(connection, identity, frame, context) do
-    with {:ok, actor, share, stored, now} <- read(connection, identity),
-         {:ok, expires} <- Protocol.operation_time(frame, now) do
-      layer = valid_layer(stored, share, now)
+  defp commit(connection, identity, frame, context, attachment) do
+    with {:ok, actor, share, stored, now} <- Authority.read(connection, identity),
+         {:ok, expires} <- Protocol.operation_time(frame, now),
+         layer = Authority.valid_layer(stored, share, now),
+         :ok <- authorize_attachment(layer, attachment, frame["command"], now) do
       actor = Map.put(actor, :operation_id, frame["operation_id"])
 
       case frame["command"] do
@@ -156,87 +61,102 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
     end
   end
 
+  defp authorize_attachment(_layer, nil, _command, _now), do: :ok
+
+  defp authorize_attachment(layer, attachment, command, now) do
+    if Attachment.matches?(layer, attachment, now) and Attachment.allowed_command?(command),
+      do: :ok,
+      else: {:error, "forbidden"}
+  end
+
   defp bind(connection, identity, state, actor, bind) do
     with %{owner: owner, generation: generation, publication: publication} <- state.share,
          true <-
            owner == actor.id and generation == actor.generation and
              publication == bind["publication_id"] do
-      if state.layer do
-        {:ok, accepted(state.layer)}
-      else
-        params = Store.context(identity)
-        id = UUID.generate()
-        trace = Observability.observed_operation_context(state.context)
-
-        if state.stored, do: Postgrex.query!(connection, SQL.delete_layer(), params, log: nil)
-
-        Postgrex.query!(
-          connection,
-          SQL.create_layer(),
-          params ++
-            [
-              Store.uuid(id),
-              publication,
-              Store.uuid(owner),
-              generation,
-              bind["frame"],
-              trace.producing_trace_id,
-              trace.producing_span_id
-            ],
-          log: nil
-        )
-
-        {:ok, %{"kind" => "accepted", "layer_id" => id, "revision" => 1}}
-      end
+      store_binding(connection, identity, state, actor, bind)
     else
       _ -> {:error, "invalid_target"}
     end
   end
 
-  defp mutate(_connection, _identity, nil, _actor, _frame, _command, _now, _expires),
+  defp store_binding(_connection, _identity, %{layer: %{} = layer}, _actor, _bind),
+    do: {:ok, accepted(layer)}
+
+  defp store_binding(connection, identity, state, actor, bind) do
+    params = Store.context(identity)
+    id = UUID.generate()
+    trace = Observability.observed_operation_context(state.context)
+
+    if state.stored, do: Postgrex.query!(connection, SQL.delete_layer(), params, log: nil)
+
+    Postgrex.query!(
+      connection,
+      SQL.create_layer(),
+      params ++
+        [
+          Store.uuid(id),
+          state.share.publication,
+          Store.uuid(actor.id),
+          actor.generation,
+          bind["frame"],
+          trace.producing_trace_id,
+          trace.producing_span_id
+        ],
+      log: nil
+    )
+
+    {:ok, %{"kind" => "accepted", "layer_id" => id, "revision" => 1}}
+  end
+
+  defp mutate(
+         connection,
+         identity,
+         %{binding: %{"layer_id" => id}} = layer,
+         actor,
+         %{"layer_id" => id} = frame,
+         command,
+         now,
+         expires
+       ) do
+    {:ok, operation_bytes} = Protocol.operation_bytes(frame["operation_id"])
+    key = [Store.uuid(id), Store.uuid(actor.id), actor.generation, operation_bytes]
+    fingerprint = Store.fingerprint(Map.take(frame, ["layer_id", "fence", "command"]))
+
+    case Postgrex.query!(connection, SQL.receipt(), key, log: nil).rows do
+      [[^fingerprint, revision]] ->
+        {:ok, %{"kind" => "accepted", "layer_id" => id, "revision" => revision}}
+
+      [[_different, _revision]] ->
+        {:error, "operation_id_conflict"}
+
+      [] ->
+        write_command(connection, identity, layer, actor, command, %{
+          key: key,
+          fingerprint: fingerprint,
+          fence: frame["fence"],
+          now: now,
+          expires: expires
+        })
+    end
+  end
+
+  defp mutate(_connection, _identity, _layer, _actor, _frame, _command, _now, _expires),
     do: {:error, "stale_layer"}
 
-  defp mutate(connection, identity, layer, actor, frame, command, now, expires) do
-    layer_id = layer.binding["layer_id"]
+  defp write_command(connection, identity, layer, actor, command, op) do
+    with true <- op.fence == layer.fence,
+         :ok <- receipt_capacity(connection, op.key, command, actor, layer, op.now),
+         {:ok, next} <- transition(connection, identity, layer, command, actor, op.now) do
+      Postgrex.query!(
+        connection,
+        SQL.store_receipt(),
+        op.key ++ [op.fingerprint, next.revision, op.expires], log: nil)
 
-    if frame["layer_id"] == layer_id do
-      {:ok, operation_bytes} = Protocol.operation_bytes(frame["operation_id"])
-
-      key = [
-        Store.uuid(layer_id),
-        Store.uuid(actor.id),
-        actor.generation,
-        operation_bytes
-      ]
-
-      fingerprint = Store.fingerprint(Map.take(frame, ["layer_id", "fence", "command"]))
-
-      case Postgrex.query!(connection, SQL.receipt(), key, log: nil).rows do
-        [[^fingerprint, revision]] ->
-          {:ok, %{"kind" => "accepted", "layer_id" => layer_id, "revision" => revision}}
-
-        [[_different, _revision]] ->
-          {:error, "operation_id_conflict"}
-
-        [] ->
-          with true <- frame["fence"] == layer.fence,
-               :ok <- receipt_capacity(connection, key, command, actor, layer, now),
-               {:ok, next} <- transition(connection, identity, layer, command, actor, now) do
-            Postgrex.query!(
-              connection,
-              SQL.store_receipt(),
-              key ++ [fingerprint, next.revision, expires],
-              log: nil
-            )
-
-            {:ok, accepted(next)}
-          else
-            false -> {:error, "stale_fence"}
-            failure -> failure
-          end
-      end
+      {:ok, accepted(next)}
     else
-      {:error, "stale_layer"}
+      false -> {:error, "stale_fence"}
+      failure -> failure
     end
   end
 
@@ -308,32 +228,34 @@ defmodule ChalkSync.ScreenAnnotation.Repository do
         end
 
       {:policy, policy} ->
-        if actor.draw_policy == policy do
-          {:ok, layer}
-        else
-          Postgrex.query!(
-            connection,
-            WhiteboardSQL.upsert_draw_policy(),
-            Store.context(identity) ++ [policy, Store.uuid(actor.id)],
-            log: nil
-          )
-
-          with :ok <- Store.notify_access(connection, identity) do
-            after_access_write(connection, identity)
-          end
-        end
+        store_policy(connection, identity, layer, actor, policy)
 
       failure ->
         failure
     end
   end
 
+  defp store_policy(_connection, _identity, layer, %{draw_policy: policy}, policy),
+    do: {:ok, layer}
+
+  defp store_policy(connection, identity, _layer, actor, policy) do
+    Postgrex.query!(
+      connection,
+      WhiteboardSQL.upsert_draw_policy(),
+      Store.context(identity) ++ [policy, Store.uuid(actor.id)],
+      log: nil
+    )
+
+    with :ok <- Store.notify_access(connection, identity),
+         do: after_access_write(connection, identity)
+  end
+
   defp validate_grant("hosts"), do: {:error, "forbidden"}
   defp validate_grant(_policy), do: :ok
 
   defp after_access_write(connection, identity) do
-    with {:ok, _actor, share, layer, now} <- read(connection, identity),
-         %{} = layer <- valid_layer(layer, share, now),
+    with {:ok, _actor, share, layer, now} <- Authority.read(connection, identity),
+         %{} = layer <- Authority.valid_layer(layer, share, now),
          do: {:ok, layer},
          else: (_ -> {:error, "stale_layer"})
   end

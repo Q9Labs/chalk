@@ -287,6 +287,21 @@ export interface components {
       readonly cursor: components["schemas"]["Cursor"] | null;
       readonly draft: components["schemas"]["Draft"] | null;
     };
+    readonly HelperChallenge: {
+      /** @enum {unknown} */
+      readonly type: "annotation_helper_challenge";
+      /** @enum {unknown} */
+      readonly version: 1;
+      readonly nonce: string;
+    };
+    readonly HelperAttach: {
+      /** @enum {unknown} */
+      readonly type: "annotation_helper_attach";
+      /** @enum {unknown} */
+      readonly version: 1;
+      readonly ticket: string;
+      readonly proof: string;
+    };
     readonly ClientFrame: components["schemas"]["ClientRequest"] | components["schemas"]["ClientCommand"] | components["schemas"]["ClientPresence"];
     readonly ServerFrame: components["schemas"]["ServerState"] | components["schemas"]["ServerChange"] | components["schemas"]["ServerClosed"] | components["schemas"]["ServerReceipt"] | components["schemas"]["ServerPresence"];
   };
@@ -304,6 +319,16 @@ export const screenAnnotationV1 = {
     query: "screen_annotation",
     version: 1,
     welcome: "screen_annotation",
+  },
+  helperAttachment: {
+    path: "/v1/screen-annotation/helper",
+    audience: "screen_annotation_helper_v1",
+    version: 1,
+    leaseMs: 60000,
+    proofDomain: "chalk.screen_annotation.helper.v1",
+    proof: "Ed25519 over UTF-8 proofDomain + LF + nonce + LF + base64url(SHA-256(ticket)), without padding",
+    confirmationKey: "cnf.jwk (OKP Ed25519)",
+    commands: ["commit", "erase", "undo", "redo", "clear", "pause"],
   },
   limits: {
     commandBytes: 16384,
@@ -1185,6 +1210,47 @@ export const screenAnnotationDefinitions = {
             type: "null",
           },
         ],
+      },
+    },
+  },
+  HelperChallenge: {
+    type: "object",
+    additionalProperties: false,
+    required: ["type", "version", "nonce"],
+    properties: {
+      type: {
+        enum: ["annotation_helper_challenge"],
+      },
+      version: {
+        enum: [1],
+      },
+      nonce: {
+        type: "string",
+        minLength: 43,
+        maxLength: 43,
+      },
+    },
+  },
+  HelperAttach: {
+    type: "object",
+    additionalProperties: false,
+    required: ["type", "version", "ticket", "proof"],
+    properties: {
+      type: {
+        enum: ["annotation_helper_attach"],
+      },
+      version: {
+        enum: [1],
+      },
+      ticket: {
+        type: "string",
+        minLength: 1,
+        maxLength: 4096,
+      },
+      proof: {
+        type: "string",
+        minLength: 86,
+        maxLength: 86,
       },
     },
   },
