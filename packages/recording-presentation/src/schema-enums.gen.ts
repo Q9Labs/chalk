@@ -21,4 +21,4 @@ export const THEME_PALETTES = [
   "oled-signal",
 ] as const;
 export const REACTIONS = ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"] as const;
-export const ASSET_KINDS = ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"] as const;
+export const ASSET_KINDS = ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font", "screen_annotation"] as const;

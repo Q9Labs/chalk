@@ -1,5 +1,6 @@
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
+import { webAnnotation } from "../../lib/screen-annotation";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -165,6 +166,7 @@ function OwnerCallSurface({
     );
   return (
     <Chalk
+      screenAnnotation={webAnnotation}
       {...props}
       client={client}
       timeLimit={{

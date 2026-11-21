@@ -13,11 +13,28 @@ final class ChalkWhiteboardAssets: NSObject {
     _ resolve: RCTPromiseResolveBlock,
     rejecter reject: RCTPromiseRejectBlock
   ) {
+    resolveRenderer(bundleName: "ChalkWhiteboard", folder: "chalk-whiteboard", resolve: resolve, reject: reject)
+  }
+
+  @objc(annotationRendererURL:rejecter:)
+  func annotationRendererURL(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    resolveRenderer(bundleName: "ChalkAnnotation", folder: "chalk-annotation", resolve: resolve, reject: reject)
+  }
+
+  private func resolveRenderer(
+    bundleName: String,
+    folder: String,
+    resolve: RCTPromiseResolveBlock,
+    reject: RCTPromiseRejectBlock
+  ) {
     let ownerBundle = Bundle(for: ChalkWhiteboardAssets.self)
     let candidates = [
-      ownerBundle.url(forResource: "ChalkWhiteboard", withExtension: "bundle"),
-      ownerBundle.resourceURL?.appendingPathComponent("ChalkWhiteboard.bundle"),
-      Bundle.main.url(forResource: "ChalkWhiteboard", withExtension: "bundle"),
+      ownerBundle.url(forResource: bundleName, withExtension: "bundle"),
+      ownerBundle.resourceURL?.appendingPathComponent("\(bundleName).bundle"),
+      Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
     ]
 
     for candidate in candidates.compactMap({ $0 }) {
@@ -25,7 +42,7 @@ final class ChalkWhiteboardAssets: NSObject {
       if let renderer = resources.url(
         forResource: "index",
         withExtension: "html",
-        subdirectory: "chalk-whiteboard"
+        subdirectory: folder
       ) {
         resolve(renderer.absoluteString)
         return
@@ -34,7 +51,7 @@ final class ChalkWhiteboardAssets: NSObject {
 
     reject(
       "renderer_asset_unavailable",
-      "ChalkWhiteboard.bundle does not contain chalk-whiteboard/index.html",
+      "\(bundleName).bundle does not contain \(folder)/index.html",
       nil
     )
   }

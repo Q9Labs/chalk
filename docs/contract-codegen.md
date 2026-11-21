@@ -16,3 +16,5 @@ Run `pnpm run regen` after changing a contract, route, migration or other genera
 Non-JSON attachment download operations stay in OpenAPI and the generated wire types but not in the generated JSON HTTP client. Consumers stream those responses over HTTP to keep the attachment headers.
 
 The default TypeScript client is Promise-based, and Effect is an optional subpath; see [effect-ts.md](effect-ts.md). Don't add empty language-SDK shells before a working client exists.
+
+The negotiated screen annotation extension uses [screen-annotation-v1.json](../contract/schema/screen-annotation-v1.json). The SDK generator emits its TypeScript payload types and Sync schema metadata. The [implementation plan](plans/screen-annotation.md) defines the contextual checks that the payload schema cannot express.

@@ -150,6 +150,25 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("finalizeWhiteboardFileUpload", "/v1/whiteboard/scenes/:sceneId/files/:fileId/finalize", {
+      params: S.FinalizeWhiteboardFileUploadPathParamsSchema,
+      payload: S.FinalizeWhiteboardFileUploadRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.WhiteboardInvalidFileErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardFileConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getChatAttachmentDownload", "/v1/chat/attachments/:attachmentId/download", {
       params: S.GetChatAttachmentDownloadPathParamsSchema,
       success: S.GetChatAttachmentDownloadResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -254,6 +273,25 @@ const defaultGroup = HttpApiGroup.make("default")
         S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ChatStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("initiateWhiteboardFileUpload", "/v1/whiteboard/scenes/:sceneId/files/:fileId/upload", {
+      params: S.InitiateWhiteboardFileUploadPathParamsSchema,
+      payload: S.InitiateWhiteboardFileUploadRequestBodySchema,
+      success: S.InitiateWhiteboardFileUploadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.WhiteboardInvalidFileErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardFileConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

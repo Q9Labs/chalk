@@ -1,3 +1,4 @@
+import { ScreenAnnotationFixture } from "./screen-annotation";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -41,6 +42,7 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
+  { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
   { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
   { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
   { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },

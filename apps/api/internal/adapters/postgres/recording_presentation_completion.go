@@ -163,6 +163,13 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 	if err := strictCompletionJSON([]byte(row.CapturePlansJson), &plans); err != nil {
 		return recordingpresentation.CompletionSource{}, completionSourceError("capture plans", err)
 	}
+	if row.ScreenAnnotationOverflow.Bool {
+		return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation exceeds recording limits", recordingpresentation.ErrInvalidCompletionSource)
+	}
+	var annotation []recordingpresentation.ScreenAnnotationFact
+	if err := strictCompletionJSON([]byte(row.ScreenAnnotationJson), &annotation); err != nil {
+		return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation", err)
+	}
 	var reactions []completionReactionWire
 	if err := strictCompletionJSON([]byte(row.ReactionsJson), &reactions); err != nil {
 		return recordingpresentation.CompletionSource{}, completionSourceError("reactions", err)
@@ -173,7 +180,7 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 		TenantID:           utilities.IDFromBytes(row.TenantID.Bytes), SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes),
 		EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), RecordingID: utilities.IDFromBytes(row.RecordingID.Bytes),
 		CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: timestamp(row.CaptureReadyAt), DurationMillis: row.DurationMillis,
-		Profile: profile, SpaceName: row.SpaceName,
+		Profile: profile, SpaceName: row.SpaceName, ScreenAnnotation: annotation,
 		EpisodeControlStartRevision:  row.EpisodeControlStartRevision,
 		EpisodeControlOriginRevision: row.EpisodeControlEndRevision,
 		ChatStartSequence:            row.ChatStartSequence,

@@ -9,10 +9,13 @@ import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { SignalBars } from "../participant-tile/ParticipantTile";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
+import { AnnotationSurface, type AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
+import type { ScreenAnnotationOptions } from "../screen-annotation/model";
 
 export type ScreenShareState = "live" | "connecting" | "paused" | "low-quality";
 export interface ScreenShareViewProps {
   readonly className?: string;
+  readonly annotation?: ScreenAnnotationOptions;
 }
 export interface ScreenSharePresentationProps extends ScreenShareViewProps {
   readonly sharedByName: string;
@@ -31,14 +34,41 @@ export interface ScreenSharePresentationProps extends ScreenShareViewProps {
   readonly onStopSharing?: () => Promise<void>;
   readonly onChangeShare?: (options: ScreenShareOptions) => Promise<void>;
   readonly switcher?: React.ReactNode;
+  /** Present only for a live track-backed surface, never recording playback. */
+  readonly annotationMedia?: AnnotationPresentationContext & {
+    readonly track: MediaStreamTrack;
+    readonly videoRef: React.RefObject<HTMLVideoElement | null>;
+  };
 }
-export interface ScreenShareViewSurfaceProps extends Omit<ScreenSharePresentationProps, "media" | "mediaVisible"> {
+export interface ScreenShareViewSurfaceProps extends Omit<ScreenSharePresentationProps, "media" | "mediaVisible" | "annotationMedia"> {
   readonly screenShareTrack: MediaStreamTrack;
+  readonly annotationContext?: AnnotationPresentationContext;
 }
 
 /** Stable media layer: connecting/paused chrome never removes the video or its last decoded frame. */
-export function ScreenSharePresentation({ sharedByName, media, mediaVisible, state, isLocal = false, hasAudio = false, capture, primary = true, pinned, hidden, style, onClick, onDoubleClick, onStopSharing, onChangeShare, switcher, className }: ScreenSharePresentationProps): React.JSX.Element {
+export function ScreenSharePresentation({
+  sharedByName,
+  media,
+  mediaVisible,
+  state,
+  isLocal = false,
+  hasAudio = false,
+  capture,
+  primary = true,
+  pinned,
+  hidden,
+  style,
+  onClick,
+  onDoubleClick,
+  onStopSharing,
+  onChangeShare,
+  switcher,
+  className,
+  annotation,
+  annotationMedia,
+}: ScreenSharePresentationProps): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
+  const [canvasHost, setCanvasHost] = useState<HTMLDivElement | null>(null);
   const [fill, setFill] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [poppedOut, setPoppedOut] = useState(false);
@@ -114,12 +144,14 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       >
         <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[ease-out]", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
           <div
-            className={cn("h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[ease-out] [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
+            className={cn("relative h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[ease-out] [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
             style={{ transform: zoom ? "scale(2)" : undefined }}
           >
             {media}
+            {annotation && annotationMedia ? <div ref={setCanvasHost} className="pointer-events-none absolute inset-0" /> : null}
           </div>
         </div>
+        {annotation && annotationMedia && !hidden ? <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} /> : null}
         {poppedOut ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
             <StageIcon name="pip" size={32} />
@@ -222,10 +254,11 @@ function ShareControl({ label, pressed, onClick, children }: { readonly label: s
     </button>
   );
 }
-export function ScreenShareViewSurface({ screenShareTrack, ...props }: ScreenShareViewSurfaceProps): React.JSX.Element {
+export function ScreenShareViewSurface({ screenShareTrack, annotationContext, ...props }: ScreenShareViewSurfaceProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
   const status = useVideoTrack(videoRef, screenShareTrack, !props.hidden);
-  return <ScreenSharePresentation {...props} state={props.state ?? (status === "muted" ? "paused" : undefined)} media={<video ref={videoRef} autoPlay playsInline muted />} mediaVisible={status === "playing" || status === "muted"} />;
+  const annotationMedia = props.annotation && annotationContext ? { ...annotationContext, track: screenShareTrack, videoRef } : undefined;
+  return <ScreenSharePresentation {...props} annotationMedia={annotationMedia} state={props.state ?? (status === "muted" ? "paused" : undefined)} media={<video ref={videoRef} autoPlay playsInline muted />} mediaVisible={status === "playing" || status === "muted"} />;
 }
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
   const client = useSpaceClient();
@@ -245,6 +278,8 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
   return (
     <ScreenShareViewSurface
       {...props}
+      annotation={props.annotation && (active.isLocal || props.annotation.publicationId === active.screenSharePublicationId) ? props.annotation : undefined}
+      annotationContext={self.participantId ? { actorId: self.participantId, actorName: self.displayName ?? "You" } : undefined}
       screenShareTrack={active.screenShareTrack}
       sharedByName={active.displayName}
       isLocal={active.isLocal}

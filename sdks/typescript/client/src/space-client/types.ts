@@ -178,7 +178,12 @@ export type MediaSlice = {
   };
   readonly local: Readonly<Record<MediaSource, LocalMedia>>;
   readonly remote: readonly RemoteMedia[];
-  readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
+  readonly screenShare: LocalMedia & {
+    readonly hasAudio?: boolean;
+    readonly capture?: ScreenShareCapture;
+    /** The observed screen-video publication for this exact local track, absent during recovery or replacement. */
+    readonly publicationId?: string;
+  };
   readonly incomingRequests: readonly IncomingMediaRequest[];
   /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
   readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];

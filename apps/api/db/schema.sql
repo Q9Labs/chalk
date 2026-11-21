@@ -1258,6 +1258,7 @@ create table sync_whiteboard_files (
     immutable_object_identity text,
     expires_at timestamptz not null,
     finalized_at timestamptz,
+    referenced_at timestamptz,
     cleanup_claim_token uuid,
     cleanup_claimed_until timestamptz,
     cleanup_attempts integer not null default 0,
@@ -1296,6 +1297,32 @@ create index sync_whiteboard_files_pending_cleanup_idx
     where status in ('pending', 'finalizing', 'failed');
 create index sync_whiteboard_files_space_cleanup_idx
     on sync_whiteboard_files(tenant_id, space_id, cleanup_claimed_until);
+
+create view sync_whiteboard_file_writers as
+select participant.tenant_id, participant.space_id, participant.episode_id,
+       participant.id as participant_id, participant.generation as participant_generation,
+       scene.scene_id
+from participants participant
+join episodes episode
+    on (episode.tenant_id, episode.space_id, episode.id) =
+       (participant.tenant_id, participant.space_id, participant.episode_id)
+join sync_whiteboard_scenes scene
+    on (scene.tenant_id, scene.space_id, scene.episode_id) =
+       (participant.tenant_id, participant.space_id, participant.episode_id)
+left join sync_whiteboard_permissions permission
+    on (permission.tenant_id, permission.space_id, permission.episode_id, permission.participant_id) =
+       (participant.tenant_id, participant.space_id, participant.episode_id, participant.id)
+left join sync_whiteboard_draw_policies policy
+    on (policy.tenant_id, policy.space_id, policy.episode_id) =
+       (participant.tenant_id, participant.space_id, participant.episode_id)
+where participant.status = 'active' and episode.status = 'active' and scene.is_current
+    -- Same effective drawing rule as ChalkSync.WhiteboardV1.SQL.lock_authority/0.
+    and case coalesce(policy.policy, 'everyone')
+        when 'hosts' then 'manageWhiteboard' = any(participant.capabilities)
+        when 'picked' then 'manageWhiteboard' = any(participant.capabilities)
+            or coalesce(permission.can_draw, false)
+        else coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities))
+    end;
 
 create table sync_episode_control (
     tenant_id uuid not null,
@@ -3922,7 +3949,7 @@ create table recording_presentation_assets (
     recording_id uuid not null,
     ordinal smallint not null check (ordinal between 0 and 255),
     asset_id text not null check (octet_length(asset_id) between 1 and 512),
-    asset_kind text not null check (asset_kind in ('logo', 'avatar', 'chat_attachment', 'whiteboard_state', 'whiteboard_file', 'font')),
+    asset_kind text not null check (asset_kind in ('logo', 'avatar', 'chat_attachment', 'whiteboard_state', 'whiteboard_file', 'font', 'screen_annotation')),
     object_key text not null check (octet_length(object_key) between 1 and 1024),
     object_version text not null check (octet_length(object_version) <= 1024),
     object_etag text not null check (octet_length(object_etag) between 1 and 512),
@@ -5264,3 +5291,41 @@ create table participant_media_sessions (
 );
 create index participant_media_sessions_participant_idx
     on participant_media_sessions(tenant_id, episode_id, participant_id, generation);
+
+create table recording_screen_annotation_layers (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    recording_id uuid not null references recordings(id) on delete cascade,
+    capture_epoch bigint not null,
+    layer_id uuid not null,
+    publication_id text not null,
+    sharer_generation bigint not null,
+    layer jsonb not null,
+    initial_at_ms bigint not null,
+    initial_revision bigint not null,
+    initial_paused boolean not null,
+    initial_marks jsonb not null,
+    closed_at_ms bigint,
+    primary key (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id),
+    check (octet_length(initial_marks::text) <= 1048576)
+);
+create index recording_annotation_active_layer_idx
+    on recording_screen_annotation_layers (tenant_id, space_id, episode_id, layer_id)
+    where closed_at_ms is null;
+
+create table recording_screen_annotation_changes (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    recording_id uuid not null,
+    capture_epoch bigint not null,
+    layer_id uuid not null,
+    revision bigint not null,
+    at_ms bigint not null,
+    change jsonb not null check (octet_length(change::text) <= 32768),
+    primary key (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id, revision),
+    foreign key (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id)
+        references recording_screen_annotation_layers(tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id)
+        on delete cascade
+);

@@ -8,7 +8,9 @@ import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } fr
 import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
-import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
+import { annotationServerFrame } from "../screen-annotation/codec";
+import { AnnotationReplica } from "../screen-annotation/replica";
+import { encodeV1ClientFrame, decodeV1ServerValue } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
 import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
@@ -121,6 +123,16 @@ export class V1SyncClient implements V1CollaborationClient {
   #offReasonNegotiated = false;
   /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
   #connectionQualityNegotiated = false;
+  #annotationNegotiated = false;
+  readonly annotation = new AnnotationReplica((wire) => {
+    if (!this.#socket || this.#phase.phase !== "live" || !this.#annotationNegotiated) return false;
+    try {
+      this.#socket.send(wire);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -236,6 +248,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket?.close(1000, "client stopped");
     this.#socket = null;
     this.#phase = { phase: "stopped" };
+    this.annotation.disconnected(true);
     this.#options.mediaPlane?.remotePublicationsChanged?.([], "unavailable");
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
@@ -436,6 +449,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = false;
     this.#offReasonNegotiated = false;
     this.#connectionQualityNegotiated = false;
+    this.#annotationNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -532,9 +546,16 @@ export class V1SyncClient implements V1CollaborationClient {
   async #receive(socket: V1Socket, data: unknown): Promise<void> {
     if (socket !== this.#socket) return;
     try {
-      if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
-      const frame = decodeV1ServerFrame(data);
-      await this.#handleFrame(frame);
+      if (typeof data !== "string") throw new V1ReplicaError("invalid inbound frame size");
+      const size = encoder.encode(data).byteLength;
+      if (size > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
+      const value: unknown = JSON.parse(data);
+      const annotation = annotationServerFrame(value, size);
+      if (annotation) {
+        if (this.#annotationNegotiated && this.#phase.phase === "live") this.annotation.receive(annotation);
+        return;
+      }
+      await this.#handleFrame(decodeV1ServerValue(value));
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
@@ -677,6 +698,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#connectionQualityNegotiated = frame.connection_quality === true;
+    this.#annotationNegotiated = frame.screen_annotation === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -806,6 +828,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
     if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
+    this.annotation.enterLive(this.#annotationNegotiated);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -850,6 +873,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#options.mediaPlane?.remotePublicationsChanged?.([], this.#mediaEnded() ? "available" : "unavailable");
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
+    this.annotation.disconnected(this.#phase.phase === "terminal");
     if (!this.#started || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -1062,6 +1086,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#timers.cancel("noticeProbe");
   }
   #emit(): void {
+    if (this.#phase.phase === "terminal") this.annotation.disconnected(true);
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }

@@ -34,10 +34,16 @@ export { AdmissionPanel } from "./admission-panel/AdmissionPanel";
 export type { AdmissionPanelProps, AdmissionParticipant } from "./admission-panel/AdmissionPanel";
 export { ReactionsOverlay } from "./composite/ReactionsOverlay";
 export type { ReactionsOverlayProps } from "./composite/ReactionsOverlay";
-export { ScreenShareView } from "./composite/ScreenShareView";
-export type { ScreenShareViewProps } from "./composite/ScreenShareView";
+export { ScreenShareView, ScreenShareViewSurface } from "./composite/ScreenShareView";
+export type { ScreenShareViewProps, ScreenShareViewSurfaceProps } from "./composite/ScreenShareView";
 export { Logo } from "./logo/Logo";
 export type { LogoProps, LogoVariant } from "./logo/Logo";
 
 export { CallLimbo } from "./call-limbo/CallLimbo";
 export type { CallLimboProps } from "./call-limbo/CallLimbo";
+
+export { ScreenAnnotationLayer } from "./screen-annotation/ScreenAnnotationLayer";
+export type { ScreenAnnotationLayerProps } from "./screen-annotation/ScreenAnnotationLayer";
+export { ScreenAnnotationToolbar } from "./screen-annotation/ScreenAnnotationToolbar";
+export type { ScreenAnnotationToolbarProps } from "./screen-annotation/ScreenAnnotationToolbar";
+export type { AnnotationBrush, AnnotationTool, ScreenAnnotationActions, ScreenAnnotationFrame, ScreenAnnotationOptions, ScreenAnnotationSetup, ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./screen-annotation/model";

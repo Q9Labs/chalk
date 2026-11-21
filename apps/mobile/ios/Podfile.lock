@@ -81,8 +81,9 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
-  - Q9ChalkReactNative (4.0.1):
+  - Q9ChalkReactNative (5.5.0):
     - React-Core
+    - RTKWebRTC (= 125.6422.07)
   - RCTDeprecation (0.83.2)
   - RCTRequired (0.83.2)
   - RCTSwiftUI (0.83.2)
@@ -2334,7 +2335,7 @@ SPEC CHECKSUMS:
   ExpoSplashScreen: ab4d4c72364d5f60ca91c5b44ce00ec65a8a5950
   FBLazyVector: 32e9ed0301d0fcbc1b2b341dd7fcbf291f51eb83
   hermes-engine: a1b65c0ae6af9e77e4912fa76b7a8f3da93c7966
-  Q9ChalkReactNative: 715000ae5df0a25379cfdb6fee7a8e2ffeec2628
+  Q9ChalkReactNative: dfcbaa0363bd378b25b5204b0d70cef08b52bf76
   RCTDeprecation: a522c536d2c7be8f518dd834883cf6dce1d4f545
   RCTRequired: 44337def23abb244c025e9e7ab58f9cd3d63ec7d
   RCTSwiftUI: b2f0c2f2761631b8cd605767536cbb1cbf8d020f

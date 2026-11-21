@@ -75,3 +75,20 @@ export { CallReady, type CallReadyProps } from "./components/call-limbo/CallRead
 export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";
 
 export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";
+
+export { ScreenShareView, ScreenShareViewSurface, ScreenAnnotationLayer, ScreenAnnotationToolbar } from "./components";
+export type {
+  ScreenShareViewProps,
+  ScreenShareViewSurfaceProps,
+  ScreenAnnotationLayerProps,
+  ScreenAnnotationToolbarProps,
+  ScreenAnnotationOptions,
+  ScreenAnnotationSetup,
+  ScreenAnnotationHelper,
+  ScreenAnnotationHelperShare,
+  ScreenAnnotationHelperStatus,
+  ScreenAnnotationActions,
+  ScreenAnnotationFrame,
+  AnnotationBrush,
+  AnnotationTool,
+} from "./components";

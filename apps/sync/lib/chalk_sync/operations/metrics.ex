@@ -20,7 +20,9 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :retention, :cleanup],
     [:chalk, :sync, :live_target, :stage],
     [:chalk, :sync, :entry, :stage],
-    [:chalk, :sync, :direct, :admission]
+    [:chalk, :sync, :direct, :admission],
+    [:chalk, :sync, :annotation, :command],
+    [:chalk, :sync, :annotation, :attachment]
   ]
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error

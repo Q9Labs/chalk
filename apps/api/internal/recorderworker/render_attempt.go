@@ -304,6 +304,14 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		DecodedMediaSHA256: decoded.IndexSHA256, Width: timeline.Initial.Profile.Viewport.Width, Height: timeline.Initial.Profile.Viewport.Height,
 		FPS: nativeRenderFPS, DurationMs: resolved.DurationMillis,
 	}
+	for _, asset := range timeline.Assets {
+		if asset.Kind == recordingpresentation.ScreenAnnotationAssetKind {
+			if frameRequest.AnnotationSidecar != nil {
+				return fmt.Errorf("%w: multiple frozen screen annotation assets", ErrInvalidProductionRenderAttempt)
+			}
+			frameRequest.AnnotationSidecar = &FrameAnnotationSidecar{Path: filepath.Join(assetDirectory, asset.SHA256), SHA256: asset.SHA256}
+		}
+	}
 	expected, err := attempt.renderVideo(ctx, frameRequest, videoPath)
 	if err != nil {
 		return err

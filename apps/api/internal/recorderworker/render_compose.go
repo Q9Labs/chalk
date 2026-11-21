@@ -107,6 +107,9 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 
 	args := []string{producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--output", output,
 		"--ffmpeg", producer.FFmpegPath, "--encoder", string(producer.Encoder), "--threads", strconv.Itoa(producer.Threads)}
+	if sidecar := request.AnnotationSidecar; sidecar != nil {
+		args = append(args, "--annotation-sidecar", sidecar.Path, "--annotation-sha256", sidecar.SHA256)
+	}
 	command := exec.CommandContext(ctx, producer.NodePath, args...)
 	isolateProcessGroup(command)
 	command.WaitDelay = 3 * time.Second

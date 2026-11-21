@@ -1217,6 +1217,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/whiteboard/scenes/{sceneId}/files/{fileId}/finalize": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Finalize whiteboard file upload */
+    post: operations["finalizeWhiteboardFileUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/whiteboard/scenes/{sceneId}/files/{fileId}/upload": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Initiate whiteboard file upload */
+    post: operations["initiateWhiteboardFileUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1756,10 +1790,18 @@ export interface components {
         message: string;
       };
     };
+    FinalizeWhiteboardFileUploadRequest: {
+      sha256: string;
+    };
     InitiateChatAttachmentUploadRequest: {
       byteLength: number;
       clientAttachmentId: string;
       fileName: string;
+      mimeType: string;
+      sha256: string;
+    };
+    InitiateWhiteboardFileUploadRequest: {
+      byteLength: number;
       mimeType: string;
       sha256: string;
     };
@@ -3209,6 +3251,14 @@ export interface components {
     WhiteboardFileDownload: {
       downloadUrl: string;
       expiresAt: string;
+    };
+    WhiteboardFileUpload: {
+      expiresAt?: string;
+      headers?: {
+        [key: string]: string;
+      };
+      ready: boolean;
+      uploadUrl?: string;
     };
   };
   responses: never;
@@ -11216,6 +11266,226 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Bad Gateway */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  finalizeWhiteboardFileUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        sceneId: string;
+        fileId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FinalizeWhiteboardFileUploadRequest"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Bad Gateway */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  initiateWhiteboardFileUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        sceneId: string;
+        fileId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InitiateWhiteboardFileUploadRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WhiteboardFileUpload"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
         headers: {
           [name: string]: unknown;
         };

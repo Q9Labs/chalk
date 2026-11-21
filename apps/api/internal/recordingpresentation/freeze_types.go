@@ -77,6 +77,7 @@ type CompletionSource struct {
 	CapturePlanStartRevision int64
 	CapturePlans             []CapturePlanFact
 	Reactions                []ReactionFact
+	ScreenAnnotation         []ScreenAnnotationFact
 
 	BaselineControlState json.RawMessage
 }

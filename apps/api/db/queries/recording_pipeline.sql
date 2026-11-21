@@ -1342,7 +1342,21 @@ order by terminal_at desc, id desc
 limit sqlc.arg(limit_count)::integer;
 
 -- name: ExpireRecordingReservations :many
-with expired_preparations as (
+with expired_annotations as (
+    delete from recording_screen_annotation_layers layer
+    where (layer.tenant_id, layer.space_id, layer.episode_id, layer.recording_id, layer.capture_epoch, layer.layer_id) in (
+        select layer.tenant_id, layer.space_id, layer.episode_id, layer.recording_id, layer.capture_epoch, layer.layer_id
+        from recording_screen_annotation_layers layer
+        join recording_jobs job
+          on job.tenant_id = layer.tenant_id and job.recording_id = layer.recording_id and job.kind = 'capture'
+        join episodes episode
+          on episode.tenant_id = layer.tenant_id and episode.space_id = layer.space_id and episode.id = layer.episode_id
+        where job.state = 'terminal_failure'
+          and job.terminal_at + recording_deferred_retention_seconds(episode.config_snapshot) * interval '1 second' <= sqlc.arg(now)::timestamptz
+        order by job.terminal_at, layer.recording_id, layer.capture_epoch, layer.layer_id
+        limit 256
+    )
+), expired_preparations as (
     update recording_preparations
     set state = 'expired', revision = revision + 1, updated_at = sqlc.arg(now)::timestamptz
     where state = 'scheduled' and starts_at <= sqlc.arg(now)::timestamptz - interval '5 minutes'

@@ -4,10 +4,12 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { deriveRecordingMediaSourceId, parseRecordingPresentationTimelineV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import { parseDecodedMediaIndexV1, type DecodedMediaIndexV1 } from "../decoded-media.js";
+import { parseRecordingAnnotation, type BoundAnnotationLayer } from "../compose/annotation-sidecar.js";
 import type { ComposeRequestV1 } from "./request.js";
 
 const MAXIMUM_PRESENTATION_BYTES = 64 << 20;
 const MAXIMUM_DECODED_INDEX_BYTES = 16 << 20;
+const MAXIMUM_ANNOTATION_BYTES = 32 << 20;
 
 export interface VerifiedFileBinding {
   readonly path: string;
@@ -22,9 +24,15 @@ export interface VerifiedRenderInputs {
   readonly assets: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mediaFiles: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mixPath: string;
+  readonly annotation: readonly BoundAnnotationLayer[];
 }
 
-export async function loadVerifiedRenderInputs(request: ComposeRequestV1): Promise<VerifiedRenderInputs> {
+export interface AnnotationInputFile {
+  readonly path: string;
+  readonly sha256: string;
+}
+
+export async function loadVerifiedRenderInputs(request: ComposeRequestV1, annotationFile?: AnnotationInputFile): Promise<VerifiedRenderInputs> {
   const workspaceDirectory = await realpath(request.workspaceDirectory);
   const presentationPath = await confinedRealPath(workspaceDirectory, request.presentationPath);
   const decodedMediaPath = await confinedRealPath(workspaceDirectory, request.decodedMediaPath);
@@ -53,7 +61,23 @@ export async function loadVerifiedRenderInputs(request: ComposeRequestV1): Promi
   const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
   await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
 
-  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath };
+  const frozenAnnotation = timeline.assets.filter((asset) => asset.kind === "screen_annotation");
+  if (frozenAnnotation.length > 1) throw new TypeError("multiple frozen screen annotation assets");
+  const annotationAsset = frozenAnnotation[0];
+  if (annotationAsset && annotationFile && annotationAsset.sha256 !== annotationFile.sha256) throw new TypeError("recording annotation does not match the frozen asset");
+  const annotationInput = annotationAsset ? { path: join(assetDirectory, annotationAsset.sha256), sha256: annotationAsset.sha256 } : annotationFile;
+  const annotation = annotationInput === undefined ? [] : await loadAnnotation(workspaceDirectory, annotationInput, timeline);
+  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath, annotation };
+}
+
+async function loadAnnotation(workspace: string, file: AnnotationInputFile, timeline: RecordingPresentationTimelineV1): Promise<readonly BoundAnnotationLayer[]> {
+  const path = await confinedRealPath(workspace, file.path);
+  const value = await readVerifiedJson(path, file.sha256, MAXIMUM_ANNOTATION_BYTES, "recording annotation sidecar");
+  const sources = new Map(timeline.initial.media.map((source) => [source.sourceId, source]));
+  for (const event of timeline.events) {
+    if (event.kind === "media_source_changed") sources.set(event.source.sourceId, event.source);
+  }
+  return parseRecordingAnnotation(value, { recordingId: timeline.recordingId, episodeId: timeline.episodeId, originAuthorityId: timeline.clock.originAuthorityId, captureEpoch: timeline.clock.captureEpoch, sources });
 }
 
 async function validateSharedAuthority(request: ComposeRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): Promise<void> {

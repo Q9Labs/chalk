@@ -41,6 +41,38 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
     end
   end
 
+  def reference_files(connection, identity, scene_id, elements) do
+    file_ids =
+      elements
+      |> Enum.flat_map(fn
+        %{
+          "type" => "image",
+          "is_deleted" => false,
+          "payload" => %{"fileId" => id, "status" => "saved"}
+        }
+        when is_binary(id) ->
+          [id]
+
+        _ ->
+          []
+      end)
+      |> Enum.uniq()
+
+    case file_ids do
+      [] ->
+        :ok
+
+      ids ->
+        params = Store.context(identity) ++ [Store.uuid(scene_id), ids]
+
+        case Postgrex.query(connection, SQL.reference_files(), params) do
+          {:ok, %Postgrex.Result{rows: [[count]]}} when count == length(ids) -> :ok
+          {:ok, _result} -> {:error, :invalid_payload}
+          {:error, _error} -> {:retryable, :storage_unavailable}
+        end
+    end
+  end
+
   def advance_scene(connection, identity, scene_id) do
     params = Store.context(identity) ++ [Store.uuid(scene_id)]
 

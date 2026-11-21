@@ -13,7 +13,8 @@ Pod::Spec.new do |spec|
   spec.source = { :git => "https://github.com/Q9Labs/chalk.git", :tag => spec.version.to_s }
   spec.source_files = "ios/**/*.{h,m,mm,swift}"
   spec.resource_bundles = {
-    "ChalkWhiteboard" => ["embedded/chalk-whiteboard"]
+    "ChalkWhiteboard" => ["embedded/chalk-whiteboard"],
+    "ChalkAnnotation" => ["embedded/chalk-annotation"]
   }
   spec.requires_arc = true
   spec.swift_version = "5.0"
@@ -24,4 +25,5 @@ Pod::Spec.new do |spec|
   }
 
   spec.dependency "React-Core"
+  spec.dependency "RTKWebRTC", "125.6422.07"
 end

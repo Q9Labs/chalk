@@ -978,6 +978,35 @@ type RecordingReservation struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingScreenAnnotationChange struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+	RecordingID  pgtype.UUID `json:"recording_id"`
+	CaptureEpoch int64       `json:"capture_epoch"`
+	LayerID      pgtype.UUID `json:"layer_id"`
+	Revision     int64       `json:"revision"`
+	AtMs         int64       `json:"at_ms"`
+	Change       []byte      `json:"change"`
+}
+
+type RecordingScreenAnnotationLayer struct {
+	TenantID         pgtype.UUID `json:"tenant_id"`
+	SpaceID          pgtype.UUID `json:"space_id"`
+	EpisodeID        pgtype.UUID `json:"episode_id"`
+	RecordingID      pgtype.UUID `json:"recording_id"`
+	CaptureEpoch     int64       `json:"capture_epoch"`
+	LayerID          pgtype.UUID `json:"layer_id"`
+	PublicationID    string      `json:"publication_id"`
+	SharerGeneration int64       `json:"sharer_generation"`
+	Layer            []byte      `json:"layer"`
+	InitialAtMs      int64       `json:"initial_at_ms"`
+	InitialRevision  int64       `json:"initial_revision"`
+	InitialPaused    bool        `json:"initial_paused"`
+	InitialMarks     []byte      `json:"initial_marks"`
+	ClosedAtMs       pgtype.Int8 `json:"closed_at_ms"`
+}
+
 type RecordingTranscriptionPreparationCommit struct {
 	TranscriptionJobID    pgtype.UUID        `json:"transcription_job_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
@@ -1540,11 +1569,21 @@ type SyncWhiteboardFile struct {
 	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
 	FinalizedAt             pgtype.Timestamptz `json:"finalized_at"`
+	ReferencedAt            pgtype.Timestamptz `json:"referenced_at"`
 	CleanupClaimToken       pgtype.UUID        `json:"cleanup_claim_token"`
 	CleanupClaimedUntil     pgtype.Timestamptz `json:"cleanup_claimed_until"`
 	CleanupAttempts         int32              `json:"cleanup_attempts"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardFileWriter struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	SceneID               pgtype.UUID `json:"scene_id"`
 }
 
 type SyncWhiteboardOperationReceipt struct {

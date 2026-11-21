@@ -7,3 +7,5 @@ export type { DevScenario } from "./dev-scenario";
 export type { AudioRoute, AudioRouteKind, AudioRoutes } from "./dock/audio-route";
 export { setMeasurementRegistry } from "./frame/measurement";
 export type { MeasuredFrame, Measurement, MeasurementRegistry } from "./frame/measurement";
+
+export { annotationRendererUrl } from "./screen-annotation/renderer-url";
