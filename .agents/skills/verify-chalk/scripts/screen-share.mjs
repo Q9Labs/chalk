@@ -2,7 +2,7 @@
 // Drives share → stop → share again in real browsers. One sharer and viewers, each in Chromium or WebKit; the viewers must see the
 // shared screen as live video, the tile must disappear when the sharer stops, and come back when they share again.
 //
-//   node .agents/skills/verify-chalk/scripts/screen-share.mjs <run-id> [--web <origin>] [--sharer chromium|webkit] [--viewers webkit,chromium] [--fault]
+//   node .agents/skills/verify-chalk/scripts/screen-share.mjs <run-id> [--web <origin>] [--sharer chromium|webkit] [--viewers webkit,chromium] [--fault] [--devices on|off] [--stop-via toolbar|pill]
 //
 // --fault answers the sharer's first SFU "tracks_close" signal after the share is live with HTTP 404 (without forwarding it), as when the
 // SFU session is already gone. The stop must still succeed. Chromium's sharer captures its fake screen. WebKit has no automatable display
@@ -18,6 +18,7 @@ const option = (name, fallback) => {
 const sharerEngine = option("--sharer", "chromium");
 const viewerEngines = option("--viewers", "webkit").split(",");
 const fault = process.argv.includes("--fault");
+const devices = option("--devices", "on"); // "on": the sharer's microphone and camera are on while sharing, as in a class; "off": the share is the only published media
 const stopVia = option("--stop-via", "toolbar"); // the toolbar toggle, or the "Stop sharing" pill on the stage
 const waitMs = 60_000;
 const stopMs = 20_000;
@@ -172,6 +173,14 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
       note("sharer capture support", capture);
       return { sharer: sharerEngine, viewers: viewerEngines, capture };
     });
+    if (devices === "on") {
+      await step("the sharer turns on microphone and camera", async () => {
+        await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
+        for (const name of ["Unmute microphone", "Turn on camera"]) await sharer.page.getByRole("button", { name, exact: true }).click();
+        for (const name of ["Mute microphone", "Turn off camera"]) await sharer.page.getByRole("button", { name, exact: true }).waitFor({ timeout: 15_000 });
+        await sharer.page.waitForTimeout(3000);
+      });
+    }
     await step("the sharer shares their screen and every viewer sees live video", async () => {
       await startShare();
       const seen = await everyoneSeesShare("1-sharing");
