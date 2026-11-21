@@ -12,8 +12,7 @@ export const kmsKeyProvider = Provider.effect(
   AWS.KMS.Key,
   Effect.gen(function* () {
     const upstream = yield* Provider.findProvider(AWS.KMS.Key);
-    const read: NonNullable<Provider.ProviderService<AWS.KMS.Key>["read"]> = (input) =>
-      upstream.read ? upstream.read(input).pipe(Effect.map((live) => keepRecordedPolicy(live, input.output?.policy))) : Effect.undefined;
+    const read: NonNullable<Provider.ProviderService<AWS.KMS.Key>["read"]> = (input) => (upstream.read ? upstream.read(input).pipe(Effect.map((live) => keepRecordedPolicy(live, input.output?.policy))) : Effect.undefined);
     return { ...upstream, read };
   }),
 );
