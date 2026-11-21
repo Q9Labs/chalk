@@ -28,7 +28,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Observe the first remote mark without widening the call subscription; abort the attachment with this publication.
   useEffect(() => {
-    const unsubscribe = client.subscribe(() => {
+    const observe = () => {
       const snapshot = client.getSnapshot();
       if (snapshot.status !== "ready" || snapshot.state?.layer.layer_id !== state.layer.layer_id) {
         attempt.current?.abort();
@@ -38,7 +38,9 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       const preview = snapshot.presence.find((peer) => peer.author.participant_id !== actorId && (peer.draft || peer.cursor?.tool === "pointer"));
       const name = active?.author.display_name ?? preview?.author.display_name;
       if (!snapshot.state.paused && name) setDrawing((prior) => prior ?? name);
-    });
+    };
+    const unsubscribe = client.subscribe(observe);
+    observe();
     return () => {
       unsubscribe();
       attempt.current?.abort();

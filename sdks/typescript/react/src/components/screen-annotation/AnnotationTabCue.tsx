@@ -38,7 +38,7 @@ export function AnnotationTabCue({ client, publicationId, sharerId }: { readonly
           icon = document.createElement("link");
           icon.rel = "icon";
           icon.href = penIcon;
-          document.head.append(icon);
+          document.head.appendChild(icon);
         }
       }
       clearTimeout(timer);

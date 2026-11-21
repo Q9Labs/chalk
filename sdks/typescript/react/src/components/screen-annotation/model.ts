@@ -1,20 +1,10 @@
+import type { ScreenAnnotationActions as SharedActions, ScreenAnnotationFrame as SharedFrame } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 
 export type AnnotationAuthor = ScreenAnnotationMark["author"];
 
-/** A detached, pristine copy of the decoded frame and its accepted ink at action time. */
-export interface ScreenAnnotationFrame {
-  readonly publicationId: string;
-  readonly size: ScreenAnnotationFrameSize;
-  readonly video: HTMLCanvasElement;
-  readonly marks: readonly ScreenAnnotationMark[];
-  readonly nowMs: number;
-}
-
-export interface ScreenAnnotationActions {
-  readonly saveToWhiteboard?: (frame: ScreenAnnotationFrame) => Promise<void>;
-  readonly downloadPng?: (frame: ScreenAnnotationFrame) => Promise<void>;
-}
+export type ScreenAnnotationFrame = SharedFrame<HTMLCanvasElement>;
+export type ScreenAnnotationActions = SharedActions<HTMLCanvasElement>;
 
 export interface ScreenAnnotationOptions {
   readonly client: ScreenAnnotationClient;
@@ -58,18 +48,6 @@ export function matchesTarget(client: ScreenAnnotationClient, target: ScreenAnno
 
 export function visibleMarks(state: ScreenAnnotationState, nowMs: number): readonly ScreenAnnotationMark[] {
   return state.marks.filter((mark) => (!state.paused || mark.author.participant_id === state.layer.sharer_id) && (mark.expires_at_ms === null || mark.expires_at_ms > nowMs));
-}
-
-export function freezeFrame(video: HTMLVideoElement, state: ScreenAnnotationState, nowMs: number): ScreenAnnotationFrame {
-  const size = decodedSize(video);
-  if (!size) throw new Error("Wait for the shared video to play before saving a frame.");
-  const frame = video.ownerDocument.createElement("canvas");
-  frame.width = size.width;
-  frame.height = size.height;
-  const context = frame.getContext("2d");
-  if (!context) throw new Error("This browser cannot capture the shared frame.");
-  context.drawImage(video, 0, 0, size.width, size.height);
-  return { publicationId: state.layer.publication_id, size, video: frame, marks: structuredClone(visibleMarks(state, nowMs)), nowMs };
 }
 
 export function videoMatchesTrack(video: HTMLVideoElement, track: MediaStreamTrack): boolean {

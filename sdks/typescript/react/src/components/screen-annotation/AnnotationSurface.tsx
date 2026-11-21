@@ -1,4 +1,4 @@
-import type { AnnotationFit } from "@q9labsai/chalk-screen-annotation";
+import { captureAnnotationVideoFrame, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -9,7 +9,7 @@ import { AnnotationTabCue } from "./AnnotationTabCue";
 import { AnnotationHelperOffer } from "./AnnotationHelperOffer";
 import { ScreenAnnotationLayer } from "./ScreenAnnotationLayer";
 import { ScreenAnnotationToolbar } from "./ScreenAnnotationToolbar";
-import { canDraw, defaultBrush, freezeFrame, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
+import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
 
 export interface AnnotationPresentationContext {
   readonly actorId: string;
@@ -102,7 +102,13 @@ function ActiveAnnotationSurface({
     setBusy(true);
     setFeedback(null);
     try {
-      const frame = freezeFrame(video, live, client.serverNowMs());
+      const frame = captureAnnotationVideoFrame(video, {
+        publicationId: live.layer.publication_id,
+        marks: live.marks,
+        paused: live.paused,
+        sharerId: live.layer.sharer_id,
+        nowMs: client.serverNowMs(),
+      });
       await action(frame);
       setFeedback({ message: success, error: false });
     } catch {
@@ -117,7 +123,10 @@ function ActiveAnnotationSurface({
   return (
     <>
       {safePreview && canvasHost
-        ? createPortal(<ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: onError } : undefined} />, canvasHost)
+        ? createPortal(
+            <ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: onError } : undefined} />,
+            canvasHost,
+          )
         : null}
       {primary ? (
         <div data-part="screen-annotation-controls" className="pointer-events-none absolute inset-x-2 bottom-12 z-30 grid justify-items-center gap-1.5">
