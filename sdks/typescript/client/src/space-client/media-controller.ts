@@ -1399,6 +1399,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
             }
           }
           scope.set(fields);
+          obs.fact("video.device_failed", {
+            device_kind: "camera",
+            capture_error_name: errorNameOf(cause),
+            ...(typeof fields.permission_after === "string" ? { permission_state: fields.permission_after === "denied" ? "denied" : "unknown" } : {}),
+          });
           // A refusal is expected(video.permission_denied) only when the probes show the person chose it: the
           // permission is denied, the block is not the system's, and no policy forbids camera.
           if (errorNameOf(cause) === "NotAllowedError" && fields.permission_after === "denied" && permissionBlockOf(cause) !== "system") {

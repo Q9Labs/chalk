@@ -6,6 +6,7 @@ import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { UNREPORTED_TILE_WAIT_MS, VideoTileSubscriptions } from "./video-tile-visibility";
+import { registerVideoObservation } from "./video-render-probe";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { chunks, desiredRemotePublications, droppedRemoteTracks, matchRemotePullTracks, publicationsByTrack, reconcileRemoteTracks, trackKey } from "./remote-track-response";
@@ -185,6 +186,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #syncPublications: readonly MediaPublication[] = [];
   readonly #videoTiles: VideoTileSubscriptions;
   readonly #stopObservingVideoTiles: () => void;
+  readonly #stopVideoObservation: () => void;
   #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
   // A tile change must reach the provider even while the tab is hidden, where routine polls pause.
   #videoTilesChanged = false;
@@ -256,6 +258,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
     this.#stopObservingVideoTiles = this.#observeVideoTiles();
+    this.#stopVideoObservation = registerVideoObservation({
+      surface: (fields) => this.#obs()?.surface("video.tile", fields) ?? { dismiss() {} },
+      probe: (fields) => this.#obs()?.fact("video.render_probe", fields),
+    });
   }
   getSnapshot(): CloudflareSFUSnapshot {
     return this.#snapshot;
@@ -454,6 +460,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // The listing that follows owns the replacement (#pullWithRecovery); an early pull would only add a section to an offer that is already too large.
     return pending.length > 0 && (await this.#hasSpentOfferBudget(pending, false, false)) ? [] : pending;
   }
+  #obs() {
+    return this.#telemetry instanceof TelemetryOutbox ? this.#telemetry.obs : undefined;
+  }
+
   #commitEarlyPulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
     const next = new Map(this.#remoteTracks);
     for (const publication of pulled) next.set(publicationKey(publication), publication);
@@ -1091,6 +1101,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#recentRecoveries.clear();
     this.#subscribedPublicationIds.clear();
     this.#stopObservingVideoTiles();
+    this.#stopVideoObservation();
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();

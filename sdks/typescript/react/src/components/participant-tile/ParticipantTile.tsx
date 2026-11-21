@@ -15,6 +15,7 @@ import { useFramesFrozen, useFrozenFrame } from "./useFrozenFrame";
 import { TileReconnecting, TileSignal } from "./TileConnection";
 import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
 import { useTrueFor } from "../../internal/useTrueFor";
+import { useVideoRenderProbe } from "./useVideoRenderProbe";
 
 export interface ParticipantTileProps {
   participant: {
@@ -84,6 +85,12 @@ export const ParticipantTile = React.memo(function ParticipantTile({ videoTrack,
   useVideoTileVisibility(videoRef, props.participant.isLocal ? undefined : props.participant.videoPublicationId, props.hidden !== true);
 
   const frozenFrame = useFrozenFrame(videoRef, useFramesFrozen());
+  useVideoRenderProbe(videoRef, videoTrack, status, {
+    publicationId: props.participant.isLocal ? undefined : props.participant.videoPublicationId,
+    local: props.participant.isLocal === true,
+    state: props.participant.isVideoPausedForNetwork === true ? "paused_for_network" : frozenFrame.shown ? "frozen_frame" : status === "playing" ? "picture" : "avatar",
+    statusShown: props.participant.isReconnecting === true || props.participant.isVideoPausedForNetwork === true,
+  });
 
   return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} frozenFrame={frozenFrame} />;
 });

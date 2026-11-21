@@ -61,7 +61,7 @@ export function decide({ readings }) {
   const forwarded = readings["video.forwarded"];
   const pause = readings["video.viewer_pause"];
   const statsFailed = readings["video.stats_failed"];
-  const connection = readings["video.connection"];
+  const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
 
   const needed = { "video.render_probe": probe, "video.tile": tile, "video.track_window": track, "video.call_window": call, "video.forwarded": forwarded, "video.viewer_pause": pause };
   const missing = Object.entries(needed).find(([, r]) => r.kind !== "present");

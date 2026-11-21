@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "0f24749432eb"
+  @schema_ver "e38da80c5410"
 
   @events %{
     "client.call_ended" => %{
@@ -601,7 +601,7 @@ defmodule ChalkSync.Obs.Registry do
       "decisions" => [],
       "fields" => %{
         "media_state_code" => %{
-          "required" => true
+          "required" => false
         },
         "device_state" => %{
           "required" => false
@@ -790,6 +790,9 @@ defmodule ChalkSync.Obs.Registry do
           "required" => false
         },
         "tile_reason" => %{
+          "required" => false
+        },
+        "publication_id" => %{
           "required" => false
         }
       }

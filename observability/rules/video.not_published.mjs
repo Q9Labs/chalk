@@ -66,7 +66,7 @@ export function decide({ readings }) {
   const publication = readings["video.publication"];
   const lease = readings["video.source_lease"];
   const statsFailed = readings["video.stats_failed"];
-  const connection = readings["video.connection"];
+  const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
 
   if (camera.kind !== "present" || send.kind !== "present" || ingress.kind !== "present" || publication.kind !== "present") {
     return { status: "unknown", reason: "a required witness for the publish path is missing" };

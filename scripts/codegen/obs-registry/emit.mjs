@@ -12,8 +12,8 @@ const camel = (text) =>
     .join("");
 
 function eventLinks(model, name) {
-  const event = model.events.find((entry) => entry.name === name) ?? { fields: {}, emit_sites: [] };
-  return { name, fields: Object.keys(event.fields), emit_sites: event.emit_sites };
+  const event = model.events.find((entry) => entry.name === name) ?? model.machines.find((entry) => entry.name === name) ?? { fields: {}, emit_sites: [] };
+  return { name, fields: Object.keys(event.fields ?? {}), emit_sites: event.emit_sites };
 }
 
 const factOf = (model, name) => model.facts.find((fact) => fact.name === name) ?? { events: [] };

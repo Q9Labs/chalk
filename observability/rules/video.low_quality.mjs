@@ -42,7 +42,7 @@ export function decide({ readings }) {
   const congestion = readings["video.congestion"];
   const transport = readings["video.transport"];
   const probe = readings["video.render_probe"];
-  const connection = readings["video.connection"];
+  const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
 
   const needed = { "video.tile": tile, "video.call_window": call, "video.forwarded": forwarded, "video.congestion": congestion, "video.transport": transport };
   const missing = Object.entries(needed).find(([, r]) => r.kind !== "present");

@@ -43,7 +43,7 @@ export function decide({ readings }) {
   const muted = readings["video.camera_track_muted"];
   const effects = readings["video.camera_effects"];
   const device = readings["video.device_failure"];
-  const connection = readings["video.connection"];
+  const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
   const episodeEnded = readings["video.episode_ended"];
 
   if (capture.kind !== "present" || camera.kind !== "present") {

@@ -9,4 +9,5 @@ export type { CameraEffectsAssets, CameraEffectsTrack, CameraEffectsProvider, Ca
 export type { CameraBackground } from "./camera-background-settings";
 export { setVideoRenderSize } from "./video-render-size";
 export { setVideoTileVisibility } from "./video-tile-visibility";
+export { registerVideoObservation, reportVideoRenderProbe, showVideoTile, type VideoRenderProbeFields, type VideoTileFields, type VideoTileHandle, type VideoTileState } from "./video-render-probe";
 export type { VideoRenderSize } from "./video-render-size";

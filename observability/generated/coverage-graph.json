@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "0f24749432eb",
+  "schema_ver": "e38da80c5410",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -364,25 +364,18 @@
               "fields": ["enabled", "source", "operation_id"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
         {
           "name": "video.camera",
           "fields": [],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera"
+            }
+          ]
         },
         {
           "name": "video.camera_bound",
@@ -417,12 +410,12 @@
         {
           "name": "sync.media.intent",
           "fields": ["operation_id", "source", "enabled"],
-          "emit_sites": []
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
+              "literal": "sync.media.intent"
+            }
+          ]
         }
       ],
       "rule": "observability/rules/video.camera_stopped.mjs",
@@ -516,18 +509,6 @@
               "fields": ["muted"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
@@ -544,7 +525,12 @@
         {
           "name": "video.camera",
           "fields": [],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera"
+            }
+          ]
         },
         {
           "name": "video.camera_bound",
@@ -559,17 +545,32 @@
         {
           "name": "video.device_failed",
           "fields": ["device_kind", "capture_error_name", "permission_state"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.device_failed"
+            }
+          ]
         },
         {
           "name": "video.media_state",
           "fields": ["media_state_code", "device_state", "source"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+              "literal": "video.media_state"
+            }
+          ]
         },
         {
           "name": "sync.media.intent",
           "fields": ["operation_id", "source", "enabled"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
+              "literal": "sync.media.intent"
+            }
+          ]
         },
         {
           "name": "video.camera_track_muted",
@@ -580,11 +581,6 @@
               "literal": "video.camera_track_muted"
             }
           ]
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
         }
       ],
       "rule": "observability/rules/video.camera_wont_start.mjs",
@@ -622,7 +618,7 @@
             {
               "event": "video.tile",
               "source": "client",
-              "fields": ["tile_state", "status_shown", "tile_reason"]
+              "fields": ["publication_id", "tile_state", "status_shown", "tile_reason"]
             }
           ]
         },
@@ -732,18 +728,6 @@
               "fields": ["capture_error_name"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
@@ -752,25 +736,17 @@
           "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.render_probe"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.render_probe"
             }
           ]
         },
         {
           "name": "video.tile",
-          "fields": ["tile_state", "status_shown", "tile_reason"],
+          "fields": ["tile_state", "status_shown", "tile_reason", "publication_id"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.tile"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.tile"
             }
           ]
@@ -779,10 +755,6 @@
           "name": "video.track_window",
           "fields": ["mid", "source", "publication_id", "packets", "lost", "bytes", "frames_received", "frames_decoded", "frames_dropped", "key_frames_decoded", "freeze_count", "freeze_ms", "pli_sent", "nack_sent", "frame_height", "playout", "window_ms"],
           "emit_sites": [
-            {
-              "path": "sdks/typescript/client/src/media/client.ts",
-              "literal": "video.track_window"
-            },
             {
               "path": "sdks/typescript/client/src/media/call-stats.ts",
               "literal": "video.track_window"
@@ -814,14 +786,19 @@
             "recv_bitrate_bps",
             "send_bitrate_bps"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "video.call_stats"
+            }
+          ]
         },
         {
           "name": "video.subscription_forwarded",
           "fields": ["publisher_id", "source", "mid", "forwarded_packets", "forwarded_keyframes", "layer", "requested_layer", "pause_reason", "ingress_packets", "ingress_lost", "ingress_repaired", "ingress_jitter_ms", "ingress_bitrate_bps", "ingress_layers_active", "plan", "final"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/stats.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_forwarded"
             }
           ]
@@ -829,29 +806,49 @@
         {
           "name": "sfu.subscription.started",
           "fields": ["publisher_id", "source", "media_kind", "mid"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.started"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.paused",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.paused"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.resumed",
           "fields": ["publisher_id", "source", "media_kind", "mid", "was"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.resumed"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.stopped",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.stopped"
+            }
+          ]
         },
         {
           "name": "video.subscription_select",
           "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/subscription.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_select"
             }
           ]
@@ -865,11 +862,6 @@
               "literal": "video.stats_failed"
             }
           ]
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
         }
       ],
       "rule": "observability/rules/video.frozen.mjs",
@@ -907,7 +899,7 @@
             {
               "event": "video.tile",
               "source": "client",
-              "fields": ["tile_state", "status_shown", "tile_reason"]
+              "fields": ["publication_id", "tile_state", "status_shown", "tile_reason"]
             }
           ]
         },
@@ -1053,18 +1045,6 @@
               "fields": ["capture_error_name"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
@@ -1073,25 +1053,17 @@
           "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.render_probe"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.render_probe"
             }
           ]
         },
         {
           "name": "video.tile",
-          "fields": ["tile_state", "status_shown", "tile_reason"],
+          "fields": ["tile_state", "status_shown", "tile_reason", "publication_id"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.tile"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.tile"
             }
           ]
@@ -1100,10 +1072,6 @@
           "name": "video.track_window",
           "fields": ["mid", "source", "publication_id", "packets", "lost", "bytes", "frames_received", "frames_decoded", "frames_dropped", "key_frames_decoded", "freeze_count", "freeze_ms", "pli_sent", "nack_sent", "frame_height", "playout", "window_ms"],
           "emit_sites": [
-            {
-              "path": "sdks/typescript/client/src/media/client.ts",
-              "literal": "video.track_window"
-            },
             {
               "path": "sdks/typescript/client/src/media/call-stats.ts",
               "literal": "video.track_window"
@@ -1135,14 +1103,19 @@
             "recv_bitrate_bps",
             "send_bitrate_bps"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "video.call_stats"
+            }
+          ]
         },
         {
           "name": "video.subscription_forwarded",
           "fields": ["publisher_id", "source", "mid", "forwarded_packets", "forwarded_keyframes", "layer", "requested_layer", "pause_reason", "ingress_packets", "ingress_lost", "ingress_repaired", "ingress_jitter_ms", "ingress_bitrate_bps", "ingress_layers_active", "plan", "final"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/stats.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_forwarded"
             }
           ]
@@ -1150,29 +1123,49 @@
         {
           "name": "sfu.subscription.started",
           "fields": ["publisher_id", "source", "media_kind", "mid"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.started"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.paused",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.paused"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.resumed",
           "fields": ["publisher_id", "source", "media_kind", "mid", "was"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.resumed"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.stopped",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.stopped"
+            }
+          ]
         },
         {
           "name": "video.subscription_select",
           "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/subscription.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_select"
             }
           ]
@@ -1180,17 +1173,32 @@
         {
           "name": "sfu.media.egress",
           "fields": ["media_kind", "subscriptions", "paused_subscriptions", "high_layer", "low_layer", "pli_received", "fir_received", "nack_received", "lost", "jitter_ms", "loss_share", "rtt_ms", "bitrate_bps", "final"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.media.egress"
+            }
+          ]
         },
         {
           "name": "sfu.media.transport",
           "fields": ["estimate_bps", "proven_bps", "queued_bytes", "probing", "sent_audio", "sent_video", "sent_repair", "sent_probe", "dropped", "repairs_cut", "feedback_age_ms", "final"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.media.transport"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.congestion",
           "fields": ["mid", "layer", "reason", "estimate_bps", "proven_bps", "delivered_share", "probing", "host_pressure", "acked_bps", "loss_share", "lossy", "trend", "decrease_cause", "decrease_ago_ms", "decrease_from_bps", "decrease_to_bps", "decrease_acked_bps"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.congestion"
+            }
+          ]
         },
         {
           "name": "video.stats_failed",
@@ -1201,11 +1209,6 @@
               "literal": "video.stats_failed"
             }
           ]
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
         }
       ],
       "rule": "observability/rules/video.low_quality.mjs",
@@ -1338,25 +1341,18 @@
               "fields": ["source", "revision"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
         {
           "name": "video.camera",
           "fields": [],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+              "literal": "video.camera"
+            }
+          ]
         },
         {
           "name": "video.camera_bound",
@@ -1373,10 +1369,6 @@
           "fields": ["rid", "frames_encoded", "bytes_sent", "frame_height", "quality_limitation_reason", "active", "window_ms"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/client/src/media/client.ts",
-              "literal": "video.send_window"
-            },
-            {
               "path": "sdks/typescript/client/src/media/call-stats.ts",
               "literal": "video.send_window"
             }
@@ -1385,12 +1377,22 @@
         {
           "name": "sfu.media.ingress",
           "fields": ["source", "media_kind", "mid", "packets", "bytes", "lost", "repaired", "nack_requested", "keyframe_repairs", "pli_sent", "jitter_ms", "bitrate_bps", "layers", "layers_active", "held", "final"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.media.ingress"
+            }
+          ]
         },
         {
           "name": "sfu.publication.started",
           "fields": ["source", "media_kind"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.publication.started"
+            }
+          ]
         },
         {
           "name": "video.call_stats",
@@ -1417,7 +1419,12 @@
             "recv_bitrate_bps",
             "send_bitrate_bps"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "video.call_stats"
+            }
+          ]
         },
         {
           "name": "video.stats_failed",
@@ -1432,17 +1439,22 @@
         {
           "name": "sfu.source.lease_lost",
           "fields": ["source", "cause", "revision"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.source.lease_lost"
+            }
+          ]
         },
         {
           "name": "sfu.source.lease_opened",
           "fields": ["source", "revision"],
-          "emit_sites": []
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.source.lease_opened"
+            }
+          ]
         }
       ],
       "rule": "observability/rules/video.not_published.mjs",
@@ -1480,7 +1492,7 @@
             {
               "event": "video.tile",
               "source": "client",
-              "fields": ["tile_state", "status_shown", "tile_reason"]
+              "fields": ["publication_id", "tile_state", "status_shown", "tile_reason"]
             }
           ]
         },
@@ -1590,18 +1602,6 @@
               "fields": ["capture_error_name"]
             }
           ]
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "events": [
-            {
-              "event": "client.connection",
-              "source": "client",
-              "fields": ["to_state", "from_state", "trigger"]
-            }
-          ]
         }
       ],
       "events": [
@@ -1610,25 +1610,17 @@
           "fields": ["publication_id", "local", "presented_frames", "ready_state", "video_width", "video_height", "rect_w", "rect_h", "on_screen", "page_visible", "covered", "luma_mean", "probe_unavailable"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.render_probe"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.render_probe"
             }
           ]
         },
         {
           "name": "video.tile",
-          "fields": ["tile_state", "status_shown", "tile_reason"],
+          "fields": ["tile_state", "status_shown", "tile_reason", "publication_id"],
           "emit_sites": [
             {
-              "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-              "literal": "video.tile"
-            },
-            {
-              "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+              "path": "sdks/typescript/client/src/media/client.ts",
               "literal": "video.tile"
             }
           ]
@@ -1637,10 +1629,6 @@
           "name": "video.track_window",
           "fields": ["mid", "source", "publication_id", "packets", "lost", "bytes", "frames_received", "frames_decoded", "frames_dropped", "key_frames_decoded", "freeze_count", "freeze_ms", "pli_sent", "nack_sent", "frame_height", "playout", "window_ms"],
           "emit_sites": [
-            {
-              "path": "sdks/typescript/client/src/media/client.ts",
-              "literal": "video.track_window"
-            },
             {
               "path": "sdks/typescript/client/src/media/call-stats.ts",
               "literal": "video.track_window"
@@ -1672,14 +1660,19 @@
             "recv_bitrate_bps",
             "send_bitrate_bps"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/call-stats.ts",
+              "literal": "video.call_stats"
+            }
+          ]
         },
         {
           "name": "video.subscription_forwarded",
           "fields": ["publisher_id", "source", "mid", "forwarded_packets", "forwarded_keyframes", "layer", "requested_layer", "pause_reason", "ingress_packets", "ingress_lost", "ingress_repaired", "ingress_jitter_ms", "ingress_bitrate_bps", "ingress_layers_active", "plan", "final"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/stats.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_forwarded"
             }
           ]
@@ -1687,29 +1680,49 @@
         {
           "name": "sfu.subscription.started",
           "fields": ["publisher_id", "source", "media_kind", "mid"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.started"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.paused",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.paused"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.resumed",
           "fields": ["publisher_id", "source", "media_kind", "mid", "was"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.resumed"
+            }
+          ]
         },
         {
           "name": "sfu.subscription.stopped",
           "fields": ["publisher_id", "source", "media_kind", "mid", "reason"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/events.go",
+              "literal": "sfu.subscription.stopped"
+            }
+          ]
         },
         {
           "name": "video.subscription_select",
           "fields": ["publisher_id", "source", "mid", "target_layer", "pause_reason"],
           "emit_sites": [
             {
-              "path": "features/media/sfu/internal/media/subscription.go",
+              "path": "features/media/sfu/internal/media/events.go",
               "literal": "video.subscription_select"
             }
           ]
@@ -1723,11 +1736,6 @@
               "literal": "video.stats_failed"
             }
           ]
-        },
-        {
-          "name": "client.connection",
-          "fields": [],
-          "emit_sites": []
         }
       ],
       "rule": "observability/rules/video.not_shown.mjs",

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "0f24749432eb",
+  "schema_ver": "e38da80c5410",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -2455,7 +2455,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.egress"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.media.egress"
@@ -2521,7 +2526,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.ingress"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.media.ingress"
@@ -2575,7 +2585,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.transport"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.media.transport"
@@ -2599,7 +2614,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.publication.started"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.publication.started"
@@ -2626,7 +2646,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.source.lease_lost"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.source.lease_lost"
@@ -2650,7 +2675,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.source.lease_opened"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.source.lease_opened"
@@ -2719,7 +2749,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.congestion"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.subscription.congestion"
@@ -2752,7 +2787,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.paused"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.subscription.paused"
@@ -2785,7 +2825,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.resumed"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.subscription.resumed"
@@ -2815,7 +2860,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.started"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.subscription.started"
@@ -2848,7 +2898,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.stopped"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sfu.subscription.stopped"
@@ -2900,7 +2955,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
+          "literal": "sync.media.intent"
+        }
+      ],
       "legacy": {
         "match": {
           "event": "sync.media.intent"
@@ -2981,7 +3041,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/call-stats.ts",
+          "literal": "video.call_stats"
+        }
+      ],
       "legacy": {
         "match": {
           "type": "call_stats"
@@ -3086,7 +3151,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.device_failed"
+        }
+      ],
       "legacy": {
         "match": {
           "type": "device_failed"
@@ -3104,7 +3174,7 @@
       "test_only": false,
       "fields": {
         "media_state_code": {
-          "required": true
+          "required": false
         },
         "device_state": {
           "required": false
@@ -3113,13 +3183,18 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "literal": "video.media_state"
+        }
+      ],
       "legacy": {
         "match": {
           "type": "media_state"
         }
       },
-      "doc": "A legacy sdk.telemetry media_state row; code=media_capture_failed marks a camera-effects path failure."
+      "doc": "A kernel media_state row: the media diagnostic phase (device_state) and, when a failure, its code."
     },
     {
       "name": "video.render_probe",
@@ -3172,11 +3247,7 @@
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-          "literal": "video.render_probe"
-        },
-        {
-          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "path": "sdks/typescript/client/src/media/client.ts",
           "literal": "video.render_probe"
         }
       ],
@@ -3214,10 +3285,6 @@
         }
       },
       "emit_sites": [
-        {
-          "path": "sdks/typescript/client/src/media/client.ts",
-          "literal": "video.send_window"
-        },
         {
           "path": "sdks/typescript/client/src/media/call-stats.ts",
           "literal": "video.send_window"
@@ -3306,7 +3373,7 @@
       },
       "emit_sites": [
         {
-          "path": "features/media/sfu/internal/media/stats.go",
+          "path": "features/media/sfu/internal/media/events.go",
           "literal": "video.subscription_forwarded"
         }
       ],
@@ -3340,7 +3407,7 @@
       },
       "emit_sites": [
         {
-          "path": "features/media/sfu/internal/media/subscription.go",
+          "path": "features/media/sfu/internal/media/events.go",
           "literal": "video.subscription_select"
         }
       ],
@@ -3363,19 +3430,18 @@
         },
         "tile_reason": {
           "required": false
+        },
+        "publication_id": {
+          "required": false
         }
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-          "literal": "video.tile"
-        },
-        {
-          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "path": "sdks/typescript/client/src/media/client.ts",
           "literal": "video.tile"
         }
       ],
-      "doc": "The tile's rendered state: picture, avatar, paused_for_network, frozen_frame, media_state."
+      "doc": "The tile's rendered state: picture, avatar, paused_for_network, frozen_frame, media_state. publication_id names which remote publication the tile shows (absent for the local tile)."
     },
     {
       "name": "video.track_window",
@@ -3440,10 +3506,6 @@
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/client/src/media/client.ts",
-          "literal": "video.track_window"
-        },
-        {
           "path": "sdks/typescript/client/src/media/call-stats.ts",
           "literal": "video.track_window"
         }
@@ -3475,7 +3537,8 @@
         ["reconnecting", "failed"]
       ],
       "triggers": ["join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"],
-      "doc": "The SDK connection state (CONNECTION_STATES in sdks/typescript/client/src/connection/types.ts). Its one writer is transition() in connection/lifecycle.ts."
+      "doc": "The SDK connection state (CONNECTION_STATES in sdks/typescript/client/src/connection/types.ts). Its one writer is transition() in connection/lifecycle.ts.",
+      "emit_sites": []
     },
     {
       "name": "episode.lifecycle",
@@ -3489,7 +3552,8 @@
         ["active", "ended"]
       ],
       "triggers": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"],
-      "doc": "The Episode row's status in Postgres (episodes.status)."
+      "doc": "The Episode row's status in Postgres (episodes.status).",
+      "emit_sites": []
     },
     {
       "name": "selftest.door",
@@ -3504,7 +3568,8 @@
         ["locked", "closed"]
       ],
       "triggers": ["push", "pull", "lock", "unlock"],
-      "doc": "A self-test machine."
+      "doc": "A self-test machine.",
+      "emit_sites": []
     },
     {
       "name": "video.camera",
@@ -3524,7 +3589,13 @@
         ["idle", "ended"]
       ],
       "triggers": ["capture_requested", "captured", "capture_not_live", "track_ended", "device_switched", "released", "unbound", "bound", "cleared", "cancelled"],
-      "doc": "The camera state machine in the space media controller. camera_bound is true while a real publication is bound."
+      "doc": "The camera state machine in the space media controller. camera_bound is true while a real publication is bound.",
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera"
+        }
+      ]
     }
   ],
   "facts": [
@@ -3766,22 +3837,6 @@
       "doc": "The congestion controller's per-subscription view on a seat's downlink. Claim: reason."
     },
     {
-      "name": "video.connection",
-      "area": "video",
-      "kind": "state",
-      "per": "seat",
-      "events": [
-        {
-          "event": "client.connection",
-          "source": "client",
-          "claim": "to_state",
-          "failure_claims": [],
-          "fields": ["to_state", "from_state", "trigger"]
-        }
-      ],
-      "doc": "Slice 2's client.connection transitions for a seat, read for the reconnect clause and the connected precondition. Claim: to_state."
-    },
-    {
       "name": "video.device_failure",
       "area": "video",
       "kind": "event",
@@ -3959,7 +4014,7 @@
           "source": "client",
           "claim": "tile_state",
           "failure_claims": [],
-          "fields": ["tile_state", "status_shown", "tile_reason"]
+          "fields": ["publication_id", "tile_state", "status_shown", "tile_reason"]
         }
       ],
       "doc": "The rendered tile's surface state for a seat. Claim: tile_state."
@@ -4359,14 +4414,6 @@
           "independent": 1,
           "query": "sync.media.intent rows for {participant}",
           "doc": "Whether the participant asked it off."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.camera_stopped.mjs",
@@ -4432,14 +4479,6 @@
           "independent": 1,
           "query": "video.camera_track_muted rows for {participant}",
           "doc": "A muted camera."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.camera_wont_start.mjs",
@@ -4513,14 +4552,6 @@
           "independent": 1,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.frozen.mjs",
@@ -4618,14 +4649,6 @@
           "independent": 1,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.low_quality.mjs",
@@ -4699,14 +4722,6 @@
           "independent": 1,
           "query": "sfu.source.lease rows for {participant}",
           "doc": "A lease_lost excluding the finding."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.not_published.mjs",
@@ -4780,14 +4795,6 @@
           "independent": 1,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure hiding the track."
-        },
-        {
-          "fact": "video.connection",
-          "from": ["client"],
-          "required": false,
-          "independent": 1,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ],
       "rule": "observability/rules/video.not_shown.mjs",

@@ -1,4 +1,4 @@
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { reportVideoRenderProbe, showVideoTile, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSharedValue, withTiming } from "react-native-reanimated";
@@ -80,6 +80,14 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
 
   const streamURL = useMemo(() => (tile.track ? createNativeMediaStream(tile.track).toURL() : null), [tile.track]);
   const video = tileVideo(slot, streamURL, tile.isSelf && !tile.back && mirror);
+  const picture = video !== null;
+  const self = tile.isSelf;
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [telemetry] The tile surface row and the native probe's honest unavailable marker; reopened when the rendered state changes.
+  useEffect(() => {
+    reportVideoRenderProbe({ local: self, probe_unavailable: "native_render" });
+    const handle = showVideoTile({ tile_state: picture ? "picture" : "avatar" });
+    return () => handle.dismiss();
+  }, [picture, self]);
   const youOnly = tile.isSelf && (float || width < SELF_NAME_MIN_WIDTH);
   const name = youOnly ? "You" : tile.name;
   const you = tile.isSelf && !youOnly;

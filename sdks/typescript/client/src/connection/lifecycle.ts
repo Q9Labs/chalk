@@ -1116,7 +1116,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
           const phase = mediaDiagnosticPhase(snapshot);
-          if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
+          if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) {
+            onTransportDiagnostic({ event: "media_state", phase });
+            telemetry?.obs.fact("video.media_state", { device_state: phase, ...(phase === "failed" ? { media_state_code: "media_capture_failed" as const } : {}) });
+          }
           model.mediaSnapshot = snapshot;
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();

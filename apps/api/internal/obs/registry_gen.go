@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "0f24749432eb"
+const SchemaVer = "e38da80c5410"
 
 // Event names.
 const (
@@ -489,13 +489,13 @@ var registryEvents = map[string]eventSpec{
 	"video.camera_capture":         {kind: "op", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: false}, "permission_before": {required: false}, "permission_after": {required: false}, "permission_probe": {required: false}, "policy_allows": {required: false}, "policy_probe": {required: false}}},
 	"video.camera_track_muted":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"muted": {required: true}}},
 	"video.device_failed":          {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"device_kind": {required: true}, "capture_error_name": {required: false}, "permission_state": {required: false}}},
-	"video.media_state":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"media_state_code": {required: true}, "device_state": {required: false}, "source": {required: false}}},
+	"video.media_state":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"media_state_code": {required: false}, "device_state": {required: false}, "source": {required: false}}},
 	"video.render_probe":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"publication_id": {required: false}, "local": {required: false}, "presented_frames": {required: false}, "ready_state": {required: false}, "video_width": {required: false}, "video_height": {required: false}, "rect_w": {required: false}, "rect_h": {required: false}, "on_screen": {required: false}, "page_visible": {required: false}, "covered": {required: false}, "luma_mean": {required: false}, "probe_unavailable": {required: false}}},
 	"video.send_window":            {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"rid": {required: true}, "frames_encoded": {required: true}, "bytes_sent": {required: true}, "frame_height": {required: false}, "quality_limitation_reason": {required: false}, "active": {required: false}, "window_ms": {required: true}}},
 	"video.stats_failed":           {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"capture_error_name": {required: true}}},
 	"video.subscription_forwarded": {kind: "fact", dataset: "media-stats", side: "server", testOnly: false, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "forwarded_packets": {required: true}, "forwarded_keyframes": {required: false}, "layer": {required: false}, "requested_layer": {required: false}, "pause_reason": {required: false}, "ingress_packets": {required: false}, "ingress_lost": {required: false}, "ingress_repaired": {required: false}, "ingress_jitter_ms": {required: false}, "ingress_bitrate_bps": {required: false}, "ingress_layers_active": {required: false}, "plan": {required: false}, "final": {required: false}}},
 	"video.subscription_select":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"paused", "forwarding"}, fields: map[string]fieldRule{"publisher_id": {required: true}, "source": {required: true}, "mid": {required: true}, "target_layer": {required: false}, "pause_reason": {required: false}}},
-	"video.tile":                   {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"tile_state": {required: false}, "status_shown": {required: false}, "tile_reason": {required: false}}},
+	"video.tile":                   {kind: "surface", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"tile_state": {required: false}, "status_shown": {required: false}, "tile_reason": {required: false}, "publication_id": {required: false}}},
 	"video.track_window":           {kind: "fact", dataset: "media-stats", side: "client", testOnly: false, fields: map[string]fieldRule{"mid": {required: true}, "source": {required: true}, "publication_id": {required: false}, "packets": {required: true}, "lost": {required: false}, "bytes": {required: false}, "frames_received": {required: false}, "frames_decoded": {required: false}, "frames_dropped": {required: false}, "key_frames_decoded": {required: false}, "freeze_count": {required: false}, "freeze_ms": {required: false}, "pli_sent": {required: false}, "nack_sent": {required: false}, "frame_height": {required: false}, "playout": {required: false}, "window_ms": {required: true}}},
 }
 

@@ -42,7 +42,7 @@ function connectionAt(connection, atMs) {
 export function decide({ readings }) {
   const camera = readings["video.camera_state"];
   const intent = readings["video.capture_intent"];
-  const connection = readings["video.connection"];
+  const connection = readings["video.connection"] ?? { kind: "absent", observations: [] };
   const episodeEnded = readings["video.episode_ended"];
 
   if (camera.kind !== "present") return { status: "unknown", reason: "the camera machine is not witnessed for this seat" };

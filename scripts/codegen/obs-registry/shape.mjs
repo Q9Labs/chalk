@@ -118,6 +118,6 @@ export function addMachine(scope, declared) {
   const machine = { states: [], edges: [], triggers: [], doc: "", ...declared };
   const problems = [...problemsOf(MACHINE_CHECKS, machine, scope), ...edgeProblems(machine.states, machine.edges)];
   report(scope.fail, `${scope.where} machine ${machine.name}`, problems);
-  const { name, states, initial, edges, triggers, doc } = machine;
-  scope.machines.set(name, { name, area: scope.area.area, test_only: scope.testOnly, states, initial, edges, triggers, doc });
+  const { name, states, initial, edges, triggers, doc, emit_sites = [] } = machine;
+  scope.machines.set(name, { name, area: scope.area.area, test_only: scope.testOnly, states, initial, edges, triggers, doc, emit_sites });
 }

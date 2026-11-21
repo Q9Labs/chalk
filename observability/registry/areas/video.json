@@ -982,11 +982,7 @@
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-          "literal": "video.render_probe"
-        },
-        {
-          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "path": "sdks/typescript/client/src/media/client.ts",
           "literal": "video.render_probe"
         }
       ]
@@ -1000,19 +996,16 @@
         "web",
         "mobile"
       ],
-      "doc": "The tile's rendered state: picture, avatar, paused_for_network, frozen_frame, media_state.",
+      "doc": "The tile's rendered state: picture, avatar, paused_for_network, frozen_frame, media_state. publication_id names which remote publication the tile shows (absent for the local tile).",
       "fields": {
         "tile_state": {},
         "status_shown": {},
-        "tile_reason": {}
+        "tile_reason": {},
+        "publication_id": {}
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx",
-          "literal": "video.tile"
-        },
-        {
-          "path": "sdks/typescript/react-native/src/stage/ParticipantTile.tsx",
+          "path": "sdks/typescript/client/src/media/client.ts",
           "literal": "video.tile"
         }
       ]
@@ -1055,10 +1048,6 @@
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/client/src/media/client.ts",
-          "literal": "video.track_window"
-        },
-        {
           "path": "sdks/typescript/client/src/media/call-stats.ts",
           "literal": "video.track_window"
         }
@@ -1091,10 +1080,6 @@
         }
       },
       "emit_sites": [
-        {
-          "path": "sdks/typescript/client/src/media/client.ts",
-          "literal": "video.send_window"
-        },
         {
           "path": "sdks/typescript/client/src/media/call-stats.ts",
           "literal": "video.send_window"
@@ -1129,7 +1114,7 @@
       },
       "emit_sites": [
         {
-          "path": "features/media/sfu/internal/media/subscription.go",
+          "path": "features/media/sfu/internal/media/events.go",
           "literal": "video.subscription_select"
         }
       ]
@@ -1171,7 +1156,7 @@
       },
       "emit_sites": [
         {
-          "path": "features/media/sfu/internal/media/stats.go",
+          "path": "features/media/sfu/internal/media/events.go",
           "literal": "video.subscription_forwarded"
         }
       ]
@@ -1217,7 +1202,13 @@
         },
         "capture_error_name": {},
         "permission_state": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.device_failed"
+        }
+      ]
     },
     {
       "name": "video.media_state",
@@ -1227,19 +1218,23 @@
       "modules": [
         "sdk"
       ],
-      "doc": "A legacy sdk.telemetry media_state row; code=media_capture_failed marks a camera-effects path failure.",
+      "doc": "A kernel media_state row: the media diagnostic phase (device_state) and, when a failure, its code.",
       "legacy": {
         "match": {
           "type": "media_state"
         }
       },
       "fields": {
-        "media_state_code": {
-          "required": true
-        },
+        "media_state_code": {},
         "device_state": {},
         "source": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "literal": "video.media_state"
+        }
+      ]
     },
     {
       "name": "video.call_stats",
@@ -1279,7 +1274,13 @@
         "quality_limitation_reason": {},
         "recv_bitrate_bps": {},
         "send_bitrate_bps": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/call-stats.ts",
+          "literal": "video.call_stats"
+        }
+      ]
     },
     {
       "name": "sync.media.intent",
@@ -1303,7 +1304,13 @@
         "enabled": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
+          "literal": "sync.media.intent"
+        }
+      ]
     },
     {
       "name": "sfu.publication.started",
@@ -1326,7 +1333,13 @@
         "media_kind": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.publication.started"
+        }
+      ]
     },
     {
       "name": "sfu.subscription.started",
@@ -1355,7 +1368,13 @@
         "mid": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.started"
+        }
+      ]
     },
     {
       "name": "sfu.subscription.paused",
@@ -1387,7 +1406,13 @@
         "reason": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.paused"
+        }
+      ]
     },
     {
       "name": "sfu.subscription.resumed",
@@ -1419,7 +1444,13 @@
         "was": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.resumed"
+        }
+      ]
     },
     {
       "name": "sfu.subscription.stopped",
@@ -1451,7 +1482,13 @@
         "reason": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.stopped"
+        }
+      ]
     },
     {
       "name": "sfu.media.ingress",
@@ -1492,7 +1529,13 @@
         "layers_active": {},
         "held": {},
         "final": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.ingress"
+        }
+      ]
     },
     {
       "name": "sfu.media.egress",
@@ -1525,7 +1568,13 @@
         "rtt_ms": {},
         "bitrate_bps": {},
         "final": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.egress"
+        }
+      ]
     },
     {
       "name": "sfu.media.transport",
@@ -1554,7 +1603,13 @@
         "repairs_cut": {},
         "feedback_age_ms": {},
         "final": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.media.transport"
+        }
+      ]
     },
     {
       "name": "sfu.subscription.congestion",
@@ -1590,7 +1645,13 @@
         "decrease_from_bps": {},
         "decrease_to_bps": {},
         "decrease_acked_bps": {}
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.subscription.congestion"
+        }
+      ]
     },
     {
       "name": "sfu.source.lease_opened",
@@ -1613,7 +1674,13 @@
         "revision": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.source.lease_opened"
+        }
+      ]
     },
     {
       "name": "sfu.source.lease_lost",
@@ -1639,7 +1706,13 @@
         "revision": {
           "required": true
         }
-      }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/events.go",
+          "literal": "sfu.source.lease_lost"
+        }
+      ]
     }
   ],
   "reasons": [
@@ -1779,6 +1852,12 @@
         "bound",
         "cleared",
         "cancelled"
+      ],
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/space-client/media-controller.ts",
+          "literal": "video.camera"
+        }
       ]
     }
   ],
@@ -2042,6 +2121,7 @@
           "source": "client",
           "claim": "tile_state",
           "fields": [
+            "publication_id",
             "tile_state",
             "status_shown",
             "tile_reason"
@@ -2333,24 +2413,6 @@
       ]
     },
     {
-      "name": "video.connection",
-      "kind": "state",
-      "per": "seat",
-      "doc": "Slice 2's client.connection transitions for a seat, read for the reconnect clause and the connected precondition. Claim: to_state.",
-      "events": [
-        {
-          "event": "client.connection",
-          "source": "client",
-          "claim": "to_state",
-          "fields": [
-            "to_state",
-            "from_state",
-            "trigger"
-          ]
-        }
-      ]
-    },
-    {
       "name": "video.episode_ended",
       "kind": "once",
       "per": "item",
@@ -2434,15 +2496,6 @@
           "required": false,
           "query": "video.camera_track_muted rows for {participant}",
           "doc": "A muted camera."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     },
@@ -2492,15 +2545,6 @@
           "required": false,
           "query": "sync.media.intent rows for {participant}",
           "doc": "Whether the participant asked it off."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     },
@@ -2576,15 +2620,6 @@
           "required": false,
           "query": "sfu.source.lease rows for {participant}",
           "doc": "A lease_lost excluding the finding."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     },
@@ -2662,15 +2697,6 @@
           "required": false,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure hiding the track."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     },
@@ -2748,15 +2774,6 @@
           "required": false,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     },
@@ -2861,15 +2878,6 @@
           "required": false,
           "query": "video.stats_failed rows for {participant}",
           "doc": "A stats failure."
-        },
-        {
-          "fact": "video.connection",
-          "from": [
-            "client"
-          ],
-          "required": false,
-          "query": "client.connection transitions for {participant}",
-          "doc": "Whether the seat was connected."
         }
       ]
     }
