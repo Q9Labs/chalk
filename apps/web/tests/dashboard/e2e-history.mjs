@@ -264,8 +264,10 @@ export async function archivedRecordingChecks({ sql, post }, { ada, firstTenant,
 
   const link = await post(ada, "/dashboard-api/past-session", { action: "recording-url", spaceId, episodeId, recordingId, download: true }, session.csrfToken);
   assert.equal(link.status, 200, await link.clone().text());
-  const { url } = await link.json();
-  assert.ok(new URL(url).searchParams.get("X-Amz-Signature"));
+  const url = new URL((await link.json()).url);
+  assert.equal(url.origin, process.env.CHALK_R2_ENDPOINT);
+  assert.equal(url.pathname, `/${process.env.CHALK_R2_BUCKET}/${key}`);
+  assert.ok(url.searchParams.get("X-Amz-Signature"));
   const download = await fetch(url);
   assert.equal(download.status, 200);
   assert.equal(await download.text(), "archived recording fixture");

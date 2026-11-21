@@ -30,6 +30,11 @@ check_refusal 'CHALK_SFU_APPLICATION_ID must occur'
 sed 's/^CHALK_RECORDING_ENABLED=false$/CHALK_RECORDING_ENABLED=true/' "$fixture/full.env" > "$fixture_api"
 printf 'CHALK_SFU_CAPTURE_ENABLED=false\n' >> "$fixture_api"
 check_refusal 'sync.env'
+printf 'CHALK_SFU_COLOCATED_CAPTURE=ON\n' >> "$fixture_api"
+check_refusal 'CHALK_SFU_COLOCATED_CAPTURE needs CHALK_SFU_CAPTURE_ENABLED=true'
+sed 's/^CHALK_SFU_CAPTURE_ENABLED=false$/CHALK_SFU_CAPTURE_ENABLED=1/' "$fixture_api" > "$fixture/colocated.env"
+mv "$fixture/colocated.env" "$fixture_api"
+check_refusal 'sync.env'
 
 for value in true yes on 1 ' YES '; do
   sed "s/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=$value/" "$fixture/full.env" > "$fixture_api"

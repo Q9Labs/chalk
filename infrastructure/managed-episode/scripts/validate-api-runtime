@@ -50,18 +50,25 @@ require_env() {
   env_value "${api_env}" "${name}" >/dev/null || fail "${name} must occur exactly once with a non-empty value in ${api_env}"
 }
 
+env_enabled() {
+  case "$(env_value "${api_env}" "$1" | awk '{sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print tolower($0)}')" in
+    true|yes|on|1) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 secure_regular_file "${api_env}"
 if grep -Eq '__[A-Z0-9_]+__' "${api_env}"; then
   fail "API environment contains unresolved placeholders"
 fi
 
-case "$(env_value "${api_env}" CHALK_SFU_ENABLED | awk '{sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print tolower($0)}')" in
-  true|yes|on|1) ;;
-  *) fail "CHALK_SFU_ENABLED must be true (true, yes, on, or 1)" ;;
-esac
+env_enabled CHALK_SFU_ENABLED || fail "CHALK_SFU_ENABLED must be true (true, yes, on, or 1)"
 for name in CHALK_SFU_APPLICATION_ID CHALK_SFU_NODES CHALK_SFU_SERVER_NAME CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
   require_env "$name"
 done
+if env_enabled CHALK_SFU_COLOCATED_CAPTURE && ! env_enabled CHALK_SFU_CAPTURE_ENABLED; then
+  fail "CHALK_SFU_COLOCATED_CAPTURE needs CHALK_SFU_CAPTURE_ENABLED=true"
+fi
 
 # TURN can serve Chalk SFU peers on networks that cannot reach its public media port.
 turn_key_set=false
