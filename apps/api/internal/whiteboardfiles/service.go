@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -35,6 +36,7 @@ type Upload struct {
 	MIMEType   string
 	ByteLength int64
 	SHA256     [32]byte
+	Status     string
 	ExpiresAt  time.Time
 }
 
@@ -45,9 +47,14 @@ type Download struct {
 
 type Repository interface {
 	ReadyFile(context.Context, Subject, string) (Upload, error)
+	Reserve(context.Context, Upload) (Upload, error)
+	PendingOrReady(context.Context, FileRequest) (Upload, error)
+	Finalize(context.Context, FileRequest, utilities.ID, string, time.Time) (bool, error)
 }
 
 type ObjectStore interface {
+	CreateUploadURL(context.Context, objectstorage.CreateUploadURLInput) (objectstorage.SignedURL, error)
+	GetObject(context.Context, string) (objectstorage.ObjectReader, error)
 	CreateDownloadURL(context.Context, objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error)
 }
 
@@ -77,5 +84,5 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 }
 
 func validFileID(value string) bool {
-	return value != "" && utf8.ValidString(value) && len(value) <= maxFileIDBytes
+	return value != "" && !strings.ContainsRune(value, 0) && utf8.ValidString(value) && len(value) <= maxFileIDBytes
 }

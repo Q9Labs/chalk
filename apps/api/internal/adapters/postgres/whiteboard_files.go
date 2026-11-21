@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,10 @@ type WhiteboardFileRepository struct {
 }
 
 type whiteboardFileQuerier interface {
+	CanWriteWhiteboardFile(context.Context, sqlc.CanWriteWhiteboardFileParams) (bool, error)
+	ReserveWhiteboardFile(context.Context, sqlc.ReserveWhiteboardFileParams) (sqlc.ReserveWhiteboardFileRow, error)
+	GetWhiteboardFileUpload(context.Context, sqlc.GetWhiteboardFileUploadParams) (sqlc.GetWhiteboardFileUploadRow, error)
+	FinalizeWhiteboardFile(context.Context, sqlc.FinalizeWhiteboardFileParams) (int64, error)
 	GetReadyWhiteboardFile(context.Context, sqlc.GetReadyWhiteboardFileParams) (sqlc.GetReadyWhiteboardFileRow, error)
 	ClaimWhiteboardFileCleanup(context.Context, sqlc.ClaimWhiteboardFileCleanupParams) ([]sqlc.ClaimWhiteboardFileCleanupRow, error)
 	CompleteWhiteboardFileCleanup(context.Context, sqlc.CompleteWhiteboardFileCleanupParams) (int64, error)
@@ -45,6 +50,84 @@ func (r WhiteboardFileRepository) ReadyFile(ctx context.Context, subject whitebo
 		row.ParticipantID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
 		row.MimeType, row.ByteLength, row.Sha256, row.ExpiresAt,
 	)
+}
+
+func (r WhiteboardFileRepository) Reserve(ctx context.Context, file whiteboardfiles.Upload) (whiteboardfiles.Upload, error) {
+	subject := file.Subject
+	row, err := r.queries.ReserveWhiteboardFile(ctx, sqlc.ReserveWhiteboardFileParams{
+		UploadID: uuid(file.UploadID), ObjectKey: file.ObjectKey,
+		FileID: file.FileID, MimeType: file.MIMEType, ByteLength: file.ByteLength,
+		Sha256: file.SHA256[:], ExpiresAt: pgtype.Timestamptz{Time: file.ExpiresAt, Valid: true},
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
+		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
+		SceneID: uuid(file.SceneID),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return whiteboardfiles.Upload{}, r.uploadDeniedOr(ctx, whiteboardfiles.FileRequest{
+			Subject: subject, SceneID: file.SceneID, FileID: file.FileID,
+		}, whiteboardfiles.ErrFileConflict)
+	}
+	if err != nil {
+		return whiteboardfiles.Upload{}, fmt.Errorf("reserve whiteboard file: %w", err)
+	}
+	file.UploadID = utilities.IDFromBytes(row.UploadID.Bytes)
+	file.ObjectKey = row.ObjectKey
+	file.Status = row.Status
+	file.ExpiresAt = row.ExpiresAt.Time
+	return file, nil
+}
+
+func (r WhiteboardFileRepository) PendingOrReady(ctx context.Context, request whiteboardfiles.FileRequest) (whiteboardfiles.Upload, error) {
+	subject := request.Subject
+	row, err := r.queries.GetWhiteboardFileUpload(ctx, sqlc.GetWhiteboardFileUploadParams{
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
+		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
+		SceneID: uuid(request.SceneID), FileID: request.FileID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return whiteboardfiles.Upload{}, r.uploadDeniedOr(ctx, request, whiteboardfiles.ErrFileNotFound)
+	}
+	if err != nil {
+		return whiteboardfiles.Upload{}, fmt.Errorf("get whiteboard upload: %w", err)
+	}
+	file := whiteboardfiles.Upload{
+		UploadID:  utilities.IDFromBytes(row.UploadID.Bytes),
+		ObjectKey: row.ObjectKey, MIMEType: row.MimeType, ByteLength: row.ByteLength,
+		Status: row.Status, ExpiresAt: row.ExpiresAt.Time,
+	}
+	copy(file.SHA256[:], row.Sha256)
+	return file, nil
+}
+
+func (r WhiteboardFileRepository) Finalize(ctx context.Context, request whiteboardfiles.FileRequest, uploadID utilities.ID, identity string, expiresAt time.Time) (bool, error) {
+	subject := request.Subject
+	rows, err := r.queries.FinalizeWhiteboardFile(ctx, sqlc.FinalizeWhiteboardFileParams{
+		UploadID: uuid(uploadID), ImmutableObjectIdentity: pgtype.Text{String: identity, Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		TenantID:  uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
+		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
+		SceneID: uuid(request.SceneID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("finalize whiteboard file: %w", err)
+	}
+	return rows == 1, nil
+}
+
+func (r WhiteboardFileRepository) uploadDeniedOr(ctx context.Context, request whiteboardfiles.FileRequest, fallback error) error {
+	subject := request.Subject
+	allowed, err := r.queries.CanWriteWhiteboardFile(ctx, sqlc.CanWriteWhiteboardFileParams{
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
+		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
+		SceneID: uuid(request.SceneID),
+	})
+	if err != nil {
+		return fmt.Errorf("authorize whiteboard upload: %w", err)
+	}
+	if !allowed {
+		return whiteboardfiles.ErrPermissionDenied
+	}
+	return fallback
 }
 
 func (r WhiteboardFileRepository) ClaimCleanup(ctx context.Context, input objectcleanup.ClaimInput) ([]whiteboardfiles.CleanupClaim, error) {

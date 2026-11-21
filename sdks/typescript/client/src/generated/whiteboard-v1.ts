@@ -194,6 +194,10 @@ export const WhiteboardV1ProtocolMetadata = {
   },
   fileTransport: {
     download: "participant-bound-short-lived-url",
+    upload: "scene-and-draw-authorized-create-only-short-lived-url",
+    finalize: "scene-file-id-and-digest-idempotent",
+    maxUploadBytes: 20971520,
+    uploadMimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp"],
   },
   persistence: {
     fullSyncDeletesAbsentElements: false,

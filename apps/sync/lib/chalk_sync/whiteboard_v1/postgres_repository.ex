@@ -32,6 +32,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            :missing <- Store.receipt(connection, identity, operation.operation_id, fingerprint),
            {:ok, changed_elements} <-
              Mutations.upsert_elements(connection, identity, scene.scene_id, operation.elements),
+           :ok <-
+             Mutations.reference_files(connection, identity, scene.scene_id, changed_elements),
            {:ok, revision} <- Mutations.advance_scene(connection, identity, scene.scene_id),
            :ok <-
              Store.insert_receipt(
