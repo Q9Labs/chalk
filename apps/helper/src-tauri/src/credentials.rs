@@ -13,8 +13,20 @@ pub fn read(target: &str) -> Result<Option<Vec<u8>>, &'static str> {
 
 #[cfg(target_os = "macos")]
 pub fn store(target: &str, data: &[u8]) -> Result<(), &'static str> {
-    security_framework::passwords::set_generic_password(target, ACCOUNT, data)
-        .map_err(|_| "Could not save the Chalk Helper credential to Keychain.")
+    extern "C" {
+        fn chalk_store_credential(
+            target: *const std::ffi::c_char,
+            data: *const u8,
+            len: usize,
+        ) -> bool;
+    }
+    let error = "Could not save the Chalk Helper credential to Keychain.";
+    let target = std::ffi::CString::new(target).map_err(|_| error)?;
+    if unsafe { chalk_store_credential(target.as_ptr(), data.as_ptr(), data.len()) } {
+        Ok(())
+    } else {
+        Err(error)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -29,6 +41,7 @@ pub fn clear(target: &str) -> Result<(), &'static str> {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::ACCOUNT;
+    use crate::windows_key;
     use std::{io, ptr, slice};
     use windows_sys::Win32::{
         Foundation::ERROR_NOT_FOUND,
@@ -71,13 +84,13 @@ mod windows {
             CredFree(entry.cast());
             data
         };
-        Ok(Some(data))
+        windows_key::unseal(&target, &data).map(Some)
     }
 
     pub fn store(target: &str, data: &[u8]) -> Result<(), &'static str> {
         let mut target = wide(target);
         let mut account = wide(ACCOUNT);
-        let mut data = data.to_vec();
+        let mut data = windows_key::seal(&target, data)?;
         let credential = CREDENTIALW {
             Type: CRED_TYPE_GENERIC,
             TargetName: target.as_mut_ptr(),
@@ -96,7 +109,7 @@ mod windows {
     pub fn clear(target: &str) -> Result<(), &'static str> {
         let target = wide(target);
         if unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 || not_found() {
-            return Ok(());
+            return windows_key::forget(&target);
         }
         Err("Could not remove the Chalk Helper credential from Credential Manager.")
     }

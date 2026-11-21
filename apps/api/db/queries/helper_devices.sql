@@ -6,18 +6,19 @@ where id in (select id from helper_device_requests where expires_at <= now() ord
 select * from helper_devices where credential_hash = $1 and revoked_at is null;
 
 -- name: StartHelperDeviceRequest :exec
-insert into helper_device_requests (id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at)
-values ($1, $2, $3, $4, $5, $6, $7, now() + interval '5 minutes');
+insert into helper_device_requests (id, code_hash, poll_hash, name, public_key, credential_hash, device_id, intended_tenant_id, expires_at)
+values ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '5 minutes');
 
 -- name: LookupHelperDeviceRequest :one
 select request.id, request.name, request.public_key
 from helper_device_requests request
 left join helper_devices device on device.id = request.device_id
 where request.code_hash = $1 and request.expires_at > now() and request.approved_share is null
-and (request.device_id is null or (device.tenant_id = $2 and device.revoked_at is null));
+and request.intended_tenant_id = sqlc.arg(tenant_id)
+and (request.device_id is null or (device.tenant_id = sqlc.arg(tenant_id) and device.revoked_at is null));
 
 -- name: LockHelperDeviceRequest :one
-select * from helper_device_requests where id = $1 and expires_at > now() for update;
+select * from helper_device_requests where id = $1 and intended_tenant_id = $2 and expires_at > now() for update;
 
 -- name: RegisterHelperDevice :exec
 insert into helper_devices (id, tenant_id, name, public_key, credential_hash)

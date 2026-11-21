@@ -74,7 +74,7 @@ fn api_origin() -> Result<&'static str, &'static str> {
 }
 
 fn credential_target(origin: &str) -> String {
-    format!("Chalk Helper device credentials: {origin}")
+    format!("Chalk Helper protected device credentials: {origin}")
 }
 
 impl DeviceConnection {
@@ -84,7 +84,12 @@ impl DeviceConnection {
         view
     }
 
-    pub fn start(&self) -> Result<(), &'static str> {
+    pub fn start(&self, tenant_id: &str) -> Result<(), &'static str> {
+        let tenant = uuid::Uuid::parse_str(tenant_id.trim())
+            .map_err(|_| "Paste the account ID shown in your Chalk call.")?;
+        if tenant.is_nil() {
+            return Err("Paste the account ID shown in your Chalk call.");
+        }
         let origin = api_origin()?;
         let mut state = self.0.lock().expect("device connection");
         if let Some(task) = state.task.take() {
@@ -96,7 +101,7 @@ impl DeviceConnection {
         };
         let owner = self.clone();
         state.task = Some(tauri::async_runtime::spawn(async move {
-            let result = owner.connect(origin).await;
+            let result = owner.connect(origin, tenant).await;
             owner.0.lock().expect("device connection").view = DeviceView {
                 status: Some(result.err().unwrap_or("The device connection ended.")),
                 ..Default::default()
@@ -119,7 +124,7 @@ impl DeviceConnection {
         Ok(())
     }
 
-    async fn connect(&self, origin: &str) -> Result<(), &'static str> {
+    async fn connect(&self, origin: &str, tenant: uuid::Uuid) -> Result<(), &'static str> {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(8))
@@ -167,7 +172,7 @@ impl DeviceConnection {
                 "start",
                 json!({
                     "name": name, "publicKey": public_key, "credential": registration.credential,
-                    "pollSecret": poll_secret, "registered": registered
+                    "pollSecret": poll_secret, "registered": registered, "tenantId": tenant.to_string()
                 }),
             )
         };
@@ -180,7 +185,7 @@ impl DeviceConnection {
             _ => OFFLINE,
         })?;
         let delay = Duration::from_secs(code.interval_seconds.clamp(3, 30));
-        let fingerprint = fingerprint(&public_key, &code.code)?;
+        let fingerprint = fingerprint(&public_key, &code.code, &tenant.to_string())?;
         self.0.lock().expect("device connection").view = DeviceView {
             code: Some(code.code),
             fingerprint: Some(fingerprint),
@@ -294,13 +299,16 @@ fn save(target: &str, registration: &Registration) -> Result<(), &'static str> {
     credentials::store(target, &data)
 }
 
-fn fingerprint(public_key: &str, code: &str) -> Result<String, &'static str> {
+fn fingerprint(public_key: &str, code: &str, tenant: &str) -> Result<String, &'static str> {
     const ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = code.replace('-', "");
     if code.len() != 8 || !code.bytes().all(|byte| ALPHABET.contains(&byte)) {
         return Err("Chalk returned an invalid device code.");
     }
-    let hash = digest(&SHA256, format!("{public_key}\n{code}").as_bytes());
+    let hash = digest(
+        &SHA256,
+        format!("{public_key}\n{tenant}\n{code}").as_bytes(),
+    );
     let mut accumulator = 0_u64;
     for &byte in &hash.as_ref()[..5] {
         accumulator = (accumulator << 8) | u64::from(byte);

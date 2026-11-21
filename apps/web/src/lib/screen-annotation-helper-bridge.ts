@@ -3,26 +3,13 @@ import { z } from "zod";
 const loopback = "http://127.0.0.1:47361";
 const attachLifetimeMs = 60_000;
 export const networkTimeoutMs = 10_000;
-const statusSchema = z.enum(["unbound", "calibrating", "ready", "unsupported_surface", "update_required", "disconnected"]);
+const statusSchema = z.enum(["waiting_for_sync", "unbound", "calibrating", "ready", "unsupported_surface", "update_required", "disconnected"]);
 const secret = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const deadline = z.number().int().positive();
 export const challengeSchema = z.strictObject({ version: z.number().int().positive().max(255), helperPublicKey: secret, challenge: secret, expiresAtMs: deadline });
-export const attachSchema = z.strictObject({ sessionSecret: secret, leaseExpiresAtMs: deadline, status: statusSchema });
-const statusEvent = z.strictObject({ type: z.literal("status"), status: statusSchema });
-const frameCoordinate = z.number().int().min(0).max(65535);
-const penEvent = z.strictObject({
-  type: z.literal("pen"),
-  pen: z.strictObject({
-    fence: deadline,
-    width: z.number().int().min(32).max(3277),
-    points: z
-      .array(z.strictObject({ x: frameCoordinate, y: frameCoordinate }))
-      .min(1)
-      .max(384),
-  }),
-});
-const helperEvent = z.discriminatedUnion("type", [statusEvent, penEvent]);
-export type HelperPen = z.infer<typeof penEvent>["pen"];
+export const attachSchema = z.strictObject({ sessionSecret: secret, leaseExpiresAtMs: deadline, confirmation: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
+const statusEvent = z.strictObject({ type: z.literal("status"), status: statusSchema, sequence: deadline, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
+const helperEvent = statusEvent;
 const ticket = z.strictObject({
   ticket: z
     .string()
@@ -94,14 +81,6 @@ export async function localRequest(path: HelperPath, signal: AbortSignal, data?:
   if (response.status === 409) throw new HelperConflict("Helper projection is not current.");
   if (!response.ok) throw new Error("Chalk Helper could not be reached.");
   return response;
-}
-
-export async function challengeFingerprint({ helperPublicKey, challenge }: Challenge): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${helperPublicKey}.${challenge}`));
-  const hex = Array.from(new Uint8Array(digest, 0, 4), (byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase();
-  return `${hex.slice(0, 4)}-${hex.slice(4)}`;
 }
 
 export function remaining(expiresAt: number): number {
@@ -176,5 +155,4 @@ export async function watchEvents(attachmentSecret: string, signal: AbortSignal,
   } finally {
     clearTimeout(timer);
   }
-  await observe({ type: "status", status: "disconnected" });
 }

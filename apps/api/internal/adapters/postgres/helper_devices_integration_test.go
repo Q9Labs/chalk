@@ -22,6 +22,21 @@ func (activeHelperShare) CurrentAnnotationShare(context.Context, accessgrants.Su
 	return true, nil
 }
 
+type pausedHelperShare struct {
+	started chan struct{}
+	resume  chan struct{}
+}
+
+func (s pausedHelperShare) CurrentAnnotationShare(ctx context.Context, _ accessgrants.Subject, _ utilities.ID, _ string) (bool, error) {
+	close(s.started)
+	select {
+	case <-s.resume:
+		return true, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
 func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 	url := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
 	if testing.Short() || url == "" {
@@ -58,7 +73,7 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 		return base64.RawURLEncoding.EncodeToString(data[:])
 	}
 	key, credential, poll := secret(), secret(), secret()
-	code, err := service.StartDevice(ctx, "Proof device", key, credential, poll, false)
+	code, err := service.StartDevice(ctx, tenants[0], "Proof device", key, credential, poll, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +81,11 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 	if err != nil || pending.Attachment != nil {
 		t.Fatalf("unapproved device received a ticket: %v", err)
 	}
+	t.Run("only intended tenant can look up a pending code", func(t *testing.T) {
+		if _, err := service.LookupDevice(ctx, tenants[1], code.Code); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+			t.Fatalf("unrelated signed-in tenant learned the pending code details: %v", err)
+		}
+	})
 	offer, err := service.LookupDevice(ctx, tenants[0], code.Code)
 	if err != nil || offer.Name != "Proof device" {
 		t.Fatalf("lookup offer = %+v, %v", offer, err)
@@ -82,6 +102,11 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 	publication := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"helper-proof-connection","m":"1","t":"screen","g":3}`))
 	if err := service.ApproveDevice(ctx, tenants[1], requestID, subject, layer, publication, false); !errors.Is(err, helperaccess.ErrShareNotCurrent) {
 		t.Fatalf("another signed-in tenant approved this participant: %v", err)
+	}
+	otherSubject := subject
+	otherSubject.TenantID = tenants[1]
+	if err := service.ApproveDevice(ctx, tenants[1], requestID, otherSubject, layer, publication, false); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+		t.Fatalf("another tenant with its own active share approved the pending code: %v", err)
 	}
 	if err := service.ApproveDevice(ctx, tenants[0], requestID, subject, layer, publication, false); err != nil {
 		t.Fatal(err)
@@ -107,7 +132,7 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 	if err != nil || approved.Attachment == nil {
 		t.Fatalf("approved device did not receive an attachment: %v", err)
 	}
-	if _, err := service.StartDevice(ctx, "Proof device", key, credential, secret(), true); err != nil {
+	if _, err := service.StartDevice(ctx, tenants[0], "Proof device", key, credential, secret(), true); err != nil {
 		t.Fatalf("reuse durable registration: %v", err)
 	}
 	if err := service.RevokeDevice(ctx, tenants[1], requestID); err != nil {
@@ -117,14 +142,30 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 	if err != nil || len(devices) != 1 {
 		t.Fatalf("another tenant revoked this device: %+v, %v", devices, err)
 	}
-	if err := service.RevokeDevice(ctx, tenants[0], requestID); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("revocation wins during the share check", func(t *testing.T) {
+		paused := pausedHelperShare{started: make(chan struct{}), resume: make(chan struct{})}
+		racing := helperaccess.NewService(paused, "test", "test", signer).WithDevices(store)
+		resetPoll()
+		result := make(chan error, 1)
+		go func() {
+			_, err := racing.PollDevice(ctx, poll)
+			result <- err
+		}()
+		<-paused.started
+		err := service.RevokeDevice(ctx, tenants[0], requestID)
+		close(paused.resume)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := <-result; !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+			t.Fatalf("ticket was minted after revocation returned: %v", err)
+		}
+	})
 	resetPoll()
 	if _, err := service.PollDevice(ctx, poll); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
 		t.Fatalf("revoked device renewed its ticket: %v", err)
 	}
-	if _, err := service.StartDevice(ctx, "Proof device", key, credential, secret(), true); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
+	if _, err := service.StartDevice(ctx, tenants[0], "Proof device", key, credential, secret(), true); !errors.Is(err, helperaccess.ErrDeviceUnavailable) {
 		t.Fatalf("revoked registration began a new exchange: %v", err)
 	}
 }

@@ -338,7 +338,7 @@ type Querier interface {
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
 	LockEpisodeAdmissionRequest(ctx context.Context, arg LockEpisodeAdmissionRequestParams) (SyncAdmissionRequest, error)
 	LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error)
-	LockHelperDeviceRequest(ctx context.Context, id pgtype.UUID) (HelperDeviceRequest, error)
+	LockHelperDeviceRequest(ctx context.Context, arg LockHelperDeviceRequestParams) (HelperDeviceRequest, error)
 	LockLifecycleEpisodeForUpdate(ctx context.Context, arg LockLifecycleEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)

@@ -101,6 +101,7 @@ if (isOverlay) {
     <div class="approval" hidden>
       <p>Compare this code with the code in Chalk.</p>
       <p id="fingerprint"></p>
+      <p id="confirmation-code"></p>
       <button type="button" id="deny">Deny</button>
       <button type="button" id="allow">Allow</button>
     </div>
@@ -108,6 +109,7 @@ if (isOverlay) {
     <button type="button" id="live-draw" hidden>Draw one mark</button>
     <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
     <div id="device-code" hidden>
+      <label>Account ID from your Chalk call <input id="device-account" maxlength="36" autocomplete="off" spellcheck="false"></label>
       <button type="button" id="new-device-code">Get a device code</button>
       <button type="button" id="forget-device">Remove local credential</button>
       <p id="device-status" role="status"></p>
@@ -123,7 +125,9 @@ if (isOverlay) {
   control("check_for_update", "#update");
   control("toggle_live_draw", "#live-draw");
   control("follow_window", "#follow-window");
-  control("start_device_code", "#new-device-code");
+  listen("#new-device-code", "click", () => void run("start_device_code", {
+    tenant_id: root.querySelector("#device-account").value
+  }).catch(showError));
   control("forget_device", "#forget-device");
   for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
     listen(id, "click", () => void run("decide_pairing", {
@@ -133,11 +137,25 @@ if (isOverlay) {
   }
 }
 
+let renderedProbe;
 async function refresh() {
   try {
     const view = await invoke("view");
     if (label === "ink-live") {
-      paintLive(root.querySelector("canvas"), view.overlay);
+      const canvas = root.querySelector("canvas");
+      paintLive(canvas, view.overlay);
+      const probe = view.overlay?.kind === "probe" ? view.overlay.spec : undefined;
+      if (probe?.nonce !== renderedProbe) {
+        renderedProbe = probe?.nonce;
+        if (probe) requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (renderedProbe !== probe.nonce) return;
+          const ctx = canvas.getContext("2d");
+          if (probe.points.every(({ x, y, rgb }) => {
+            const pixel = ctx.getImageData(Math.round(x * canvas.width), Math.round(y * canvas.height), 1, 1).data;
+            return rgb.every((component, channel) => pixel[channel] === component) && pixel[3] === 255;
+          })) void run("probe_painted", { nonce: probe.nonce }).catch(showError);
+        }));
+      }
     } else if (isOverlay && view.segment) {
       paintFixture(root.querySelector("canvas"), view);
     } else if (label === "hud") {
@@ -168,8 +186,9 @@ async function refresh() {
           return button;
         }));
       }
-      root.querySelector(".approval").hidden = !view.fingerprint;
-      root.querySelector("#fingerprint").textContent = view.fingerprint ?? "";
+      root.querySelector(".approval").hidden = !view.approval;
+      root.querySelector("#fingerprint").textContent = view.approval?.fingerprint ?? "";
+      root.querySelector("#confirmation-code").textContent = view.approval ? `Confirmation code: ${view.approval.confirmationCode}` : "";
       root.querySelector("#device-code").hidden = !view.device?.available;
       const deviceStatus = root.querySelector("#device-status");
       if (deviceStatus.textContent !== (view.device?.status ?? "")) deviceStatus.textContent = view.device?.status ?? "";

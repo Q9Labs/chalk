@@ -1935,6 +1935,7 @@ export interface components {
       pollSecret: string;
       publicKey: string;
       registered: boolean;
+      tenantId: string;
     };
     HelperDeviceList: {
       devices: {

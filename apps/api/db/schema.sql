@@ -5352,6 +5352,7 @@ create table helper_device_requests (
     next_poll_at timestamptz not null default now(),
     approved_share jsonb,
     approval_expires_at timestamptz,
+    intended_tenant_id uuid,
     check ((approved_share is null) = (approval_expires_at is null))
 );
 create index helper_device_requests_expiry_idx on helper_device_requests (expires_at);

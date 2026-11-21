@@ -1,8 +1,11 @@
+#import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <ColorSync/ColorSyncDevice.h>
 #import <libproc.h>
 #import <unistd.h>
+#import <stdatomic.h>
 
 typedef struct {
     int32_t x;
@@ -12,6 +15,50 @@ typedef struct {
     uint32_t pid;
     uint64_t birth;
 } ChalkWindowBounds;
+
+static _Atomic(uint32_t) live_overlay;
+
+bool chalk_window_ignore_overlay(void *applicationWindow) {
+    NSWindow *window = (__bridge NSWindow *)applicationWindow;
+    NSInteger number = window.windowNumber;
+    if (number <= 0 || number > UINT32_MAX) return false;
+    atomic_store(&live_overlay, (uint32_t)number);
+    return true;
+}
+
+static bool covers(CGRect target, CGRect above) {
+    return !CGRectIsEmpty(CGRectIntersection(target, above));
+}
+
+bool chalk_window_test_cover(uint32_t width, uint32_t height) {
+    return covers(CGRectMake(0, 0, 800, 600), CGRectMake(799, 1, width, height));
+}
+
+// Tauri uses physical coordinates. A mirrored or ambiguous match is not safe.
+bool chalk_display_identity(int32_t x, int32_t y, uint32_t width, uint32_t height, uint8_t *out) {
+    CGDirectDisplayID displays[32], selected = kCGNullDirectDisplay;
+    uint32_t count = 0;
+    if (CGGetActiveDisplayList(32, displays, &count) != kCGErrorSuccess || count >= 32) return false;
+    for (uint32_t i = 0; i < count; i++) {
+        CGDirectDisplayID display = displays[i];
+        CGRect bounds = CGDisplayBounds(display);
+        if (CGRectIsEmpty(bounds)) continue;
+        CGFloat scale = CGDisplayPixelsWide(display) / CGRectGetWidth(bounds);
+        if (llround(bounds.origin.x * scale) != x || llround(bounds.origin.y * scale) != y ||
+            llround(bounds.size.width * scale) != width || llround(bounds.size.height * scale) != height) continue;
+        if (selected != kCGNullDirectDisplay || CGDisplayIsInMirrorSet(display)) return false;
+        selected = display;
+    }
+    if (selected == kCGNullDirectDisplay) return false;
+    CFUUIDRef uuid = CGDisplayCreateUUIDFromDisplayID(selected);
+    if (uuid == NULL) return false;
+    CFStringRef string = CFUUIDCreateString(NULL, uuid);
+    CFRelease(uuid);
+    if (string == NULL) return false;
+    bool ok = CFStringGetCString(string, (char *)out, 37, kCFStringEncodingASCII);
+    CFRelease(string);
+    return ok;
+}
 
 // Require one display at the primary backing scale so Quartz and Tauri use
 // the same physical coordinate space. Decline ambiguous transforms.
@@ -29,19 +76,17 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
         CGRect rect;
         if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)target[(__bridge NSString *)kCGWindowBounds], &rect)) return false;
         if (CGRectGetWidth(rect) < 320 || CGRectGetHeight(rect) < 240) return false;
-        // Conservatively count any overlap above the target, ignoring Helper
-        // windows and the cursor, which don't obscure the target.
-        CGFloat limit = CGRectGetWidth(rect) * CGRectGetHeight(rect) * 0.08;
-        CGFloat area = 0;
+        // Conservatively count any overlap above the target, ignoring the Helper
+        // overlay and transparent windows, which do not obscure the target.
         for (NSUInteger i = 0; i < index; i++) {
             NSDictionary *candidate = windows[i];
-            if ([candidate[(__bridge NSString *)kCGWindowOwnerPID] intValue] == getpid()
-                || [candidate[(__bridge NSString *)kCGWindowAlpha] doubleValue] < 0.05) continue;
+            uint32_t number = [candidate[(__bridge NSString *)kCGWindowNumber] unsignedIntValue];
+            if (number != 0 && number == atomic_load(&live_overlay)) continue;
+            NSNumber *alpha = candidate[(__bridge NSString *)kCGWindowAlpha];
+            if (alpha != nil && alpha.doubleValue <= 0) continue;
             CGRect frame;
             if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)candidate[(__bridge NSString *)kCGWindowBounds], &frame)) return false;
-            CGRect overlap = CGRectIntersection(rect, frame);
-            if (!CGRectIsNull(overlap)) area += CGRectGetWidth(overlap) * CGRectGetHeight(overlap);
-            if (area > limit) return false;
+            if (covers(rect, frame)) return false;
         }
         // Resolve coordinates into the physical pixel space used by Tauri.
         // One scale in the virtual desktop keeps negative origins unambiguous.

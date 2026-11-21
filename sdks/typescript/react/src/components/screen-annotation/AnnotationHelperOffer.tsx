@@ -6,12 +6,14 @@ import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotat
 type HelperScreen =
   | { readonly kind: "idle" | "looking" }
   | { readonly kind: "attaching"; readonly fingerprint?: string }
+  | { readonly kind: "confirm"; readonly fingerprint: string; readonly submit: (code: string) => void }
   | { readonly kind: "code"; readonly error?: string }
   | { readonly kind: "fingerprint"; readonly value: string; readonly approve: () => Promise<void> }
   | { readonly kind: "device"; readonly name: string; readonly fingerprint?: string; readonly approve: () => Promise<void> }
   | { readonly kind: "status"; readonly status: ScreenAnnotationHelperStatus };
 
 const statuses: Record<ScreenAnnotationHelperStatus, string> = {
+  waiting_for_sync: "Connecting Chalk Helper to the call…",
   unbound: "Chalk Helper is connected. Choose the shared screen in the Helper.",
   calibrating: "Match the preview in Chalk Helper.",
   ready: "Marks show on your screen",
@@ -79,7 +81,22 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       const response = await helper.challenge(share, controller.signal);
       if (controller.signal.aborted) return;
       if (response.kind === "update_required") setScreen({ kind: "status", status: "update_required" });
-      else setScreen({ kind: "fingerprint", value: response.fingerprint, approve: () => attach(controller, response.attach, response.fingerprint) });
+      else {
+        setScreen({
+          kind: "fingerprint",
+          value: response.fingerprint,
+          approve: () => attach(controller, (status) => response.attach(status, (signal) => new Promise<string>((resolve, reject) => {
+            if (signal.aborted) { reject(signal.reason); return; }
+            const abort = () => reject(signal.reason);
+            signal.addEventListener("abort", abort, { once: true });
+            setCode("");
+            setScreen({ kind: "confirm", fingerprint: response.fingerprint, submit: (entered) => {
+              signal.removeEventListener("abort", abort);
+              resolve(entered);
+            } });
+          })), response.fingerprint),
+        });
+      }
     } catch {
       if (!controller.signal.aborted) setScreen({ kind: "code", error: "Couldn’t reach Chalk Helper on this device." });
     }
@@ -146,6 +163,12 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
                 void lookup();
               }}
             >
+              {helper.deviceAccount ? (
+                <label className="grid gap-1">
+                  Paste this account ID into Chalk Helper
+                  <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
+                </label>
+              ) : null}
               <label className="grid gap-1">
                 Device code from Chalk Helper
                 <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
@@ -156,6 +179,21 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
             </form>
           ) : null}
         </>
+      ) : null}
+      {screen.kind === "confirm" ? (
+        <form className="grid gap-2" onSubmit={(event) => {
+          event.preventDefault();
+          screen.submit(code);
+          setCode("");
+          setScreen({ kind: "attaching" });
+        }}>
+          <p>Match <code dir="ltr">{screen.fingerprint}</code> and choose Allow in the Chalk Helper app.</p>
+          <label className="grid gap-1">
+            Confirmation code shown in the app
+            <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={19} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
+          </label>
+          <button type="submit" className={annotationControl} disabled={code.replaceAll("-", "").trim().length !== 16}>Confirm</button>
+        </form>
       ) : null}
       {screen.kind === "device" ? (
         <>

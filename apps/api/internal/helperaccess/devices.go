@@ -21,12 +21,13 @@ type DeviceRepository interface {
 	LookupDeviceRequest(context.Context, utilities.ID, [32]byte) (DeviceOffer, error)
 	ApproveDeviceRequest(context.Context, utilities.ID, utilities.ID, DeviceShare, bool) error
 	PollDeviceRequest(context.Context, [32]byte) (*DeviceApproval, error)
+	IssueDeviceTicket(context.Context, utilities.ID, func() (DevicePoll, error)) (DevicePoll, error)
 	ListHelperDevices(context.Context, utilities.ID) ([]Device, error)
 	RevokeHelperDevice(context.Context, utilities.ID, utilities.ID) error
 }
 
 type DeviceEnrollment struct {
-	ID                                 utilities.ID
+	ID, IntendedTenant                 utilities.ID
 	CodeHash, PollHash, CredentialHash [32]byte
 	Name, PublicKey                    string
 	Registered                         bool
@@ -38,6 +39,7 @@ type DeviceShare struct {
 }
 
 type DeviceApproval struct {
+	DeviceID  utilities.ID
 	Share     DeviceShare
 	ExpiresAt time.Time
 }
@@ -64,9 +66,9 @@ type DevicePoll struct {
 
 var codeEncoding = base32.NewEncoding("ABCDEFGHJKLMNPQRSTUVWXYZ23456789").WithPadding(base32.NoPadding)
 
-func (s *Service) StartDevice(ctx context.Context, name, key, credential, pollSecret string, registered bool) (DeviceCode, error) {
+func (s *Service) StartDevice(ctx context.Context, intendedTenant utilities.ID, name, key, credential, pollSecret string, registered bool) (DeviceCode, error) {
 	name = strings.TrimSpace(name)
-	if !validSecret(key) || !validSecret(credential) || !validSecret(pollSecret) ||
+	if intendedTenant.IsZero() || !validSecret(key) || !validSecret(credential) || !validSecret(pollSecret) ||
 		credential == pollSecret || name == "" || len(name) > 96 ||
 		strings.ContainsFunc(name, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
 		return DeviceCode{}, ErrInvalid
@@ -81,7 +83,7 @@ func (s *Service) StartDevice(ctx context.Context, name, key, credential, pollSe
 	}
 	code := codeEncoding.EncodeToString(raw[:])
 	err = s.devices.StartDeviceRequest(ctx, DeviceEnrollment{
-		ID: id, Name: name, PublicKey: key, Registered: registered,
+		ID: id, IntendedTenant: intendedTenant, Name: name, PublicKey: key, Registered: registered,
 		CodeHash: sha256.Sum256([]byte(code)), PollHash: sha256.Sum256([]byte(pollSecret)),
 		CredentialHash: sha256.Sum256([]byte(credential)),
 	})
@@ -98,7 +100,7 @@ func (s *Service) LookupDevice(ctx context.Context, tenant utilities.ID, code st
 		return DeviceOffer{}, err
 	}
 	// The Helper displays the same fingerprint using its local key and short code.
-	hash := sha256.Sum256([]byte(offer.Fingerprint + "\n" + code))
+	hash := sha256.Sum256([]byte(offer.Fingerprint + "\n" + tenant.String() + "\n" + code))
 	offer.Fingerprint = codeEncoding.EncodeToString(hash[:5])
 	return offer, nil
 }
@@ -125,13 +127,18 @@ func (s *Service) PollDevice(ctx context.Context, pollSecret string) (DevicePoll
 	if err := s.authorize(ctx, approval.Share.Subject, approval.Share.Binding); err != nil {
 		return DevicePoll{}, err
 	}
-	now := s.now().UTC()
-	expires := approval.ExpiresAt.Truncate(time.Second)
-	if !expires.After(now.Add(4 * time.Second)) {
-		return DevicePoll{}, nil
-	}
-	ticket, err := s.remoteTicketUntil(approval.Share.Subject, approval.Share.Binding, now, expires)
-	return DevicePoll{Attachment: &ticket}, err
+	return s.devices.IssueDeviceTicket(ctx, approval.DeviceID, func() (DevicePoll, error) {
+		now := s.now().UTC()
+		expires := approval.ExpiresAt.Truncate(time.Second)
+		if !expires.After(now.Add(4 * time.Second)) {
+			return DevicePoll{}, nil
+		}
+		ticket, err := s.remoteTicketUntil(approval.Share.Subject, approval.Share.Binding, now, expires)
+		if err != nil {
+			return DevicePoll{}, err
+		}
+		return DevicePoll{Attachment: &ticket}, nil
+	})
 }
 
 func (s *Service) ListDevices(ctx context.Context, tenant utilities.ID) ([]Device, error) {

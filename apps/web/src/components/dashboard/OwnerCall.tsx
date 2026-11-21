@@ -152,11 +152,11 @@ function OwnerCallSurface({
     () =>
       callAnnotation({
         apiBaseUrl: baseURL,
-        signedIn: true,
+        tenantId,
         mediaProof: owner.reportCredential,
         screenShare: () => client.getSnapshot().media.screenShare,
       }),
-    [baseURL, owner, client],
+    [baseURL, tenantId, owner, client],
   );
   if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
     return (

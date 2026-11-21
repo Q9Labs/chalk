@@ -124,7 +124,11 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 	principal, _ := authentication.PrincipalFromContext(r.Context())
 	_, participant := accessgrants.SubjectFromContext(r.Context())
 	tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
-	if !participant && principal.Kind == authentication.PrincipalService && err == nil &&
+	serviceTenant := !participant && principal.Kind == authentication.PrincipalService && err == nil
+	if serviceTenant && policy.Name == helperLookupLimit.Name {
+		key += ":tenant:" + tenantID.String()
+	}
+	if serviceTenant &&
 		(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
 		ceiling := policy
 		ceiling.Name += ".service_ceiling"

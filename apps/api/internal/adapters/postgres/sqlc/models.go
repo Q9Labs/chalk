@@ -161,6 +161,7 @@ type HelperDeviceRequest struct {
 	NextPollAt        pgtype.Timestamptz `json:"next_poll_at"`
 	ApprovedShare     []byte             `json:"approved_share"`
 	ApprovalExpiresAt pgtype.Timestamptz `json:"approval_expires_at"`
+	IntendedTenantID  pgtype.UUID        `json:"intended_tenant_id"`
 }
 
 type Identity struct {

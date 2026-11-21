@@ -15606,9 +15606,13 @@
           },
           "registered": {
             "type": "boolean"
+          },
+          "tenantId": {
+            "minLength": 1,
+            "type": "string"
           }
         },
-        "required": ["credential", "name", "pollSecret", "publicKey", "registered"],
+        "required": ["credential", "name", "pollSecret", "publicKey", "registered", "tenantId"],
         "type": "object"
       },
       "HelperDeviceList": {

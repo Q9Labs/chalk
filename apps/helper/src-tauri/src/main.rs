@@ -4,10 +4,15 @@ mod attachment;
 mod credentials;
 mod desktop;
 mod device;
+mod display_identity;
 mod geometry;
+mod helper_scene;
 mod live;
 mod pairing;
+mod pairing_consent;
 mod window_follow;
+#[cfg(target_os = "windows")]
+mod windows_key;
 
 use desktop::{act, view};
 use tauri_plugin_global_shortcut::ShortcutState;

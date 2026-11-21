@@ -28,6 +28,7 @@ var (
 )
 
 type helperCodeStart struct {
+	TenantID   string `json:"tenantId"`
 	Name       string `json:"name"`
 	PublicKey  string `json:"publicKey"`
 	Credential string `json:"credential"`
@@ -91,7 +92,11 @@ func helperNativeEndpoints(service *helperaccess.Service) []RouteEndpoint {
 		if !service.DevicesEnabled() {
 			return helperaccess.DeviceCode{}, apiErrorServiceUnavailable
 		}
-		return service.StartDevice(ctx, req.Name, req.PublicKey, req.Credential, req.PollSecret, req.Registered)
+		tenant, err := utilities.ParseID(req.TenantID)
+		if err != nil {
+			return helperaccess.DeviceCode{}, apiErrorInvalidRequest
+		}
+		return service.StartDevice(ctx, tenant, req.Name, req.PublicKey, req.Credential, req.PollSecret, req.Registered)
 	}).Needs(service).RateLimit(helperEnrollmentLimit).Middleware(noStoreResponses).
 		RequestBody("HelperDeviceCodeStart", helperCodeStart{}).Responds(http.StatusOK, "HelperDeviceCode", helperaccess.DeviceCode{}).
 		Errors(helperDeviceErrors...).ErrorRules(helperDeviceRules)

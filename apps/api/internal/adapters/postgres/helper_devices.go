@@ -23,14 +23,15 @@ func (r EpisodeLifecycleRepository) StartDeviceRequest(ctx context.Context, requ
 			if err != nil {
 				return deviceRequestError(err)
 			}
-			if device.PublicKey != request.PublicKey {
+			if device.PublicKey != request.PublicKey || device.TenantID != uuid(request.IntendedTenant) {
 				return helperaccess.ErrDeviceUnavailable
 			}
 			deviceID, request.Name = device.ID, device.Name
 		}
 		return q.StartHelperDeviceRequest(ctx, sqlc.StartHelperDeviceRequestParams{
 			ID: uuid(request.ID), CodeHash: request.CodeHash[:], PollHash: request.PollHash[:],
-			Name: request.Name, PublicKey: request.PublicKey, CredentialHash: request.CredentialHash[:], DeviceID: deviceID,
+			Name: request.Name, PublicKey: request.PublicKey, CredentialHash: request.CredentialHash[:],
+			DeviceID: deviceID, IntendedTenantID: uuid(request.IntendedTenant),
 		})
 	})
 }
@@ -49,7 +50,7 @@ func (r EpisodeLifecycleRepository) LookupDeviceRequest(ctx context.Context, ten
 
 func (r EpisodeLifecycleRepository) ApproveDeviceRequest(ctx context.Context, tenant, requestID utilities.ID, share helperaccess.DeviceShare, refresh bool) error {
 	return r.transaction(ctx, func(q *sqlc.Queries, _ pgx.Tx) error {
-		request, err := q.LockHelperDeviceRequest(ctx, uuid(requestID))
+		request, err := q.LockHelperDeviceRequest(ctx, sqlc.LockHelperDeviceRequestParams{ID: uuid(requestID), IntendedTenantID: uuid(tenant)})
 		if err != nil {
 			return deviceRequestError(err)
 		}
@@ -111,10 +112,26 @@ func (r EpisodeLifecycleRepository) PollDeviceRequest(ctx context.Context, poll 
 		if err := json.Unmarshal(request.ApprovedShare, &share); err != nil {
 			return err
 		}
-		approval = &helperaccess.DeviceApproval{Share: share, ExpiresAt: request.ApprovalExpiresAt.Time}
+		approval = &helperaccess.DeviceApproval{DeviceID: id(request.DeviceID), Share: share, ExpiresAt: request.ApprovalExpiresAt.Time}
 		return nil
 	})
 	return approval, err
+}
+
+// Sign under the same row lock that revocation takes. The share recheck does
+// not hold a database connection or lock while it consults other services.
+func (r EpisodeLifecycleRepository) IssueDeviceTicket(ctx context.Context, device utilities.ID, issue func() (helperaccess.DevicePoll, error)) (ticket helperaccess.DevicePoll, err error) {
+	err = r.transaction(ctx, func(q *sqlc.Queries, _ pgx.Tx) error {
+		if _, err := q.LockActiveHelperDevice(ctx, uuid(device)); err != nil {
+			return deviceRequestError(err)
+		}
+		ticket, err = issue()
+		return err
+	})
+	if err != nil {
+		return helperaccess.DevicePoll{}, err
+	}
+	return ticket, nil
 }
 
 func (r EpisodeLifecycleRepository) ListHelperDevices(ctx context.Context, tenant utilities.ID) (devices []helperaccess.Device, err error) {

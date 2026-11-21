@@ -77,11 +77,16 @@ func (q *Queries) LockActiveHelperDevice(ctx context.Context, id pgtype.UUID) (H
 }
 
 const lockHelperDeviceRequest = `-- name: LockHelperDeviceRequest :one
-select id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at, next_poll_at, approved_share, approval_expires_at from helper_device_requests where id = $1 and expires_at > now() for update
+select id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at, next_poll_at, approved_share, approval_expires_at, intended_tenant_id from helper_device_requests where id = $1 and intended_tenant_id = $2 and expires_at > now() for update
 `
 
-func (q *Queries) LockHelperDeviceRequest(ctx context.Context, id pgtype.UUID) (HelperDeviceRequest, error) {
-	row := q.db.QueryRow(ctx, lockHelperDeviceRequest, id)
+type LockHelperDeviceRequestParams struct {
+	ID               pgtype.UUID `json:"id"`
+	IntendedTenantID pgtype.UUID `json:"intended_tenant_id"`
+}
+
+func (q *Queries) LockHelperDeviceRequest(ctx context.Context, arg LockHelperDeviceRequestParams) (HelperDeviceRequest, error) {
+	row := q.db.QueryRow(ctx, lockHelperDeviceRequest, arg.ID, arg.IntendedTenantID)
 	var i HelperDeviceRequest
 	err := row.Scan(
 		&i.ID,
@@ -95,6 +100,7 @@ func (q *Queries) LockHelperDeviceRequest(ctx context.Context, id pgtype.UUID) (
 		&i.NextPollAt,
 		&i.ApprovedShare,
 		&i.ApprovalExpiresAt,
+		&i.IntendedTenantID,
 	)
 	return i, err
 }
@@ -104,6 +110,7 @@ select request.id, request.name, request.public_key
 from helper_device_requests request
 left join helper_devices device on device.id = request.device_id
 where request.code_hash = $1 and request.expires_at > now() and request.approved_share is null
+and request.intended_tenant_id = $2
 and (request.device_id is null or (device.tenant_id = $2 and device.revoked_at is null))
 `
 
@@ -128,7 +135,7 @@ func (q *Queries) LookupHelperDeviceRequest(ctx context.Context, arg LookupHelpe
 const pollHelperDeviceRequest = `-- name: PollHelperDeviceRequest :one
 update helper_device_requests set next_poll_at = now() + interval '3 seconds'
 where poll_hash = $1 and expires_at > now() and next_poll_at <= now()
-returning id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at, next_poll_at, approved_share, approval_expires_at
+returning id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at, next_poll_at, approved_share, approval_expires_at, intended_tenant_id
 `
 
 func (q *Queries) PollHelperDeviceRequest(ctx context.Context, pollHash []byte) (HelperDeviceRequest, error) {
@@ -146,6 +153,7 @@ func (q *Queries) PollHelperDeviceRequest(ctx context.Context, pollHash []byte) 
 		&i.NextPollAt,
 		&i.ApprovedShare,
 		&i.ApprovalExpiresAt,
+		&i.IntendedTenantID,
 	)
 	return i, err
 }
@@ -218,18 +226,19 @@ func (q *Queries) RevokeHelperDevice(ctx context.Context, arg RevokeHelperDevice
 }
 
 const startHelperDeviceRequest = `-- name: StartHelperDeviceRequest :exec
-insert into helper_device_requests (id, code_hash, poll_hash, name, public_key, credential_hash, device_id, expires_at)
-values ($1, $2, $3, $4, $5, $6, $7, now() + interval '5 minutes')
+insert into helper_device_requests (id, code_hash, poll_hash, name, public_key, credential_hash, device_id, intended_tenant_id, expires_at)
+values ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '5 minutes')
 `
 
 type StartHelperDeviceRequestParams struct {
-	ID             pgtype.UUID `json:"id"`
-	CodeHash       []byte      `json:"code_hash"`
-	PollHash       []byte      `json:"poll_hash"`
-	Name           string      `json:"name"`
-	PublicKey      string      `json:"public_key"`
-	CredentialHash []byte      `json:"credential_hash"`
-	DeviceID       pgtype.UUID `json:"device_id"`
+	ID               pgtype.UUID `json:"id"`
+	CodeHash         []byte      `json:"code_hash"`
+	PollHash         []byte      `json:"poll_hash"`
+	Name             string      `json:"name"`
+	PublicKey        string      `json:"public_key"`
+	CredentialHash   []byte      `json:"credential_hash"`
+	DeviceID         pgtype.UUID `json:"device_id"`
+	IntendedTenantID pgtype.UUID `json:"intended_tenant_id"`
 }
 
 func (q *Queries) StartHelperDeviceRequest(ctx context.Context, arg StartHelperDeviceRequestParams) error {
@@ -241,6 +250,7 @@ func (q *Queries) StartHelperDeviceRequest(ctx context.Context, arg StartHelperD
 		arg.PublicKey,
 		arg.CredentialHash,
 		arg.DeviceID,
+		arg.IntendedTenantID,
 	)
 	return err
 }

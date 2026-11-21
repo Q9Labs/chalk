@@ -85,7 +85,7 @@ pub struct View {
     color: &'static str,
     hotkey: bool,
     fixture: bool,
-    fingerprint: Option<String>,
+    approval: Option<crate::pairing::ApprovalPrompt>,
     connected: bool,
     live_drawing_available: bool,
     monitors: Vec<String>,
@@ -100,7 +100,7 @@ pub struct View {
 pub enum Action {
     ChangeStyle { style: Style },
     CheckForUpdate,
-    StartDeviceCode,
+    StartDeviceCode { tenant_id: String },
     ForgetDevice,
     DecidePairing { fingerprint: String, allowed: bool },
     SelectMonitor { index: usize },
@@ -113,6 +113,7 @@ pub enum Action {
     BeginDrag,
     Drag,
     EndDrag,
+    ProbePainted { nonce: String },
     BeginStroke { x: f64, y: f64 },
     AddPoint { x: f64, y: f64 },
     FinishStroke,
@@ -287,6 +288,8 @@ pub(crate) fn show_live_overlay(
         overlay.set_content_protected(false)?;
     }
     place(&overlay, bounds)?;
+    overlay.set_focusable(false)?;
+
     overlay.set_ignore_cursor_events(true)?;
     let size = overlay.inner_size()?;
     let position = overlay.inner_position()?;
@@ -299,7 +302,8 @@ pub(crate) fn show_live_overlay(
             std::io::Error::other("Monitor overlay does not align with the display.").into(),
         );
     }
-    overlay.show()
+    overlay.show()?;
+    crate::window_follow::ignore_overlay(&overlay)
 }
 
 #[cfg(target_os = "windows")]
@@ -367,6 +371,8 @@ fn start_fixture(app: &AppHandle) -> tauri::Result<()> {
     for (index, segment) in segments.iter().enumerate() {
         let overlay = floating(app, &format!("ink-{index}"), false)?;
         place(&overlay, segment.bounds)?;
+        overlay.set_focusable(false)?;
+
         overlay.set_ignore_cursor_events(true)?;
         let handle = app.clone();
         overlay.on_window_event(move |event| {
@@ -602,7 +608,7 @@ fn allowed(label: &str, action: &Action) -> bool {
     match action {
         Action::ChangeStyle { .. } => matches!(label, "settings" | "hud"),
         Action::CheckForUpdate
-        | Action::StartDeviceCode
+        | Action::StartDeviceCode { .. }
         | Action::ForgetDevice
         | Action::DecidePairing { .. }
         | Action::FollowWindow
@@ -617,6 +623,7 @@ fn allowed(label: &str, action: &Action) -> bool {
         Action::CancelDraw => {
             matches!(label, "draw-bar" | live::OVERLAY) || segment_index(label).is_some()
         }
+        Action::ProbePainted { .. } => label == live::OVERLAY,
         Action::BeginStroke { .. }
         | Action::AddPoint { .. }
         | Action::FinishStroke
@@ -638,8 +645,8 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
         live_drawing_available: local.pairing.as_ref().is_some_and(Pairing::can_draw),
         hotkey: local.hotkey,
         fixture: local.fixture.is_some(),
-        fingerprint: (window.label() == "settings")
-            .then(|| local.pairing.as_ref()?.fingerprint())
+        approval: (window.label() == "settings")
+            .then(|| local.pairing.as_ref()?.approval_prompt())
             .flatten(),
         connected: local.pairing.as_ref().is_some_and(Pairing::connected),
         can_follow_window: window.label() == "settings"
@@ -709,6 +716,7 @@ pub fn act(
                     Action::ToggleLiveDraw => {
                         let _ = capture.toggle_drawing(&app);
                     }
+                    Action::ProbePainted { nonce } => capture.acknowledge_paint(&nonce),
                     Action::BeginStroke { x, y } => capture.add_point(x, y, true),
                     Action::AddPoint { x, y } => capture.add_point(x, y, false),
                     Action::FinishStroke => capture.finish_stroke(&app),
@@ -721,7 +729,9 @@ pub fn act(
             .map_err(|error| error.to_string());
     }
     match action {
-        Action::StartDeviceCode => return local.device.start().map_err(str::to_owned),
+        Action::StartDeviceCode { tenant_id } => {
+            return local.device.start(&tenant_id).map_err(str::to_owned)
+        }
         Action::ForgetDevice => return local.device.clear().map_err(str::to_owned),
         Action::DecidePairing {
             fingerprint,

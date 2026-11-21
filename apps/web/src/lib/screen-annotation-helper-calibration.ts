@@ -100,6 +100,7 @@ export async function calibrateWindow(options: {
   readonly signal: AbortSignal;
   readonly verify: (input: { width: number; height: number; landmarks: number[] }, signal: AbortSignal) => Promise<boolean>;
   readonly start: (signal: AbortSignal) => Promise<Probe>;
+  readonly painted: (nonce: string, signal: AbortSignal) => Promise<void>;
   readonly complete: (nonce: string, signal: AbortSignal) => Promise<void>;
   readonly abort: () => Promise<void>;
 }): Promise<void> {
@@ -123,6 +124,7 @@ export async function calibrateWindow(options: {
     track.enabled = false;
     probing = true;
     const probe = await options.start(deadline);
+    await options.painted(probe.nonce, deadline);
     const sample = probeReader(video);
     let frames = 0;
     while (frames < 4) {

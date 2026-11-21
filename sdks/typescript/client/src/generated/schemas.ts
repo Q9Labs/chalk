@@ -722,6 +722,7 @@ export const HelperDeviceCodeStartSchema = /* @__PURE__ */ (() =>
     pollSecret: Schema.String.check(Schema.isMinLength(1)),
     publicKey: Schema.String.check(Schema.isMinLength(1)),
     registered: Schema.Boolean,
+    tenantId: Schema.String.check(Schema.isMinLength(1)),
   }))();
 export type HelperDeviceCodeStart = typeof HelperDeviceCodeStartSchema.Type;
 
