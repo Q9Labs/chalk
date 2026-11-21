@@ -205,8 +205,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageRecording = useCan("manageRecording");
-  const { status } = useConnection();
-  const live = status === "live";
+  const live = useConnection().status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
   const microphoneTarget = mediaToggleTarget(media.local.microphone.state, live);
@@ -306,7 +305,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     microphonePending: media.local.microphone.state === "requesting",
     onCancelMicrophonePending: toggleMicrophone,
     mediaEnableDisabled: !live,
-    reactionsDisabled: !live && status !== "reconnecting",
+    reactionsDisabled: !live,
     cameraPending: media.local.camera.state === "requesting",
     onCancelCameraPending: toggleCamera,
     isVideoEnabled: cameraEnabled,

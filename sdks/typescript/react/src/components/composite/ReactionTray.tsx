@@ -23,15 +23,13 @@ export interface ReactionTrayProps {
   readonly onClose: () => void;
   readonly position?: "top" | "bottom";
   readonly className?: string;
-  /** The emoji are disabled while the call reconnects; the hand still works. */
-  readonly emojiPaused?: boolean;
 }
 
 /**
  * One row of large emoji buttons that pops up over the control bar. Arrow keys move between
  * emojis, Home/End jump, Escape and clicking outside close. Focus lands on the first emoji.
  */
-export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className, emojiPaused = false }: ReactionTrayProps): React.JSX.Element {
+export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
   const [more, setMore] = useState(false);
   const returnFocus = useRef<Element | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -63,7 +61,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     const resize = new ResizeObserver(place);
     if (tray) resize.observe(tray);
     window.addEventListener("resize", place);
-    listRef.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+    listRef.current?.querySelector("button")?.focus();
     return () => {
       window.removeEventListener("resize", place);
       resize.disconnect();
@@ -101,7 +99,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   );
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const buttons = listRef.current ? [...listRef.current.querySelectorAll("button:not(:disabled)")].filter((button) => button instanceof HTMLElement) : [];
+    const buttons = listRef.current ? [...listRef.current.querySelectorAll("button")] : [];
     if (buttons.length === 0) return;
     const index = buttons.findIndex((button) => button === document.activeElement);
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -112,7 +110,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   };
 
   const buttons = (more ? reactions : reactions.slice(0, 6)).map((emoji) => (
-    <button key={emoji} type="button" disabled={emojiPaused} onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" data-move={EMOJI_MOVE.get(emoji) ?? "pop"} aria-label={`React with ${emoji}`}>
+    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" data-move={EMOJI_MOVE.get(emoji) ?? "pop"} aria-label={`React with ${emoji}`}>
       <span aria-hidden="true">{emoji}</span>
     </button>
   ));
@@ -144,7 +142,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
           ) : null}
           {buttons}
           {!more && reactions.length > 6 ? (
-            <button type="button" className="chalk-shell-emoji" disabled={emojiPaused} aria-label="More emoji" onClick={() => setMore(true)}>
+            <button type="button" className="chalk-shell-emoji" aria-label="More emoji" onClick={() => setMore(true)}>
               …
             </button>
           ) : null}
