@@ -60,7 +60,9 @@ function Measured({ talk, playback }: { readonly talk: MeasuredTalk; readonly pl
     return (
       <>
         {totals}
-        <p className="sub">Nobody was heard talking in this session.</p>
+        <div className="blank">
+          <p>Nobody was heard talking in this session.</p>
+        </div>
       </>
     );
   }
