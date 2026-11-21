@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	apiErrorWhiteboardFileConflict       = APIError{Status: http.StatusConflict, Code: "whiteboard.file_conflict", Message: "Whiteboard file ID is already reserved or the upload expired"}
+	apiErrorWhiteboardFileConflict       = APIError{Status: http.StatusConflict, Code: "whiteboard.file_conflict", Message: "Whiteboard file could not be reserved or finalized"}
 	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
 	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
 	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
@@ -40,11 +40,21 @@ type whiteboardFileDownloadResponse struct {
 	ExpiresAt   string `json:"expiresAt"`
 }
 
+type whiteboardFileAvailability struct {
+	Available bool `json:"available"`
+}
+
 type whiteboardSubjectContextKey struct{}
 
 func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) []RouteEndpoint {
 	auth := requireWhiteboardParticipant(verifier)
 	return []RouteEndpoint{
+		Get("/v1/whiteboard/files/availability", "getWhiteboardFileAvailability",
+			func(*http.Request) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, struct{}) (whiteboardFileAvailability, error) {
+				return whiteboardFileAvailability{Available: service != nil && verifier != nil}, nil
+			},
+		).Responds(http.StatusOK, "WhiteboardFileAvailability", whiteboardFileAvailability{}),
 		downloadWhiteboardFileEndpoint(service).Middleware(auth),
 		initiateWhiteboardFileEndpoint(service).Middleware(auth),
 		finalizeWhiteboardFileEndpoint(service).Middleware(auth),

@@ -978,6 +978,13 @@ type RecordingReservation struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingScreenAnnotationBudget struct {
+	RecordingID   pgtype.UUID `json:"recording_id"`
+	RetainedBytes int64       `json:"retained_bytes"`
+	LayerCount    int64       `json:"layer_count"`
+	Exhausted     bool        `json:"exhausted"`
+}
+
 type RecordingScreenAnnotationChange struct {
 	TenantID     pgtype.UUID `json:"tenant_id"`
 	SpaceID      pgtype.UUID `json:"space_id"`

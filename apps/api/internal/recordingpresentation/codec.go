@@ -109,6 +109,27 @@ func (timeline Timeline) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wire)
 }
 
+func (content SharedContent) MarshalJSON() ([]byte, error) {
+	if content.Kind != "whiteboard" {
+		type wire SharedContent
+		return json.Marshal(wire(content))
+	}
+
+	// A clear creates a new scene at revision zero, which is required on the
+	// whiteboard variant but must be absent on the other variants.
+	return json.Marshal(struct {
+		Kind         string `json:"kind"`
+		SceneID      string `json:"sceneId"`
+		Revision     int64  `json:"revision"`
+		StateAssetID string `json:"stateAssetId"`
+	}{
+		Kind:         content.Kind,
+		SceneID:      content.SceneID,
+		Revision:     content.Revision,
+		StateAssetID: content.StateAssetID,
+	})
+}
+
 func decodeEvent(raw json.RawMessage) (Event, error) {
 	var header struct {
 		Kind string `json:"kind"`

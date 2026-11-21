@@ -30,6 +30,7 @@
   "scripts": {
     "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform neutral --no-splitting && pnpm run build:types",
     "build:types": "node ../../scripts/fs.mjs rm tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "test": "tsx --test test/*.test.ts",
     "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "node ../../scripts/fs.mjs rm dist"

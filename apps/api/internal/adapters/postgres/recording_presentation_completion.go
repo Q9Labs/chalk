@@ -108,6 +108,7 @@ type completionWhiteboardEventWire struct {
 }
 
 type completionWhiteboardFileWire struct {
+	SceneID    string `json:"scene_id"`
 	ID         string `json:"file_id"`
 	ObjectKey  string `json:"object_key"`
 	ObjectETag string `json:"object_etag"`
@@ -163,12 +164,13 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 	if err := strictCompletionJSON([]byte(row.CapturePlansJson), &plans); err != nil {
 		return recordingpresentation.CompletionSource{}, completionSourceError("capture plans", err)
 	}
-	if row.ScreenAnnotationOverflow.Bool {
-		return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation exceeds recording limits", recordingpresentation.ErrInvalidCompletionSource)
-	}
+	// Captures that started before the retention budget can already exceed it.
+	// Export the media rather than retrying an optional sidecar that cannot fit.
 	var annotation []recordingpresentation.ScreenAnnotationFact
-	if err := strictCompletionJSON([]byte(row.ScreenAnnotationJson), &annotation); err != nil {
-		return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation", err)
+	if !row.ScreenAnnotationOverflow.Bool {
+		if err := strictCompletionJSON([]byte(row.ScreenAnnotationJson), &annotation); err != nil {
+			return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation", err)
+		}
 	}
 	var reactions []completionReactionWire
 	if err := strictCompletionJSON([]byte(row.ReactionsJson), &reactions); err != nil {
@@ -301,7 +303,7 @@ func mapWhiteboardFileFacts(values []completionWhiteboardFileWire) ([]recordingp
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, recordingpresentation.WhiteboardFileFact{ID: value.ID, Object: object})
+		result = append(result, recordingpresentation.WhiteboardFileFact{SceneID: value.SceneID, ID: value.ID, Object: object})
 	}
 	return result, nil
 }
