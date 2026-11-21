@@ -39,7 +39,7 @@ import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext } from "@q9labsai/chalk-whiteboard/react";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
-import { SpaceStage } from "../stage/SpaceStage";
+import { SpaceStage, type StageScreenAnnotation } from "../stage/SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
@@ -96,6 +96,7 @@ export interface SpaceViewProps {
   readonly onDismissCommandError?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
+  readonly screenAnnotation?: StageScreenAnnotation;
   /** Rejoin after the call could not be recovered; the failed card offers it. */
   readonly onRejoin?: () => void;
   readonly overlay?: React.ReactNode;
@@ -136,6 +137,7 @@ export function SpaceView({
   onDismissCommandError,
   onToggleWhiteboard,
   whiteboard,
+  screenAnnotation,
   onRejoin,
   overlay,
   onLeft,
@@ -377,6 +379,7 @@ export function SpaceView({
                 colorScheme={colorScheme}
                 onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
                 shareCapture={media.screenShare.capture}
+                screenAnnotation={screenAnnotation}
                 onStopSharing={async () => {
                   await client.media.setScreenShareEnabled(false);
                 }}
@@ -401,6 +404,7 @@ export function SpaceView({
                   onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
                   buttons={buttons}
                   microphonePicker={microphoneNotice.picker}
+                  helperInstallUrl={screenAnnotation?.helper?.installUrl}
                   activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                   onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                   onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}

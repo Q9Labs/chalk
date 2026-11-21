@@ -121,7 +121,15 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
         />
       ) : null}
       {has("screenshare") && canCaptureDisplay ? (
-        <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
+        <ShareControl
+          helperInstallUrl={props.helperInstallUrl}
+          access={props.deviceAccess?.screen}
+          disabled={props.mediaEnableDisabled && !props.isScreenSharing}
+          startDisabled={props.mediaEnableDisabled}
+          sharing={props.isScreenSharing ?? false}
+          onToggle={props.onToggleScreenShare}
+          onStart={props.onStartScreenShare}
+        />
       ) : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}

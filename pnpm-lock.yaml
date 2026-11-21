@@ -524,6 +524,9 @@ importers:
       '@q9labsai/chalk-react':
         specifier: workspace:^
         version: link:../../sdks/typescript/react
+      '@q9labsai/chalk-screen-annotation':
+        specifier: workspace:^
+        version: link:../../packages/screen-annotation
       '@q9labsai/chalk-ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -852,6 +855,9 @@ importers:
       '@q9labsai/chalk-client':
         specifier: workspace:^
         version: link:../client
+      '@q9labsai/chalk-screen-annotation':
+        specifier: workspace:^
+        version: link:../../../packages/screen-annotation
       '@q9labsai/chalk-ui':
         specifier: workspace:^
         version: link:../../../packages/ui

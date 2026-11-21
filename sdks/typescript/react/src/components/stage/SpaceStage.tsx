@@ -1,3 +1,5 @@
+import type { AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
+import type { ScreenAnnotationOptions } from "../screen-annotation/model";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
@@ -33,6 +35,11 @@ const Board = lazy(() =>
   ),
 );
 
+export interface StageScreenAnnotation extends Omit<ScreenAnnotationOptions, "publicationId"> {
+  readonly context: AnnotationPresentationContext;
+  readonly publicationForTrack: (track: MediaStreamTrack) => string | undefined;
+}
+
 export interface SpaceStageProps {
   readonly pinnedId?: string | null;
   readonly onPinnedChange?: (id: string | null) => void;
@@ -42,6 +49,7 @@ export interface SpaceStageProps {
   readonly generatedAvatars?: boolean;
   readonly whiteboard?: SpaceViewWhiteboard;
   readonly onOverflowClick?: () => void;
+  readonly screenAnnotation?: StageScreenAnnotation;
   readonly shareCapture?: ScreenShareCapture;
   readonly onStopSharing?: () => Promise<void>;
   readonly onChangeShare?: (options: ScreenShareOptions) => Promise<void>;
@@ -50,7 +58,7 @@ export interface SpaceStageProps {
   readonly className?: string;
 }
 /** One keyed renderer for people, the live board and each screen, in both layouts. */
-export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
+export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, screenAnnotation, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
   const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
   const [localPin, setLocalPin] = useState<string | null>(null);
@@ -92,12 +100,16 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   );
   const renderContentTile = useCallback(
     (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
-      if (item.kind === "screen-share")
+      if (item.kind === "screen-share") {
+        const track = item.participant.screenShareTrack;
+        const publicationId = track && screenAnnotation?.publicationForTrack(track);
         return (
           <StageContentTile
             item={item}
             {...context}
             capture={item.participant.isLocal ? shareCapture : undefined}
+            annotation={screenAnnotation && publicationId ? { ...screenAnnotation, publicationId } : undefined}
+            annotationContext={screenAnnotation?.context}
             onStopSharing={item.participant.isLocal ? onStopSharing : undefined}
             onChangeShare={item.participant.isLocal ? onChangeShare : undefined}
             switcher={
@@ -122,6 +134,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
             }
           />
         );
+      }
       const boardProps = whiteboard?.props;
       return (
         <StageContentTileSurface
@@ -140,7 +153,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
         />
       );
     },
-    [follow, whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
+    [follow, whiteboard, shares, shareCapture, screenAnnotation, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
   );
   const focusContent = useCallback(
     (item: StageItem) => {
