@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "recording_presentation.v1",
+  "recordingId": "recording",
+  "episodeId": "episode",
+  "clock": {
+    "origin": "capture_ready",
+    "timebase": "recording_relative_ms",
+    "captureEpoch": 1,
+    "originAuthorityId": "capture",
+    "durationMs": 1000
+  },
+  "sourceCursors": {
+    "episodeControlStartRevision": 1,
+    "episodeControlEndRevision": 1,
+    "chatStartSequence": 0,
+    "chatEndSequence": 0,
+    "whiteboardStartRevision": 1,
+    "whiteboardEndRevision": 2,
+    "capturePlanStartRevision": 1,
+    "capturePlanEndRevision": 1
+  },
+  "initial": {
+    "elapsedMs": 0,
+    "profile": {
+      "name": "recording-space",
+      "version": "composite_720p_v1",
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "deviceScaleFactor": 1
+      },
+      "locale": "en",
+      "timeZone": "UTC",
+      "fontAssetIds": [],
+      "theme": {
+        "colorScheme": "light",
+        "skin": "classic",
+        "palette": "light",
+        "texture": "none",
+        "stageBackground": true,
+        "generatedAvatars": true
+      }
+    },
+    "space": {
+      "id": "space",
+      "name": "Empty presented board"
+    },
+    "view": {
+      "layout": "presentation",
+      "sidebar": "chat"
+    },
+    "participants": [],
+    "media": [],
+    "chat": {
+      "retainedFloorSequence": null,
+      "headSequence": 0,
+      "messages": []
+    },
+    "sharedContent": {
+      "kind": "whiteboard",
+      "sceneId": "board-cleared-before-capture",
+      "revision": 0,
+      "stateAssetId": "initial-board"
+    },
+    "reactions": []
+  },
+  "events": [
+    {
+      "atMs": 500,
+      "sequence": 1,
+      "kind": "shared_content_changed",
+      "sharedContent": {
+        "kind": "whiteboard",
+        "sceneId": "board-cleared-during-capture",
+        "revision": 0,
+        "stateAssetId": "cleared-board"
+      }
+    },
+    {
+      "atMs": 750,
+      "sequence": 2,
+      "kind": "shared_content_changed",
+      "sharedContent": {
+        "kind": "none"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": "initial-board",
+      "kind": "whiteboard_state",
+      "objectKey": "board/initial.json",
+      "contentType": "application/json",
+      "byteSize": 131,
+      "sha256": "e6ade9df8a0521f3534f30f7a4d6a541ae404186561f60b19b10c9904b8e509e"
+    },
+    {
+      "id": "cleared-board",
+      "kind": "whiteboard_state",
+      "objectKey": "board/cleared.json",
+      "contentType": "application/json",
+      "byteSize": 131,
+      "sha256": "139b61bad67edc7d6fd267734431721e634a260a7610a1cbdb1fd0c839c5d865"
+    }
+  ]
+}
