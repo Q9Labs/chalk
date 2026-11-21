@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "apps/api/cmd/boot_facts_fault_test.go",
+      "command": "go -C apps/api test ./cmd -run TestBootFactsChain -count=1",
+      "writes": ["boots.fault.json", "boots.healthy.json"]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/releases/release-marker.chain.test.mjs",
+      "command": "node --test scripts/releases/release-marker.chain.test.mjs",
+      "writes": ["markers.fault.json", "markers.healthy.json"]
+    },
+    {
+      "hop": "c",
+      "test": "scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "writes": ["../positive.json", "../healthy.json"]
+    }
+  ]
+}

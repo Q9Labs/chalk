@@ -1,0 +1,34 @@
+[
+  {
+    "kind": "fact",
+    "name": "client.flags_snapshot",
+    "event_id": "fill-client.flags_snapshot-1795177800000-cs-chain-1-2",
+    "est_server_ms": 1795177800000,
+    "env": "test",
+    "module": "web",
+    "schema_ver": "fill",
+    "seq": 45000000,
+    "source_id": "cs-chain-1",
+    "client_session_id": "cs-chain-1",
+    "device_id": "dev-chain-1",
+    "release_sha": "ccccccddddd",
+    "flags_hash": "aa",
+    "flags": {}
+  },
+  {
+    "kind": "fact",
+    "name": "client.flags_snapshot",
+    "event_id": "fill-client.flags_snapshot-1795177860000-cs-chain-2-2",
+    "est_server_ms": 1795177860000,
+    "env": "test",
+    "module": "web",
+    "schema_ver": "fill",
+    "seq": 45060000,
+    "source_id": "cs-chain-2",
+    "client_session_id": "cs-chain-2",
+    "device_id": "dev-chain-2",
+    "release_sha": "ccccccddddd",
+    "flags_hash": "aa",
+    "flags": {}
+  }
+]

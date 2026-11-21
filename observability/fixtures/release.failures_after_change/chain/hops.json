@@ -1,0 +1,34 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "apps/api/internal/observability/http_fault_test.go",
+      "command": "go -C apps/api test ./internal/observability -run TestHTTPFaultChain -count=1",
+      "writes": ["requests.fault.json", "requests.restart.json", "requests.healthy.json"]
+    },
+    {
+      "hop": "b",
+      "test": "infrastructure/uptime-worker/edge.chain.test.mjs",
+      "command": "node --test infrastructure/uptime-worker/edge.chain.test.mjs",
+      "writes": ["edge.fault.json", "edge.restart.json", "edge.healthy.json"]
+    },
+    {
+      "hop": "c",
+      "test": "scripts/releases/release-marker.chain.test.mjs",
+      "command": "node --test scripts/releases/release-marker.chain.test.mjs",
+      "writes": ["markers.fault.json", "markers.restart.json", "markers.healthy.json"]
+    },
+    {
+      "hop": "d",
+      "test": "apps/api/cmd/boot_facts_fault_test.go",
+      "command": "go -C apps/api test ./cmd -run TestBootFactsChain -count=1",
+      "writes": ["boots.fault.json", "boots.restart.json", "boots.healthy.json"]
+    },
+    {
+      "hop": "e",
+      "test": "scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "writes": ["change.fault.json", "change.healthy.json", "fill.positive.json", "fill.restart.json", "fill.healthy.json", "../positive.json", "../healthy.json"]
+    }
+  ]
+}

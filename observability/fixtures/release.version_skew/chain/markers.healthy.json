@@ -1,0 +1,20 @@
+[
+  {
+    "event_id": "chain-marker-0001",
+    "kind": "fact",
+    "name": "release.marker",
+    "module": "checker",
+    "env": "test",
+    "source_id": "release-marker:chain",
+    "seq": 2,
+    "schema_ver": "66bca601fc49",
+    "est_server_ms": 1795176060000,
+    "component": "api",
+    "release_id": "2026.11.20-0000000",
+    "commit": "ccccccddddd",
+    "marker_kind": "deploy",
+    "started_ms": 1795172400000,
+    "finished_ms": 1795172700000,
+    "run_id": "run-1"
+  }
+]

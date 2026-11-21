@@ -1,0 +1,20 @@
+[
+  {
+    "chalk_alert_reason": "unreachable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 1,
+    "db_reach": "down",
+    "env": "test",
+    "est_server_ms": 1795176000000,
+    "event_id": "chain-host-0000"
+  },
+  {
+    "chalk_alert_reason": "unreachable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 1,
+    "db_reach": "down",
+    "env": "test",
+    "est_server_ms": 1795176060000,
+    "event_id": "chain-host-0001"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "infrastructure/uptime-worker/edge.chain.test.mjs",
+      "command": "node --test infrastructure/uptime-worker/edge.chain.test.mjs",
+      "writes": ["edge.fault.json", "edge.healthy.json"]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/releases/release-marker.chain.test.mjs",
+      "command": "node --test scripts/releases/release-marker.chain.test.mjs",
+      "writes": ["markers.fault.json", "markers.healthy.json"]
+    },
+    {
+      "hop": "c",
+      "test": "scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "writes": ["fill.positive.json", "fill.healthy.json", "../positive.json", "../healthy.json"]
+    }
+  ]
+}

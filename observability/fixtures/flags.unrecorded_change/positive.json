@@ -1,0 +1,106 @@
+{
+  "description": "Two real API boots: the second came up on a different flags_hash, and the day's only marker is a web deploy two hours earlier that covers nothing.",
+  "asof_ms": 1795219200000,
+  "declaration": {
+    "kind": "platform",
+    "id": "test",
+    "tenant": null,
+    "day": "2026-11-20",
+    "window": {
+      "from_ms": 1795132800000,
+      "to_ms": 1795219200000
+    }
+  },
+  "chain": [
+    "observability/fixtures/flags.unrecorded_change/chain/boots.fault.json",
+    "observability/fixtures/flags.unrecorded_change/chain/markers.fault.json"
+  ],
+  "rows": [
+    {
+      "clock_state": "server",
+      "env": "test",
+      "est_server_ms": 1795176000000,
+      "event_id": "chain-boot-0001",
+      "flags": {
+        "recording": true,
+        "request_logs": "all",
+        "sfu_new_episodes": true
+      },
+      "flags_hash": "dbed6aaa2bf075c7",
+      "kind": "fact",
+      "module": "api",
+      "name": "obs.flags_snapshot",
+      "schema_ver": "aae5df74a4de",
+      "seq": 1,
+      "source_id": "src-boot-a"
+    },
+    {
+      "clock_state": "server",
+      "env": "test",
+      "est_server_ms": 1795176060000,
+      "event_id": "chain-boot-0002",
+      "flags_hash": "dbed6aaa2bf075c7",
+      "host_boot_id": "boot-a",
+      "kind": "fact",
+      "module": "api",
+      "name": "release.started",
+      "previous_boot_end": "unknown",
+      "release_id": "2026.11.20-0000000",
+      "schema_ver": "aae5df74a4de",
+      "seq": 2,
+      "source_id": "src-boot-a"
+    },
+    {
+      "clock_state": "server",
+      "env": "test",
+      "est_server_ms": 1795176120000,
+      "event_id": "chain-boot-0003",
+      "flags": {
+        "recording": true,
+        "request_logs": "all",
+        "sfu_new_episodes": false
+      },
+      "flags_hash": "10946595a97cac74",
+      "kind": "fact",
+      "module": "api",
+      "name": "obs.flags_snapshot",
+      "schema_ver": "aae5df74a4de",
+      "seq": 3,
+      "source_id": "src-boot-b"
+    },
+    {
+      "clock_state": "server",
+      "env": "test",
+      "est_server_ms": 1795176180000,
+      "event_id": "chain-boot-0004",
+      "flags_hash": "10946595a97cac74",
+      "host_boot_id": "boot-b",
+      "kind": "fact",
+      "module": "api",
+      "name": "release.started",
+      "previous_boot_end": "unknown",
+      "release_id": "2026.11.20-0000000",
+      "schema_ver": "aae5df74a4de",
+      "seq": 4,
+      "source_id": "src-boot-b"
+    },
+    {
+      "event_id": "chain-marker-0001",
+      "kind": "fact",
+      "name": "release.marker",
+      "module": "checker",
+      "env": "test",
+      "source_id": "release-marker:chain",
+      "seq": 2,
+      "schema_ver": "66bca601fc49",
+      "est_server_ms": 1795176060000,
+      "component": "web",
+      "release_id": "2026.11.20-wwwwwww",
+      "commit": "wwwwwwwxxxxx",
+      "marker_kind": "deploy",
+      "started_ms": 1795168800000,
+      "finished_ms": 1795169100000,
+      "run_id": "run-1"
+    }
+  ]
+}

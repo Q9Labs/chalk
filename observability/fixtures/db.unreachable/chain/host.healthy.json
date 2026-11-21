@@ -1,0 +1,38 @@
+[
+  {
+    "chalk_alert_reason": "readable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 0,
+    "db_reach": "up",
+    "env": "test",
+    "est_server_ms": 1795176000000,
+    "event_id": "chain-host-0000"
+  },
+  {
+    "chalk_alert_reason": "readable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 0,
+    "db_reach": "up",
+    "env": "test",
+    "est_server_ms": 1795176060000,
+    "event_id": "chain-host-0001"
+  },
+  {
+    "chalk_alert_reason": "readable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 0,
+    "db_reach": "up",
+    "env": "test",
+    "est_server_ms": 1795176120000,
+    "event_id": "chain-host-0002"
+  },
+  {
+    "chalk_alert_reason": "readable",
+    "chalk_alert_rule": "database-unreachable",
+    "chalk_alert_value": 0,
+    "db_reach": "up",
+    "env": "test",
+    "est_server_ms": 1795176180000,
+    "event_id": "chain-host-0003"
+  }
+]

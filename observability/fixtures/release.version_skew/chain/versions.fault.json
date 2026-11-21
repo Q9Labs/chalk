@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "fact",
+    "name": "api.service_version",
+    "event_id": "chain-sv-api-1",
+    "est_server_ms": 1795176060000,
+    "env": "test",
+    "service_version": "2026.11.19-fffffff"
+  },
+  {
+    "kind": "fact",
+    "name": "sync.service_version",
+    "event_id": "chain-sv-sync-1",
+    "est_server_ms": 1795176060000,
+    "env": "test",
+    "service_version": "2026.11.19-fffffff"
+  }
+]

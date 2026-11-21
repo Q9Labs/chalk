@@ -1,0 +1,37 @@
+[
+  {
+    "event_id": "chain-edge-0032",
+    "kind": "fact",
+    "name": "edge.http_rollup",
+    "module": "checker",
+    "env": "test",
+    "source_id": "edge-collector",
+    "seq": 41,
+    "schema_ver": "66bca601fc49",
+    "est_server_ms": 1795176300000,
+    "duration_ms": 300000,
+    "bucket_start_ms": 1795176300000,
+    "host": "chalkmeet.test",
+    "requests": 40,
+    "path_class": "asset",
+    "edge_status": 200,
+    "origin_status": 200,
+    "method": "GET",
+    "content_class": "html",
+    "ua_class": "browser"
+  },
+  {
+    "event_id": "chain-edge-0034",
+    "kind": "fact",
+    "name": "edge.collector_tick",
+    "module": "checker",
+    "env": "test",
+    "source_id": "edge-collector",
+    "seq": 42,
+    "schema_ver": "66bca601fc49",
+    "est_server_ms": 1795176600000,
+    "bucket_start_ms": 1795176300000,
+    "host": "chalkmeet.test",
+    "tick_status": "ok"
+  }
+]

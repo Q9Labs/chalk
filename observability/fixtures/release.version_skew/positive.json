@@ -1,0 +1,136 @@
+{
+  "description": "The api marker deployed 2026.11.20-aaaaaaa at 11:05 and the api kept serving the previous release past the settle window.",
+  "asof_ms": 1795219200000,
+  "declaration": {
+    "kind": "platform",
+    "id": "test",
+    "tenant": null,
+    "day": "2026-11-20",
+    "window": {
+      "from_ms": 1795132800000,
+      "to_ms": 1795219200000
+    }
+  },
+  "chain": [
+    "observability/fixtures/release.version_skew/chain/markers.fault.json",
+    "observability/fixtures/release.version_skew/chain/requests.fault.json",
+    "observability/fixtures/release.version_skew/chain/versions.fault.json",
+    "observability/fixtures/release.version_skew/chain/client.fault.json"
+  ],
+  "rows": [
+    {
+      "event_id": "chain-marker-0001",
+      "kind": "fact",
+      "name": "release.marker",
+      "module": "checker",
+      "env": "test",
+      "source_id": "release-marker:chain",
+      "seq": 2,
+      "schema_ver": "66bca601fc49",
+      "est_server_ms": 1795176060000,
+      "component": "api",
+      "release_id": "2026.11.20-aaaaaaa",
+      "commit": "aaaaaaabbbb",
+      "marker_kind": "deploy",
+      "started_ms": 1795172400000,
+      "finished_ms": 1795172700000,
+      "run_id": "run-1"
+    },
+    {
+      "bytes": 0,
+      "duration_ms": 0,
+      "env": "test",
+      "est_server_ms": 1795176000000,
+      "event": "http.request",
+      "event_id": "chain-http-0001",
+      "method": "GET",
+      "module": "api",
+      "outcome": "ok",
+      "path": "/",
+      "route": "unmatched",
+      "service_version": "2026.11.19-fffffff",
+      "status": 200,
+      "status_class": "s2xx"
+    },
+    {
+      "bytes": 0,
+      "duration_ms": 0,
+      "env": "test",
+      "est_server_ms": 1795176060000,
+      "event": "http.request",
+      "event_id": "chain-http-0002",
+      "method": "GET",
+      "module": "api",
+      "outcome": "ok",
+      "path": "/",
+      "route": "unmatched",
+      "service_version": "2026.11.19-fffffff",
+      "status": 200,
+      "status_class": "s2xx"
+    },
+    {
+      "bytes": 0,
+      "duration_ms": 0,
+      "env": "test",
+      "est_server_ms": 1795176120000,
+      "event": "http.request",
+      "event_id": "chain-http-0003",
+      "method": "GET",
+      "module": "api",
+      "outcome": "ok",
+      "path": "/",
+      "route": "unmatched",
+      "service_version": "2026.11.19-fffffff",
+      "status": 200,
+      "status_class": "s2xx"
+    },
+    {
+      "kind": "fact",
+      "name": "api.service_version",
+      "event_id": "chain-sv-api-1",
+      "est_server_ms": 1795176060000,
+      "env": "test",
+      "service_version": "2026.11.19-fffffff"
+    },
+    {
+      "kind": "fact",
+      "name": "sync.service_version",
+      "event_id": "chain-sv-sync-1",
+      "est_server_ms": 1795176060000,
+      "env": "test",
+      "service_version": "2026.11.19-fffffff"
+    },
+    {
+      "kind": "fact",
+      "name": "client.flags_snapshot",
+      "event_id": "fill-client.flags_snapshot-1795177800000-cs-chain-1-1",
+      "est_server_ms": 1795177800000,
+      "env": "test",
+      "module": "web",
+      "schema_ver": "fill",
+      "seq": 45000000,
+      "source_id": "cs-chain-1",
+      "client_session_id": "cs-chain-1",
+      "device_id": "dev-chain-1",
+      "release_sha": "9999999old",
+      "flags_hash": "aa",
+      "flags": {}
+    },
+    {
+      "kind": "fact",
+      "name": "client.flags_snapshot",
+      "event_id": "fill-client.flags_snapshot-1795177860000-cs-chain-2-1",
+      "est_server_ms": 1795177860000,
+      "env": "test",
+      "module": "web",
+      "schema_ver": "fill",
+      "seq": 45060000,
+      "source_id": "cs-chain-2",
+      "client_session_id": "cs-chain-2",
+      "device_id": "dev-chain-2",
+      "release_sha": "9999999old",
+      "flags_hash": "aa",
+      "flags": {}
+    }
+  ]
+}

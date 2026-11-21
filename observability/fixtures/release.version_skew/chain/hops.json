@@ -1,0 +1,22 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/releases/release-marker.chain.test.mjs",
+      "command": "node --test scripts/releases/release-marker.chain.test.mjs",
+      "writes": ["markers.fault.json", "markers.healthy.json"]
+    },
+    {
+      "hop": "b",
+      "test": "apps/api/internal/observability/http_fault_test.go",
+      "command": "go -C apps/api test ./internal/observability -run TestHTTPFaultChain -count=1",
+      "writes": ["requests.fault.json", "requests.healthy.json"]
+    },
+    {
+      "hop": "c",
+      "test": "scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "writes": ["versions.fault.json", "versions.healthy.json", "client.fault.json", "client.healthy.json", "../positive.json", "../healthy.json"]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "apps/api/internal/adapters/postgres/health_poller_fault_test.go",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/adapters/postgres -run TestHealthPollerFaultChain -count=1",
+      "writes": [
+        "samples.fault.json",
+        "samples.healthy.json"
+      ]
+    },
+    {
+      "hop": "b",
+      "test": "infrastructure/observability/production-alerts/collector_health_chain_test.go",
+      "command": "cd apps/api && GOTOOLCHAIN=go1.26.11 go test ../../infrastructure/observability/production-alerts/collector*.go -run TestCollectorHealthChain -count=1",
+      "writes": [
+        "host.fault.json",
+        "host.healthy.json"
+      ]
+    },
+    {
+      "hop": "c",
+      "test": "scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/platform-chain.test.mjs",
+      "writes": [
+        "fill.positive.json",
+        "fill.healthy.json",
+        "../positive.json",
+        "../healthy.json"
+      ]
+    }
+  ]
+}

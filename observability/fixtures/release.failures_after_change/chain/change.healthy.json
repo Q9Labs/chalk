@@ -1,0 +1,13 @@
+[
+  {
+    "kind": "fact",
+    "name": "db.media_plane_change",
+    "event_id": "chain-mpc-1",
+    "est_server_ms": 1795186800000,
+    "env": "test",
+    "media_plane_scope": "kill_switch",
+    "old_plane": "chalk_sfu",
+    "new_plane": "cf_sfu",
+    "changed_at_ms": 1795186800000
+  }
+]
