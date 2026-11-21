@@ -284,9 +284,8 @@ function SpaceSurface(
   const { roster } = useParticipants();
   const setup = props.screenAnnotation;
   const whiteboardTransport = client.whiteboard.transport();
-  const uploadBoardFrame = setup?.uploadBoardFrame;
   const annotationFontUrl = setup?.fontUrl;
-  const saveAnnotation = useMemo(() => (whiteboardTransport && uploadBoardFrame ? saveAnnotationToBoard(client, whiteboardTransport, uploadBoardFrame, annotationFontUrl) : undefined), [client, whiteboardTransport, uploadBoardFrame, annotationFontUrl]);
+  const saveAnnotation = useMemo(() => (whiteboardTransport?.files.uploadFile ? saveAnnotationToBoard(client, whiteboardTransport, annotationFontUrl) : undefined), [client, whiteboardTransport, annotationFontUrl]);
   const screenAnnotation = useMemo(() => {
     if (!setup || !self.participantId || connection.status !== "live") return undefined;
     const context = {
@@ -304,7 +303,7 @@ function SpaceSurface(
       ...setup,
       client: screenAnnotationFor(client),
       context,
-      publicationForTrack: (track: MediaStreamTrack) => media.screenShare.track === track ? media.screenShare.publicationId : media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId,
+      publicationForTrack: (track: MediaStreamTrack) => (media.screenShare.track === track ? media.screenShare.publicationId : media.remote.find((item) => item.track === track && item.source === "screen")?.publicationId),
       actions: {
         saveToWhiteboard: props.features?.whiteboard !== false && canDrawWhiteboard ? (setup.actions?.saveToWhiteboard ?? saveAnnotation) : undefined,
         downloadPng: setup.actions?.downloadPng,

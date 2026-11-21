@@ -1,3 +1,4 @@
+import { screenAnnotationFor } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StatusBar, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -15,6 +16,7 @@ import { ToastStack, useToasts } from "../primitives/toast/ToastStack";
 import { ChatNotices } from "../sheets/people-chat/ChatNotices";
 import { PeopleChatSheet } from "../sheets/people-chat/PeopleChatSheet";
 import { playSound } from "../sounds/sounds";
+import type { ScreenAnnotationActions } from "../screen-annotation/model";
 import { Stage } from "../stage/Stage";
 import { useStageView } from "../stage/stage-view";
 import { useLandscapeChrome } from "./use-landscape-chrome";
@@ -36,6 +38,7 @@ export type CallFrameProps = {
   readonly displayName?: string;
   readonly callName?: string;
   readonly inviteLink?: string;
+  readonly annotationActions?: ScreenAnnotationActions;
   readonly onLeave?: () => void;
   readonly onOpenSettings?: (permission: Permission) => void;
   readonly resumedAfterSettings?: Permission;
@@ -49,8 +52,10 @@ type OpenSheet = "more" | "people" | "chat" | "details" | null;
  * overlays, the menus layer and the toasts layer, each inside the safe area for the current
  * arrangement. Each region lives in its own folder so the part lanes can work in parallel.
  */
-export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
+export function CallFrame({ displayName, callName = "Call", inviteLink, annotationActions, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
+  const annotation = useMemo(() => ({ client: screenAnnotationFor(client), actions: annotationActions }), [client, annotationActions]);
+  const annotationControls = usePortalCount("annotation");
   const connection = useConnection();
   const media = useMedia();
   const { colors, scheme } = useTheme();
@@ -126,7 +131,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
 
   const sharedBoard = useWhiteboard().engine.presenting;
   const boardVisible = useStageView().boardOpen ?? sharedBoard;
-  const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered, boardVisible });
+  const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered && annotationControls === 0, boardVisible });
   const chromeOpacity = useSharedValue(1);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate committed chrome visibility on the native UI runtime.
   useEffect(() => {
@@ -144,8 +149,9 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} />
       <View accessibilityElementsHidden={layered} importantForAccessibility={layered ? "no-hide-descendants" : "auto"} style={StyleSheet.absoluteFill}>
         <LandscapeControlsContext.Provider value={layout.arrangement === "landscape" && !chrome.hidden}>
-          <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
+          <Stage annotation={annotation} frame={regions.stage} onOpenPeople={() => setSheet("people")} />
         </LandscapeControlsContext.Provider>
+        <PortalHost layer="annotation" />
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chromeStyle]}>
           <Header arrangement={layout.arrangement} callName={callName} detailsOpen={sheet === "details"} onOpenDetails={() => setSheet("details")} ref={nameRef} />

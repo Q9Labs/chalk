@@ -185,6 +185,8 @@ declare
     event_id uuid;
     parent_id uuid;
     lifecycle_phase text;
+    end_trace_id text;
+    end_span_id text;
 begin
     if tg_op = 'INSERT' then
         current_layer := new;
@@ -212,6 +214,22 @@ begin
         into cause
         from episodes episode
         where episode.tenant_id = old.tenant_id and episode.space_id = old.space_id and episode.id = old.episode_id;
+
+        if cause = 'episode_ended' then
+            -- The finalizer has already persisted this Episode's end event.
+            select operation.producing_trace_id, operation.producing_span_id
+            into end_trace_id, end_span_id
+            from sync_control_events ended
+            join sync_external_operations operation
+              on operation.tenant_id = ended.tenant_id and operation.space_id = ended.space_id
+             and operation.episode_id = ended.episode_id
+             and operation.external_operation_id = ended.external_operation_id
+            where ended.tenant_id = old.tenant_id and ended.space_id = old.space_id
+              and ended.episode_id = old.episode_id and ended.event_name = 'episode_ended'
+              and operation.producing_trace_id is not null and operation.producing_span_id is not null
+            order by ended.revision desc
+            limit 1;
+        end if;
     end if;
 
     insert into observability_journey_events (
@@ -225,8 +243,8 @@ begin
         ), 0),
         clock_timestamp(), event_name, lifecycle_phase,
         case when tg_op = 'INSERT' then 'started' else 'completed' end,
-        'user', 'sync', 'visible', parent_id, current_layer.producing_trace_id,
-        current_layer.producing_span_id,
+        'user', 'sync', 'visible', parent_id, coalesce(end_trace_id, current_layer.producing_trace_id),
+        coalesce(end_span_id, current_layer.producing_span_id),
         jsonb_strip_nulls(jsonb_build_object(
           'tenantId', current_layer.tenant_id, 'spaceId', current_layer.space_id,
           'episodeId', current_layer.episode_id, 'layerId', current_layer.layer_id,

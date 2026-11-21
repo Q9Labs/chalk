@@ -33,14 +33,9 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
   if (track) return "requesting";
   return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
-export function confirmedScreenPublication(
-  screen: ConnectionMediaSnapshot["localTracks"][number] | undefined,
-  sync: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | undefined,
-): string | undefined {
+export function confirmedScreenPublication(screen: ConnectionMediaSnapshot["localTracks"][number] | undefined, sync: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | undefined): string | undefined {
   if (!sync || !screen?.enabled || !screen.publicationId || screen.track.readyState !== "live") return undefined;
-  return sync.media?.items.some((item) => item.participantId === sync.participantId && item.source === "screen" && item.enabled && item.publicationId === screen.publicationId)
-    ? screen.publicationId
-    : undefined;
+  return sync.media?.items.some((item) => item.participantId === sync.participantId && item.source === "screen" && item.enabled && item.publicationId === screen.publicationId) ? screen.publicationId : undefined;
 }
 export function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;

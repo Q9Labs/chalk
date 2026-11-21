@@ -250,7 +250,7 @@
       "required": ["id", "kind", "objectKey", "contentType", "byteSize", "sha256"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "kind": { "enum": ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"] },
+        "kind": { "enum": ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font", "screen_annotation"] },
         "objectKey": { "type": "string", "minLength": 1, "maxLength": 1024 },
         "contentType": { "type": "string", "minLength": 1, "maxLength": 255 },
         "byteSize": { "$ref": "#/$defs/positiveInteger" },

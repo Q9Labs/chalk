@@ -9,6 +9,7 @@ create table recording_screen_annotation_layers (
     capture_epoch bigint not null,
     layer_id uuid not null,
     publication_id text not null,
+    sharer_generation bigint not null,
     layer jsonb not null,
     initial_at_ms bigint not null,
     initial_revision bigint not null,
@@ -56,11 +57,11 @@ begin
             and track->>'participant_generation' = target.sharer_generation::text
     ) then
         insert into recording_screen_annotation_layers (
-            tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id, publication_id, layer,
+            tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id, publication_id, sharer_generation, layer,
             initial_at_ms, initial_revision, initial_paused, initial_marks
         ) values (
             target.tenant_id, target.space_id, target.episode_id, plan.recording_id, plan.capture_epoch, target.layer_id,
-            target.publication_id, jsonb_build_object('layer_id', target.layer_id, 'publication_id', target.publication_id,
+            target.publication_id, target.sharer_generation, jsonb_build_object('layer_id', target.layer_id, 'publication_id', target.publication_id,
                 'sharer_id', target.sharer_id, 'frame', target.frame),
             captured_at_ms, target.revision, target.paused, coalesce((
                 select jsonb_agg(mark order by (mark->>'created_revision')::bigint)
@@ -138,7 +139,7 @@ begin
         update recording_screen_annotation_layers captured set closed_at_ms = greatest(captured.initial_at_ms, event_at_ms)
         where captured.tenant_id = old.tenant_id and captured.space_id = old.space_id
             and captured.episode_id = old.episode_id and captured.layer_id = old.layer_id and captured.closed_at_ms is null;
-    else
+    elsif new.last_change is not null then
         insert into recording_screen_annotation_changes
             (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id, revision, at_ms, change)
         select captured.tenant_id, captured.space_id, captured.episode_id, captured.recording_id,
@@ -170,6 +171,14 @@ begin
     end if;
 
     perform pg_advisory_xact_lock(hashtextextended(concat_ws(':', 'annotation-capture', recording.tenant_id, recording.space_id, recording.episode_id), 0));
+    -- The presentation and its private object were frozen before successful
+    -- completion. Keep the transient facts only while capture can be retried.
+    if new.capture_completed_at is not null then
+        delete from recording_screen_annotation_layers
+        where tenant_id = recording.tenant_id and space_id = recording.space_id
+          and episode_id = recording.episode_id and recording_id = recording.id;
+        return null;
+    end if;
     cut_ms := (extract(epoch from coalesce(new.stop_requested_at, new.capture_completed_at, clock_timestamp())) * 1000)::bigint;
 
     update recording_screen_annotation_layers captured
@@ -184,7 +193,8 @@ $$;
 create trigger recording_annotation_cut
     after update on recording_pipelines
     for each row when (
-        (new.stop_requested_at is not null and old.stop_requested_at is distinct from new.stop_requested_at)
+        (new.capture_completed_at is not null and old.capture_completed_at is null)
+        or (new.stop_requested_at is not null and old.stop_requested_at is distinct from new.stop_requested_at)
         or (old.state in ('capture_leased', 'capturing_segmented') and new.state not in ('capture_leased', 'capturing_segmented'))
     ) execute function recording_annotation_cut();
 

@@ -3,12 +3,11 @@ import { canvasAnnotationTextMeasure, encodeAnnotationCanvasPng } from "@q9labsa
 import type { AnnotationWhiteboardImport } from "@q9labsai/chalk-whiteboard/annotation";
 import { toWhiteboardWireElement } from "../../whiteboard/wire-adapters";
 import { loadAnnotationFont } from "./font";
-import type { ScreenAnnotationFrame, ScreenAnnotationSetup } from "./model";
+import type { ScreenAnnotationFrame } from "./model";
 
 type Snapshot = Extract<ChalkWhiteboardV1Event, { type: "snapshot" }>;
-type Upload = NonNullable<ScreenAnnotationSetup["uploadBoardFrame"]>;
 
-export function saveAnnotationToBoard(client: SpaceClient, transport: ChalkWhiteboardV1Transport, uploadFrame: Upload, fontUrl?: string) {
+export function saveAnnotationToBoard(client: SpaceClient, transport: ChalkWhiteboardV1Transport, fontUrl?: string) {
   const imports = new WeakMap<ScreenAnnotationFrame, { sceneId: string; operation: AnnotationWhiteboardImport }>();
   const requireAccess = (sceneId?: string) => {
     const board = client.getSnapshot().whiteboard;
@@ -36,9 +35,10 @@ export function saveAnnotationToBoard(client: SpaceClient, transport: ChalkWhite
       placement: annotation.annotationWhiteboardPlacement(elements, { x: 0, y: 0 }),
       measureText: canvasAnnotationTextMeasure(context),
       encodeFrame: encodeAnnotationCanvasPng,
-      uploadFrame: (input) => {
+      uploadFrame: async ({ sceneId, fileId, png }) => {
         requireAccess(sceneId);
-        return uploadFrame(input);
+        if (!transport.files.uploadFile) throw new Error("This board cannot upload files.");
+        await transport.files.uploadFile({ sceneId, fileId, blob: png });
       },
       transport: {
         submitUpdate: (input) => {

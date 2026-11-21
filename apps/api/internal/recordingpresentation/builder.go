@@ -91,6 +91,7 @@ type whiteboardStateWire struct {
 type activeTrack struct {
 	key          string
 	captureEpoch int64
+	publication  captureplan.PublicationReference
 	binding      captureplane.CaptureTrack
 	source       MediaSource
 }
@@ -158,7 +159,9 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 	if err != nil {
 		return builtPresentation{}, err
 	}
-	active, planEnd, err = schedulePlanTail(source, active, planEnd, appendScheduled)
+	annotationSources := make(annotationSources)
+	annotationSources.collect(active)
+	active, planEnd, err = schedulePlanTail(source, active, planEnd, annotationSources, appendScheduled)
 	if err != nil {
 		return builtPresentation{}, err
 	}
@@ -192,6 +195,9 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 		events[index] = scheduled[index].event
 	}
 
+	if err := addScreenAnnotationAsset(source, annotationSources, &materials, assetByID); err != nil {
+		return builtPresentation{}, err
+	}
 	assets := make([]Asset, len(materials))
 	for index := range materials {
 		assets[index] = materials[index].Asset
@@ -586,7 +592,7 @@ func tracksForPlan(source CompletionSource, fact CapturePlanFact, previous map[s
 		if err != nil {
 			return nil, fmt.Errorf("%w: derive media source identity", ErrInvalidCompletionSource)
 		}
-		desired[key] = activeTrack{key: key, captureEpoch: captureEpoch, binding: binding, source: MediaSource{
+		desired[key] = activeTrack{key: key, captureEpoch: captureEpoch, publication: track.PublicationReference, binding: binding, source: MediaSource{
 			SourceID: sourceID, ParticipantID: identity.ParticipantID,
 			ParticipantGeneration: identity.ParticipantGeneration, Kind: identity.Kind,
 			TrackID: identity.TrackID, Epoch: identity.Epoch,
@@ -646,7 +652,7 @@ func screenSharedContent(active map[string]activeTrack) SharedContent {
 	return SharedContent{Kind: "screen_share", ParticipantID: screen.ParticipantID, SourceID: screen.SourceID}
 }
 
-func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, appendEvent func(int64, int, Event)) (map[string]activeTrack, int64, error) {
+func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, annotationSources annotationSources, appendEvent func(int64, int, Event)) (map[string]activeTrack, int64, error) {
 	previousRevision := int64(0)
 	endRevision := originRevision
 	for _, fact := range source.CapturePlans {
@@ -711,6 +717,7 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		if sharedChanged && (!clearedShared || nextShared.Kind != "none") {
 			appendEvent(at, 22, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: nextShared})
 		}
+		annotationSources.collect(desired)
 		active = desired
 		endRevision = fact.Revision
 	}

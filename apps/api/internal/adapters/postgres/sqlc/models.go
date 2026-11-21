@@ -978,6 +978,35 @@ type RecordingReservation struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingScreenAnnotationChange struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+	RecordingID  pgtype.UUID `json:"recording_id"`
+	CaptureEpoch int64       `json:"capture_epoch"`
+	LayerID      pgtype.UUID `json:"layer_id"`
+	Revision     int64       `json:"revision"`
+	AtMs         int64       `json:"at_ms"`
+	Change       []byte      `json:"change"`
+}
+
+type RecordingScreenAnnotationLayer struct {
+	TenantID         pgtype.UUID `json:"tenant_id"`
+	SpaceID          pgtype.UUID `json:"space_id"`
+	EpisodeID        pgtype.UUID `json:"episode_id"`
+	RecordingID      pgtype.UUID `json:"recording_id"`
+	CaptureEpoch     int64       `json:"capture_epoch"`
+	LayerID          pgtype.UUID `json:"layer_id"`
+	PublicationID    string      `json:"publication_id"`
+	SharerGeneration int64       `json:"sharer_generation"`
+	Layer            []byte      `json:"layer"`
+	InitialAtMs      int64       `json:"initial_at_ms"`
+	InitialRevision  int64       `json:"initial_revision"`
+	InitialPaused    bool        `json:"initial_paused"`
+	InitialMarks     []byte      `json:"initial_marks"`
+	ClosedAtMs       pgtype.Int8 `json:"closed_at_ms"`
+}
+
 type RecordingTranscriptionPreparationCommit struct {
 	TranscriptionJobID    pgtype.UUID        `json:"transcription_job_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`

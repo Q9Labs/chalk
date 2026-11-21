@@ -23,3 +23,7 @@ export { announce } from "./primitives/announce";
 export { usePressAnimation } from "./motion/press";
 export { Limbo } from "./limbo/Limbo";
 export { QrCode } from "./header/QrCode";
+
+export { ScreenAnnotationLayer, type ScreenAnnotationLayerProps } from "./screen-annotation/ScreenAnnotationLayer";
+export { ScreenAnnotationToolbar, type ScreenAnnotationToolbarProps } from "./screen-annotation/ScreenAnnotationToolbar";
+export type { ScreenAnnotationActions, ScreenAnnotationFrame, ScreenAnnotationSource, StageAnnotation } from "./screen-annotation/model";

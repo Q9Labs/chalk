@@ -67,10 +67,12 @@ export async function runJourney(journey, body) {
   const shot = (person, label) => person.page.screenshot({ path: join(out, "screenshots", `${person.name}-${label}.png`) });
 
   const launch = (browserEngine, display) => {
-    const key = browserEngine === webkit ? "webkit" : display ? "chromium+display" : "chromium";
+    const tabTitle = typeof display === "string" ? display : undefined;
+    const key = browserEngine === webkit ? "webkit" : display ? `chromium+display:${display}` : "chromium";
     if (!browsers.has(key)) {
       const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
-      browsers.set(key, browserEngine.launch({ headless: true, ...(browserEngine === chromium ? { args } : {}) }));
+      if (tabTitle) args.push(`--auto-select-tab-capture-source-by-title=${tabTitle}`);
+      browsers.set(key, browserEngine.launch({ headless: true, ...(browserEngine === chromium ? { args, ...(tabTitle ? { channel: "chromium" } : {}) } : {}) }));
     }
     return browsers.get(key);
   };

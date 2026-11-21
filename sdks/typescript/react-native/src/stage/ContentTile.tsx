@@ -1,5 +1,5 @@
 import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
@@ -12,6 +12,10 @@ import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { NameTag } from "../primitives/NameTag";
+import { ScreenAnnotationLayer } from "../screen-annotation/ScreenAnnotationLayer";
+import { AnnotationDock } from "../screen-annotation/AnnotationDock";
+import { matchLayer, type StageAnnotation } from "../screen-annotation/model";
+import { useNativeAnnotationSource } from "../screen-annotation/use-native-annotation-source";
 import { useTheme } from "../theme/theme";
 import { radii } from "../theme/tokens";
 import { useStageView } from "./stage-view";
@@ -20,6 +24,7 @@ import { useSpaceSelector } from "./space-selector";
 export type SharedContent = { readonly kind: "screen"; readonly sharerId: string } | { readonly kind: "board" };
 
 export type ContentTileProps = {
+  readonly annotation?: StageAnnotation;
   readonly content: SharedContent;
   /** The content's box inside the tile, letterboxed to its aspect. */
   readonly inner: Frame;
@@ -29,36 +34,83 @@ export type ContentTileProps = {
 };
 
 /** The shared screen or board as one stage tile (`.tile.content`), kept mounted while it moves. */
-export const ContentTile = memo(function ContentTile({ content, inner, mini, onShowInSpotlight }: ContentTileProps): React.JSX.Element {
+export const ContentTile = memo(function ContentTile({ annotation, content, inner, mini, onShowInSpotlight }: ContentTileProps): React.JSX.Element {
   const { colors } = useTheme();
   const tileStyle = [styles.tile, { backgroundColor: colors.tile }];
   const tileRef = useMeasuredRef<View>("tile.content", tileStyle);
   return (
     <View ref={tileRef} style={tileStyle} testID="tile.content">
-      {content.kind === "screen" ? <ScreenShare inner={inner} mini={mini} onShowInSpotlight={onShowInSpotlight} sharerId={content.sharerId} /> : <Board mini={mini} onShowInSpotlight={onShowInSpotlight} />}
+      {content.kind === "screen" ? <ScreenShare annotation={annotation} inner={inner} mini={mini} onShowInSpotlight={onShowInSpotlight} sharerId={content.sharerId} /> : <Board mini={mini} onShowInSpotlight={onShowInSpotlight} />}
     </View>
   );
 });
 
-function ScreenShare({ sharerId, inner, mini, onShowInSpotlight }: { readonly sharerId: string; readonly inner: Frame; readonly mini: boolean; readonly onShowInSpotlight: () => void }): React.JSX.Element {
+function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: { readonly annotation?: StageAnnotation; readonly sharerId: string; readonly inner: Frame; readonly mini: boolean; readonly onShowInSpotlight: () => void }): React.JSX.Element {
   const { colors } = useTheme();
-  const select = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null, [sharerId]);
-  const track = useSpaceSelector(select);
+  const selectScreen = useMemo(() => (snapshot: SpaceSnapshot) =>
+    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null, [sharerId]);
+  const selectPublication = useMemo(() => (snapshot: SpaceSnapshot) =>
+    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.publicationId ?? null, [sharerId]);
+  const selectPlayable = useMemo(() => (snapshot: SpaceSnapshot) => !snapshot.media.remote.some((media) =>
+    media.participantId === sharerId && media.source === "screen" && media.pausedForNetwork), [sharerId]);
+  const playable = useSpaceSelector(selectPlayable);
+  const track = useSpaceSelector(selectScreen);
+  const publicationId = useSpaceSelector(selectPublication);
   const selectName = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.participants.roster.find((person) => person.participantId === sharerId)?.displayName ?? "", [sharerId]);
   const sharerName = useSpaceSelector(selectName);
+  const selfId = useSpaceSelector(selectSelfId);
   const slot = useDevScenario().screenSlots?.[sharerId];
   const streamURL = useMemo(() => (track ? createNativeMediaStream(track).toURL() : null), [track]);
-  const name = `${sharerName.split(" ")[0]}’s screen`;
+  const name = selfId === sharerId ? "Your screen" : `${sharerName.split(" ")[0]}’s screen`;
+  const annotate = playable && !mini && annotation && publicationId && selfId && (!annotation.publicationId || annotation.publicationId === publicationId);
 
   return (
     <>
       <View style={[styles.box, { left: inner.x, top: inner.y, width: inner.width, height: inner.height, backgroundColor: colors.tile }]} testID="tile.content.screen">
-        {slot ?? (streamURL ? <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} /> : null)}
+        {slot ?? (streamURL ? annotate
+          ? <AnnotationScreenShare annotation={annotation} inner={inner} publicationId={publicationId} selfId={selfId} streamURL={streamURL} />
+          : <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} />
+          : null)}
       </View>
       {mini ? <Pressable accessibilityLabel={`Show ${name} in spotlight`} accessibilityRole="button" onPress={onShowInSpotlight} style={StyleSheet.absoluteFill} testID="tile.content.open" /> : null}
-      <NameTag icon="share" name={name} testID="tile.content.name" />
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}><NameTag icon="share" name={name} testID="tile.content.name" /></View>
     </>
   );
+}
+
+function AnnotationScreenShare({ annotation, inner, publicationId, selfId, streamURL }: { readonly annotation: StageAnnotation; readonly inner: Frame; readonly publicationId: string; readonly selfId: string; readonly streamURL: string }): React.JSX.Element {
+  const { client, actions } = annotation;
+  const toasts = useToasts();
+  const roster = useSpaceSelector(selectRoster);
+  const access = useSpaceSelector(selectAccess);
+  const selectCanSave = (snapshot: SpaceSnapshot) => snapshot.self.can("drawWhiteboard");
+  const canSave = useSpaceSelector(selectCanSave);
+  const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
+  const getMatch = useCallback(() => matchLayer(client, publicationId) !== null, [client, publicationId]);
+  const matched = useSyncExternalStore(subscribe, getMatch, getMatch);
+  const source = useNativeAnnotationSource(matched ? streamURL : null);
+  const viewport = { x: 0, y: 0, width: inner.width, height: inner.height };
+  const ownName = roster.find((person) => person.participantId === selfId)?.displayName ?? "";
+  const people = roster.filter((person) => person.participantId !== selfId).map((person) => ({
+    id: person.participantId,
+    name: person.displayName,
+    manages: person.capabilities.includes("manageWhiteboard"),
+    canDraw: access.permissions.find((permission) => permission.participantId === person.participantId)?.canDraw ??
+      (access.policy === "everyone" && person.capabilities.includes("drawWhiteboard")),
+  }));
+  return <ScreenAnnotationLayer
+    client={client}
+    actions={actions}
+    canSave={canSave}
+    publicationId={publicationId}
+    person={{ id: selfId, name: ownName }}
+    people={people}
+    source={source}
+    viewport={viewport}
+    video={(rect) => <RtcVideoView objectFit="contain" streamURL={streamURL} style={[styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]} />}
+    controls={(tray: ReactNode) => tray ? <AnnotationDock>{tray}</AnnotationDock> : null}
+    reportError={(message) => toasts.show({ kind: "error", dismissible: true, message })}
+  />;
 }
 
 const selectBoard = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.status;
