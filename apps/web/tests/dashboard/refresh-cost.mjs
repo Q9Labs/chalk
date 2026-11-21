@@ -103,7 +103,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const inviteToken = inviteCredential(initial.inviteUrl);
     const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
       method: "POST",
-      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "X-Chalk-Media-Providers": "chalk_sfu", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ space_invite_token: inviteToken, display_name: "Budget guest" }),
     });
     assert.equal(arrival.status, 201, await arrival.clone().text());

@@ -28,11 +28,8 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 	apiKeyRepository := postgres.NewAPIKeyRepository(w.queries, w.pool, w.diagnostics.Queries)
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: w.launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(w.queries, w.pool)
-	planePolicy := spaces.PlanePolicy{Platform: w.cfg.DefaultMediaPlane, Allowed: w.cfg.ChalkSFU.AllowedSpaces, NewSpace: w.cfg.NewSpace.MediaPlane, NewEpisodesPaused: w.cfg.ChalkSFU.NewEpisodesPaused}
-	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool {
-		provider, err := mediaplane.ParseSettingName(plane)
-		return err == nil && planePolicy.PublicWriteAllowed(provider)
-	}, mediaplane.KnownSettingName)
+	planePolicy := spaces.PlanePolicy{NewEpisodesPaused: w.cfg.ChalkSFU.NewEpisodesPaused}
+	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(mediaplane.KnownSettingName, mediaplane.KnownSettingName)
 	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), w.cfg, tenantService)
 	if err != nil {
 		return fmt.Errorf("configure public invite defaults: %w", err)
@@ -54,7 +51,7 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 	w.options.TenantAuthz = authorization.NewTenantPolicy(membershipRepository, tenantRepository)
 	spaceRepository := postgres.NewSpaceRepository(w.queries, w.pool)
 	killSwitch := postgres.NewKillSwitch(w.pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, w.cfg.DefaultMediaPlane).WithPlanePolicy(planePolicy).WithNewSpaceDefaults(w.cfg.NewSpace, tenantRepository).WithNewEpisodeSwitch(killSwitch)
+	spaceService := spaces.NewService(spaceRepository).WithPlanePolicy(planePolicy).WithNewSpaceDefaults(w.cfg.NewSpace, tenantRepository).WithNewEpisodeSwitch(killSwitch)
 	w.spaceService = spaceService
 	w.options.Spaces = spaceService
 	if w.cfg.ChalkSFU.Enabled {
@@ -65,7 +62,7 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 	}
 	w.ownCapture = w.chalkSFU != nil && w.cfg.ChalkSFU.CaptureEnabled
 	w.mediaPlaneTelemetry = observability.NewMediaPlaneResolutionTelemetry(w.logger)
-	w.episodeMediaBindingResolver = mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: w.cfg.CloudflareRealtime, DefaultProvider: w.cfg.DefaultMediaPlane, Telemetry: w.mediaPlaneTelemetry, ChalkSFU: w.chalkSFU, Rollout: mediaplaneprovideradapter.Rollout{Spaces: w.cfg.ChalkSFU.AllowedSpaces, NewEpisodesPaused: w.cfg.ChalkSFU.NewEpisodesPaused, Switch: killSwitch, ClientSunset: w.cfg.ChalkSFU.ClientSunset}})
+	w.episodeMediaBindingResolver = mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{TURN: w.cfg.TURN, Telemetry: w.mediaPlaneTelemetry, ChalkSFU: w.chalkSFU, Rollout: mediaplaneprovideradapter.Rollout{NewEpisodesPaused: w.cfg.ChalkSFU.NewEpisodesPaused, Switch: killSwitch}})
 	w.episodeRepository = postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(w.pool, w.episodeMediaBindingResolver).WithTenantLimits(w.cfg.TenantLimits)
 	episodeService := episodes.NewService(w.episodeRepository)
 

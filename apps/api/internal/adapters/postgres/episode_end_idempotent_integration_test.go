@@ -50,7 +50,7 @@ func TestRequestEpisodeEndOfAnEndingOrEndedEpisodeSucceedsWithoutAnOperation(t *
 				args []any
 			}{
 				{`insert into tenants(id,name) values($1,'Episode end idempotency regression')`, []any{uuid(tenantID)}},
-				{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Episode end idempotency',$3,'cf_sfu')`, []any{uuid(spaceID), uuid(tenantID), spaceID.String()}},
+				{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Episode end idempotency',$3,'chalk_sfu')`, []any{uuid(spaceID), uuid(tenantID), spaceID.String()}},
 				{`insert into episodes(id,tenant_id,space_id,status,config_snapshot,started_at) values($1,$2,$3,$4,'{"maximum_episode_duration_seconds":7200}'::jsonb,now() - interval '1 hour')`, []any{uuid(episodeID), uuid(tenantID), uuid(spaceID), status}},
 				{`insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes) values($1,$2,$3,'{}'::jsonb,1,$4,2)`, []any{uuid(tenantID), uuid(spaceID), uuid(episodeID), make([]byte, 32)}},
 			} {

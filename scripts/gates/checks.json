@@ -926,7 +926,7 @@
     {
       "id": "workflow:cloudflare-egress-check.yml#check",
       "owner": "Monitoring",
-      "catches": "SFU or TURN egress nearing its Cloudflare limit before calls degrade.",
+      "catches": "TURN relay egress nearing its Cloudflare limit.",
       "runs": ["daily"],
       "blocks": "alert",
       "minutes": null,
@@ -1532,16 +1532,6 @@
       "minutes": null,
       "record": "caught",
       "sample": "6 of 306 history values exceeded a ceiling in 19 runs; the cut holds on a breach."
-    },
-    {
-      "id": "scorecard:cf_sfu.action",
-      "owner": "Media",
-      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling; only the Cloudflare latency run turns red.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": null,
-      "record": "never-failed",
-      "sample": "3 successful runs; the limits are interim."
     },
     {
       "id": "scorecard:sfu.loopback",

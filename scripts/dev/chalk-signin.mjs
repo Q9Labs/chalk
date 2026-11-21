@@ -1,3 +1,4 @@
+import { chalkSfuPlane } from "./config.mjs";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { FailureKind, failure } from "./model.mjs";
@@ -21,12 +22,12 @@ export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, space
 }
 
 /** Loads the invite page, arrives as the seeded guest through `origin`, checks the guest is admitted, then leaves. */
-export async function proveSeededSignIn({ origin, invite, mediaPlane, fetchImpl = fetch, attempts = 3, episodeAttempts = 31, retryDelayMs = 3000 } = {}) {
+export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, attempts = 3, episodeAttempts = 31, retryDelayMs = 3000 } = {}) {
   const page = await fetchImpl(new URL(invite.path, origin), { headers: { accept: "text/html" } });
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
   }
-  const arrival = await admitSeededGuest({ origin, invite, mediaPlane, fetchImpl, attempts, episodeAttempts, retryDelayMs });
+  const arrival = await admitSeededGuest({ origin, invite, fetchImpl, attempts, episodeAttempts, retryDelayMs });
   if (arrival.status !== 201) throw failure(FailureKind.STARTUP, `seeded guest arrival through ${origin} failed with HTTP ${arrival.status}: ${(await arrival.text()).slice(0, 200)}`, { stage: "signin" });
   const body = await arrival.json();
   const leave = await fetchImpl(new URL("/v1/public/space-invite-arrival", origin), {
@@ -42,19 +43,35 @@ export async function proveSeededSignIn({ origin, invite, mediaPlane, fetchImpl 
   });
   if (!leave.ok) throw failure(FailureKind.STARTUP, `seeded guest could not leave (HTTP ${leave.status}): ${(await leave.text()).slice(0, 200)}`, { stage: "signin" });
   const actual = body.access?.media?.provider;
-  if (mediaPlane && actual !== mediaPlane) {
-    throw failure(FailureKind.STARTUP, `seeded guest received ${actual || "no media provider"}; expected ${mediaPlane}`, { stage: "signin" });
+  if (actual !== chalkSfuPlane) {
+    throw failure(FailureKind.STARTUP, `seeded guest received ${actual || "no media provider"}; expected ${chalkSfuPlane}`, { stage: "signin" });
   }
   return { state: body.state };
 }
 
-async function admitSeededGuest({ origin, invite, mediaPlane, fetchImpl, attempts, episodeAttempts, retryDelayMs }) {
+export async function waitForSeededSpaceIdle({ origin, seed, fetchImpl = fetch, retryDelayMs = 1000, signal = AbortSignal.timeout(90_000) }) {
+  const url = new URL(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes?page_size=1`, origin);
+  try {
+    for (;;) {
+      const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${seed.systemToken}` }, signal });
+      if (!response.ok) throw new Error(`seeded Space Episode listing returned HTTP ${response.status}`);
+      const { episodes } = await response.json();
+      if (episodes.length === 0 || episodes[0].status === "ended") return;
+      await delay(retryDelayMs, undefined, { signal });
+    }
+  } catch (error) {
+    if (!signal.aborted) throw error;
+    throw new Error("the seeded guest's Episode did not finish after reload", { cause: error });
+  }
+}
+
+async function admitSeededGuest({ origin, invite, fetchImpl, attempts, episodeAttempts, retryDelayMs }) {
   // A restart can interrupt the previous guest's cleanup. Sync's external-operation
   // lease lasts 60 seconds; allow its retry plus a 30-second provider request.
   for (let attempt = 1; ; attempt += 1) {
     const arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
       method: "POST",
-      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin, ...(mediaPlane ? { "X-Chalk-Media-Providers": mediaPlane } : {}) },
+      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin, "X-Chalk-Media-Providers": chalkSfuPlane },
       body: JSON.stringify({ display_name: "Seeded guest", space_invite_token: invite.code }),
     });
     const endingEpisode =

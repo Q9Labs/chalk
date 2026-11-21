@@ -52,27 +52,23 @@ func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, erro
 	if err != nil {
 		return MediaCredential{}, ErrSigningFailed
 	}
-	connectionClaims := jwtClaims{ConnectionID: subject.ConnectionID}
-	if subject.Provider == ProviderCloudflareSFU {
-		connectionClaims = jwtClaims{CloudflareConnectionID: subject.ConnectionID}
-	}
 	claims, err := encodeJWTPart(jwtClaims{
-		Issuer:                 i.config.Issuer,
-		Audience:               json.RawMessage(`"` + Audience + `"`),
-		Subject:                subject.ParticipantID.String(),
-		TokenID:                tokenID,
-		IssuedAt:               now.Unix(),
-		NotBefore:              now.Unix(),
-		ExpiresAt:              expiresAt.Unix(),
-		TenantID:               subject.TenantID.String(),
-		SpaceID:                subject.SpaceID.String(),
-		EpisodeID:              subject.EpisodeID.String(),
-		ParticipantID:          subject.ParticipantID.String(),
-		ParticipantGeneration:  subject.ParticipantGeneration,
-		MediaProvider:          subject.Provider,
-		CloudflareConnectionID: connectionClaims.CloudflareConnectionID,
-		ConnectionID:           connectionClaims.ConnectionID,
-		ProviderSubject:        subject.ProviderSubject,
+		Issuer:                i.config.Issuer,
+		Audience:              json.RawMessage(`"` + Audience + `"`),
+		Subject:               subject.ParticipantID.String(),
+		TokenID:               tokenID,
+		IssuedAt:              now.Unix(),
+		NotBefore:             now.Unix(),
+		ExpiresAt:             expiresAt.Unix(),
+		TenantID:              subject.TenantID.String(),
+		SpaceID:               subject.SpaceID.String(),
+		EpisodeID:             subject.EpisodeID.String(),
+		ParticipantID:         subject.ParticipantID.String(),
+		ParticipantGeneration: subject.ParticipantGeneration,
+		MediaProvider:         subject.Provider,
+
+		ConnectionID:    subject.ConnectionID,
+		ProviderSubject: subject.ProviderSubject,
 	})
 	if err != nil {
 		return MediaCredential{}, ErrSigningFailed

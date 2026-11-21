@@ -48,7 +48,7 @@ func TestPublicLeaveLockTimeoutCanRetryTheSameRequest(t *testing.T) {
 		args []any
 	}{
 		{`insert into tenants(id,name) values($1,'Public leave lock regression')`, []any{uuid(tenantID)}},
-		{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Leave regression',$3,'cf_sfu')`, []any{uuid(spaceID), uuid(tenantID), spaceID.String()}},
+		{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Leave regression',$3,'chalk_sfu')`, []any{uuid(spaceID), uuid(tenantID), spaceID.String()}},
 		{`insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, []any{uuid(episodeID), uuid(tenantID), uuid(spaceID)}},
 		{`insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes) values($1,$2,$3,'{}'::jsonb,1,$4,2)`, []any{uuid(tenantID), uuid(spaceID), uuid(episodeID), make([]byte, 32)}},
 		{`insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,'{publishAudio}',1,'active','collaborator')`, []any{uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID)}},

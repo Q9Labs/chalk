@@ -1,5 +1,5 @@
 import type { TelemetryEvent } from "../telemetry/types";
-import { CloudflareSFUError } from "./types";
+import { SFUError } from "./types";
 
 type ReportEvent = TelemetryEvent;
 export type MediaFailureDiagnostic = Required<Pick<ReportEvent, "media_error_kind" | "media_error_step">> & Pick<ReportEvent, "http_status">;
@@ -58,14 +58,14 @@ export function mediaResultFailure(cause: unknown, fallbackStep: MediaFailureSte
 export const subscribeFailure = (cause: unknown) => mediaResultFailure(cause, "sfu_subscriptions");
 
 /** A pull that returns fewer tracks than it asked for failed in part: the SFU reports each refused track in `trackErrors` and still answers. */
-export const pullShortfall = (requested: number) => (pulled: readonly unknown[]) => (pulled.length < requested ? subscribeFailure(new CloudflareSFUError("Cloudflare SFU returned fewer tracks than requested", "media_failed")) : undefined);
+export const pullShortfall = (requested: number) => (pulled: readonly unknown[]) => (pulled.length < requested ? subscribeFailure(new SFUError("Chalk SFU returned fewer tracks than requested", "media_failed")) : undefined);
 
 export function classifyMediaFailure(cause: unknown, fallbackStep: MediaFailureStep): MediaFailureDiagnostic {
   const { error, step } = unwrapMediaFailure(cause, fallbackStep);
-  if (error instanceof CloudflareSFUError) {
+  if (error instanceof SFUError) {
     const status = error.options.status;
     return {
-      media_error_kind: error.code === "signaling_timeout" || error.code === "negotiation_timeout" ? "timeout" : "CloudflareSFUError",
+      media_error_kind: error.code === "signaling_timeout" || error.code === "negotiation_timeout" ? "timeout" : "SFUError",
       media_error_step: step,
       ...(status !== undefined && Number.isInteger(status) && status >= 400 && status <= 599 ? { http_status: status } : {}),
     };

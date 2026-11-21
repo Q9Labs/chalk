@@ -155,7 +155,7 @@ func TestColocatedCaptureClaimPlacement(t *testing.T) {
 			where id=(select episode_id from recordings where id=$1)`, s.fixture.recordingID.Bytes())
 		s.wantNoClaim(t, s.worker, colocatedTestGrace)
 	})
-	t.Run("a Cloudflare-plane capture stays with the fleet", func(t *testing.T) {
+	t.Run("a capture with no node binding stays with the fleet", func(t *testing.T) {
 		s := newColocatedScenario(t)
 		s.setBinding(t, `update episodes set config_snapshot = config_snapshot - 'media_plane_binding'
 			where id=(select episode_id from recordings where id=$1)`, s.fixture.recordingID.Bytes())

@@ -12,11 +12,9 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
-	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -479,12 +477,12 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 			property = nullableSchema(property)
 		}
 
-		if name == "transcript_language" && schemaIncludesNull(property) {
-			values := make([]any, 0, len(artifactpolicy.TranscriptLanguageValues())+1)
-			for _, value := range artifactpolicy.TranscriptLanguageValues() {
-				values = append(values, value)
+		if values, ok := property["enum"].([]string); ok && schemaIncludesNull(property) {
+			enum := make([]any, 0, len(values)+1)
+			for _, value := range values {
+				enum = append(enum, value)
 			}
-			property["enum"] = append(values, nil)
+			property["enum"] = append(enum, nil)
 		}
 
 		properties[name] = property
@@ -714,52 +712,6 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 		(schemaName == "ProblemReportRequest" && fieldName == "diagnostics")
 }
 
-func fieldEnum(schemaName string, fieldName string) []string {
-	if values := telemetryFieldEnum(schemaName, fieldName); values != nil {
-		return values
-	}
-	if schemaName == "CloudflareSFUSignalRequest" {
-		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
-			return values
-		}
-	}
-	switch fieldName {
-	case "transcript_language":
-		return artifactpolicy.TranscriptLanguageValues()
-	case "recording_render_mode":
-		return []string{"on_demand", "automatic"}
-	case "admission":
-		if schemaName == "AdmitEpisodeParticipantRequest" {
-			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}
-		}
-	case "role":
-		switch schemaName {
-		case "Membership", "MembershipList", "CreateMembershipRequest", "UpdateMembershipRequest":
-			return []string{"owner", "collaborator", "observer"}
-		default:
-			// Episode participant roles are customer-defined space roles. They
-			// must remain open strings in the generated API contract.
-			return nil
-		}
-	case "storage_provider":
-		return []string{"r2"}
-	case "status":
-		switch schemaName {
-		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest", "ParticipantEpisodeStatus":
-			return []string{"active", "ending", "ended"}
-		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
-			return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
-		case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
-			return []string{
-				transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
-				transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
-				transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
-			}
-		}
-	}
-	return nil
-}
-
 func jsonFieldName(field reflect.StructField) (string, bool) {
 	tag := field.Tag.Get("json")
 	if tag == "-" {
@@ -848,7 +800,9 @@ func optionalStringAllowsNull(schemaName string, fieldName string) bool {
 		return true
 	case "name":
 		return false
-	case "status", "role", "slug", "media_plane", "provider", "model":
+	case "media_plane":
+		return schemaName == "UpdateSpaceRequest"
+	case "status", "role", "slug", "provider", "model":
 		return false
 	}
 	return !strings.HasPrefix(schemaName, "Update")
@@ -935,12 +889,12 @@ func providerConfigSchemas() map[string]map[string]any {
 	return map[string]map[string]any{
 		"MediaPlaneProviderConfig": {
 			"type":                 "object",
-			"description":          "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
+			"description":          "Controls whether the Tenant uses the Chalk SFU.",
 			"additionalProperties": true,
 			"properties": map[string]any{
 				"enabled":  map[string]any{"type": "boolean"},
-				"provider": map[string]any{"type": "string", "description": "The supported provider is cf_sfu."},
-				"mode":     providerModeSchema(),
+				"provider": map[string]any{"type": "string", "enum": []string{"chalk_sfu"}},
+				"mode":     map[string]any{"type": "string", "enum": []string{"chalk_managed"}},
 			},
 		},
 		"StorageProviderConfig": {
@@ -1142,7 +1096,7 @@ func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {
 		return true
 	}
-	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")
+	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "ChalkSFU")
 }
 
 func schemaTypeIs(schema map[string]any, value string) bool {

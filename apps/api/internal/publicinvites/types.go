@@ -68,10 +68,7 @@ const (
 )
 
 const (
-	PublicProviderCloudflareSFU = "cloudflare_sfu"
-	PublicProviderChalkSFU      = "chalk_sfu"
-
-	ProviderCloudflareSFU = PublicProviderCloudflareSFU
+	PublicProviderChalkSFU = "chalk_sfu"
 )
 
 type AdmissionMode string
@@ -388,13 +385,9 @@ type PublicAccessGrant struct {
 }
 
 type PublicAccessClientPayload struct {
-	ConnectionID    string
-	StunServer      string
-	ICEServers      []mediaplane.ICEServer
-	ProviderSubject string
-	Token           string
-	// EpisodeRef, ICEServers and Capabilities describe the Chalk SFU. Cloudflare sets none of them but ICEServers.
+	ConnectionID string
 	EpisodeRef   string
+	ICEServers   []mediaplane.ICEServer
 	Capabilities PublicAccessCapabilities
 }
 

@@ -1,6 +1,6 @@
 // Package pion owns the WebRTC peer connection used by a recording capture
 // worker. The package deliberately exposes only provider-neutral signaling and
-// Chalk track identity; Cloudflare and other SFU adapters stay outside it.
+// Chalk track identity.
 package pion
 
 import (

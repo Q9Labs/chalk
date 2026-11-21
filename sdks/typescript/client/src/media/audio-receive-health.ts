@@ -1,7 +1,7 @@
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { audioStats, increased, readStats, type AudioStats } from "./audio-stats";
 import type { MediaPublication } from "./plane";
-import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
+import type { SFUPublication, SFURemoteTrack } from "./types";
 
 type ReceiveState = NonNullable<TransportDiagnostic["receive_state"]>;
 type PlayResult = NonNullable<TransportDiagnostic["play_result"]>;
@@ -27,7 +27,7 @@ export type AudioReceiveHealthOptions = {
   setInterval: (callback: () => void, milliseconds: number) => ReturnType<typeof setInterval>;
   clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   connection: () => RTCPeerConnection | null;
-  tracks: () => Iterable<CloudflareSFURemoteTrack>;
+  tracks: () => Iterable<SFURemoteTrack>;
   onEvent: (event: TransportDiagnostic) => void;
 };
 
@@ -93,7 +93,7 @@ export class AudioReceiveHealth {
     }
   }
 
-  roster(publications: Iterable<CloudflareSFUPublication>): void {
+  roster(publications: Iterable<SFUPublication>): void {
     if (this.#disposed) return;
     const desired = new Set<string>();
     for (const publication of publications) {

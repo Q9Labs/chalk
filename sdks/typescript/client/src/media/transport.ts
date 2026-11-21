@@ -1,8 +1,8 @@
 import type { MediaPublicationSource } from "./plane";
 import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
 import type { MediaFailureStep } from "./failure-diagnostics";
-import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse, SFUSubscriptionState } from "./types";
+import { SFUError } from "./types";
+import type { SFUCredentialProvider, SFUHTTPTransportOptions, SFUPublicationSnapshot, SFUSignalingTransport, SFUTracksResponse, SFUSubscriptionState } from "./types";
 import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, directOrigin, directPathBlocked, markDirectPathFailed, sharedDirectPathMemory } from "../direct-path";
 import { withRequestContext } from "../session";
 import * as apiUrls from "../api-urls";
@@ -21,7 +21,7 @@ const FAILURE_STEPS: Readonly<Record<SignalOp, MediaFailureStep>> = {
 /** The calls that change nothing, so a second send cannot do harm. The unified route carries them as POST, so the operation decides, not the method. */
 const READS: ReadonlySet<SignalOp> = new Set(["publications", "subscriptions"]);
 
-export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
+export function createSFUHTTPTransport(options: SFUHTTPTransportOptions): SFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
   const base = trimTrailingSlashes(options.apiBaseURL);
@@ -52,7 +52,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     notifyObserver(() => options.onPath?.({ plane: "signalling", path, fellBack }));
   };
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new SFUError("The signaling deadline is invalid", "signaling_failed");
   const freshToken = async (op?: SignalOp): Promise<string> => {
     const startedAt = performance.now();
     try {
@@ -80,7 +80,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           });
           if (!response.ok) {
             notifyObserver(() => options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt }));
-            throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
+            throw new SFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
               status: response.status,
               retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
             });
@@ -92,7 +92,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         try {
           return await send(origin);
         } catch (error) {
-          if (!options.refreshCredential || !(error instanceof CloudflareSFUError) || error.options.status !== 403) throw error;
+          if (!options.refreshCredential || !(error instanceof SFUError) || error.options.status !== 403) throw error;
           const refresh = options.refreshCredential;
           token = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal)));
           return await send(origin);
@@ -132,7 +132,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       return tracksResponse(response);
     },
     closeTracks: async (input) =>
-      request<CloudflareSFUTracksResponse>("tracks_close", {
+      request<SFUTracksResponse>("tracks_close", {
         connection_id: input.connectionId,
         session_description: input.sessionDescription,
         close_tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
@@ -140,7 +140,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         ...(input.receiveOnly ? { receive_only: true } : {}),
       }),
     updateTracks: async (input) =>
-      request<CloudflareSFUTracksResponse>("tracks_update", {
+      request<SFUTracksResponse>("tracks_update", {
         connection_id: input.connectionId,
         tracks: input.tracks.map(({ publicationId, ...track }) => (publicationId === undefined ? track : { ...track, publication_id: publicationId })),
       }),
@@ -171,10 +171,10 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     renegotiate: async (input) => {
       await request("renegotiate", { connection_id: input.connectionId, session_description: input.sessionDescription });
     },
-    listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
+    listPublications: async (): Promise<SFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
     pullPublishedAudio: async (input) => {
       const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks", { connection_id: input.connectionId, tracks: [], pull_published_audio: true, allow_partial_remote_tracks: true });
-      if (!publications) throw new CloudflareSFUError("The pull-published response carried no publications", "signaling_failed");
+      if (!publications) throw new SFUError("The pull-published response carried no publications", "signaling_failed");
       return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };
     },
   };
@@ -188,12 +188,12 @@ function notifyObserver(observer: () => void): void {
   }
 }
 function nonEmptyToken(token: string): string {
-  if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+  if (!token.trim()) throw new SFUError("The media credential provider returned an empty token", "signaling_failed");
   return token;
 }
 type TracksWireResponse = {
-  readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
-  readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
+  readonly sessionDescription?: SFUTracksResponse["sessionDescription"];
+  readonly tracks?: readonly (Omit<NonNullable<SFUTracksResponse["tracks"]>[number], "publicationId"> & {
     readonly publication_id?: string;
   })[];
   readonly requiresImmediateRenegotiation?: boolean;
@@ -209,10 +209,10 @@ type WirePublicationList = {
     readonly paused?: boolean;
   }[];
 };
-function tracksResponse(response: TracksWireResponse): CloudflareSFUTracksResponse {
+function tracksResponse(response: TracksWireResponse): SFUTracksResponse {
   return { ...response, tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })) };
 }
-function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublicationSnapshot {
+function publicationSnapshot(response: WirePublicationList): SFUPublicationSnapshot {
   return {
     incarnation: response.incarnation,
     sequence: response.sequence,
@@ -226,7 +226,7 @@ function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublic
 }
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {
   const controller = new AbortController();
-  const timeout = new CloudflareSFUError("Cloudflare SFU signaling timed out. Try again.", "signaling_timeout");
+  const timeout = new SFUError("Chalk SFU signaling timed out. Try again.", "signaling_timeout");
   let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = globalThis.setTimeout(() => {
@@ -243,10 +243,10 @@ async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSigna
     if (timer !== undefined) globalThis.clearTimeout(timer);
   }
 }
-function requireCredential(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUCredentialProvider {
+function requireCredential(options: SFUHTTPTransportOptions): SFUCredentialProvider {
   if (options.credential) return options.credential;
   if (options.bearerToken !== undefined) return () => options.bearerToken ?? "";
-  throw new CloudflareSFUError("A media credential provider is required", "signaling_failed");
+  throw new SFUError("A media credential provider is required", "signaling_failed");
 }
 /** One request to the direct host's catch-all route: any HTTP answer, even a 404, proves TCP and TLS work. Resolves false on a network failure or after the attempt budget. */
 async function probeDirectPath(direct: URL, fetch: typeof globalThis.fetch): Promise<boolean> {
@@ -263,10 +263,10 @@ async function probeDirectPath(direct: URL, fetch: typeof globalThis.fetch): Pro
  * A timeout or a 504 may follow a call the API already handled, so those surface as they do on the Tunnel.
  */
 function isSignalingTimeout(error: unknown): boolean {
-  return error instanceof CloudflareSFUError && error.code === "signaling_timeout";
+  return error instanceof SFUError && error.code === "signaling_timeout";
 }
 
 function neverReachedApi(error: unknown): boolean {
-  if (error instanceof CloudflareSFUError) return error.options.status === 429 || error.options.status === 502 || error.options.status === 503;
+  if (error instanceof SFUError) return error.options.status === 429 || error.options.status === 502 || error.options.status === 503;
   return error instanceof TypeError;
 }

@@ -5262,7 +5262,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "409": {
             "content": {
@@ -5532,7 +5532,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "404": {
             "content": {
@@ -7608,7 +7608,7 @@
     },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
       "post": {
-        "operationId": "signalCloudflareSFU",
+        "operationId": "signalChalkSFU",
         "parameters": [
           {
             "in": "path",
@@ -7647,7 +7647,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CloudflareSFUSignalRequest"
+                "$ref": "#/components/schemas/ChalkSFUSignalRequest"
               }
             }
           },
@@ -7658,7 +7658,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CloudflareSFUSignalAPIResponse"
+                  "$ref": "#/components/schemas/ChalkSFUSignalAPIResponse"
                 }
               }
             },
@@ -7778,7 +7778,7 @@
             "participantMediaBearer": []
           }
         ],
-        "summary": "Signal cloudflare s f u",
+        "summary": "Signal chalk s f u",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -13087,6 +13087,7 @@
                 "$ref": "#/components/schemas/DateTimeString"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               },
               "token": {
@@ -13187,67 +13188,7 @@
         "required": ["expected_revision"],
         "type": "object"
       },
-      "ChatAttachment": {
-        "additionalProperties": false,
-        "properties": {
-          "attachmentId": {
-            "type": "string"
-          },
-          "byteLength": {
-            "type": "integer"
-          },
-          "fileName": {
-            "type": "string"
-          },
-          "mimeType": {
-            "type": "string"
-          }
-        },
-        "required": ["attachmentId", "byteLength", "fileName", "mimeType"],
-        "type": "object"
-      },
-      "ChatAttachmentDownload": {
-        "additionalProperties": false,
-        "properties": {
-          "downloadUrl": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string"
-          }
-        },
-        "required": ["downloadUrl", "expiresAt"],
-        "type": "object"
-      },
-      "ChatAttachmentUpload": {
-        "additionalProperties": false,
-        "properties": {
-          "attachmentId": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string"
-          },
-          "headers": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "method": {
-            "type": "string"
-          },
-          "uploadId": {
-            "type": "string"
-          },
-          "uploadUrl": {
-            "type": "string"
-          }
-        },
-        "required": ["attachmentId", "expiresAt", "headers", "method", "uploadId", "uploadUrl"],
-        "type": "object"
-      },
-      "CloudflareSFUSignalAPIResponse": {
+      "ChalkSFUSignalAPIResponse": {
         "additionalProperties": false,
         "properties": {
           "accepted": {
@@ -13383,7 +13324,7 @@
         },
         "type": "object"
       },
-      "CloudflareSFUSignalRequest": {
+      "ChalkSFUSignalRequest": {
         "additionalProperties": false,
         "properties": {
           "allow_partial_remote_tracks": {
@@ -13524,6 +13465,66 @@
         "required": ["op"],
         "type": "object"
       },
+      "ChatAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "byteLength": {
+            "type": "integer"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          }
+        },
+        "required": ["attachmentId", "byteLength", "fileName", "mimeType"],
+        "type": "object"
+      },
+      "ChatAttachmentDownload": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": ["downloadUrl", "expiresAt"],
+        "type": "object"
+      },
+      "ChatAttachmentUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "uploadId": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["attachmentId", "expiresAt", "headers", "method", "uploadId", "uploadUrl"],
+        "type": "object"
+      },
       "CreateAPIKeyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13621,7 +13622,7 @@
             "type": "integer"
           },
           "media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu"],
             "type": "string"
           },
           "metadata": {
@@ -13777,7 +13778,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -14441,17 +14442,17 @@
       },
       "MediaPlaneProviderConfig": {
         "additionalProperties": true,
-        "description": "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
+        "description": "Controls whether the Tenant uses the Chalk SFU.",
         "properties": {
           "enabled": {
             "type": "boolean"
           },
           "mode": {
-            "enum": ["chalk_managed", "tenant_managed"],
+            "enum": ["chalk_managed"],
             "type": "string"
           },
           "provider": {
-            "description": "The supported provider is cf_sfu.",
+            "enum": ["chalk_sfu"],
             "type": "string"
           }
         },
@@ -14635,6 +14636,7 @@
                 "type": "object"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               }
             },
@@ -15401,6 +15403,7 @@
             "type": "integer"
           },
           "effective_media_plane": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "id": {
@@ -15413,9 +15416,11 @@
             "type": "integer"
           },
           "media_plane": {
+            "enum": ["chalk_sfu"],
             "type": "string"
           },
           "media_plane_setting": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "metadata": {
@@ -15999,7 +16004,7 @@
                   "type": "string"
                 },
                 "media_error_kind": {
-                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"],
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "SFUError", "network", "timeout", "unknown"],
                   "type": "string"
                 },
                 "media_error_step": {
@@ -16349,6 +16354,7 @@
             "$ref": "#/components/schemas/DateTimeString"
           },
           "default_media_plane": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -16953,8 +16959,8 @@
             "type": "integer"
           },
           "media_plane": {
-            "minLength": 1,
-            "type": "string"
+            "enum": ["chalk_sfu", null],
+            "type": ["string", "null"]
           },
           "metadata": {
             "additionalProperties": true,
@@ -17108,7 +17114,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "logo_key": {

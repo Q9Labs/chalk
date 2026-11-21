@@ -131,7 +131,6 @@ jobs:
     with:
       environment: production
       proofs: chalk-sfu-spaces
-      media_plane: chalk_sfu
     secrets: inherit
   live-calls:
     # A deploy restarts the API and Sync and drops every live call. Wait for calls to end, then refuse; the count comes from the production API's /readyz.
@@ -189,7 +188,6 @@ jobs:
     with:
       environment: production
       proofs: ${{ matrix.proofs }}
-      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
   mcp-change:
@@ -234,7 +232,6 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      media_plane: chalk_sfu
       latency: true
       latency_only: true
       latency_samples: "60"
@@ -301,7 +298,6 @@ jobs:
     with:
       environment: production
       proofs: leave-chalk-sfu
-      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       scorecard_label: rerun
     secrets: inherit
@@ -314,7 +310,6 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      media_plane: chalk_sfu
       latency: true
       latency_only: true
       latency_samples: "60"

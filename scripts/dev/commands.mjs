@@ -23,8 +23,9 @@ for the media smoke test.
 
 doctor is a read-only check that this instance is worth driving; it exits 0 only when every check passes.
 down stops the runtime and removes what start created (database, Redis volume, runtime files); it keeps .logs and .verify.
-Set PUBLIC_ORIGIN to the address browsers use. Set CHALK_CLOUDFLARE_REALTIME_APP_ID and
-CHALK_CLOUDFLARE_REALTIME_APP_SECRET to skip 1Password.`;
+Set PUBLIC_ORIGIN to the web address browsers use. For remote calls, set
+CHALK_DEV_SFU_ANNOUNCE_IP to a reachable IPv4 address and allow the SFU media
+port over UDP and TCP. Without it, media stays on the host loopback.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
@@ -136,7 +137,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
   }
   await check("sign-in", async () => {
     const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
-    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, mediaPlane: seed.signInMediaPlane, fetchImpl });
+    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, fetchImpl });
     return `seeded guest arrival ${proof.state}`;
   });
   const result = { ok: checks.every((entry) => entry.ok), checks };

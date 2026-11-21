@@ -9,7 +9,7 @@ import { load } from "js-yaml";
 const root = resolve(import.meta.dirname, "../..");
 const proofJob = Object.values(load(readFileSync(resolve(root, ".github/workflows/real-call-proof.yml"), "utf8")).jobs).find((job) => job.steps?.some((step) => step.id === "prove"));
 const script = proofJob.steps.find((step) => step.id === "prove").run;
-const plane = JSON.parse(readFileSync(resolve(root, "scripts/prod-proof/registry.json"), "utf8"))["leave-chalk-sfu"].planes.at(-1);
+const plane = "chalk_sfu";
 
 // Runs the real "Prove a real call" script against the real registry.mjs, whose registry.json holds only the names from before the rename. The proof
 // runner (`pnpm prod:proof`, which calls the live API) is the one boundary replaced.

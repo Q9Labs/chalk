@@ -58,7 +58,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	spaceService := spaces.NewService(NewSpaceRepository(queries, pool))
 	space, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
 		TenantID: tenantID, Name: "New call", Slug: "call-" + accountTenantIntegrationID(t).String(),
-		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
+		MediaPlane: "chalk_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
 		DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60,
 		RequestKey: accountTenantIntegrationID(t).String(),
 	})

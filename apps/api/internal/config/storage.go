@@ -47,10 +47,6 @@ func (cfg *Config) loadTimeouts() error {
 	if err != nil {
 		return err
 	}
-	cfg.CloudflareRealtime.RequestTimeout, err = envPositiveMilliseconds(CloudflareRealtimeRequestTimeoutMS, DefaultCloudflareRealtimeRequestTimeoutMS)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

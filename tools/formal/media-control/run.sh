@@ -2,7 +2,7 @@
 # Runs the model checker for every row of runs.txt (or only the rows named on the
 # command line) and checks each outcome against the row's expectation.
 #   ./run.sh               all runs
-#   ./run.sh cf-decided-safety-1src   one run
+#   ./run.sh dist-decided-safety-1src   one run
 #   DEEP=1 ./run.sh       also the deep-* runs (about 20 minutes)
 # Needs Java 11+ and curl. The TLA+ tools pin is in ../tla2tools.sh.
 set -euo pipefail
@@ -51,16 +51,13 @@ while IFS='|' read -r name check sources seq drops loss mutes cfails rule ui sfu
   elif [[ "$name" == deep-* && -z "${DEEP:-}" ]]; then continue; fi
 
   case "$sfu" in
-    cloudflare) sfu_consts="CloseCanFail = TRUE
+    distributed) sfu_consts="CloseCanFail = TRUE
   OrphansLinger = TRUE
   AtomicRevoke = FALSE" ;;
-    own-distributed) sfu_consts="CloseCanFail = TRUE
-  OrphansLinger = TRUE
-  AtomicRevoke = FALSE" ;;
-    own) sfu_consts="CloseCanFail = FALSE
+    atomic) sfu_consts="CloseCanFail = FALSE
   OrphansLinger = FALSE
   AtomicRevoke = TRUE" ;;
-    *) echo "unknChalk SFU '$sfu' in run $name" >&2; exit 2 ;;
+    *) echo "unknown SFU authority '$sfu' in run $name" >&2; exit 2 ;;
   esac
   symmetry=yes
   case "$check" in

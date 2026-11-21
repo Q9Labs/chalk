@@ -1,7 +1,7 @@
-import type { CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot } from "./types";
+import type { SFULocalTrack, SFURemoteTrack, SFUSnapshot } from "./types";
 
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
-export function freezeSnapshot(snapshot: CloudflareSFUSnapshot): CloudflareSFUSnapshot {
+export function freezeSnapshot(snapshot: SFUSnapshot): SFUSnapshot {
   const failure = snapshot.failure ? Object.freeze(snapshot.failure) : null;
   return Object.freeze({
     ...snapshot,
@@ -12,10 +12,10 @@ export function freezeSnapshot(snapshot: CloudflareSFUSnapshot): CloudflareSFUSn
     failure,
   });
 }
-export function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
+export function snapshotEqual(left: SFUSnapshot, right: SFUSnapshot): boolean {
   return snapshotMetadataEqual(left, right) && left.localTracks.every((publication, index) => publicationEqual(publication, right.localTracks[index])) && left.remoteTracks.every((publication, index) => remotePublicationEqual(publication, right.remoteTracks[index]));
 }
-function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
+function snapshotMetadataEqual(left: SFUSnapshot, right: SFUSnapshot): boolean {
   return (
     (left.receiveStalls ?? EMPTY_RECEIVE_STALLS) === (right.receiveStalls ?? EMPTY_RECEIVE_STALLS) &&
     sharedRefsEqual(left, right) &&
@@ -26,21 +26,21 @@ function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFU
     left.remoteTracks.length === right.remoteTracks.length
   );
 }
-function sharedRefsEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
+function sharedRefsEqual(left: SFUSnapshot, right: SFUSnapshot): boolean {
   return left.remoteDelivery === right.remoteDelivery && left.callStats === right.callStats;
 }
-function connectionEqual(left: CloudflareSFUSnapshot["connection"], right: CloudflareSFUSnapshot["connection"]): boolean {
+function connectionEqual(left: SFUSnapshot["connection"], right: SFUSnapshot["connection"]): boolean {
   return left.phase === right.phase && left.peerConnectionState === right.peerConnectionState && left.iceConnectionState === right.iceConnectionState;
 }
-function cursorEqual(left: CloudflareSFUSnapshot["cursor"], right: CloudflareSFUSnapshot["cursor"]): boolean {
+function cursorEqual(left: SFUSnapshot["cursor"], right: SFUSnapshot["cursor"]): boolean {
   return left?.incarnation === right?.incarnation && left?.sequence === right?.sequence;
 }
-function failureEqual(left: CloudflareSFUSnapshot["failure"], right: CloudflareSFUSnapshot["failure"]): boolean {
+function failureEqual(left: SFUSnapshot["failure"], right: SFUSnapshot["failure"]): boolean {
   return left?.code === right?.code && left?.recoverable === right?.recoverable;
 }
-function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULocalTrack | undefined): boolean {
+function publicationEqual(left: SFULocalTrack, right: SFULocalTrack | undefined): boolean {
   return right !== undefined && left.source === right.source && left.enabled === right.enabled && left.publicationId === right.publicationId && left.track === right.track;
 }
-function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
+function remotePublicationEqual(left: SFURemoteTrack, right: SFURemoteTrack | undefined): boolean {
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }

@@ -26,7 +26,7 @@ let dialCount = 0;
 globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
   construct(target, args) { dialCount += 1; return Reflect.construct(target, args); }
 });
-const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:127.0.0.1:9" } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/v1/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
+const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", iceServers: [], episodeRef: "episode-1", capabilities: {} } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/v1/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
 const root = createRoot(document.getElementById("root"));
 `;
 }

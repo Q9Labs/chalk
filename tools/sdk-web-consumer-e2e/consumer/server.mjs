@@ -203,7 +203,7 @@ function accessGrant(user, body) {
   return {
     subject: { tenant_id: "fixture-tenant", space_id: "fixture-space", episode_id: "fixture-episode", participant_id: user, participant_generation: 1 },
     sync: { token: token("chalk-sync", user), expires_at: expiresAt },
-    media: { token: token("chalk-media", user), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:localhost:9" } },
+    media: { token: token("chalk-media", user), expires_at: expiresAt, provider: "chalk_sfu", client_payload: { connectionId, iceServers: [], episodeRef: "episode-1", capabilities: {} } },
   };
 }
 

@@ -7,7 +7,7 @@ This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert
 - **Node down** reaches Discord and Oncall through the Axiom `sfu-readiness` branch (reason `unreachable`: at least 4 unhealthy minute samples in 5 minutes, latest still unhealthy, because the API host cannot read `/readyz`). The DigitalOcean ping check `chalk-sfu-<env>-ping` (fails from every region for 2 minutes) is the second, independent signal and reaches Discord only.
 - **CPU, memory or disk high** (DigitalOcean policies `chalk-sfu-<env>: ...`: CPU or memory above 85%, disk above 80%, for 5 minutes) reaches Discord only. A busy host that still answers `/readyz` pages Oncall only once the node closes admission itself (`admission_cpu_busy` and the other admission reasons).
 - **Node refusing calls or near its packet budget** is the same `sfu-readiness` branch, from the collector's `/readyz` probe.
-- **Join failures on `chalk_sfu`** (an accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu`, one alert per Episode and failure), **recording failed or stranded** (`recording` and `recording-stop` branches) and **overflow to `cf_sfu`** (`sfu-overflow` branch, any API-side `chalk_sfu.overflow` event in the last 2 minutes; the node's own events are `sfu.*`) all reach Discord and Oncall through Axiom.
+- **Join failures on `chalk_sfu`** (an accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu`, one alert per Episode and failure), **recording failed or stranded** (`recording` and `recording-stop` branches) and **placement refusal** (`sfu-overflow` branch, any API-side `chalk_sfu.overflow` event in the last 2 minutes; the node's own events are `sfu.*`) all reach Discord and Oncall through Axiom.
 
 Why the split: DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL, so its alerts have no Oncall path. The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor and Oncall is a Slack-type notifier. A forwarder (a small Cloudflare Worker re-posting DigitalOcean's Slack-format POST to Oncall and Discord) would close the gap but is not built; until then the readiness probe is how Oncall hears of a down node. If the collector probe is ever turned off, the `sfu-readiness` branch has no data and node health reaches the team only through DigitalOcean's Discord alerts.
 
@@ -101,7 +101,7 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 ### Node down
 
-**Meaning.** The node does not answer ping from DigitalOcean's probes in Asia, Europe and the US for 2 minutes. Live classes on it have dropped or will drop. New classes overflow to Cloudflare while the API still has a Cloudflare application for the Tenant, or are refused.
+**Meaning.** The node does not answer ping from DigitalOcean's probes in Asia, Europe and the US for 2 minutes. Live classes on it have dropped or will drop. New classes start on a healthy fleet node, or are refused if none is ready.
 
 **Check.**
 
@@ -147,7 +147,7 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 **Check.** Search the API log dataset for the Episode id from the alert (`| search "<episode-id>"`). Two sets of events explain a join, and they have different names. The API writes `chalk_sfu.*` events (`chalk_sfu.client_refused`, `chalk_sfu.overflow`, `chalk_sfu.recovery`) with `service.name` of the API. The node writes `sfu.*` events with `service.name=chalk-sfu`, in the same dataset, joined by `episode_id` and `connection_id`. For a join that failed, read `sfu.session.refused`, `sfu.negotiation.failed` and `sfu.control.failed` first, then the `outcome` of `sfu.session.closed` (`never_connected` means the media path never opened, so the cause is the network or a blocked UDP port, not the node; see [Follow one Participant through the Chalk SFU](../../../docs/observability.md#follow-one-participant-through-the-chalk-sfu)). Read the node's `/readyz` for the same minute. The node's journal is still needed for error text, which the export leaves out.
 
-**Fix.** One participant with one report is usually the participant's network. Several Episodes in minutes is the node. Restart the service, and if joins keep failing, switch new Episodes to Cloudflare with the kill switch below; live Episodes stay on the node.
+**Fix.** One participant with one report is usually the participant's network. Several Episodes in minutes is the node. Restart the service, and if joins keep failing, pause new Episodes with the kill switch below; live Episodes stay on the node.
 
 ### Recording failed or stranded
 
@@ -157,9 +157,9 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 **Fix.** If the node is healthy, retry the stop or export from the dashboard. If the node was down during the class, tell the customer that a complete video cannot be promised, and check whether any retained source can be recovered.
 
-### Overflow to `cf_sfu`
+### Placement refusal
 
-**Meaning.** A new class did not start on the Chalk SFU. With provider `cf_sfu` it moved to Cloudflare; with `chalk_sfu` it was refused because overflow is off. The `placement_reason` tells why (for example `overflow_no_room`, `overflow_node_protocol_too_old`, host guard closed, draining or silent). Classes keep working on Cloudflare, but the Chalk SFU is not carrying them.
+**Meaning.** A new class did not start on the Chalk SFU. The fleet refused placement. The `placement_reason` tells why (for example `overflow_no_room`, `overflow_node_protocol_too_old`, host guard closed, draining or silent).
 
 **Check.** Read the reason in the alert, then `/readyz` for `host.admissionReason`, `draining`, `protocol`, `packetBudget` and `reservedPackets`. A `protocol_too_old` reason means the node runs a build older than the API sends: deploy the node.
 
@@ -197,4 +197,4 @@ features/media/sfu/scripts/live-smoke production --confirm production
 
 ## Kill switch
 
-Sending one Space back to Cloudflare, and returning it, is in [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`media-settings new-episodes --state off --operator <name> --reason <text>`) is the second step and needs no API reload.
+Use `media-settings new-episodes --state off --operator <name> --reason <text>` to stop new Episodes without moving live Episodes.

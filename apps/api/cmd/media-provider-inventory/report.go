@@ -96,7 +96,7 @@ var (
 	spaceSelectionKeys  = []string{"space_cf_sfu", "space_chalk_sfu", "space_unknown", "tenant_default_cf_sfu", "tenant_default_chalk_sfu", "tenant_default_unknown", "none"}
 	newEpisodeKeys      = []string{"chalk_sfu", "cf_sfu", "cf_sfu_by_allowlist", "none", "unresolvable"}
 	cloudflareSpaceKeys = []string{"has_cloudflare_space", "no_cloudflare_space"}
-	boundProviderKeys   = []string{"chalk_sfu", "cf_sfu", "legacy_cf_sfu", "none", "other", "unreadable"}
+	boundProviderKeys   = []string{"chalk_sfu", "cf_sfu", "cf_rtk", "legacy_cf_sfu", "none", "other", "unreadable"}
 )
 
 type Report struct {
@@ -140,14 +140,7 @@ type DependencyReport struct {
 	TranscriptionsInFlightByProvider     Family `json:"transcriptions_in_flight_by_bound_provider"`
 }
 
-func newReport(raw rawReport, list allowlist) Report {
-	mode := "none"
-	switch {
-	case list.all:
-		mode = "all"
-	case len(list.spaces) > 0:
-		mode = "listed"
-	}
+func newReport(raw rawReport) Report {
 	tenants := publish(
 		draft{raw.Tenants.ByDefaultMediaPlane, defaultPlaneKeys},
 		draft{raw.Tenants.ByConfigurationSource, configSourceKeys},
@@ -163,7 +156,7 @@ func newReport(raw rawReport, list allowlist) Report {
 	return Report{
 		Schema:          "chalk.media_provider_inventory.v1",
 		SuppressedBelow: suppressBelow,
-		Allowlist:       AllowlistReport{Mode: mode, Spaces: publishCell(len(list.spaces))},
+		Allowlist:       AllowlistReport{Mode: "all"},
 		Tenants: TenantsReport{
 			ByDefaultMediaPlane:   tenants[0],
 			ByConfigurationSource: tenants[1],

@@ -1,8 +1,7 @@
 import { videoRenderSize } from "./video-render-size";
 
-// A viewer picks which simulcast layer of a remote camera it receives. Cloudflare
-// never adapts by itself (priorityOrdering and ridNotAvailable default to none),
-// so this decides from the viewer's own receive stats and the size of its tile.
+// Without server adaptation, the viewer picks a simulcast layer from its
+// receive stats and tile size.
 // An SFU with server layer adaptation picks the layer under the request from its
 // own estimate, so there the request is only a tile-size ceiling: a second loop
 // reacting to the same congestion would fight the SFU's.

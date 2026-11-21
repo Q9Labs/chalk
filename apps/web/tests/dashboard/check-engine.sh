@@ -16,14 +16,23 @@ for delay in 10 30 0; do
 done
 (cd apps/sync && MIX_ENV=dev mix compile)
 case "$proof" in
-  http) bash apps/web/tests/dashboard/real-engine.sh ;;
+  http)
+    # The HTTP proof has no Sync consumer to release SFU seats on End.
+    # Leave room for both owner Episodes, the knock Episode, and recent placements.
+    export SFU_PACKET_BUDGET=48000
+    bash apps/web/tests/dashboard/real-engine.sh
+    ;;
   refresh)
-    # Five consecutive ports; remote-slot-env.sh moves the block into the slot's own range.
+    # Six consecutive ports; remote-slot-env.sh moves the block into the slot's own range.
     refresh_port=${CHALK_DASHBOARD_REFRESH_PORT_BASE:-18180}
     export CHALK_DASHBOARD_API_PORT=$refresh_port CHALK_DASHBOARD_VENDOR_PORT=$((refresh_port + 1))
     export CHALK_DASHBOARD_BRIDGE_PORT=$((refresh_port + 2))
+    export CHALK_DASHBOARD_SFU_PORT=$((refresh_port + 5))
     export CHALK_JOIN_WEB_PORT=$((refresh_port + 3)) CHALK_JOIN_SYNC_PORT=$((refresh_port + 4))
     export DASHBOARD_ENGINE_ARTIFACT_SUFFIX=-refresh DASHBOARD_ENGINE_DEADLINE_SECONDS=600
+    # Placement counts recent starts for 30 seconds, even after End releases their sessions.
+    # Budget for 60 sequential fixture Episodes at 3,480 packets/s each plus the live browser tabs.
+    export SFU_PACKET_BUDGET=250000
     bash apps/web/tests/dashboard/real-engine.sh node apps/web/tests/dashboard/owner-refresh.mjs
     ;;
   board)

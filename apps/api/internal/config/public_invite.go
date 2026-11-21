@@ -15,7 +15,6 @@ import (
 
 const (
 	PublicInviteManagedTenantID            = "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID"
-	PublicInviteDefaultMediaPlane          = "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE"
 	PublicInviteWebOrigin                  = "CHALK_PUBLIC_INVITE_WEB_ORIGIN"
 	PublicInviteKeyID                      = "CHALK_PUBLIC_INVITE_KEY_ID"
 	PublicInvitePrivateKey                 = "CHALK_PUBLIC_INVITE_PRIVATE_KEY"
@@ -47,13 +46,12 @@ var publicInviteUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a
 
 func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	managedTenantID := strings.TrimSpace(envOrDefault(PublicInviteManagedTenantID, ""))
-	defaultMediaPlane := strings.TrimSpace(envOrDefault(PublicInviteDefaultMediaPlane, ""))
 	webOrigin := strings.TrimSpace(envOrDefault(PublicInviteWebOrigin, ""))
 	keyID := strings.TrimSpace(envOrDefault(PublicInviteKeyID, ""))
 	encodedPrivateKey := strings.TrimSpace(envOrDefault(PublicInvitePrivateKey, ""))
 	encodedVerificationKeys := strings.TrimSpace(envOrDefault(PublicInviteVerificationKeys, ""))
 
-	coreConfigured := countConfigured(managedTenantID, defaultMediaPlane, webOrigin, keyID, encodedPrivateKey, encodedVerificationKeys)
+	coreConfigured := countConfigured(managedTenantID, webOrigin, keyID, encodedPrivateKey, encodedVerificationKeys)
 	schedulerConfigured := countConfigured(
 		strings.TrimSpace(envOrDefault(PublicInviteSchedulerIntervalMS, "")),
 		strings.TrimSpace(envOrDefault(PublicInviteSchedulerBatch, "")),
@@ -62,10 +60,10 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 		if environment == DefaultEnvironment {
 			return PublicInviteConfig{}, nil
 		}
-		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set outside local environments", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
+		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set outside local environments", PublicInviteManagedTenantID, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
 	}
-	if coreConfigured != 6 {
-		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set together", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
+	if coreConfigured != 5 {
+		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set together", PublicInviteManagedTenantID, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
 	}
 	if schedulerConfigured == 1 {
 		return PublicInviteConfig{}, fmt.Errorf("%s and %s must be set together", PublicInviteSchedulerIntervalMS, PublicInviteSchedulerBatch)
@@ -74,10 +72,6 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	canonicalTenantID := strings.ToLower(managedTenantID)
 	if !publicInviteUUIDPattern.MatchString(canonicalTenantID) {
 		return PublicInviteConfig{}, fmt.Errorf("%s must be a canonical UUID", PublicInviteManagedTenantID)
-	}
-	plane, err := mediaplane.ParseSettingName(defaultMediaPlane)
-	if err != nil {
-		return PublicInviteConfig{}, fmt.Errorf("%s: %w", PublicInviteDefaultMediaPlane, err)
 	}
 	if err := validatePublicInviteWebOrigin(environment, webOrigin); err != nil {
 		return PublicInviteConfig{}, err
@@ -98,7 +92,7 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	return PublicInviteConfig{
 		Enabled:           true,
 		ManagedTenantID:   canonicalTenantID,
-		DefaultMediaPlane: plane,
+		DefaultMediaPlane: mediaplane.ProviderChalkSFU,
 		WebOrigin:         webOrigin,
 		KeyID:             keyID,
 		PrivateKey:        privateKey,

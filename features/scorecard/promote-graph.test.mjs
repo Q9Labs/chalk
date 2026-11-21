@@ -14,7 +14,7 @@ const needsOf = (job) => [job.needs ?? []].flat();
 test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
   const spaces = promote.jobs["chalk-sfu-spaces"];
   assert.equal(spaces.uses, "./.github/workflows/real-call-proof.yml");
-  assert.deepEqual([spaces.with.environment, spaces.with.proofs, spaces.with.media_plane], ["production", "chalk-sfu-spaces", "chalk_sfu"]);
+  assert.deepEqual([spaces.with.environment, spaces.with.proofs], ["production", "chalk-sfu-spaces"]);
   assert.equal(spaces.with.release_sha, undefined, "the ensure step runs the dispatching master's proof code");
   assert.ok(needsOf(spaces).includes("approve"));
   assert.ok(needsOf(promote.jobs.release).includes("chalk-sfu-spaces"));
@@ -22,14 +22,14 @@ test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
 
 test("Promote's production proof and its rerun run on chalk_sfu, and none runs on Cloudflare", () => {
   const proof = promote.jobs.proof;
-  assert.equal(proof.with.media_plane, "chalk_sfu");
+  assert.equal(proofWorkflow.env.CHALK_PROOF_MEDIA_PLANE, "chalk_sfu");
   assert.equal(proof.with.proofs, "${{ matrix.proofs }}");
   const lanes = JSON.parse(proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
   assert.equal(lanes.length, 2, "two legs run at once, each on its own proof Space");
   assert.deepEqual(lanes.flatMap((lane) => lane.proofs.split(" ")).sort(), ["call-artifacts", "camera-share", "chat-upload", "leave-chalk-sfu"]);
   assert.ok(needsOf(proof).includes("release"));
   const rerun = promote.jobs["scorecard-rerun"];
-  assert.deepEqual([rerun.with.proofs, rerun.with.media_plane], ["leave-chalk-sfu", "chalk_sfu"]);
+  assert.equal(rerun.with.proofs, "leave-chalk-sfu");
   for (const proofs of [proof.strategy.matrix, rerun.with.proofs]) assert.doesNotMatch(proofs, /\b(leave|smoke|transcript)\b(?!-)/);
 });
 
@@ -39,7 +39,7 @@ test("Promote measures action latency on the Chalk SFU after the proofs and scor
   for (const name of ["latency", "latency-rerun"]) {
     const job = promote.jobs[name];
     assert.equal(job.uses, "./.github/workflows/real-call-proof.yml");
-    assert.deepEqual([job.with.environment, job.with.media_plane, job.with.latency, job.with.latency_only], ["production", promote.jobs.proof.with.media_plane, true, true]);
+    assert.deepEqual([job.with.environment, job.with.latency, job.with.latency_only], ["production", true, true]);
     assert.equal(job.with.latency_samples, "60", "the kit measures 20 cycles unless it is asked for the 60 the gate needs");
   }
   assert.deepEqual(needsOf(promote.jobs.latency).sort(), ["proof", "release", "select"], "the proof Space is free only after the proofs");
@@ -69,8 +69,7 @@ test("a Release job with an environment that runs after a failed dependency stil
 
 test("only the call-artifacts proof leaves the production group that every other production proof, web proof included, shares", () => {
   const group = proofWorkflow.concurrency.group;
-  const plane = promote.jobs.proof.with.media_plane;
-  assert.match(group, new RegExp(`format\\('real-call-proof-\\{0\\}\\{1\\}', inputs\\.environment \\|\\| 'production', inputs\\.proofs == 'call-artifacts' && inputs\\.media_plane == '${plane}' && '-recording' \\|\\| ''\\)`));
+  assert.match(group, new RegExp(`format\\('real-call-proof-\\{0\\}\\{1\\}', inputs\\.environment \\|\\| 'production', inputs\\.proofs == 'call-artifacts' && '-recording' \\|\\| ''\\)`));
   assert.match(webProofWorkflow.concurrency.group, /format\('real-call-proof-\{0\}', inputs\.environment\)/);
   const legs = JSON.parse(promote.jobs.proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
   assert.deepEqual(legs.filter((leg) => leg.proofs === "call-artifacts").length, 1);
@@ -79,8 +78,7 @@ test("only the call-artifacts proof leaves the production group that every other
 test("a production Chalk SFU run that spans both proof Spaces is refused, so no run overlaps Promote's other leg", () => {
   const steps = Object.values(proofWorkflow.jobs).flatMap((job) => job.steps ?? []);
   const guard = steps.find((step) => step.name === "Refuse a production run that spans both proof Spaces");
-  const plane = promote.jobs.proof.with.media_plane;
-  assert.match(guard.if, new RegExp(`inputs\\.environment == 'production' && inputs\\.media_plane == '${plane}' && contains\\(inputs\\.proofs, 'call-artifacts'\\) && \\(inputs\\.proofs != 'call-artifacts' \\|\\| inputs\\.latency\\)`));
+  assert.match(guard.if, new RegExp(`inputs\\.environment == 'production' && contains\\(inputs\\.proofs, 'call-artifacts'\\) && \\(inputs\\.proofs != 'call-artifacts' \\|\\| inputs\\.latency\\)`));
   assert.match(guard.run, /exit 1/);
   const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
   for (const job of calls) assert.ok(!job.with.proofs?.includes("call-artifacts") || job.with.proofs.includes("matrix.proofs"), "Promote reaches call-artifacts only through its own leg");

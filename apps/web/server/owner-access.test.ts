@@ -59,7 +59,7 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
   const access = {
     subject: { tenant_id: tenantId, space_id: spaceId, episode_id: episodeId, participant_id: participantId, participant_generation: 1 },
     sync: { token: "sync", expires_at: "2026-10-22T15:00:00Z" },
-    media: { token: "recovered", expires_at: "2026-10-22T15:00:00Z", provider: "cf_sfu", client_payload: { connectionId: "replacement" } },
+    media: { token: "recovered", expires_at: "2026-10-22T15:00:00Z", provider: "chalk_sfu", client_payload: { connectionId: "replacement" } },
   };
   const payloads: unknown[] = [];
   const api = await Effect.runPromise(

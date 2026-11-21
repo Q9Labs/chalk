@@ -13,15 +13,9 @@ const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.j
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace),
 // deferJoin (prepare and admit every guest but leave join() to the caller), headed, path and pathGuest (the latency kit's forced ICE path for one guest, see latency-path.mjs)
 // and executablePaths (a browser executable per guest index, for a guest that runs inside its own network namespace).
-// A full Chalk SFU falls back to Cloudflare; a Chalk SFU proof must not pass there.
-function checkMediaPlane(grant, guest, plane) {
-  if (plane !== "chalk_sfu") return;
-  check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
-}
-
 // A run builds each bundle once: the source cannot change under it, and a fleet joins hundreds of calls.
 const bundles = new Map();
 function sdkBundle(entry = "./sdks/typescript/client/src/index.ts", lobby = false) {
@@ -51,7 +45,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     admissions.push({ ms: performance.now() - admitStartedAt, provider: grant.media?.provider ?? null });
-    checkMediaPlane(grant, guest + 1, options.plane ?? mediaPlane);
+    check(grant.media?.provider === mediaPlane, `Guest ${guest + 1} got media on ${grant.media?.provider}, not ${mediaPlane}`, "media-plane");
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
     const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, currentExpiry: initial.mediaExpiry, latestExpiry: 0, requests: [] };
@@ -395,10 +389,8 @@ export async function proveLayers(run, { before, after, limited = false, receive
   else {
     for (let guest = 0; guest < after.length; guest++) {
       const layers = movingLayers(before[guest], after[guest]);
-      // Cloudflare makes every simulcast encoding live. The Chalk SFU asks a publisher only for the layers someone views.
-      const live = new Set(layers.map((row) => row.rid)).size;
-      if (mediaPlane === "chalk_sfu") check(live >= 1, "Stats did not prove a live simulcast encoding");
-      else check(live === 3, "Stats did not prove three live simulcast encodings");
+      // The SFU asks a publisher only for the layers someone views.
+      check(layers.length > 0, "Stats did not prove a live simulcast encoding");
     }
   }
   return moving;

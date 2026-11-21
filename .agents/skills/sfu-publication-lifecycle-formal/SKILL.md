@@ -1,6 +1,6 @@
 ---
 name: sfu-publication-lifecycle-formal
-description: 'Model-check the CloudflareSFUClient local publication lifecycle with TLA+: pending, confirmed, held, retiring and retired across reconnect, connection replacement, user pause/resume and stop(). Use when a change touches sdks/typescript/client/src/media/client.ts publication lifecycle fields, #markPublicationRetiring, #holdOwnedPublication or #heldPublication, when the "SFU publication lifecycle model" CI check fails, or to prove a stop-wins or pause/resume ordering bug.'
+description: 'Model-check the SFUClient local publication lifecycle with TLA+: pending, confirmed, held, retiring and retired across reconnect, connection replacement, user pause/resume and stop(). Use when a change touches sdks/typescript/client/src/media/client.ts publication lifecycle fields, #markPublicationRetiring, #holdOwnedPublication or #heldPublication, when the "SFU publication lifecycle model" CI check fails, or to prove a stop-wins or pause/resume ordering bug.'
 ---
 
 # SFU publication lifecycle model

@@ -19,7 +19,6 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
   let rootFailure;
   let poller;
   let owner;
-  let secrets;
   let stopResolve;
   let stopPromise = Promise.resolve({ state: RuntimeState.STOPPED });
 
@@ -32,9 +31,6 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     },
     get rootFailure() {
       return rootFailure;
-    },
-    get secrets() {
-      return secrets;
     },
     running,
     async start() {
@@ -52,8 +48,6 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
         state = transition(state, RuntimeState.STARTING);
         owner = ownerRecord({ lease, config, state, revision: await hooks.revision?.(), resources: (await hooks.resources?.()) || [] });
         await persist();
-        const resolveSecrets = hooks.resolveSecrets || config.secretResolver;
-        secrets = resolveSecrets ? await resolveSecrets({ config }) : undefined;
         await hooks.startResources?.({ config, lease, runtime });
         for (const spec of ordered) {
           try {
@@ -115,7 +109,6 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
       if (lease) await removeOwner(config, lease.runtimeId).catch((error) => errors.push(asFailure(error, "cleanup")));
       await lease?.release().catch((error) => errors.push(asFailure(error, "cleanup")));
       lease = undefined;
-      secrets = undefined;
       owner = undefined;
       const result = runtime.status();
       stopResolve?.(result);
@@ -203,10 +196,10 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
   };
 
   async function startService(spec) {
-    const childEnv = hooks.childEnv ? await hooks.childEnv(spec, { config, lease, runtime, secrets }) : undefined;
-    await hooks.beforeStartService?.(spec, { config, lease, runtime, secrets, childEnv });
-    const redactions = (await hooks.logRedactions?.(spec, { config, lease, runtime, secrets, childEnv })) || [];
-    const process = hooks.startService ? await hooks.startService(spec, { config, lease, runtime, secrets, childEnv, redactions }) : spawnService(spec, { config, runtimeId: lease?.runtimeId, extraEnv: childEnv, redactions });
+    const childEnv = hooks.childEnv ? await hooks.childEnv(spec, { config, lease, runtime }) : undefined;
+    await hooks.beforeStartService?.(spec, { config, lease, runtime, childEnv });
+    const redactions = (await hooks.logRedactions?.(spec, { config, lease, runtime, childEnv })) || [];
+    const process = hooks.startService ? await hooks.startService(spec, { config, lease, runtime, childEnv, redactions }) : spawnService(spec, { config, runtimeId: lease?.runtimeId, extraEnv: childEnv, redactions });
     if (!process) throw failure(FailureKind.STARTUP, `${spec.id} start hook returned no process`, { stage: "startup", service: spec.id });
     running.set(spec.id, process);
     process.child?.once("exit", () => {

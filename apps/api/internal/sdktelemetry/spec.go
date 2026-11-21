@@ -80,7 +80,7 @@ func EventTypes() []string {
 }
 
 var fieldEnums = map[string][]string{
-	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
+	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "SFUError", "network", "timeout", "unknown"},
 	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
 	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
 	"granted_audio":         {"granted", "not_granted", "unknown"},

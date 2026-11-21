@@ -16,10 +16,11 @@ import (
 
 func TestRecordingCaptureBindingSourceUsesFullIdentityAndFrozenBinding(t *testing.T) {
 	identity := captureBindingIdentity(t)
-	binding, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
+	binding, err := mediaplane.NewBinding(mediaplane.ProviderChalkSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
 	if err != nil {
 		t.Fatalf("create binding: %v", err)
 	}
+	binding.Provider = "cf_sfu" // The persisted binding must remain readable, never mapped to a Chalk allocation.
 	snapshot, err := json.Marshal(struct {
 		MediaPlaneBinding mediaplane.Binding `json:"media_plane_binding"`
 	}{MediaPlaneBinding: binding})
@@ -46,7 +47,7 @@ func TestRecordingCaptureBindingSourceUsesFullIdentityAndFrozenBinding(t *testin
 
 func TestRecordingCaptureBindingSourceRejectsMissingOrInvalidAuthority(t *testing.T) {
 	identity := captureBindingIdentity(t)
-	validBinding, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
+	validBinding, err := mediaplane.NewBinding(mediaplane.ProviderChalkSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
 	if err != nil {
 		t.Fatalf("create binding: %v", err)
 	}

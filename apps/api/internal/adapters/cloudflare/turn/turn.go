@@ -1,5 +1,4 @@
-// Package turn mints Cloudflare TURN credentials. It is independent of the
-// Cloudflare SFU adapter so retiring that adapter leaves TURN in place.
+// Package turn mints Cloudflare TURN credentials for Chalk SFU clients.
 package turn
 
 import (
@@ -78,8 +77,7 @@ func New(keyID, apiToken string) *Credentials {
 	return &Credentials{keyID: keyID, apiToken: apiToken, now: time.Now}
 }
 
-// RelayServers returns Cloudflare TURN for a media plane that is not
-// Cloudflare's, such as the Chalk SFU, from the same cache and backoff.
+// RelayServers returns cached or freshly minted Cloudflare TURN ICE servers.
 func (t *Credentials) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
 	return t.Servers(ctx, &http.Client{Transport: sharedTransport()}, defaultEndpoint)
 }
@@ -97,8 +95,7 @@ func newTransport() *http.Transport {
 }
 
 // Servers returns the cached TURN ICE servers, minting them through client at
-// endpoint when the cache is stale. The Cloudflare SFU adapter passes its own
-// client and endpoint so its joins keep their configured timeout and base URL.
+// endpoint when the cache is stale.
 func (t *Credentials) Servers(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	for {
 		t.mu.Lock()

@@ -7,16 +7,12 @@
 (*                                                                         *)
 (* A publication is a record [src, sess]: source `src` is published        *)
 (* in the device's SFU session `sess`. `pubs` is the SFU publication       *)
-(* ledger: in Cloudflare it is the Go API ledger in front of the SFU.      *)
-(*                                                                         *)
-(*   Cloudflare today   CloseCanFail = TRUE   OrphansLinger = TRUE         *)
-(*                      AtomicRevoke = FALSE                               *)
-(*   Chalk SFU, state     CloseCanFail = FALSE  OrphansLinger = FALSE        *)
-(*   in the room                                                           *)
-(*   authority          AtomicRevoke = TRUE                                *)
+(* ledger. The deployed, distributed SFU can lose close calls and leave   *)
+(* orphaned publications. The atomic comparison shares the room authority *)
+(* with Sync and applies a revoke and close in one step.                   *)
 (***************************************************************************)
 CONSTANTS
-  CloseCanFail,   \* a separate close call can fail (Cloudflare tracks/close)
+  CloseCanFail,   \* a remote close call can fail
   OrphansLinger,  \* publications of a dead session stay until closed or garbage-collected
   AtomicRevoke    \* revoking a grant removes the publication in the same step
 

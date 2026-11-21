@@ -51,7 +51,7 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.equal(release.with.build_web, true, "the cut keeps the production web archive");
   assert.equal(gate.uses, "./.github/workflows/nightly-proofs.yml");
   assert.equal(gate.with.image_source, "manifest");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "cloudflare-plane", "latency-smoke", "web-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "latency-smoke", "web-call"]);
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
   for (const name of ["release", "proof", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
   assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);

@@ -21,7 +21,7 @@ export type CreateSpaceInput = {
   readonly defaultEpisodeDurationSeconds: number;
   readonly lingerWindowSeconds: number;
   readonly maximumEpisodeDurationSeconds: number;
-  readonly mediaPlane: string;
+  readonly mediaPlane?: "chalk_sfu";
   readonly metadata?: unknown;
   readonly name: string;
   readonly recordingPolicy?: RecordingPolicy;

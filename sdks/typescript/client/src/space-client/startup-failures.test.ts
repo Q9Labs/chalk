@@ -167,7 +167,7 @@ function accessGrant(participantGeneration = 1, id = participantId) {
   return {
     subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: id, participant_generation: participantGeneration },
     sync: { token: token("chalk-sync"), expires_at: expiresAt },
-    media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
+    media: { token: token("chalk-media"), expires_at: expiresAt, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", iceServers: [], episodeRef: "episode-1", capabilities: {} } },
   };
 }
 async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number; readonly entryConfirmation?: boolean; readonly participantGeneration?: () => number; readonly participantId?: string } = {}) {

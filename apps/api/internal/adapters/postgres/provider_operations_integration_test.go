@@ -45,7 +45,7 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, 'provider operation integration')`, tenantID.Bytes()); err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'provider operation integration', $2, $3, 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "provider-operation-"+spaceID.String()[:8]); err != nil {
+	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'provider operation integration', $2, $3, 'chalk_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "provider-operation-"+spaceID.String()[:8]); err != nil {
 		t.Fatalf("seed space: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {

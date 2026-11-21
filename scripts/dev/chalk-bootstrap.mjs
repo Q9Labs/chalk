@@ -1,7 +1,6 @@
 import { FailureKind, failure } from "./model.mjs";
-import { cloudflareSfuPlane } from "./config.mjs";
 
-export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, mediaPlane = cloudflareSfuPlane, fetchImpl = fetch, fresh = false } = {}) {
+export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
   const marker = fixtureMarker || runtimeMarker(runtimeId);
   const tenantName = `Chalk local dev ${marker}`;
@@ -11,11 +10,7 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
     tenant = await request(fetchImpl, apiOrigin, "/v1/tenants", {
       systemToken,
       method: "POST",
-      body: {
-        name: tenantName,
-        default_media_plane: mediaPlane,
-        ...(mediaPlane === cloudflareSfuPlane ? { media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : {}),
-      },
+      body: { name: tenantName },
     });
   }
   const spaceSlug = `chalk-local-${marker}`;
@@ -26,7 +21,7 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
       systemToken,
       method: "POST",
       headers: { "Idempotency-Key": `chalk-local-space-${marker}` },
-      body: { name: `Chalk local Space ${marker}`, slug: spaceSlug, media_plane: mediaPlane },
+      body: { name: `Chalk local Space ${marker}`, slug: spaceSlug },
     });
   }
   return {

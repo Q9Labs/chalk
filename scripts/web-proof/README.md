@@ -25,14 +25,13 @@ The API must be ready, but recording and transcription can be disabled: this
 proof tests the live web call, not media processing. The separate recording and
 transcript proofs still require both media capabilities before a nightly can hold.
 
-The proof Space is on Cloudflare by default. `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` runs the call on the Chalk SFU
-instead: the public API cannot create such a Space, so set `CHALK_PROOF_SPACE_ID_CHALK_SFU` to a Space an operator moved with
-`media-settings` (manual Recording, on-demand Transcription, open admission). The run turns that Space's public invite on
-for the call and off again afterwards, and ends the Episode it made. `CHALK_PROOF_WEBKIT=1` adds Playwright WebKit (an
+The proof runs on the Chalk SFU. Set `CHALK_PROOF_SPACE_ID_CHALK_SFU` to reuse a Space with manual Recording,
+on-demand Transcription and open admission. The run turns its public invite on for the call and off afterwards,
+and ends the Episode it made. `CHALK_PROOF_WEBKIT=1` adds Playwright WebKit (an
 iPad Safari profile) beside Chromium. `CHALK_PROOF_JOIN_ORDER=web-first` or `guest-first` fixes which side is in the
 Episode before the other joins; unset, the SDK guest starts while the web app opens.
 
-Run browser suites in a configured checkout, not a developer laptop. For hosted runs, `.github/workflows/web-call-proof.yml` accepts an environment (production) and returns `result=passed` only when the test, cleanup and encrypted evidence upload pass. A manual dispatch takes `media_plane` (`cf_sfu` by default). The cut's own web lane runs on a throwaway stack (`.github/workflows/nightly-proofs.yml`). This workflow and the real-call proof share one environment lock because proof cleanup resets the webhook.
+Run browser suites in a configured checkout, not a developer laptop. For hosted runs, `.github/workflows/web-call-proof.yml` accepts an environment (production) and returns `result=passed` only when the test, cleanup and encrypted evidence upload pass. The cut's own web lane runs on a throwaway stack (`.github/workflows/nightly-proofs.yml`). This workflow and the real-call proof share one environment lock because proof cleanup resets the webhook.
 
 Tests live in `tests/*.e2e.ts` and use TesterArmy `e2e` with `@e2e-dev/web`. Retries are disabled, so a failing cut stays failed.
 

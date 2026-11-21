@@ -105,7 +105,7 @@ async function createIntegratorFixture(run) {
   run.apiKey = key.secret;
   await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` });
-  return run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, metadata: { proof_run_id: run.runId }, mediaPlane: "cf_sfu" }));
+  return run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, metadata: { proof_run_id: run.runId }, mediaPlane: "chalk_sfu" }));
 }
 
 export function createIntegratorAccessSession(run, space, chalk, getAccessRefreshState) {

@@ -71,17 +71,6 @@ function env(name, values) {
   );
 }
 
-// The API insists on a Cloudflare Realtime app while it boots. Without real credentials overflow is off, so nothing ever calls it.
-// The Cloudflare plane lane passes the Nightly credentials in the process environment (CHALK_STACK_CLOUDFLARE_*), and its Spaces
-// then talk to the real Cloudflare Realtime and TURN services.
-const cloudflareNames = ["ACCOUNT_ID", "REALTIME_APP_ID", "REALTIME_APP_SECRET", "TURN_KEY_ID", "TURN_API_TOKEN"];
-const cloudflareReal = cloudflareNames.map((name) => process.env[`CHALK_STACK_CLOUDFLARE_${name}`] ?? "");
-if (cloudflareReal.some(Boolean) && !cloudflareReal.every(Boolean)) throw new Error("identity: pass all of CHALK_STACK_CLOUDFLARE_* or none");
-const cloudflare = cloudflareReal.every(Boolean) ? Object.fromEntries(cloudflareNames.map((name, index) => [`CHALK_CLOUDFLARE_${name}`, cloudflareReal[index]])) : { CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused" };
-
-// New Spaces land on the plane the stack proves: Cloudflare when it has real credentials, the Chalk SFU otherwise.
-const mediaPlane = cloudflareReal.every(Boolean) ? "cf_sfu" : "chalk_sfu";
-
 env("api.env", {
   CHALK_API_ADDR: `127.0.0.1:${apiPort}`,
   CHALK_API_ENV: "local",
@@ -96,7 +85,6 @@ env("api.env", {
   CHALK_R2_SECRET_ACCESS_KEY: storageSecret,
   // The public Space page creates its Space in this Tenant, which boot inserts; its invites point at the stack's own web origin.
   CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID: managedTenantId,
-  CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE: mediaPlane,
   CHALK_PUBLIC_INVITE_WEB_ORIGIN: frontOrigin,
   CHALK_PUBLIC_INVITE_KEY_ID: kid,
   CHALK_PUBLIC_INVITE_PRIVATE_KEY: signingKey,
@@ -111,18 +99,13 @@ env("api.env", {
   CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE: "/run/chalk/provider-bridge/server.key",
   CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE: "/run/chalk/provider-bridge/client-ca.crt",
   CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN: trustDomain,
-  CHALK_DEFAULT_MEDIA_PLANE: mediaPlane,
-  CHALK_NEW_SPACE_MEDIA_PLANE: mediaPlane,
   // Recording and transcription need the recorder fleet, which this stack does not start.
   CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
   CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
   // The latency kit creates a Space every cycle from one address, which the production limits would answer with 429.
   CHALK_API_RATE_LIMITS: "off",
   CHALK_SFU_ENABLED: "true",
-  CHALK_SFU_ALLOWED_SPACES: "*",
-  CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
   CHALK_SFU_CAPTURE_ENABLED: "true",
-  ...cloudflare,
   CHALK_SFU_APPLICATION_ID: "nightly-stack",
   CHALK_SFU_NODES: `local=https://${announceIp}:${sfuControlPort}`,
   CHALK_SFU_SERVER_NAME: "chalk-sfu",

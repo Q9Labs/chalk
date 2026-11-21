@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawnCommand } from "../lib/platform.mjs";
-import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check } from "../prod-proof/runtime.mjs";
-import { createSpace, onCloudflare, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
+import { createRun, loadConfig, save, maskCredentials, publicFailure, errorEvidence, check } from "../prod-proof/runtime.mjs";
+import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
 import { closeReusedInvite } from "./invite.mjs";
@@ -38,7 +38,7 @@ try {
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
   await prepareIntegration(run, false);
-  const space = await createSpace(run, mediaPlane, undefined, { explicitPlane: onCloudflare });
+  const space = await createSpace(run);
   const reused = space.metadata?.proof_run_id !== runId;
   await save(`${directory}/space.json`, space);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
@@ -58,7 +58,7 @@ try {
     child = spawnCommand("pnpm", ["exec", "e2e", "run"], {
       detached: true,
       stdio: "inherit",
-      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin, mediaPlane }),
+      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin }),
     });
     const timer = setTimeout(stop, 300_000);
     child.once("error", (error) => {

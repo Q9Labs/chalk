@@ -1,24 +1,12 @@
-// media-settings is the operator's way to choose the media plane for a Tenant or a
-// Space. The public API cannot select the Chalk SFU, and no operator principal exists in
-// production, so this command is the only write path to it. It prints one JSON line per
-// change to stdout and keeps Tenant and Space IDs out of metrics.
+// media-settings reads or updates rollback-compatible media settings and pauses
+// admission of new Episodes without moving live ones.
 //
 //	media-settings get --tenant ID [--space ID]
-//	media-settings set --tenant ID [--space ID] --plane cf_sfu|chalk_sfu|inherit --operator NAME --reason TEXT
+//	media-settings set --tenant ID [--space ID] --plane chalk_sfu|inherit --operator NAME --reason TEXT
 //	media-settings backfill [--dry-run]
 //	media-settings new-episodes [--state on|off --operator NAME --reason TEXT]
 //
-// Every change needs --operator and --reason. The database writes one row of
-// media_plane_changes (who, why, scope, before, after, trace) in the transaction of the
-// change, and the API announces it as the media_plane.changed event. An undo is another
-// change: run set or new-episodes again with its own reason.
-//
-// new-episodes is the kill switch of the Chalk SFU, stored in the database so a flip needs
-// no API restart. off sends every new Episode to Cloudflare; Episodes already on the own
-// SFU keep running there. Without --state it reads the switch.
-//
-// Run it with the same settings the API runs with: it reads CHALK_DATABASE_URL,
-// CHALK_DEFAULT_MEDIA_PLANE, CHALK_SFU_ALLOWED_SPACES and CHALK_SFU_NEW_EPISODES.
+// Writes carry their operator and reason into the database audit trail.
 package main
 
 import (
@@ -62,7 +50,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("media-settings "+command, flag.ContinueOnError)
 	tenantFlag := flags.String("tenant", "", "Tenant ID")
 	spaceFlag := flags.String("space", "", "Space ID; omit to act on the Tenant")
-	planeFlag := flags.String("plane", "", "cf_sfu, chalk_sfu, or inherit to clear (set only)")
+	planeFlag := flags.String("plane", "", "chalk_sfu or inherit to clear (set only)")
 	dryRun := flags.Bool("dry-run", false, "list the changes without writing them (backfill only)")
 	stateFlag := flags.String("state", "", "on or off (new-episodes only); omit to read")
 	operatorFlag := flags.String("operator", "", "who makes the change (set and new-episodes --state)")
@@ -91,15 +79,11 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if url == "" {
 		return fmt.Errorf("%s required", config.DatabaseURL)
 	}
-	policy, err := config.LoadPlanePolicy()
+	paused, err := config.LoadNewEpisodesPaused()
 	if err != nil {
 		return err
 	}
-	if parsed.command == "backfill" {
-		if _, set := os.LookupEnv(config.ChalkSFUAllowedSpaces); !set {
-			return fmt.Errorf("state the allowlist the API runs with: set %s (empty means none)", config.ChalkSFUAllowedSpaces)
-		}
-	}
+	policy := spaces.PlanePolicy{NewEpisodesPaused: paused}
 
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()
@@ -179,7 +163,7 @@ func newSettings(pool *pgxpool.Pool, policy spaces.PlanePolicy, out io.Writer) s
 	spaceRepository := postgres.NewSpaceRepository(queries, pool)
 	return settings{
 		pool: pool, policy: policy, tenants: tenantService, spaces: spaceRepository, killSwitch: postgres.NewKillSwitch(pool),
-		operator: spaces.NewPlaneOperator(spaceRepository, postgres.NewTenantOperator(pool), policy).WithAdopter(spaceRepository),
+		operator: spaces.NewPlaneOperator(spaceRepository, postgres.NewTenantOperator(pool)).WithAdopter(spaceRepository),
 		log:      slog.New(slog.NewJSONHandler(out, nil)),
 	}
 }
@@ -215,20 +199,20 @@ func (s settings) get(ctx context.Context, r request) error {
 	}
 	policy := s.policy.Paused(live)
 	attributes := []any{"scope", "tenant", "tenant_id", r.tenant.String(), "tenant_default", valueOrInherit(tenant.DefaultMediaPlane),
-		"platform_default", s.policy.Platform.SettingName(), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
+		"platform_default", mediaplane.ProviderChalkSFU.SettingName(), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
 	if !r.space.IsZero() {
 		space, err := s.spaces.GetSpace(ctx, r.tenant, r.space)
 		if err != nil {
 			return fmt.Errorf("read Space: %w", err)
 		}
-		effective, err := policy.Effective(tenant, space)
-		if err != nil {
-			return fmt.Errorf("resolve the effective plane: %w", err)
+		var effective string
+		if policy.AllowsNewEpisodes(tenant) {
+			effective = mediaplane.ProviderChalkSFU.SettingName()
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
 			"space_setting", valueOrInherit(mediaplane.OptionalSettingName(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
-			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", s.policy.Platform.SettingName(),
-			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", effective.Plane.SettingName(), "selected_by", effective.By}
+			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", mediaplane.ProviderChalkSFU.SettingName(),
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "effective_plane", effective}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil
@@ -297,12 +281,8 @@ func (s settings) backfill(ctx context.Context, dryRun bool) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list Spaces: %w", err)
 	}
-	var changed, offAllowlist, refused, moved int
+	var changed, refused, moved int
 	for _, c := range candidates {
-		if !s.policy.Allowed.Allows(c.space) {
-			offAllowlist++
-			continue
-		}
 		wrote, err := s.operator.AdoptStoredChalkSFU(ctx, c.tenant, c.space, dryRun)
 		if errors.Is(err, spaces.ErrTenantCannotServePlane) {
 			refused++
@@ -332,7 +312,7 @@ func (s settings) backfill(ctx context.Context, dryRun bool) error {
 		return fmt.Errorf("audit Tenant defaults: %w", err)
 	}
 	s.log.Info("media plane backfill finished", "dry_run", dryRun, "stored_as_chalk_sfu", len(candidates), "changed", changed,
-		"off_allowlist", offAllowlist, "refused_tenant", refused, "changed_since_listed", moved,
+		"refused_tenant", refused, "changed_since_listed", moved,
 		"tenants_with_unknown_default", unknownTenantDefaults, "tenants_with_unapproved_chalk_sfu_default", unapprovedOwnDefaults)
 	return nil
 }

@@ -1,12 +1,12 @@
 package spaces
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -195,6 +195,7 @@ type CreateSpaceInput struct {
 	CreatedByUserID               utilities.ID
 	RequestKey                    string
 	RequestFingerprint            [32]byte
+	replayFingerprints            [][32]byte
 }
 
 type UpdateSpaceInput struct {
@@ -264,12 +265,7 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
-func NewServiceWithDefaultProvider(repository Repository, defaultProvider mediaplane.Provider) Service {
-	return Service{repository: repository, planes: PlanePolicy{Platform: defaultProvider}}
-}
-
-// WithPlanePolicy sets the deployment's plane policy: the platform default that new
-// Spaces inherit, and the Chalk SFU kill switch and allowlist that Effective applies.
+// WithPlanePolicy applies the deployment floor for new Episode admission.
 func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
 	s.planes = policy
 	return s
@@ -281,36 +277,12 @@ func (s Service) WithNewEpisodeSwitch(killSwitch NewEpisodeSwitch) Service {
 	return s
 }
 
-// WithNewSpaceDefaults sets what a Create Space request gets for the fields it
-// omits. It changes new Spaces only: Spaces and Tenants that store no plane keep
-// resolving to the deployment default. The Tenant reader decides per Tenant
-// whether the new-Space plane applies.
+// WithNewSpaceDefaults sets the artifact policies for new Spaces whose request
+// does not name a media plane or supply those policies.
 func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults, tenants TenantReader) Service {
 	s.newSpace = defaults
 	s.tenants = tenants
 	return s
-}
-
-// planeForNewSpace returns the plane for a Space whose request names none, and
-// whether it is the configured new-Space plane. A Tenant that pins its own
-// provider keeps the deployment default.
-func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (plane mediaplane.Provider, newSpacePlane bool, err error) {
-	if s.newSpace.MediaPlane != "" {
-		tenant, err := s.tenants.GetTenant(ctx, tenantID)
-		if err != nil {
-			return "", false, fmt.Errorf("read Tenant for the new Space plane: %w", err)
-		}
-		if tenantServesNewSpacePlane(tenant) {
-			return s.newSpace.MediaPlane, true, nil
-		}
-	}
-	return s.planes.Platform, false, nil
-}
-
-// tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
-// and the Tenant names no plane of its own. A Tenant default plane is its own choice.
-func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
-	return tenantDefault(tenant) == nil && mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig)
 }
 
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
@@ -321,18 +293,15 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	input.ID = id
 	input.MediaPlaneSetting = nil
 	explicitPlane := input.MediaPlaneSet || input.MediaPlane != ""
-	newSpacePlane := false
 	if !explicitPlane {
-		plane, isNewSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
-		if err != nil {
-			return Space{}, err
-		}
-		input.MediaPlane, newSpacePlane = plane.SettingName(), isNewSpacePlane
+		input.MediaPlane = mediaplane.ProviderChalkSFU.SettingName()
 	}
-	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
+	recordingPolicySet := input.RecordingPolicySet
+	transcriptionPolicySet := input.TranscriptionPolicySet
+	if !explicitPlane && !recordingPolicySet && s.newSpace.RecordingPolicy != "" {
 		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
 	}
-	if newSpacePlane && !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
+	if !explicitPlane && !transcriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
 		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
@@ -341,39 +310,13 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	// The request names a plane only when the caller may; a Space that names none
-	// inherits, except that the configured new-Space plane is the Space's own choice.
-	provider, err := mediaplane.ParseSettingName(input.MediaPlane)
-	if err != nil {
-		return Space{}, ErrInvalidMediaPlane
-	}
-	switch {
-	case explicitPlane:
-		if !input.MediaPlaneFromConfig {
-			if err := s.planes.publicWriteAllowed(provider); err != nil {
-				return Space{}, err
-			}
-			if provider == mediaplane.ProviderChalkSFU {
-				// A public write naming the Chalk SFU inherits; see PublicWriteAllowed.
-				input.MediaPlane = s.planes.legacyPlane(nil)
-				break
-			}
-		}
-		input.MediaPlaneSetting = &provider
-	case newSpacePlane:
-		input.MediaPlaneSetting = &provider
-	default:
-		input.MediaPlane = s.planes.legacyPlane(nil)
-	}
 	if input.RequestKey != "" {
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
 			return Space{}, ErrInvalidRequestKey
 		}
-		fingerprint, err := createFingerprint(input)
-		if err != nil {
+		if err := input.setCreateFingerprints(recordingPolicySet, transcriptionPolicySet); err != nil {
 			return Space{}, err
 		}
-		input.RequestFingerprint = fingerprint
 		idempotent, ok := s.repository.(IdempotentRepository)
 		if !ok {
 			return Space{}, errors.New("space idempotency repository unavailable")
@@ -420,26 +363,11 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 	input.MediaPlaneSetting = OptionalMediaPlaneSetting{}
 	if input.MediaPlane.Set {
-		var setting *mediaplane.Provider
-		if input.MediaPlane.Value != nil {
-			provider, err := mediaplane.ParseSettingName(*input.MediaPlane.Value)
-			if err != nil {
-				return Space{}, ErrInvalidMediaPlane
-			}
-			if err := s.planes.publicWriteAllowed(provider); err != nil {
-				return Space{}, err
-			}
-			if provider != mediaplane.ProviderChalkSFU { // naming the Chalk SFU inherits; see PublicWriteAllowed
-				setting = &provider
-			}
+		if input.MediaPlane.Value != nil && !mediaplane.KnownSettingName(*input.MediaPlane.Value) {
+			return Space{}, ErrInvalidMediaPlane
 		}
-		stored := s.planes.legacyPlane(setting)
-		if stored == "" {
-			// Clearing with no platform default: the column is not null, and Cloudflare is what a
-			// public write may name anyway.
-			stored = s.planes.PublicWritePlane().SettingName()
-		}
-		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true, Value: setting}
+		stored := mediaplane.ProviderChalkSFU.SettingName()
+		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true}
 		input.MediaPlane.Value = &stored
 	}
 
@@ -756,4 +684,50 @@ func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 		return [32]byte{}, err
 	}
 	return sha256.Sum256(payload), nil
+}
+
+// setCreateFingerprints keeps old keys replayable even though both the stored
+// default and the normalized request's default plane have changed.
+func (input *CreateSpaceInput) setCreateFingerprints(recordingPolicySet, transcriptionPolicySet bool) error {
+	fingerprint, err := createFingerprint(*input)
+	if err != nil {
+		return err
+	}
+	input.RequestFingerprint = fingerprint
+	legacy := *input
+	legacy.MediaPlane = mediaplane.PlaneCloudflare
+	old, err := createFingerprint(legacy)
+	if err != nil {
+		return err
+	}
+	input.replayFingerprints = [][32]byte{old}
+	if recordingPolicySet == input.RecordingPolicySet && transcriptionPolicySet == input.TranscriptionPolicySet {
+		return nil
+	}
+	// Older deployments did not apply configured artifact defaults when a Space
+	// inherited the platform media plane.
+	if !recordingPolicySet {
+		legacy.RecordingPolicy, legacy.RecordingPolicySet = artifactpolicy.RecordingDisabled, false
+	}
+	if !transcriptionPolicySet {
+		legacy.TranscriptionPolicy, legacy.TranscriptionPolicySet = artifactpolicy.TranscriptionDisabled, false
+	}
+	old, err = createFingerprint(legacy)
+	if err != nil {
+		return err
+	}
+	input.replayFingerprints = append(input.replayFingerprints, old)
+	return nil
+}
+
+func (input CreateSpaceInput) MatchesRequestFingerprint(stored []byte) bool {
+	if bytes.Equal(stored, input.RequestFingerprint[:]) {
+		return true
+	}
+	for _, fingerprint := range input.replayFingerprints {
+		if bytes.Equal(stored, fingerprint[:]) {
+			return true
+		}
+	}
+	return false
 }

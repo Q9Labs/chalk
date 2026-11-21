@@ -88,9 +88,11 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
   };
 
   await step("the host starts the class", async () => {
-    ({ link } = await startCall(host));
+    const call = await startCall(host);
+    link = call.link;
     await control(host, "Unmute microphone");
     await control(host, "Turn on camera");
+    return { mediaPlane: call.mediaPlane };
   });
 
   await step("opens the class link on the device and sees the entrance", async () => {
@@ -113,9 +115,15 @@ await runJourney(`class-${device}`, async ({ step, person, startCall, leave, sho
     await sheet.getByRole("button", { name: "Turn on", exact: true }).click();
     await sheet.waitFor({ state: "detached", timeout: 15_000 });
     await shot(me, "03-ready-to-join");
+    const arrival = me.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/space-invite-arrivals");
     await join.click();
+    const admitted = await arrival;
+    if (admitted.status() !== 201) throw new Error(`Class arrival answered HTTP ${admitted.status()}`);
+    const mediaPlane = (await admitted.json()).access?.media?.provider;
+    if (mediaPlane !== "chalk_sfu") throw new Error(`Class arrival issued ${mediaPlane ?? "no media grant"}, not chalk_sfu`);
     await me.page.getByRole("button", { name: `Video tile for ${myName}`, exact: true }).waitFor({ timeout: waitMs });
     await shot(me, "04-joined");
+    return { mediaPlane };
   });
 
   await step("sees the host's video moving and hears the host", async () => {

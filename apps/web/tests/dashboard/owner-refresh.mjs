@@ -8,7 +8,7 @@ import { leaveOwnerCall } from "./owner-controls.mjs";
 import { startAndJoinCall } from "./call-steps.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
-const { context, origin, cleanup, recordPage } = fixture;
+const { context, origin, apiOrigin, bindings, cleanup, recordPage } = fixture;
 const pendingResponses = [];
 function callResponse(page, action) {
   const response = page.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === action, { timeout: 330000 });
@@ -18,6 +18,20 @@ function callResponse(page, action) {
 async function access(response) {
   assert.equal(response.status(), 200, `Owner call returned HTTP ${response.status()}`);
   return (await response.json()).access;
+}
+async function endFixtureEpisode({ tenant_id, space_id, episode_id }) {
+  const url = `${apiOrigin}/v1/tenants/${tenant_id}/spaces/${space_id}/episodes/${episode_id}`;
+  const headers = { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}` };
+  const end = await fetch(`${url}/end`, { method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() } });
+  assert.equal(end.status, 202, "The API must accept the fixture's End request");
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const episode = await fetch(url, { headers });
+    assert.equal(episode.status, 200, "The API must return the fixture Episode");
+    if ((await episode.json()).status === "ended") return;
+    await delay(250);
+  }
+  throw new Error("The fixture Episode did not end within 30 seconds");
 }
 try {
   const first = await context.newPage();
@@ -36,8 +50,8 @@ try {
   assert.notEqual(original.subject.participant_id, sibling.subject.participant_id);
   await second.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const secondRefreshed = callResponse(second, "refresh-access");
-  await proveEvictionReload(context, origin);
-  await proveCookieBudget(context, origin);
+  await endFixtureEpisode(await proveEvictionReload(context, origin));
+  await proveCookieBudget(context, origin, endFixtureEpisode);
   const leaving = await context.newPage();
   await startAndJoinCall(leaving, origin);
   await leaveOwnerCall(leaving, origin);

@@ -1,12 +1,13 @@
 import { findExecutable } from "../lib/platform.mjs";
-import { createServer } from "node:net";
-import { homedir } from "node:os";
-import { existsSync } from "node:fs";
+import { createSocket } from "node:dgram";
+import { createServer, isIPv4 } from "node:net";
+import { homedir, networkInterfaces } from "node:os";
 import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
 import { identityPaths } from "./identity.mjs";
 import ports from "./ports.json" with { type: "json" };
+import sfuNode from "../../features/media/sfu/internal/config/node.json" with { type: "json" };
 
 export const DevCommand = Object.freeze({
   START: "start",
@@ -23,12 +24,11 @@ const commands = new Set(Object.values(DevCommand));
 const { metro: metroPort, ...localPorts } = ports;
 const defaultPorts = Object.freeze(localPorts);
 export const chalkSfuPlane = "chalk_sfu";
-export const cloudflareSfuPlane = "cf_sfu";
 const toolByProfile = Object.freeze({
-  core: ["node", "pnpm", "docker", "op"],
-  mobile: ["node", "pnpm", "docker", "op", "adb", "java"],
-  android: ["node", "pnpm", "docker", "op", "adb", "java"],
-  ios: ["node", "pnpm", "docker", "op", "xcrun"],
+  core: ["node", "pnpm", "docker"],
+  mobile: ["node", "pnpm", "docker", "adb", "java"],
+  android: ["node", "pnpm", "docker", "adb", "java"],
+  ios: ["node", "pnpm", "docker", "xcrun"],
 });
 
 function parseFlagValue(token, flag, argv, index) {
@@ -115,6 +115,16 @@ function publicOriginFromEnv(env) {
   return url.origin;
 }
 
+function sfuMediaFromEnv(env) {
+  const announceIP = env.CHALK_DEV_SFU_ANNOUNCE_IP?.trim();
+  if (!announceIP) return { announceIP: "127.0.0.1", bindIP: "127.0.0.1", includeLoopback: true };
+  const firstOctet = Number(announceIP.split(".")[0]);
+  if (!isIPv4(announceIP) || firstOctet === 0 || firstOctet === 127 || firstOctet >= 224) {
+    throw failure(FailureKind.CONFIG, "CHALK_DEV_SFU_ANNOUNCE_IP must be a non-loopback unicast IPv4 address", { stage: "config" });
+  }
+  return { announceIP, bindIP: "0.0.0.0", includeLoopback: false };
+}
+
 function numberFromEnv(env, name, fallback) {
   const raw = env[name];
   if (raw === undefined || raw === "") return fallback;
@@ -137,12 +147,7 @@ function userStateRoot({ env, platform, home }) {
   return join(env.XDG_STATE_HOME || join(home, ".local", "state"), "chalk");
 }
 
-function devRequiredTools(profile, env, orb) {
-  const hasCloudflareCredentials = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
-  return orb || hasCloudflareCredentials ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile];
-}
-
-export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
+export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [] } = {}) {
   if (!Object.hasOwn(toolByProfile, profile)) throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
   const stateRoot = env.CHALK_DEV_STATE_ROOT || userStateRoot({ env, platform, home });
@@ -156,10 +161,9 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     postgres: numberFromEnv(env, "CHALK_DEV_POSTGRES_PORT", defaultPorts.postgres),
     redis: redisPort,
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
+    sfuMedia: numberFromEnv(env, "CHALK_DEV_SFU_MEDIA_PORT", sfuNode.ports.media),
   };
   const publicOrigin = publicOriginFromEnv(env);
-  // The Orb launcher writes its metadata before starting the stack; a tunnel URL is not an Orb.
-  const orb = existsSync(join(home, ".orb.json"));
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
   return {
@@ -183,7 +187,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       trustDomain: env.CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN || "chalk.local",
       environment: env.CHALK_API_ENV || "local",
     },
-    secretResolver,
     databaseName: "chalk_dev",
     postgres: {
       container: env.CHALK_POSTGRES_CONTAINER || "chalk-postgres",
@@ -197,9 +200,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
     metro: { port: numberFromEnv(env, "RCT_METRO_PORT", metroPort) },
     ports,
+    sfuMedia: sfuMediaFromEnv(env),
     publicOrigin,
-    orb,
-    mediaPlane: orb ? chalkSfuPlane : cloudflareSfuPlane,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
@@ -208,7 +210,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || devRequiredTools(profile, env, orb),
+    requiredTools: requiredTools || toolByProfile[profile],
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),
@@ -220,12 +222,56 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   };
 }
 
-export function probePort(port, host = "127.0.0.1") {
+function probeUdpPort(port, host) {
+  return new Promise((resolveProbe) => {
+    const socket = createSocket("udp4");
+    socket.once("error", (error) => {
+      socket.close();
+      resolveProbe({ available: !["EADDRINUSE", "EACCES"].includes(error.code), error });
+    });
+    socket.bind(port, host, () => socket.close(() => resolveProbe({ available: true })));
+  });
+}
+
+export async function probePort(port, host = "127.0.0.1", transport = "tcp") {
+  if (transport === "udp") {
+    // Windows can bind a wildcard UDP socket even when a specific interface already owns that port.
+    const addresses = new Set([host]);
+    if (process.platform === "win32" && host === "0.0.0.0") {
+      for (const interfaces of Object.values(networkInterfaces())) {
+        for (const { address, family } of interfaces) {
+          if (family === "IPv4") addresses.add(address);
+        }
+      }
+    }
+    for (const address of addresses) {
+      const result = await probeUdpPort(port, address);
+      if (!result.available) return result;
+    }
+    return { available: true };
+  }
   return new Promise((resolveProbe) => {
     const server = createServer();
     server.once("error", (error) => resolveProbe({ available: error.code !== "EADDRINUSE", error }));
     server.listen({ port, host }, () => server.close(() => resolveProbe({ available: true })));
   });
+}
+
+async function assertPortsAvailable(config, probe, allowBusyPorts) {
+  const busy = [];
+  for (const [name, port] of Object.entries(config.ports)) {
+    if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
+    const host = name === "sfuMedia" ? config.sfuMedia?.bindIP : undefined;
+    const result = await probe(port, host);
+    if (!result.available) busy.push(`${name}:${port}`);
+    if (name !== "sfuMedia") continue;
+    const udp = await probe(port, host, "udp");
+    if (udp.error?.code === "EACCES") {
+      throw failure(FailureKind.CONFIG, `cannot bind ${name}:${port}/udp: ${udp.error.message}`, { stage: "preflight", cause: udp.error });
+    }
+    if (!udp.available) busy.push(`${name}:${port}/udp`);
+  }
+  if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });
 }
 
 export async function preflight(config, { which = async (tool) => commandExists(tool), probe = probePort, requiredTools = config.requiredTools, allowBusyPorts = config.allowBusyPorts } = {}) {
@@ -235,13 +281,7 @@ export async function preflight(config, { which = async (tool) => commandExists(
   }
   if (missing.length > 0) throw failure(FailureKind.MISSING_TOOL, `missing required tools: ${missing.join(", ")}`, { stage: "preflight" });
 
-  const busy = [];
-  for (const [name, port] of Object.entries(config.ports)) {
-    if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
-    const result = await probe(port);
-    if (!result.available) busy.push(`${name}:${port}`);
-  }
-  if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });
+  await assertPortsAvailable(config, probe, allowBusyPorts);
   try {
     await access(config.root);
   } catch (error) {

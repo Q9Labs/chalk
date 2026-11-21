@@ -10,8 +10,7 @@ import (
 var ErrInvalidSignalRequest = errors.New("invalid media signal request")
 
 // Scope names the Participant connection a call acts for. Chalk SFU isolates by
-// Tenant, Episode, Participant and generation, so it needs all four. Cloudflare
-// ignores the scope.
+// Tenant, Episode, Participant and generation, so it needs all four.
 type Scope struct {
 	TenantID      string
 	EpisodeID     string

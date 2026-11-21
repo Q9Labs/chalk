@@ -163,14 +163,7 @@ func subjectFromClaims(claims jwtClaims) (Subject, error) {
 // providerConnectionID returns the connection ID from the claim the provider owns. The claim
 // of the other provider must be empty.
 func providerConnectionID(claims jwtClaims) (string, bool) {
-	switch claims.MediaProvider {
-	case ProviderCloudflareSFU:
-		return claims.CloudflareConnectionID, claims.ConnectionID == "" && validConnectionID(claims.CloudflareConnectionID)
-	case ProviderChalkSFU:
-		return claims.ConnectionID, claims.CloudflareConnectionID == "" && validConnectionID(claims.ConnectionID)
-	default:
-		return "", false
-	}
+	return claims.ConnectionID, claims.MediaProvider == ProviderChalkSFU && claims.CloudflareConnectionID == "" && validConnectionID(claims.ConnectionID)
 }
 
 func validSubject(subject Subject) bool {
@@ -181,13 +174,8 @@ func validSubject(subject Subject) bool {
 		subject.ParticipantGeneration <= 0 {
 		return false
 	}
-	switch subject.Provider {
-	case ProviderCloudflareSFU, ProviderChalkSFU:
-		return subject.ProviderSubject == "" && validConnectionID(subject.ConnectionID)
-
-	default:
-		return false
-	}
+	return subject.Provider == ProviderChalkSFU &&
+		subject.ProviderSubject == "" && validConnectionID(subject.ConnectionID)
 }
 
 func canonicalID(value string) (utilities.ID, bool) {
