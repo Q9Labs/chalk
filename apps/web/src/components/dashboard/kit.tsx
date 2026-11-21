@@ -106,19 +106,17 @@ export function Sk({ width, height, radius }: { readonly width: string; readonly
   return <span className="sk" style={{ width, height, borderRadius: radius }} />;
 }
 
-/** Placeholder rows in the shape of a Home or Past sessions row: faces, a title over a short line, and the time at the end. */
+/** Placeholder rows in the shape of a Home or Past sessions row: a title and, at the end, the time and the room for the row's buttons (faces are not known until the row loads). */
 export function SkeletonRows({ count }: { readonly count: number }) {
   return (
     <div className="list" aria-busy="true" aria-label="Loading">
       {Array.from({ length: count }, (_, index) => (
         <div className="skrow" key={index}>
-          <span className="fcol">
-            <Sk width="28px" height={28} radius="999px" />
-          </span>
           <span className="skrow-text">
             <Sk width={`${[38, 28, 44, 32][index % 4]}%`} height={14} />
           </span>
           <Sk width="88px" height={12} />
+          <span className="skrow-act" />
         </div>
       ))}
     </div>
