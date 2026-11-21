@@ -21,6 +21,10 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   // A guest whose Sync notices stop arriving learns the call is over only from its media and access calls.
   const deaf = await person("EndGuestNoSync", 1);
   let syncDeaf = false;
+  let refreshAnswer = "";
+  deaf.page.on("response", async (response) => {
+    if (!refreshAnswer && response.url().endsWith("/access-grants") && response.status() >= 400) refreshAnswer = `${response.status()} ${(await response.text().catch(() => "")).slice(0, 200)}`;
+  });
   await deaf.context.routeWebSocket(/\/v1\/sync/, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => server.send(message));
@@ -79,7 +83,7 @@ await runJourney("call-end", async ({ step, person, startCall, joinByLink, shot,
   for (const [index, who] of people.entries()) {
     await step(`${who.name} sees that the call has ended`, async () => {
       await shot(who, "time-limit-ended");
-      if (!results[index]) throw new Error(`${who.name} never saw "The call reached its time limit"; saw ${[...seen.get(who.name)].join(", ") || "nothing else"}`);
+      if (!results[index]) throw new Error(`${who.name} never saw "The call reached its time limit"; saw ${[...seen.get(who.name)].join(", ") || "nothing else"}${who === deaf ? `; first failed access refresh: ${refreshAnswer || "none"}` : ""}`);
       const forbidden = [...seen.get(who.name)].filter((text) => text === "Connection lost" || who !== deaf);
       if (forbidden.length) throw new Error(`${who.name} saw ${forbidden.join(" and ")} before the ended screen`);
     });
