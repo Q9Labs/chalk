@@ -45,7 +45,7 @@ export function rememberLanguage(code: WhisperLanguage) {
 /** What the next new call uses: null means the account default. */
 export type NewCallLanguage = TranscriptLanguage | null;
 
-export function readNewCallLanguage(): NewCallLanguage {
+function readNewCallLanguage(): NewCallLanguage {
   const raw = readStored(NEW_CALL_SLOT);
   if (raw === "auto") return "auto";
   return raw ? asWhisper(raw) : null;
