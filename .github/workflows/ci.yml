@@ -994,6 +994,37 @@ jobs:
           echo "release_id=$EXPECTED_RELEASE" >> "$GITHUB_OUTPUT"
           echo "restored_source_release_id=$SOURCE_RELEASE" >> "$GITHUB_OUTPUT"
 
+      - name: Post release markers
+        if: always() && inputs.pages_rollback_id == ''
+        env:
+          CHALK_AXIOM_INGEST_TOKEN: ${{ secrets.CHALK_AXIOM_INGEST_TOKEN }}
+          CHALK_INFRA_DATASET: ${{ secrets.CHALK_INFRA_DATASET }}
+          DEPLOYMENT_RESULT: ${{ runner.temp }}/managed-deployment.json
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          manifest="${{ runner.temp }}/managed-release/${RELEASE_ID}.json"
+          if [[ -f "$manifest" ]]; then
+            kind="failed"
+            if [[ -s "$DEPLOYMENT_RESULT" ]]; then
+              status="$(jq -r '.status // "missing"' "$DEPLOYMENT_RESULT")"
+              if [[ "$(jq -r '.rolled_back // false' "$DEPLOYMENT_RESULT")" == "true" ]]; then
+                kind="auto_rollback"
+              elif [[ "$status" == "deployed" ]]; then
+                kind="deploy"
+              fi
+            fi
+            commit="$(jq -r '.source_revision // "unknown"' "$manifest")"
+            for component in api sync; do
+              component_release="$(jq -r --arg c "$component" '.component_releases[$c].release_id // empty' "$manifest")"
+              node scripts/releases/release-marker.mjs \
+                --component "$component" --release-id "${component_release:-$RELEASE_ID}" --commit "$commit" \
+                --kind "$kind" --environment "$MANAGED_ENVIRONMENT" --run-id "${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" || true
+            done
+          else
+            echo "release markers skipped: no release manifest" >&2
+          fi
+
       - name: Mark the retained production manifest healthy
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
         env:

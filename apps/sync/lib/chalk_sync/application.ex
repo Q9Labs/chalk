@@ -37,8 +37,34 @@ defmodule ChalkSync.Application do
       |> List.flatten()
       |> Enum.reject(&is_nil/1)
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: ChalkSync.Supervisor)
+    result = Supervisor.start_link(children, strategy: :one_for_one, name: ChalkSync.Supervisor)
+    release_started()
+    result
   end
+
+  # release.started is the boot fact a release marker for the sync component is
+  # judged against. It is a zero-length span, so the observability sink exports it
+  # the way every Sync span lands instead of a second delivery path.
+  defp release_started do
+    attributes = [
+      release_id: System.get_env("CHALK_SYNC_RELEASE_ID", ""),
+      host_boot_id: System.get_env("CHALK_HOST_BOOT_ID", ""),
+      previous_boot_end: previous_boot_end(System.get_env("CHALK_PREVIOUS_BOOT_END"))
+    ]
+
+    span =
+      :otel_tracer.start_span(
+        :otel_ctx.get_current(),
+        :opentelemetry.get_application_tracer(__MODULE__),
+        "release.started",
+        %{kind: :internal, attributes: attributes}
+      )
+
+    :otel_span.end_span(span)
+  end
+
+  defp previous_boot_end(value) when value in ["clean", "killed"], do: value
+  defp previous_boot_end(_), do: "unknown"
 
   @impl true
   def prep_stop(state) do

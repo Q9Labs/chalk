@@ -8,5 +8,6 @@ crons = ["*/5 * * * *"]
 [vars]
 API_BASE_URL = "https://nightly-api.chalkmeet.com"
 SYNC_BASE_URL = "https://nightly-sync.chalkmeet.com"
+EDGE_HOSTS = "nightly.chalkmeet.com, nightly-api.chalkmeet.com, nightly-sync.chalkmeet.com"
 
 # Bind this Worker's own DISCORD_WEBHOOK_URL and optional OPS_MANUAL_RUN_TOKEN.

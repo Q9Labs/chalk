@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { entryFile, requireDeployable, selectStack } from "../registry.ts";
 import { resourceTypes } from "../transcription-dispatcher/policy.ts";
 import { reportFailure } from "./failure.ts";
+import { postDeployMarker } from "./marker.ts";
 
 export const checkBootstrap = Effect.fn(function* (plan: Alchemist.StackPlan) {
   const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
@@ -36,6 +37,7 @@ if (import.meta.main) {
     Effect.gen(function* () {
       const { plan, target, stage } = yield* prepareDeployment(process.argv[2], process.argv[3]);
       yield* Alchemist.apply(plan);
+      postDeployMarker(target.stackName, stage.name);
       process.stdout.write(`${JSON.stringify({ deployed: true, stack: target.stackName, stage: stage.name })}\n`);
     }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
   );

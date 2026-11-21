@@ -44,6 +44,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
@@ -126,6 +127,12 @@ func run() error {
 		"request_logs", cfg.Observability.RequestLogs,
 		"recording_enabled", cfg.Capabilities.Recording,
 		"transcription_enabled", cfg.Capabilities.Transcription,
+	)
+	bootFacts(context.Background(), cfg, logger)
+	obs.Fact(context.Background(), obs.EventReleaseStarted,
+		slog.String("release_id", cfg.Observability.Version),
+		slog.String("host_boot_id", os.Getenv("CHALK_HOST_BOOT_ID")),
+		slog.String("previous_boot_end", previousBootEnd(os.Getenv("CHALK_PREVIOUS_BOOT_END"))),
 	)
 
 	pool, err := postgres.Open(context.Background(), cfg.Database)
@@ -658,6 +665,7 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go postgres.RunHealthPoller(signalCtx, pool, cfg.Database.URL)
 	if chalkSFU != nil {
 		// Placement reads node load from these probes; the first round ends before the server takes a request.
 		chalkSFU.Probe(signalCtx)

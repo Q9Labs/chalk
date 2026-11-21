@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 )
 
 type recordingFieldsKey struct{}
@@ -69,7 +71,42 @@ func StartWorker(ctx context.Context, service string, getenv func(string) string
 	}
 	diagnostics := New(config, output)
 	slog.SetDefault(diagnostics.Logger())
+	workerBootFacts(ctx, config, diagnostics.Logger(), getenv)
 	return WorkerTelemetry{runtime: runtime, diagnostics: diagnostics}, nil
+}
+
+// workerModules maps a worker's telemetry service name to its registry module,
+// the component a release marker names for it.
+var workerModules = map[string]string{
+	"chalk-recorder-capture": "recorder_capture",
+	"chalk-recorder-render":  "recorder_render",
+}
+
+// workerBootFacts records release.started for a recorder worker boot, the same
+// witness the API posts at boot, so a marker for the component can be judged
+// against the release it actually runs.
+func workerBootFacts(ctx context.Context, config Config, logger *slog.Logger, getenv func(string) string) {
+	module := workerModules[config.Service]
+	if module == "" || config.Environment == "" {
+		return
+	}
+	obs.Configure(obs.Config{Logger: logger, Module: module, Env: config.Environment, Platform: "server"})
+	obs.Fact(ctx, obs.EventReleaseStarted,
+		slog.String("release_id", config.Version),
+		slog.String("host_boot_id", getenv("CHALK_HOST_BOOT_ID")),
+		slog.String("previous_boot_end", previousBootEnd(getenv("CHALK_PREVIOUS_BOOT_END"))),
+	)
+}
+
+// previousBootEnd keeps the worker's copy of the host's boot-end vocabulary to
+// the same small enum the API reports.
+func previousBootEnd(value string) string {
+	switch value {
+	case "clean", "killed":
+		return value
+	default:
+		return "unknown"
+	}
 }
 
 // Close flushes pending exports. Call it before the process exits; a failed flush is reported on

@@ -168,6 +168,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				"path", r.URL.Path,
 				"route", route,
 				"status", recorder.status,
+				"status_class", requestStatusClass(recorder.status),
 				"bytes", recorder.bytes,
 				"duration_ms", milliseconds(duration),
 				"outcome", requestOutcome(recorder.status),
@@ -257,6 +258,21 @@ func requestOutcome(status int) string {
 		return "error"
 	}
 	return "ok"
+}
+
+// requestStatusClass is the row's status class, the field a checker's failure
+// claim reads: only a 5xx is a failure a finding has to explain.
+func requestStatusClass(status int) string {
+	switch {
+	case status >= 500:
+		return "s5xx"
+	case status >= 400:
+		return "s4xx"
+	case status >= 300:
+		return "s3xx"
+	default:
+		return "s2xx"
+	}
 }
 
 // LogAccessGrantFailure records only bounded stages and public error codes.

@@ -74,6 +74,9 @@ func PoolConfig(cfg config.DatabaseConfig) (*pgxpool.Config, error) {
 	poolConfig.MinConns = cfg.MinConns
 	poolConfig.MaxConnIdleTime = defaultMaxConnIdleTime
 	poolConfig.HealthCheckPeriod = defaultHealthCheck
+	// The pool's sessions name themselves so pg_stat_activity can tell API work
+	// from the health poller's own connection and from other sessions holding locks.
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = PoolApplicationName
 
 	return poolConfig, nil
 }

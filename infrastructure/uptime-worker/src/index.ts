@@ -1,6 +1,7 @@
-import { runJoinProbe, type ProbeEnv } from "./probe";
+import { runJoinProbe, type ProbeEnv } from "./probe.ts";
+import { collectEdge, deriveEnv, kernelRow, type EdgeEnv } from "./edge.ts";
 
-export interface Env extends ProbeEnv {
+export interface Env extends ProbeEnv, EdgeEnv {
   API_BASE_URL?: string;
   API_MONITOR_BASE_URL?: string;
   SYNC_BASE_URL?: string;
@@ -9,7 +10,7 @@ export interface Env extends ProbeEnv {
   OPS_MANUAL_RUN_TOKEN?: string;
 }
 
-type CheckResult = { readonly name: string; readonly healthy: boolean; readonly status?: number };
+type CheckResult = { readonly name: string; readonly healthy: boolean; readonly status?: number; readonly fetched: boolean; readonly durationMs: number };
 
 function baseURL(value: string): URL {
   const url = new URL(value);
@@ -18,13 +19,43 @@ function baseURL(value: string): URL {
 }
 
 async function check(name: string, url: URL): Promise<CheckResult> {
+  const started = Date.now();
   try {
     const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Chalk-Uptime/1.0" } });
     await response.body?.cancel();
-    return { name, healthy: response.status === 200, status: response.status };
+    return { name, healthy: response.status === 200, status: response.status, fetched: true, durationMs: Date.now() - started };
   } catch {
-    return { name, healthy: false };
+    return { name, healthy: false, fetched: false, durationMs: Date.now() - started };
   }
+}
+
+// postUptimeRows records each probe as an edge.uptime_check row: whether the
+// target answered healthy, its HTTP status and the probe duration. A throw from
+// fetch is unavailable(fetch_failed), never a zero status. Posting is the best
+// effort of the monitor cycle; a missing row shows as a coverage gap.
+async function postUptimeRows(env: Env, results: CheckResult[]): Promise<void> {
+  if (!env.CHALK_AXIOM_INGEST_TOKEN || !env.CHALK_INFRA_DATASET) return;
+  const envName = deriveEnv(env);
+  const rows = results.map((result) =>
+    kernelRow(
+      envName,
+      "edge.uptime_check",
+      {
+        target: result.name,
+        uptime_status: !result.fetched ? "unavailable(fetch_failed)" : result.healthy ? "ok" : "failed",
+        http_status: result.status ?? 0,
+        origin_reach: result.healthy ? "up" : "down",
+      },
+      Date.now() - result.durationMs,
+      result.durationMs,
+    ),
+  );
+  const response = await fetch(`https://api.axiom.co/v1/datasets/${encodeURIComponent(env.CHALK_INFRA_DATASET)}/ingest`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${env.CHALK_AXIOM_INGEST_TOKEN}` },
+    body: JSON.stringify(rows),
+  });
+  await response.body?.cancel();
 }
 
 async function notify(webhook: URL, content: string): Promise<void> {
@@ -48,6 +79,7 @@ export async function runMonitorCycle(env: Env): Promise<{ readonly checked: num
   const api = baseURL(apiTarget);
   const sync = baseURL(env.SYNC_BASE_URL);
   const results = await Promise.all([check("API health", new URL("/healthz", api)), check("API readiness", new URL("/readyz", api)), check("Sync health", new URL("/healthz", sync)), check("Sync readiness", new URL("/readyz", sync))]);
+  await postUptimeRows(env, results).catch(() => {});
   const failures = results.filter((result) => !result.healthy);
   if (failures.length > 0) {
     await notify(
@@ -63,8 +95,13 @@ export async function runMonitorCycle(env: Env): Promise<{ readonly checked: num
 }
 
 export default {
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await runMonitorCycle(env);
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    // The monitor and the edge collector are independent lanes of the same tick:
+    // Promise.allSettled runs both even when one fails, and the rejections are
+    // thrown together so the failed lane still reports as an error.
+    const settled = await Promise.allSettled([runMonitorCycle(env), collectEdge(env, controller.scheduledTime)]);
+    const rejected = settled.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (rejected.length) throw new AggregateError(rejected.map((result) => result.reason), "uptime worker lane failed");
   },
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/run") return Response.json({ worker: "chalk-uptime-worker" });

@@ -12,6 +12,7 @@ import { parseInputs } from "../transcription-dispatcher/config.ts";
 import { dispatcherPolicy } from "../transcription-dispatcher/policy.ts";
 import { applyCheckedPlan } from "./apply.ts";
 import { reportFailure } from "./failure.ts";
+import { postDeployMarker } from "./marker.ts";
 import { planView } from "./plan-view.ts";
 
 const [commandArg, stageArg, ...args] = process.argv.slice(2);
@@ -32,6 +33,7 @@ const program = Effect.gen(function* () {
     if (!inputs) return yield* Effect.die("A release operation requires explicit requested inputs");
     const checked = dispatcherPolicy(view, inputs, command);
     yield* applyCheckedPlan(plan, checked.plan, checked.policy, apply);
+    if (apply) postDeployMarker(stackName, stage);
   }
   if (apply) {
     const declared = yield* Stack.pipe(Effect.provide(plan.context));

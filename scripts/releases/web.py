@@ -113,12 +113,21 @@ def previous(project):
     raise ValueError('no earlier successful Pages production deployment')
 
 
+def marker(component, release_id, commit, kind, target):
+    """Post one release.marker row; the marker script fails open, so a deploy never waits on telemetry."""
+    subprocess.run(['node', str(ROOT / 'scripts/releases/release-marker.mjs'),
+                    '--component', component, '--release-id', release_id, '--commit', commit,
+                    '--kind', kind, '--environment', target,
+                    '--run-id', os.environ.get('GITHUB_RUN_ID', 'local')], check=False)
+
+
 def rollback(project, deployment_id, target='production'):
     subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-vendor-store.mjs'), '--target', target], check=True)
     if current(project) != deployment_id:
         deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
         require(deployment['id'] == deployment_id, 'Pages rollback returned a different deployment')
     require(current(project) == deployment_id, 'Pages rollback verification failed: saved deployment is not live')
+    marker('web', deployment_id, 'unavailable(pages_rollback)', 'rollback', target)
     outputs({'pages_deployment_id': deployment_id})
 
 
@@ -151,8 +160,12 @@ def stage(target, sha, run, member, project):
 def deploy(target, sha, run, member, project):
     upload(target, sha, run, member, project, PRODUCTION_BRANCH)
     config = public_config(target, sha)
-    subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-web-deploy.mjs'), config['VITE_PUBLIC_APP_URL'], sha,
-                    '--api-base-url', config['VITE_API_URL'], '--environment', target], check=True)
+    verified = subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-web-deploy.mjs'), config['VITE_PUBLIC_APP_URL'], sha,
+                              '--api-base-url', config['VITE_API_URL'], '--environment', target])
+    if verified.returncode != 0:
+        marker('web', sha, sha, 'failed', target)
+        verified.check_returncode()
+    marker('web', current(project), sha, 'deploy', target)
 
 
 def rehearse_rollback(target, sha, run, member, project):
