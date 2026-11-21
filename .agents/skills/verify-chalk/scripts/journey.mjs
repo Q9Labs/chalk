@@ -55,7 +55,7 @@ export async function runJourney(journey, body) {
   const launch = (engine, display) => {
     const key = `${engine}${display ? "+display" : ""}`;
     if (!browsers.has(key)) {
-      const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
+      const args = ["--autoplay-policy=no-user-gesture-required", ...(display ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
       browsers.set(key, engine === "webkit" ? webkit.launch({ headless: true }) : chromium.launch({ headless: true, args }));
     }
     return browsers.get(key);
