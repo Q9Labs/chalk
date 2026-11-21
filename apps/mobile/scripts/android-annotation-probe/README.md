@@ -30,3 +30,6 @@ These are results for one API 35 emulator, not a hardware or remote WebRTC
 verification. Full-display overlays fail the media invariant. App-only capture
 avoids the overlay but cannot provide a portable display-space origin for an
 arbitrary selected task. Neither result justifies an external Chalk overlay.
+
+Revoking the Android permission while the test window was visible removed it;
+the probe logged `permission revoked; overlay removed`.

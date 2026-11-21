@@ -64,34 +64,41 @@ public final class ChalkAnnotationFramesModule extends ReactContextBaseJavaModul
   public void capture(String key, int width, int height, Promise promise) {
     main.post(() -> {
       var observation = observers.get(key);
-      var frame = observation == null ? null : observation.retainFrame(width, height);
-      if (frame == null) {
+      if (observation == null || !encoding.compareAndSet(false, true)) {
         promise.resolve(null);
         return;
       }
-      if (!encoding.compareAndSet(false, true)) {
-        frame.release();
-        promise.resolve(null);
-        return;
-      }
-      try {
-        encoder.execute(() -> {
-          try {
-            promise.resolve(encode(frame));
-          } catch (RuntimeException | IOException error) {
-            promise.reject("annotation_frame_capture", error);
-          } finally {
-            frame.release();
-            encoding.set(false);
-          }
-        });
-      } catch (RejectedExecutionException error) {
-        frame.release();
+      var request = new Capture(width, height, promise);
+      if (observation.request(request)) {
+        main.postDelayed(() -> observation.cancel(request), 1_000);
+      } else {
         encoding.set(false);
         promise.resolve(null);
       }
     });
   }
+
+  private void encodeNextFrame(VideoFrame frame, Promise promise) {
+    frame.retain();
+    try {
+      encoder.execute(() -> {
+        try {
+          promise.resolve(encode(frame));
+        } catch (RuntimeException | IOException error) {
+          promise.reject("annotation_frame_capture", error);
+        } finally {
+          frame.release();
+          encoding.set(false);
+        }
+      });
+    } catch (RejectedExecutionException error) {
+      frame.release();
+      encoding.set(false);
+      promise.resolve(null);
+    }
+  }
+
+  private record Capture(int width, int height, Promise promise) {}
 
   private String encode(VideoFrame frame) throws IOException {
     var yuv = frame.getBuffer().toI420();
@@ -162,7 +169,7 @@ public final class ChalkAnnotationFramesModule extends ReactContextBaseJavaModul
   private final class Observation implements VideoSink {
     private final String key;
     private final VideoTrack track;
-    private VideoFrame frame;
+    private Capture pending;
     private boolean stopped;
     private int width;
     private int height;
@@ -172,13 +179,21 @@ public final class ChalkAnnotationFramesModule extends ReactContextBaseJavaModul
       this.track = track;
     }
 
-    @Override public synchronized void onFrame(VideoFrame next) {
+    @Override public synchronized void onFrame(VideoFrame frame) {
       if (stopped) return;
-      next.retain();
-      if (frame != null) frame.release();
-      frame = next;
-      int w = next.getRotatedWidth();
-      int h = next.getRotatedHeight();
+      int w = frame.getRotatedWidth();
+      int h = frame.getRotatedHeight();
+      if (pending != null) {
+        var capture = pending;
+        if (capture.width() == w && capture.height() == h) {
+          // Never retain a decoder-owned texture across frames: some Android decoders
+          // cannot deliver another texture until this one is released.
+          pending = null;
+          encodeNextFrame(frame, capture.promise());
+        } else {
+          cancel(capture);
+        }
+      }
       if (width == w && height == h) return;
       width = w;
       height = h;
@@ -192,18 +207,24 @@ public final class ChalkAnnotationFramesModule extends ReactContextBaseJavaModul
       });
     }
 
-    synchronized VideoFrame retainFrame(int expectedWidth, int expectedHeight) {
-      if (frame == null || width != expectedWidth || height != expectedHeight) return null;
-      frame.retain();
-      return frame;
+    synchronized boolean request(Capture capture) {
+      if (stopped || width != capture.width() || height != capture.height()) return false;
+      pending = capture;
+      return true;
+    }
+
+    synchronized void cancel(Capture capture) {
+      if (capture == null || pending != capture) return;
+      pending = null;
+      encoding.set(false);
+      capture.promise().resolve(null);
     }
 
     void close() {
       track.removeSink(this);
       synchronized (this) {
         stopped = true;
-        if (frame != null) frame.release();
-        frame = null;
+        cancel(pending);
       }
     }
   }
