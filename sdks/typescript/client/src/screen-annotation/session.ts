@@ -1,8 +1,12 @@
 import type { ConnectionPorts } from "../connection";
-import type { ConnectionLifecycleCapability } from "../connection/lifecycle";
 import { confirmedScreenPublication } from "../space-client/media-snapshot";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
 import type { AnnotationReplica } from "./replica";
+
+type AnnotationPorts = {
+  readonly sync: Pick<ConnectionPorts["sync"], "annotation" | "getSnapshot" | "subscribe">;
+  readonly media: Pick<ConnectionPorts["media"], "getSnapshot" | "subscribe">;
+};
 
 const unavailable: ScreenAnnotationSnapshot = { status: "unavailable" };
 
@@ -14,7 +18,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
   readonly #unsubscribePorts: () => void;
 
   constructor(
-    connection: Pick<ConnectionLifecycleCapability, "subscribePorts">,
+    connection: { readonly subscribePorts: (listener: (ports: AnnotationPorts | null) => void) => () => void },
     private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined,
   ) {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
@@ -38,7 +42,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
     this.#listeners.clear();
   }
 
-  #bind(ports: ConnectionPorts | null): void {
+  #bind(ports: AnnotationPorts | null): void {
     this.#unbind?.();
     const replica = ports?.sync.annotation;
     this.#replica = replica;
@@ -92,7 +96,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
   }
 }
 
-function localScreenBinding(ports: ConnectionPorts, annotation: ScreenAnnotationSnapshot, verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
+function localScreenBinding(ports: AnnotationPorts, annotation: ScreenAnnotationSnapshot, verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
   if (annotation.status !== "ready") return { kind: "unavailable" } as const;
   const sync = ports.sync.getSnapshot();
   const screen = ports.media.getSnapshot().localTracks.find((track) => track.source === "screen" && track.enabled);
