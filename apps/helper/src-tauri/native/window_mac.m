@@ -147,6 +147,20 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
     }
 }
 
+// ScreenCaptureKit needs a WindowServer connection even in a headless
+// sampler. Initialize AppKit on the main thread without creating any UI.
+_Noreturn void chalk_run_window_sampler(int (*serve)(void)) {
+    @autoreleasepool {
+        NSApplication *app = NSApplication.sharedApplication;
+        [app setActivationPolicy:NSApplicationActivationPolicyProhibited];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            exit(serve());
+        });
+        [app run];
+    }
+    exit(1);
+}
+
 // The sampler preflights only. Granting access belongs to System Settings.
 bool chalk_window_sample(uint32_t id, double top_fraction, uint8_t *output, size_t size) {
     if (!CGPreflightScreenCaptureAccess()) return false;

@@ -207,7 +207,7 @@ fn sampler_timeline() -> String {
             match capture {
                 None => "not asked yet",
                 Some(true) => "received",
-                Some(false) => "refused (no Screen Recording grant on this Mac)",
+                Some(false) => "refused (permission or capture unavailable)",
             }
         );
         std::thread::sleep(Duration::from_millis(500));

@@ -207,8 +207,17 @@ pub fn shared() -> &'static Sampler {
     SHARED.get_or_init(|| Sampler::new(helper_sampler, REPLY_TIMEOUT))
 }
 
+unsafe extern "C" {
+    fn chalk_run_window_sampler(serve: extern "C" fn() -> i32) -> !;
+}
+
+pub fn run_child() -> ! {
+    // main calls this before Tauri starts; the bridge keeps the main queue live.
+    unsafe { chalk_run_window_sampler(serve_requests) }
+}
+
 /// The child's side: answer requests until Helper closes the pipe.
-pub fn run_child() -> i32 {
+extern "C" fn serve_requests() -> i32 {
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     let mut line = String::new();

@@ -29,7 +29,7 @@ fn main() {
     // Helper's capture child: it starts after a grant, so it can use one Helper cannot.
     #[cfg(target_os = "macos")]
     if std::env::args().any(|arg| arg == sampler::FLAG) {
-        std::process::exit(sampler::run_child());
+        sampler::run_child();
     }
     tauri::Builder::default()
         .plugin(
