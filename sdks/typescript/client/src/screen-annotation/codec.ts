@@ -56,23 +56,18 @@ function matches(value: unknown, schema: Definition): boolean {
   }
   if (schema.oneOf) return schema.oneOf.some((choice) => matches(value, choice));
   if (schema.enum) return schema.enum.includes(value);
-  switch (schema.type) {
-    case "null":
-      return value === null;
-    case "boolean":
-      return typeof value === "boolean";
-    case "object":
-      return matchesObject(value, schema);
-    case "array":
-      return matchesArray(value, schema);
-    case "integer":
-      return matchesInteger(value, schema);
-    case "string":
-      return matchesString(value, schema);
-    default:
-      return false;
-  }
+  const match = schema.type && primitiveMatchers.get(schema.type);
+  return match ? match(value, schema) : false;
 }
+
+const primitiveMatchers = new Map<string, (value: unknown, schema: Definition) => boolean>([
+  ["null", (value) => value === null],
+  ["boolean", (value) => typeof value === "boolean"],
+  ["object", matchesObject],
+  ["array", matchesArray],
+  ["integer", matchesInteger],
+  ["string", matchesString],
+]);
 
 function matchesObject(value: unknown, schema: Definition): boolean {
   return (

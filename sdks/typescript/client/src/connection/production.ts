@@ -1,3 +1,4 @@
+import { whiteboardFileAvailability } from "../whiteboard/file-urls";
 import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
@@ -189,7 +190,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
 
 async function whiteboardUploadsEnabled(apiBaseURL: string): Promise<boolean> {
   try {
-    const response = await fetch(apiUrls.whiteboardFileAvailability(apiBaseURL), {
+    const response = await fetch(whiteboardFileAvailability(apiBaseURL), {
       cache: "no-store",
       signal: AbortSignal.timeout(2000),
     });

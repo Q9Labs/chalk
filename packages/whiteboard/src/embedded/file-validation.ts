@@ -35,8 +35,11 @@ function resolveMimeType(bytes: Uint8Array, claimed: string): string {
 }
 
 function validateSignature(claimed: string, detected: string | null): void {
-  if (detected && claimed !== detected) throw new Error("whiteboard file MIME signature does not match");
-  if (claimed.startsWith("image/") && !detected) throw new Error("whiteboard image signature is invalid");
+  if (detected) {
+    if (claimed !== detected) throw new Error("whiteboard file MIME signature does not match");
+  } else if (claimed.startsWith("image/")) {
+    throw new Error("whiteboard image signature is invalid");
+  }
 }
 
 function validateImage(bytes: Uint8Array, mimeType: string): void {

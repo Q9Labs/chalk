@@ -110,21 +110,27 @@ export function denseKeyframeArgs(inputPath: string, outputPath: string, output:
 /** An ffconcat list that shows each UI image for its span; the concat demuxer ignores the last duration unless the last file repeats. */
 export function overlayListFor(segment: VideoSegment, overlayPath: (sceneKey: string) => string, fps: number, frameAccurate = false): string {
   const lines = ["ffconcat version 1.0"];
-  const microsecondsAt = (frame: number) => Math.floor(((frame - segment.startFrame) * 1_000_000) / fps);
+  const duration = overlayDuration(segment.startFrame, fps, frameAccurate);
+  const fileLines = (sceneKey: string) => overlayFileLines(overlayPath(sceneKey), frameAccurate);
   for (const span of segment.spans) {
-    lines.push(`file '${escapeConcatPath(overlayPath(span.sceneKey))}'`);
-    if (frameAccurate) lines.push("option framerate 1000000");
-    // The default PNG timebase is 25 Hz. On an annotated segment each ink
-    // frame must land by its target timestamp rather than rounding to 40 ms.
-    const duration = frameAccurate ? (microsecondsAt(span.endFrame) - microsecondsAt(span.startFrame)) / 1_000_000 : (span.endFrame - span.startFrame) / fps;
-    lines.push(`duration ${seconds(duration)}`);
+    lines.push(...fileLines(span.sceneKey), `duration ${seconds(duration(span.startFrame, span.endFrame))}`);
   }
   const last = segment.spans.at(-1);
-  if (last !== undefined) {
-    lines.push(`file '${escapeConcatPath(overlayPath(last.sceneKey))}'`);
-    if (frameAccurate) lines.push("option framerate 1000000");
-  }
+  if (last !== undefined) lines.push(...fileLines(last.sceneKey));
   return `${lines.join("\n")}\n`;
+}
+
+function overlayFileLines(path: string, frameAccurate: boolean): readonly string[] {
+  const file = `file '${escapeConcatPath(path)}'`;
+  return frameAccurate ? [file, "option framerate 1000000"] : [file];
+}
+
+function overlayDuration(segmentStart: number, fps: number, frameAccurate: boolean): (start: number, end: number) => number {
+  // The default PNG timebase is 25 Hz. On an annotated segment each ink
+  // frame must land by its target timestamp rather than rounding to 40 ms.
+  if (!frameAccurate) return (start, end) => (end - start) / fps;
+  const microsecondsAt = (frame: number) => Math.floor(((frame - segmentStart) * 1_000_000) / fps);
+  return (start, end) => (microsecondsAt(end) - microsecondsAt(start)) / 1_000_000;
 }
 
 export function segmentListFor(paths: readonly string[]): string {
@@ -183,9 +189,9 @@ function videoCadence(fps: number, holdSeconds: number, hold?: { readonly durati
   // tpad would round a delay to input frames (a sparse share can be 1 fps).
   const offset = holdSeconds > 0 ? `+${seconds(holdSeconds)}/TB` : "";
   const cadence = holdSeconds > 0 ? `fps=${fps}:start_time=0` : `fps=${fps}`;
-  const tail = hold === undefined ? "" : `,tpad=stop_mode=clone:stop_duration=${seconds(hold.duration)}`;
-  const trim = hold === undefined ? "" : `,trim=start=${seconds(hold.trim)},setpts=PTS-STARTPTS`;
-  return `setpts=PTS-STARTPTS${offset}${tail},${cadence}${trim}`;
+  const start = `setpts=PTS-STARTPTS${offset}`;
+  if (hold === undefined) return `${start},${cadence}`;
+  return `${start},tpad=stop_mode=clone:stop_duration=${seconds(hold.duration)},${cadence},trim=start=${seconds(hold.trim)},setpts=PTS-STARTPTS`;
 }
 
 function scaleContained(placement: VideoPlacement): string {

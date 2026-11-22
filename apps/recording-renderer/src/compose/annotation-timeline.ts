@@ -34,19 +34,15 @@ export function createAnnotationTimeline(layers: readonly BoundAnnotationLayer[]
       const nextBoundary = advanceOver(frames, (frame) => frame);
       const nextGeometry = advanceOver(geometry, (item) => item.frame, 1);
       const nextCursor = advanceOver(cursors, ({ layer }) => layer.closedAtMs);
-      const spans: SceneSpan[] = [];
-      for (const span of segment.spans) {
-        for (let frame = span.startFrame; frame < span.endFrame; ) {
-          const boundary = nextBoundary(frame);
-          const rect = geometry[nextGeometry(frame) - 1]?.content;
-          const endFrame = Math.min(span.endFrame, frames[boundary] ?? span.endFrame);
-          const atMs = Math.floor((frame * 1_000) / fps);
-          const cursor = cursors[nextCursor(atMs)];
-          const visible = frame >= startFrame ? cursor?.at(atMs) : undefined;
-          appendSpan(spans, withAnnotation({ ...span, startFrame: frame, endFrame }, sourceId, atMs, rect, visible, cursor?.layer.layer.layer_id));
-          frame = endFrame;
-        }
-      }
+      const spans = subdivideSpans(segment.spans, (span, frame) => {
+        const boundary = nextBoundary(frame);
+        const rect = geometry[nextGeometry(frame) - 1]?.content;
+        const endFrame = Math.min(span.endFrame, frames[boundary] ?? span.endFrame);
+        const atMs = Math.floor((frame * 1_000) / fps);
+        const cursor = cursors[nextCursor(atMs)];
+        const visible = frame >= startFrame ? cursor?.at(atMs) : undefined;
+        return withAnnotation({ ...span, startFrame: frame, endFrame }, sourceId, atMs, rect, visible, cursor?.layer.layer.layer_id);
+      });
       return { ...segment, spans };
     },
   };
@@ -90,6 +86,18 @@ function advanceOver<T>(items: readonly T[], boundary: (item: T) => number, inde
     while (index < items.length && boundary(items[index]!) <= at) index++;
     return index;
   };
+}
+
+function subdivideSpans(spans: readonly SceneSpan[], at: (span: SceneSpan, frame: number) => SceneSpan): SceneSpan[] {
+  const result: SceneSpan[] = [];
+  for (const span of spans) {
+    for (let frame = span.startFrame; frame < span.endFrame; ) {
+      const slice = at(span, frame);
+      appendSpan(result, slice);
+      frame = slice.endFrame;
+    }
+  }
+  return result;
 }
 
 function withAnnotation(span: SceneSpan, sourceId: string, atMs: number, rect: Rect | undefined, visible: ReturnType<LayerCursor["at"]> | undefined, layerId: string | undefined): SceneSpan {
@@ -165,8 +173,7 @@ function createLayerCursor(layer: BoundAnnotationLayer): LayerCursor {
 function applyMarkChange(marks: Map<string, ScreenAnnotationMark>, change: Exclude<BoundAnnotationLayer["changes"][number]["change"], { kind: "control" }>): void {
   switch (change.kind) {
     case "upsert":
-      marks.set(change.mark.draft.mark_id, change.mark);
-      if (marks.size > ACTIVE_MARKS_V1) throw new TypeError("recording annotation sidecar exceeds the active mark bound");
+      setActiveMark(marks, change.mark);
       break;
     case "remove":
       marks.delete(change.mark_id);
@@ -177,6 +184,10 @@ function applyMarkChange(marks: Map<string, ScreenAnnotationMark>, change: Exclu
   }
 }
 
+function setActiveMark(marks: Map<string, ScreenAnnotationMark>, mark: ScreenAnnotationMark): void {
+  marks.set(mark.draft.mark_id, mark);
+  if (marks.size > ACTIVE_MARKS_V1) throw new TypeError("recording annotation sidecar exceeds the active mark bound");
+}
 function clearMarks(marks: Map<string, ScreenAnnotationMark>, participantId: string | null): void {
   if (participantId === null) {
     marks.clear();

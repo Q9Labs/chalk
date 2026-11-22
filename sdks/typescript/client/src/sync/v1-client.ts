@@ -20,7 +20,7 @@ import { reportLiveTarget } from "./v1-live-target-telemetry";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { V1TimerMap } from "./v1-timer-map";
 import { copyProjection, copyPublication, mediaItem, mediaKey, presenceItem, updateProjection, validMediaPublication } from "./v1-projection-items";
-import { assertV1Url, syncEntryUrl } from "./entry-url";
+import { assertV1Url, syncEntryUrl } from "./v1-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
   V1AdmissionTarget,

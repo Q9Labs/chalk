@@ -39,6 +39,10 @@ export async function paintOverlays(spans: readonly SceneSpan[], inputs: Verifie
       loadAsset: async (assetId) => ({ bytes: await readFile(assetPath(assetId)), contentType: inputs.assets.get(assetId)!.contentType }),
     }),
   });
+  return writeOverlayFiles(spans, workDirectory, painter);
+}
+
+async function writeOverlayFiles(spans: readonly SceneSpan[], workDirectory: string, painter: ReturnType<typeof createPainter>): Promise<ReadonlyMap<string, string>> {
   const overlays = new Map<string, string>();
   for (const span of spans) {
     if (overlays.has(span.sceneKey)) continue;

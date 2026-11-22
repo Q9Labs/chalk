@@ -2,27 +2,21 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { annotationGeometryArgs, denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
-import { COMPOSE_RESULT_VERSION, VIDEO_ENCODERS, type VideoEncoder } from "./generated/render-contract.js";
+import { COMPOSE_RESULT_VERSION } from "./generated/render-contract.js";
 import { paintOverlays } from "./compose/overlay-files.js";
 import { createAnnotationTimeline, type AnnotationGeometry } from "./compose/annotation-timeline.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
-import { loadVerifiedRenderInputs, type AnnotationInputFile, type VerifiedRenderInputs } from "./node/inputs.js";
+import { loadVerifiedRenderInputs, type VerifiedRenderInputs } from "./node/inputs.js";
 import { isMainModule } from "./node/main-module.js";
 import { readComposeRequest, validateResultPath } from "./node/request.js";
 
-const FONTS_DIRECTORY = fileURLToPath(new URL("./fonts/", import.meta.url));
+import { parseArguments } from "./node/compose-arguments.js";
 
-interface Arguments {
-  readonly requestPath: string;
-  readonly resultPath: string;
-  readonly outputPath: string;
-  readonly ffmpegPath: string;
-  readonly encoder: VideoEncoder;
-  readonly threads?: number;
-  readonly annotationFile?: AnnotationInputFile;
-}
+export { parseArguments };
+
+const FONTS_DIRECTORY = fileURLToPath(new URL("./fonts/", import.meta.url));
 
 interface ComposeResultV1 {
   readonly schema_version: typeof COMPOSE_RESULT_VERSION;
@@ -52,38 +46,8 @@ async function main(): Promise<void> {
     const frameCount = frameCountFor(inputs.timeline.clock.durationMs, output.fps);
 
     const sources = await seekableSources(args.ffmpegPath, inputs, segments, output, workDirectory);
-    const annotation = createAnnotationTimeline(inputs.annotation, output.fps);
-    const composedSegments = [];
-    for (const segment of segments) {
-      const sourceId = annotation.sourceFor(segment);
-      const source = sourceId === undefined ? undefined : sources.get(sourceId);
-      const placement = segment.placements.find((item) => item.sourceId === sourceId);
-      if (sourceId === undefined || source === undefined || placement === undefined) {
-        composedSegments.push({ segment, annotated: false });
-        continue;
-      }
-      const geometry = await probeAnnotationGeometry(args.ffmpegPath, source, segment, placement, output);
-      composedSegments.push({ segment: annotation.apply(segment, sourceId, source.startMs, geometry), annotated: true });
-    }
-    const overlays = await paintOverlays(
-      composedSegments.flatMap(({ segment }) => segment.spans),
-      inputs,
-      output,
-      workDirectory,
-      FONTS_DIRECTORY,
-    );
-    const segmentPaths: string[] = [];
-    for (const [index, { segment, annotated }] of composedSegments.entries()) {
-      const listPath = join(workDirectory, `overlays-${index}.ffconcat`);
-      const segmentPath = join(workDirectory, `segment-${index}.ts`);
-      await writeFile(
-        listPath,
-        overlayListFor(segment, (sceneKey) => overlays.get(sceneKey)!, output.fps, annotated),
-        { mode: 0o600 },
-      );
-      await runTool(args.ffmpegPath, segmentArgs(segment, sources, listPath, segmentPath, output), `ffmpeg segment ${index}`);
-      segmentPaths.push(segmentPath);
-    }
+    const composedSegments = await annotateSegments(args.ffmpegPath, inputs, segments, sources, output);
+    const segmentPaths = await encodeSegments(args.ffmpegPath, composedSegments, sources, inputs, output, workDirectory);
 
     const segmentListPath = join(workDirectory, "segments.ffconcat");
     await writeFile(segmentListPath, segmentListFor(segmentPaths), { mode: 0o600 });
@@ -104,6 +68,54 @@ async function main(): Promise<void> {
   } finally {
     await rm(workDirectory, { recursive: true, force: true });
   }
+}
+
+async function annotateSegments(ffmpegPath: string, inputs: VerifiedRenderInputs, segments: readonly VideoSegment[], sources: ReadonlyMap<string, PlannedSource>, output: ComposeOutput): Promise<readonly { readonly segment: VideoSegment; readonly annotated: boolean }[]> {
+  const annotation = createAnnotationTimeline(inputs.annotation, output.fps);
+  const composedSegments = [];
+  for (const segment of segments) {
+    const sourceId = annotation.sourceFor(segment);
+    const video = findAnnotationVideo(segment, sources, sourceId);
+    if (!video) {
+      composedSegments.push({ segment, annotated: false });
+      continue;
+    }
+    const { source, placement } = video;
+    const geometry = await probeAnnotationGeometry(ffmpegPath, source, segment, placement, output);
+    composedSegments.push({ segment: annotation.apply(segment, video.sourceId, source.startMs, geometry), annotated: true });
+  }
+  return composedSegments;
+}
+
+function findAnnotationVideo(segment: VideoSegment, sources: ReadonlyMap<string, PlannedSource>, sourceId: string | undefined) {
+  if (sourceId === undefined) return undefined;
+  const source = sources.get(sourceId);
+  const placement = segment.placements.find((item) => item.sourceId === sourceId);
+  return source && placement ? { source, placement, sourceId } : undefined;
+}
+
+async function encodeSegments(ffmpegPath: string, composedSegments: readonly { readonly segment: VideoSegment; readonly annotated: boolean }[], sources: ReadonlyMap<string, PlannedSource>, inputs: VerifiedRenderInputs, output: ComposeOutput, workDirectory: string): Promise<readonly string[]> {
+  const overlays = await paintOverlays(
+    composedSegments.flatMap(({ segment }) => segment.spans),
+    inputs,
+    output,
+    workDirectory,
+    FONTS_DIRECTORY,
+  );
+  const segmentPaths: string[] = [];
+  for (const [index, { segment, annotated }] of composedSegments.entries()) {
+    const listPath = join(workDirectory, `overlays-${index}.ffconcat`);
+    const segmentPath = join(workDirectory, `segment-${index}.ts`);
+    await writeFile(
+      listPath,
+      overlayListFor(segment, (sceneKey) => overlays.get(sceneKey)!, output.fps, annotated),
+      { mode: 0o600 },
+    );
+    await runTool(ffmpegPath, segmentArgs(segment, sources, listPath, segmentPath, output), `ffmpeg segment ${index}`);
+    segmentPaths.push(segmentPath);
+  }
+
+  return segmentPaths;
 }
 
 /**
@@ -219,51 +231,6 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     for (const child of running) child.kill("SIGKILL");
     process.exit(128 + (signal === "SIGTERM" ? 15 : 2));
   });
-}
-
-function composeOptions(values: readonly string[]): ReadonlyMap<string, string> {
-  const options = new Map<string, string>();
-  let index = 0;
-  while (index < values.length) {
-    const key = values[index];
-    const value = values[index + 1];
-    if (key === undefined || value === undefined || !key.startsWith("--") || options.has(key))
-      throw new TypeError(`usage: compose --request <path> --result <path> --output <path> [--ffmpeg <path>] [--encoder ${VIDEO_ENCODERS.join("|")}] [--threads <n>] [--annotation-sidecar <path> --annotation-sha256 <sha256>]`);
-    options.set(key, value);
-    index += 2;
-  }
-  for (const key of options.keys()) {
-    if (!["--request", "--result", "--output", "--ffmpeg", "--encoder", "--threads", "--annotation-sidecar", "--annotation-sha256"].includes(key)) throw new TypeError(`unknown compose option ${key}`);
-  }
-  return options;
-}
-
-function absoluteOption(options: ReadonlyMap<string, string>, key: string): string {
-  const value = options.get(key);
-  if (value === undefined || !isAbsolute(value)) throw new TypeError(`${key} must be an absolute path`);
-  return value;
-}
-
-export function parseArguments(values: readonly string[]): Arguments {
-  const options = composeOptions(values);
-  const encoder = VIDEO_ENCODERS.find((candidate) => candidate === (options.get("--encoder") ?? "libx264"));
-  if (encoder === undefined) throw new TypeError(`unsupported compose encoder ${options.get("--encoder")}`);
-  const threads = options.has("--threads") ? Number(options.get("--threads")) : undefined;
-  if (threads !== undefined && (!Number.isSafeInteger(threads) || threads < 1 || threads > 64)) throw new TypeError("--threads must be between 1 and 64");
-  const sha256 = options.get("--annotation-sha256");
-  const hasAnnotation = options.has("--annotation-sidecar");
-  if (hasAnnotation !== (sha256 !== undefined) || (sha256 !== undefined && !/^[0-9a-f]{64}$/.test(sha256))) {
-    throw new TypeError("recording annotation sidecar requires a path and lowercase SHA-256");
-  }
-  return {
-    ...(sha256 === undefined ? {} : { annotationFile: { path: absoluteOption(options, "--annotation-sidecar"), sha256 } }),
-    requestPath: absoluteOption(options, "--request"),
-    resultPath: absoluteOption(options, "--result"),
-    outputPath: absoluteOption(options, "--output"),
-    ffmpegPath: options.get("--ffmpeg") ?? "ffmpeg",
-    encoder,
-    ...(threads === undefined ? {} : { threads }),
-  };
 }
 
 if (isMainModule(import.meta.url)) {

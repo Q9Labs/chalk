@@ -72,14 +72,19 @@ function validateSourceBinding(layer: BoundAnnotationLayer, id: string, source: 
 function parseBoundLayer(value: unknown, binding: AnnotationRecordingBinding): BoundAnnotationLayer {
   const entry = record(value, ["sourceIds", "sidecar"]);
   const sidecar = parseSidecar(field(entry, "sidecar"));
-  const sourceIds = list(field(entry, "sourceIds"), 4096).map((id) => {
-    if (typeof id !== "string" || !SOURCE_ID.test(id)) throw invalid("has an invalid media source reference");
-    const source = binding.sources.get(id);
-    if (source?.kind !== "screen_share" || source.participantId !== sidecar.layer.sharer_id) throw invalid("does not match the authenticated screen source");
-    return id;
-  });
-  if (sourceIds.length === 0 || new Set(sourceIds).size !== sourceIds.length) throw invalid("has an invalid set of media source references");
+  const sourceIds = list(field(entry, "sourceIds"), 4096).map((id) => boundSourceId(id, sidecar.layer.sharer_id, binding.sources));
+  if (!sourceIds.length || new Set(sourceIds).size !== sourceIds.length) throw invalid("has an invalid set of media source references");
   return { ...sidecar, sourceIds };
+}
+
+function boundSourceId(id: unknown, sharerId: string, sources: AnnotationRecordingBinding["sources"]): string {
+  if (typeof id !== "string" || !SOURCE_ID.test(id)) throw invalid("has an invalid media source reference");
+  if (!belongsToScreenSharer(sources.get(id), sharerId)) throw invalid("does not match the authenticated screen source");
+  return id;
+}
+
+function belongsToScreenSharer(source: { readonly kind: string; readonly participantId: string } | undefined, sharerId: string): boolean {
+  return source?.kind === "screen_share" && source.participantId === sharerId;
 }
 
 function parseSidecar(value: unknown): AnnotationSidecar {
@@ -101,11 +106,14 @@ function parseSidecar(value: unknown): AnnotationSidecar {
 function validateCheckpoint(initial: AnnotationSidecar["initial"]): void {
   const ids = new Set<string>();
   for (const mark of initial.marks) {
-    if (mark.committed_at_ms > initial.atMs || mark.created_revision > initial.revision || ids.has(mark.draft.mark_id)) throw invalid("has an invalid checkpoint mark");
+    if (!validCheckpointMark(mark, initial) || ids.has(mark.draft.mark_id)) throw invalid("has an invalid checkpoint mark");
     ids.add(mark.draft.mark_id);
   }
 }
 
+function validCheckpointMark(mark: ScreenAnnotationMark, initial: Revision): boolean {
+  return mark.committed_at_ms <= initial.atMs && mark.created_revision <= initial.revision;
+}
 function parseChanges(value: unknown, initial: Revision, closedAtMs: number): AnnotationSidecar["changes"] {
   const revisions = new Map<number, AnnotationSidecar["changes"][number]>();
   for (const itemValue of list(value, 262_144)) {

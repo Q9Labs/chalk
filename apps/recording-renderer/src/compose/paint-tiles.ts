@@ -29,16 +29,7 @@ async function paintPersonTile(kit: PaintKit, tile: PersonTile, theme: Theme): P
   const { context, px } = kit;
   const radius = px(TILE_RADIUS);
   if (tile.video !== undefined) {
-    // The compositor places video underneath; the rounded clear keeps its corners.
-    context.save();
-    roundedPath(context, tile.rect, radius);
-    context.clip();
-    context.clearRect(tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height);
-    if (tile.kind === "screen_share" && tile.annotation !== undefined) {
-      const { content, marks, atMs } = tile.annotation;
-      paintAnnotation(context, { rect: content, marks, nowMs: atMs });
-    }
-    context.restore();
+    paintVideoMask(kit, tile);
   } else if (tile.kind === "screen_share") {
     paintUnavailableScreen(kit, tile, theme);
   } else {
@@ -48,6 +39,20 @@ async function paintPersonTile(kit: PaintKit, tile: PersonTile, theme: Theme): P
     await paintAvatar(kit, tile.participant, tile.rect);
   }
   paintPersonTileDetails(kit, tile);
+}
+
+function paintVideoMask({ context, px }: PaintKit, tile: PersonTile): void {
+  const radius = px(TILE_RADIUS);
+  // The compositor places video underneath; the rounded clear keeps its corners.
+  context.save();
+  roundedPath(context, tile.rect, radius);
+  context.clip();
+  context.clearRect(tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height);
+  if (tile.kind === "screen_share" && tile.annotation !== undefined) {
+    const { content, marks, atMs } = tile.annotation;
+    paintAnnotation(context, { rect: content, marks, nowMs: atMs });
+  }
+  context.restore();
 }
 
 // Matches the live ScreenShareView empty state, for gaps in the shared screen.
