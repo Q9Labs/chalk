@@ -54,8 +54,8 @@ function startWatch({ selector, start, end, box }) {
   const context = layer.getContext("2d");
   const rect = layer.getBoundingClientRect();
   const region = (point) => {
-    const x = (box.x + point.x * box.width - rect.left) * layer.width / rect.width;
-    const y = (box.y + point.y * box.height - rect.top) * layer.height / rect.height;
+    const x = ((box.x + point.x * box.width - rect.left) * layer.width) / rect.width;
+    const y = ((box.y + point.y * box.height - rect.top) * layer.height) / rect.height;
     return [Math.round(x) - 3, Math.round(y) - 3, 7, 7];
   };
   const startBox = region(start);
@@ -140,30 +140,34 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     }
 
     const input = await drawer.context.newCDPSession(drawer.page);
-    const mouse = (type, point, buttons) => input.send("Input.dispatchMouseEvent", {
-      type, ...point, buttons, button: type === "mouseMoved" ? "none" : "left", clickCount: 1,
-    });
+    const mouse = (type, point, buttons) =>
+      input.send("Input.dispatchMouseEvent", {
+        type,
+        ...point,
+        buttons,
+        button: type === "mouseMoved" ? "none" : "left",
+        clickCount: 1,
+      });
     const trace = [];
     for (let i = 0; i < attempts; i++) {
       const x = 0.12 + (i % 10) * 0.079;
       const y = 0.12 + Math.floor(i / 10) * 0.032;
       const end = { x: x + 0.052, y };
       const start = { x, y };
-      const [senderBox, ...boxes] = await Promise.all([
-        drawer.page.evaluate(contentBox, canvas),
-        ...surfaces.map(({ page, selector }) => page.evaluate(contentBox, selector)),
-      ]);
+      const [senderBox, ...boxes] = await Promise.all([drawer.page.evaluate(contentBox, canvas), ...surfaces.map(({ page, selector }) => page.evaluate(contentBox, selector))]);
       assert.ok(senderBox && boxes.every(Boolean), "Each surface has a decoded frame");
       await Promise.all(surfaces.map(({ page, selector }, index) => page.evaluate(startWatch, { selector, start, end, box: boxes[index] })));
 
       const origin = placement(senderBox, { x, y });
       const finish = placement(senderBox, end);
-      await drawer.page.evaluate(() => { window.annotationInput = []; });
+      await drawer.page.evaluate(() => {
+        window.annotationInput = [];
+      });
       await mouse("mouseMoved", origin, 0);
       const sendStart = sent.length;
       await mouse("mousePressed", origin, 1);
       for (let move = 1; move <= 8; move++) {
-        const mid = placement(senderBox, { x: x + 0.026 * move / 8, y });
+        const mid = placement(senderBox, { x: x + (0.026 * move) / 8, y });
         await mouse("mouseMoved", mid, 1);
         await delay(13);
       }
@@ -171,17 +175,18 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
       await mouse("mouseReleased", finish, 0);
 
       await Promise.all(surfaces.map(({ page }) => page.waitForFunction(() => window.annotationPaint?.commit !== null, undefined, { timeout: 600 }).catch(() => {})));
-      const [input, ...paints] = await Promise.all([
-        drawer.page.evaluate(() => window.annotationInput),
-        ...surfaces.map(({ page }) => page.evaluate(() => window.annotationPaint)),
-      ]);
+      const [input, ...paints] = await Promise.all([drawer.page.evaluate(() => window.annotationInput), ...surfaces.map(({ page }) => page.evaluate(() => window.annotationPaint))]);
       const id = String(i + 1);
       const pointerMs = input.find(({ type }) => type === "pointerdown")?.at ?? null;
       const releaseMs = input.find(({ type }) => type === "pointerup")?.at ?? null;
       const outgoing = sent.slice(sendStart);
       const mark = outgoing.find(({ type }) => type === "annotation_command")?.mark ?? outgoing.find(({ type }) => type === "annotation_presence")?.mark;
       trace.push({
-        id, input, observation: paints, sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length, firstPreviewSentAt: outgoing.find(({ type }) => type === "annotation_presence")?.at ?? null,
+        id,
+        input,
+        observation: paints,
+        sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length,
+        firstPreviewSentAt: outgoing.find(({ type }) => type === "annotation_presence")?.at ?? null,
         sentCommit: outgoing.some(({ type }) => type === "annotation_command"),
         received: surfaces.map(({ wire }) => ({
           preview: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_presence").length,
@@ -193,7 +198,9 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
         const { preview, commit, occupied } = paints[index];
         const offset = endpoint.clock.receiverMinusSenderMs;
         endpoint.samples.push({
-          id, pointerMs, releaseMs,
+          id,
+          pointerMs,
+          releaseMs,
           previewPresentedMs: !occupied && pointerMs !== null && releaseMs !== null && preview !== null && preview - offset < releaseMs ? preview : null,
           committedPresentedMs: !occupied && releaseMs !== null && commit !== null && commit - offset >= releaseMs - endpoint.clock.uncertaintyMs ? commit : null,
         });
@@ -206,7 +213,7 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
   await writeFile(join(out, "latency.json"), JSON.stringify({ source: synthetic ? "synthetic" : "real tab", latency }, null, 2));
   await step("Check missing samples and upper p95 against the budget", async () => {
     const summary = latency.map(({ surface, samples, clock }) => {
-      const delays = samples.flatMap(({ previewPresentedMs, pointerMs }) => previewPresentedMs === null ? [] : [previewPresentedMs - clock.receiverMinusSenderMs - pointerMs]).sort((a, b) => a - b);
+      const delays = samples.flatMap(({ previewPresentedMs, pointerMs }) => (previewPresentedMs === null ? [] : [previewPresentedMs - clock.receiverMinusSenderMs - pointerMs])).sort((a, b) => a - b);
       const p95 = delays[Math.ceil(delays.length * 0.95) - 1] ?? null;
       return { surface, attempts, missingPreview: attempts - delays.length, missingCommit: samples.filter(({ committedPresentedMs }) => committedPresentedMs === null).length, p95, p95Upper: p95 === null ? null : p95 + clock.uncertaintyMs };
     });

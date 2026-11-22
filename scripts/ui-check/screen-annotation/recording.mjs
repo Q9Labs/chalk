@@ -4,8 +4,9 @@ import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { percentile } from "../../../features/scorecard/stats.mjs";
 import { deriveRecordingMediaSourceId } from "../../../packages/recording-presentation/src/source-id.ts";
-import { centroid, decodeRgb, fiducialPpm, inkPixel, nearestRank, regionAround, TARGETS, targetPixel } from "./pixels.mjs";
+import { centroid, decodeRgb, fiducialPpm, inkPixel, regionAround, TARGETS, targetPixel } from "./pixels.mjs";
 
 const renderer = fileURLToPath(new URL("../../../apps/recording-renderer/", import.meta.url));
 const output = resolve(process.argv[2] ?? ".verify/screen-annotation-recording");
@@ -194,7 +195,7 @@ const below = centroid(sample, regionAround({ x: edge.x, y: edge.y + 4 }, 2, sam
 const above = centroid(sample, regionAround({ x: edge.x, y: edge.y - 4 }, 2, sample), inkPixel);
 assert.ok(below, "the mark reaching the decoded screen edge must paint inside it");
 assert.equal(above, null, "ink must be clipped out of the letterbox");
-const p95 = nearestRank(errors, 0.95);
+const p95 = percentile(errors, 0.95);
 assert.ok(p95 < 0.005, `recorded alignment p95 ${p95} exceeds 0.5%`);
 
 const frame = join(output, "sample-frame.png");

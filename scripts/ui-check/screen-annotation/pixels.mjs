@@ -49,12 +49,6 @@ export function regionAround(center, radius, image) {
   };
 }
 
-export function nearestRank(values, percentile) {
-  if (!values.length) return null;
-  const sorted = values.toSorted((left, right) => left - right);
-  return sorted[Math.ceil(percentile * sorted.length) - 1];
-}
-
 export function fiducialPpm(width, height) {
   const pixels = Buffer.alloc(width * height * 3, 34);
   for (const target of TARGETS) {

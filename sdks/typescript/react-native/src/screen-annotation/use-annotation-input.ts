@@ -1,11 +1,4 @@
-import type {
-  ScreenAnnotationClient,
-  ScreenAnnotationCursor,
-  ScreenAnnotationDraft,
-  ScreenAnnotationPoint,
-  ScreenAnnotationPresence,
-  ScreenAnnotationTarget,
-} from "@q9labsai/chalk-client";
+import type { ScreenAnnotationClient, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent, NativeTouchEvent } from "react-native";
@@ -78,7 +71,18 @@ function preview(drawing: Drawing, point: ScreenAnnotationPoint): ScreenAnnotati
 }
 
 export function useAnnotationInput({
-  client, publicationId, participantId, displayName, color, ink, rect, viewport, onViewport, onText, onErase, onCommit,
+  client,
+  publicationId,
+  participantId,
+  displayName,
+  color,
+  ink,
+  rect,
+  viewport,
+  onViewport,
+  onText,
+  onErase,
+  onCommit,
 }: {
   readonly client: ScreenAnnotationClient;
   readonly publicationId: string;
@@ -106,11 +110,14 @@ export function useAnnotationInput({
     if (drawing && hasTarget(current(), drawing.target)) client.setPresence(drawing.target, null, null);
   }
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] End the old publication's presence when the surface is removed.
-  useEffect(() => () => {
-    const drawing = active.current;
-    if (drawing) client.setPresence(drawing.target, null, null);
-  }, [client, publicationId]);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] End the old publication's presence when the surface is removed.
+  useEffect(
+    () => () => {
+      const drawing = active.current;
+      if (drawing) client.setPresence(drawing.target, null, null);
+    },
+    [client, publicationId],
+  );
 
   function publish(drawing: Drawing, point: ScreenAnnotationPoint) {
     const draft = preview(drawing, point);

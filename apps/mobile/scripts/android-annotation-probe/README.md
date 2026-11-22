@@ -21,10 +21,10 @@ PNGs come from the projection's virtual display surface, not a screenshot.
 
 ## API 35 emulator result
 
-| Projection | Baseline center | Ordinary overlay | Secure overlay | Restored |
-| --- | --- | --- | --- | --- |
-| Entire screen | `#50d2e6` | `#d335f9` (ink captured) | `#000000` (black box) | `#50d2e6` |
-| Single app | `#50d2e6` | `#50d2e6` (clean) | `#50d2e6` (clean) | `#50d2e6` |
+| Projection    | Baseline center | Ordinary overlay         | Secure overlay        | Restored  |
+| ------------- | --------------- | ------------------------ | --------------------- | --------- |
+| Entire screen | `#50d2e6`       | `#d335f9` (ink captured) | `#000000` (black box) | `#50d2e6` |
+| Single app    | `#50d2e6`       | `#50d2e6` (clean)        | `#50d2e6` (clean)     | `#50d2e6` |
 
 These are results for one API 35 emulator, not a hardware or remote WebRTC
 verification. Full-display overlays fail the media invariant. App-only capture

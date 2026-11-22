@@ -250,13 +250,30 @@
       "name": "screen-annotation",
       "summary": "Projects publication-bound marks onto a shared screen and reproduces committed marks in recording exports.",
       "paths": [
+        "apps/mobile/e2e",
+        "apps/recording-renderer/src/compose/annotation-sidecar.ts",
+        "apps/recording-renderer/src/compose/annotation-timeline.ts",
+        "apps/sync/lib/chalk_sync/screen_annotation",
+        "apps/sync/lib/chalk_sync/transport/socket/annotation.ex",
+        "apps/sync/lib/chalk_sync/transport/socket_annotation_helper.ex",
+        "apps/sync/test/chalk_sync/screen_annotation",
+        "apps/sync/test/support/screen_annotation_proof.ex",
+        "apps/web/e2e.annotation.config.ts",
+        "apps/web/src/lib/screen-annotation-helper.ts",
+        "apps/web/src/lib/screen-annotation.ts",
+        "apps/web/tests/screen-annotation-board.mjs",
+        "apps/web/tests/screen-annotation-latency.mjs",
+        "apps/web/tests/screen-annotation-live.mjs",
+        "apps/web/tests/screen-annotation-recovery.mjs",
+        "apps/web/tests/screen-annotation-sharer.mjs",
+        "apps/web/tests/screen-annotation.e2e.ts",
         "contract/schema/screen-annotation-v1.json",
         "docs/plans/screen-annotation.md",
         "packages/screen-annotation",
+        "scripts/ui-check/screen-annotation",
         "sdks/typescript/client/src/screen-annotation",
-        "apps/recording-renderer/src/compose/annotation-sidecar.ts",
-        "apps/recording-renderer/src/compose/annotation-timeline.ts",
-        "scripts/ui-check/screen-annotation"
+        "sdks/typescript/react-native/src/screen-annotation",
+        "sdks/typescript/react/src/components/screen-annotation"
       ]
     },
     {
@@ -264,6 +281,7 @@
       "summary": "Stores and synchronizes the Space whiteboard scene.",
       "paths": [
         "apps/api/internal/httpapi/whiteboard_files.go",
+        "apps/api/internal/httpapi/whiteboard_files_test.go",
         "apps/api/internal/whiteboardfiles",
         "apps/sync/lib/chalk_sync/whiteboard_v1",
         "apps/sync/test/chalk_sync/whiteboard_v1",

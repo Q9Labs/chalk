@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { centroid, decodeRgb, inkPixel, nearestRank, TARGETS, targetPixel } from "./pixels.mjs";
+import { percentile } from "../../../features/scorecard/stats.mjs";
+import { centroid, decodeRgb, inkPixel, TARGETS, targetPixel } from "./pixels.mjs";
 
 const SURFACES = new Set(["remote", "sharer_overlay", "export"]);
 const ALIGNMENT_COVERAGE = ["portrait", "landscape", "contain", "cover", "resize", "scroll", "tab", "window", "monitor", "mixed_dpi_negative_origin", "android_rotation_insets"];
@@ -42,7 +43,7 @@ function measureAlignment(scenarios, evidenceFile) {
       }
       errors.push(Math.hypot(target.x - mark.x, target.y - mark.y) / sample.displayedFrameWidthPx);
     }
-    const p95 = nearestRank(errors, 0.95);
+    const p95 = percentile(errors, 0.95);
     const verdict = missingMarks > 0 || (p95 !== null && p95 >= 0.005) ? "fail" : p95 === null ? "unmapped" : "pass";
     results.push({ id: scenario.id, surface: scenario.surface, tags: scenario.tags, samples: errors.length, unmapped, missingMarks, p95FrameWidthFraction: p95, verdict });
   }
@@ -110,8 +111,8 @@ function addLatency(values, presentedMs, fromMs, offsetMs, uncertaintyMs) {
 }
 
 function summarizeLatency(values, attempts, uncertaintyMs) {
-  const p95 = nearestRank(values, 0.95);
-  return { samples: values.length, missing: attempts - values.length, p50Ms: nearestRank(values, 0.5), p95Ms: p95, p95UpperMs: p95 === null ? null : p95 + uncertaintyMs };
+  const p95 = percentile(values, 0.95);
+  return { samples: values.length, missing: attempts - values.length, p50Ms: percentile(values, 0.5), p95Ms: p95, p95UpperMs: p95 === null ? null : p95 + uncertaintyMs };
 }
 
 function measureExclusion(scenarios, evidenceFile) {

@@ -40,7 +40,7 @@ async function tapInk(page, y) {
   const open = page.getByRole("button", { name: "Annotate", exact: true });
   if (await open.isVisible()) await open.click();
   const keep = page.getByRole("button", { name: "Keep new marks", exact: true });
-  if (await keep.getAttribute("aria-pressed") !== "true") await keep.click();
+  if ((await keep.getAttribute("aria-pressed")) !== "true") await keep.click();
   const box = await page.locator(canvas).first().boundingBox(wait);
   assert.ok(box);
   await page.mouse.move(box.x + box.width * 0.38, box.y + box.height * y);
@@ -121,8 +121,12 @@ await runJourney("screen-annotation-recovery", async ({ step, person, startCall,
   });
 
   await step("Replace the live share with a second tab and reject an old-layer commit", async () => {
-    await red.evaluate(() => { document.title = "Previous capture"; });
-    await blue.evaluate((title) => { document.title = title; }, target);
+    await red.evaluate(() => {
+      document.title = "Previous capture";
+    });
+    await blue.evaluate((title) => {
+      document.title = title;
+    }, target);
     await sharer.page.bringToFront();
     await sharer.page.getByRole("group", { name: "Your share" }).getByRole("button", { name: "Change", exact: true }).click();
     await sharer.page.getByRole("menuitem", { name: "Browser tab", exact: true }).click();
@@ -142,9 +146,16 @@ await runJourney("screen-annotation-recovery", async ({ step, person, startCall,
   await step("Stop sharing and restart the red tab without its old ink", async () => {
     await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
     await sharer.page.getByLabel("Stop sharing", { exact: true }).click();
-    await viewer.page.locator(canvas).first().waitFor({ state: "detached", ...wait });
-    await blue.evaluate(() => { document.title = "Not selected"; });
-    await red.evaluate((title) => { document.title = title; }, target);
+    await viewer.page
+      .locator(canvas)
+      .first()
+      .waitFor({ state: "detached", ...wait });
+    await blue.evaluate(() => {
+      document.title = "Not selected";
+    });
+    await red.evaluate((title) => {
+      document.title = title;
+    }, target);
     await control(sharer, "Share screen");
     await decoded(0);
     await viewer.page.locator(canvas).first().waitFor(wait);
@@ -158,14 +169,20 @@ await runJourney("screen-annotation-recovery", async ({ step, person, startCall,
     facts.push({ transition: "stop/restart", publicationChanged: true, layerChanged: true, initialMarks: marks.length });
   });
 
-  for (const [name, { page, context }, log] of [["viewer", viewer, sent], ["sharer", sharer, host]]) {
+  for (const [name, { page, context }, log] of [
+    ["viewer", viewer, sent],
+    ["sharer", sharer, host],
+  ]) {
     await step(`The ${name}'s Sync connection drops and recovers without duplicating ink`, async () => {
       const before = log.length;
       await context.setOffline(true);
       try {
         await page.evaluate(() => window.proofSyncSocket()?.close(4000, "Test connection drop"));
         await page.waitForFunction(() => !window.proofSyncSocket(), undefined, wait);
-        await page.locator(canvas).first().waitFor({ state: "detached", ...wait });
+        await page
+          .locator(canvas)
+          .first()
+          .waitFor({ state: "detached", ...wait });
       } finally {
         await context.setOffline(false);
       }
@@ -173,7 +190,10 @@ await runJourney("screen-annotation-recovery", async ({ step, person, startCall,
       const { state } = await until(() => recent(log.slice(before), "annotation_state", ({ state }) => state), "No annotation state after reconnect");
       assert.equal(state.layer.publication_id, restarted.publication_id);
       assert.equal(state.layer.layer_id, restarted.layer_id);
-      assert.deepEqual(state.marks.map(({ draft }) => draft.mark_id), [lastCommand.command.draft.mark_id]);
+      assert.deepEqual(
+        state.marks.map(({ draft }) => draft.mark_id),
+        [lastCommand.command.draft.mark_id],
+      );
       facts.push({ transition: `${name} Sync recovery`, sameLayer: true, keptMarks: state.marks.length });
     });
   }
