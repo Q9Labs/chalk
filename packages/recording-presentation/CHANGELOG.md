@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Accept `screen_annotation` assets in Recording timelines. The public asset type and runtime validator both recognize the new kind.
+
 ## 0.1.1
 
 - Accept all 24 shared call reactions in Recording timelines, including 👏.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.1.0
+
+- Offer screen annotation when Sync enables it. Supported Android full-screen shares can include marks in the shared video. Single-app shares keep marks separate, and the video overlay withdraws ink when capture can no longer be verified.
+
 ## 5.2.0
 
 ### confirmed-call-entry
