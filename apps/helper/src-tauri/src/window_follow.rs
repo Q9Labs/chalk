@@ -56,15 +56,70 @@ pub fn observe(id: u64) -> Option<Observation> {
     platform::bounds(id).map(Observation::from)
 }
 
-pub fn matches(id: u64, expected: &[i8]) -> bool {
+#[derive(Clone, Copy)]
+pub struct Projection {
+    outer_size: (u32, u32),
+    top: u32,
+}
+
+impl Projection {
+    pub fn at(self, outer: Rect) -> Option<Rect> {
+        if (outer.width, outer.height) != self.outer_size {
+            return None;
+        }
+        Some(Rect {
+            y: outer.y.checked_add(i32::try_from(self.top).ok()?)?,
+            height: outer.height - self.top,
+            ..outer
+        })
+    }
+}
+
+fn capture_projection(
+    outer: Rect,
+    (width, height): (u32, u32),
+    can_crop_titlebar: bool,
+) -> Option<Projection> {
+    if !(320..=16_384).contains(&width) || !(240..=16_384).contains(&height) {
+        return None;
+    }
+    let incoming = f64::from(width) / f64::from(height);
+    let matches_aspect =
+        |height: u32| (f64::from(outer.width) / f64::from(height) / incoming - 1.0).abs() <= 0.004;
+    let top = if matches_aspect(outer.height) {
+        0
+    } else if can_crop_titlebar {
+        // Some macOS capture sources omit the title bar. Infer the one top
+        // inset consistent with the decoded aspect, then verify the pixels.
+        let content_height = (f64::from(outer.width) / incoming).round() as u32;
+        let top = outer.height.checked_sub(content_height)?;
+        if top == 0 || top > outer.height / 5 || !matches_aspect(content_height) {
+            return None;
+        }
+        top
+    } else {
+        return None;
+    };
+    Some(Projection {
+        outer_size: (outer.width, outer.height),
+        top,
+    })
+}
+
+pub fn matching_projection(
+    id: u64,
+    outer: Rect,
+    frame: (u32, u32),
+    expected: &[i8],
+) -> Option<Projection> {
     if expected.len() != LANDMARK_COUNT {
-        return false;
+        return None;
     }
+    let projection = capture_projection(outer, frame, cfg!(target_os = "macos"))?;
     let mut pixels = vec![0; SAMPLES];
-    if !platform::sample(id, &mut pixels) {
-        return false;
-    }
-    landmarks_match(&pixels, expected)
+    let top_fraction = f64::from(projection.top) / f64::from(outer.height);
+    (platform::sample(id, top_fraction, &mut pixels) && landmarks_match(&pixels, expected))
+        .then_some(projection)
 }
 
 fn landmarks_match(pixels: &[u8], expected: &[i8]) -> bool {
@@ -74,7 +129,9 @@ fn landmarks_match(pixels: &[u8], expected: &[i8]) -> bool {
         (i16::from(r) + 2 * i16::from(g) + i16::from(b)) / 4
     };
     let mut actual = Vec::with_capacity(LANDMARK_COUNT);
-    for (left, top) in [(3, 3), (48, 3), (3, 48)] {
+    // Skip the toolbar, which macOS and Chromium can render differently.
+    // Keep these positions in sync with the browser's preview landmarks.
+    for (left, top) in [(3, 12), (48, 12), (3, 48)] {
         for y in 0..5 {
             for x in 0..5 {
                 let px = left + x * 5;
@@ -119,7 +176,7 @@ mod platform {
         fn chalk_window_ignore_overlay(window: *mut std::ffi::c_void) -> bool;
         fn chalk_window_request_capture_access() -> bool;
         fn chalk_window_bounds(id: u32, output: *mut NativeBounds) -> bool;
-        fn chalk_window_sample(id: u32, output: *mut u8, size: usize) -> bool;
+        fn chalk_window_sample(id: u32, top_fraction: f64, output: *mut u8, size: usize) -> bool;
     }
 
     pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -142,12 +199,12 @@ mod platform {
         unsafe { chalk_window_bounds(id, &mut output) }.then_some(output)
     }
 
-    pub fn sample(id: u64, pixels: &mut [u8]) -> bool {
+    pub fn sample(id: u64, top_fraction: f64, pixels: &mut [u8]) -> bool {
         let Ok(id) = u32::try_from(id) else {
             return false;
         };
         // The bridge copies only after the callback finishes; it never retains this buffer.
-        unsafe { chalk_window_sample(id, pixels.as_mut_ptr(), SIZE) }
+        unsafe { chalk_window_sample(id, top_fraction, pixels.as_mut_ptr(), SIZE) }
     }
 }
 
@@ -287,7 +344,7 @@ mod platform {
         }
     }
 
-    pub fn sample(id: u64, pixels: &mut [u8]) -> bool {
+    pub fn sample(id: u64, _top_fraction: f64, pixels: &mut [u8]) -> bool {
         let Some(window) = bounds(id) else {
             return false;
         };
@@ -369,7 +426,7 @@ mod platform {
     pub fn bounds(_: u64) -> Option<NativeBounds> {
         None
     }
-    pub fn sample(_: u64, _: &mut [u8]) -> bool {
+    pub fn sample(_: u64, _: f64, _: &mut [u8]) -> bool {
         false
     }
 }
@@ -379,10 +436,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn window_projection_tracks_only_the_content_preview_verified() {
+        let outer = Rect {
+            x: -140,
+            y: 373,
+            width: 650,
+            height: 317,
+        };
+        let content = Rect {
+            y: 402,
+            height: 288,
+            ..outer
+        };
+        let projected =
+            |frame, mac| capture_projection(outer, frame, mac).and_then(|proof| proof.at(outer));
+        assert_eq!(projected((650, 317), true), Some(outer));
+        assert_eq!(projected((650, 288), true), Some(content));
+        assert_eq!(projected((650, 288), false), None);
+        assert_eq!(projected((650, 360), true), None);
+        assert_eq!(projected((650, 240), true), None);
+        assert_eq!(projected((1300, 576), true), Some(content));
+        let proof = capture_projection(outer, (650, 288), true).unwrap();
+        assert_eq!(
+            proof.at(Rect {
+                x: -92,
+                y: 40,
+                ..outer
+            }),
+            Some(Rect {
+                x: -92,
+                y: 69,
+                ..content
+            })
+        );
+        assert_eq!(
+            proof.at(Rect {
+                width: 651,
+                ..outer
+            }),
+            None
+        );
+        assert_eq!(
+            proof.at(Rect {
+                height: 318,
+                ..outer
+            }),
+            None
+        );
+    }
+
+    #[test]
     fn window_match_requires_three_textured_landmarks_of_the_same_orientation() {
         let mut pixels = vec![0; SAMPLES];
         assert!(!landmarks_match(&pixels, &[0; LANDMARK_COUNT]));
-        for (left, top) in [(3, 3), (48, 3), (3, 48)] {
+        for (left, top) in [(3, 12), (48, 12), (3, 48)] {
             for y in 0..5 {
                 for x in 0..5 {
                     let pixel = ((top + y * 5) * SIZE + left + x * 5) * 4;

@@ -12,7 +12,7 @@ use crate::{
     display_identity::Display,
     geometry::Rect,
     helper_scene::Scene,
-    window_follow::{self, Identity, Observation},
+    window_follow::{self, Identity, Observation, Projection},
 };
 
 const PROBE_LIMIT: Duration = Duration::from_secs(4);
@@ -37,7 +37,15 @@ pub struct Capture {
 struct FollowWindow {
     id: u64,
     identity: Option<Identity>,
-    match_sample: Option<(Observation, u32, u32, Instant)>,
+    match_sample: Option<WindowMatch>,
+    projection: Option<Projection>,
+}
+
+struct WindowMatch {
+    observed: Observation,
+    projection: Projection,
+    frame: (u32, u32),
+    checked_at: Instant,
 }
 
 struct Probe {
@@ -115,6 +123,7 @@ impl Capture {
                 id,
                 identity: None,
                 match_sample: None,
+                projection: None,
             });
         } else {
             self.unsupported = true;
@@ -153,25 +162,35 @@ impl Capture {
     pub fn record_window_match(
         &mut self,
         observed: Observation,
-        width: u32,
-        height: u32,
+        projection: Projection,
+        frame: (u32, u32),
     ) -> Result<(), ()> {
         let window = self
             .window
             .as_mut()
             .filter(|window| window.identity == Some(observed.identity))
             .ok_or(())?;
-        window.match_sample = Some((observed, width, height, Instant::now()));
+        window.match_sample = Some(WindowMatch {
+            observed,
+            projection,
+            frame,
+            checked_at: Instant::now(),
+        });
         Ok(())
     }
 
     pub fn start_window_probe(&mut self, app: &AppHandle) -> Result<ProbeSpec, ()> {
-        let (observed, width, height, at) = self
+        let WindowMatch {
+            observed,
+            projection,
+            frame,
+            checked_at,
+        } = self
             .window
             .as_mut()
             .and_then(|window| window.match_sample.take())
             .ok_or(())?;
-        if at.elapsed() > Duration::from_secs(2) {
+        if checked_at.elapsed() > Duration::from_secs(2) {
             return Err(());
         }
         let (id, identity) = self.window_id().ok_or(())?;
@@ -188,23 +207,17 @@ impl Capture {
                         == Some(observed.bounds)
                 })
             })
-            || !(320..=16384).contains(&width)
-            || !(240..=16384).contains(&height)
         {
             return Err(());
         }
-        let bounds = observed.bounds;
-        let target = f64::from(bounds.width) / f64::from(bounds.height);
-        let incoming = f64::from(width) / f64::from(height);
-        if (target / incoming - 1.0).abs() > 0.004 {
-            return Err(());
-        }
+        let bounds = projection.at(observed.bounds).ok_or(())?;
         let spec = make_probe()?;
         if desktop::show_live_overlay(app, bounds, true).is_err() {
             self.await_window(app);
             return Err(());
         }
-        self.frame = Some((width, height));
+        self.frame = Some(frame);
+        self.window.as_mut().ok_or(())?.projection = Some(projection);
         self.selected = Some(bounds);
         self.probe = Some(Probe {
             spec: spec.clone(),
@@ -222,21 +235,22 @@ impl Capture {
         let Some(old) = self.selected else {
             return true;
         };
-        if let Some(observed) =
-            window_follow::observe(id).filter(|current| current.identity == identity)
-        {
-            let next = observed.bounds;
+        let projected = window_follow::observe(id)
+            .filter(|current| current.identity == identity)
+            .and_then(|observed| {
+                let next = self.window.as_ref()?.projection?.at(observed.bounds)?;
+                Some((observed.bounds, next))
+            });
+        if let Some((outer, next)) = projected {
             if next == old && self.allows_window() {
                 self.disable_stale_input(app);
                 return true;
             }
             if self.ready
                 && !self.drawing
-                && next.width == old.width
-                && next.height == old.height
                 && app.available_monitors().is_ok_and(|monitors| {
                     monitors.iter().any(|monitor| {
-                        next.intersect(desktop::monitor_bounds(monitor)) == Some(next)
+                        outer.intersect(desktop::monitor_bounds(monitor)) == Some(outer)
                     })
                 })
                 && desktop::show_live_overlay(app, next, true).is_ok()
@@ -252,6 +266,10 @@ impl Capture {
     pub fn await_window(&mut self, app: &AppHandle) {
         self.ready = false;
         self.selected = None;
+        if let Some(window) = self.window.as_mut() {
+            window.projection = None;
+            window.match_sample = None;
+        }
         self.probe = None;
         self.scene = None;
         self.draft = None;

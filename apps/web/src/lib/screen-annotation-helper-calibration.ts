@@ -178,9 +178,10 @@ function windowLandmarks(video: HTMLVideoElement): number[] {
     return Math.floor(((pixels[offset] ?? 0) + 2 * (pixels[offset + 1] ?? 0) + (pixels[offset + 2] ?? 0)) / 4);
   };
   const landmarks: number[] = [];
+  // Skip browser chrome. Keep these positions in sync with Helper's native sample.
   for (const [left, top] of [
-    [3, 3],
-    [48, 3],
+    [3, 12],
+    [48, 12],
     [3, 48],
   ] as const) {
     for (let y = 0; y < 5; y++) {

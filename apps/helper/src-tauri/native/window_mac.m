@@ -115,7 +115,7 @@ bool chalk_window_request_capture_access(void) {
     return CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess();
 }
 
-bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
+bool chalk_window_sample(uint32_t id, double top_fraction, uint8_t *output, size_t size) {
     if (!CGPreflightScreenCaptureAccess()) return false;
     @autoreleasepool {
         dispatch_semaphore_t ready = dispatch_semaphore_create(0);
@@ -139,6 +139,13 @@ bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
             config.showsCursor = NO;
             config.ignoreShadowsSingleWindow = YES;
             [SCScreenshotManager captureImageWithFilter:filter configuration:config completionHandler:^(CGImageRef image, NSError *captureError) {
+                CGImageRef cropped = NULL;
+                if (image && !captureError && top_fraction > 0) {
+                    size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+                    size_t top = llround(top_fraction * height);
+                    cropped = CGImageCreateWithImageInRect(image, CGRectMake(0, top, width, height - top));
+                    image = cropped;
+                }
                 if (image && !captureError) {
                     NSMutableData *local = [NSMutableData dataWithLength:size * size * 4];
                     CGColorSpaceRef color = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
@@ -152,6 +159,7 @@ bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
                     }
                     CGColorSpaceRelease(color);
                 }
+                if (cropped) CGImageRelease(cropped);
                 dispatch_semaphore_signal(ready);
             }];
         }];

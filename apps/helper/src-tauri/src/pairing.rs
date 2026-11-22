@@ -465,19 +465,20 @@ impl Pairing {
             .clone()
             .try_acquire_owned()
             .map_err(|_| StatusCode::CONFLICT)?;
-        let observation = tokio::task::spawn_blocking(move || {
+        let sample = tokio::task::spawn_blocking(move || {
             let _permit = permitted;
             let before =
                 window_follow::observe(id).filter(|observed| observed.identity == identity)?;
-            if !window_follow::matches(id, &landmarks) {
-                return None;
-            }
-            window_follow::observe(id)
-                .filter(|current| current.identity == identity && current.bounds == before.bounds)
+            let projection =
+                window_follow::matching_projection(id, before.bounds, (width, height), &landmarks)?;
+            let observed = window_follow::observe(id).filter(|current| {
+                current.identity == identity && current.bounds == before.bounds
+            })?;
+            Some((observed, projection))
         })
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-        let Some(observed) = observation else {
+        let Some((observed, projection)) = sample else {
             return Ok(StatusCode::NO_CONTENT.into_response());
         };
 
@@ -489,7 +490,7 @@ impl Pairing {
             .ok_or(StatusCode::UNAUTHORIZED)?
             .capture;
         capture
-            .record_window_match(observed, width, height)
+            .record_window_match(observed, projection, (width, height))
             .map_err(|_| StatusCode::CONFLICT)?;
         Ok(Json(serde_json::json!({"matched":true})).into_response())
     }
