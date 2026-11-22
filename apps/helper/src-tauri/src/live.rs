@@ -271,6 +271,11 @@ impl Capture {
     }
 
     pub fn await_window(&mut self, app: &AppHandle) {
+        self.reset_window_projection();
+        hide(app);
+    }
+
+    fn reset_window_projection(&mut self) {
         self.ready = false;
         self.selected = None;
         if let Some(window) = self.window.as_mut() {
@@ -278,11 +283,9 @@ impl Capture {
             window.match_sample = None;
         }
         self.probe = None;
-        self.scene = None;
         self.draft = None;
         self.commits.clear();
         self.drawing = false;
-        hide(app);
     }
 
     pub fn offers_monitors(&self) -> bool {
@@ -614,5 +617,48 @@ fn make_probe() -> Result<ProbeSpec, ()> {
 pub fn hide(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(OVERLAY) {
         let _ = window.hide();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn recalibrating_the_same_window_does_not_require_a_new_sync_snapshot() {
+        let bounds = Rect {
+            x: 10,
+            y: 30,
+            width: 650,
+            height: 288,
+        };
+        let mut capture = Capture {
+            selected: Some(bounds),
+            ready: true,
+            ..Capture::default()
+        };
+        let snapshot = json!({
+            "server_at_ms": 100,
+            "state": {
+                "layer": { "layer_id": "layer", "publication_id": "publication", "sharer_id": "sharer" },
+                "marks": [],
+                "paused": false,
+                "fence": 1,
+                "access": { "can_draw": true },
+                "revision": 1
+            }
+        });
+        capture.accept_scene(Scene::snapshot(&snapshot, "layer", "publication", "sharer").unwrap());
+        assert!(matches!(capture.get_overlay(), Some(Overlay::Ink { .. })));
+
+        capture.reset_window_projection();
+        assert!(capture.get_overlay().is_none());
+        capture.selected = Some(bounds);
+        assert!(capture.get_overlay().is_none());
+
+        // Only a successful, protected calibration sets ready again.
+        capture.ready = true;
+        assert!(matches!(capture.get_overlay(), Some(Overlay::Ink { .. })));
     }
 }
