@@ -1,10 +1,13 @@
+import { DASHBOARD_BOOT_ID } from "./dashboard-boot-script";
+
 /**
  * Fades the opening frame out once every stylesheet the app added has loaded, so the app is never seen unstyled, then
  * removes it. It waits on the stylesheets' own load events, not on animation frames or timers alone, so a page whose
  * timers are held (a background tab, a test clock) still lets the frame go. `onGone` runs once the frame is gone, or at
- * once when there is none (`boot` is null). Returns a cleanup for the effect that calls it.
+ * once when there is none. Returns a cleanup for the effect that calls it.
  */
-export function dismissDashboardBoot(boot: HTMLElement | null, onGone: () => void): () => void {
+export function dismissDashboardBoot(onGone: () => void): () => void {
+  const boot = document.getElementById(DASHBOARD_BOOT_ID);
   if (!boot) {
     onGone();
     return () => {};
@@ -48,4 +51,9 @@ export function dismissDashboardBoot(boot: HTMLElement | null, onGone: () => voi
   // A stylesheet that never answers can't keep the frame up for good.
   timer = window.setTimeout(leave, 4000);
   return stopWaiting;
+}
+
+/** Leaving the dashboard before the frame faded takes it away at once. */
+export function removeDashboardBoot(): void {
+  document.getElementById(DASHBOARD_BOOT_ID)?.remove();
 }

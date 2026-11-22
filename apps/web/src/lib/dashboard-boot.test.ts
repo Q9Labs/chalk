@@ -9,7 +9,7 @@ afterEach(() => {
 
 it("reports the opening frame gone at once when the page never drew one", () => {
   let gone = 0;
-  dismissDashboardBoot(null, () => {
+  dismissDashboardBoot(() => {
     gone += 1;
   });
   expect(gone).toBe(1);
@@ -19,7 +19,7 @@ it("reports the opening frame gone only after it has faded out and left the page
   vi.useFakeTimers();
   document.body.innerHTML = `<div id="chalk-dashboard-boot"></div>`;
   let gone = 0;
-  dismissDashboardBoot(document.getElementById("chalk-dashboard-boot"), () => {
+  dismissDashboardBoot(() => {
     gone += 1;
   });
   expect(gone).toBe(0);

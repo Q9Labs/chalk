@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type React from "react";
 
 import { applyTheme, clearCallBoot, DASHBOARD_CANVAS_STYLE_ID, isDashboardPath, persistThemePreference, readThemePreference, resolveTheme, type ResolvedTheme, type ThemePreference } from "./theme";
-import { DASHBOARD_BOOT_ID } from "./dashboard-boot-script";
+import { dismissDashboardBoot, removeDashboardBoot } from "./dashboard-boot";
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -28,22 +28,9 @@ export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Elemen
   // Effects run children first, so by now the page has drawn its own frame and placeholders for the opening frame to
   // fade over, on every dashboard route.
   useEffect(() => {
-    if (!isDashboardPath(pathname)) {
-      removeDashboardCanvas();
-      // Leaving the dashboard before the frame faded takes it away at once.
-      document.getElementById(DASHBOARD_BOOT_ID)?.remove();
-      return;
-    }
-    // Loaded here: only a dashboard page has a frame to dismiss, so the call route never carries the code.
-    let cancelled = false;
-    let stop = () => {};
-    void import("./dashboard-boot").then((boot) => {
-      if (!cancelled) stop = boot.dismissDashboardBoot(document.getElementById(DASHBOARD_BOOT_ID), removeDashboardCanvas);
-    });
-    return () => {
-      cancelled = true;
-      stop();
-    };
+    if (isDashboardPath(pathname)) return dismissDashboardBoot(removeDashboardCanvas);
+    removeDashboardCanvas();
+    removeDashboardBoot();
   }, [pathname]);
 
   const setPreference = useCallback((next: ThemePreference) => {
