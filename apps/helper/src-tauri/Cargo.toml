@@ -15,6 +15,7 @@ uuid = { version = "1", features = ["v4", "v7", "serde"] }
 axum = "0.8"
 base64 = "0.22"
 ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 reqwest = { version = "0.13", features = ["json"] }
 subtle = "2.6"
 tokio = { version = "1", features = ["net", "sync", "time"] }

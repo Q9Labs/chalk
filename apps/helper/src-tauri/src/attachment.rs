@@ -5,8 +5,11 @@ use futures_util::{SinkExt, StreamExt};
 use ring::{digest, signature::Ed25519KeyPair};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::time::timeout;
-use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message};
+use tokio::{net::TcpStream, time::timeout};
+use tokio_tungstenite::{
+    tungstenite::{protocol::WebSocketConfig, Message},
+    MaybeTlsStream, WebSocketStream,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,6 +55,27 @@ fn prove(challenge: Challenge, ticket: &str, key: &Ed25519KeyPair) -> Result<Val
     Ok(json!({"type":"annotation_helper_attach","version":1,"ticket": ticket,"proof":proof}))
 }
 
+async fn connect(
+    endpoint: &str,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
+    // Reqwest and the platform verifier enable different Rustls providers.
+    // Rustls cannot infer the process default when both are linked.
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
+    let config = WebSocketConfig::default()
+        .max_frame_size(Some(512 * 1024))
+        .max_message_size(Some(512 * 1024));
+    let (socket, _) = timeout(
+        Duration::from_secs(4),
+        tokio_tungstenite::connect_async_with_config(endpoint, Some(config), true),
+    )
+    .await
+    .map_err(|_| "sync_timeout")?
+    .map_err(|_| "sync_unavailable")?;
+    Ok(socket)
+}
+
 pub async fn receive(
     ticket: String,
     key: Arc<Ed25519KeyPair>,
@@ -68,16 +92,7 @@ pub async fn receive_with_commands(
     mut update: impl FnMut(Value) -> bool,
 ) -> Result<(), &'static str> {
     let endpoint = Endpoint::configured()?;
-    let config = WebSocketConfig::default()
-        .max_frame_size(Some(512 * 1024))
-        .max_message_size(Some(512 * 1024));
-    let (mut socket, _) = timeout(
-        Duration::from_secs(4),
-        tokio_tungstenite::connect_async_with_config(endpoint.0.as_str(), Some(config), true),
-    )
-    .await
-    .map_err(|_| "sync_timeout")?
-    .map_err(|_| "sync_unavailable")?;
+    let mut socket = connect(endpoint.0.as_str()).await?;
     let Some(Ok(Message::Text(frame))) = timeout(Duration::from_secs(4), socket.next())
         .await
         .map_err(|_| "sync_timeout")?
@@ -134,6 +149,34 @@ mod tests {
         rand::SystemRandom,
         signature::{KeyPair, UnparsedPublicKey, ED25519},
     };
+
+    #[test]
+    fn managed_websocket_sends_a_tls_client_hello() {
+        use tokio::io::AsyncReadExt;
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("wss://{}", listener.local_addr().unwrap());
+            let server = async {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                stream.read_u8().await.unwrap()
+            };
+            let client = connect(&url);
+            let (first_byte, result) = timeout(Duration::from_secs(3), async {
+                tokio::join!(server, client)
+            })
+            .await
+            .unwrap();
+
+            // TLS handshake record. The fake server then drops the connection.
+            assert_eq!(first_byte, 0x16);
+            assert!(matches!(result, Err("sync_unavailable")));
+        });
+    }
 
     #[test]
     fn proof_matches_the_sync_transcript_and_is_nonce_bound() {
