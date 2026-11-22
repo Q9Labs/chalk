@@ -6,7 +6,7 @@ export function useCallCountdown(deadline: string | null | undefined) {
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
   const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: CallLimitWarning } | null>(null);
   const countdown = callCountdown(deadline, now);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh the call-limit clock each second; clear the interval when the deadline changes.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [timer] Refresh the call-limit clock each second; clear the interval when the deadline changes.
   useEffect(() => {
     if (!deadline) return;
     const tick = () => setNow(Date.now());
@@ -14,7 +14,7 @@ export function useCallCountdown(deadline: string | null | undefined) {
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [deadline]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Emit warnings only when the committed countdown crosses a threshold; preserve a dismissed warning between ticks.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [transition] Emit warnings only when the committed countdown crosses a threshold; preserve a dismissed warning between ticks.
   useEffect(() => {
     const previous = previousCountdown.current;
     const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous?.seconds : undefined);
