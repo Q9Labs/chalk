@@ -86,6 +86,28 @@ describe("baked stroke frame evidence", () => {
     expect(frameProvesStroke(frame, proof)).toBe(true);
   });
 
+  it.each([
+    { coverage: 192, decoded: [166, 54, 106] },
+    { coverage: 255, decoded: [125, 38, 78] },
+  ] as const)("proves the pen when rasterization changes nominal coverage $coverage", ({ coverage, decoded }) => {
+    const baseline = raster(0, { dark: 0, bright: 0, alpha: 255 });
+    const ink = stencil(254);
+    const frame = { ...baseline, data: baseline.data.slice() };
+    for (let x = 2; x <= 9; x++) {
+      const offset = (6 * ink.width + x) * 4;
+      ink.data.set([215, 66, 134, coverage], offset);
+      frame.data.set([...decoded, 255], offset);
+    }
+    const proof = makeStrokeProof(baseline, ink);
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(frameProvesStroke(baseline, proof)).toBe(false);
+    expect(frameProvesStroke(frame, proof)).toBe(true);
+    for (let x = 2; x <= 9; x++) {
+      frame.data.set([decoded[0], decoded[2], decoded[1], 255], (6 * frame.width + x) * 4);
+    }
+    expect(frameProvesStroke(frame, proof)).toBe(false);
+  });
+
   it("keeps the local copy if matching background supplies no new evidence", () => {
     const sameColor = raster(50, { dark: 30, bright: 250, alpha: 255 });
     expect(makeStrokeProof(sameColor, stencil(254))).toBeNull();

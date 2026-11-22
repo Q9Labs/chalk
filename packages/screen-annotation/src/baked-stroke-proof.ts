@@ -29,6 +29,17 @@ function mix(before: Color, color: Color, opacity: number): Color {
   return [before[0] + (color[0] - before[0]) * opacity, before[1] + (color[1] - before[1]) * opacity, before[2] + (color[2] - before[2]) * opacity];
 }
 
+function matchesInk(observed: Color, { before, painted }: Sample): boolean {
+  const red = painted[0] - before[0];
+  const green = painted[1] - before[1];
+  const blue = painted[2] - before[2];
+  const strength = ((observed[0] - before[0]) * red + (observed[1] - before[1]) * green + (observed[2] - before[2]) * blue) / (red * red + green * green + blue * blue);
+  // A thin stroke can land between two decoded pixels. That changes its
+  // coverage, not its direction in RGB away from the pre-stroke background.
+  if (strength < 0.65 || strength > 1.4) return false;
+  return distance(observed, mix(before, painted, strength)) <= Math.min(18, distance(observed, before) * 0.3);
+}
+
 /** The stencil is straight-alpha ink rendered over transparency at the analysis size. */
 export function makeStrokeProof(baseline: InkRaster, stencil: InkRaster): StrokeProof | null {
   if (baseline.width !== stencil.width || baseline.height !== stencil.height) return null;
@@ -85,13 +96,7 @@ export function makeStrokeProof(baseline: InkRaster, stencil: InkRaster): Stroke
 
 export function frameProvesStroke(frame: InkRaster, proof: StrokeProof): boolean {
   if (frame.width !== proof.width || frame.height !== proof.height) return false;
-  const hits = proof.samples.filter((local) =>
-    local.some(({ offset, before, painted }) => {
-      const observed = pixel(frame.data, offset);
-      const error = distance(observed, painted);
-      return error <= 28 && error <= distance(observed, before) * 0.55;
-    }),
-  );
+  const hits = proof.samples.filter((local) => local.some((sample) => matchesInk(pixel(frame.data, sample.offset), sample)));
   if (hits.length < Math.max(4, Math.ceil(proof.samples.length * 0.8))) return false;
   const steady = proof.background.filter(({ offset, before }) => distance(pixel(frame.data, offset), before) <= 35);
   return steady.length >= Math.ceil(proof.background.length * 0.65);
