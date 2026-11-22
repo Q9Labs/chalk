@@ -46,7 +46,6 @@ const variants = [
   { id: "confirm", title: "People: remove confirm", others: BIG, panel: true },
   { id: "guest", title: "People: guest view", others: BIG, panel: true, host: false },
   { id: "call-menu", title: "Call menu: host", others: SMALL, clicks: ["Call details"] },
-  { id: "call-menu-join", title: "Call menu: host, who can join open", others: SMALL, clicks: ["Call details", "Who can join"] },
   { id: "call-menu-mute", title: "Call menu: host, mute everyone confirm", others: SMALL, clicks: ["Call details", "Mute everyone"] },
   { id: "call-menu-guest", title: "Call menu: guest view", others: SMALL, host: false, clicks: ["Call details"] },
   { id: "wait-one", title: "Waiting room: one knock", others: SMALL, knocks: 1 },

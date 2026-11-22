@@ -25,18 +25,18 @@ function person(id: string, microphone: "active" | "inactive"): Participant {
   };
 }
 
-function snapshot(capabilities: readonly Capability[], roster: readonly Participant[], admissionPolicy: SpaceSnapshot["participants"]["admissionPolicy"] = "open"): SpaceSnapshot {
+function snapshot(capabilities: readonly Capability[], roster: readonly Participant[]): SpaceSnapshot {
   const base = createSnapshot(capabilities);
-  return { ...base, self: { ...base.self, participantId: "me" }, participants: { roster, admissionQueue: [], admissionPolicy } };
+  return { ...base, self: { ...base.self, participantId: "me" }, participants: { roster, admissionQueue: [], admissionPolicy: "open" } };
 }
 
-function mount(initial: SpaceSnapshot, admissionEnabled = true) {
+function mount(initial: SpaceSnapshot) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const commands: PreviewClientCommand[] = [];
   const client = createPreviewClient(initial, { onCommand: (command) => void commands.push(command) });
   let seen: ReturnType<typeof useHostControls> | undefined;
   function Probe() {
-    seen = useHostControls(useParticipants(), "me", admissionEnabled);
+    seen = useHostControls(useParticipants(), "me");
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -52,9 +52,8 @@ function mount(initial: SpaceSnapshot, admissionEnabled = true) {
 
 const roster = [person("me", "active"), person("nora", "active"), person("sofia", "inactive"), person("akash", "active")];
 
-it("offers a host both controls, counting only the other people who are unmuted", () => {
+it("offers a host Mute everyone, counting only the other people who are unmuted", () => {
   const { controls } = mount(snapshot(HOST, roster));
-  expect(controls()?.whoCanJoin?.policy).toBe("open");
   expect(controls()?.muteEveryone?.unmutedCount).toBe(2);
 });
 
@@ -62,22 +61,18 @@ it("offers a guest nothing", () => {
   expect(mount(snapshot([], roster)).controls()).toBeUndefined();
 });
 
-it("leaves out Who can join when admission is off or the policy is not one the call offers", () => {
-  expect(mount(snapshot(HOST, roster), false).controls()?.whoCanJoin).toBeUndefined();
-  expect(mount(snapshot(HOST, roster, "members_only")).controls()?.whoCanJoin).toBeUndefined();
+it("leaves out Mute everyone without the capability to mute others", () => {
   expect(mount(snapshot(["manageAdmission"], roster)).controls()?.muteEveryone).toBeUndefined();
 });
 
 it("leaves out Mute everyone when the host is alone", () => {
   const { controls } = mount(snapshot(HOST, [person("me", "active")]));
-  expect(controls()?.muteEveryone).toBeUndefined();
-  expect(controls()?.whoCanJoin?.policy).toBe("open");
+  expect(controls()).toBeUndefined();
 });
 
-it("changes the policy and mutes only the unmuted others", async () => {
+it("mutes only the unmuted others", async () => {
   const { commands, controls } = mount(snapshot(HOST, roster));
-  await act(async () => controls()?.whoCanJoin?.onChange("knock"));
   await act(async () => controls()?.muteEveryone?.onMute());
-  expect(commands.map((command) => command.type)).toEqual(["setAdmissionPolicy", "mute", "mute"]);
+  expect(commands.map((command) => command.type)).toEqual(["mute", "mute"]);
   expect(commands.flatMap((command) => (command.type === "mute" ? [command.participantId] : []))).toEqual(["nora", "akash"]);
 });

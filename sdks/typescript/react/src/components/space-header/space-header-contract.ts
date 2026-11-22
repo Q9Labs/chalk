@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
-import type { AdmissionPolicyTarget } from "@q9labsai/chalk-client";
 import type { CallNetwork } from "./call-network";
 
 /** The call-wide controls a host sees in the call menu. A control that is missing here is not shown. */
 export interface CallHostControls {
-  /** The call's current "Who can join" value and the way to change it. */
-  readonly whoCanJoin?: { readonly policy: AdmissionPolicyTarget; readonly onChange: (policy: AdmissionPolicyTarget) => Promise<void> };
   /** How many other people are unmuted, and the way to mute them all. */
   readonly muteEveryone?: { readonly unmutedCount: number; readonly onMute: () => Promise<void> };
 }
@@ -16,7 +13,7 @@ export interface SpaceHeaderProps {
   onTogglePeople?: () => void;
   knockCount?: number;
   shareUrl?: string;
-  /** Who can join and Mute everyone, for a host. Without it the call menu has neither row. */
+  /** Mute everyone, for a host. Without it the call menu has no host row. */
   hostControls?: CallHostControls;
   callLinkOpen?: boolean;
   onCallLinkToggle?: () => void;

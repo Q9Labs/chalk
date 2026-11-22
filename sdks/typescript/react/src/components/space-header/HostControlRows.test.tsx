@@ -20,43 +20,11 @@ const click = async (element: Element | undefined) => {
 };
 const alerts = () => [...document.querySelectorAll("[role=alert]")].map((alert) => alert.textContent);
 
-it("shows neither row to someone without host controls", () => {
+it("shows no host row to someone without host controls", () => {
   mount();
-  expect(rowNamed("Who can join")).toBeUndefined();
   expect(rowNamed("Mute everyone")).toBeUndefined();
   mount({});
-  expect(document.querySelector("#chalk-details-join, #chalk-details-mute")).toBeNull();
-});
-
-it("shows the current policy and changes it through the row", async () => {
-  const policies: string[] = [];
-  mount({ whoCanJoin: { policy: "open", onChange: async (policy) => void policies.push(policy) } });
-  const row = rowNamed("Who can join");
-  expect(row?.textContent).toContain("Anyone with the link");
-  expect(row?.getAttribute("aria-expanded")).toBe("false");
-  await click(row);
-  expect(row?.getAttribute("aria-expanded")).toBe("true");
-  const options = [...document.querySelectorAll<HTMLButtonElement>("#chalk-details-join button")];
-  expect(options.map((option) => [option.textContent, option.getAttribute("aria-pressed")])).toEqual([
-    ["Anyone with the linkPeople join right away", "true"],
-    ["Ask to joinYou let each person in", "false"],
-  ]);
-  await click(options[1]);
-  expect(policies).toEqual(["knock"]);
-  expect(row?.getAttribute("aria-expanded")).toBe("false");
-});
-
-it("disables the row while a policy change is pending and says when it fails", async () => {
-  let fail: (cause: Error) => void = () => {};
-  mount({ whoCanJoin: { policy: "knock", onChange: () => new Promise<void>((_, reject) => (fail = reject)) } });
-  const row = rowNamed("Who can join");
-  expect(row?.textContent).toContain("Ask to join");
-  await click(row);
-  await click(document.querySelectorAll("#chalk-details-join button")[0]);
-  expect(row?.disabled).toBe(true);
-  await act(async () => fail(new Error("refused")));
-  expect(row?.disabled).toBe(false);
-  expect(alerts()).toEqual(["Couldn’t change who can join. Try again."]);
+  expect(document.querySelector("#chalk-details-mute")).toBeNull();
 });
 
 it("asks before muting everyone and mutes through the row", async () => {

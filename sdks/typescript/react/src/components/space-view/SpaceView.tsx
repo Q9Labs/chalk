@@ -170,7 +170,7 @@ export function SpaceView({
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
-  const { canManageAdmission, hostHeader } = useHostControls(participantsSlice, self.participantId, features?.admission !== false);
+  const { canManageAdmission, hostHeader } = useHostControls(participantsSlice, self.participantId);
   const callLink = useCallLink(participantsSlice.roster.length <= 1, live, canManageAdmission);
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();

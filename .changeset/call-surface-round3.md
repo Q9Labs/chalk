@@ -3,7 +3,7 @@
 "@q9labsai/chalk-react": minor
 ---
 
-`participants.admissionPolicy` holds the call's "Who can join" value, and `client.participants.setAdmissionPolicy("open" | "knock")` lets a Participant with `manageAdmission` change it during the call. The call menu shows it to hosts as a "Who can join" row, with Mute everyone beneath it.
+`participants.admissionPolicy` holds the call's "Who can join" value, and `client.participants.setAdmissionPolicy("open" | "knock")` lets a Participant with `manageAdmission` change it during the call. It sets the live call's policy only: people who arrive through a public invite are still admitted by the Space's own admission policy.
 
 While Sync recovers, other people's tiles keep their picture and microphone state as long as the SFU still delivers their tracks, instead of dropping to the avatar.
 
