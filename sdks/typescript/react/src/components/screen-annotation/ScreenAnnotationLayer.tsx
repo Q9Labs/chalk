@@ -6,6 +6,7 @@ import {
   inkHandoff,
   type BakedExportProof,
   type BakedStrokeProof,
+  type InkRaster,
   type StrokeProof,
   canvasAnnotationTextMeasure,
   contentRect,
@@ -64,6 +65,16 @@ function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, tra
   const clip: AnnotationRect = { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight };
   const rect = contentRect(frame, clip, fit);
   return rect && { frame, clip, rect };
+}
+
+function resetCanvas(context: CanvasRenderingContext2D, clip: AnnotationRect, scale: number): void {
+  const { canvas } = context;
+  const width = Math.round(clip.width * scale);
+  const height = Math.round(clip.height * scale);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  context.setTransform(width / clip.width, 0, 0, height / clip.height, 0, 0);
+  context.clearRect(0, 0, clip.width, clip.height);
 }
 
 /** The canvas and video must occupy the same positioned box and use the same fit and transforms. */
@@ -136,51 +147,11 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         return;
       }
       const { clip, rect } = mapped;
-      const scale = window.devicePixelRatio || 1;
-      const width = Math.round(clip.width * scale);
-      const height = Math.round(clip.height * scale);
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== height) canvas.height = height;
-      context.setTransform(width / clip.width, 0, 0, height / clip.height, 0, 0);
-      context.clearRect(0, 0, clip.width, clip.height);
+      resetCanvas(context, clip, window.devicePixelRatio || 1);
       const nowMs = client.serverNowMs();
       const surface = videoSurface.current;
-      const image = surface?.image();
-      if (image) {
-        context.fillStyle = CHALK_THEME_TOKENS.stage;
-        context.fillRect(0, 0, clip.width, clip.height);
-        context.drawImage(image, rect.x, rect.y, rect.width, rect.height);
-      }
-      const pending = [];
-      const marks = optimistic.current.size ? new Map(state.marks.map((mark) => [mark.draft.mark_id, mark])) : null;
-      if (baked && image && exportProof) {
-        for (const mark of visibleMarks(state, nowMs)) {
-          const id = mark.draft.mark_id;
-          if (!exportProof.observe(id, mark.created_revision)) continue;
-          const proof = surface?.proofFor(mark.draft);
-          if (proof) exportSamples.current.set(id, { expiresAt: nowMs + INK_PROOF_TIMEOUT_MS, revision: mark.created_revision, proof });
-          else exportProof.finish(id);
-        }
-      }
-      const decoded = image && (optimistic.current.size || exportSamples.current.size) ? surface?.pixels() : null;
-      for (const [id, sample] of exportSamples.current) {
-        const removed = sample.revision !== undefined && state.revision >= sample.revision && !state.marks.some((mark) => mark.draft.mark_id === id);
-        if (!baked || removed || sample.expiresAt <= nowMs) exportSamples.current.delete(id);
-        else if (decoded && frameContainsStroke(decoded, sample.proof)) {
-          exportProof?.finish(id);
-          exportSamples.current.delete(id);
-        }
-      }
-      for (const [id, preview] of optimistic.current) {
-        const committed = marks?.get(id);
-        preview.revision ??= committed?.created_revision;
-        const proved = Boolean(decoded && preview.proof && frameProvesStroke(decoded, preview.proof));
-        if (inkHandoff({ baked, revision: state.revision, nowMs, mark: committed, preview, proved }) !== "local") {
-          optimistic.current.delete(id);
-          continue;
-        }
-        pending.push(localSample(preview.author, preview.draft, null));
-      }
+      const decoded = paintBakedFrame(surface, context, rect, clip, nowMs);
+      const pending = collectPreviews(decoded, nowMs).map(({ author, draft }) => localSample(author, draft, null));
       function localSample(author: AnnotationAuthor, draft: ScreenAnnotationDraft | null, point: ScreenAnnotationCursor | null): ScreenAnnotationPresence {
         return { type: "annotation_presence", layer_id: state.layer.layer_id, fence: state.fence, author, server_at_ms: localPresenceAt.current, expires_at_ms: nowMs + 1000, cursor: point, draft };
       }
@@ -190,9 +161,58 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       if (actor && drawing && (cursor.current || draft)) pending.push(localSample(actor, draft, baked ? null : cursor.current));
       const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS ? cursor.current?.point : undefined;
       paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...pending], nowMs), localTouch, nowMs });
-      const expiring = hasTimeVaryingInk(baked ? [] : state.marks, remote, nowMs);
-      if (expiring || optimistic.current.size > 0 || localTouch || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS)) schedule();
+      if (animateAgain(remote, nowMs, localTouch !== undefined)) schedule();
     };
+    function animateAgain(remote: readonly ScreenAnnotationPresence[], nowMs: number, touch: boolean) {
+      const stillPointing = cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS;
+      return hasTimeVaryingInk(baked ? [] : state.marks, remote, nowMs) || optimistic.current.size > 0 || touch || stillPointing;
+    }
+    function paintBakedFrame(surface: typeof videoSurface.current, context: CanvasRenderingContext2D, rect: AnnotationRect, clip: AnnotationRect, nowMs: number) {
+      const image = surface?.image();
+      if (!surface || !image) return null;
+      context.fillStyle = CHALK_THEME_TOKENS.stage;
+      context.fillRect(0, 0, clip.width, clip.height);
+      context.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      trackCommittedInk(surface, nowMs);
+      const decoded = optimistic.current.size || exportSamples.current.size ? surface.pixels() : null;
+      checkExportSamples(decoded, nowMs);
+      return decoded;
+    }
+    function trackCommittedInk(surface: NonNullable<typeof videoSurface.current>, nowMs: number) {
+      if (!baked || !exportProof) return;
+      for (const mark of visibleMarks(state, nowMs)) {
+        const id = mark.draft.mark_id;
+        if (!exportProof.observe(id, mark.created_revision)) continue;
+        const proof = surface.proofFor(mark.draft);
+        if (proof) exportSamples.current.set(id, { expiresAt: nowMs + INK_PROOF_TIMEOUT_MS, revision: mark.created_revision, proof });
+        else exportProof.finish(id);
+      }
+    }
+    function checkExportSamples(decoded: InkRaster | null, nowMs: number) {
+      for (const [id, sample] of exportSamples.current) {
+        const removed = sample.revision !== undefined && state.revision >= sample.revision && !state.marks.some((mark) => mark.draft.mark_id === id);
+        if (!baked || removed || sample.expiresAt <= nowMs) exportSamples.current.delete(id);
+        else if (decoded && frameContainsStroke(decoded, sample.proof)) {
+          exportProof?.finish(id);
+          exportSamples.current.delete(id);
+        }
+      }
+    }
+    function collectPreviews(decoded: InkRaster | null, nowMs: number) {
+      const retained: Preview[] = [];
+      const marks = new Map(state.marks.map((mark) => [mark.draft.mark_id, mark]));
+      for (const [id, preview] of optimistic.current) {
+        const committed = marks.get(id);
+        preview.revision ??= committed?.created_revision;
+        const proved = Boolean(decoded && preview.proof && frameProvesStroke(decoded, preview.proof));
+        if (inkHandoff({ baked, revision: state.revision, nowMs, mark: committed, preview, proved }) !== "local") {
+          optimistic.current.delete(id);
+          continue;
+        }
+        retained.push(preview);
+      }
+      return retained;
+    }
     const schedule = () => {
       if (!raf) raf = window.requestAnimationFrame(paint);
     };
@@ -253,55 +273,54 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     cursor.current = null;
     publish(true);
   };
+  function showPreview(draft: ScreenAnnotationDraft, author: AnnotationAuthor): Preview {
+    const surface = videoSurface.current;
+    const proof = baked ? surface?.proofFor(draft) : undefined;
+    const preview: Preview = {
+      draft,
+      author,
+      startedBaked: baked,
+      proof: proof?.changed ?? null,
+      expiresAt: client.serverNowMs() + 1000,
+      proofTimeoutAt: baked ? client.serverNowMs() + INK_PROOF_TIMEOUT_MS : undefined,
+    };
+    const id = preview.draft.mark_id;
+    optimistic.current.set(id, preview);
+    if (baked) {
+      if (proof) {
+        exportProof?.expect(id);
+        exportSamples.current.set(id, { expiresAt: client.serverNowMs() + INK_PROOF_TIMEOUT_MS, proof });
+      } else if (proof === null) {
+        exportProof?.expect(id);
+        exportProof?.finish(id);
+      }
+    }
+    return preview;
+  }
+  function settlePreview(preview: Preview, result: Awaited<ReturnType<ScreenAnnotationClient["dispatch"]>>) {
+    const id = preview.draft.mark_id;
+    if (result.kind === "accepted") {
+      preview.revision = result.revision;
+      const sample = exportSamples.current.get(id);
+      if (sample) exportSamples.current.set(id, { ...sample, revision: result.revision });
+      exportProof?.accepted(id, result.revision);
+      return;
+    }
+    if (result.kind !== "delivery_unknown") {
+      exportSamples.current.delete(id);
+      exportProof?.settle(id);
+    }
+    if (optimistic.current.get(id) === preview) optimistic.current.delete(id);
+  }
   const send = async (command: ScreenAnnotationCommand) => {
     if (!input || !actor) return;
     const live = matchesTarget(client, target);
     if (!live || !canDraw(live, actor.participant_id)) return;
-    const surface = videoSurface.current;
-    const proof = baked && command.kind === "commit" ? surface?.proofFor(command.draft) : undefined;
-    const preview: Preview | null =
-      command.kind === "commit"
-        ? {
-            draft: command.draft,
-            author: actor,
-            startedBaked: baked,
-            proof: proof?.changed ?? null,
-            expiresAt: client.serverNowMs() + 1000,
-            proofTimeoutAt: baked ? client.serverNowMs() + INK_PROOF_TIMEOUT_MS : undefined,
-          }
-        : null;
-    if (preview) {
-      const id = preview.draft.mark_id;
-      optimistic.current.set(id, preview);
-      if (baked) {
-        if (proof) {
-          exportProof?.expect(id);
-          exportSamples.current.set(id, { expiresAt: client.serverNowMs() + INK_PROOF_TIMEOUT_MS, proof });
-        } else if (proof === null) {
-          exportProof?.expect(id);
-          exportProof?.finish(id);
-        }
-      }
-    }
+    const preview = command.kind === "commit" ? showPreview(command.draft, actor) : null;
     refresh.current();
     try {
       const result = await client.dispatch(target, command);
-      if (preview) {
-        const id = preview.draft.mark_id;
-        if (result.kind === "accepted") {
-          preview.revision = result.revision;
-          const sample = exportSamples.current.get(id);
-          if (sample) exportSamples.current.set(id, { ...sample, revision: result.revision });
-          exportProof?.accepted(id, result.revision);
-        } else if (result.kind !== "delivery_unknown") {
-          exportSamples.current.delete(id);
-          exportProof?.settle(id);
-        }
-      }
-      if (preview && optimistic.current.get(preview.draft.mark_id) === preview) {
-        if (result.kind === "accepted") preview.revision = result.revision;
-        else optimistic.current.delete(preview.draft.mark_id);
-      }
+      if (preview) settlePreview(preview, result);
       if (result.kind !== "accepted" && matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     } catch {
       if (preview && optimistic.current.get(preview.draft.mark_id) === preview) optimistic.current.delete(preview.draft.mark_id);

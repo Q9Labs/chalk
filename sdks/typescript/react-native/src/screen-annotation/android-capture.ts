@@ -9,9 +9,23 @@ type AndroidAnnotationOverlay = {
   readonly requestPermission: () => Promise<boolean>;
   readonly protectControls: (trackId: string) => Promise<boolean>;
   readonly probe: (trackId: string) => Promise<ScreenAnnotationFrameSize | null>;
-  readonly render: (trackId: string, scene: string, nowMs: number, active: boolean) => void;
+  readonly render: (trackId: string, scene: string, nowMs: number, mode: "annotated" | "recovering" | "plain") => void;
   readonly stop: (trackId: string) => void;
 };
+
+async function askForOverlayPermission(overlay: AndroidAnnotationOverlay): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      "See marks over your screen?",
+      "Allow Chalk to show marks while you’re in another app, or share without the overlay.",
+      [
+        { text: "Share without overlay", style: "cancel", onPress: () => resolve(false) },
+        { text: "Open Android settings", onPress: () => resolve(overlay.requestPermission().catch(() => false)) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
+}
 
 export function createNativeAnnotationCapture() {
   const overlay = Platform.OS === "android" ? (NativeModules.ChalkAnnotationOverlay as AndroidAnnotationOverlay | undefined) : undefined;
@@ -19,6 +33,21 @@ export function createNativeAnnotationCapture() {
   let share: MediaStreamTrack | undefined;
   let space: SpaceClient | undefined;
   let askAgain = true;
+
+  async function prepareOverlay(overlay: AndroidAnnotationOverlay, annotation: ReturnType<typeof screenAnnotationFor>, track: MediaStreamTrack, permission: boolean) {
+    if (annotation.getSnapshot().status !== "ready") return;
+    share = track;
+    // Chalk's UI (including annotation controls) must not enter its screen share.
+    if (!(await overlay.protectControls(track.id).catch(() => false))) {
+      share = undefined;
+      if (annotation.getSnapshot().status !== "ready") return;
+      releaseNativeTrack(track);
+      throw new Error("Chalk could not protect the sharing controls.");
+    }
+    if (!permission || !annotation.supportsBurnIn?.()) return;
+    const frame = await overlay.probe(track.id).catch(() => null);
+    if (frame && share === track && track.readyState !== "ended" && annotation.supportsBurnIn?.()) witnesses.set(track, frame);
+  }
 
   return {
     async getDisplayMedia(): Promise<MediaStream> {
@@ -28,36 +57,12 @@ export function createNativeAnnotationCapture() {
         permission = await overlay.hasPermission().catch(() => false);
         if (!permission && askAgain) {
           askAgain = false;
-          permission = await new Promise((resolve) => {
-            Alert.alert(
-              "See marks over your screen?",
-              "Allow Chalk to show marks while you’re in another app, or share without the overlay.",
-              [
-                { text: "Share without overlay", style: "cancel", onPress: () => resolve(false) },
-                { text: "Open Android settings", onPress: () => resolve(overlay.requestPermission().catch(() => false)) },
-              ],
-              { cancelable: true, onDismiss: () => resolve(false) },
-            );
-          });
+          permission = await askForOverlayPermission(overlay);
         }
       }
       const stream = Platform.OS === "android" ? await captureAndroidScreen() : ((await mediaDevices.getDisplayMedia()) as unknown as MediaStream);
       const track = stream.getVideoTracks()[0];
-      if (!track || !overlay || annotation?.getSnapshot().status !== "ready") return stream;
-
-      share = track;
-      // Chalk's own UI (including annotation controls) must not enter its screen share.
-      const protectedControls = await overlay.protectControls(track.id).catch(() => false);
-      if (!protectedControls) {
-        share = undefined;
-        if (annotation.getSnapshot().status !== "ready") return stream;
-        releaseNativeTrack(track);
-        throw new Error("Chalk could not protect the sharing controls.");
-      }
-      if (permission && annotation.supportsBurnIn?.()) {
-        const frame = await overlay.probe(track.id).catch(() => null);
-        if (frame && share === track && track.readyState !== "ended" && annotation.supportsBurnIn?.()) witnesses.set(track, frame);
-      }
+      if (track && overlay && annotation) await prepareOverlay(overlay, annotation, track, permission);
       return stream;
     },
     verifiedAnnotationCapture: (track: MediaStreamTrack) => witnesses.get(track),
@@ -80,7 +85,9 @@ export function createNativeAnnotationCapture() {
         const local = client.getSnapshot();
         const state = snapshot.status === "ready" ? snapshot.state : null;
         const active = state?.layer.burned_in === true && state.layer.publication_id === local.media.screenShare.publicationId && state.layer.sharer_id === local.self.participantId;
-        overlay.render(track.id, JSON.stringify({ sharerId: local.self.participantId, paused: active ? state.paused : true, marks: active ? state.marks : [] }), annotation.serverNowMs(), active);
+        const mode = active ? "annotated" : snapshot.status === "connecting" ? "recovering" : "plain";
+        const scene = { sharerId: local.self.participantId, paused: active ? state.paused : true, marks: active ? state.marks : [] };
+        overlay.render(track.id, JSON.stringify(scene), annotation.serverNowMs(), mode);
       };
       const unbindAnnotation = annotation.subscribe(emit);
       const unbindSpace = client.subscribe(emit);

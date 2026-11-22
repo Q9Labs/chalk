@@ -42,11 +42,20 @@ export function useAnnotationActions({
       if (matchesTarget(client, target)) onError("The annotation action could not be applied.");
     }
   };
+  function currentShare(video: HTMLVideoElement | null): ScreenAnnotationState | null {
+    const live = matchesTarget(client, target);
+    return live && video && videoRef.current === video && videoMatchesTrack(video, track) && canDraw(live, actorId) ? live : null;
+  }
+  function captureFrame(video: HTMLVideoElement, live: ScreenAnnotationState): ScreenAnnotationFrame {
+    const { layer, marks, paused } = live;
+    const scene = { publicationId: layer.publication_id, marks: layer.burned_in ? [] : marks, paused, sharerId: layer.sharer_id, nowMs: client.serverNowMs() };
+    return captureAnnotationVideoFrame(video, scene, layer.burned_in ? bakedFrame.current : null);
+  }
   const exportFrame = async (action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]>, toBoard: boolean) => {
     if (saving.current) return;
-    let live = matchesTarget(client, target);
     const video = videoRef.current;
-    if (!live || !video || !videoMatchesTrack(video, track) || !canDraw(live, actorId)) return;
+    let live = currentShare(video);
+    if (!live || !video) return;
     saving.current = true;
     setBusy(true);
     setFeedback(null);
@@ -54,10 +63,10 @@ export function useAnnotationActions({
       const retry = toBoard && boardRetry.current?.action === action && boardRetry.current.target.fence === target.fence ? boardRetry.current : null;
       if (!retry && live.layer.burned_in) {
         await exportProof.wait(visibleMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id));
-        live = matchesTarget(client, target);
-        if (!live || videoRef.current !== video || !videoMatchesTrack(video, track) || !canDraw(live, actorId)) return;
+        live = currentShare(video);
+        if (!live) return;
       }
-      const frame = retry?.frame ?? captureAnnotationVideoFrame(video, { publicationId: live.layer.publication_id, marks: live.layer.burned_in ? [] : live.marks, paused: live.paused, sharerId: live.layer.sharer_id, nowMs: client.serverNowMs() }, live.layer.burned_in ? bakedFrame.current : null);
+      const frame = retry?.frame ?? captureFrame(video, live);
       if (toBoard) boardRetry.current = { frame, action, target };
       await action(frame);
       if (toBoard) boardRetry.current = null;

@@ -683,15 +683,18 @@ export class V1SyncClient implements V1CollaborationClient {
     update();
     if (previous !== this.#health.health) this.#emit();
   }
-  async #welcome(frame: ServerFrame<"welcome">): Promise<void> {
-    if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
-    this.#baggageHelloSocket = null;
-    this.#collaborationState.acceptWelcome(frame);
+  #acceptExtensions(frame: ServerFrame<"welcome">): void {
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#connectionQualityNegotiated = frame.connection_quality === true;
     this.#annotationNegotiated = frame.screen_annotation === true;
     this.#annotationBurnInNegotiated = this.#annotationNegotiated && frame.screen_annotation_burn_in === true;
+  }
+  async #welcome(frame: ServerFrame<"welcome">): Promise<void> {
+    if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
+    this.#baggageHelloSocket = null;
+    this.#collaborationState.acceptWelcome(frame);
+    this.#acceptExtensions(frame);
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;

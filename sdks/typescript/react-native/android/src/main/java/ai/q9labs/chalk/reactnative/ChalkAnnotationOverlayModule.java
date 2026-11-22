@@ -163,7 +163,7 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     });
   }
 
-  @ReactMethod public void render(String trackId, String sceneJson, double nowMs, boolean active) {
+  @ReactMethod public void render(String trackId, String sceneJson, double nowMs, String mode) {
     main.post(() -> {
       Session current = session;
       if (current == null || !current.trackId.equals(trackId) || !current.verified || renderer == null) return;
@@ -171,22 +171,22 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
         remove(current, true);
         return;
       }
-      if (!active) {
-        current.hold = current.activated;
-        current.resumeId++;
-      }
       // Cursors are live presence, never pixels in a saved frame or recording.
-      renderer.evaluateJavascript("window.chalkAnnotationSystemOverlay?.(" + sceneJson + "," + nowMs + ");", null);
-      if (active && (current.hold || !current.activated)) {
-        current.activated = true;
-        current.hold = true;
-        long resumeId = ++current.resumeId;
-        renderer.postVisualStateCallback(resumeId, new WebView.VisualStateCallback() {
+      String script = "window.chalkAnnotationSystemOverlay?.(" + sceneJson + "," + nowMs + ");";
+      long resumeId = current.frameGate.update(mode);
+      if (resumeId == ChalkAnnotationFrameGate.NO_TRANSITION) {
+        renderer.evaluateJavascript(script, null);
+        return;
+      }
+      WebView view = renderer;
+      view.evaluateJavascript(script, ignored -> {
+        if (session != current || !current.frameGate.isCurrent(resumeId)) return;
+        view.postVisualStateCallback(resumeId, new WebView.VisualStateCallback() {
           @Override public void onComplete(long id) {
-            if (session == current && current.resumeId == id) current.hold = false;
+            if (session == current) current.frameGate.presented(id);
           }
         });
-      }
+      });
     });
   }
 
@@ -314,11 +314,9 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     volatile boolean rendererReady;
     volatile boolean verified;
     volatile boolean finished;
-    volatile boolean hold;
+    final ChalkAnnotationFrameGate frameGate = new ChalkAnnotationFrameGate();
     volatile int width;
     volatile int height;
-    boolean activated;
-    long resumeId;
     View marker;
     private volatile ChalkProjectionWitness firstMatch;
     private volatile boolean revealed;
@@ -337,7 +335,7 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
       if (finished || verified) {
         // Resize keeps the overlay. Actual overlay loss still stops this
         // publication rather than sending clean frames under a baked binding.
-        if (target != null && !hold && !(finished && verified)) target.onFrame(frame);
+        if (target != null && frameGate.forwardsFrames() && !(finished && verified)) target.onFrame(frame);
         return;
       }
       if (++frames == 1) observedSize = frame.getRotatedWidth() + "x" + frame.getRotatedHeight();

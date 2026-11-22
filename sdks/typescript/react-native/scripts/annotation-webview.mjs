@@ -197,7 +197,11 @@ export function mount(engine) {
   window.chalkAnnotationSystemOverlay = (content, nowMs) => {
     systemOverlay = true;
     scene = content;
-    window.chalkAnnotationPresence([], nowMs);
+    samples = [];
+    serverNow = nowMs;
+    receivedAt = performance.now();
+    cancelAnimationFrame(animation);
+    paint();
   };
   window.chalkAnnotationMeasure = async (request, samples) => {
     await document.fonts.load('600 16px "Chalk Annotation Figtree"');

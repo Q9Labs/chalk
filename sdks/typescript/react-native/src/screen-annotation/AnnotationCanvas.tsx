@@ -154,6 +154,23 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     [],
   );
 
+  function receiveMeasurement(result: object): boolean {
+    const measurement = measures.current;
+    if (measurement && "measure" in result && result.measure === measurement.id) {
+      const widths: unknown = "widths" in result ? result.widths : null;
+      if (!Array.isArray(widths) || widths.length !== measurement.samples.length || !widths.every((width): width is number => typeof width === "number" && Number.isFinite(width) && width >= 0)) {
+        failMeasure();
+        return true;
+      }
+      clearTimeout(measurement.timer);
+      measures.current = null;
+      const lookup = new Map(measurement.samples.map((sample, index) => [JSON.stringify(sample), widths[index]]));
+      measurement.resolve((text, size) => lookup.get(JSON.stringify([text, size])) ?? 0);
+      return true;
+    }
+    return false;
+  }
+
   const onMessage = ({ nativeEvent: { data } }: WebViewMessageEvent) => {
     if (data === "annotation-loaded") {
       setReady(true);
@@ -172,19 +189,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         onHit(result.hit, result.markId);
         return;
       }
-      const measurement = measures.current;
-      if (measurement && "measure" in result && result.measure === measurement.id) {
-        const widths: unknown = "widths" in result ? result.widths : null;
-        if (!Array.isArray(widths) || widths.length !== measurement.samples.length || !widths.every((width): width is number => typeof width === "number" && Number.isFinite(width) && width >= 0)) {
-          failMeasure();
-          return;
-        }
-        clearTimeout(measurement.timer);
-        measures.current = null;
-        const lookup = new Map(measurement.samples.map((sample, index) => [JSON.stringify(sample), widths[index]]));
-        measurement.resolve((text, size) => lookup.get(JSON.stringify([text, size])) ?? 0);
-        return;
-      }
+      if (receiveMeasurement(result)) return;
       const current = job.current;
       if (!current || !("png" in result) || result.png !== current.id) return;
       if (!annotationPngPart(result, current.length)) {
