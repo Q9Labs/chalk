@@ -1,84 +1,149 @@
+import { ClockEstimator } from "../obs/clock";
+import { createKernel, type BuildInfo, type Kernel, type KernelMode, type ObsRecord } from "../obs/kernel";
 import { startOperation } from "./operation";
-import { EventQueue, lostBy } from "./queue";
-import type { MediaOperationResult, MediaOperationStart, PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySendResult, TelemetrySink } from "./types";
+import { entryOf } from "./queue";
+import { newStream, type Stream } from "./stream";
+import { StreamJournal } from "./stream-journal";
+import { delayFor } from "./send-policy";
+import { StreamSender } from "./stream-sender";
+import type { DeliveryStep, MediaOperationResult, MediaOperationStart, PlatformChange, TelemetryCredentialSource, TelemetryDraft, TelemetryPlatform, TelemetrySink, WireEvent } from "./types";
 
-/** Events that say a bad thing may be starting go out at once, because the client may not live to send them later. */
-const STARTED_PLATFORM_STATES: ReadonlySet<PlatformState | undefined> = new Set(["offline", "hidden", "background"]);
-const ROUTINE_DELAY_MS = 1500;
-const STATS_DELAY_MS = 30_000;
-const AWAIT_CREDENTIAL_MS = 5000;
-const MAX_BATCH_EVENTS = 100;
-/** The server takes 64 KiB a request. Every request is sent with keepalive so a closing page cannot cancel it, and a keepalive request may not go over that. */
-const MAX_BATCH_BYTES = 48 * 1024;
-const MAX_QUEUE_BYTES = 256 * 1024;
-const SEND_TIMEOUT_MS = 10_000;
-const BACKOFF_BASE_MS = 1000;
-const BACKOFF_MAX_MS = 60_000;
+/** Disposal names the drop list in as many records as it takes, but never loops on a frame the server keeps refusing. */
+const MAX_DISPOSE_ROUNDS = 8;
 const MAX_MILLISECONDS = 2_147_483_647;
+
+/** The source ids of the outboxes alive in this JS realm, so one tab with two clients never takes a live client's journal for a dead one's. */
+const liveInThisRealm = new Set<string>();
 
 export type TelemetryOutboxOptions = {
   readonly platform: TelemetryPlatform;
   readonly endpoint: (tenantId: string) => string;
   readonly random?: () => number;
+  /** Internal: called synchronously at each step of the delivery model, for the trace check. Not part of the SDK surface. */
+  readonly trace?: (step: DeliveryStep) => void;
+  /** Internal: replaces the realm-wide set of live source ids. A test uses a fresh set to stand for a new page. */
+  readonly liveSources?: Set<string>;
+  /** What the kernel stamps as the build. An SDK build that knows its version and Chalk environment passes them. */
+  readonly build?: BuildInfo;
+  /** The kernel's mode: open (the default) counts a registry violation and still sends the record, closed throws. */
+  readonly obsMode?: KernelMode;
 };
+
+const DEFAULT_BUILD: BuildInfo = { module: "sdk", env: "production", platform: "web" };
 
 /**
  * Everything the client tells the server about a call goes through here. One outbox belongs to one SDK client and lives from before its first join until the client is disposed.
- * `record` never throws and never refuses: a full queue folds old stats windows and counts what it had to drop.
+ * `record` never throws and never refuses: a full queue gives up its least valuable events and names them in a `telemetry_dropped` record.
+ * A P0 record is written to the platform's journal before `record` returns, and a reload of the same tab sends what the journal still holds.
  */
 export class TelemetryOutbox implements TelemetrySink {
   readonly #platform: TelemetryPlatform;
-  readonly #endpoint: (tenantId: string) => string;
-  readonly #random: () => number;
-  readonly #queue = new EventQueue(MAX_QUEUE_BYTES);
-  readonly #sessionId: string;
+  readonly #trace: ((step: DeliveryStep) => void) | undefined;
+  readonly #realm: Set<string>;
+  #live: Stream;
+  /** Retired sources that still owe the server records, drop records or an end. */
+  readonly #retired: Stream[] = [];
   readonly traceparent: string;
+  /** The registry kernel of this client. Its records come here, and each takes the next seq of the live source. */
+  readonly obs: Kernel;
+  readonly #clientSessionId: string;
   readonly #startedAt: number;
   readonly #closing = new Set<() => void>();
   readonly #unsubscribe: () => void;
+  readonly #journal: StreamJournal;
+  readonly #sender: StreamSender;
   #source: TelemetryCredentialSource | null = null;
-  /** The newest credential seen for each subject, so events of a call that ended still leave under that call's credential. */
-  readonly #credentials = new Map<string, TelemetryCredential>();
-  #subject: string | null = null;
   #lastInterruption: { readonly reason: "offline" | "hidden"; readonly at: number } | null = null;
-  #seq = 0;
-  #dropped = 0;
-  #failures = 0;
-  #blockedUntil = 0;
-  #timer: ReturnType<typeof globalThis.setTimeout> | null = null;
-  #timerDue = 0;
-  #running: Promise<void> | null = null;
-  /** The subject whose credential was refreshed and has not been accepted since. One call's rejection never stops a later call from refreshing. */
-  #refreshedSubject: string | null = null;
+  #disposing = false;
   #disposed = false;
 
   constructor(options: TelemetryOutboxOptions) {
-    this.#platform = options.platform;
-    this.#endpoint = options.endpoint;
-    this.#random = options.random ?? Math.random;
-    this.#sessionId = options.platform.uuid();
-    this.traceparent = `00-${hex(options.platform.uuid())}-${hex(options.platform.uuid()).slice(0, 16)}-01`;
-    this.#startedAt = options.platform.now();
-    this.#unsubscribe = options.platform.subscribe((change) => this.#changed(change));
+    const platform = options.platform;
+    this.#platform = platform;
+    this.#trace = options.trace;
+    this.#realm = options.liveSources ?? liveInThisRealm;
+    this.#live = newStream(platform.uuid(), true);
+    this.#realm.add(this.#live.id);
+    this.traceparent = `00-${hex(platform.uuid())}-${hex(platform.uuid()).slice(0, 16)}-01`;
+    this.#clientSessionId = platform.uuid();
+    const clock = new ClockEstimator({ mono: platform.now, wall: platform.wall ?? Date.now });
+    this.obs = createKernel({ sink: (record) => this.#take(record), build: options.build ?? DEFAULT_BUILD, clock, trail: () => ({ client_session_id: this.#clientSessionId }), mode: options.obsMode ?? "open", uuid: platform.uuid });
+    this.#startedAt = platform.now();
+    const shared = { platform, disposed: () => this.#disposed, step: (step: DeliveryStep) => this.#step(step) };
+    this.#journal = new StreamJournal({ ...shared, streams: () => this.#streams(), forget: (stream) => this.#forget(stream) });
+    this.#sender = new StreamSender({
+      ...shared,
+      endpoint: options.endpoint,
+      random: options.random ?? Math.random,
+      traceparent: this.traceparent,
+      clock,
+      live: () => this.#live,
+      source: () => this.#source,
+      remember: () => this.#remember(),
+      persist: (now, stream) => this.#persist(now, stream),
+      stamp: (stream, draft) => this.#stamp(stream, draft),
+      flush: () => this.flush(),
+    });
+    this.#takeOver();
+    this.#unsubscribe = platform.subscribe((change) => this.#changed(change));
+    if (this.#retired.length > 0) this.#sender.schedule(0);
   }
 
-  get sessionId(): string {
-    return this.#sessionId;
+  /** The client session: this SDK client from its construction to its disposal, across every join. Every kernel record names it as `client_session_id`, and a problem report names it. */
+  get clientSessionId(): string {
+    return this.#clientSessionId;
+  }
+
+  /** The live source: the delivery stream of the current join, which owns its seqs. A new join starts a new one. */
+  get sourceId(): string {
+    return this.#live.id;
+  }
+
+  /** Whether the journal kept what it was last given. False where the platform has no journal. */
+  get durable(): boolean {
+    return this.#journal.durable;
   }
 
   /** Connects the outbox to the credential of the current join. Events recorded before this wait in the queue. */
   bind(source: TelemetryCredentialSource): void {
     this.#source = source;
     this.#remember();
-    if (this.#queue.length > 0) this.#schedule(0);
+    this.#sender.emitDrops(this.#live, true);
+    if (this.#hasWork()) this.#sender.schedule(0);
   }
 
+  /** Takes a record of the legacy vocabulary. New telemetry goes through `obs`, the kernel, instead. */
   record(draft: TelemetryDraft): void {
+    this.#enqueue((stream) => this.#stamp(stream, draft));
+  }
+
+  /** The kernel's sink: the kernel made the record and its event_id, and the outbox gives it the live source's next seq. */
+  #take(record: ObsRecord): void {
+    this.#enqueue((stream) => {
+      const event = { ...record, seq: stream.next };
+      stream.next += 1;
+      return event;
+    });
+  }
+
+  #enqueue(stamp: (stream: Stream) => WireEvent): void {
     if (this.#disposed) return;
     this.#remember();
-    const event = this.#stamp(draft);
-    this.#dropped += this.#queue.push(event, this.#subject);
-    this.#schedule(delayFor(event));
+    const stream = this.#live;
+    if (stream.closing) {
+      stream.closing = false;
+      this.#persist(true);
+    }
+    const entry = entryOf(stamp(stream), stream.subject);
+    this.#step({ a: "record", src: stream.id, seq: entry.event.seq, p0: entry.priority === "p0" });
+    this.#sender.giveUp(stream, stream.queue.push(entry), "queue_full", true);
+    if (entry.priority === "p0") {
+      stream.saved = stream.next;
+      this.#persist(true);
+    } else {
+      this.#journal.armCheckpoint(stream);
+    }
+    this.#sender.schedule(delayFor(entry.event));
   }
 
   operation(start: MediaOperationStart): (result: MediaOperationResult) => void {
@@ -98,25 +163,57 @@ export class TelemetryOutbox implements TelemetrySink {
     return () => this.#closing.delete(handler);
   }
 
-  /** Sends what is queued now, without waiting for a request already in flight, so a closing page loses nothing. Resolves when nothing more can be sent. */
-  flush(): Promise<void> {
-    return this.#loop();
+  /** Sends what is queued now. A source with a batch in flight waits for its answer first: one batch per source is in flight. Resolves when nothing more can be sent. */
+  async flush(): Promise<void> {
+    await Promise.all(this.#streams().map((stream) => this.#sender.pump(stream)));
   }
 
-  /** Sends one last time and stops. Later `record` calls do nothing. */
+  /** Names the drop list in a last record, sends everything once more, then tells the server this source is closed, with its exact `next_seq`. Later `record` calls do nothing. */
   async dispose(): Promise<void> {
-    if (this.#disposed) return;
+    if (this.#disposing) return;
+    this.#disposing = true;
     this.#unsubscribe();
-    this.#cancelTimer();
+    this.#sender.cancelTimer();
+    this.#journal.cancelCheckpoint();
     this.#closing.clear();
-    const last = this.flush();
+    for (let round = 0; round < MAX_DISPOSE_ROUNDS && !this.#live.drops.empty; round++) {
+      this.#sender.emitAllDrops();
+      await this.flush();
+    }
+    this.#sender.emitAllDrops();
+    const stream = this.#live;
     this.#disposed = true;
-    await last;
+    stream.end = "closed";
+    stream.closing = true;
+    stream.saved = stream.next;
+    this.#step({ a: "dispose", src: stream.id });
+    this.#persist(true);
+    try {
+      await this.flush();
+    } finally {
+      this.#realm.delete(stream.id);
+    }
   }
 
-  #stamp(draft: TelemetryDraft): TelemetryEvent {
-    const event: TelemetryEvent = { ...draft, seq: this.#seq, elapsed_ms: this.#elapsed() };
-    this.#seq += 1;
+  #streams(): Stream[] {
+    return [this.#live, ...this.#retired];
+  }
+
+  #step(step: DeliveryStep): void {
+    this.#trace?.(step);
+  }
+
+  #persist(now: boolean, stream: Stream = this.#live): void {
+    this.#journal.persist(now, stream);
+  }
+
+  #hasWork(): boolean {
+    return this.#streams().some((stream) => stream.queue.length > 0 || stream.inflight !== null || stream.end !== null);
+  }
+
+  #stamp(stream: Stream, draft: TelemetryDraft): WireEvent {
+    const event: WireEvent = { ...draft, seq: stream.next, event_id: this.#platform.uuid(), elapsed_ms: this.#elapsed() };
+    stream.next += 1;
     return event;
   }
 
@@ -128,10 +225,15 @@ export class TelemetryOutbox implements TelemetrySink {
     if (change === "closing") {
       for (const handler of this.#closing) handler();
       void this.flush();
+      const stream = this.#live;
+      stream.closing = true;
+      stream.saved = stream.next;
+      this.#persist(true);
+      this.#step({ a: "pagehide" });
       return;
     }
     this.record({ type: "platform_changed", platform_state: change });
-    if (change === "online") this.#resume();
+    if (change === "online") this.#sender.resume();
     else if (change === "offline") this.#lastInterruption = { reason: "offline", at: this.#platform.now() };
     else if (change === "hidden" || change === "background") {
       this.#lastInterruption = { reason: "hidden", at: this.#platform.now() };
@@ -139,161 +241,51 @@ export class TelemetryOutbox implements TelemetrySink {
     }
   }
 
-  #resume(): void {
-    this.#failures = 0;
-    this.#blockedUntil = 0;
-    this.#schedule(0);
+  /** A credential of another subject is another join. The live source retires: it names its own drop list, then closes with its exact `next_seq`. The new join gets a new source that counts from 0. */
+  #retire(): void {
+    const old = this.#live;
+    this.#journal.cancelCheckpoint();
+    old.live = false;
+    old.end = "closed";
+    old.closing = true;
+    old.saved = old.next;
+    this.#live = newStream(this.#platform.uuid(), true);
+    this.#realm.add(this.#live.id);
+    this.#retired.push(old);
+    this.#step({ a: "rejoin", src: old.id, next: this.#live.id });
+    this.#persist(true, old);
+    this.#sender.schedule(0);
   }
 
-  /** A drain never fires before `#blockedUntil`, so a new event cannot replace the wake-up a backoff set. */
-  #schedule(delayMs: number): void {
-    if (this.#disposed) return;
-    const now = this.#platform.now();
-    const due = Math.max(now + delayMs, this.#blockedUntil);
-    if (this.#timer !== null && this.#timerDue <= due) return;
-    this.#cancelTimer();
-    this.#timerDue = due;
-    this.#timer = globalThis.setTimeout(() => {
-      this.#timer = null;
-      void this.#drain();
-    }, due - now);
-  }
-
-  #cancelTimer(): void {
-    if (this.#timer !== null) globalThis.clearTimeout(this.#timer);
-    this.#timer = null;
-  }
-
-  #drain(): Promise<void> {
-    this.#running ??= this.#loop().finally(() => {
-      this.#running = null;
-    });
-    return this.#running;
-  }
-
-  /** One batch is in flight at a time per loop, so events leave in `seq` order. Every batch holds the events of one subject. */
-  async #loop(): Promise<void> {
-    for (;;) {
-      this.#reportDrops();
-      const credential = this.#sendable();
-      if (!credential) return;
-      const subject = credential.subject;
-      const batch = this.#queue.take(MAX_BATCH_EVENTS, MAX_BATCH_BYTES);
-      if ((await this.#settle(subject, batch, await this.#post(credential, batch))) === "stop") return;
-    }
-  }
-
-  /** The credential for the oldest queued event, or null when nothing can be sent now. A subject whose credential is gone loses its events, and they are counted. */
-  #sendable(): TelemetryCredential | null {
-    this.#remember();
-    for (;;) {
-      const subject = this.#queue.headSubject;
-      if (subject === undefined || !this.#platform.online()) return null;
-      if (this.#platform.now() < this.#blockedUntil) {
-        this.#schedule(0);
-        return null;
-      }
-      // Before the first grant the outbox keeps asking: nothing yet says which credential these events belong to.
-      if (subject === null) {
-        this.#schedule(AWAIT_CREDENTIAL_MS);
-        return null;
-      }
-      const credential = this.#credentials.get(subject);
-      if (credential) return credential;
-      this.#dropped += this.#queue.discard(subject);
-    }
-  }
-
-  /** Decides what the answer to one batch means for the queue and for the next batch. */
-  async #settle(subject: string, batch: readonly TelemetryEvent[], result: TelemetrySendResult | null): Promise<"continue" | "stop"> {
-    const verdict = judge(result, subject !== this.#refreshedSubject, subject === this.#source?.current()?.subject);
-    if (verdict === "retry") {
-      this.#backoff(subject, batch, result?.retryAfterMs ?? 0);
-      return "stop";
-    }
-    if (verdict === "accepted") {
-      this.#failures = 0;
-      if (this.#refreshedSubject === subject) this.#refreshedSubject = null;
-    }
-    if (verdict === "lost") this.#dropped += lostBy(batch);
-    if (verdict === "refresh") {
-      this.#refreshedSubject = subject;
-      this.#restore(subject, batch);
-      await this.#source?.refresh().catch(() => undefined);
-    }
-    return "continue";
-  }
-
-  async #post(credential: TelemetryCredential, events: readonly TelemetryEvent[]) {
-    const controller = new AbortController();
-    const timer = globalThis.setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-    try {
-      return await this.#platform.send({
-        url: this.#endpoint(credential.tenantId),
-        token: credential.token,
-        traceparent: this.traceparent,
-        body: JSON.stringify({ version: 1, client_session_id: this.#sessionId, events }),
-        keepalive: true,
-        signal: controller.signal,
-      });
-    } catch {
-      return null;
-    } finally {
-      globalThis.clearTimeout(timer);
-    }
-  }
-
-  /** Puts the batch back and waits, with full jitter, for as long as the server asked or the failures call for. */
-  #backoff(subject: string, batch: readonly TelemetryEvent[], retryAfterMs: number): void {
-    this.#restore(subject, batch);
-    this.#failures += 1;
-    const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.min(this.#failures, 10));
-    const delay = Math.max(retryAfterMs, this.#random() * ceiling);
-    this.#blockedUntil = this.#platform.now() + delay;
-    this.#schedule(delay);
-  }
-
-  #restore(subject: string, batch: readonly TelemetryEvent[]): void {
-    this.#dropped += this.#queue.restore(batch, subject);
-  }
-
-  /** The next batch of real events says how many events this client lost, so the server can tell a hole in `seq` from a bug. A loss alone never causes a request. */
-  #reportDrops(): void {
-    const tail = this.#queue.tailSubject;
-    if (this.#dropped === 0 || tail === undefined) return;
-    const dropped = Math.min(this.#dropped, MAX_MILLISECONDS);
-    this.#dropped = 0;
-    this.#dropped += this.#queue.push(this.#stamp({ type: "telemetry_dropped", dropped }), tail);
+  /** A retired source that owes the server nothing more leaves the outbox and the realm. */
+  #forget(stream: Stream): void {
+    this.#retired.splice(this.#retired.indexOf(stream), 1);
+    this.#realm.delete(stream.id);
   }
 
   /** Keeps the newest grant seen for each subject. A participant who left or failed to join has released the grant, but its credential is good until it expires. */
   #remember(): void {
     const credential = this.#source?.current();
-    for (const [subject, kept] of this.#credentials) if (kept.expiresAt <= Date.now()) this.#credentials.delete(subject);
     if (!credential || credential.expiresAt <= Date.now()) return;
-    this.#credentials.set(credential.subject, credential);
-    this.#subject = credential.subject;
-    this.#queue.adopt(credential.subject);
+    if (this.#live.subject !== null && this.#live.subject !== credential.subject) this.#retire();
+    const stream = this.#live;
+    stream.subject = credential.subject;
+    const changed = stream.credential?.token !== credential.token;
+    stream.credential = credential;
+    if (changed) this.#persist(false);
+    if (stream.queue.adopt(credential.subject)) this.#persist(false);
   }
-}
 
-type Verdict = "accepted" | "refresh" | "retry" | "lost";
-
-/** Only the current grant can be refreshed, and only once until a request succeeds, so a rejected credential of an earlier call is gone for good. */
-function judge(result: TelemetrySendResult | null, canRefresh: boolean, current: boolean): Verdict {
-  if (result === null) return "retry";
-  if (result.status >= 200 && result.status < 300) return "accepted";
-  if (result.status === 401) return !current ? "lost" : canRefresh ? "refresh" : "retry";
-  return result.status === 429 || result.status >= 500 ? "retry" : "lost";
+  /** Takes over the journals of dead predecessors of this tab. A source still alive in this realm is skipped. */
+  #takeOver(): void {
+    const found = this.#journal.takeOver((id) => id === this.#live.id || this.#realm.has(id));
+    if (found.length === 0) return;
+    this.#retired.push(...found);
+    this.#persist(true, this.#live);
+    this.#step({ a: "reboot", src: this.#live.id });
+  }
 }
 
 function hex(uuid: string): string {
   return uuid.replaceAll("-", "");
-}
-
-function delayFor(event: TelemetryEvent): number {
-  if (event.type === "call_stats") return STATS_DELAY_MS;
-  if (event.type === "platform_changed" && STARTED_PLATFORM_STATES.has(event.platform_state)) return 0;
-  if (event.type === "space_join_span" && event.outcome === "started") return 0;
-  return ROUTINE_DELAY_MS;
 }

@@ -44,7 +44,7 @@ export function strictCode({ findings, gaps }) {
   return gaps.some((gap) => gap.blocks) ? 2 : 0;
 }
 
-async function main(argv, env = process.env) {
+export async function main(argv, env = process.env) {
   const started = Date.now();
   const fixtureAt = argv.indexOf("--fixture");
   const episodeId = argv.find((arg, at) => !arg.startsWith("--") && (fixtureAt < 0 || at !== fixtureAt + 1));

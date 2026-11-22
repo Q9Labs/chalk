@@ -5264,3 +5264,66 @@ create table participant_media_sessions (
 );
 create index participant_media_sessions_participant_idx
     on participant_media_sessions(tenant_id, episode_id, participant_id, generation);
+
+-- The telemetry ledger: which seqs of each SDK source the server has stored, rejected or been told
+-- were dropped, one row per source, owned by the participant and Episode of its first batch.
+create table telemetry_sources (
+    tenant_id uuid not null,
+    source_id uuid not null,
+    participant_id uuid not null,
+    episode_id uuid not null,
+    -- {"stored": [{"from": 0, "to": 5}], "rejected": [...], "dropped": {"queue_full": [...]}}
+    ranges jsonb not null default '{"stored": [], "rejected": [], "dropped": {}}',
+    reported_next_seq bigint not null default 0 check (reported_next_seq >= 0),
+    end_state text check (end_state in ('closed', 'abandoned')),
+    end_next_seq bigint check (end_next_seq >= 0),
+    first_received_at timestamptz not null,
+    last_received_at timestamptz not null,
+    primary key (tenant_id, source_id),
+    check ((end_state is null) = (end_next_seq is null))
+);
+create index telemetry_sources_episode_idx on telemetry_sources (tenant_id, episode_id);
+create index telemetry_sources_participant_idx on telemetry_sources (tenant_id, participant_id);
+create table telemetry_outbox (
+    id bigint generated always as identity primary key,
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    payload jsonb not null check (jsonb_typeof(payload) = 'array' and jsonb_array_length(payload) > 0),
+    available_at timestamptz not null default now(),
+    retry boolean not null default false,
+    witness boolean not null default false
+);
+create index telemetry_outbox_ready_idx on telemetry_outbox (available_at, id);
+create index telemetry_outbox_tenant_idx on telemetry_outbox (tenant_id);
+
+-- Abort an enqueue at capacity rather than evict acknowledged evidence. The
+-- counter is per Tenant, so it follows the Tenant on purge and one Tenant
+-- cannot use the whole queue. A witness row (the Episode end Sync commits with the end itself)
+-- is neither counted nor refused: it is one small row per Episode, and it must not make an end
+-- wait for space or for the usage row a Participant's upload holds.
+create table telemetry_outbox_usage (
+    tenant_id uuid primary key references tenants(id) on delete cascade,
+    max_bytes bigint not null default 16777216,
+    queued_bytes bigint not null default 0 check (queued_bytes between 0 and max_bytes)
+);
+
+create function account_telemetry_outbox() returns trigger language plpgsql as $$
+begin
+    if TG_OP = 'INSERT' then
+        if new.witness then return null; end if;
+        insert into telemetry_outbox_usage (tenant_id, queued_bytes)
+        values (new.tenant_id, octet_length(new.payload::text) + 256)
+        on conflict (tenant_id) do update set queued_bytes = telemetry_outbox_usage.queued_bytes + excluded.queued_bytes;
+    elsif TG_OP = 'DELETE' then
+        if old.witness then return null; end if;
+        update telemetry_outbox_usage set queued_bytes = queued_bytes - octet_length(old.payload::text) - 256
+        where tenant_id = old.tenant_id;
+    else
+        update telemetry_outbox_usage set queued_bytes = 0;
+    end if;
+    return null;
+end;
+$$;
+create trigger account_telemetry_outbox_rows after insert or delete on telemetry_outbox
+    for each row execute function account_telemetry_outbox();
+create trigger account_telemetry_outbox_truncate after truncate on telemetry_outbox
+    for each statement execute function account_telemetry_outbox();

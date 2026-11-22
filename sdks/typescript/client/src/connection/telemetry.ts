@@ -16,9 +16,11 @@ export function callEndReason(from: ConnectionState, to: "left" | "failed", fact
   return facts.timedOut ? "connection_lost" : "left";
 }
 
-/** The media credential of the grant, as the outbox reads it at send time. */
-export function mediaCredential(grant: ParsedAccessGrant | null): TelemetryCredential | null {
-  return grant ? { tenantId: grant.subject.tenantId, subject: `${grant.subject.tenantId}/${grant.subject.episodeId}/${grant.subject.participantId}`, token: grant.media.token, expiresAt: Date.parse(grant.media.expiresAt) } : null;
+/** The credential telemetry leaves under, as the outbox reads it at send time: the grant's telemetry credential, which outlives the call, and the media credential for a server that sends none. */
+export function telemetryCredential(grant: ParsedAccessGrant | null): TelemetryCredential | null {
+  if (!grant) return null;
+  const { token, expiresAt } = grant.telemetry ?? grant.media;
+  return { tenantId: grant.subject.tenantId, subject: `${grant.subject.tenantId}/${grant.subject.episodeId}/${grant.subject.participantId}`, token, expiresAt: Date.parse(expiresAt) };
 }
 
 /** Times one outage, from the first recovery request to the recovery that ends it. */

@@ -129,6 +129,8 @@ type apiWiring struct {
 	diagnostics     observability.Diagnostics
 	logger          *slog.Logger
 	launchTelemetry *observability.LaunchTelemetry
+	evidenceSink    observability.AxiomEvidence
+	telemetryLedger postgres.TelemetryLedger
 
 	tenantService                  tenants.Service
 	spaceService                   spaces.Service

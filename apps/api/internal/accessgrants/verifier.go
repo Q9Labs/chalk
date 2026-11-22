@@ -75,17 +75,24 @@ func NewVerifier(config VerifierConfig) (Verifier, error) {
 // Verify rejects expired credentials. Only ErrExpired returns the authenticated
 // subject, so tenant-authorized refresh can validate it before replacing media.
 func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) {
-	return v.verify(credential, false)
+	return v.verify(credential, mediaKind, false)
+}
+
+// VerifyTelemetry verifies a telemetry credential. A participant media credential does not
+// verify here, and a telemetry credential does not verify in Verify. Like Verify, it returns the
+// subject with ErrExpired for an expired credential.
+func (v Verifier) VerifyTelemetry(_ context.Context, credential string) (Subject, error) {
+	return v.verify(credential, telemetryKind, false)
 }
 
 // VerifyForRecovery verifies a participant media credential for a replacement
 // connection. It keeps all credential checks intact and only permits an
 // otherwise-valid credential to be past expiry within RecoveryGrace.
 func (v Verifier) VerifyForRecovery(_ context.Context, credential string) (Subject, error) {
-	return v.verify(credential, true)
+	return v.verify(credential, mediaKind, true)
 }
 
-func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
+func (v Verifier) verify(credential string, kind credentialKind, recovery bool) (Subject, error) {
 	var claims jwtClaims
 	if err := v.keys.Verify(credential, credentialErrors, &claims); err != nil {
 		return Subject{}, err
@@ -93,10 +100,10 @@ func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 	if claims.Issuer != v.issuer {
 		return Subject{}, ErrInvalidIssuer
 	}
-	if !hasExactAudience(claims.Audience) {
+	if !hasExactAudience(claims.Audience, kind.audience) {
 		return Subject{}, ErrInvalidAudience
 	}
-	timeErr := v.verifyTimeClaims(claims, recovery)
+	timeErr := v.verifyTimeClaims(claims, kind, recovery)
 	if timeErr != nil && timeErr != ErrExpired {
 		return Subject{}, timeErr
 	}
@@ -107,16 +114,16 @@ func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 	return subject, timeErr
 }
 
-func hasExactAudience(encoded json.RawMessage) bool {
+func hasExactAudience(encoded json.RawMessage, want string) bool {
 	var audience string
-	return json.Unmarshal(encoded, &audience) == nil && audience == Audience
+	return json.Unmarshal(encoded, &audience) == nil && audience == want
 }
 
-func (v Verifier) verifyTimeClaims(claims jwtClaims, recovery bool) error {
+func (v Verifier) verifyTimeClaims(claims jwtClaims, kind credentialKind, recovery bool) error {
 	if claims.IssuedAt <= 0 || claims.NotBefore < claims.IssuedAt || claims.ExpiresAt <= claims.NotBefore {
 		return ErrInvalidTimeClaims
 	}
-	if claims.ExpiresAt-claims.IssuedAt > int64(Lifetime/time.Second) {
+	if claims.ExpiresAt-claims.IssuedAt > int64(kind.lifetime/time.Second) {
 		return ErrLifetimeExceeded
 	}
 	now := v.now().UTC().Unix()

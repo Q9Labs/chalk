@@ -111,8 +111,11 @@ func (w *apiWiring) wireParticipantAccess() error {
 		w.options.ParticipantMediaIssuer = observability.InstrumentAccessGrantIssuer(mediaIssuer, w.launchTelemetry)
 		instrumentedMediaVerifier := observability.InstrumentParticipantMediaVerifier(mediaVerifier, w.launchTelemetry)
 		w.options.ParticipantMediaVerify = instrumentedMediaVerifier
+		w.options.TelemetryVerify = mediaVerifier
 		w.participantMediaRecoveryVerifier = instrumentedMediaVerifier
 	}
+	w.telemetryLedger = postgres.NewTelemetryLedger(w.pool)
+	w.options.TelemetryLedger = w.telemetryLedger
 	w.options.ParticipantMediaActive = participantActiveAuthorizer
 	w.options.ParticipantGeneration = participantActiveAuthorizer
 	return nil

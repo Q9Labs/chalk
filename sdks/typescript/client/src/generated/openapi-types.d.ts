@@ -1283,6 +1283,10 @@ export interface components {
         expires_at: components["schemas"]["DateTimeString"];
         token: string;
       };
+      telemetry?: {
+        expires_at: components["schemas"]["DateTimeString"];
+        token: string;
+      } | null;
     };
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
@@ -2313,7 +2317,11 @@ export interface components {
       sync_token: string;
     };
     TelemetryRequest: {
-      client_session_id: components["schemas"]["UUID"];
+      batch_id?: components["schemas"]["UUID"];
+      client_session_id?: components["schemas"]["UUID"];
+      /** @enum {string} */
+      end?: "closed" | "abandoned";
+      /** @description Version 1 requires 1 to 100 events. Version 2 allows 0 to 100, and an empty list only when end is set. */
       events: {
         /** @enum {string} */
         action?: "mute" | "unmute" | "publish" | "unpublish" | "subscribe" | "unsubscribe" | "share_start" | "share_stop";
@@ -2351,7 +2359,13 @@ export interface components {
           | "not_live";
         /** @enum {string} */
         device_kind?: "microphone" | "camera" | "speaker" | "screen";
+        /** @enum {string} */
+        drop_reason?: "queue_full" | "credential_expired" | "refused";
         dropped?: number | null;
+        dropped_seqs?: {
+          from: number;
+          to: number;
+        }[];
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
@@ -2360,6 +2374,7 @@ export interface components {
         end_reason?: "left" | "episode_ended" | "time_limit" | "removed" | "connection_lost" | "join_failed" | "page_closed";
         /** @enum {string} */
         error_name?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "TypeError" | "unknown";
+        event_id?: components["schemas"]["UUID"];
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -2487,12 +2502,25 @@ export interface components {
         /** @enum {string} */
         upload_failure?: "initiate_failed" | "storage_unreachable" | "storage_rejected" | "finalize_failed";
       }[];
+      next_seq?: number | null;
+      source_id?: components["schemas"]["UUID"];
       /** @enum {integer} */
-      version: 1;
+      version: 1 | 2;
     };
     TelemetryResponse: {
       accepted: number;
+      acks: {
+        from: number;
+        to: number;
+      }[];
+      duplicates: number;
+      end_rejection?: string;
       rejected: number;
+      rejections: {
+        reason: string;
+        seq: number;
+      }[];
+      server_ms?: number;
     };
     Tenant: {
       cors_allowed_origins: string[];

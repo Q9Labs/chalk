@@ -14,7 +14,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -354,12 +353,12 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 				return participantLifecycleResponse{}, err
 			}
 			if mediaTokens != nil && syncCredential.Value != "" {
-				mediaCredential, err := mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
+				mediaCredential, telemetryCredential, _, err := issueGrantCredentials(ctx, mediaTokens, request.MediaClients, subject)
 				if err != nil {
 					return participantLifecycleResponse{}, err
 				}
 				response.Access = func() *accessGrantResponse {
-					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, telemetryCredential, join)
 
 					return &grant
 				}()

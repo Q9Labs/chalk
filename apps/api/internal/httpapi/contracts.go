@@ -14,6 +14,8 @@ const (
 	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
 	APIAuthParticipantMedia APIAuth = "participant_media"
 	APIAuthParticipantSync  APIAuth = "participant_sync"
+	// APIAuthParticipantTelemetry is the telemetry token, or the media credential in its place.
+	APIAuthParticipantTelemetry APIAuth = "participant_telemetry"
 )
 
 type APISchemaRef struct {

@@ -1,0 +1,63 @@
+{
+  "episode": "9feb0ff6",
+  "tenant": "TH",
+  "start": "2026-11-18T14:45+05:00",
+  "minutes": 60,
+  "participants": 4,
+  "checked": "full",
+  "rules": 37,
+  "findings": [
+    {
+      "id": "f71c2",
+      "severity": "broke",
+      "symptom": "cant_be_heard",
+      "participant": {
+        "name": "Haris",
+        "role": "owner",
+        "id": "pt_4c1e"
+      },
+      "start": "+07:10",
+      "end": "+10:40",
+      "cause": "mic_silent",
+      "confidence": "likely",
+      "proof": [
+        {
+          "source": "sfu",
+          "row": "a1f3",
+          "text": "10480 audio pkts, 0 voiced"
+        },
+        {
+          "source": "client",
+          "row": "c9d0",
+          "text": "unmuted +07:10"
+        },
+        {
+          "source": "absent",
+          "event": "voice_detected",
+          "window": "+07:10..+10:40"
+        },
+        {
+          "source": "report",
+          "row": "r22",
+          "text": "Haris's audio not audible"
+        }
+      ]
+    },
+    {
+      "id": "f0b9e",
+      "severity": "expected",
+      "symptom": "ended_time_limit",
+      "participant": "all",
+      "start": "+60:00",
+      "cause": "episode_cap_60m",
+      "confidence": "proved",
+      "proof": []
+    }
+  ],
+  "blind": [
+    {
+      "symptom": "board_moved",
+      "why": "no board data"
+    }
+  ]
+}

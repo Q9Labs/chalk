@@ -1,0 +1,259 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000026",
+    "next_seq": 21,
+    "events": [
+      {
+        "type": "state_changed",
+        "state": "joining",
+        "seq": 0,
+        "event_id": "00000000-0000-4000-8000-000000000005",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "join",
+        "outcome": "started",
+        "seq": 1,
+        "event_id": "00000000-0000-4000-8000-000000000006",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "acquire_initial_media",
+        "outcome": "started",
+        "seq": 2,
+        "event_id": "00000000-0000-4000-8000-000000000007",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "acquire_initial_media",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 3,
+        "event_id": "00000000-0000-4000-8000-000000000008",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "access_initialize",
+        "outcome": "started",
+        "seq": 4,
+        "event_id": "00000000-0000-4000-8000-000000000009",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "access_initialize",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 5,
+        "event_id": "00000000-0000-4000-8000-000000000010",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "create_media_client",
+        "outcome": "started",
+        "seq": 6,
+        "event_id": "00000000-0000-4000-8000-000000000011",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "create_media_client",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 7,
+        "event_id": "00000000-0000-4000-8000-000000000012",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "create_sync_client",
+        "outcome": "started",
+        "seq": 8,
+        "event_id": "00000000-0000-4000-8000-000000000013",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "create_sync_client",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 9,
+        "event_id": "00000000-0000-4000-8000-000000000014",
+        "elapsed_ms": 0
+      },
+      {
+        "phase": "idle",
+        "type": "media_state",
+        "seq": 10,
+        "event_id": "00000000-0000-4000-8000-000000000015",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "start_media",
+        "outcome": "started",
+        "seq": 11,
+        "event_id": "00000000-0000-4000-8000-000000000016",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "wait_for_sync_live",
+        "outcome": "started",
+        "seq": 12,
+        "event_id": "00000000-0000-4000-8000-000000000017",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "start_sync",
+        "outcome": "started",
+        "seq": 13,
+        "event_id": "00000000-0000-4000-8000-000000000018",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "wait_for_sync_live",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 14,
+        "event_id": "00000000-0000-4000-8000-000000000019",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "start_sync",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 15,
+        "event_id": "00000000-0000-4000-8000-000000000020",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "start_media",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 16,
+        "event_id": "00000000-0000-4000-8000-000000000021",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "confirm_entered",
+        "outcome": "started",
+        "seq": 17,
+        "event_id": "00000000-0000-4000-8000-000000000022",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "confirm_entered",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 18,
+        "event_id": "00000000-0000-4000-8000-000000000023",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "state_changed",
+        "state": "live",
+        "seq": 19,
+        "event_id": "00000000-0000-4000-8000-000000000024",
+        "elapsed_ms": 0
+      },
+      {
+        "type": "space_join_span",
+        "state": "live",
+        "step": "join",
+        "outcome": "succeeded",
+        "duration_ms": 0,
+        "seq": 20,
+        "event_id": "00000000-0000-4000-8000-000000000025",
+        "elapsed_ms": 0
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000029",
+    "next_seq": 23,
+    "events": [
+      {
+        "type": "connection_failed",
+        "state": "live",
+        "code": "invalid_access",
+        "seq": 21,
+        "event_id": "00000000-0000-4000-8000-000000000027",
+        "elapsed_ms": 80
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "end_reason": "connection_lost",
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1080,
+        "client_wall_ms": 1795599001080,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795600001200,
+        "clock_err_ms": 40,
+        "schema_ver": "2637fcfa1f33",
+        "kind": "fact",
+        "name": "client.call_ended",
+        "event_id": "00000000-0000-4000-8000-000000000028",
+        "seq": 22
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000031",
+    "next_seq": 24,
+    "events": [
+      {
+        "type": "state_changed",
+        "state": "failed",
+        "seq": 23,
+        "event_id": "00000000-0000-4000-8000-000000000030",
+        "elapsed_ms": 160
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000032",
+    "next_seq": 24,
+    "end": "closed",
+    "events": []
+  }
+]

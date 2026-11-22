@@ -632,7 +632,7 @@ const defaultGroup = HttpApiGroup.make("default")
       payload: S.UploadTelemetryRequestBodySchema,
       success: S.UploadTelemetryResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TelemetryRefusedErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
