@@ -6,16 +6,16 @@ import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { newCallIntent, startCall as startOwnedCall } from "./language-choice";
-import { type Row, type Home, merge, capped, listed, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { inviteLink, type Row, type Home, merge, capped, listed, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
-import { useJoinCall, usePendingJoin } from "./join-call";
-import { JoinLinkField, RenameDialog } from "./HomeDialogs";
+import { rememberCallLinkShown, useJoinCall, usePendingJoin } from "./join-call";
+import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
-type HomeDialog = null | { kind: "rename"; call: HomeCallDTO };
+type HomeDialog = null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO };
 type UpdateHome = Update<Home>;
 
 /** `opening` is true from the press until the call page has taken over, so a second press in that time starts nothing. */
-function useCallActions(update: UpdateHome, join: (call: CallDTO) => void, joining: boolean) {
+function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void, joining: boolean) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
   const startKey = useRef(newCallIntent());
@@ -28,7 +28,10 @@ function useCallActions(update: UpdateHome, join: (call: CallDTO) => void, joini
       startKey.current = newCallIntent();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
-      join(call);
+      const link = await inviteLink(row);
+      update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
+      rememberCallLinkShown(call.id);
+      show({ kind: "ready", call, link });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -134,7 +137,7 @@ export function HomePage() {
   const joinCall = useJoinCall();
   // The button keeps working until the call page has taken over, so Start a call never looks idle between the two.
   const joining = usePendingJoin() !== null;
-  const { starting, startCall, archive } = useCallActions(update, joinCall, joining);
+  const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next), joining);
   const opening = starting || joining;
 
   return (
@@ -150,6 +153,9 @@ export function HomePage() {
         </div>
       </div>
       <HomeBody state={state} reload={reload} update={update} onRename={(call) => setDialog({ kind: "rename", call })} onArchive={(call) => void archive(call)} />
+      {dialog?.kind === "ready" ? (
+        <CallReadyDialog call={dialog.call} link={dialog.link} joining={joining} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
+      ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
   );

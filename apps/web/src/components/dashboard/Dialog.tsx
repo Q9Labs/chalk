@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 
 import { trapDialogFocus } from "../../lib/dialog-focus";
 import { Icon, type IconName } from "../site/Icon";
@@ -13,7 +13,9 @@ type DialogProps = {
   /** Artwork above the title, such as the app and Chalk logos. */
   readonly lead?: ReactNode;
   /** A tile beside the title, the heading shape the Developer dialogs use. Body and actions get their own bands. */
-  readonly icon?: IconName;
+  readonly icon?: IconName | ReactElement;
+  /** Replaces the close button's icon, for a dialog drawn with the Chalk icon set. */
+  readonly closeIcon?: ReactElement;
   readonly tone?: "ok";
   /** Quiet text on the left of the actions. */
   readonly hint?: ReactNode;
@@ -23,12 +25,12 @@ type DialogProps = {
   readonly actions: ReactNode;
 };
 
-type InnerProps = Pick<DialogProps, "title" | "description" | "lead" | "icon" | "tone" | "hint" | "onClose" | "children" | "actions"> & {
+type InnerProps = Pick<DialogProps, "title" | "description" | "lead" | "icon" | "closeIcon" | "tone" | "hint" | "onClose" | "children" | "actions"> & {
   readonly titleId: string;
   readonly descriptionId: string;
 };
 
-function DialogInner({ title, description, lead, icon, tone, hint, onClose, children, actions, titleId, descriptionId }: InnerProps) {
+function DialogInner({ title, description, lead, icon, closeIcon, tone, hint, onClose, children, actions, titleId, descriptionId }: InnerProps) {
   const heading = (
     <>
       <h2 id={titleId}>{title}</h2>
@@ -38,14 +40,12 @@ function DialogInner({ title, description, lead, icon, tone, hint, onClose, chil
   return (
     <>
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
-        <Icon name="x" />
+        {closeIcon ?? <Icon name="x" />}
       </button>
       {lead}
       {icon ? (
         <div className="dh">
-          <span className={tone === "ok" ? "tile ok" : "tile"}>
-            <Icon name={icon} size={20} />
-          </span>
+          <span className={tone === "ok" ? "tile ok" : "tile"}>{typeof icon === "string" ? <Icon name={icon} size={20} /> : icon}</span>
           <div>{heading}</div>
         </div>
       ) : (

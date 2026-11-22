@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HomeCallDTO, HomeDTO } from "../../lib/dashboard/contracts";
 import { HomePage } from "./HomePage";
+import { callLinkShown } from "./join-call";
 import { ToastProvider } from "./kit";
 
 const call = (id: string, name: string): HomeCallDTO => ({ id, name, archived: false, admission: "knock", createdAt: "2026-11-21T10:00:00Z", slug: id, inviteUrl: null, lastActiveAt: null, recentPeople: [] });
@@ -22,6 +23,7 @@ function server() {
     if (url === "/auth/session") return json(200, { csrfToken: "csrf", profile: { id: "p1", name: "Alex" } });
     if (url.includes("cursor=")) return json(400, { error: { code: "invalid_cursor" } });
     if (url === "/dashboard-api/home" && init?.method === "POST") return json(200, { call: call("s2", "New call") });
+    if (url.startsWith("/dashboard-api/call-invite")) return json(200, { inviteUrl: "https://chalkmeet.com/s2" });
     if (url.startsWith("/dashboard-api/home")) return json(200, homeReads.shift() ?? { calls: [], live: [], nextCursor: null });
     return json(404, { error: { code: "not_found" } });
   });
@@ -74,17 +76,26 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("starts one call however often Start a call is pressed while the call page is still opening", async () => {
+it("shows the call's link in a dialog after Start a call, and starts one call however often Join call is pressed while the call page is still opening", async () => {
   const dashboard = server();
   const { host, router } = await openHome();
-  const button = buttonNamed(host, "Start a call");
 
-  await act(async () => button.click());
+  await act(async () => buttonNamed(host, "Start a call").click());
+  await until(() => expect(host.querySelector("[role=dialog]")?.textContent).toContain("Your call is ready"));
+  // The call page hasn't opened and the link is already on screen, so the call menu has nothing to reveal a second time.
+  expect(router.state.location.pathname).toBe("/dashboard");
+  expect(host.querySelector("[role=dialog]")?.textContent).toContain("chalkmeet.com");
+  expect(callLinkShown("s2")).toBe(true);
+  expect(buttonNamed(host, "Start a call").getAttribute("aria-busy")).toBeNull();
+
+  const join = buttonNamed(host, "Join call");
+  await act(async () => join.click());
   await until(() => expect(router.state.location.pathname).toBe("/dashboard/call/s2/join"));
-  // The call exists and the join route is still loading: the button spins, says it is disabled, and starts nothing.
-  await until(() => expect(button.getAttribute("aria-busy")).toBe("true"));
-  expect(button.getAttribute("aria-disabled")).toBe("true");
-  await act(async () => button.click());
+  // The call exists and the join route is still loading: both buttons spin, say they are disabled, and start nothing.
+  await until(() => expect(buttonNamed(host, "Start a call").getAttribute("aria-busy")).toBe("true"));
+  expect(buttonNamed(host, "Start a call").getAttribute("aria-disabled")).toBe("true");
+  await act(async () => buttonNamed(host, "Start a call").click());
+  await act(async () => join.click());
   expect(dashboard.started()).toBe(1);
 
   await act(async () => finishJoinRoute());

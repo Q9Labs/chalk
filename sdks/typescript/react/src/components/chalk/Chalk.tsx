@@ -66,6 +66,8 @@ export type ChalkProps = SpaceIntegration &
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
     readonly inviteLink?: string;
+    /** Pass false when the app has already shown the invite link, so the call menu doesn't open by itself for a host who is alone at call start. */
+    readonly callLinkOpen?: boolean;
     /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
@@ -337,6 +339,7 @@ function SpaceSurface(
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       inviteLink={props.inviteLink}
+      callLinkOpen={props.callLinkOpen}
       pickChatFiles={props.pickChatFiles}
       commandError={commandError ?? undefined}
       commandSource={commandSource}

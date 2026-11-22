@@ -8,7 +8,7 @@ import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
 import { newCallIntent, startCall } from "./language-choice";
-import { joiningCallName } from "./join-call";
+import { callLinkShown, joiningCallName } from "./join-call";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
@@ -95,6 +95,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
             });
         }}
         inviteLink={state.data.inviteUrl}
+        {...(callLinkShown(spaceId) ? { callLinkOpen: false } : {})}
         spaceName={state.data.call.name}
         displayName={profile.name}
         theme={{ colorScheme: theme }}

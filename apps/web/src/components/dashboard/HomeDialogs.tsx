@@ -1,11 +1,82 @@
+import { Cancel01Icon, CheckmarkCircle02Icon, Copy01Icon, Tick01Icon, Video01Icon } from "@q9labsai/chalk-react/utils";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { Dialog } from "./Dialog";
-import { useToast } from "./kit";
+import { LinkText, useCopy, useToast } from "./kit";
+import { LanguagePicker } from "./LanguagePicker";
+import { rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
+
+/** The new call as the dashboard hands it over: the link to share, who gets in, the transcript language, and the way in. */
+export function CallReadyDialog({ call, link, joining, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly joining: boolean; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
+  const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? null);
+  const [saving, setSaving] = useState(false);
+  const { copied, copy } = useCopy();
+  const toast = useToast();
+  // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
+  async function chooseLanguage(next: NewCallLanguage) {
+    const before = language;
+    if (next === before) return;
+    setLanguage(next);
+    setSaving(true);
+    try {
+      const { call: saved } = await act("home", { action: "set-transcript-language", spaceId: call.id, transcriptLanguage: next });
+      saveNewCallLanguage(next);
+      if (next && next !== "auto") rememberLanguage(next);
+      onLanguage(saved);
+    } catch (error) {
+      setLanguage(before);
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Dialog
+      title="Your call is ready"
+      description="Share this link with the people you want in the call. It keeps working after the call ends."
+      icon={<CheckmarkCircle02Icon size={20} />}
+      closeIcon={<Cancel01Icon size={16} />}
+      tone="ok"
+      onClose={onClose}
+      actions={
+        <button type="button" className="btn pri" aria-busy={joining || undefined} aria-disabled={joining || undefined} onClick={joining ? undefined : onJoin}>
+          <Video01Icon size={16} />
+          Join call
+        </button>
+      }
+    >
+      <div>
+        <div className="linkfield">
+          <LinkText link={link} />
+          <button type="button" className={copied ? "btn sec sm copied" : "btn sec sm"} onClick={() => void copy(link)}>
+            {copied ? <Tick01Icon size={16} /> : <Copy01Icon size={16} />}
+            {copied ? "Copied" : "Copy link"}
+          </button>
+        </div>
+        <p className="help">
+          People ask to join, and you let them in.{" "}
+          <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
+            Change who can join
+          </Link>
+        </p>
+      </div>
+      <div className="field">
+        <span className="lbl" id="ready-language-label">
+          Transcript language
+        </span>
+        <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
+        <p className="help" id="ready-language-help">
+          Your next calls start with this choice too.
+        </p>
+      </div>
+    </Dialog>
+  );
+}
 
 const CALL_LINK = /^\/(?:space\/)?[a-z0-9-]+\/?$/i;
 

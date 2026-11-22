@@ -2,10 +2,19 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 const names = new Map<string, string>();
+const linkShown = new Set<string>();
 const JOIN_PATH = /^\/dashboard\/call\/([^/]+)\/join\/?$/;
 
 /** The name of a call the dashboard just opened, so the joining card names it from its first frame. */
 export const joiningCallName = (spaceId: string): string | undefined => names.get(spaceId);
+
+/**
+ * Calls whose invite link the dashboard has already put in front of the host, in its "Your call is ready" dialog. The
+ * call menu's own "Your call is ready" reveal is for a host who didn't see that, such as a signed-in owner arriving by
+ * link, so the reveal skips these calls.
+ */
+export const rememberCallLinkShown = (spaceId: string): void => void linkShown.add(spaceId);
+export const callLinkShown = (spaceId: string): boolean => linkShown.has(spaceId);
 
 /**
  * Joining from the dashboard. The join route's code loads while the page is idle, so a click shows the joining card at
