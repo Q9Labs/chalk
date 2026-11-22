@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -49,12 +50,13 @@ func TestListSpacesByActivityPutsTheMostRecentlyUsedFirst(t *testing.T) {
 	oldest, older, newest, archived := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	live, ended := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	mustExec(t, tx, `insert into tenants(id, name) values($1, 'Space activity order')`, tenantID.Bytes())
+	plane := mediaplane.ProviderCloudflareSFU.SettingName()
 	for _, space := range []struct {
 		id  utilities.ID
 		age time.Duration
 	}{{oldest, 3 * time.Hour}, {older, 2 * time.Hour}, {newest, time.Hour}, {archived, 5 * time.Minute}} {
-		mustExec(t, tx, `insert into spaces(id, name, tenant_id, slug, media_plane, created_at) values($1, 'Activity order', $2, $3, 'cf_sfu', $4)`,
-			space.id.Bytes(), tenantID.Bytes(), "activity-"+space.id.String(), now.Add(-space.age))
+		mustExec(t, tx, `insert into spaces(id, name, tenant_id, slug, media_plane, created_at) values($1, 'Activity order', $2, $3, $5, $4)`,
+			space.id.Bytes(), tenantID.Bytes(), "activity-"+space.id.String(), now.Add(-space.age), plane)
 	}
 	mustExec(t, tx, `update spaces set archived_at = $2 where id = $1`, archived.Bytes(), now)
 	// The oldest Space has a call going on that started half an hour ago.
