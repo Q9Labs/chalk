@@ -1,7 +1,8 @@
 import type { ScreenAnnotationFrameSize } from "@q9labsai/chalk-client";
 
 import { freezeAnnotationFrame, type FreezeAnnotationFrameInput, type ScreenAnnotationFrame } from "./frame";
-import { paintAnnotation, type AnnotationCanvasContext } from "./paint";
+import type { AnnotationCanvasContext } from "./canvas";
+import { paintAnnotation } from "./paint";
 
 export type AnnotationPngSurface<Image, Png> = {
   readonly context: AnnotationCanvasContext;
