@@ -71,13 +71,11 @@ type Options struct {
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
 
-	APIKeys              APIKeyService
-	APIKeyAuthentication APIKeyAuthenticator
-
+	APIKeys                APIKeyService
+	APIKeyAuthentication   APIKeyAuthenticator
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer
-
 	HelperAccess           *helperaccess.Service
 	ParticipantMediaVerify ParticipantMediaVerifier
 	ParticipantMediaActive ActiveParticipantAuthorizer

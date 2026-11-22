@@ -14,7 +14,21 @@ export interface HelperPairAuthority {
 
 type CaptureTrack = (share: ScreenAnnotationHelperShare) => MediaStreamTrack | undefined;
 
-export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount, accountId }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string; readonly accountId?: string }): BrowserHelper {
+export function createBrowserAnnotationHelper({
+  origin,
+  installUrl,
+  authority,
+  captureTrack,
+  deviceAccount,
+  accountId,
+}: {
+  readonly origin: string;
+  readonly installUrl?: string;
+  readonly authority: HelperPairAuthority;
+  readonly captureTrack?: CaptureTrack;
+  readonly deviceAccount?: string;
+  readonly accountId?: string;
+}): BrowserHelper {
   return {
     installUrl,
     lookupCode: authority.lookupCode,
@@ -77,7 +91,8 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
             if (!remembered && pinSlot && provenKey && authority.rememberKey) {
               // Persist only after the Helper signed the exact native approval and typed code.
               // Registration alone never permits this browser to skip the code.
-              void authority.rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs))
+              void authority
+                .rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs))
                 .then(() => window.localStorage.setItem(pinSlot, challenge.helperPublicKey))
                 .catch(() => {
                   // A failed pin or registration leaves code pairing available.
@@ -128,7 +143,15 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
   };
 }
 
-export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly tenantId: string; readonly accountId?: string }): BrowserHelper & Required<Pick<ScreenAnnotationHelper, "lookupCode">> {
+export function createManagedAnnotationHelper(options: {
+  readonly origin: string;
+  readonly apiBaseUrl: string;
+  readonly mediaProof: () => string | null | undefined;
+  readonly installUrl?: string;
+  readonly captureTrack?: CaptureTrack;
+  readonly tenantId: string;
+  readonly accountId?: string;
+}): BrowserHelper & Required<Pick<ScreenAnnotationHelper, "lookupCode">> {
   const api = new URL("/v1/screen-annotation/helper/pair-ticket", options.apiBaseUrl);
   if (api.protocol !== "https:" || api.username || api.password) throw new Error("Invalid Helper API.");
   const authority = {

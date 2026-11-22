@@ -11,7 +11,7 @@ npx --yes @tauri-apps/cli@2.12.6 build --debug --ci --bundles app --features fix
 src-tauri/target/debug/bundle/macos/Chalk\ Helper.app/Contents/MacOS/chalk-helper --fixture
 ```
 
-On Windows, install the Tauri v2 desktop prerequisites. Build with the same command, replacing `--bundles app` with `--bundles nsis`. The local installer is under `src-tauri/target/debug/bundle/nsis/`. These builds have no distribution signature. Do not distribute them.
+On Windows, install the Tauri v2 desktop prerequisites. Build with the same command, replacing `--bundles app` with `--bundles nsis`. The local installer is under `src-tauri/target/debug/bundle/nsis/`. These builds have no distribution signature. Do not distribute them. The **Helper development installers** workflow can build the same fixture on either platform. Leave all inputs blank for the offline fixture, then launch with `--fixture`. Supply all four inputs for a test deployment and omit `--fixture` when you launch it.
 
 If `packages/screen-annotation` is present, Tauri bundles its renderer and Figtree font. To build against Lane 2 before integration, set `CHALK_HELPER_RENDERER_SOURCE` to a local copy of that package. If neither is present, the development fixture uses a sample stroke painter.
 
@@ -39,7 +39,7 @@ Set these build-time values before you build Helper:
 
 - `CHALK_HELPER_WEB_ORIGIN`: the exact Chalk HTTPS Origin, also allowed by the managed API.
 - `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY`: the base64url, unpadded Ed25519 public key for the managed Sync token issuer. Do not copy its private key to a Helper machine.
-- `CHALK_HELPER_SYNC_ORIGIN`: the exact WSS Origin for Sync, without a path or query.
+- `CHALK_HELPER_SYNC_ORIGIN`: the WSS Origin that routes `/v1/screen-annotation/helper` to Sync, without a path or query. A host that serves only the call socket cannot attach Helper.
 - `CHALK_HELPER_API_ORIGIN`: the exact HTTPS Origin for the managed API, without a path or query. This enables device-code sign-in.
 
 Set `VITE_CHALK_HELPER_INSTALL_URL` in the web app to enable the Helper offer. Run Helper without `--fixture`. In a signed-in call, share your monitor and compare the fingerprints in the browser and Helper. Click **Allow** in Helper, enter the native confirmation code in the browser, and select the actual shared display in Helper. Guest sharers use the call preview instead. The browser briefly disables the outgoing track while it reads three landmarks from a local clone. Helper enables ink only after it verifies the OS protection setting and the browser confirms that the landmarks disappeared. If you see **Draw one mark**, click it to draw a fading mark on the selected display. Helper sends that mark through the same call and returns to click-through mode.

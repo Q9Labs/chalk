@@ -8,7 +8,10 @@ test("a Sync update paints the live overlay before the next upkeep poll", async 
   const listeners = new Map();
   const pending = new Set();
   let paints = 0;
-  const source = readFileSync(new URL("../ui/view.js", import.meta.url), "utf8").split("\n").slice(1).join("\n");
+  const source = readFileSync(new URL("../ui/view.js", import.meta.url), "utf8")
+    .split("\n")
+    .slice(1)
+    .join("\n");
   runInNewContext(source, {
     document: { querySelector: () => ({ querySelector: () => ({ addEventListener() {} }) }) },
     window: {
@@ -19,9 +22,14 @@ test("a Sync update paints the live overlay before the next upkeep poll", async 
         event: { listen: async (name, listener) => listeners.set(name, listener) },
       },
     },
-    paintLive: () => { paints++; },
-    setTimeout: callback => { pending.add(callback); return callback; },
-    clearTimeout: callback => pending.delete(callback),
+    paintLive: () => {
+      paints++;
+    },
+    setTimeout: (callback) => {
+      pending.add(callback);
+      return callback;
+    },
+    clearTimeout: (callback) => pending.delete(callback),
   });
   await setImmediate();
   assert.equal(paints, 1);

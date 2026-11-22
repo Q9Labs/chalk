@@ -2,12 +2,12 @@
 
 The independent feasibility probe established browser monitor capture exclusion with the platform settings below. This is not a real Chalk call or a measurement of the Helper's end-to-end latency.
 
-| Operating system | Browser | Monitor capture |
-| --- | --- | --- |
-| macOS 26.6.2 | Helium (Chromium 158) | Zero marker pixels with `NSWindow.sharingType = .none`. |
-| macOS 15.8.2 | Chrome 158 | Zero marker pixels with `NSWindow.sharingType = .none`. |
-| Windows Server 2025 and 2022 | Chrome 157 | Zero marker pixels with `WDA_EXCLUDEFROMCAPTURE`. |
-| macOS 27.0.1 | Chrome 157 | Screen Recording consent was unavailable. No track returned from the picker. |
+| Operating system             | Browser               | Monitor capture                                                              |
+| ---------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| macOS 26.6.2                 | Helium (Chromium 158) | Zero marker pixels with `NSWindow.sharingType = .none`.                      |
+| macOS 15.8.2                 | Chrome 158            | Zero marker pixels with `NSWindow.sharingType = .none`.                      |
+| Windows Server 2025 and 2022 | Chrome 157            | Zero marker pixels with `WDA_EXCLUDEFROMCAPTURE`.                            |
+| macOS 27.0.1                 | Chrome 157            | Screen Recording consent was unavailable. No track returned from the picker. |
 
 The independent probe's unprotected controls showed 47,000–192,000 magenta pixels. Window and tab captures did not include the separate overlay. Safari, Firefox, and consumer Windows were not tested.
 

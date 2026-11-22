@@ -139,10 +139,7 @@ export async function calibrateWindow(options: {
     let frames = 0;
     while (frames < 4) {
       await nextFrame(video, deadline, (_, { captureTime }) => {
-        if (
-          video.videoWidth !== width || video.videoHeight !== height || captureTime === undefined ||
-          !Number.isFinite(captureTime) || captureTime > performance.now()
-        ) {
+        if (video.videoWidth !== width || video.videoHeight !== height || captureTime === undefined || !Number.isFinite(captureTime) || captureTime > performance.now()) {
           throw new Error("Chalk could not verify the window frame's capture time or size.");
         }
         if (captureTime <= lastCapture) {

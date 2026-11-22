@@ -1,7 +1,10 @@
 import type { Challenge } from "./screen-annotation-helper-bridge";
 
 function encode(value: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(value))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return btoa(String.fromCharCode(...new Uint8Array(value)))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
 }
 
 function decode(value: string): Uint8Array<ArrayBuffer> {
@@ -33,15 +36,10 @@ export async function startConsent() {
     },
     async bind(challenge: Challenge, pairTicket: string, attachmentTicket: string, remembered: boolean) {
       const attachmentHash = await hash(attachmentTicket);
-      const transcript = [
-        "chalk.helper.pair.v2",
-        challenge.challenge,
-        browserPublicKey,
-        challenge.helperPublicKey,
-        await hash(pairTicket),
-        attachmentHash,
-      ].join("\n");
-      const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(transcript))).slice(0, 4), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+      const transcript = ["chalk.helper.pair.v2", challenge.challenge, browserPublicKey, challenge.helperPublicKey, await hash(pairTicket), attachmentHash].join("\n");
+      const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(transcript))).slice(0, 4), (byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase();
       // The browser cannot verify a loopback responder's code signature.
       // An explicitly approved same-user impostor is outside this boundary.
       const helperKey = await crypto.subtle.importKey("raw", decode(challenge.helperPublicKey), "Ed25519", false, ["verify"]);
