@@ -69,11 +69,24 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 	if err != nil {
 		return Download{}, err
 	}
+	// Legacy rows may contain active formats; leave those objects intact without signing them.
+	if !rasterImage(file.MIMEType) {
+		return Download{}, ErrFileNotFound
+	}
 	signed, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: file.ObjectKey, ExpiresIn: 2 * time.Minute})
 	if err != nil {
 		return Download{}, fmt.Errorf("create whiteboard download url: %w", err)
 	}
 	return Download{URL: signed.URL, ExpiresAt: signed.ExpiresAt}, nil
+}
+
+func rasterImage(mimeType string) bool {
+	switch mimeType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func validFileID(value string) bool {
