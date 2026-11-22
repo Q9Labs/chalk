@@ -11,7 +11,8 @@ import { ErrorPanel } from "./kit";
 import { newCallIntent, startCall } from "./language-choice";
 import { callLinkShown, joiningCallName } from "./join-call";
 
-import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { problemReporter } from "../../lib/send-problem-report";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { ownerAccess } from "./owner-seat";

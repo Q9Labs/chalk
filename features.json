@@ -573,7 +573,15 @@
     {
       "name": "problem-reports",
       "summary": "Captures and routes diagnostic reports submitted by Participants.",
-      "paths": ["apps/api/internal/adapters/discordreports", "apps/api/internal/httpapi/problem_report_outcomes.go", "apps/api/internal/httpapi/problem_reports.go", "apps/api/internal/problemreports", "apps/web/src/lib/problem-reports.test.ts", "apps/web/src/lib/problem-reports.ts"]
+      "paths": [
+        "apps/api/internal/adapters/discordreports",
+        "apps/api/internal/httpapi/problem_report_outcomes.go",
+        "apps/api/internal/httpapi/problem_reports.go",
+        "apps/api/internal/problemreports",
+        "apps/web/src/lib/problem-reports.test.ts",
+        "apps/web/src/lib/problem-reports.ts",
+        "apps/web/src/lib/send-problem-report.ts"
+      ]
     },
     {
       "name": "notifications",

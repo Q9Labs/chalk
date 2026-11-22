@@ -7,7 +7,7 @@ import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { onPageFailure } from "../../lib/chunkReload";
 import { CallErrorBoundary } from "./CallErrorBoundary";
-import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
+import { problemReporter, type ReportProblem } from "../../lib/send-problem-report";
 import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
 
