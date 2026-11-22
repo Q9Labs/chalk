@@ -77,12 +77,11 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
             if (!remembered && pinSlot && provenKey && authority.rememberKey) {
               // Persist only after the Helper signed the exact native approval and typed code.
               // Registration alone never permits this browser to skip the code.
-              try {
-                window.localStorage.setItem(pinSlot, challenge.helperPublicKey);
-                void authority.rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs)).catch(() => undefined);
-              } catch {
-                // A failed pin or registration leaves code pairing available.
-              }
+              void authority.rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs))
+                .then(() => window.localStorage.setItem(pinSlot, challenge.helperPublicKey))
+                .catch(() => {
+                  // A failed pin or registration leaves code pairing available.
+                });
             }
             const renewal = new AbortController();
             const track = captureTrack?.(share);

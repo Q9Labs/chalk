@@ -261,6 +261,16 @@ test("only the first pairing of a pinned Helper requires a code", async () => {
   expect(helper.authorize).toHaveBeenCalledTimes(2);
 });
 
+test("code pairing still works if the API cannot register remembered keys", async () => {
+  const helper = await pairingFixture();
+  helper.rememberKey.mockRejectedValueOnce(new Error("registration not available"));
+  await helper.pair();
+  const later = await helper.pair();
+  expect(later.remembered).toBe(false);
+  expect(later.enterCode).toHaveBeenCalledOnce();
+  expect(helper.authorize).toHaveBeenCalledTimes(2);
+});
+
 test.each(["changed key", "revoked device", "another account", "cleared pin", "forged key proof", "older Helper"] as const)("%s requires a new code", async (change) => {
   const helper = await pairingFixture();
   await helper.pair();
