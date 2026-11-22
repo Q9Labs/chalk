@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ElixirAtom, renderAttribute, renderElixirValue, wrapElixirSource } from "./elixir-layout.mjs";
 import { codegenPath, loadSyncContract } from "./sync-contract.mjs";
+import { welcomeFlagsFor } from "./sync-welcome.mjs";
 
 const outputPath = codegenPath("CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", "apps/sync/lib/chalk_sync/contract/generated.ex");
 const contract = await loadSyncContract();
@@ -16,6 +17,7 @@ await writeFile(outputPath, wrapElixirSource(source));
  * @param {Record<string, any>} contract
  */
 function renderElixir(contract) {
+  const welcomeFlags = welcomeFlagsFor(contract);
   const limits = contract.limits;
   const eventOrigins = Object.fromEntries(contract.events.map((event) => [event.name, event.origin]));
   const metadata = {
@@ -237,22 +239,16 @@ function renderElixir(contract) {
     '  defp valid_welcome?(%{"protocol" => @protocol_version, "participant_id" => participant_id, "participant_generation" => generation, "recovery_id" => recovery_id, "head" => head, "mode" => mode} = frame) do',
     '    base = ["type", "protocol", "participant_id", "participant_generation", "recovery_id", "head", "mode"]',
     '    base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base',
-    '    base = if Map.has_key?(frame, "entry_confirmation"), do: base ++ ["entry_confirmation"], else: base',
-    '    base = if Map.has_key?(frame, "media_off_reason"), do: base ++ ["media_off_reason"], else: base',
-    '    base = if Map.has_key?(frame, "connection_quality"), do: base ++ ["connection_quality"], else: base',
     '    base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"], else: base',
     '    base = if Map.has_key?(frame, "participant_identity_id"), do: base ++ ["participant_identity_id"], else: base',
     '    valid_identity = not Map.has_key?(frame, "participant_identity_id") or valid_uuid?(frame["participant_identity_id"])',
     '    valid_generation = not Map.has_key?(frame, "entry_generation") or (valid_positive_integer?(frame["entry_generation"]) and frame["entry_generation"] <= 9_007_199_254_740_991)',
     '    valid_extensions = not Map.has_key?(frame, "extensions") or valid_collaborations_welcome_extensions?(frame["extensions"])',
-    '    valid_entry = not Map.has_key?(frame, "entry_confirmation") or frame["entry_confirmation"] == true',
-    '    valid_off_reason = not Map.has_key?(frame, "media_off_reason") or frame["media_off_reason"] == true',
-    '    base = if Map.has_key?(frame, "screen_annotation"), do: base ++ ["screen_annotation"], else: base',
-    '    valid_annotation = not Map.has_key?(frame, "screen_annotation") or frame["screen_annotation"] == true',
-    '    base = if Map.has_key?(frame, "screen_annotation_burn_in"), do: base ++ ["screen_annotation_burn_in"], else: base',
-    '    valid_burn_in = not Map.has_key?(frame, "screen_annotation_burn_in") or (frame["screen_annotation_burn_in"] == true and frame["screen_annotation"] == true)',
-    '    valid_quality = not Map.has_key?(frame, "connection_quality") or frame["connection_quality"] == true',
-    "    valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and valid_off_reason and valid_quality and valid_annotation and valid_burn_in and valid_generation and valid_identity",
+    `    flags = Enum.filter(${JSON.stringify(welcomeFlags)}, &Map.has_key?(frame, &1))`,
+    "    base = base ++ flags",
+    "    valid_flags = Enum.all?(flags, &(frame[&1] == true))",
+    '    valid_burn_in = frame["screen_annotation_burn_in"] != true or frame["screen_annotation"] == true',
+    "    valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_flags and valid_burn_in and valid_generation and valid_identity",
     "    case mode do",
     '      "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame, @limits["snapshotEncodedBytes"])',
     '      mode when mode in ["replay", "up_to_date"] -> correlation_exact_keys?(frame, base) and valid_base',

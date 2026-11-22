@@ -79,7 +79,7 @@ async function openJourney({ browser, boardCss }) {
 }
 
 async function loadCall(page, origin) {
-  await page.goto(`${origin}/call-states.html?state=perf-six`, { waitUntil: "load" });
+  await page.goto(`${origin}/src/call-states/performance.html?state=perf-six`, { waitUntil: "load" });
   await page.getByRole("button", { name: "Leave call", exact: true }).waitFor();
   await page.waitForTimeout(1000);
 }

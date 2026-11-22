@@ -1,4 +1,4 @@
-import { expect } from "e2e";
+import { expect, type Screen } from "e2e";
 import { test, type Browser } from "@e2e-dev/web";
 
 const canvas = '[data-part="screen-annotation-layer"]';
@@ -34,9 +34,20 @@ function inkCenterY() {
   return weight > 0 ? sum / weight / canvas.height : -1;
 }
 
-async function stroke(browser: Browser, portion = 0.38) {
+async function openAnnotationFixture(browser: Browser, screen: Screen) {
+  await browser.goto("/call-states.html?state=screen-annotation");
+  await screen.getByRole("button", "Annotate", { exact: true }).click();
+  return annotationBounds(browser);
+}
+
+async function annotationBounds(browser: Browser) {
   const box = await browser.evaluate(bounds);
   if (!box) throw new Error("Annotation canvas did not mount");
+  return box;
+}
+
+async function stroke(browser: Browser, portion = 0.38) {
+  const box = await annotationBounds(browser);
   const y = box.y + box.height * portion;
   await browser.mouse.move(box.x + box.width * 0.3, y);
   await browser.mouse.down();
@@ -46,10 +57,7 @@ async function stroke(browser: Browser, portion = 0.38) {
 }
 
 test("draw, fade, keep, undo, redo, save, download and clear a matched publication", async ({ app, browser, screen }) => {
-  await browser.goto("/call-states.html?state=screen-annotation");
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
-  const box = await browser.evaluate(bounds);
-  if (!box) throw new Error("Annotation canvas did not mount");
+  const box = await openAnnotationFixture(browser, screen);
   const frameAspect = 1600 / 900;
   const fitHeight = Math.min(box.height, box.width / frameAspect);
   const fillHeight = Math.max(box.height, box.width / frameAspect);
@@ -83,10 +91,7 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
 });
 
 test("revoke during a gesture, raise a hand to draw, approve and fall back when loopback is denied", async ({ app, browser, screen }) => {
-  await browser.goto("/call-states.html?state=screen-annotation");
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
-  const box = await browser.evaluate(bounds);
-  if (!box) throw new Error("Annotation canvas did not mount");
+  const box = await openAnnotationFixture(browser, screen);
   await browser.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
   await browser.mouse.down();
   await browser.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.4);

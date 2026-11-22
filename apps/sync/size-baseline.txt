@@ -6,6 +6,5 @@ lib/chalk_sync/protocol.ex: v1 frame decode table; one clause per wire frame, ke
 lib/chalk_sync/provider_bridge/codec.ex: encode and decode table for the provider bridge wire format; one clause per message
 lib/chalk_sync/retention/sql.ex: flat list of retention statements; each is independent text with no logic
 lib/chalk_sync/chat/sql.ex: flat list of chat statements; each is independent text with no logic
-lib/chalk_sync/whiteboard_v1/sql.ex: flat list of whiteboard statements; each is independent text with no logic
 lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex: flat list of finalizer statements; each is independent text with no logic
 lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex: flat list of lifecycle statements; each is independent text with no logic

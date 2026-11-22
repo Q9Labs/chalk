@@ -8,7 +8,7 @@ export type ParticipantRouteSubject = {
 };
 
 /** `base` and `/v1/` followed by the parts, each encoded as one path segment. */
-const route = (base: string, ...parts: string[]): string => `${trimTrailingSlashes(base)}/v1/${parts.map(encodeURIComponent).join("/")}`;
+export const route = (base: string, ...parts: string[]): string => `${trimTrailingSlashes(base)}/v1/${parts.map(encodeURIComponent).join("/")}`;
 const tenantRoute = (base: string, tenantId: string, ...parts: string[]) => route(base, "tenants", tenantId, ...parts);
 const participantRoute = (base: string, subject: ParticipantRouteSubject, ...leaf: string[]) => route(base, "tenants", subject.tenantId, "spaces", subject.spaceId, "episodes", subject.episodeId, "participants", subject.participantId, ...leaf);
 
@@ -22,7 +22,3 @@ export const problemReportAvailability = (base: string, tenantId: string) => ten
 export const chatUploads = (base: string) => route(base, "chat", "attachments", "uploads");
 export const chatUploadFinalize = (base: string, uploadId: string) => route(base, "chat", "attachments", "uploads", uploadId, "finalize");
 export const chatAttachmentDownload = (base: string, attachmentId: string) => route(base, "chat", "attachments", attachmentId, "download");
-export const whiteboardFileAvailability = (base: string) => route(base, "whiteboard", "files", "availability");
-export const whiteboardFileDownload = (base: string, fileId: string) => route(base, "whiteboard", "files", fileId, "download");
-export const whiteboardFileUpload = (base: string, sceneId: string, fileId: string) => route(base, "whiteboard", "scenes", sceneId, "files", fileId, "upload");
-export const whiteboardFileFinalize = (base: string, sceneId: string, fileId: string) => route(base, "whiteboard", "scenes", sceneId, "files", fileId, "finalize");

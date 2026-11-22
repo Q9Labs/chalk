@@ -55,12 +55,7 @@ func (request FrameRenderRequest) Validate() error {
 	if !pathWithin(request.WorkspaceDirectory, request.PresentationPath) || !pathWithin(request.WorkspaceDirectory, request.AssetDirectory) || !pathWithin(request.WorkspaceDirectory, request.DecodedMediaPath) {
 		return errors.New("frame render inputs must stay inside the attempt workspace")
 	}
-	if sidecar := request.AnnotationSidecar; sidecar != nil {
-		if !isLowerSHA256(sidecar.SHA256) || !filepath.IsAbs(sidecar.Path) || !pathWithin(request.WorkspaceDirectory, sidecar.Path) {
-			return errors.New("recording annotation sidecar is not a verified workspace input")
-		}
-	}
-	return nil
+	return validateAnnotationSidecar(request.WorkspaceDirectory, request.AnnotationSidecar)
 }
 
 type boundedCommandOutput struct {

@@ -13,7 +13,10 @@ export class AnnotationSession implements ScreenAnnotationClient {
   #unbind: (() => void) | undefined;
   readonly #unsubscribePorts: () => void;
 
-  constructor(connection: ConnectionLifecycleCapability, private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
+  constructor(
+    connection: ConnectionLifecycleCapability,
+    private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined,
+  ) {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
@@ -47,23 +50,15 @@ export class AnnotationSession implements ScreenAnnotationClient {
     let disposed = false;
     const bindLocal = () => {
       if (disposed || binding || retry !== undefined) return;
-      const annotation = replica.getSnapshot();
-      if (annotation.status !== "ready") return;
-
-      const sync = ports.sync.getSnapshot();
-      const screen = ports.media.getSnapshot().localTracks.find((track) => track.source === "screen" && track.enabled);
-      // Wait for Sync to observe this exact locally published track.
-      const publicationId = confirmedScreenPublication(screen, sync);
-      if (!screen || !publicationId || annotation.state?.layer.publication_id === publicationId) return;
-      const witness = replica.burnInNegotiated ? this.verifiedCapture?.(screen.track) : undefined;
-      const { width, height } = witness ?? screen.track.getSettings?.() ?? {};
-      if (!width || !height) {
+      const local = localScreenBinding(ports, replica.getSnapshot(), replica.burnInNegotiated ? this.verifiedCapture : undefined);
+      if (local.kind === "unavailable") return;
+      if (local.kind === "waiting_for_dimensions") {
         schedule();
         return;
       }
 
       binding = true;
-      void replica.bind(publicationId, { width, height }, witness !== undefined).finally(() => {
+      void replica.bind(local.publicationId, local.frame, local.burnedIn).finally(() => {
         binding = false;
         if (!disposed) schedule();
       });
@@ -95,4 +90,21 @@ export class AnnotationSession implements ScreenAnnotationClient {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+}
+
+function localScreenBinding(ports: ConnectionPorts, annotation: ScreenAnnotationSnapshot, verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
+  if (annotation.status !== "ready") return { kind: "unavailable" } as const;
+  const sync = ports.sync.getSnapshot();
+  const screen = ports.media.getSnapshot().localTracks.find((track) => track.source === "screen" && track.enabled);
+  // Wait for Sync to observe this exact locally published track.
+  const publicationId = confirmedScreenPublication(screen, sync);
+  if (!screen || !publicationId || annotation.state?.layer.publication_id === publicationId) return { kind: "unavailable" } as const;
+  const witness = verifiedCapture?.(screen.track);
+  const frame = witness ?? screenDimensions(screen.track);
+  return frame ? ({ kind: "ready", publicationId, frame, burnedIn: witness !== undefined } as const) : ({ kind: "waiting_for_dimensions" } as const);
+}
+
+function screenDimensions(track: MediaStreamTrack) {
+  const { width, height } = track.getSettings?.() ?? {};
+  return width && height ? { width, height } : null;
 }

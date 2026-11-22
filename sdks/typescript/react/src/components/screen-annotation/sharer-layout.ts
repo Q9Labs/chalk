@@ -51,12 +51,12 @@ export function layoutAtPoint(layout: SharerLayout, point: { readonly x: number;
   const x = clamp((point.x - box.left) / box.width);
   const y = clamp((point.y - box.top) / box.height);
   const nearest = [
-    { edge: "left", gap: x },
-    { edge: "right", gap: 1 - x },
-    { edge: "top", gap: y },
-    { edge: "bottom", gap: 1 - y },
+    { edge: "left", distance: x },
+    { edge: "right", distance: 1 - x },
+    { edge: "top", distance: y },
+    { edge: "bottom", distance: 1 - y },
   ] as const;
-  const edge = nearest.reduce((best, candidate) => (candidate.gap < best.gap ? candidate : best)).edge;
+  const edge = nearest.reduce((best, candidate) => (candidate.distance < best.distance ? candidate : best)).edge;
   return { ...layout, edge, offset: edge === "top" || edge === "bottom" ? x : y };
 }
 

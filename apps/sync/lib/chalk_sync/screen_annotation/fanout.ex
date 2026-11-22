@@ -5,13 +5,13 @@ defmodule ChalkSync.ScreenAnnotation.Fanout do
 
   alias ChalkSync.Database
   alias ChalkSync.ScreenAnnotation.Presence
+  alias ChalkSync.ScreenAnnotation.PresenceRelay
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
   alias Postgrex.SimpleConnection
 
   @control_channel "chalk_screen_annotation"
   @presence_channel "chalk_annotation_presence"
-  @batch_ms 34
 
   def child_spec(options),
     do: %{id: __MODULE__, start: {__MODULE__, :start_link, [options]}}
@@ -34,7 +34,7 @@ defmodule ChalkSync.ScreenAnnotation.Fanout do
     {:ok, publisher} = Postgrex.start_link(opts)
 
     # A slow presence write must not delay access revocations on the listener.
-    {:ok, _relay} = Task.start_link(fn -> relay_loop(publisher, source) end)
+    {:ok, _relay} = PresenceRelay.start_link(publisher, source, @presence_channel)
     {:ok, source}
   end
 
@@ -76,33 +76,6 @@ defmodule ChalkSync.ScreenAnnotation.Fanout do
 
     :ok
   end
-
-  defp relay_loop(publisher, source) do
-    Process.sleep(@batch_ms)
-    now = System.system_time(:millisecond)
-
-    payloads =
-      for {episode, sample} <- Presence.take_relay(),
-          sample["expires_at_ms"] > now,
-          payload = JSON.encode!([source, key_parts(episode), sample]),
-          byte_size(payload) < 8_000,
-          do: payload
-
-    if payloads != [] do
-      _ =
-        Postgrex.query(
-          publisher,
-          "select pg_notify('#{@presence_channel}', payload) from unnest($1::text[]) as pending(payload)",
-          [payloads],
-          log: nil,
-          timeout: 250
-        )
-    end
-
-    relay_loop(publisher, source)
-  end
-
-  defp key_parts(episode), do: [episode.tenant_id, episode.space_id, episode.episode_id]
 
   defp episode_key([tenant, space, episode]) do
     if Enum.all?([tenant, space, episode], &match?({:ok, _}, UUID.dump(&1))),

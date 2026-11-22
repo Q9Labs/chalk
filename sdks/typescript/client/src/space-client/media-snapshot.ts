@@ -1,3 +1,4 @@
+import { screenShareCapture } from "../connection/media-devices";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import { structurallyEqual } from "./structural-equal";
@@ -36,6 +37,19 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
 export function confirmedScreenPublication(screen: ConnectionMediaSnapshot["localTracks"][number] | undefined, sync: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | undefined): string | undefined {
   if (!sync || !screen?.enabled || !screen.publicationId || screen.track.readyState !== "live") return undefined;
   return sync.media?.items.some((item) => item.participantId === sync.participantId && item.source === "screen" && item.enabled && item.publicationId === screen.publicationId) ? screen.publicationId : undefined;
+}
+export function screenShareMedia(screen: MediaSlice["local"]["screen"], snapshot: ConnectionMediaSnapshot | undefined, hasAudio: boolean, sync: ConnectionPorts["sync"] | undefined): MediaSlice["screenShare"] {
+  const publicationId = publishedScreenId(screen, snapshot, sync);
+  return {
+    ...screen,
+    hasAudio,
+    ...(publicationId ? { publicationId } : {}),
+    ...(screen.track ? { capture: screenShareCapture(screen.track) } : {}),
+  };
+}
+function publishedScreenId(screen: MediaSlice["local"]["screen"], snapshot: ConnectionMediaSnapshot | undefined, sync: ConnectionPorts["sync"] | undefined): string | undefined {
+  const publication = snapshot?.localTracks.find((item) => item.source === "screen" && item.track === screen.track);
+  return sync && screen.state === "enabled" ? confirmedScreenPublication(publication, sync.getSnapshot()) : undefined;
 }
 export function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;

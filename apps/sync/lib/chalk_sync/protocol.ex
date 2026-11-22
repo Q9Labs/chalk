@@ -2,7 +2,6 @@ defmodule ChalkSync.ProtocolV1 do
   @moduledoc "Strict protocol-v1 framing at the WebSocket boundary."
 
   alias ChalkSync.Contract.GeneratedV1
-  alias ChalkSync.ScreenAnnotation.Protocol, as: AnnotationProtocol
   alias ChalkSync.Stateholder.Decision
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.OperationDecision
@@ -20,14 +19,12 @@ defmodule ChalkSync.ProtocolV1 do
   def decode(text)
       when is_binary(text) and byte_size(text) <= @inbound_frame_bytes do
     with {:ok, %{} = frame} <- JSON.decode(text),
-         :base <- AnnotationProtocol.decode(frame, byte_size(text)),
-         frame = drop_invalid_baggage(frame),
-         {:ok, decoded} <- GeneratedV1.decode_client_frame(frame),
+         :base <- ChalkSync.ScreenAnnotation.Protocol.decode(frame, byte_size(text)),
+         {:ok, decoded} <- GeneratedV1.decode_client_frame(drop_invalid_baggage(frame)),
          {:ok, normalized} <- normalize(decoded) do
       {:ok, normalized}
     else
       {:extension, normalized} -> {:ok, normalized}
-      {:ok, _other} -> {:error, :invalid_frame}
       {:error, %JSON.DecodeError{}} -> {:error, :invalid_json}
       {:error, reason} when is_atom(reason) -> {:error, reason}
       _ -> {:error, :invalid_frame}

@@ -1,3 +1,4 @@
+import { applyChange, isObsoletePresence } from "./change";
 import { screenAnnotationV1, type components } from "../generated/screen-annotation-v1";
 import { encodeAnnotationFrame } from "./codec";
 import type { ScreenAnnotationClient, ScreenAnnotationResult, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
@@ -76,23 +77,11 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   receive(frame: Wire["ServerFrame"]): void {
     if (!this.#live) return;
     switch (frame.type) {
-      case "annotation_state": {
-        const recovering = this.#snapshot.status === "connecting";
-        this.#anchorClock(frame.server_at_ms, recovering);
-        this.#clearPresence();
-        this.#set({ status: "ready", state: frame.state, presence: [] });
-        if (this.#retryAfterReconnect) {
-          this.#retryAfterReconnect = false;
-          // Only an outstanding delivery is retried. The exact original bytes
-          // (including address, fence and ID) are immutable across reconnects.
-          for (const pending of this.#pending.values()) this.#send(pending.wire);
-        }
+      case "annotation_state":
+        this.#receiveState(frame);
         return;
-      }
       case "annotation_closed":
-        if (this.#state()?.layer.layer_id !== frame.layer_id) return;
-        this.#clearPresence();
-        this.#set({ status: "ready", state: null, presence: [] });
+        this.#receiveClosed(frame.layer_id);
         return;
       case "annotation_receipt":
         this.#settle(frame.operation_id, frame.result);
@@ -169,6 +158,25 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     pending.resolve(result);
   }
 
+  #receiveState(frame: Wire["ServerState"]): void {
+    const recovering = this.#snapshot.status === "connecting";
+    this.#anchorClock(frame.server_at_ms, recovering);
+    this.#clearPresence();
+    this.#set({ status: "ready", state: frame.state, presence: [] });
+    if (this.#retryAfterReconnect) {
+      this.#retryAfterReconnect = false;
+      // Only an outstanding delivery is retried. The exact original bytes
+      // (including address, fence and ID) are immutable across reconnects.
+      for (const pending of this.#pending.values()) this.#send(pending.wire);
+    }
+  }
+
+  #receiveClosed(layerId: string): void {
+    if (this.#state()?.layer.layer_id !== layerId) return;
+    this.#clearPresence();
+    this.#set({ status: "ready", state: null, presence: [] });
+  }
+
   #receiveChange(frame: Wire["ServerChange"]): void {
     const state = this.#state();
     if (!state) return;
@@ -181,24 +189,21 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     this.#anchorClock(frame.server_at_ms, false);
     if (frame.fence !== state.fence) this.#clearPresence();
     const next = applyChange(state, frame);
-    if (frame.change.kind === "upsert") {
-      const mark = frame.change.mark;
-      if (this.#presence.get(mark.author.participant_id)?.draft?.mark_id === mark.draft.mark_id) {
-        this.#presence.delete(mark.author.participant_id);
-      }
-    }
+    if (frame.change.kind === "upsert") this.#discardCommittedPreview(frame.change.mark);
     this.#set({ status: "ready", state: next, presence: Array.from(this.#presence.values()) });
+  }
+
+  #discardCommittedPreview(mark: Wire["Mark"]): void {
+    if (this.#presence.get(mark.author.participant_id)?.draft?.mark_id === mark.draft.mark_id) {
+      this.#presence.delete(mark.author.participant_id);
+    }
   }
 
   #receivePresence(frame: Wire["ServerPresence"]): void {
     const state = this.#state();
     if (!state || frame.layer_id !== state.layer.layer_id || frame.fence !== state.fence) return;
     const authorId = frame.author.participant_id;
-    const previous = this.#presence.get(authorId);
-    if (previous && previous.server_at_ms > frame.server_at_ms) return;
-
-    const draftId = frame.draft?.mark_id;
-    if (draftId && state.marks.some((mark) => mark.draft.mark_id === draftId)) return;
+    if (isObsoletePresence(state, frame, this.#presence.get(authorId))) return;
     if ((!frame.draft && !frame.cursor) || frame.expires_at_ms <= this.serverNowMs()) this.#presence.delete(authorId);
     else this.#presence.set(authorId, frame);
     this.#publishPresence();
@@ -295,21 +300,6 @@ export class AnnotationReplica implements ScreenAnnotationClient {
       );
     }
     return { ...state, marks, access: { ...state.access, requests } };
-  }
-}
-
-function applyChange(state: Wire["State"], frame: Wire["ServerChange"]): Wire["State"] {
-  const { change, fence, revision } = frame;
-  const next = { ...state, fence, revision };
-  switch (change.kind) {
-    case "upsert":
-      return { ...next, marks: [...state.marks.filter((mark) => mark.draft.mark_id !== change.mark.draft.mark_id), change.mark].sort((a, b) => a.created_revision - b.created_revision) };
-    case "remove":
-      return { ...next, marks: state.marks.filter((mark) => mark.draft.mark_id !== change.mark_id) };
-    case "clear":
-      return { ...next, marks: change.participant_id === null ? [] : state.marks.filter((mark) => mark.author.participant_id !== change.participant_id) };
-    case "control":
-      return { ...next, paused: change.paused, access: change.access };
   }
 }
 

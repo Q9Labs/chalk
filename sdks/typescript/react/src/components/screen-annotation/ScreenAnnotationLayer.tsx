@@ -1,3 +1,4 @@
+import { AnnotationTextForm } from "./AnnotationTextForm";
 import { frameProvesStroke, inkHandoff, type StrokeProof, canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, LASER_TRAIL_MS, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
@@ -30,6 +31,10 @@ type Preview = {
   revision?: number;
 };
 type TextAnchor = { readonly fence: number; readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
+
+function hasTimeVaryingInk(state: ScreenAnnotationState, remote: readonly ScreenAnnotationPresence[], nowMs: number): boolean {
+  return state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
+}
 
 function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, track: MediaStreamTrack, fit: AnnotationFit) {
   const frame = video && videoMatchesTrack(video, track) ? decodedSize(video) : null;
@@ -137,7 +142,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       if (actor && drawing && (cursor.current || draft)) pending.push(localSample(actor, draft, baked ? null : cursor.current));
       const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS ? cursor.current?.point : undefined;
       paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...pending], nowMs), localTouch, nowMs });
-      const expiring = !baked && (state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs));
+      const expiring = !baked && hasTimeVaryingInk(state, remote, nowMs);
       if (expiring || (!baked && optimistic.current.size > 0) || localTouch || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < LASER_TRAIL_MS)) schedule();
     };
     const schedule = () => {
@@ -338,43 +343,5 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         />
       ) : null}
     </>
-  );
-}
-
-function AnnotationTextForm({ onClose, onApply }: { readonly onClose: () => void; readonly onApply: (text: string, note: boolean) => void }) {
-  const [text, setText] = useState("");
-  const [note, setNote] = useState(false);
-  const tooLong = new TextEncoder().encode(text.trim()).length > 512;
-  return (
-    <form
-      className="absolute inset-x-3 top-3 z-30 mx-auto grid max-w-sm gap-2 rounded-lg bg-[var(--chalk-overlay-strong)] p-3 text-[var(--chalk-on-overlay)]"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (text.trim() && !tooLong) onApply(text.trim(), note);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <label className="grid gap-1">
-        Annotation text
-        <input autoFocus className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" value={text} maxLength={512} onChange={(event) => setText(event.target.value)} />
-      </label>
-      {tooLong ? <span role="status">This text is too long for a mark.</span> : null}
-      <label className="flex gap-2">
-        <input type="checkbox" checked={note} onChange={(event) => setNote(event.target.checked)} /> Note background
-      </label>
-      <div className="flex justify-end gap-3">
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="submit" disabled={!text.trim() || tooLong}>
-          Add text
-        </button>
-      </div>
-    </form>
   );
 }

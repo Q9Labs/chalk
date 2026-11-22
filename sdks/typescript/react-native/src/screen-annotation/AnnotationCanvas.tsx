@@ -54,6 +54,14 @@ type MeasureJob = {
 const maxBase64Length = 16 * 1024 * 1024;
 const chunkSize = 32768;
 
+function annotationHit(result: object): result is { hit: number; markId: string | null } {
+  return "hit" in result && "markId" in result && typeof result.hit === "number" && (result.markId === null || (typeof result.markId === "string" && result.markId.length <= 36));
+}
+
+function annotationPngPart(result: object, currentLength: number): result is { part: string; final: boolean } {
+  return !("failed" in result) && "part" in result && "final" in result && typeof result.part === "string" && typeof result.final === "boolean" && result.part.length <= chunkSize && /^[\w+/=]+$/.test(result.part) && currentLength + result.part.length <= maxBase64Length;
+}
+
 export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit }, ref) {
   const view = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
@@ -133,7 +141,13 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   }, [ready, presence, nowMs, localTouch]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Fail the pending export if the sandbox goes away before returning PNG data.
-  useEffect(() => () => { failExport(); failMeasure(); }, []);
+  useEffect(
+    () => () => {
+      failExport();
+      failMeasure();
+    },
+    [],
+  );
 
   const onMessage = ({ nativeEvent: { data } }: WebViewMessageEvent) => {
     if (data === "annotation-loaded") {
@@ -145,15 +159,14 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     try {
       const result: unknown = JSON.parse(data);
       if (typeof result !== "object" || result === null) return;
-      if ("hit" in result && "markId" in result && typeof result.hit === "number" && (result.markId === null || (typeof result.markId === "string" && result.markId.length <= 36))) {
+      if (annotationHit(result)) {
         onHit(result.hit, result.markId);
         return;
       }
       const measurement = measures.current;
       if (measurement && "measure" in result && result.measure === measurement.id) {
         const widths: unknown = "widths" in result ? result.widths : null;
-        if (!Array.isArray(widths) || widths.length !== measurement.samples.length ||
-            !widths.every((width): width is number => typeof width === "number" && Number.isFinite(width) && width >= 0)) {
+        if (!Array.isArray(widths) || widths.length !== measurement.samples.length || !widths.every((width): width is number => typeof width === "number" && Number.isFinite(width) && width >= 0)) {
           failMeasure();
           return;
         }
@@ -165,7 +178,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
       }
       const current = job.current;
       if (!current || !("png" in result) || result.png !== current.id) return;
-      if ("failed" in result || !("part" in result) || !("final" in result) || typeof result.part !== "string" || typeof result.final !== "boolean" || result.part.length > chunkSize || !/^[\w+/=]+$/.test(result.part) || current.length + result.part.length > maxBase64Length) {
+      if (!annotationPngPart(result, current.length)) {
         failExport();
         return;
       }

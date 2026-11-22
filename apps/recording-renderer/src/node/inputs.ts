@@ -44,6 +44,18 @@ export async function loadVerifiedRenderInputs(request: ComposeRequestV1, annota
   const media = parseDecodedMediaIndexV1(decodedMediaValue);
   await validateSharedAuthority(request, timeline, media);
 
+  const assets = await verifyPresentationAssets(timeline, assetDirectory);
+  const mediaRoot = await realpath(dirname(decodedMediaPath));
+  const mediaFiles = await verifyMediaSources(media, mediaRoot);
+  const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
+  await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
+
+  const annotationInput = selectAnnotationInput(timeline, assetDirectory, annotationFile);
+  const annotation = annotationInput === undefined ? [] : await loadAnnotation(workspaceDirectory, annotationInput, timeline);
+  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath, annotation };
+}
+
+async function verifyPresentationAssets(timeline: RecordingPresentationTimelineV1, assetDirectory: string): Promise<ReadonlyMap<string, VerifiedFileBinding>> {
   const assets = new Map<string, VerifiedFileBinding>();
   for (const asset of timeline.assets) {
     const path = await confinedRealPath(assetDirectory, join(assetDirectory, asset.sha256));
@@ -51,23 +63,30 @@ export async function loadVerifiedRenderInputs(request: ComposeRequestV1, annota
     assets.set(asset.id, { path, contentType: asset.contentType, byteSize: asset.byteSize });
   }
 
-  const mediaRoot = await realpath(dirname(decodedMediaPath));
+  return assets;
+}
+
+async function verifyMediaSources(media: DecodedMediaIndexV1, mediaRoot: string): Promise<ReadonlyMap<string, VerifiedFileBinding>> {
   const mediaFiles = new Map<string, VerifiedFileBinding>();
   for (const source of media.sources) {
     const path = await confinedRealPath(mediaRoot, resolve(mediaRoot, source.path));
     await verifyFileFacts(path, source.byteSize, source.sha256, `decoded media source ${source.sourceId}`);
     mediaFiles.set(source.sourceId, { path, contentType: source.contentType, byteSize: source.byteSize });
   }
-  const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
-  await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
+  return mediaFiles;
+}
 
+function selectAnnotationInput(timeline: RecordingPresentationTimelineV1, assetDirectory: string, annotationFile: AnnotationInputFile | undefined): AnnotationInputFile | undefined {
   const frozenAnnotation = timeline.assets.filter((asset) => asset.kind === "screen_annotation");
   if (frozenAnnotation.length > 1) throw new TypeError("multiple frozen screen annotation assets");
   const annotationAsset = frozenAnnotation[0];
-  if (annotationAsset && annotationFile && annotationAsset.sha256 !== annotationFile.sha256) throw new TypeError("recording annotation does not match the frozen asset");
-  const annotationInput = annotationAsset ? { path: join(assetDirectory, annotationAsset.sha256), sha256: annotationAsset.sha256 } : annotationFile;
-  const annotation = annotationInput === undefined ? [] : await loadAnnotation(workspaceDirectory, annotationInput, timeline);
-  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath, annotation };
+  if (annotationAsset === undefined) return annotationFile;
+  validateAnnotationDigest(annotationAsset.sha256, annotationFile);
+  return { path: join(assetDirectory, annotationAsset.sha256), sha256: annotationAsset.sha256 };
+}
+
+function validateAnnotationDigest(digest: string, annotationFile: AnnotationInputFile | undefined): void {
+  if (annotationFile && digest !== annotationFile.sha256) throw new TypeError("recording annotation does not match the frozen asset");
 }
 
 async function loadAnnotation(workspace: string, file: AnnotationInputFile, timeline: RecordingPresentationTimelineV1): Promise<readonly BoundAnnotationLayer[]> {

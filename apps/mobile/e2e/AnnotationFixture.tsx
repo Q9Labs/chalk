@@ -1,3 +1,4 @@
+import { corners, fixed, fontSizes, palettes, space, type as callType } from "../../../sdks/typescript/react-native/src/theme/tokens";
 import type { ScreenAnnotationClient, ScreenAnnotationMark, ScreenAnnotationSnapshot, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { annotationRendererUrl } from "@q9labsai/chalk-react-native/dev";
 import { ScreenAnnotationLayer } from "@q9labsai/chalk-react-native/ui";
@@ -183,14 +184,14 @@ export function AnnotationFixtureApp() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#111215", alignItems: "center", paddingTop: 86 },
-  title: { fontSize: 24, fontWeight: "600", color: "#ffffff", marginBottom: 8 },
-  caption: { color: "#dfdfdf", marginBottom: 16 },
-  video: { position: "absolute", backgroundColor: "#24405d" },
-  leftStripe: { position: "absolute", left: 0, width: "15%", height: "100%", backgroundColor: "#305678" },
-  corner: { position: "absolute", right: 0, top: 0, width: "18%", height: "22%", backgroundColor: "#35718d" },
-  center: { position: "absolute", left: "50%", top: "50%", width: 6, height: 6, borderRadius: 3, backgroundColor: "#ffffff" },
-  videoTitle: { position: "absolute", left: "20%", top: "25%", fontSize: 17, color: "#ffffff" },
-  controls: { flexDirection: "row", gap: 15, paddingTop: 18 },
+  screen: { flex: 1, backgroundColor: palettes.dark.surface, alignItems: "center", paddingTop: space[22] },
+  title: { fontSize: fontSizes.title, fontWeight: "600", color: fixed.overlayText, marginBottom: space[2] },
+  caption: { color: palettes.dark.textSoft, marginBottom: space[4] },
+  video: { position: "absolute", backgroundColor: palettes.dark.tile },
+  leftStripe: { position: "absolute", left: 0, width: "15%", height: "100%", backgroundColor: palettes.dark.raised },
+  corner: { position: "absolute", right: 0, top: 0, width: "18%", height: "22%", backgroundColor: palettes.dark.info },
+  center: { position: "absolute", left: "50%", top: "50%", width: 6, height: 6, borderRadius: corners.pill, backgroundColor: fixed.overlayText },
+  videoTitle: { position: "absolute", left: "20%", top: "25%", fontSize: callType.progress.fontSize, color: fixed.overlayText },
+  controls: { flexDirection: "row", gap: space[4], paddingTop: space[5] },
   tray: { position: "absolute", left: 16, right: 16, bottom: 64, maxHeight: "50%", alignItems: "center" },
 });
