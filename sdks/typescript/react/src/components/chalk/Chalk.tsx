@@ -1,6 +1,6 @@
 "use client";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChatUploadFile, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChalkProvider } from "../../bindings/context";
 import { useConnection, useRecording, useSpaceClient } from "../../bindings/hooks";
