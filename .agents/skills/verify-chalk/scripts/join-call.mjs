@@ -143,6 +143,9 @@ try {
     const episodes = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes`);
     const live = (episodes.episodes ?? []).at(0);
     if (!live) throw new Error("the seeded Space has no Episode after both guests joined");
+    const provider = live.config_snapshot?.media_plane_binding?.provider;
+    if (provider !== "chalk_sfu") throw new Error(`The live Episode bound to ${provider ?? "no media provider"}, not chalk_sfu`);
+    measurements.mediaPlane = provider;
     const attendance = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes/${live.id}/attendance`);
     await writeFile(join(out, "attendance.json"), `${JSON.stringify(attendance, null, 2)}\n`);
     const names = JSON.stringify(attendance);
@@ -168,7 +171,7 @@ try {
 }
 
 // Evidence must never carry a credential: scan every file we wrote for the values this run was given.
-const secrets = [seed.systemToken, process.env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET, process.env.CHALK_CLOUDFLARE_REALTIME_APP_ID].filter(Boolean);
+const secrets = [seed.systemToken].filter(Boolean);
 await writeFile(join(out, "console.json"), `${JSON.stringify(logs.console, null, 2)}\n`);
 await writeFile(join(out, "network.json"), `${JSON.stringify(logs.network, null, 2)}\n`);
 const result = { journey: "join-call", runId, web, pass: !failure && steps.every((entry) => entry.pass), failure, measurements, steps };

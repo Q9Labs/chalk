@@ -166,25 +166,8 @@ func validateAccessGrant(grant PublicAccessGrant, arrival Arrival) error {
 	if err := validateProviderBinding(grant.Provider, grant.ProviderSubject, true); err != nil {
 		return err
 	}
-	if err := validateClientPayload(grant); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateClientPayload(grant PublicAccessGrant) error {
 	payload := grant.ClientPayload
-	switch grant.Provider {
-	case PublicProviderCloudflareSFU:
-		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.StunServer) || payload.ProviderSubject != "" || payload.Token != "" {
-			return ErrInvalidArrival
-		}
-	case PublicProviderChalkSFU:
-		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.EpisodeRef) || payload.StunServer != "" || payload.ProviderSubject != "" || payload.Token != "" {
-			return ErrInvalidArrival
-		}
-
-	default:
+	if grant.Provider != PublicProviderChalkSFU || !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.EpisodeRef) {
 		return ErrInvalidArrival
 	}
 	return nil

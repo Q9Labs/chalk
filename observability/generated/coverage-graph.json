@@ -1,0 +1,324 @@
+{
+  "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
+  "schema_ver": "2637fcfa1f33",
+  "symptoms": [
+    {
+      "code": "access.connection_lost",
+      "area": "access",
+      "slice": 7,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/access.connection_lost.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/access.connection_lost/positive.json",
+        "healthy": "observability/fixtures/access.connection_lost/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "admission.unresolved",
+      "area": "entry",
+      "slice": 1,
+      "allowlisted": true,
+      "item": "attempt",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "admission.decision",
+          "from": ["api"],
+          "required": true,
+          "events": []
+        }
+      ],
+      "events": [],
+      "rule": "observability/rules/admission.unresolved.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/admission.unresolved/positive.json",
+        "healthy": "observability/fixtures/admission.unresolved/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "audio.cant_hear",
+      "area": "audio",
+      "slice": 3,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/audio.cant_hear.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/audio.cant_hear/positive.json",
+        "healthy": "observability/fixtures/audio.cant_hear/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "audio.not_heard",
+      "area": "audio",
+      "slice": 3,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "audio.mic_state",
+          "from": ["client"],
+          "required": true,
+          "events": []
+        },
+        {
+          "fact": "audio.ingress",
+          "from": ["sfu"],
+          "required": true,
+          "events": []
+        },
+        {
+          "fact": "audio.capture",
+          "from": ["client"],
+          "required": false,
+          "events": []
+        }
+      ],
+      "events": [],
+      "rule": "observability/rules/audio.not_heard.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/audio.not_heard/positive.json",
+        "healthy": "observability/fixtures/audio.not_heard/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "board.view_jumped",
+      "area": "board",
+      "slice": 6,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "board.camera",
+          "from": ["client"],
+          "required": true,
+          "events": []
+        }
+      ],
+      "events": [],
+      "rule": "observability/rules/board.view_jumped.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/board.view_jumped/positive.json",
+        "healthy": "observability/fixtures/board.view_jumped/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "end.time_limit",
+      "area": "end",
+      "slice": 8,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "end.episode",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.episode.ended",
+              "source": "sync",
+              "fields": ["episode_id", "end_reason", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+              "literal": "\"sync.episode.ended\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/end.time_limit.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/end.time_limit/positive.json",
+        "healthy": "observability/fixtures/end.time_limit/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "end.wrong_screen",
+      "area": "end",
+      "slice": 8,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "end.episode",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "sync.episode.ended",
+              "source": "sync",
+              "fields": ["episode_id", "end_reason", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "end.client_screen",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.call_ended",
+              "source": "client",
+              "fields": ["episode_id", "participant_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+              "literal": "\"sync.episode.ended\""
+            }
+          ]
+        },
+        {
+          "name": "client.call_ended",
+          "fields": ["client_session_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+              "literal": "\"client.call_ended\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/end.wrong_screen.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/end.wrong_screen/positive.json",
+        "healthy": "observability/fixtures/end.wrong_screen/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
+    },
+    {
+      "code": "join.no_media",
+      "area": "join",
+      "slice": 2,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/join.no_media.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/join.no_media/positive.json",
+        "healthy": "observability/fixtures/join.no_media/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "page.crashed",
+      "area": "crash",
+      "slice": 9,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/page.crashed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/page.crashed/positive.json",
+        "healthy": "observability/fixtures/page.crashed/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "recording.not_ready",
+      "area": "recording",
+      "slice": 10,
+      "allowlisted": true,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": []
+        }
+      ],
+      "events": [],
+      "rule": "observability/rules/recording.not_ready.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/recording.not_ready/positive.json",
+        "healthy": "observability/fixtures/recording.not_ready/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "rejoin.refused",
+      "area": "end",
+      "slice": 8,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/rejoin.refused.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/rejoin.refused/positive.json",
+        "healthy": "observability/fixtures/rejoin.refused/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "share.wont_stop",
+      "area": "share",
+      "slice": 5,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/share.wont_stop.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/share.wont_stop/positive.json",
+        "healthy": "observability/fixtures/share.wont_stop/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
+      "code": "video.frozen",
+      "area": "video",
+      "slice": 4,
+      "allowlisted": true,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [],
+      "events": [],
+      "rule": "observability/rules/video.frozen.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/video.frozen/positive.json",
+        "healthy": "observability/fixtures/video.frozen/healthy.json"
+      },
+      "fault_scenario": null
+    }
+  ]
+}

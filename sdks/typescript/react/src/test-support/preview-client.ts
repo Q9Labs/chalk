@@ -1,5 +1,6 @@
-import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { ActiveReaction, AdmissionPolicyTarget, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
+import { applyRosterCommand } from "./preview-roster-commands";
 import { callEvents, createSpaceClient } from "@q9labsai/chalk-client";
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
 
@@ -26,6 +27,7 @@ export type PreviewClientCommand =
   | { readonly type: "remove"; readonly participantId: string }
   | { readonly type: "admit"; readonly requestId: string }
   | { readonly type: "deny"; readonly requestId: string }
+  | { readonly type: "setAdmissionPolicy"; readonly policy: AdmissionPolicyTarget }
   | { readonly type: "raiseHand" }
   | { readonly type: "lowerHand" }
   | { readonly type: "renameSelf"; readonly displayName: string }
@@ -148,6 +150,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       remove: (participantId: string) => dispatch({ type: "remove", participantId }),
       admit: (requestId: string) => dispatch({ type: "admit", requestId }),
       deny: (requestId: string) => dispatch({ type: "deny", requestId }),
+      setAdmissionPolicy: (policy: AdmissionPolicyTarget) => dispatch({ type: "setAdmissionPolicy", policy }),
       raiseHand: () => dispatch({ type: "raiseHand" }),
       lowerHand: () => dispatch({ type: "lowerHand" }),
       renameSelf: (displayName: string) => dispatch({ type: "renameSelf", displayName }),
@@ -201,7 +204,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
   return {
     connection: { status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false },
     self: { participantId: null, displayName: null, role: null, capabilities, handRaised: false, can: (capability) => capabilities.includes(capability) },
-    participants: { roster: [], admissionQueue: [] },
+    participants: { roster: [], admissionQueue: [], admissionPolicy: null },
     media: {
       devices: {
         ...createPreviewMediaDevices(),
@@ -276,31 +279,9 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
       return acceptIncomingRequest(snapshot, command.requestId);
     case "declineRequest":
       return removeIncomingRequest(snapshot, command.requestId);
-    case "assignRole":
-      return {
-        ...snapshot,
-        participants: {
-          ...snapshot.participants,
-          roster: snapshot.participants.roster.map((participant) => (participant.participantId === command.participantId ? { ...participant, role: command.roleName } : participant)),
-        },
-      };
-    case "mute":
-      return updateParticipantMedia(snapshot, command.participantId, "microphone", "inactive");
-    case "stopVideo":
-      return updateParticipantMedia(snapshot, command.participantId, "camera", "inactive");
-    case "stopScreenShare":
-      return updateParticipantMedia(snapshot, command.participantId, "screenShare", "inactive");
-    case "requestMedia":
-      return addIncomingRequest(snapshot, command);
-    case "remove":
-      return { ...snapshot, participants: { ...snapshot.participants, roster: snapshot.participants.roster.filter((participant) => participant.participantId !== command.participantId) } };
-    case "admit":
-    case "deny":
-      return { ...snapshot, participants: { ...snapshot.participants, admissionQueue: snapshot.participants.admissionQueue.filter((request) => request.requestId !== command.requestId) } };
     case "raiseHand":
-      return { ...snapshot, self: { ...snapshot.self, handRaised: true } };
     case "lowerHand":
-      return { ...snapshot, self: { ...snapshot.self, handRaised: false } };
+      return { ...snapshot, self: { ...snapshot.self, handRaised: command.type === "raiseHand" } };
     case "renameSelf":
       return { ...snapshot, self: { ...snapshot.self, displayName: command.displayName } };
     case "sendReaction":
@@ -309,6 +290,8 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
       return addPendingChat(snapshot, command.input);
     case "markChatRead":
       return { ...snapshot, chat: { ...snapshot.chat, unreadCount: 0 } };
+    default:
+      return applyRosterCommand(snapshot, command);
   }
 }
 
@@ -322,16 +305,6 @@ function updateScreenShare(snapshot: SpaceSnapshot, enabled: boolean): SpaceSnap
   return { ...snapshot, media: { ...snapshot.media, local: { ...snapshot.media.local, screen }, screenShare: screen } };
 }
 
-function updateParticipantMedia(snapshot: SpaceSnapshot, participantId: string, source: "microphone" | "camera" | "screenShare", state: "inactive"): SpaceSnapshot {
-  return {
-    ...snapshot,
-    participants: {
-      ...snapshot.participants,
-      roster: snapshot.participants.roster.map((participant) => (participant.participantId === participantId ? { ...participant, media: { ...participant.media, [source]: state } } : participant)),
-    },
-  };
-}
-
 function acceptIncomingRequest(snapshot: SpaceSnapshot, requestId: string): SpaceSnapshot {
   const request = snapshot.media.incomingRequests.find((candidate) => candidate.requestId === requestId);
   if (!request) return snapshot;
@@ -341,18 +314,6 @@ function acceptIncomingRequest(snapshot: SpaceSnapshot, requestId: string): Spac
 
 function removeIncomingRequest(snapshot: SpaceSnapshot, requestId: string): SpaceSnapshot {
   return { ...snapshot, media: { ...snapshot.media, incomingRequests: snapshot.media.incomingRequests.filter((request) => request.requestId !== requestId) } };
-}
-
-function addIncomingRequest(snapshot: SpaceSnapshot, command: Extract<PreviewClientCommand, { readonly type: "requestMedia" }>): SpaceSnapshot {
-  const participant = snapshot.participants.roster.find((candidate) => candidate.participantId === command.participantId);
-  const request: IncomingMediaRequest = {
-    requestId: command.requestId,
-    kind: command.kind === "microphone" ? "unmute" : "start_camera",
-    actorParticipantId: command.participantId,
-    actorDisplayName: participant?.displayName ?? null,
-    expiresAt: "2026-08-01T10:20:00.000Z",
-  };
-  return { ...snapshot, media: { ...snapshot.media, incomingRequests: [...snapshot.media.incomingRequests, request] } };
 }
 
 function addPendingChat(snapshot: SpaceSnapshot, input: ChatSendInput): SpaceSnapshot {

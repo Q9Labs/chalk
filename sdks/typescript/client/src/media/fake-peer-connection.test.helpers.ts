@@ -1,4 +1,4 @@
-import { FakeTrack } from "./cloudflare-sfu.test.helpers";
+import { FakeTrack } from "./sfu.test.helpers";
 
 export class FakePeerConnection extends EventTarget {
   readonly bornAt = Date.now();

@@ -1,0 +1,87 @@
+import { expect } from "vitest";
+import { TelemetryOutbox } from "./outbox";
+import { legacyOf } from "./queue";
+import type { DeliveryStep, LedgerFrame, PlatformChange, SeqRange, TelemetryJournal, TelemetryPlatform, TelemetrySend, TelemetrySendResult, WireEvent } from "./types";
+
+type Answer = TelemetrySendResult | "network_error";
+
+const rangeOf = (seq: number): SeqRange => ({ from: seq, to: seq + 1 });
+
+/** A platform that runs on the test clock and answers each POST from a script. The default answer is a 200 that settles every seq of the batch. */
+export function createTestTelemetryPlatform(options: { readonly now?: () => number; readonly journal?: TelemetryJournal } = {}) {
+  const listeners = new Set<(change: PlatformChange) => void>();
+  const requests: { readonly send: TelemetrySend; readonly body: LedgerFrame; readonly events: readonly WireEvent[]; readonly status: number | "network_error" }[] = [];
+  const accepted: WireEvent[] = [];
+  const answers: Answer[] = [];
+  let gate: Promise<void> | null = null;
+  let ids = 0;
+  const state = { online: true, hidden: false };
+  const platform: TelemetryPlatform = {
+    now: options.now ?? (() => Date.now()),
+    uuid: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
+    online: () => state.online,
+    hidden: () => state.hidden,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    send: async (send) => {
+      const body: LedgerFrame = JSON.parse(send.body);
+      const answer = answers.shift() ?? { status: 200, retryAfterMs: 0 };
+      requests.push({ send, body, events: body.events, status: answer === "network_error" ? answer : answer.status });
+      await gate;
+      if (answer === "network_error") throw new TypeError("network error");
+      if (answer.status < 200 || answer.status >= 300) return answer;
+      const acks = answer.acks ?? body.events.map((event) => rangeOf(event.seq));
+      accepted.push(...body.events.filter((event) => acks.some((range) => event.seq >= range.from && event.seq < range.to)));
+      return { ...answer, acks };
+    },
+    ...(options.journal ? { journal: options.journal } : {}),
+  };
+  return {
+    platform,
+    requests,
+    /** Every event a 2xx answer took, in the order the server saw them. */
+    accepted,
+    state,
+    /** Holds the answer of every POST from now on, until the returned function is called. The request itself is already seen by the fake server. */
+    hold: () => {
+      let release: () => void = () => undefined;
+      gate = new Promise<void>((resolve) => (release = () => resolve()));
+      return () => {
+        release();
+        gate = null;
+      };
+    },
+    /** The next POSTs get these answers, one each, in order. */
+    answer: (...next: Answer[]) => answers.push(...next),
+    emit: (change: PlatformChange) => {
+      if (change === "offline") state.online = false;
+      if (change === "online") state.online = true;
+      if (change === "hidden" || change === "background") state.hidden = true;
+      if (change === "visible" || change === "foreground") state.hidden = false;
+      for (const listener of [...listeners]) listener(change);
+    },
+  };
+}
+
+/** An outbox over the test platform, bound to a credential that stays valid. */
+export function createTestOutbox(options: { readonly now?: () => number; readonly random?: () => number; readonly bound?: boolean; readonly journal?: TelemetryJournal; readonly trace?: (step: DeliveryStep) => void } = {}) {
+  const harness = createTestTelemetryPlatform(options);
+  const outbox = new TelemetryOutbox({ platform: harness.platform, endpoint: (tenantId) => `https://api.test/v1/tenants/${tenantId}/telemetry`, random: options.random ?? (() => 0.5), ...(options.trace ? { trace: options.trace } : {}), liveSources: new Set() });
+  if (options.bound !== false) outbox.bind({ current: () => ({ tenantId: "tenant", subject: "tenant/episode/participant", token: "token", expiresAt: Date.now() + 3_600_000 }), refresh: async () => undefined });
+  return { ...harness, outbox };
+}
+
+/** What the server checks of one client session: `seq` only rises, and every hole is a drop the client counted in a `telemetry_dropped` event. */
+export function expectUnbrokenSequence(events: readonly WireEvent[]): void {
+  const seqs = events.map((event) => event.seq);
+  seqs.forEach((seq, index) => {
+    if (index > 0) expect(seq).toBeGreaterThan(seqs[index - 1] ?? -1);
+  });
+  const holes = (seqs.at(-1) ?? -1) + 1 - seqs.length;
+  const counted = events.map(legacyOf).reduce((sum, event) => sum + (event?.type === "telemetry_dropped" ? (event.dropped ?? 0) : 0), 0);
+  expect(holes).toBe(counted);
+}
+
+export const statsEvent = (windowMs = 10_000) => ({ type: "call_stats", stats: { window_ms: windowMs, connection_type: "udp" } }) as const;

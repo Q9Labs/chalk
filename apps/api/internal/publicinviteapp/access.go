@@ -10,7 +10,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -44,10 +43,6 @@ type MediaResolver interface {
 
 type SyncIssuer interface {
 	IssueForParticipant(context.Context, synctokens.SubjectKey) (synctokens.Token, error)
-}
-
-type MediaIssuer interface {
-	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
 }
 
 type MediaProofVerifier interface {
@@ -334,7 +329,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
-	providerSubject, clientPayload, err := publicJoinPayload(service.Provider(), join)
+	providerSubject, clientPayload, err := publicJoinPayload(join)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -352,7 +347,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		Provider: provider,
 	}
 	mediaSubject.ConnectionID = providerSubject
-	mediaToken, err := a.mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, clients), mediaSubject)
+	mediaToken, telemetryToken, err := issueGrantCredentials(ctx, a.mediaTokens, clients, mediaSubject)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -362,7 +357,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	}
 
 	return publicinvites.PublicAccessGrant{
-		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
+		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, Telemetry: telemetryToken, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,
@@ -391,7 +386,7 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	if persistedProvider != "" && string(service.Provider()) != persistedProvider {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
-	if !publicProvider(service.Provider()) {
+	if service.Provider() != mediaplane.ProviderChalkSFU {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{
@@ -407,63 +402,38 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	return service, episode, nil
 }
 
-// scopeOf names the Participant connection a media call acts for. Chalk SFU
-// rejects a call without all four parts; Cloudflare ignores them.
+// scopeOf names the Participant connection the Chalk SFU acts on.
 func scopeOf(tenantID, episodeID, participantID utilities.ID, generation int64) mediaplane.Scope {
 	return mediaplane.Scope{TenantID: tenantID.String(), EpisodeID: episodeID.String(), ParticipantID: participantID.String(), Generation: generation}
 }
 
-// publicProvider reports whether the provider's joins name one connection, which
-// the guest's media proof binds to. Both SFU providers do.
-func publicProvider(provider mediaplane.Provider) bool {
-	return provider == mediaplane.ProviderCloudflareSFU || provider == mediaplane.ProviderChalkSFU
-}
-
-func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (string, publicinvites.PublicAccessClientPayload, error) {
-	switch provider {
-	case mediaplane.ProviderChalkSFU:
-		connectionID, ok := join.ClientPayload["connectionId"].(string)
-		episodeRef, refOK := join.ClientPayload["episodeRef"].(string)
-		if !ok || !refOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(episodeRef) == "" {
-			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
-		}
-		iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
-		flags, _ := join.ClientPayload["capabilities"].(map[string]any)
-		capabilities := publicinvites.PublicAccessCapabilities{
-			ServerLayerAdaptation: flags["serverLayerAdaptation"] == true,
-			SubscriptionState:     flags["subscriptionState"] == true,
-			ICERestart:            flags["iceRestart"] == true,
-			PullPublished:         flags["pullPublished"] == true,
-			UnifiedSignaling:      flags["unifiedSignaling"] == true,
-			MuteInPlace:           flags["muteInPlace"] == true,
-			KeepsIdleSession:      flags["keepsIdleSession"] == true,
-		}
-		capabilities.DirectSignalingURL, _ = flags["directSignalingUrl"].(string)
-		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
-	case mediaplane.ProviderCloudflareSFU:
-		connectionID, ok := join.ClientPayload["connectionId"].(string)
-		stunServer, stunOK := join.ClientPayload["stunServer"].(string)
-		if !ok || !stunOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(stunServer) == "" {
-			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
-		}
-		iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
-		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, StunServer: stunServer, ICEServers: iceServers}, nil
-
-	default:
+func publicJoinPayload(join mediaplane.Join) (string, publicinvites.PublicAccessClientPayload, error) {
+	connectionID, ok := join.ClientPayload["connectionId"].(string)
+	episodeRef, refOK := join.ClientPayload["episodeRef"].(string)
+	if !ok || !refOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(episodeRef) == "" {
 		return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
 	}
+	iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
+	flags, _ := join.ClientPayload["capabilities"].(map[string]any)
+	capabilities := publicinvites.PublicAccessCapabilities{
+		ServerLayerAdaptation: flags["serverLayerAdaptation"] == true,
+		SubscriptionState:     flags["subscriptionState"] == true,
+		ICERestart:            flags["iceRestart"] == true,
+		PullPublished:         flags["pullPublished"] == true,
+		UnifiedSignaling:      flags["unifiedSignaling"] == true,
+		MuteInPlace:           flags["muteInPlace"] == true,
+		KeepsIdleSession:      flags["keepsIdleSession"] == true,
+	}
+	capabilities.DirectSignalingURL, _ = flags["directSignalingUrl"].(string)
+	return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 }
 
 func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arrival) bool {
 	if subject.TenantID != arrival.TenantID || subject.SpaceID != arrival.SpaceID || subject.EpisodeID != arrival.EpisodeID || subject.ParticipantID != arrival.ParticipantID || subject.ParticipantGeneration != arrival.ParticipantGeneration || subject.Provider != arrival.Provider {
 		return false
 	}
-	switch arrival.Provider {
-	case publicinvites.PublicProviderCloudflareSFU, publicinvites.PublicProviderChalkSFU:
-		return subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
-	default:
-		return false
-	}
+	return arrival.Provider == publicinvites.PublicProviderChalkSFU &&
+		subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 }
 
 var _ publicinvites.Access = accessPort{}

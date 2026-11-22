@@ -908,8 +908,8 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Signal cloudflare s f u */
-    post: operations["signalCloudflareSFU"];
+    /** Signal chalk s f u */
+    post: operations["signalChalkSFU"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1456,7 +1456,8 @@ export interface components {
             | null;
         };
         expires_at: components["schemas"]["DateTimeString"];
-        provider: string;
+        /** @enum {string} */
+        provider: "chalk_sfu";
         token: string;
       };
       subject: {
@@ -1470,6 +1471,10 @@ export interface components {
         expires_at: components["schemas"]["DateTimeString"];
         token: string;
       };
+      telemetry?: {
+        expires_at: components["schemas"]["DateTimeString"];
+        token: string;
+      } | null;
     };
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
@@ -1494,27 +1499,7 @@ export interface components {
     CancelRecordingPreparationRequest: {
       expected_revision: number;
     };
-    ChatAttachment: {
-      attachmentId: string;
-      byteLength: number;
-      fileName: string;
-      mimeType: string;
-    };
-    ChatAttachmentDownload: {
-      downloadUrl: string;
-      expiresAt: string;
-    };
-    ChatAttachmentUpload: {
-      attachmentId: string;
-      expiresAt: string;
-      headers: {
-        [key: string]: string;
-      };
-      method: string;
-      uploadId: string;
-      uploadUrl: string;
-    };
-    CloudflareSFUSignalAPIResponse: {
+    ChalkSFUSignalAPIResponse: {
       accepted?: boolean;
       incarnation?: number;
       publications?:
@@ -1562,7 +1547,7 @@ export interface components {
         trackName?: string;
       }[];
     };
-    CloudflareSFUSignalRequest: {
+    ChalkSFUSignalRequest: {
       allow_partial_remote_tracks?: boolean;
       close_tracks?: {
         mid: string;
@@ -1612,6 +1597,26 @@ export interface components {
         trackName: string;
       }[];
     };
+    ChatAttachment: {
+      attachmentId: string;
+      byteLength: number;
+      fileName: string;
+      mimeType: string;
+    };
+    ChatAttachmentDownload: {
+      downloadUrl: string;
+      expiresAt: string;
+    };
+    ChatAttachmentUpload: {
+      attachmentId: string;
+      expiresAt: string;
+      headers: {
+        [key: string]: string;
+      };
+      method: string;
+      uploadId: string;
+      uploadUrl: string;
+    };
     CreateAPIKeyRequest: {
       expires_at: components["schemas"]["DateTimeString"];
       name: string;
@@ -1654,7 +1659,8 @@ export interface components {
       default_episode_duration_seconds: number;
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
-      media_plane?: string;
+      /** @enum {string} */
+      media_plane?: "chalk_sfu";
       metadata?:
         | {
             [key: string]: unknown;
@@ -1784,7 +1790,8 @@ export interface components {
     };
     CreateTenantRequest: {
       cors_allowed_origins?: string[];
-      default_media_plane?: string | null;
+      /** @enum {string|null} */
+      default_media_plane?: "chalk_sfu" | null;
       external_id?: string | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
@@ -2041,13 +2048,13 @@ export interface components {
       redirect_host: string;
       scope: string;
     };
-    /** @description Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses. */
+    /** @description Controls whether the Tenant uses the Chalk SFU. */
     MediaPlaneProviderConfig: {
       enabled?: boolean;
       /** @enum {string} */
-      mode?: "chalk_managed" | "tenant_managed";
-      /** @description The supported provider is cf_sfu. */
-      provider?: string;
+      mode?: "chalk_managed";
+      /** @enum {string} */
+      provider?: "chalk_sfu";
     } & {
       [key: string]: unknown;
     };
@@ -2111,7 +2118,8 @@ export interface components {
             | boolean
             | null;
         };
-        provider: string;
+        /** @enum {string} */
+        provider: "chalk_sfu";
       } | null;
       participant: {
         capabilities: string[];
@@ -2356,12 +2364,15 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
       default_episode_duration_seconds: number;
-      effective_media_plane: string | null;
+      /** @enum {string|null} */
+      effective_media_plane: "chalk_sfu" | null;
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
-      media_plane: string;
-      media_plane_setting: string | null;
+      /** @enum {string} */
+      media_plane: "chalk_sfu";
+      /** @enum {string|null} */
+      media_plane_setting: "chalk_sfu" | null;
       metadata:
         | {
             [key: string]: unknown;
@@ -2575,7 +2586,11 @@ export interface components {
       sync_token: string;
     };
     TelemetryRequest: {
-      client_session_id: components["schemas"]["UUID"];
+      batch_id?: components["schemas"]["UUID"];
+      client_session_id?: components["schemas"]["UUID"];
+      /** @enum {string} */
+      end?: "closed" | "abandoned";
+      /** @description Version 1 requires 1 to 100 events. Version 2 allows 0 to 100, and an empty list only when end is set. */
       events: {
         /** @enum {string} */
         action?: "mute" | "unmute" | "publish" | "unpublish" | "subscribe" | "unsubscribe" | "share_start" | "share_stop";
@@ -2613,7 +2628,13 @@ export interface components {
           | "not_live";
         /** @enum {string} */
         device_kind?: "microphone" | "camera" | "speaker" | "screen";
+        /** @enum {string} */
+        drop_reason?: "queue_full" | "credential_expired" | "refused";
         dropped?: number | null;
+        dropped_seqs?: {
+          from: number;
+          to: number;
+        }[];
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
@@ -2622,6 +2643,7 @@ export interface components {
         end_reason?: "left" | "episode_ended" | "time_limit" | "removed" | "connection_lost" | "join_failed" | "page_closed";
         /** @enum {string} */
         error_name?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "TypeError" | "unknown";
+        event_id?: components["schemas"]["UUID"];
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -2631,7 +2653,7 @@ export interface components {
         /** @enum {string} */
         mechanism?: "ice_restart" | "media_reconnect" | "sync_reconnect" | "sync_digest" | "access_refresh";
         /** @enum {string} */
-        media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
+        media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "SFUError" | "network" | "timeout" | "unknown";
         /** @enum {string} */
         media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications" | "sfu_subscriptions";
         op_id?: components["schemas"]["UUID"];
@@ -2749,17 +2771,31 @@ export interface components {
         /** @enum {string} */
         upload_failure?: "initiate_failed" | "storage_unreachable" | "storage_rejected" | "finalize_failed";
       }[];
+      next_seq?: number | null;
+      source_id?: components["schemas"]["UUID"];
       /** @enum {integer} */
-      version: 1;
+      version: 1 | 2;
     };
     TelemetryResponse: {
       accepted: number;
+      acks: {
+        from: number;
+        to: number;
+      }[];
+      duplicates: number;
+      end_rejection?: string;
       rejected: number;
+      rejections: {
+        reason: string;
+        seq: number;
+      }[];
+      server_ms?: number;
     };
     Tenant: {
       cors_allowed_origins: string[];
       created_at: components["schemas"]["DateTimeString"];
-      default_media_plane: string | null;
+      /** @enum {string|null} */
+      default_media_plane: "chalk_sfu" | null;
       external_id: string | null;
       id: components["schemas"]["TenantId"];
       logo_key: string | null;
@@ -3078,7 +3114,8 @@ export interface components {
       default_episode_duration_seconds?: number;
       linger_window_seconds?: number;
       maximum_episode_duration_seconds?: number;
-      media_plane?: string;
+      /** @enum {string|null} */
+      media_plane?: "chalk_sfu" | null;
       metadata?:
         | {
             [key: string]: unknown;
@@ -3208,7 +3245,8 @@ export interface components {
     };
     UpdateTenantRequest: {
       cors_allowed_origins?: string[];
-      default_media_plane?: string | null;
+      /** @enum {string|null} */
+      default_media_plane?: "chalk_sfu" | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name?: string;
@@ -7411,6 +7449,7 @@ export interface operations {
     parameters: {
       query?: {
         archived?: boolean;
+        order?: "created" | "active";
         page_size?: number;
         cursor?: string;
       };
@@ -8927,7 +8966,7 @@ export interface operations {
       };
     };
   };
-  signalCloudflareSFU: {
+  signalChalkSFU: {
     parameters: {
       query?: never;
       header?: never;
@@ -8941,7 +8980,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CloudflareSFUSignalRequest"];
+        "application/json": components["schemas"]["ChalkSFUSignalRequest"];
       };
     };
     responses: {
@@ -8951,7 +8990,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["CloudflareSFUSignalAPIResponse"];
+          "application/json": components["schemas"]["ChalkSFUSignalAPIResponse"];
         };
       };
       /** @description Bad Request */

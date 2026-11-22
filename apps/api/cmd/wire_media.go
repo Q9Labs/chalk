@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
-	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
@@ -15,20 +14,12 @@ import (
 )
 
 func (w *apiWiring) wireMediaPlane() error {
-	var err error
-	if w.cfg.DefaultMediaPlane != "" || w.cfg.ProviderBridge.Enabled {
-		w.managedSFU, err = sfuadapter.NewAdapter(w.cfg.CloudflareRealtime)
-		if err != nil {
-			return fmt.Errorf("configure Cloudflare SFU adapter: %w", err)
-		}
-	}
 	w.mediaPlaneRegistry = mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
-		ProcessConfig:   w.cfg.CloudflareRealtime,
-		DefaultProvider: w.cfg.DefaultMediaPlane,
-		Telemetry:       w.mediaPlaneTelemetry,
-		ChalkSFU:        w.chalkSFU,
-		Episodes:        w.options.Episodes,
-		Recovery:        postgres.NewEpisodeRecovery(w.pool),
+		TURN:      w.cfg.TURN,
+		Telemetry: w.mediaPlaneTelemetry,
+		ChalkSFU:  w.chalkSFU,
+		Episodes:  w.options.Episodes,
+		Recovery:  postgres.NewEpisodeRecovery(w.pool),
 	})
 	w.options.MediaPlane = w.mediaPlaneRegistry
 	return nil
@@ -45,7 +36,7 @@ func (w *apiWiring) wireProviderBridge() error {
 	}
 	if w.cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(w.recordingPipelineService)
-		executor := providerbridge.NewSFUExecutor(w.mediaPublicationService, w.managedSFU, recordingController)
+		executor := providerbridge.NewSFUExecutor(w.mediaPublicationService, nil, recordingController)
 		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(w.pool), w.chalkNodes).WithRetiredAllocations(w.mediaPlaneRegistry.EndRetiredAllocations).WithSessionOutcomes(postgres.NewSessionOutcomes(w.pool))
 		providerBridgeService := providerbridge.NewService(w.providerOperationRepository, executor)
 		verifier, err := spiffe.NewVerifier(w.cfg.ProviderBridge.SPIFFETrustDomain, w.cfg.Observability.Environment)

@@ -4,23 +4,12 @@ create table tenants (
     id uuid primary key,
     name text not null,
     default_region text,
-    -- cf_sfu
+    -- Retained for the public contract and rollback; new media uses chalk_sfu.
     default_media_plane text,
     -- Set only by the operator command; a trigger clears it whenever the default changes otherwise.
     default_media_plane_approved boolean not null default false,
-    -- {
-    --   "enabled": true,
-    --   "provider": "cf_sfu",
-    --   "mode": "chalk_managed" | "tenant_managed",
-    --   "cloudflare": {
-    --     "account_id": "cloudflare-account-id",
-    --     "sfu": {
-    --       "enabled": true,
-    --       "app_id": "realtime-app-id",
-    --       "app_secret": string
-    --     }
-    --   }
-    -- }
+    -- A Tenant can disable media with {"enabled": false}.
+    -- Previous-release provider documents can remain stored for rollback.
     media_plane_provider_config jsonb,
     ai_provider_config jsonb,
     -- {
@@ -230,7 +219,7 @@ create table spaces (
     name text not null,
     tenant_id uuid not null references tenants(id),
     slug text not null,
-    -- cf_sfu
+    -- chalk_sfu for new Spaces; historical snapshots retain their original binding.
     media_plane text not null,
     -- The Space's own plane choice, with the media_plane value it was written against; null inherits the Tenant, then the platform default.
     media_plane_setting_written text check (media_plane_setting_written in ('cf_sfu', 'chalk_sfu')),
@@ -514,6 +503,49 @@ create trigger episodes_record_initial_deadline
 after update of deadline_at on episodes
 for each row when (old.deadline_at is distinct from new.deadline_at)
 execute function record_initial_episode_deadline();
+
+-- When each Space was last active: when it was created, or when an Episode in it was created, started or ended,
+-- whichever is latest. Triggers keep it, so every writer of Spaces and Episodes keeps it current.
+create table space_activity (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    active_at timestamptz not null,
+    primary key (tenant_id, space_id),
+    foreign key (tenant_id, space_id) references spaces(tenant_id, id) on delete cascade
+);
+create index space_activity_tenant_active_at_idx on space_activity(tenant_id, active_at desc, space_id desc);
+
+create function record_space_created()
+returns trigger
+language plpgsql
+as $$
+begin
+    insert into space_activity (tenant_id, space_id, active_at)
+    values (new.tenant_id, new.id, new.created_at)
+    on conflict (tenant_id, space_id) do nothing;
+    return null;
+end;
+$$;
+
+create function record_episode_activity()
+returns trigger
+language plpgsql
+as $$
+begin
+    insert into space_activity (tenant_id, space_id, active_at)
+    values (new.tenant_id, new.space_id, coalesce(new.ended_at, new.started_at, new.created_at))
+    on conflict (tenant_id, space_id) do update set active_at = greatest(space_activity.active_at, excluded.active_at);
+    return null;
+end;
+$$;
+
+create trigger spaces_record_activity
+after insert on spaces
+for each row execute function record_space_created();
+
+create trigger episodes_record_activity
+after insert or update of started_at, ended_at on episodes
+for each row execute function record_episode_activity();
 
 create table episode_create_requests (
     tenant_id uuid not null,
@@ -5292,6 +5324,68 @@ create table participant_media_sessions (
 create index participant_media_sessions_participant_idx
     on participant_media_sessions(tenant_id, episode_id, participant_id, generation);
 
+-- The telemetry ledger: which seqs of each SDK source the server has stored, rejected or been told
+-- were dropped, one row per source, owned by the participant and Episode of its first batch.
+create table telemetry_sources (
+    tenant_id uuid not null,
+    source_id uuid not null,
+    participant_id uuid not null,
+    episode_id uuid not null,
+    -- {"stored": [{"from": 0, "to": 5}], "rejected": [...], "dropped": {"queue_full": [...]}}
+    ranges jsonb not null default '{"stored": [], "rejected": [], "dropped": {}}',
+    reported_next_seq bigint not null default 0 check (reported_next_seq >= 0),
+    end_state text check (end_state in ('closed', 'abandoned')),
+    end_next_seq bigint check (end_next_seq >= 0),
+    first_received_at timestamptz not null,
+    last_received_at timestamptz not null,
+    primary key (tenant_id, source_id),
+    check ((end_state is null) = (end_next_seq is null))
+);
+create index telemetry_sources_episode_idx on telemetry_sources (tenant_id, episode_id);
+create index telemetry_sources_participant_idx on telemetry_sources (tenant_id, participant_id);
+create table telemetry_outbox (
+    id bigint generated always as identity primary key,
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    payload jsonb not null check (jsonb_typeof(payload) = 'array' and jsonb_array_length(payload) > 0),
+    available_at timestamptz not null default now(),
+    retry boolean not null default false,
+    witness boolean not null default false
+);
+create index telemetry_outbox_ready_idx on telemetry_outbox (available_at, id);
+create index telemetry_outbox_tenant_idx on telemetry_outbox (tenant_id);
+
+-- Abort an enqueue at capacity rather than evict acknowledged evidence. The
+-- counter is per Tenant, so it follows the Tenant on purge and one Tenant
+-- cannot use the whole queue. A witness row (the Episode end Sync commits with the end itself)
+-- is neither counted nor refused: it is one small row per Episode, and it must not make an end
+-- wait for space or for the usage row a Participant's upload holds.
+create table telemetry_outbox_usage (
+    tenant_id uuid primary key references tenants(id) on delete cascade,
+    max_bytes bigint not null default 16777216,
+    queued_bytes bigint not null default 0 check (queued_bytes between 0 and max_bytes)
+);
+
+create function account_telemetry_outbox() returns trigger language plpgsql as $$
+begin
+    if TG_OP = 'INSERT' then
+        if new.witness then return null; end if;
+        insert into telemetry_outbox_usage (tenant_id, queued_bytes)
+        values (new.tenant_id, octet_length(new.payload::text) + 256)
+        on conflict (tenant_id) do update set queued_bytes = telemetry_outbox_usage.queued_bytes + excluded.queued_bytes;
+    elsif TG_OP = 'DELETE' then
+        if old.witness then return null; end if;
+        update telemetry_outbox_usage set queued_bytes = queued_bytes - octet_length(old.payload::text) - 256
+        where tenant_id = old.tenant_id;
+    else
+        update telemetry_outbox_usage set queued_bytes = 0;
+    end if;
+    return null;
+end;
+$$;
+create trigger account_telemetry_outbox_rows after insert or delete on telemetry_outbox
+    for each row execute function account_telemetry_outbox();
+create trigger account_telemetry_outbox_truncate after truncate on telemetry_outbox
+    for each statement execute function account_telemetry_outbox();
 create table recording_screen_annotation_layers (
     tenant_id uuid not null,
     space_id uuid not null,

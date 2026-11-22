@@ -36,7 +36,7 @@ func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
 		}
 	}
 	exec(`insert into tenants(id, name) values($1, 'Helper proof')`, uuid(tenant))
-	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Helper proof', $2, $3, 'cf_sfu')`, uuid(space), uuid(tenant), "helper-"+space.String())
+	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Helper proof', $2, $3, 'chalk_sfu')`, uuid(space), uuid(tenant), "helper-"+space.String())
 	exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{}')`, uuid(episode), uuid(space), uuid(tenant))
 	exec(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role, media_connection_id, media_connection_generation)
 		values($1, $2, $3, $4, '{drawWhiteboard}', 3, 'active', 'collaborator', $5, 3)`,

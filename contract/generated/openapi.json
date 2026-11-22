@@ -6108,6 +6108,15 @@
           },
           {
             "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": ["created", "active"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "page_size",
             "required": false,
             "schema": {
@@ -6143,7 +6152,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_archive_filter", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_archive_filter", "space.invalid_order", "tenant.invalid_id"]
           },
           "401": {
             "content": {
@@ -6272,7 +6281,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "409": {
             "content": {
@@ -6542,7 +6551,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
+            "x-chalk-error-codes": ["access.forbidden"]
           },
           "404": {
             "content": {
@@ -8618,7 +8627,7 @@
     },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
       "post": {
-        "operationId": "signalCloudflareSFU",
+        "operationId": "signalChalkSFU",
         "parameters": [
           {
             "in": "path",
@@ -8657,7 +8666,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CloudflareSFUSignalRequest"
+                "$ref": "#/components/schemas/ChalkSFUSignalRequest"
               }
             }
           },
@@ -8668,7 +8677,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CloudflareSFUSignalAPIResponse"
+                  "$ref": "#/components/schemas/ChalkSFUSignalAPIResponse"
                 }
               }
             },
@@ -8788,7 +8797,7 @@
             "participantMediaBearer": []
           }
         ],
-        "summary": "Signal cloudflare s f u",
+        "summary": "Signal chalk s f u",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -10962,7 +10971,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["telemetry.refused", "tenant.invalid_id"]
           },
           "401": {
             "content": {
@@ -11052,6 +11061,9 @@
           }
         },
         "security": [
+          {
+            "participantTelemetryBearer": []
+          },
           {
             "participantMediaBearer": []
           }
@@ -14276,6 +14288,12 @@
         "scheme": "bearer",
         "type": "http"
       },
+      "participantTelemetryBearer": {
+        "bearerFormat": "JWT",
+        "description": "Participant telemetry token, valid for 24 hours and accepted only by the telemetry route. The participant media credential is accepted there too. It cannot call any other route.",
+        "scheme": "bearer",
+        "type": "http"
+      },
       "sessionOrBearer": {
         "description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
         "scheme": "bearer",
@@ -14465,6 +14483,7 @@
                 "$ref": "#/components/schemas/DateTimeString"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               },
               "token": {
@@ -14508,6 +14527,19 @@
             },
             "required": ["expires_at", "token"],
             "type": "object"
+          },
+          "telemetry": {
+            "additionalProperties": false,
+            "properties": {
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["expires_at", "token"],
+            "type": ["object", "null"]
           }
         },
         "required": ["media", "subject", "sync"],
@@ -14565,67 +14597,7 @@
         "required": ["expected_revision"],
         "type": "object"
       },
-      "ChatAttachment": {
-        "additionalProperties": false,
-        "properties": {
-          "attachmentId": {
-            "type": "string"
-          },
-          "byteLength": {
-            "type": "integer"
-          },
-          "fileName": {
-            "type": "string"
-          },
-          "mimeType": {
-            "type": "string"
-          }
-        },
-        "required": ["attachmentId", "byteLength", "fileName", "mimeType"],
-        "type": "object"
-      },
-      "ChatAttachmentDownload": {
-        "additionalProperties": false,
-        "properties": {
-          "downloadUrl": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string"
-          }
-        },
-        "required": ["downloadUrl", "expiresAt"],
-        "type": "object"
-      },
-      "ChatAttachmentUpload": {
-        "additionalProperties": false,
-        "properties": {
-          "attachmentId": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string"
-          },
-          "headers": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "method": {
-            "type": "string"
-          },
-          "uploadId": {
-            "type": "string"
-          },
-          "uploadUrl": {
-            "type": "string"
-          }
-        },
-        "required": ["attachmentId", "expiresAt", "headers", "method", "uploadId", "uploadUrl"],
-        "type": "object"
-      },
-      "CloudflareSFUSignalAPIResponse": {
+      "ChalkSFUSignalAPIResponse": {
         "additionalProperties": false,
         "properties": {
           "accepted": {
@@ -14761,7 +14733,7 @@
         },
         "type": "object"
       },
-      "CloudflareSFUSignalRequest": {
+      "ChalkSFUSignalRequest": {
         "additionalProperties": false,
         "properties": {
           "allow_partial_remote_tracks": {
@@ -14902,6 +14874,66 @@
         "required": ["op"],
         "type": "object"
       },
+      "ChatAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "byteLength": {
+            "type": "integer"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          }
+        },
+        "required": ["attachmentId", "byteLength", "fileName", "mimeType"],
+        "type": "object"
+      },
+      "ChatAttachmentDownload": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": ["downloadUrl", "expiresAt"],
+        "type": "object"
+      },
+      "ChatAttachmentUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "uploadId": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["attachmentId", "expiresAt", "headers", "method", "uploadId", "uploadUrl"],
+        "type": "object"
+      },
       "CreateAPIKeyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -14999,7 +15031,7 @@
             "type": "integer"
           },
           "media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu"],
             "type": "string"
           },
           "metadata": {
@@ -15155,7 +15187,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -16019,17 +16051,17 @@
       },
       "MediaPlaneProviderConfig": {
         "additionalProperties": true,
-        "description": "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
+        "description": "Controls whether the Tenant uses the Chalk SFU.",
         "properties": {
           "enabled": {
             "type": "boolean"
           },
           "mode": {
-            "enum": ["chalk_managed", "tenant_managed"],
+            "enum": ["chalk_managed"],
             "type": "string"
           },
           "provider": {
-            "description": "The supported provider is cf_sfu.",
+            "enum": ["chalk_sfu"],
             "type": "string"
           }
         },
@@ -16213,6 +16245,7 @@
                 "type": "object"
               },
               "provider": {
+                "enum": ["chalk_sfu"],
                 "type": "string"
               }
             },
@@ -17045,6 +17078,7 @@
             "type": "integer"
           },
           "effective_media_plane": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "id": {
@@ -17057,9 +17091,11 @@
             "type": "integer"
           },
           "media_plane": {
+            "enum": ["chalk_sfu"],
             "type": "string"
           },
           "media_plane_setting": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "metadata": {
@@ -17533,10 +17569,18 @@
       "TelemetryRequest": {
         "additionalProperties": false,
         "properties": {
+          "batch_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "client_session_id": {
             "$ref": "#/components/schemas/UUID"
           },
+          "end": {
+            "enum": ["closed", "abandoned"],
+            "type": "string"
+          },
           "events": {
+            "description": "Version 1 requires 1 to 100 events. Version 2 allows 0 to 100, and an empty list only when end is set.",
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -17593,10 +17637,35 @@
                   "enum": ["microphone", "camera", "speaker", "screen"],
                   "type": "string"
                 },
+                "drop_reason": {
+                  "enum": ["queue_full", "credential_expired", "refused"],
+                  "type": "string"
+                },
                 "dropped": {
                   "maximum": 2147483647,
                   "minimum": 0,
                   "type": ["integer", "null"]
+                },
+                "dropped_seqs": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "to": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
                 },
                 "duration_ms": {
                   "maximum": 2147483647,
@@ -17619,6 +17688,9 @@
                 "error_name": {
                   "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
                   "type": "string"
+                },
+                "event_id": {
+                  "$ref": "#/components/schemas/UUID"
                 },
                 "granted_audio": {
                   "enum": ["granted", "not_granted", "unknown"],
@@ -17643,7 +17715,7 @@
                   "type": "string"
                 },
                 "media_error_kind": {
-                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"],
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "SFUError", "network", "timeout", "unknown"],
                   "type": "string"
                 },
                 "media_error_step": {
@@ -17952,15 +18024,23 @@
               "type": "object"
             },
             "maxItems": 100,
-            "minItems": 1,
+            "minItems": 0,
             "type": "array"
           },
+          "next_seq": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": ["integer", "null"]
+          },
+          "source_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
           "version": {
-            "enum": [1],
+            "enum": [1, 2],
             "type": "integer"
           }
         },
-        "required": ["client_session_id", "events", "version"],
+        "required": ["events", "version"],
         "type": "object"
       },
       "TelemetryResponse": {
@@ -17969,11 +18049,52 @@
           "accepted": {
             "type": "integer"
           },
+          "acks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                }
+              },
+              "required": ["from", "to"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "end_rejection": {
+            "type": "string"
+          },
           "rejected": {
+            "type": "integer"
+          },
+          "rejections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer"
+                }
+              },
+              "required": ["reason", "seq"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "server_ms": {
             "type": "integer"
           }
         },
-        "required": ["accepted", "rejected"],
+        "required": ["accepted", "acks", "duplicates", "rejected", "rejections"],
         "type": "object"
       },
       "Tenant": {
@@ -17993,6 +18114,7 @@
             "$ref": "#/components/schemas/DateTimeString"
           },
           "default_media_plane": {
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "external_id": {
@@ -18597,8 +18719,8 @@
             "type": "integer"
           },
           "media_plane": {
-            "minLength": 1,
-            "type": "string"
+            "enum": ["chalk_sfu", null],
+            "type": ["string", "null"]
           },
           "metadata": {
             "additionalProperties": true,
@@ -18752,7 +18874,7 @@
             "type": "array"
           },
           "default_media_plane": {
-            "minLength": 1,
+            "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
           "logo_key": {

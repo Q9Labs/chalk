@@ -60,7 +60,7 @@ var specs = map[string]spec{
 	"call_stats": {allowed: []string{"stats"}, required: []string{"stats"}},
 
 	// The outbox could not keep every event and says how many it lost.
-	"telemetry_dropped": {allowed: []string{"dropped"}, required: []string{"dropped"}},
+	"telemetry_dropped": {allowed: []string{"dropped", "dropped_seqs", "drop_reason"}, required: []string{"dropped"}},
 
 	// Media operations: the click or call that asked for them, and what came of it.
 	"media_intent": {allowed: []string{"action", "source", "op_id"}, required: []string{"action", "op_id"}},
@@ -80,7 +80,7 @@ func EventTypes() []string {
 }
 
 var fieldEnums = map[string][]string{
-	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
+	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "SFUError", "network", "timeout", "unknown"},
 	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
 	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
 	"granted_audio":         {"granted", "not_granted", "unknown"},
@@ -112,6 +112,8 @@ var fieldEnums = map[string][]string{
 	"relay_protocol":        {"udp", "tcp", "tls"},
 	"send_layer":            {captureplane.TrackLayerHigh.RID(), captureplane.TrackLayerMedium.RID(), captureplane.TrackLayerLow.RID()},
 	"kind":                  {"audio", "video"},
+	"drop_reason":           {"queue_full", "credential_expired", "refused"},
+	"end":                   {"closed", "abandoned"},
 	"playout":               {"playing", "paused", "no_element", "unknown"},
 }
 
@@ -129,7 +131,7 @@ func FieldEnum(field string) []string {
 // at all. A stats window longer than MaxWindowMS is a gap window, which Check bounds alone.
 func FieldRange(field string) (low, high float64, numeric bool) {
 	switch field {
-	case "seq", "elapsed_ms", "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "dropped", "audio_energy":
+	case "seq", "next_seq", "from", "to", "elapsed_ms", "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "dropped", "audio_energy":
 		return 0, MaxMilliseconds, true
 	case "window_ms":
 		return 1, MaxMilliseconds, true

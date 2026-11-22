@@ -1,3 +1,4 @@
+import { CopyMorphIcon } from "./ChalkCopyButton";
 import { MenuIcon } from "./MenuIcon";
 import { useCopyText } from "./useCopyText";
 
@@ -10,24 +11,24 @@ function inviteSlug(link: string): string {
   }
 }
 
-/** The one way to grab the invite link. `menu` is a row in the call menu; `card` is the filled button on the invite card. */
-export function InviteLinkButton({ link, variant }: { readonly link: string; readonly variant: "menu" | "card" }) {
+/**
+ * The one way to grab the invite link: a row in the call menu.
+ * The label never changes: the copy icon morphs to a check and back, and a polite live region says "Link copied".
+ */
+export function InviteLinkButton({ link }: { readonly link: string }) {
   const { copied, error, copy } = useCopyText(link);
   return (
     <>
-      <button type="button" data-part="copy-invite-link" data-variant={variant} data-copied={copied} className="chalk-invite-link" onClick={() => void copy()}>
+      <button type="button" data-part="copy-invite-link" data-copied={copied} className="chalk-invite-link" onClick={() => void copy()}>
         <span className="chalk-invite-link-lead">
           <MenuIcon name="link" />
         </span>
-        <span className="chalk-invite-link-label">{variant === "card" && copied ? "Link copied" : "Copy invite link"}</span>
-        {variant === "menu" && !copied ? (
-          <span dir="ltr" className="chalk-invite-link-slug">
-            {inviteSlug(link)}
-          </span>
-        ) : null}
+        <span className="chalk-invite-link-label">Copy invite link</span>
+        <span dir="ltr" className="chalk-invite-link-slug">
+          {inviteSlug(link)}
+        </span>
         <span className="chalk-invite-link-end">
-          {copied ? <MenuIcon name="check" size={variant === "menu" ? 16 : 18} /> : <MenuIcon name="copy" size={variant === "menu" ? 16 : 18} />}
-          {variant === "menu" && copied ? "Copied" : null}
+          <CopyMorphIcon copied={copied} size={16} />
         </span>
       </button>
       <span role="status" aria-live="polite" className="sr-only">

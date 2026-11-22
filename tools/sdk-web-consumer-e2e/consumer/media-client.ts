@@ -1,5 +1,5 @@
-import type { CloudflareSFUBootstrap, CloudflareSFUIceServer, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
-import { CloudflareSFUError } from "@q9labsai/chalk-client";
+import type { SFUBootstrap, SFULocalTrack, SFURemoteTrack, SFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
+import { SFUError } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -25,15 +25,13 @@ type FixtureMediaClientInput = {
   readonly onScreenEnded: () => void;
 };
 
-type FixtureMediaAccess =
-  | { readonly token: string; readonly expiresAt: string; readonly provider: "cloudflare_sfu"; readonly clientPayload: CloudflareSFUBootstrap }
-  | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: FixtureChalkSFUPayload };
-type FixtureChalkSFUPayload = {
-  readonly connectionId: string;
-  readonly episodeRef: string;
-  readonly iceServers: readonly CloudflareSFUIceServer[];
-  readonly capabilities: { readonly serverLayerAdaptation: boolean; readonly iceRestart: boolean; readonly pullPublished: boolean };
+type FixtureMediaAccess = {
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly provider: "chalk_sfu";
+  readonly clientPayload: FixtureBootstrap;
 };
+type FixtureBootstrap = Pick<SFUBootstrap, "connectionId">;
 
 export class FixtureMediaClient {
   readonly #credential: () => Promise<string>;
@@ -47,18 +45,18 @@ export class FixtureMediaClient {
   readonly #onScreenEnded: () => void;
   readonly #participantId: string;
   readonly #peers = new Map<string, PeerState>();
-  readonly #received = new Map<string, CloudflareSFURemoteTrack>();
+  readonly #received = new Map<string, SFURemoteTrack>();
   readonly #signalingURL: string;
-  #bootstrap: CloudflareSFUBootstrap;
+  #bootstrap: FixtureBootstrap;
   #remotePublications: readonly MediaPublication[] = [];
-  #snapshot: CloudflareSFUSnapshot;
+  #snapshot: SFUSnapshot;
   #socket: WebSocket | null = null;
   #publicationSequence = 0;
 
   constructor(signalingURL: string, input: FixtureMediaClientInput) {
     this.#signalingURL = signalingURL;
     this.#participantId = input.access.subject.participantId;
-    if (input.access.media.provider !== "cloudflare_sfu") throw new TypeError("The fixture media client only supports Cloudflare SFU access");
+    if (input.access.media.provider !== "chalk_sfu") throw new TypeError("The fixture media client only supports Chalk SFU access");
     this.#bootstrap = input.access.media.clientPayload;
     this.#credential = input.credential;
     this.#onFailure = input.onFailure;
@@ -116,7 +114,7 @@ export class FixtureMediaClient {
     this.#publish("live");
   }
 
-  async restart(input: CloudflareSFUBootstrap | FixtureMediaAccess): Promise<void> {
+  async restart(input: SFUBootstrap | FixtureMediaAccess): Promise<void> {
     this.#bootstrap = fixtureBootstrap(input);
     this.#advertised.clear();
     for (const local of this.#local.values()) local.publicationId = null;
@@ -136,7 +134,7 @@ export class FixtureMediaClient {
   }
 
   #recoverableFailure(cause: unknown): boolean {
-    const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
+    const status = cause instanceof SFUError ? cause.options.status : undefined;
     return status !== 401 && status !== 403;
   }
 
@@ -219,7 +217,7 @@ export class FixtureMediaClient {
 
   async #connect(): Promise<void> {
     const status = await fetch(`/test/media-recovery?participant=${encodeURIComponent(this.#participantId)}`);
-    if (!status.ok) throw new CloudflareSFUError(`Fixture SFU HTTP ${status.status}`, "signaling_failed", { status: status.status, retryableConnection: status.status >= 500 });
+    if (!status.ok) throw new SFUError(`Fixture SFU HTTP ${status.status}`, "signaling_failed", { status: status.status, retryableConnection: status.status >= 500 });
     const token = await this.#credential();
     await new Promise<void>((resolve, reject) => {
       const socket = registerSocket(new WebSocket(`${this.#signalingURL}?token=${encodeURIComponent(token)}&connection=${encodeURIComponent(this.#bootstrap.connectionId)}`));
@@ -438,8 +436,8 @@ export class FixtureMediaClient {
     this.#remotePublications = [];
   }
 
-  #makeSnapshot(phase: CloudflareSFUSnapshot["connection"]["phase"], failure: CloudflareSFUSnapshot["failure"]): CloudflareSFUSnapshot {
-    const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.publicationId, track: local.track }));
+  #makeSnapshot(phase: SFUSnapshot["connection"]["phase"], failure: SFUSnapshot["failure"]): SFUSnapshot {
+    const localTracks: readonly SFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.publicationId, track: local.track }));
     const remoteTracks = projectFixtureRemoteTracks(this.#remotePublications, this.#received);
     return { connection: { phase, peerConnectionState: null, iceConnectionState: null }, cursor: null, localTracks, remoteTracks, failure };
   }
@@ -455,17 +453,17 @@ export class FixtureMediaClient {
   }
 }
 
-function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): CloudflareSFUBootstrap {
+function fixtureBootstrap(input: SFUBootstrap | FixtureMediaAccess): FixtureBootstrap {
   if (!("provider" in input)) return input;
-  if (input.provider !== "cloudflare_sfu") throw new TypeError("The fixture media client only supports Cloudflare SFU access");
+  if (input.provider !== "chalk_sfu") throw new TypeError("The fixture media client only supports Chalk SFU access");
   return input.clientPayload;
 }
 
-function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
+function recordFixtureRemoteTrack(received: Map<string, SFURemoteTrack>, remote: SFURemoteTrack): void {
   received.set(`${remote.participantId}:${remote.source}`, remote);
 }
 
-function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
+function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, SFURemoteTrack>): readonly SFURemoteTrack[] {
   // Projection can arrive after ontrack or disappear during a mute. Keep the
   // receiver owned by its peer; stopping it here permanently silences a reused
   // transceiver. Only expose tracks with a current physical publication.

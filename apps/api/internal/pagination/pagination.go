@@ -22,9 +22,12 @@ var (
 	ErrInvalidCursor   = errors.New("invalid cursor")
 )
 
+// Cursor marks where a page ended. Order names the list order the position belongs to, empty for a list's default, so
+// a list that offers more than one order can refuse a cursor from another, whose position it would misread.
 type Cursor struct {
 	CreatedAt time.Time
 	ID        utilities.ID
+	Order     string
 }
 
 type PageRequest struct {
@@ -42,6 +45,7 @@ type cursorPayload struct {
 	Version   int    `json:"v"`
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
+	Order     string `json:"order,omitempty"`
 }
 
 func NewPageRequest(size int, cursor *Cursor) (PageRequest, error) {
@@ -72,6 +76,7 @@ func EncodeCursor(cursor Cursor) (string, error) {
 		Version:   cursorVersion,
 		CreatedAt: cursor.CreatedAt.UTC().Format(time.RFC3339Nano),
 		ID:        cursor.ID.String(),
+		Order:     cursor.Order,
 	})
 	if err != nil {
 		return "", err
@@ -111,5 +116,6 @@ func DecodeCursor(value string) (Cursor, error) {
 	return Cursor{
 		CreatedAt: createdAt.UTC(),
 		ID:        id,
+		Order:     payload.Order,
 	}, nil
 }

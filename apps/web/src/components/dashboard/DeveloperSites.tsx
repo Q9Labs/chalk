@@ -9,7 +9,6 @@ export function SitesPanel({ origins, onAdd, onRemove }: { readonly origins: rea
   return (
     <section className="panel card" id="websites" aria-labelledby="websites-title">
       <div className="ph">
-        <Icon name="globe" size={18} />
         <div>
           <h2 id="websites-title">Allowed websites</h2>
           <div className="sub">Chalk calls can load inside these websites with this account’s keys.</div>

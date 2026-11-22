@@ -74,11 +74,10 @@ func (q *Queries) CancelRecordingPreparation(ctx context.Context, arg CancelReco
 
 const getRecordingEntranceEligibility = `-- name: GetRecordingEntranceEligibility :one
 select spaces.recording_policy, spaces.archived_at,
-    ($1::boolean or coalesce(
-        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
-         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
-        nullif(btrim(spaces.media_plane), ''),
-        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')::boolean as plane_eligible,
+    ($1::boolean and not exists (
+        select 1 from episodes episode
+        where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active'
+          and episode.config_snapshot->'media_plane_binding'->>'provider' is distinct from 'chalk_sfu'))::boolean as plane_eligible,
     (exists (select 1 from sync_recordings where sync_recordings.tenant_id = spaces.tenant_id
         and sync_recordings.space_id = spaces.id and sync_recordings.status in ('starting', 'recording', 'stopping'))
      or exists (select 1 from recordings join episodes on episodes.id = recordings.episode_id
@@ -133,11 +132,10 @@ with eligible as (
       and preparation.starts_at <= $3::timestamptz + interval '5 minutes'
       and preparation.starts_at > $3::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
-      and ($4::boolean or coalesce(
-        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
-         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
-        nullif(btrim(spaces.media_plane), ''),
-        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
+      and ($4::boolean and not exists (
+        select 1 from episodes episode
+        where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active'
+          and episode.config_snapshot->'media_plane_binding'->>'provider' is distinct from 'chalk_sfu'))
 ), capacity as (
     -- Sync reserves ten participants for each new Recording.
     select greatest(0, least(

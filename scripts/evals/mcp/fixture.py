@@ -123,7 +123,7 @@ def seed(db, label):
     for name in ["Atlas", "Beacon", "Commons", "Retired"]:
         spaces[name] = identifier(name)
         insert("spaces", id=spaces[name], tenant_id=tenant, name=name, slug=name.lower(),
-               media_plane="cf_sfu", recording_policy="manual", transcription_policy="on_demand",
+               media_plane="chalk_sfu", recording_policy="manual", transcription_policy="on_demand",
                archived_at="2026-10-18T00:00:00Z" if name == "Retired" else None)
         insert("space_roles", id=identifier("role-" + name), tenant_id=tenant, space_id=spaces[name],
                name="collaborator", capabilities=["sendChat"])

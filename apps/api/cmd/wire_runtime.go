@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
-	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -129,6 +128,8 @@ type apiWiring struct {
 	diagnostics     observability.Diagnostics
 	logger          *slog.Logger
 	launchTelemetry *observability.LaunchTelemetry
+	evidenceSink    observability.AxiomEvidence
+	telemetryLedger postgres.TelemetryLedger
 
 	tenantService                  tenants.Service
 	spaceService                   spaces.Service
@@ -139,7 +140,6 @@ type apiWiring struct {
 
 	chalkSFU                    *chalksfu.Fleet
 	ownCapture                  bool
-	managedSFU                  sfuadapter.Adapter
 	chalkNodes                  providerbridge.ChalkNodes
 	mediaPlaneTelemetry         observability.MediaPlaneResolutionTelemetry
 	episodeMediaBindingResolver mediaplaneprovideradapter.Registry

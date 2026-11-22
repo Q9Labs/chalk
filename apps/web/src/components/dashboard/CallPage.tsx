@@ -3,16 +3,18 @@ import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
-import { clock } from "../../lib/dashboard/format";
+import { clock, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import { RenameDialog } from "./HomeDialogs";
+import { RecordingSettingsLink } from "./ListParts";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { callInterval, keptByRow, loadCallPage, newCallRefresh, readCallTick, type CallRefresh } from "./call-refresh";
 import { CallSettings } from "./call-settings";
+import { rememberJoiningCall, usePendingJoin } from "./join-call";
 import { ErrorPanel, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 import { Menu, RenameArchiveItems } from "./menu";
 
@@ -52,14 +54,15 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
   const toast = useToast();
   const navigate = useNavigate();
   const intents = useIntentKeys();
-  const { call, inviteUrl, episodes, live, nextCursor, knocks } = data;
+  const { call, episodes, live, nextCursor, knocks } = data;
+  const inviteUrl = shareableLink(data.inviteUrl);
   const current = episodes.find((episode) => episode.status === "active");
   const past = episodes.filter((episode) => episode !== current);
 
   async function archive() {
     try {
       await act("home", { action: "archive-call", spaceId });
-      toast(`Archived ${call.name}`, { icon: "trash" });
+      toast(`Archived ${call.name}`, { icon: "archive" });
       void navigate({ to: "/dashboard" });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
@@ -96,6 +99,7 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
 }
 
 function CallHeader({ spaceId, name, onRename, onArchive }: { readonly spaceId: string; readonly name: string; readonly onRename: () => void; readonly onArchive: () => void }) {
+  const joining = usePendingJoin() === spaceId;
   return (
     <div className="pgh">
       <h1>
@@ -108,8 +112,8 @@ function CallHeader({ spaceId, name, onRename, onArchive }: { readonly spaceId: 
           )}
         </Menu>
       </h1>
-      <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }}>
-        <Icon name="cam" />
+      <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }} preload="intent" aria-busy={joining || undefined} onClick={() => rememberJoiningCall({ id: spaceId, name })}>
+        {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
         Join call
       </Link>
     </div>
@@ -145,6 +149,7 @@ function PastSessions({ spaceId, past, nextCursor, refresh, update }: PastSessio
     <>
       <div className="secth">
         <h2>Past sessions</h2>
+        <RecordingSettingsLink />
       </div>
       {past.length === 0 ? (
         <div className="list">

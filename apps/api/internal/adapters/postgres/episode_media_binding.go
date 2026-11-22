@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -37,3 +38,23 @@ func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Conte
 	}
 	return json.Marshal(binding)
 }
+
+// Compare an active Episode’s stored binding with the joining SDK’s capability.
+func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
+	binding, _, err := episode.MediaPlaneBinding()
+	if err != nil {
+		return err
+	}
+	if binding == nil {
+		return nil
+	}
+	if !binding.Is(mediaplane.ProviderChalkSFU) {
+		return mediaplane.ErrPlaneUnavailable
+	}
+	if !clients.Runs(mediaplane.ProviderChalkSFU) {
+		return mediaplane.ErrClientUnsupported
+	}
+	return nil
+}
+
+var _ episodes.PublicJoinRepository = EpisodeLifecycleRepository{}

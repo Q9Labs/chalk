@@ -1,0 +1,6 @@
+ep 9feb0ff6 TH 2026-11-18 14:45+05 60m 4ppl checked=full rules=37 t=+mm:ss from start
+f71c2 BROKE cant_be_heard Haris(owner) +07:10..+10:40 cause=mic_silent conf=likely
+ sfu:a1f3 10480 audio pkts, 0 voiced | client:c9d0 unmuted +07:10 | absent:voice_detected +07:10..+10:40 | report:r22 "Haris's audio not audible"
+f0b9e EXPECTED ended_time_limit all +60:00 cause=episode_cap_60m conf=proved
+blind: board_moved (no board data)
+next: diagnose f71c2 | diagnose participant Haris --tenant TH --since 30d

@@ -1,11 +1,11 @@
 import {
   AsyncStorageV1PendingTargetStore,
-  CloudflareSFUClient,
+  SFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
   createChalkWhiteboardV1FileDownloadTransport,
   createDirectFirstWebSocketFactory,
-  createCloudflareSFUHTTPTransport,
+  createSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
   createV1SyncClient,
@@ -128,10 +128,10 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const bootstrap = mediaBootstrap(input.access.media);
-  const client = new CloudflareSFUClient({
+  const client = new SFUClient({
     bootstrap,
     participantId: subject.participantId,
-    transport: createCloudflareSFUHTTPTransport({
+    transport: createSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
       tenantId: subject.tenantId,
@@ -153,7 +153,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
   return createSFUConnectionMediaClient(client);
 }
 /** The mute path needs `setLocalSourceIntent` and `closeForcedLocalPublication`: without them every mute takes the forced-close path and fails on the bundled transport. */
-export function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
+export function createSFUConnectionMediaClient(client: SFUClient): NativeMediaClient {
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),

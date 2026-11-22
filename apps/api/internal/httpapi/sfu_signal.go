@@ -90,7 +90,7 @@ type sfuSignalEndpointRequest struct {
 func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuSignalEndpointRequest, any] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal",
-		"signalCloudflareSFU",
+		"signalChalkSFU",
 		decodeSFUSignalRequest,
 		func(ctx context.Context, request sfuSignalEndpointRequest) (any, error) {
 			return signalSFU(ctx, request, spaces, episodeLookup, tenants, media, publications)
@@ -99,8 +99,8 @@ func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants
 		Auth(APIAuthParticipantMedia).
 		RateLimitFor(authenticatedWriteRateLimit, sfuSignalRateLimit).
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		RequestBody("CloudflareSFUSignalRequest", sfuSignalRequest{}).
-		Responds(http.StatusOK, "CloudflareSFUSignalAPIResponse", sfuSignalResponse{}).
+		RequestBody("ChalkSFUSignalRequest", sfuSignalRequest{}).
+		Responds(http.StatusOK, "ChalkSFUSignalAPIResponse", sfuSignalResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
 		ErrorRules(episodeLifecycleRules)
 }

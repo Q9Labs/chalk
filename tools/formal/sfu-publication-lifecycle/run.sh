@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Model-checks the CloudflareSFUClient local publication lifecycle: pending,
+# Model-checks the SFUClient local publication lifecycle: pending,
 # confirmed, held, retiring and retired across reconnect, replacement and
 # stop() (SfuPublicationLifecycle.tla).
 # Usage: tools/formal/sfu-publication-lifecycle/run.sh

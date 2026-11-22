@@ -7,7 +7,7 @@ import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { UNREPORTED_TILE_WAIT_MS, VideoTileSubscriptions } from "./video-tile-visibility";
 import { resolveMediaTarget } from "./target";
-import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
+import { comparePublicationCursor, parseSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { chunks, desiredRemotePublications, droppedRemoteTracks, matchRemotePullTracks, publicationsByTrack, reconcileRemoteTracks, trackKey } from "./remote-track-response";
 import { freezeSnapshot, snapshotEqual } from "./snapshot";
 import { failuresOf, isGoneStatus, isRateLimited, mediaTargetFailure, simulcastUnsupported } from "./failure-policy";
@@ -39,7 +39,7 @@ import {
   TRACKS_PER_REQUEST,
   VIEWER_LAYER_BATCH_SIZE,
   VIEWER_LAYER_UPDATE_INTERVAL_MS,
-} from "./cloudflare-limits";
+} from "./sfu-limits";
 import {
   PAGE_VISIBILITY_EVENTS,
   activeOfferedMids,
@@ -59,39 +59,25 @@ import {
 } from "./peer-connection";
 import { createCallStatsCollector, type CallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
-import { CloudflareSFUError } from "./types";
+import { SFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure, pullShortfall, subscribeFailure } from "./failure-diagnostics";
 import { observeOperation } from "../telemetry/operation";
-import type {
-  CloudflareSFUBootstrap,
-  CloudflareSFUClientOptions,
-  CloudflareSFUFailureCode,
-  CloudflareSFULocalOfferDiagnostic,
-  CloudflareSFUPublication,
-  CloudflareSFUPublicationSnapshot,
-  CloudflareSFURemoteTrack,
-  CloudflareSFURestartOptions,
-  CloudflareSFUSignalingTransport,
-  CloudflareSFUSnapshot,
-  CloudflareSFUTrackRequest,
-  CloudflareSFUTracksResponse,
-  SFUMediaCapabilities,
-} from "./types";
+import type { SFUBootstrap, SFUClientOptions, SFUFailureCode, SFULocalOfferDiagnostic, SFUPublication, SFUPublicationSnapshot, SFURemoteTrack, SFURestartOptions, SFUSignalingTransport, SFUSnapshot, SFUTrackRequest, SFUTracksResponse, SFUMediaCapabilities } from "./types";
 import type { PublicationCursor } from "./tracks";
 import { expectedOfferAddition, measureOffer, shouldReplaceForOfferSize } from "./offer-size";
-export class CloudflareSFUClient implements ClientMediaPlane {
+export class SFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
-  readonly #onError: CloudflareSFUClientOptions["onError"];
-  readonly #telemetry: CloudflareSFUClientOptions["telemetry"];
-  readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
-  readonly #onReceiveHealth: CloudflareSFUClientOptions["onReceiveHealth"];
-  readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
+  readonly #onError: SFUClientOptions["onError"];
+  readonly #telemetry: SFUClientOptions["telemetry"];
+  readonly #onDiagnostic: SFUClientOptions["onDiagnostic"];
+  readonly #onReceiveHealth: SFUClientOptions["onReceiveHealth"];
+  readonly #onRemoteTrack: ((publication: SFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
-  readonly #replaceMediaConnection: ((observedConnectionId: string) => Promise<CloudflareSFUBootstrap>) | undefined;
+  readonly #replaceMediaConnection: ((observedConnectionId: string) => Promise<SFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
   readonly #failureOwners = new WeakMap<Error, { readonly generation: number; readonly connectionId: string }>();
@@ -154,8 +140,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     reportHealth: (event) => this.#reportHealth(event),
     setFailure: (error, fallback) => this.#setFailure(error, fallback),
   });
-  readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
-  #bootstrap: CloudflareSFUBootstrap;
+  readonly #remoteTracks = new Map<string, SFURemoteTrack>();
+  #bootstrap: SFUBootstrap;
   #connection: RTCPeerConnection;
   #disposeConnectionObservation: (() => void) | undefined;
   #connectionEpoch = 0;
@@ -169,7 +155,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // Advertised videos the tile policy leaves out of the last poll: hidden, off screen or in a hidden page.
   #hiddenVideos = 0;
   // Dropped remote tracks whose receive m-line is not closed yet, with the failed closes so far.
-  readonly #unretiredReceivers = new Map<CloudflareSFURemoteTrack, number>();
+  readonly #unretiredReceivers = new Map<SFURemoteTrack, number>();
   // A stopped transceiver keeps its mid until the next negotiation, so a later retirement would find it and close it a second time.
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
@@ -187,15 +173,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #sdpPending = 0;
   // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
   #localOffer: { readonly connection: RTCPeerConnection; readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
-  #snapshot: CloudflareSFUSnapshot;
+  #snapshot: SFUSnapshot;
   #started = false;
   // The epoch of the last connection that went live; a pull that times out on any other one never connected.
   #connectedEpoch = -1;
   #receivingInitial = false;
   #stopped = false;
-  #transport: CloudflareSFUSignalingTransport | undefined;
+  #transport: SFUSignalingTransport | undefined;
   readonly #callStats: CallStatsCollector;
-  constructor(options: CloudflareSFUClientOptions) {
+  constructor(options: SFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
     this.#bootstrap = options.bootstrap;
@@ -231,7 +217,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
     this.#stopObservingVideoTiles = this.#observeVideoTiles();
   }
-  getSnapshot(): CloudflareSFUSnapshot {
+  getSnapshot(): SFUSnapshot {
     return this.#snapshot;
   }
   subscribe(listener: () => void): () => void {
@@ -267,7 +253,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
-    if (this.#locals.tracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
+    if (this.#locals.tracks.has(source)) throw new SFUError(`A ${source} track is already prepared`, "media_failed");
     const reusable = [...this.#locals.owned].find((item) => item.state.source === source && item.connection === this.#connection && (item.lifecycle.kind === "confirmed" || item.lifecycle.kind === "held"));
     const state: LocalTrackState = {
       source,
@@ -368,7 +354,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#finishPublicationPoll(generation);
     }
   }
-  async #listOrPullPublications(transport: CloudflareSFUSignalingTransport, generation: number): Promise<CloudflareSFUPublicationSnapshot> {
+  async #listOrPullPublications(transport: SFUSignalingTransport, generation: number): Promise<SFUPublicationSnapshot> {
     const pull = transport.pullPublishedAudio?.bind(transport);
     if (!pull || !this.#capabilities().pullPublished || this.#pulls.pullPublishedTried || this.#cursor !== null || this.#remoteTracks.size > 0) {
       return this.#signal(() => transport.listPublications());
@@ -390,7 +376,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const pending = await this.#pendingSyncAdvertisedPulls();
     if (pending.length === 0) return;
     const epoch = this.#connectionEpoch;
-    let pulled: readonly CloudflareSFURemoteTrack[] | null;
+    let pulled: readonly SFURemoteTrack[] | null;
     try {
       pulled = await this.#pull(pending, generation);
     } catch (error) {
@@ -407,7 +393,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#commitEarlyPulledTracks(pulled);
   }
-  async #pendingSyncAdvertisedPulls(): Promise<CloudflareSFUPublication[]> {
+  async #pendingSyncAdvertisedPulls(): Promise<SFUPublication[]> {
     if (!this.#started || !this.#capabilities().subscriptionState) return [];
     const named = this.#syncPublications.flatMap(({ participantId, source, enabled, publicationId }) => (enabled && publicationId !== null ? [{ participantId, source, publicationId }] : []));
     const advertised = desiredRemotePublications(
@@ -419,7 +405,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // The listing that follows owns the replacement (#pullWithRecovery); an early pull would only add a section to an offer that is already too large.
     return pending.length > 0 && (await this.#hasSpentOfferBudget(pending, false, false)) ? [] : pending;
   }
-  #commitEarlyPulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
+  #commitEarlyPulledTracks(pulled: readonly SFURemoteTrack[]): void {
     const next = new Map(this.#remoteTracks);
     for (const publication of pulled) next.set(publicationKey(publication), publication);
     const dropped = droppedRemoteTracks(this.#remoteTracks, next);
@@ -432,7 +418,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // The registry drops a publication when listeners keep failing to pull it.
   // A publisher that still believes it is sending must publish again, so
   // listeners get a new publication ID instead of retrying a dead one.
-  #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot): void {
+  #republishUnlistedLocalPublications(authoritative: SFUPublicationSnapshot): void {
     const unlisted = [...this.#locals.tracks.values()].filter((state) => state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId));
     for (const state of unlisted) this.#recovery.begin(state, state.providerPublicationId, true);
   }
@@ -830,9 +816,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   observeAudioElement(track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } {
     return this.#receiveHealth.observeAudioElement(track, element);
   }
-  async restart(input: CloudflareSFUBootstrap | CloudflareSFURestartOptions): Promise<void> {
+  async restart(input: SFUBootstrap | SFURestartOptions): Promise<void> {
     this.#requireActive();
-    const options: CloudflareSFURestartOptions = "connectionId" in input ? { bootstrap: input } : input;
+    const options: SFURestartOptions = "connectionId" in input ? { bootstrap: input } : input;
     validateBootstrap(options.bootstrap);
     if (options.bootstrap.connectionId !== this.#bootstrap.connectionId) {
       this.#locals.fence();
@@ -1051,7 +1037,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #tracksToPublish(states: readonly LocalTrackState[]): LocalTrackState[] {
     return [...this.#locals.tracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended");
   }
-  // Cloudflare answers an offer on a session that never came up with 406, and later calls on it with 410 or 404.
   // The once-per-generation replacement budget protects a connection that was up. A connection that never came up
   // gets its own short budget, so a dead session cannot keep the speaker silent until someone toggles the mic.
   async #publishOnReplacedConnections(states: readonly LocalTrackState[], generation: number, rejection: unknown): Promise<void> {
@@ -1079,7 +1064,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.#replaceForOfferSize(() => this.#replacer.replace(generation, "section_budget"));
       return this.#tracksToPublish(states);
     }
-    // Retiring the bundled sender can expire the Cloudflare SFU connection.
+    // Retiring the bundled sender can expire the Chalk SFU connection.
     // Rebuild before publishing, retaining only other provider-authorized sources.
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     this.#pauseUnavailableOtherSources(authoritative.publications, states);
@@ -1087,7 +1072,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#replacer.replace(generation, this.#locals.retiredCause);
     return this.#tracksToPublish(states);
   }
-  #pauseUnavailableOtherSources(publications: readonly CloudflareSFUPublication[], states: readonly LocalTrackState[]): void {
+  #pauseUnavailableOtherSources(publications: readonly SFUPublication[], states: readonly LocalTrackState[]): void {
     for (const state of this.#locals.tracks.values()) {
       if (states.includes(state) || !state.providerPublicationId) continue;
       if (publications.some((publication) => publication.publicationId === state.providerPublicationId)) continue;
@@ -1165,7 +1150,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       sessionDescription = await this.#createLocalOffer(connection, "publish_without_simulcast");
     }
     const tracks = publications.map(
-      ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
+      ({ state, transceiver, trackName }): SFUTrackRequest => ({
         location: "local",
         mid: requireTransceiverMid(transceiver),
         trackName,
@@ -1177,12 +1162,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
-  #recordLocalPublicationHandles(publications: readonly OwnedLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
+  #recordLocalPublicationHandles(publications: readonly OwnedLocalPublication[], tracks: readonly SFUTrackRequest[] | undefined): void {
     for (const publication of publications) {
       const { state, transceiver, lifecycle } = publication;
       if (lifecycle.kind === "retired") continue;
       const authoritative = tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
-      if (!authoritative?.publicationId) throw new CloudflareSFUError("Missing publication ID", "invalid_publication");
+      if (!authoritative?.publicationId) throw new SFUError("Missing publication ID", "invalid_publication");
       const handle = { publicationId: authoritative.publicationId, mid: requireTransceiverMid(transceiver) };
       publication.lifecycle = lifecycle.kind === "retiring" ? { ...lifecycle, handle } : { kind: "confirmed", handle };
     }
@@ -1210,7 +1195,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return description;
   }
   // SDP operations are serialized, so a local offer must not outlive its operation. If one does, name its origin.
-  #reportPendingLocalOffer(connection: RTCPeerConnection, where: CloudflareSFULocalOfferDiagnostic["where"]): void {
+  #reportPendingLocalOffer(connection: RTCPeerConnection, where: SFULocalOfferDiagnostic["where"]): void {
     if (connection.signalingState !== "have-local-offer") return;
     const known = this.#localOffer?.connection === connection ? this.#localOffer : null;
     try {
@@ -1229,7 +1214,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-  async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
+  async #reconcileRemotePublications(authoritative: SFUPublicationSnapshot, generation: number): Promise<void> {
     await this.#retireDroppedReceivers(generation);
     const cursor = this.#nextRemotePublicationCursor(authoritative);
     if (cursor === null) return;
@@ -1258,7 +1243,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#queueDroppedReceivers(dropped);
     await this.#retireDroppedReceivers(generation);
   }
-  #announcePulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
+  #announcePulledTracks(pulled: readonly SFURemoteTrack[]): void {
     for (const publication of pulled) {
       this.#pulls.noteSubscribed(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
@@ -1266,13 +1251,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitRemote();
   }
-  #queueDroppedReceivers(dropped: readonly CloudflareSFURemoteTrack[]): void {
+  #queueDroppedReceivers(dropped: readonly SFURemoteTrack[]): void {
     for (const publication of dropped) {
       if (this.#unretiredReceivers.size >= RECEIVER_RETIREMENT_LIMIT) break;
       this.#unretiredReceivers.set(publication, 0);
     }
   }
-  #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): readonly CloudflareSFURemoteTrack[] {
+  #commitRemoteTracks(desired: ReadonlyMap<string, SFUPublication>, pulled: readonly SFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): readonly SFURemoteTrack[] {
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
     for (const [key, publication] of [...unclosed, ...parked]) next.set(key, publication);
     const dropped = droppedRemoteTracks(this.#remoteTracks, next);
@@ -1311,23 +1296,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-  #countFailedRetirement(publication: CloudflareSFURemoteTrack): void {
+  #countFailedRetirement(publication: SFURemoteTrack): void {
     const failures = (this.#unretiredReceivers.get(publication) ?? 0) + 1;
     if (failures >= RECEIVER_RETIREMENT_ATTEMPTS) this.#unretiredReceivers.delete(publication);
     else this.#unretiredReceivers.set(publication, failures);
   }
-  #receiversOf(publications: readonly CloudflareSFURemoteTrack[]) {
+  #receiversOf(publications: readonly SFURemoteTrack[]) {
     return publications.flatMap((publication) => {
       const transceiver = transceiverOf(this.#connection, publication.track);
       return transceiver?.mid && !this.#closedReceiverTracks.has(publication.track) ? [{ publication, transceiver, mid: transceiver.mid }] : [];
     });
   }
-  #forgetViewerPauses(kept: Iterable<CloudflareSFURemoteTrack>): void {
+  #forgetViewerPauses(kept: Iterable<SFURemoteTrack>): void {
     const ids = new Set([...kept].map((publication) => publication.publicationId));
     for (const publicationId of this.#viewerPaused) if (!ids.has(publicationId)) this.#viewerPaused.delete(publicationId);
   }
   // A hidden tile keeps its pull backoff and subscription eligibility; only a withdrawn publication loses them.
-  #visibleRemotePublications(advertised: ReadonlyMap<string, CloudflareSFUPublication>): Map<string, CloudflareSFUPublication> {
+  #visibleRemotePublications(advertised: ReadonlyMap<string, SFUPublication>): Map<string, SFUPublication> {
     const video = [...advertised.values()].filter(isVideoPublication).map((publication) => publication.publicationId);
     const pulled = new Set([...this.#remoteTracks.values()].filter(isVideoPublication).map((publication) => publication.publicationId));
     // Nothing is reconciled yet: this is the join's first pull, which must not hold the video back behind the report wait.
@@ -1359,7 +1344,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return hidden.filter(([, publication]) => this.#viewerPaused.has(publication.publicationId));
   }
   // Returns the wanted video the SFU would not resume. Closing it lets this poll pull it again.
-  async #resumeVideoInPlace(desired: ReadonlyMap<string, CloudflareSFUPublication>, generation: number): Promise<readonly RemoteTrackEntry[]> {
+  async #resumeVideoInPlace(desired: ReadonlyMap<string, SFUPublication>, generation: number): Promise<readonly RemoteTrackEntry[]> {
     const resuming = [...this.#remoteTracks].filter(([key, publication]) => this.#viewerPaused.has(publication.publicationId) && desired.get(key)?.publicationId === publication.publicationId);
     if (!resuming.length) return [];
     const failed = await this.#setVideoPaused(resuming, false, generation);
@@ -1375,8 +1360,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #setVideoPaused(entries: readonly RemoteTrackEntry[], paused: boolean, generation: number): Promise<ReadonlySet<string>> {
     const targets = entries.flatMap(([, publication]) => {
       const mid = transceiverOf(this.#connection, publication.track)?.mid;
-      const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
-      return mid ? [{ publication, request: { location: "remote", mid, sessionId: connectionId, trackName, paused } satisfies CloudflareSFUTrackRequest }] : [];
+      const { connectionId, trackName } = parseSFUPublicationID(publication.publicationId);
+      return mid ? [{ publication, request: { location: "remote", mid, sessionId: connectionId, trackName, paused } satisfies SFUTrackRequest }] : [];
     });
     const failed = new Set(entries.map(([, publication]) => publication.publicationId));
     if (!targets.length) return failed;
@@ -1392,15 +1377,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     return failed;
   }
-  #updateTracks(tracks: readonly CloudflareSFUTrackRequest[]): Promise<CloudflareSFUTracksResponse> {
+  #updateTracks(tracks: readonly SFUTrackRequest[]): Promise<SFUTracksResponse> {
     const transport = this.#transport;
     const connectionId = this.#bootstrap.connectionId;
     const owner = { generation: this.#generation, connectionId };
     const update = this.#trackUpdates.then(async () => {
-      if (!transport?.updateTracks) throw new CloudflareSFUError("This media plane cannot update tracks in place", "signaling_failed");
+      if (!transport?.updateTracks) throw new SFUError("This media plane cannot update tracks in place", "signaling_failed");
       // A replacement issues a token for the new connection, so an update still addressed to the old one is refused (403) by the API.
       // Owning the failure makes the error reporter drop it once the connection has changed; the new connection pulls the state afresh.
-      if (this.#bootstrap.connectionId !== connectionId) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+      if (this.#bootstrap.connectionId !== connectionId) throw new SFUError("Stale media connection", "stale_generation");
       const updateTracks = transport.updateTracks.bind(transport);
       return this.#signal(() => updateTracks({ connectionId, tracks }), owner);
     });
@@ -1428,7 +1413,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitRemote();
     return [];
   }
-  #nextRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
+  #nextRemotePublicationCursor(authoritative: SFUPublicationSnapshot): PublicationCursor | null {
     if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
     let cursor: PublicationCursor;
     try {
@@ -1440,7 +1425,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const ordering = comparePublicationCursor(this.#cursor, cursor);
     return ordering === "stale" || (ordering === "same" && !this.#pulls.incomplete) ? null : cursor;
   }
-  #desiredRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, cursor: PublicationCursor): ReturnType<typeof desiredRemotePublications> {
+  #desiredRemotePublications(authoritative: SFUPublicationSnapshot, cursor: PublicationCursor): ReturnType<typeof desiredRemotePublications> {
     try {
       // Sync disconnection does not end an already-playing media track.
       // It does exclude abandoned participants from new subscriptions.
@@ -1451,7 +1436,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-  async #pullWithRecovery(desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #pullWithRecovery(desired: ReadonlyMap<string, SFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly SFURemoteTrack[] | null> {
     const pending = this.#pulls.pending(desired, this.#remoteTracks, this.#receiveProgress, this.#replaceMediaConnection !== undefined);
     if (pending.length > 0 && (await this.#hasSpentOfferBudget(pending))) return this.#replaceForOfferSize(() => this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "section_budget"));
     const stalled = pending.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
@@ -1471,7 +1456,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return measureOffer((await connection.createOffer()).sdp ?? "");
   }
   // A safety valve: the media node reuses closed sections, so the offer should not grow this far. When it does, the replacement is logged here and reported to the API as cause section_budget.
-  async #hasSpentOfferBudget(tracks: readonly Pick<CloudflareSFUPublication, "source">[], inQueue = false, announce = true): Promise<boolean> {
+  async #hasSpentOfferBudget(tracks: readonly Pick<SFUPublication, "source">[], inQueue = false, announce = true): Promise<boolean> {
     if (!this.#replaceMediaConnection) return false;
     const connection = this.#connection;
     const measure = () => this.#measureLocalOffer(connection);
@@ -1495,7 +1480,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#replacer.attemptedGeneration = null;
     }
   }
-  async #recoverStalledRemotePublications(stalled: readonly CloudflareSFUPublication[], desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #recoverStalledRemotePublications(stalled: readonly SFUPublication[], desired: ReadonlyMap<string, SFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly SFURemoteTrack[] | null> {
     if (stalled.every((publication) => this.#receiveProgress.canRepull(publication.publicationId))) {
       try {
         return await this.#repullStalledRemotePublications(stalled, generation);
@@ -1507,16 +1492,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#replaceMediaConnection || !this.#receiveProgress.reserveRebuild()) return [];
     return this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "receive_stalled");
   }
-  async #repullStalledRemotePublications(stalled: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #repullStalledRemotePublications(stalled: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[] | null> {
     for (const publication of stalled) this.#receiveProgress.reserveRepull(publication.publicationId);
     const retired = await this.#retireStalledReceivers(stalled, generation);
     if (!retired.length) return [];
     const pulled = await this.#pullInRequests(retired, generation, (batch) => this.#pullBatch(batch, generation));
-    if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
+    if (pulled?.length !== retired.length) throw new SFUError("Stalled receive subscriptions were not restored", "media_failed");
     for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
     return pulled;
   }
-  async #retireStalledReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFUPublication[]> {
+  async #retireStalledReceivers(publications: readonly SFUPublication[], generation: number): Promise<readonly SFUPublication[]> {
     return this.#serializeSDP(async () => {
       this.#requireGeneration(generation);
       const stalled = publications.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
@@ -1525,14 +1510,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const receivers = stalled.map((publication) => {
         const remote = [...this.#remoteTracks.values()].find((track) => track.publicationId === publication.publicationId);
         const transceiver = remote && transceiverOf(connection, remote.track);
-        if (!transceiver || transceiver.mid === null) throw new CloudflareSFUError("The stalled receiver has no negotiated MID", "media_failed");
+        if (!transceiver || transceiver.mid === null) throw new SFUError("The stalled receiver has no negotiated MID", "media_failed");
         return { publication, transceiver, mid: transceiver.mid };
       });
       await this.#closeReceivers(receivers, generation);
       return stalled;
     });
   }
-  async #closeReceivers(receivers: readonly { readonly publication: Pick<CloudflareSFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
+  async #closeReceivers(receivers: readonly { readonly publication: Pick<SFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
     const connectionId = this.#bootstrap.connectionId;
     // The SFU rejects a request of more than 16 tracks. A forced close of a closed track answers alreadyClosed, so a retry after a partial failure is safe.
     for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
@@ -1561,7 +1546,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
-  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure"): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #retryRemotePullOnReplacement(publications: readonly SFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure"): Promise<readonly SFURemoteTrack[] | null> {
     this.#pulls.recoveryGeneration = generation;
     const connection = this.#connection;
     try {
@@ -1578,13 +1563,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-  async #pull(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #pull(publications: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[] | null> {
     const eligible = publications.filter((publication) => this.#pulls.canSubscribe(publication));
     return this.#pullInRequests(eligible, generation, (batch) => this.#pullWithFallback(batch, generation));
   }
   // One request pulls at most 16 tracks. A later batch that fails keeps what the earlier batches already pulled; the roster pulls the rest on the next poll.
-  async #pullInRequests(publications: readonly CloudflareSFUPublication[], generation: number, pullBatch: (batch: readonly CloudflareSFUPublication[]) => Promise<readonly CloudflareSFURemoteTrack[]>): Promise<readonly CloudflareSFURemoteTrack[]> {
-    const pulled: CloudflareSFURemoteTrack[] = [];
+  async #pullInRequests(publications: readonly SFUPublication[], generation: number, pullBatch: (batch: readonly SFUPublication[]) => Promise<readonly SFURemoteTrack[]>): Promise<readonly SFURemoteTrack[]> {
+    const pulled: SFURemoteTrack[] = [];
     for (const [index, batch] of [...chunks(publications, TRACKS_PER_REQUEST)].entries()) {
       try {
         pulled.push(...(await pullBatch(batch)));
@@ -1599,7 +1584,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     return pulled;
   }
-  async #pullWithFallback(eligible: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
+  async #pullWithFallback(eligible: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[]> {
     try {
       return await this.#pullBatch(eligible, generation);
     } catch (error) {
@@ -1611,8 +1596,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     return this.#pullIndividually(eligible, generation);
   }
-  async #pullIndividually(eligible: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
-    const pulled: CloudflareSFURemoteTrack[] = [];
+  async #pullIndividually(eligible: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[]> {
+    const pulled: SFURemoteTrack[] = [];
     let failure: unknown;
     // Healthy subscriptions stay batched; isolate only a failed batch.
     for (const [index, publication] of eligible.entries()) {
@@ -1633,23 +1618,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (failure && pulled.length === 0) throw failure;
     return pulled;
   }
-  async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
+  async #pullBatch(publications: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[]> {
     if (publications.length === 0) return [];
     return observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullTracks(publications, generation), subscribeFailure, pullShortfall(publications.length));
   }
-  async #pullTracks(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
+  async #pullTracks(publications: readonly SFUPublication[], generation: number): Promise<readonly SFURemoteTrack[]> {
     this.#receiveHealth.pullRequested(publications.map((publication) => publication.publicationId));
     return this.#serializeSDP(() =>
       this.#negotiateRemotePull(publications, generation, async (connectionId) => {
-        const requested = publications.map((publication): CloudflareSFUTrackRequest => {
-          const reference = parseCloudflareSFUPublicationID(publication.publicationId);
+        const requested = publications.map((publication): SFUTrackRequest => {
+          const reference = parseSFUPublicationID(publication.publicationId);
           return {
             location: "remote",
             sessionId: reference.connectionId,
             trackName: reference.trackName,
             // h sorts before l: prefer full camera quality, but keep video flowing
             // when the publisher pauses h. Do not silently downgrade a live h layer.
-            // https://developers.cloudflare.com/realtime/sfu/features/simulcast/#quality-control
             ...(publication.source === "camera" ? { simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } as const } : {}),
           };
         });
@@ -1660,8 +1644,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // The join's first poll: one request lists the publications and pulls the other Participants' audio. The tracks
   // join the roster before the normal reconcile runs, so it only has the video left to pull.
-  async #pullPublishedAudio(pull: NonNullable<CloudflareSFUSignalingTransport["pullPublishedAudio"]>, generation: number): Promise<CloudflareSFUPublicationSnapshot> {
-    const listed: { snapshot?: CloudflareSFUPublicationSnapshot } = {};
+  async #pullPublishedAudio(pull: NonNullable<SFUSignalingTransport["pullPublishedAudio"]>, generation: number): Promise<SFUPublicationSnapshot> {
+    const listed: { snapshot?: SFUPublicationSnapshot } = {};
     const pulled = await this.#serializeSDP(() =>
       this.#negotiateRemotePull([], generation, async (connectionId) => {
         const issued = await this.#signal(() => pull({ connectionId }), { generation, connectionId });
@@ -1671,7 +1655,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         return { publications: audio, response: issued.response };
       }),
     );
-    if (!listed.snapshot) throw new CloudflareSFUError("The pull-published request returned no publications", "signaling_failed");
+    if (!listed.snapshot) throw new SFUError("The pull-published request returned no publications", "signaling_failed");
     // The server pulled every listed audio track. The roster still decides which ones this client keeps.
     const kept = pulled.filter((publication) => this.#pulls.canSubscribe(publication));
     const roster = reconcileRemoteTracks(desiredRemotePublications(kept, this.#participantId), kept, this.#remoteTracks);
@@ -1685,7 +1669,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#queueDroppedReceivers(pulled.filter((publication) => !held.has(publication.track)));
     return listed.snapshot;
   }
-  async #negotiateRemotePull(requested: readonly CloudflareSFUPublication[], generation: number, issue: (connectionId: string) => Promise<{ readonly publications: readonly CloudflareSFUPublication[]; readonly response: CloudflareSFUTracksResponse }>): Promise<readonly CloudflareSFURemoteTrack[]> {
+  async #negotiateRemotePull(requested: readonly SFUPublication[], generation: number, issue: (connectionId: string) => Promise<{ readonly publications: readonly SFUPublication[]; readonly response: SFUTracksResponse }>): Promise<readonly SFURemoteTrack[]> {
     const connection = this.#connection;
     const connectionId = this.#bootstrap.connectionId;
     let publications = requested;
@@ -1724,7 +1708,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#requireGeneration(generation);
       return matched.map(({ publication, mid }) => {
         const track = arrived(mid);
-        if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
+        if (!track) throw new SFUError("A negotiated remote track did not arrive", "media_failed");
         this.#closedReceiverTracks.delete(track);
         this.#receiveHealth.pullSucceeded([publication.publicationId]);
         return Object.freeze({ ...publication, track });
@@ -1754,20 +1738,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const track = transceiver?.receiver.track;
     return transceiver?.direction === "recvonly" && track !== undefined && this.#closedReceiverTracks.has(track) ? track : undefined;
   }
-  #recordRemotePullErrors(publications: readonly CloudflareSFUPublication[], failures: NonNullable<CloudflareSFUTracksResponse["trackErrors"]>): void {
+  #recordRemotePullErrors(publications: readonly SFUPublication[], failures: NonNullable<SFUTracksResponse["trackErrors"]>): void {
     const requested = publicationsByTrack(publications);
     for (const failure of failures) {
       const publication = requested.get(trackKey(failure.connectionId, failure.trackName));
-      if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
+      if (!publication) throw new SFUError("Chalk SFU returned an unrequested remote track error", "invalid_publication");
       // A republished track can be discovered before the provider can pull it.
       // Keep its backoff independent of polls restarted by unrelated presence.
       this.#pulls.backoff(publication.publicationId);
-      this.#receiveHealth.pullFailed(publication.publicationId, "CloudflareSFUError");
-      this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
+      this.#receiveHealth.pullFailed(publication.publicationId, "SFUError");
+      this.#reportError(new SFUError(`Chalk SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
-  #recordReceivePullFailure(publications: readonly CloudflareSFUPublication[], generation: number, error: unknown): void {
-    if (generation !== this.#generation || (error instanceof CloudflareSFUError && error.code === "stale_generation")) return;
+  #recordReceivePullFailure(publications: readonly SFUPublication[], generation: number, error: unknown): void {
+    if (generation !== this.#generation || (error instanceof SFUError && error.code === "stale_generation")) return;
     const kind = classifyMediaFailure(error, "sfu_tracks").media_error_kind;
     for (const publication of publications) this.#receiveHealth.pullFailed(publication.publicationId, kind);
   }
@@ -1809,14 +1793,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       const response = await this.#updateTracks(
         batch.map(({ change, mid }) => {
-          const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+          const { connectionId, trackName } = parseSFUPublicationID(change.publicationId);
           return { location: "remote", mid, sessionId: connectionId, trackName, simulcast: { preferredRid: change.layer, priorityOrdering: "none", ridNotAvailable: "asciibetical" } };
         }),
       );
       return new Set(
         batch
           .filter(({ change }) => {
-            const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+            const { connectionId, trackName } = parseSFUPublicationID(change.publicationId);
             return response?.trackErrors?.some((error) => error.connectionId === connectionId && error.trackName === trackName);
           })
           .map(({ change }) => change.publicationId),
@@ -1856,12 +1840,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#capabilities().subscriptionState && this.#transport?.listSubscriptions !== undefined;
   }
   // The SFU's subscription state decides whether a quiet video is stalled or paused for network.
-  #observeDelivery(now: number, connection: RTCPeerConnection, received: readonly CloudflareSFURemoteTrack[], advanced: ReadonlySet<string>, current: () => boolean): void {
+  #observeDelivery(now: number, connection: RTCPeerConnection, received: readonly SFURemoteTrack[], advanced: ReadonlySet<string>, current: () => boolean): void {
     const videos = received.flatMap((publication): DeliveredVideo[] => {
       if (!isVideoPublication(publication)) return [];
       const mid = transceiverOf(connection, publication.track)?.mid;
       if (!mid) return [];
-      const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
+      const { connectionId, trackName } = parseSFUPublicationID(publication.publicationId);
       return [{ publicationId: publication.publicationId, trackId: publication.track.id, mid, sessionId: connectionId, trackName }];
     });
     this.#delivery.observe(now, videos, advanced);
@@ -1877,17 +1861,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       (error) => {
         if (!current()) return;
         this.#delivery.failed(startedAt, performance.now());
-        if (error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410)) this.#replacer.replaceGone();
+        if (error instanceof SFUError && (error.options.status === 404 || error.options.status === 410)) this.#replacer.replaceGone();
       },
     );
   }
-  async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
+  async #completeRenegotiation(response: SFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
     if (response.sessionDescription?.type === "offer") await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
   // An answer completes our own offer. An offer comes from the SFU and must always be answered:
   // this peer is the polite one, so it rolls back a pending local offer first. A browser that
   // rolls back on its own would otherwise leave the SFU's offer unanswered.
-  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
+  async #applyProviderDescription(response: SFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
     const description = requireSFUDescription(response.sessionDescription);
     if (description.type !== "offer") {
       await connection.setRemoteDescription(description);
@@ -1905,9 +1889,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // An answer cannot enable a section that this side set inactive. The SFU reuses a closed mid for its next pull: the mid of a
   // parked receiver, or of our own muted microphone or camera. So an inactive transceiver that the request's response names and
-  // that the offer turns on must receive again before the answer is made. cf_sfu keeps offering every closed mid as sendonly (the
-  // 2026-11-10 Orb churn probe), so only the mids the response names are revived; the others stay parked and get an inactive answer.
-  #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string, response: CloudflareSFUTracksResponse): void {
+  // that the offer turns on must receive again before the answer is made. Leave other mids parked.
+  #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string, response: SFUTracksResponse): void {
     const named = new Set((response.tracks ?? []).map((track) => track.mid));
     const active = activeOfferedMids(offerSDP);
     for (const transceiver of connection.getTransceivers()) {
@@ -1915,14 +1898,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (transceiver.direction === "inactive" && mid !== null && named.has(mid) && active.has(mid)) transceiver.direction = "recvonly";
     }
   }
-  async #applyProviderDescriptionIfOpen(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
+  async #applyProviderDescriptionIfOpen(response: SFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
     if (!connectionIsClosed(connection)) await this.#applyProviderDescription(response, connection, owner);
   }
   #serializeSDP<T>(operation: () => Promise<T>, retirement = false): Promise<T> {
     const generation = this.#generation;
     this.#sdpPending += 1;
     let expired = false;
-    const timeout = new CloudflareSFUError("Cloudflare SFU negotiation timed out. Try again.", "negotiation_timeout");
+    const timeout = new SFUError("Chalk SFU negotiation timed out. Try again.", "negotiation_timeout");
     const run = () => {
       if (expired || (!retirement && generation !== this.#generation)) throw timeout;
       this.#reportPendingLocalOffer(this.#connection, "sdp_operation_start");
@@ -1935,7 +1918,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return timeout;
     })
       .catch((error: unknown) => {
-        if (error instanceof CloudflareSFUError && error.code === "signaling_timeout" && generation === this.#generation && !this.#stopped) this.#expireNegotiation(error);
+        if (error instanceof SFUError && error.code === "signaling_timeout" && generation === this.#generation && !this.#stopped) this.#expireNegotiation(error);
         throw error;
       })
       .finally(() => {
@@ -1949,13 +1932,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #boundPeerOperation(operation: Promise<void>): Promise<void> {
     const generation = this.#generation;
-    const timeout = new CloudflareSFUError("The browser media operation timed out. Try again.", "negotiation_timeout");
+    const timeout = new SFUError("The browser media operation timed out. Try again.", "negotiation_timeout");
     await withDeadline(operation, PEER_OPERATION_TIMEOUT_MS, () => {
       if (generation === this.#generation && !this.#stopped) this.#expireNegotiation(timeout);
       return timeout;
     });
   }
-  #expireNegotiation(error: CloudflareSFUError): void {
+  #expireNegotiation(error: SFUError): void {
     this.#generation++;
     this.#connectionEpoch++;
     this.#poll.interrupt();
@@ -1970,7 +1953,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         return connectionIsLive(connection);
       },
       CONNECTION_TIMEOUT_MS,
-      "Timed out waiting for the Cloudflare SFU peer connection",
+      "Timed out waiting for the Chalk SFU peer connection",
     );
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
@@ -2074,13 +2057,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #restartsIceInPlace(): boolean {
     return this.#started && this.#capabilities().iceRestart;
   }
-  #addTracks(input: Omit<Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0], "replacementCause">): Promise<CloudflareSFUTracksResponse> {
+  #addTracks(input: Omit<Parameters<SFUSignalingTransport["addTracks"]>[0], "replacementCause">): Promise<SFUTracksResponse> {
     // The first signaling attempt on the new binding reports its origin, even if
     // that attempt fails. Extra query parameters also work with older APIs.
     const replacementCause = this.#replacer.takeCause();
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }
-  #adoptReplacement(bootstrap: CloudflareSFUBootstrap, cause: MediaConnectionReplacementCause): void {
+  #adoptReplacement(bootstrap: SFUBootstrap, cause: MediaConnectionReplacementCause): void {
     this.#locals.fence();
     const connectionEpoch = ++this.#connectionEpoch;
     // A connection that never negotiated carried nothing, so swapping it is no recovery. Saying "recovering" would
@@ -2111,15 +2094,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pulls.observeCursor(pullIncomplete);
     this.#publishSnapshot();
   }
-  #quarantineInvalidRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): void {
+  #quarantineInvalidRemotePublicationCursor(authoritative: SFUPublicationSnapshot): void {
     if (!Number.isSafeInteger(authoritative.incarnation) || authoritative.incarnation < 0 || !Number.isSafeInteger(authoritative.sequence) || authoritative.sequence < 0) return;
     this.#observeRemotePublicationCursor({ incarnation: authoritative.incarnation, sequence: authoritative.sequence, signature: INVALID_PUBLICATION_SIGNATURE });
   }
-  #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
+  #createPeerConnection(bootstrap: SFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
     return create({ iceServers: iceServersFor(bootstrap), bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 });
   }
-  #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
+  #rebuildPeerConnection(bootstrap: SFUBootstrap, generation: number, connectionEpoch: number): void {
     try {
       this.#connection = this.#createPeerConnection(bootstrap);
       this.#callStats.reset();
@@ -2234,8 +2217,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#snapshot = next;
     for (const listener of this.#snapshotListeners) this.#invokeListener(listener);
   }
-  #setFailure(error: unknown, fallback: CloudflareSFUFailureCode): void {
-    const code = error instanceof CloudflareSFUError ? error.code : fallback;
+  #setFailure(error: unknown, fallback: SFUFailureCode): void {
+    const code = error instanceof SFUError ? error.code : fallback;
     this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication", diagnostic: classifyMediaFailure(error, "peer_connection") });
     this.#reportError(error);
   }
@@ -2272,14 +2255,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #requireGeneration(generation: number): void {
-    if (generation !== this.#generation || this.#stopped) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+    if (generation !== this.#generation || this.#stopped) throw new SFUError("Stale media connection", "stale_generation");
   }
   #requireActive(): void {
-    if (this.#stopped) throw new CloudflareSFUError("SFU client stopped", "media_failed");
+    if (this.#stopped) throw new SFUError("SFU client stopped", "media_failed");
   }
-  #requireTransport(): CloudflareSFUSignalingTransport {
-    if (!this.#transport) throw new CloudflareSFUError("SFU signaling unavailable", "signaling_failed");
+  #requireTransport(): SFUSignalingTransport {
+    if (!this.#transport) throw new SFUError("SFU signaling unavailable", "signaling_failed");
     return this.#transport;
   }
 }
-type LocalOfferOrigin = Exclude<CloudflareSFULocalOfferDiagnostic["origin"], "outside_sdk">;
+type LocalOfferOrigin = Exclude<SFULocalOfferDiagnostic["origin"], "outside_sdk">;

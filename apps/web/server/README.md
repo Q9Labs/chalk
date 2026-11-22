@@ -52,7 +52,7 @@ CHALK_API_SERVICE_SECRETS=<comma-separated rotation secrets>
 CHALK_API_SERVICE_SCOPES=tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete
 ```
 
-It also needs `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` with the Cloudflare SFU credentials so owned calls work. Key creation accepts only non-Tenant scopes, and rotation sends only expiry.
+It also needs a configured Chalk SFU fleet so owned calls work. Key creation accepts only non-Tenant scopes, and rotation sends only expiry.
 
 Callback URLs are derived from `DASHBOARD_ORIGIN` as `<origin>/auth/callback/google` and `<origin>/auth/callback/apple`. Register Google's exact redirect URIs, set the consent screen to Chalk/chalkmeet.com, verify the domain and publish it. Register Apple's domains and HTTPS return URLs on the Services ID. Apple rejects HTTP and localhost, so real Apple smoke needs staging or production.
 

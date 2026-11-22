@@ -5,9 +5,9 @@
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { connectionIsLive, observeConnectionState, withDeadline } from "./peer-connection";
 import { waitFor } from "./tracks";
-import { ICE_RESTART_BUDGET_MS, ICE_RESTART_FAILURE } from "./cloudflare-limits";
-import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUFailureCode, CloudflareSFUSessionDescription, CloudflareSFUSnapshot, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./types";
+import { ICE_RESTART_BUDGET_MS, ICE_RESTART_FAILURE } from "./sfu-limits";
+import { SFUError } from "./types";
+import type { SFUFailureCode, SFUSessionDescription, SFUSnapshot, SFUTrackRequest, SFUTracksResponse } from "./types";
 
 export type IceRestart = { readonly connection: RTCPeerConnection; readonly connectionEpoch: number; state: "running" | "succeeded" | "failed" };
 export type ConnectionObservation = ReturnType<typeof observeConnectionState>;
@@ -19,19 +19,19 @@ export interface IceRestartControllerOps {
   readonly restartsInPlace: () => boolean;
   readonly needsReceiveTransport: (generation: number) => boolean;
   readonly markNegotiated: (generation: number) => void;
-  readonly currentFailure: () => CloudflareSFUSnapshot["failure"];
+  readonly currentFailure: () => SFUSnapshot["failure"];
   readonly generation: () => number;
   readonly connectionEpoch: () => number;
   readonly connection: () => RTCPeerConnection;
   readonly bootstrapConnectionId: () => string;
   readonly stopped: () => boolean;
   readonly serializeSDP: <T>(operation: () => Promise<T>) => Promise<T>;
-  readonly createLocalOffer: (connection: RTCPeerConnection, origin: TransportOffer) => Promise<CloudflareSFUSessionDescription>;
-  readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }, owner: IceRestartOwner) => Promise<CloudflareSFUTracksResponse>;
-  readonly applyProviderDescription: (response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: IceRestartOwner) => Promise<void>;
+  readonly createLocalOffer: (connection: RTCPeerConnection, origin: TransportOffer) => Promise<SFUSessionDescription>;
+  readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription: SFUSessionDescription; readonly tracks: readonly SFUTrackRequest[] }, owner: IceRestartOwner) => Promise<SFUTracksResponse>;
+  readonly applyProviderDescription: (response: SFUTracksResponse, connection: RTCPeerConnection, owner: IceRestartOwner) => Promise<void>;
   readonly rollbackLocalOffer: (connection: RTCPeerConnection) => Promise<void>;
   readonly reportHealth: (event: TransportDiagnostic) => void;
-  readonly setFailure: (error: unknown, fallback: CloudflareSFUFailureCode) => void;
+  readonly setFailure: (error: unknown, fallback: SFUFailureCode) => void;
 }
 
 export class IceRestartController {
@@ -105,7 +105,7 @@ export class IceRestartController {
     );
   }
   async #restartWithinBudget(connection: RTCPeerConnection, generation: number, current: () => boolean): Promise<void> {
-    await withDeadline(this.#restartIce(connection, generation, current), ICE_RESTART_BUDGET_MS, () => new CloudflareSFUError("The ICE restart did not reconnect in time", "ice_connection_failed"));
+    await withDeadline(this.#restartIce(connection, generation, current), ICE_RESTART_BUDGET_MS, () => new SFUError("The ICE restart did not reconnect in time", "ice_connection_failed"));
   }
   // The restart offer keeps every media section, so the SFU keeps the session's publications and subscriptions.
   async #restartIce(connection: RTCPeerConnection, generation: number, current: () => boolean): Promise<void> {
@@ -139,6 +139,6 @@ export class IceRestartController {
   }
 }
 
-function staleConnection(): CloudflareSFUError {
-  return new CloudflareSFUError("Stale media connection", "stale_generation");
+function staleConnection(): SFUError {
+  return new SFUError("Stale media connection", "stale_generation");
 }

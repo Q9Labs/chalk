@@ -52,6 +52,7 @@ export async function proveEvictionReload(context, origin) {
     await Promise.all([page.waitForEvent("domcontentloaded"), page.getByRole("button", { name: "Reload page", exact: true }).click()]);
     await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
     console.log("PASS: five real sibling joins evict the legacy seat; real 401 shows reload guidance, stops retries, and Reload page rejoins");
+    return initial.subject;
   } finally {
     await page.close();
   }

@@ -1,0 +1,123 @@
+{
+  "doc": "Fields every record may carry, in every dataset. The kernel stamps the delivery, build, flags, clock and record groups; the caller's context supplies the trail. Delivery semantics (uniqueness, ordering, retry and dedup of event_id, seq, batch_id and source_id) belong to contract C3; this file only declares the fields.",
+  "groups": [
+    {
+      "group": "delivery",
+      "doc": "Who sent a record and where it sits in that sender's stream.",
+      "fields": [
+        { "name": "event_id", "type": "id", "id_kind": "event", "required": true, "sensitivity": null, "doc": "One record. Minted by the kernel when the record is made." },
+        {
+          "name": "seq",
+          "type": "int",
+          "required": true,
+          "sensitivity": null,
+          "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
+        },
+        { "name": "batch_id", "type": "id", "id_kind": "batch", "required": false, "sensitivity": null, "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel." },
+        {
+          "name": "source_id",
+          "type": "string",
+          "required": true,
+          "sensitivity": null,
+          "doc": "The stream that owns seq. On a client the outbox stamps it with seq. A client starts a new source for each page load and for each Participant it joins as, and only that Participant's credential may write it (C3); a server uses its instance id."
+        },
+        { "name": "next_seq", "type": "int", "sensitivity": null, "doc": "The source's high-water mark on every batch (C3): every seq below it has been assigned." },
+        {
+          "name": "end",
+          "type": "enum",
+          "sensitivity": null,
+          "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (the next page load found it dead and reports the last high-water mark it persisted). The ledger refuses an end below a seq it settled or below a next_seq already reported, so the missing suffix stays a gap.",
+          "values": ["closed", "abandoned"]
+        },
+        { "name": "dropped_seqs", "type": "ranges", "sensitivity": null, "doc": "On a drop record (C3): the half-open seq ranges [from, to) of the record's own source that the client gave up on, all below the record's seq, at most 64." },
+        { "name": "drop_reason", "type": "enum", "values": ["queue_full", "credential_expired", "refused"], "sensitivity": null, "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs." }
+      ]
+    },
+    {
+      "group": "trail",
+      "doc": "The ID trail. Each is present when it is known at the emit site, and never guessed.",
+      "fields": [
+        { "name": "tenant_id", "type": "id", "id_kind": "tenant", "sensitivity": null, "doc": "The tenant." },
+        { "name": "space_id", "type": "id", "id_kind": "space", "sensitivity": null, "doc": "The Space." },
+        { "name": "episode_id", "type": "id", "id_kind": "episode", "sensitivity": null, "doc": "The Episode." },
+        { "name": "participant_id", "type": "id", "id_kind": "participant", "sensitivity": null, "doc": "The Participant seat in the Episode." },
+        { "name": "generation", "type": "int", "sensitivity": null, "doc": "Which join of the Participant seat this is." },
+        { "name": "user_id", "type": "id", "id_kind": "user", "sensitivity": null, "doc": "The tenant's identifier for the person." },
+        { "name": "agent_id", "type": "id", "id_kind": "agent", "sensitivity": null, "doc": "The tenant's identifier for the agent." },
+        { "name": "device_id", "type": "id", "id_kind": "device", "sensitivity": null, "doc": "The persistent device." },
+        { "name": "device_ephemeral", "type": "bool", "sensitivity": null, "doc": "True when device_id could not be stored and lives only for this client session." },
+        {
+          "name": "client_session_id",
+          "type": "id",
+          "id_kind": "client_session",
+          "sensitivity": null,
+          "doc": "The SDK client session: one client object's lifetime. The client kernel stamps it on every record, separate from source_id, because one client session opens a new source for each Participant it joins as."
+        },
+        { "name": "journey_id", "type": "id", "id_kind": "journey", "sensitivity": null, "doc": "The user-visible attempt this record belongs to." },
+        { "name": "request_id", "type": "id", "id_kind": "request", "sensitivity": null, "doc": "The request attempt." },
+        { "name": "trace_id", "type": "id", "id_kind": "trace", "sensitivity": null, "doc": "The W3C trace." },
+        { "name": "span_id", "type": "id", "id_kind": "span", "sensitivity": null, "doc": "The W3C span." },
+        { "name": "media_connection_id", "type": "id", "id_kind": "media_connection", "legacy_names": ["connection_id"], "sensitivity": null, "doc": "Chalk's media connection." },
+        { "name": "provider_media_id", "type": "id", "id_kind": "provider_media", "legacy_names": ["provider_session_id", "cloudflare_connection_id"], "sensitivity": null, "doc": "The media provider's session id." },
+        { "name": "sync_connection_id", "type": "id", "id_kind": "sync_connection", "sensitivity": null, "doc": "The Sync websocket." },
+        { "name": "recording_id", "type": "id", "id_kind": "recording", "sensitivity": null, "doc": "The recording." },
+        { "name": "job_id", "type": "id", "id_kind": "job", "sensitivity": null, "doc": "The background job." },
+        { "name": "attempt", "type": "int", "sensitivity": null, "doc": "Which run of a job or which try of an op this is, starting at 1." },
+        { "name": "webhook_delivery_id", "type": "id", "id_kind": "webhook_delivery", "sensitivity": null, "doc": "The webhook delivery." },
+        { "name": "admission_request_id", "type": "id", "id_kind": "admission_request", "sensitivity": null, "doc": "The admission request." }
+      ]
+    },
+    {
+      "group": "build",
+      "doc": "What code made the record.",
+      "fields": [
+        { "name": "module", "type": "enum", "values_from": "core.modules", "required": true, "sensitivity": null, "doc": "The emitting program." },
+        { "name": "env", "type": "enum", "values_from": "core.environments", "required": true, "sensitivity": null, "doc": "The environment." },
+        { "name": "release_sha", "type": "string", "sensitivity": null, "doc": "The git commit the program was built from." },
+        { "name": "app_version", "type": "string", "sensitivity": null, "doc": "The host app's version." },
+        { "name": "app_build", "type": "string", "sensitivity": null, "doc": "The host app's build number." },
+        { "name": "sdk_version", "type": "string", "sensitivity": null, "doc": "The Chalk SDK version inside the host app." },
+        { "name": "platform", "type": "enum", "values_from": "core.platforms", "sensitivity": null, "doc": "Where the program runs." },
+        { "name": "schema_ver", "type": "string", "required": true, "sensitivity": null, "doc": "The registry's content hash, so a reader knows which catalogue the record was written against." }
+      ]
+    },
+    {
+      "group": "flags",
+      "doc": "The switches in effect. Chalk has no flag service: flags are config switches, the media-plane kill switch and caps.",
+      "fields": [{ "name": "flags_hash", "type": "string", "sensitivity": null, "doc": "16 hex characters of the SHA-256 of the canonical flags JSON. Resolve it with the obs.flags_snapshot fact that carries the same hash." }]
+    },
+    {
+      "group": "clock",
+      "doc": "When the record happened. Order records by source_id and seq first; use est_server_ms across sources only within clock_err_ms.",
+      "fields": [
+        { "name": "client_mono_ms", "type": "number", "sensitivity": null, "doc": "The client's monotonic clock, since its time origin." },
+        { "name": "client_wall_ms", "type": "int", "sensitivity": null, "doc": "The client's wall clock, in Unix milliseconds." },
+        { "name": "est_server_ms", "type": "int", "sensitivity": null, "doc": "The estimated server time in Unix milliseconds. A server stamps its own clock." },
+        { "name": "clock_err_ms", "type": "int", "sensitivity": null, "doc": "The bound on est_server_ms's error. Absent on server records." },
+        { "name": "clock_state", "type": "enum", "values_from": "core.clock_states", "required": true, "sensitivity": null, "doc": "Whether est_server_ms can be trusted." },
+        { "name": "clock_epoch", "type": "int", "sensitivity": null, "doc": "Counts clock jumps in this source. Records from different epochs are ordered only by seq." }
+      ]
+    },
+    {
+      "group": "record",
+      "doc": "What the record is.",
+      "fields": [
+        { "name": "kind", "type": "enum", "values_from": "core.kinds", "required": true, "sensitivity": null, "doc": "op, transition, decision, surface or fact." },
+        { "name": "name", "type": "string", "required": true, "sensitivity": null, "doc": "The registry event name. A transition's name is its machine." },
+        { "name": "outcome", "type": "enum", "values_from": "core.outcomes", "sensitivity": null, "doc": "An op's terminal outcome." },
+        { "name": "reason_code", "type": "string", "sensitivity": null, "doc": "A registry reason code. Required when the outcome is expected or error, and on a decision that refuses, times out, closes or limits." },
+        { "name": "duration_ms", "type": "int", "sensitivity": null, "doc": "An op's duration, or how long a state lasted." },
+        { "name": "op_id", "type": "id", "id_kind": "operation", "sensitivity": null, "doc": "The op." },
+        { "name": "parent_op_id", "type": "id", "id_kind": "operation", "sensitivity": null, "doc": "The op that started this one." },
+        { "name": "machine", "type": "string", "sensitivity": null, "doc": "A transition's machine." },
+        { "name": "from_state", "type": "string", "sensitivity": null, "doc": "The state before a transition." },
+        { "name": "to_state", "type": "string", "sensitivity": null, "doc": "The state after a transition." },
+        { "name": "trigger", "type": "string", "sensitivity": null, "doc": "What caused a transition, from the machine's trigger list." },
+        { "name": "decision_id", "type": "id", "id_kind": "decision", "sensitivity": null, "doc": "The decision." },
+        { "name": "decision", "type": "string", "sensitivity": null, "doc": "What a decision decided, from the event's declared values." },
+        { "name": "surface_state", "type": "enum", "values_from": "core.surface_states", "sensitivity": null, "doc": "Whether a surface was shown or dismissed." },
+        { "name": "shown_ms", "type": "int", "sensitivity": null, "doc": "How long a dismissed surface was on screen." }
+      ]
+    }
+  ]
+}

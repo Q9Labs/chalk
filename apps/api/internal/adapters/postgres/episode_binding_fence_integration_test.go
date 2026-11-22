@@ -21,7 +21,7 @@ func fenceSnapshot(generation int, selectedBy string) string {
 // fence accepts the move that drops selected_by and nothing else about it.
 func TestBindingMoveMayDropSelectedByButNotChangeIt(t *testing.T) {
 	pool := settingsPool(t)
-	tenant, space := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	tenant, space := seedSettingsSpace(t, pool, nil, nil, "chalk_sfu")
 	episode, err := utilities.NewID()
 	if err != nil {
 		t.Fatal(err)

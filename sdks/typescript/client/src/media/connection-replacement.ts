@@ -6,22 +6,22 @@
 import type { MediaConnectionReplacementCause } from "./plane";
 import { validateBootstrap } from "./client-validation";
 import { connectionIsLive } from "./peer-connection";
-import { DEAD_SESSION_STATUSES } from "./cloudflare-limits";
-import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUBootstrap } from "./types";
+import { DEAD_SESSION_STATUSES } from "./sfu-limits";
+import { SFUError } from "./types";
+import type { SFUBootstrap } from "./types";
 
 /** A signaling failure the node marks retryable is healed by a fresh connection. */
 export function retryableConnectionFailure(error: unknown): boolean {
-  return error instanceof CloudflareSFUError && error.code === "signaling_failed" && error.options.retryableConnection === true;
+  return error instanceof SFUError && error.code === "signaling_failed" && error.options.retryableConnection === true;
 }
 /** An offer rejected on a connection that never came up is a dead session, not a bad offer. */
 export function rejectedOnDeadConnection(error: unknown, connection: RTCPeerConnection): boolean {
-  return error instanceof CloudflareSFUError && error.code === "signaling_failed" && DEAD_SESSION_STATUSES.has(error.options.status) && !connectionIsLive(connection);
+  return error instanceof SFUError && error.code === "signaling_failed" && DEAD_SESSION_STATUSES.has(error.options.status) && !connectionIsLive(connection);
 }
 
 /** What the replacer needs from the coordinator. */
 export interface MediaConnectionReplacerOps {
-  readonly requestReplacement: () => ((observedConnectionId: string) => Promise<CloudflareSFUBootstrap>) | undefined;
+  readonly requestReplacement: () => ((observedConnectionId: string) => Promise<SFUBootstrap>) | undefined;
   readonly observedConnectionId: () => string;
   readonly generation: () => number;
   readonly stopped: () => boolean;
@@ -32,7 +32,7 @@ export interface MediaConnectionReplacerOps {
   readonly sdpPending: () => number;
   readonly requireGeneration: (generation: number) => void;
   readonly serializeSDP: <T>(operation: () => Promise<T>) => Promise<T>;
-  readonly adopt: (bootstrap: CloudflareSFUBootstrap, cause: MediaConnectionReplacementCause) => void;
+  readonly adopt: (bootstrap: SFUBootstrap, cause: MediaConnectionReplacementCause) => void;
   readonly republish: (generation: number) => Promise<void>;
   readonly reportError: (error: unknown) => void;
 }
@@ -64,7 +64,7 @@ export class MediaConnectionReplacer {
     if (this.#replacement?.generation === generation) return this.#replacement.promise;
     const requestReplacement = this.#ops.requestReplacement();
     if (!requestReplacement || this.attemptedGeneration === generation) {
-      return Promise.reject(new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed"));
+      return Promise.reject(new SFUError("A fresh Chalk SFU connection is unavailable", "signaling_failed"));
     }
     this.attemptedGeneration = generation;
     const promise = Promise.resolve().then(async () => {
@@ -74,7 +74,7 @@ export class MediaConnectionReplacer {
       this.#ops.requireGeneration(generation);
       validateBootstrap(bootstrap);
       if (bootstrap.connectionId === this.#ops.observedConnectionId()) {
-        throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
+        throw new SFUError("Participant access did not replace the Chalk SFU connection", "signaling_failed");
       }
       this.#ops.adopt(bootstrap, cause);
     });

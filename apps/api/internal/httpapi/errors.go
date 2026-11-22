@@ -21,6 +21,7 @@ var (
 	apiErrorForbidden          = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
 	apiErrorServiceUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
 	apiErrorInvalidRequest     = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
+	apiErrorTelemetryRefused   = APIError{Status: http.StatusBadRequest, Code: "telemetry.refused", Message: "Telemetry batch refused"}
 	apiErrorInvalidPageSize    = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
 	apiErrorInvalidCursor      = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
 	apiErrorInvalidTenantID    = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
@@ -42,12 +43,12 @@ var (
 	apiErrorInvalidEpisodeID              = APIError{Status: http.StatusBadRequest, Code: "episode.invalid_id", Message: "Invalid Episode id"}
 	apiErrorInvalidSpaceName              = APIError{Status: http.StatusBadRequest, Code: "space.invalid_name", Message: "Invalid Space name"}
 	apiErrorInvalidSpaceSlug              = APIError{Status: http.StatusBadRequest, Code: "space.invalid_slug", Message: "Invalid Space slug"}
-	apiErrorInvalidMediaPlane             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_media_plane", Message: "Invalid media plane"}
-	apiErrorSpaceMediaPlaneNotPermitted   = APIError{Status: http.StatusForbidden, Code: "space.media_plane_not_permitted", Message: "This media plane can only be set by Chalk"}
+	apiErrorInvalidMediaPlane             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_media_plane", Message: "Invalid media plane: use chalk_sfu"}
 	apiErrorInvalidSpaceField             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_field", Message: "Invalid Space field"}
 	apiErrorSpaceSlugAlreadyUsed          = APIError{Status: http.StatusConflict, Code: "space.slug_conflict", Message: "Space slug already used"}
 	apiErrorSpaceNotFound                 = APIError{Status: http.StatusNotFound, Code: "space.not_found", Message: "Space not found"}
 	apiErrorInvalidSpaceArchiveFilter     = APIError{Status: http.StatusBadRequest, Code: "space.invalid_archive_filter", Message: "Invalid archived filter"}
+	apiErrorInvalidSpaceOrder             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_order", Message: "order must be created or active"}
 	apiErrorEpisodeNotFound               = APIError{Status: http.StatusNotFound, Code: "episode.not_found", Message: "Episode not found"}
 	apiErrorInvalidParticipantID          = APIError{Status: http.StatusBadRequest, Code: "participant.invalid_id", Message: "Invalid Participant id"}
 	apiErrorInvalidRequestKey             = APIError{Status: http.StatusBadRequest, Code: "request.invalid_idempotency_key", Message: "Idempotency-Key must contain 16 to 128 ASCII letters, digits, underscores, or hyphens"}

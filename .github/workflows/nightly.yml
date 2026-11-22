@@ -91,7 +91,7 @@ jobs:
     with:
       release_sha: ${{ needs.plan.outputs.target_sha }}
       release_id: ${{ needs.release.outputs.release_id }}
-      proofs: camera-share long-call chat-upload leave-chalk-sfu cloudflare-plane latency-smoke web-call
+      proofs: camera-share long-call chat-upload leave-chalk-sfu latency-smoke web-call
       image_source: manifest
     secrets: inherit
   start-latency:

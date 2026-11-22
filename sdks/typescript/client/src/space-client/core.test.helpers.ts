@@ -115,7 +115,7 @@ export function opaqueAccessGrant(value: string | number, suffix = String(value)
   return {
     subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
     sync: { token: credential("chalk-sync", suffix), expires_at: expiresAt },
-    media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
+    media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "chalk_sfu", client_payload: { connectionId, iceServers: [], episodeRef: "episode-1", capabilities: {} } },
   } as unknown as AccessGrant;
 }
 function credential(audience: "chalk-sync" | "chalk-media", suffix: string): string {

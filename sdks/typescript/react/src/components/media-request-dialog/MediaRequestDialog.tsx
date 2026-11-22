@@ -42,12 +42,14 @@ export function MediaRequestDialog({ request, onDecline, onAllow, onActionError 
           </span>
         ) : null}
       </span>
-      <ChalkButton variant="ghost" onClick={() => runAction("decline")} disabled={isExpired || pendingAction !== null}>
-        Not now
-      </ChalkButton>
-      <ChalkButton variant="solid" onClick={() => runAction("allow")} disabled={isExpired || pendingAction !== null}>
-        {isExpired ? "Expired" : pendingAction === "allow" ? "Working…" : "Allow"}
-      </ChalkButton>
+      <span data-part="toast-actions">
+        <ChalkButton variant="ghost" onClick={() => runAction("decline")} disabled={isExpired || pendingAction !== null}>
+          Not now
+        </ChalkButton>
+        <ChalkButton variant="solid" onClick={() => runAction("allow")} disabled={isExpired || pendingAction !== null}>
+          {isExpired ? "Expired" : pendingAction === "allow" ? "Working…" : "Allow"}
+        </ChalkButton>
+      </span>
     </div>
   );
 }

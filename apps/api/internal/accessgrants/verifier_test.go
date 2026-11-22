@@ -199,7 +199,7 @@ func TestVerifierRejectsIssuerAndSubjectClaims(t *testing.T) {
 		{name: "noncanonical tenant", change: func(claims map[string]any) { claims["tenant_id"] = " 11111111-1111-4111-8111-111111111111" }, want: accessgrants.ErrInvalidSubject},
 		{name: "generation", change: func(claims map[string]any) { claims["participant_generation"] = 0 }, want: accessgrants.ErrInvalidSubject},
 		{name: "wrong provider", change: func(claims map[string]any) { claims["media_provider"] = "other_sfu" }, want: accessgrants.ErrInvalidSubject},
-		{name: "connection", change: func(claims map[string]any) { claims["cloudflare_connection_id"] = "" }, want: accessgrants.ErrInvalidSubject},
+		{name: "connection", change: func(claims map[string]any) { claims["connection_id"] = "" }, want: accessgrants.ErrInvalidSubject},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

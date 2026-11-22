@@ -41,7 +41,7 @@ type SpaceArchiveService interface {
 }
 
 type SpaceFilterService interface {
-	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error)
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options spaces.ListOptions) (spaces.SpaceList, error)
 }
 
 type spaceRoleResponse struct {
@@ -119,7 +119,7 @@ type createSpaceEndpointRequest struct {
 type listSpacesRequest struct {
 	TenantID utilities.ID
 	Page     pagination.PageRequest
-	Archived *bool
+	Options  spaces.ListOptions
 }
 
 type getSpaceRequest struct {
@@ -162,21 +162,16 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		ErrorRules(spaceRules)
 }
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
-
 		var list spaces.SpaceList
 		var err error
-		if request.Archived != nil {
-			if filtered, ok := service.(SpaceFilterService); ok {
-				list, err = filtered.ListSpacesFiltered(ctx, request.TenantID, request.Page, request.Archived)
-			} else {
-				list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
-			}
+		if filtered, ok := service.(SpaceFilterService); ok && request.Options != (spaces.ListOptions{}) {
+			list, err = filtered.ListSpacesFiltered(ctx, request.TenantID, request.Page, request.Options)
 		} else {
 			list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
 		}
@@ -187,8 +182,8 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
-		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}, spaceOrderParameter()}, paginationParameters()...)...).
+		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter, apiErrorInvalidSpaceOrder)...).
 		ErrorRules(spaceRules)
 }
 
@@ -226,7 +221,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
 		ErrorRules(spaceRules)
 }
 
@@ -297,7 +292,11 @@ func decodeListSpacesRequest(r *http.Request) (listSpacesRequest, error) {
 	if err != nil {
 		return listSpacesRequest{}, err
 	}
-	return listSpacesRequest{TenantID: tenantID, Page: page, Archived: archived}, nil
+	order, err := spaceOrderQuery(r)
+	if err != nil {
+		return listSpacesRequest{}, err
+	}
+	return listSpacesRequest{TenantID: tenantID, Page: page, Options: spaces.ListOptions{Archived: archived, Order: order}}, nil
 }
 
 func optionalArchivedQuery(r *http.Request) (*bool, error) {
@@ -366,11 +365,11 @@ func spaceWriteErrors(extra ...APIError) []APIError {
 
 var spaceRules = errorRules{
 	ruleFor(apiErrorInvalidTenantID, spaces.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidCursor, pagination.ErrInvalidCursor),
 	ruleFor(apiErrorInvalidSpaceID, spaces.ErrInvalidSpaceID),
 	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
 	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
 	ruleFor(apiErrorInvalidMediaPlane, spaces.ErrInvalidMediaPlane),
-	ruleFor(apiErrorSpaceMediaPlaneNotPermitted, spaces.ErrMediaPlaneNotPermitted),
 	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField),
 	ruleFor(apiErrorInvalidSpaceArtifactPolicy, spaces.ErrInvalidRecordingPolicy, spaces.ErrInvalidTranscriptionPolicy),
 	ruleFor(apiErrorSpaceNotFound, spaces.ErrSpaceNotFound),
@@ -431,7 +430,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		Name:                          space.Name,
 		TenantID:                      space.TenantID.String(),
 		Slug:                          space.Slug,
-		MediaPlane:                    space.MediaPlane,
+		MediaPlane:                    mediaplane.ProviderChalkSFU.SettingName(),
 		MediaPlaneSetting:             mediaplane.OptionalSettingName(space.MediaPlaneSetting),
 		RecordingPolicy:               space.RecordingPolicy,
 		TranscriptionPolicy:           space.TranscriptionPolicy,

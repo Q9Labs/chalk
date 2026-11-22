@@ -1,11 +1,10 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { ChalkSheet } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
+import { cameraBackgroundPicker } from "./camera-background-loader";
 import { CameraPreview, InputLevel } from "./DevicePreview";
-
-const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 
 interface DeviceSheetProps {
   readonly type: "mic" | "video";
@@ -80,8 +79,10 @@ function DeviceRow({ checked, disabled, onClick, children }: { readonly checked:
 }
 
 function SwitchRow({ label, hint, checked, onChange }: { readonly label: string; readonly hint?: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
+  // A switch the app can't act on would read as on-but-disabled, so it isn't shown at all.
+  if (!onChange) return null;
   return (
-    <button type="button" role="switch" aria-checked={checked} className="chalk-sheet-row" disabled={!onChange} onClick={() => onChange?.(!checked)}>
+    <button type="button" role="switch" aria-checked={checked} className="chalk-sheet-row" onClick={() => onChange(!checked)}>
       <span className="chalk-shell-device-label">
         {label}
         {hint ? <small>{hint}</small> : null}
@@ -177,7 +178,7 @@ export default function DeviceSheet({
           {previewDeviceId && open ? (
             <Suspense fallback={null}>
               <div className="chalk-sheet-group">
-                <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} menu={sheetBackground} />
+                <cameraBackgroundPicker.Component key={previewDeviceId} deviceId={previewDeviceId} menu={sheetBackground} />
               </div>
             </Suspense>
           ) : null}

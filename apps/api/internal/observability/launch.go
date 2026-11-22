@@ -22,6 +22,7 @@ var launchTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/observ
 
 type accessGrantIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
+	IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error)
 }
 
 type participantMediaVerifier interface {

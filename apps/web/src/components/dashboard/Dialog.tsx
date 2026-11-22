@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
+
+import { Cancel01Icon } from "@q9labsai/chalk-react/utils";
 
 import { trapDialogFocus } from "../../lib/dialog-focus";
 import { Icon, type IconName } from "../site/Icon";
@@ -13,7 +15,7 @@ type DialogProps = {
   /** Artwork above the title, such as the app and Chalk logos. */
   readonly lead?: ReactNode;
   /** A tile beside the title, the heading shape the Developer dialogs use. Body and actions get their own bands. */
-  readonly icon?: IconName;
+  readonly icon?: IconName | ReactElement;
   readonly tone?: "ok";
   /** Quiet text on the left of the actions. */
   readonly hint?: ReactNode;
@@ -38,14 +40,12 @@ function DialogInner({ title, description, lead, icon, tone, hint, onClose, chil
   return (
     <>
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
-        <Icon name="x" />
+        <Cancel01Icon size={16} />
       </button>
       {lead}
       {icon ? (
         <div className="dh">
-          <span className={tone === "ok" ? "tile ok" : "tile"}>
-            <Icon name={icon} size={20} />
-          </span>
+          <span className={tone === "ok" ? "tile ok" : "tile"}>{typeof icon === "string" ? <Icon name={icon} size={20} /> : icon}</span>
           <div>{heading}</div>
         </div>
       ) : (

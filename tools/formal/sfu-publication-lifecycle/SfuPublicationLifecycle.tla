@@ -1,6 +1,6 @@
 ------------------- MODULE SfuPublicationLifecycle -------------------
 (***************************************************************************)
-(* The five-state local publication lifecycle of CloudflareSFUClient       *)
+(* The five-state local publication lifecycle of SFUClient       *)
 (* (sdks/typescript/client/src/media/client.ts): every owned publication   *)
 (* moves pending -> confirmed -> held -> retiring -> retired, with         *)
 (* reconnect, replacement and stop() racing asynchronous SFU responses.    *)

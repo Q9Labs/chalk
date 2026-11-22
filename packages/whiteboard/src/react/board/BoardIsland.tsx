@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { usePrefersReducedMotion } from "./useMediaQuery";
+import { useExpandedTools, useRovingTabStop } from "./useIslandFocus";
 import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "./controls";
 import { BoardIcon, GripIcon } from "./BoardIcon";
 import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, checkInk, strokeChip, strokePreview, strokeTarget, surfaceFill, surfaceInk, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
@@ -258,18 +259,12 @@ function nearestPlace(board: DOMRect, x: number, y: number): IslandPlace {
 export function BoardIsland(props: IslandProps) {
   const { place, onPlace, compact } = props;
   const island = useRef<HTMLDivElement>(null);
-  const tabStop = useRef<HTMLButtonElement | null>(null);
   const reduced = usePrefersReducedMotion();
   const [drag, setDrag] = useState<{ readonly x: number; readonly y: number; readonly near: IslandPlace } | null>(null);
   const dropRect = useRef<DOMRect | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const { expanded, openFromLauncher } = useExpandedTools(island);
 
-  useLayoutEffect(() => {
-    const buttons = [...(island.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-    const stop = buttons.find((button) => button === tabStop.current && !button.disabled) ?? buttons.find((button) => !button.disabled);
-    tabStop.current = stop ?? null;
-    for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
-  });
+  const tabStop = useRovingTabStop(island);
 
   useLayoutEffect(() => {
     const element = island.current;
@@ -351,7 +346,7 @@ export function BoardIsland(props: IslandProps) {
         }}
       >
         {compact && props.idle && !expanded ? (
-          <button type="button" className="chalk-board-tool" data-current aria-label="Open drawing tools" aria-expanded={false} onClick={() => setExpanded(true)}>
+          <button type="button" className="chalk-board-tool" data-current aria-label="Open drawing tools" aria-expanded={false} onClick={openFromLauncher}>
             <BoardIcon name={toolEntry(props.tool).glyph} />
           </button>
         ) : compact ? (

@@ -1,4 +1,4 @@
-import type { CloudflareSFUIceServer } from "../media/types";
+import type { SFUIceServer } from "../media/types";
 import { directOrigin } from "../direct-path";
 import { decodeBase64Url } from "./base64-url";
 declare const syncCredentialBrand: unique symbol;
@@ -16,6 +16,10 @@ export type AccessSubject = {
   readonly episodeId: string;
   readonly participantId: string;
   readonly participantGeneration: number;
+};
+export type ParticipantTelemetryAccess = {
+  readonly token: string;
+  readonly expiresAt: string;
 };
 export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
@@ -39,36 +43,26 @@ export type ChalkSFUCapabilities = {
   /** The https origin of the direct door for Sync and SFU signalling; absent when the API advertises none. */
   readonly directSignalingUrl?: string;
 };
-export type CloudflareSFUClientPayload = {
-  readonly connectionId: string;
-  readonly stunServer: string;
-  readonly iceServers?: readonly CloudflareSFUIceServer[];
-};
 export type ChalkSFUClientPayload = {
   readonly connectionId: string;
   readonly episodeRef: string;
   /** Every ICE server the Chalk SFU wants. It can be empty, because the SFU has a public address. */
-  readonly iceServers: readonly CloudflareSFUIceServer[];
+  readonly iceServers: readonly SFUIceServer[];
   readonly capabilities: ChalkSFUCapabilities;
 };
-export type ParticipantMediaAccess =
-  | {
-      readonly token: ParticipantMediaCredential;
-      readonly expiresAt: string;
-      readonly provider: "cloudflare_sfu";
-      readonly clientPayload: CloudflareSFUClientPayload;
-    }
-  | {
-      readonly token: ParticipantMediaCredential;
-      readonly expiresAt: string;
-      readonly provider: "chalk_sfu";
-      readonly clientPayload: ChalkSFUClientPayload;
-    };
+export type ParticipantMediaAccess = {
+  readonly token: ParticipantMediaCredential;
+  readonly expiresAt: string;
+  readonly provider: "chalk_sfu";
+  readonly clientPayload: ChalkSFUClientPayload;
+};
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
   readonly episodeStartedAt?: string | null;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
+  /** The credential for the telemetry route alone. Absent from a server that predates it, and then telemetry leaves under the media credential. */
+  readonly telemetry?: ParticipantTelemetryAccess;
 };
 /** Opaque signed envelope minted by the server SDK and consumed by SpaceClient. */
 export type AccessGrant = {
@@ -115,6 +109,7 @@ export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
     episodeStartedAt,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
+    ...optionalTelemetry(value.telemetry),
   };
 }
 export function parseAccessGrant(value: unknown): AccessGrant {
@@ -137,6 +132,7 @@ function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       provider: value.media.provider,
       client_payload: mediaClientPayload(value.media),
     },
+    ...(value.telemetry ? { telemetry: { token: value.telemetry.token, expires_at: value.telemetry.expiresAt } } : {}),
     [accessGrantBrand]: "AccessGrant" as const,
   });
 }
@@ -173,24 +169,23 @@ function parseSyncAccess(value: unknown): ParticipantSyncAccess {
     expiresAt: requireDateTime(value.expires_at ?? value.expiresAt),
   };
 }
+/** Telemetry is not worth a failed join: a missing or malformed credential means telemetry falls back to the media credential. */
+function optionalTelemetry(value: unknown): { readonly telemetry?: ParticipantTelemetryAccess } {
+  if (!isRecord(value)) return {};
+  try {
+    return { telemetry: { token: requireCredential(value.token, "chalk-telemetry"), expiresAt: requireDateTime(value.expires_at ?? value.expiresAt) } };
+  } catch {
+    return {};
+  }
+}
 function parseMediaAccess(value: unknown): ParticipantMediaAccess {
   if (!isRecord(value)) throw new AccessGrantError();
   const payload = value.client_payload ?? value.clientPayload;
   if (!isRecord(payload)) throw new AccessGrantError();
   const token = requireCredential(value.token, "chalk-media") as ParticipantMediaCredential;
   const expiresAt = requireDateTime(value.expires_at ?? value.expiresAt);
-  switch (value.provider) {
-    case "cloudflare_sfu":
-      return { token, expiresAt, provider: value.provider, clientPayload: parseCloudflareSFUPayload(payload) };
-    case "chalk_sfu":
-      return { token, expiresAt, provider: value.provider, clientPayload: parseChalkSFUPayload(payload) };
-    default:
-      throw new AccessGrantError();
-  }
-}
-function parseCloudflareSFUPayload(payload: Readonly<Record<string, unknown>>): CloudflareSFUClientPayload {
-  const iceServers = payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) };
-  return { connectionId: requireNonEmptyString(payload.connectionId), stunServer: requireNonEmptyString(payload.stunServer), ...iceServers };
+  if (value.provider !== "chalk_sfu") throw new AccessGrantError();
+  return { token, expiresAt, provider: value.provider, clientPayload: parseChalkSFUPayload(payload) };
 }
 function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): ChalkSFUClientPayload {
   return {
@@ -214,9 +209,9 @@ function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
     ...(direct ? { directSignalingUrl: direct.origin } : {}),
   };
 }
-function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
+function parseIceServers(value: unknown): readonly SFUIceServer[] {
   if (!Array.isArray(value)) throw new AccessGrantError();
-  return value.map((entry): CloudflareSFUIceServer => {
+  return value.map((entry): SFUIceServer => {
     if (!isRecord(entry) || !Array.isArray(entry.urls) || entry.urls.length === 0) throw new AccessGrantError();
     const urls = entry.urls.map(requireNonEmptyString);
     if (entry.username === undefined && entry.credential === undefined) return { urls };
@@ -224,23 +219,9 @@ function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
   });
 }
 function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, unknown>> {
-  switch (value.provider) {
-    case "cloudflare_sfu":
-      return {
-        connectionId: value.clientPayload.connectionId,
-        stunServer: value.clientPayload.stunServer,
-        ...(value.clientPayload.iceServers ? { iceServers: value.clientPayload.iceServers } : {}),
-      };
-    case "chalk_sfu":
-      return {
-        connectionId: value.clientPayload.connectionId,
-        episodeRef: value.clientPayload.episodeRef,
-        iceServers: value.clientPayload.iceServers,
-        capabilities: value.clientPayload.capabilities,
-      };
-  }
+  return value.clientPayload;
 }
-function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {
+function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media" | "chalk-telemetry"): string {
   const token = requireNonEmptyString(value);
   const segments = token.split(".");
   if (segments.length !== 3) throw new AccessGrantError();

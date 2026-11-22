@@ -1,0 +1,71 @@
+{
+  "doc": "Identifier kinds. A prefix is display and lookup syntax only: stores keep the canonical value (a UUID, a trace id or a provider token) and the reader adds or strips the prefix. A full handle is <prefix>_<canonical without dashes>; a short handle is <prefix>_<4 to 31 leading hex characters> and is only meaningful inside a scope.",
+  "kinds": [
+    { "kind": "tenant", "prefix": "ten", "field": "tenant_id", "canonical": "uuid", "authority": "tenants.id", "doc": "The customer account." },
+    { "kind": "space", "prefix": "spc", "field": "space_id", "canonical": "uuid", "authority": "spaces.id", "scope": "tenant", "doc": "A durable room with zero or more Episodes over time." },
+    { "kind": "episode", "prefix": "ep", "field": "episode_id", "canonical": "uuid", "authority": "episodes.id", "scope": "space", "doc": "One live occurrence inside a Space." },
+    {
+      "kind": "participant",
+      "prefix": "pt",
+      "field": "participant_id",
+      "canonical": "uuid",
+      "authority": "participants.id",
+      "scope": "episode",
+      "companions": ["generation"],
+      "legacy_hash_field": "participant_id_hash",
+      "doc": "A person's or agent's seat in one Episode. generation counts its joins; the person across Episodes is the User or Agent."
+    },
+    { "kind": "user", "prefix": "usr", "field": "user_id", "canonical": "token", "authority": "identities.external_id", "scope": "tenant", "doc": "The tenant's identifier for a person, carried across Episodes." },
+    { "kind": "agent", "prefix": "agt", "field": "agent_id", "canonical": "token", "authority": "identities.external_id", "scope": "tenant", "doc": "The tenant's identifier for an AI agent, carried across Episodes." },
+    {
+      "kind": "device",
+      "prefix": "dev",
+      "field": "device_id",
+      "canonical": "uuid",
+      "authority": "client storage",
+      "companions": ["device_ephemeral"],
+      "doc": "A persistent install or browser profile. device_ephemeral is true when storage was unavailable and the id lives only for this client session."
+    },
+    {
+      "kind": "client_session",
+      "prefix": "cs",
+      "field": "client_session_id",
+      "canonical": "uuid",
+      "authority": "SDK outbox",
+      "doc": "One SDK client object's lifetime. Every record the client makes carries it, separate from source_id, the stream that owns seq. The CHK- diagnostic code is derived from it."
+    },
+    { "kind": "journey", "prefix": "jr", "field": "journey_id", "canonical": "uuid", "authority": "minted at the user action that starts it", "doc": "One user-visible attempt, such as a join, spanning many requests and traces. Never an alias for a trace." },
+    { "kind": "request", "prefix": "rq", "field": "request_id", "canonical": "uuid", "authority": "minted per attempt by the receiving server", "scope": "journey", "doc": "One request attempt. A retry is a new request in the same journey." },
+    { "kind": "trace", "prefix": "tr", "field": "trace_id", "canonical": "hex32", "authority": "OpenTelemetry", "doc": "A W3C trace. A journey links to one or more traces." },
+    { "kind": "span", "prefix": "sp", "field": "span_id", "canonical": "hex16", "authority": "OpenTelemetry", "scope": "trace", "doc": "A W3C span." },
+    { "kind": "media_connection", "prefix": "mc", "field": "media_connection_id", "canonical": "uuid", "authority": "media_connections.id", "scope": "episode", "doc": "Chalk's record of one media transport. The provider's id sits beside it as provider_media_id." },
+    { "kind": "provider_media", "prefix": "pm", "field": "provider_media_id", "canonical": "token", "authority": "the media provider", "doc": "The media provider's session id. Called a session by the provider; it is not a client session." },
+    { "kind": "sync_connection", "prefix": "sc", "field": "sync_connection_id", "canonical": "uuid", "authority": "Sync socket", "scope": "episode", "doc": "One Sync websocket." },
+    { "kind": "operation", "prefix": "op", "field": "op_id", "canonical": "uuid", "authority": "the kernel's op call", "doc": "One kernel op. parent_op_id links nested ops." },
+    { "kind": "decision", "prefix": "dc", "field": "decision_id", "canonical": "uuid", "authority": "the kernel's decision call", "doc": "One authoritative server decision." },
+    { "kind": "recording", "prefix": "rec", "field": "recording_id", "canonical": "uuid", "authority": "recordings.id", "scope": "episode", "doc": "A recording of an Episode." },
+    { "kind": "job", "prefix": "job", "field": "job_id", "canonical": "uuid", "authority": "jobs.id", "companions": ["attempt"], "doc": "A background job. attempt counts its runs." },
+    { "kind": "webhook_delivery", "prefix": "whd", "field": "webhook_delivery_id", "canonical": "uuid", "authority": "webhook_deliveries.id", "scope": "tenant", "doc": "One webhook delivery to a tenant." },
+    { "kind": "admission_request", "prefix": "adm", "field": "admission_request_id", "canonical": "uuid", "authority": "admission_requests.id", "scope": "episode", "doc": "A request to be admitted to an Episode." },
+    { "kind": "event", "prefix": "ev", "field": "event_id", "canonical": "uuid", "authority": "the emitter", "doc": "One telemetry record. Delivery semantics belong to contract C3." },
+    { "kind": "batch", "prefix": "bt", "field": "batch_id", "canonical": "uuid", "authority": "the batcher or the ingest", "doc": "One delivered batch of records. Delivery semantics belong to contract C3." },
+    { "kind": "finding", "prefix": "f", "field": "finding_id", "canonical": "uuid", "authority": "the checker", "doc": "One checker finding." },
+    { "kind": "flags", "prefix": "fl", "field": "flags_hash", "canonical": "hex16", "authority": "the kernel's flags snapshot", "doc": "One flags snapshot: the hash of the canonical flag map a record ran under. The obs.flags_snapshot fact holds the map itself." },
+    { "kind": "diagnostic_upload", "prefix": "dg", "field": "diagnostic_upload_id", "canonical": "uuid", "authority": "the API, when it issues the upload", "scope": "tenant", "doc": "One diagnostic bundle a client uploaded after a problem report or a live request (slice 13)." },
+    { "kind": "api_key", "prefix": "ak", "field": "api_key_id", "canonical": "uuid", "authority": "api_keys.id", "scope": "tenant", "doc": "A tenant API key, by its row id. The secret and its hash are credentials: never logged." },
+    { "kind": "webhook_endpoint", "prefix": "wh", "field": "webhook_endpoint_id", "canonical": "uuid", "authority": "webhook_endpoints.id", "scope": "tenant", "doc": "A tenant's webhook endpoint. Each delivery to it is a whd_." }
+  ],
+  "session_meanings": [
+    { "meaning": "episode", "kind": "episode", "lookup": true, "doc": "The dashboard calls an Episode a session. Read session:<id> there as an Episode." },
+    { "meaning": "provider_media", "kind": "provider_media", "lookup": true, "doc": "The media provider's session, stored as provider_media_id." },
+    { "meaning": "client_session", "kind": "client_session", "lookup": true, "doc": "The SDK client session, cs_." },
+    { "meaning": "dashboard_auth", "kind": null, "lookup": false, "doc": "The dashboard's signed-in session (SessionDTO). It is a credential: never logged, never looked up." }
+  ],
+  "diagnostic_code": {
+    "prefix": "CHK-",
+    "length": 4,
+    "alphabet": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+    "source_kind": "client_session",
+    "doc": "A code a person can read aloud from their screen. It is four Crockford base32 characters from the first 20 bits of the client session id. It is a scoped lookup, never an authority: it matches roughly one client session in a million, so the reader scopes it by tenant and time and returns every candidate."
+  }
+}

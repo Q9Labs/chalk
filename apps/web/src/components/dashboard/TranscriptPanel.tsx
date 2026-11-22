@@ -111,6 +111,8 @@ export function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: Pa
     return lines.map(({ cue, index }) => <CueLine key={index} cue={cue} mark={mark} active={index === active} onSeek={onSeek} />);
   }
 
+  // With no lines to read there is nothing to search, so the state shows on its own, in the card around it.
+  if (transcript.kind !== "ready") return <div className="tbody">{body()}</div>;
   return (
     <section className="tpanel" aria-labelledby="transcript-heading">
       <div className="thead">

@@ -1,7 +1,11 @@
 package tenants
 
 import (
+	"encoding/json"
+	"errors"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -27,6 +31,9 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.JSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.NullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.NullableString(input.Website)
+	if mediaErr == nil {
+		input.MediaPlaneProviderConfig, mediaErr = normalizeMediaConfig(input.MediaPlaneProviderConfig)
+	}
 	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
 }
 
@@ -77,6 +84,9 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.OptionalNullableJSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.OptionalNullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.OptionalNullableString(input.Website)
+	if mediaErr == nil {
+		input.MediaPlaneProviderConfig.Value, mediaErr = normalizeMediaConfig(input.MediaPlaneProviderConfig.Value)
+	}
 	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
 }
 
@@ -102,4 +112,24 @@ func ValidExternalID(id string) bool {
 func validStoredText(value string, maxCharacters int) bool {
 	characters := utf8.RuneCountInString(value)
 	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+
+// normalizeMediaConfig validates a stored media plane document and fills the
+// provider and mode, so the previous release's resolver, which requires mode, still reads it after a rollback.
+func normalizeMediaConfig(raw json.RawMessage) (json.RawMessage, error) {
+	config, err := mediaplane.ParseTenantConfig(raw)
+	if errors.Is(err, mediaplane.ErrMissingTenantConfig) {
+		return raw, nil
+	}
+	if err != nil || (config.Provider != "" && config.Provider != string(mediaplane.ProviderChalkSFU)) ||
+		(config.Mode != "" && config.Mode != mediaplane.ModeChalkManaged) {
+		return raw, ErrInvalidTenantField
+	}
+	config.Provider = mediaplane.ProviderChalkSFU.SettingName()
+	config.Mode = mediaplane.ModeChalkManaged
+	normalized, err := json.Marshal(config)
+	if err != nil {
+		return raw, ErrInvalidTenantField
+	}
+	return normalized, nil
 }

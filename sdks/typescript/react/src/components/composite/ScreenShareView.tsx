@@ -106,6 +106,7 @@ export function ScreenSharePresentation({
       video.removeEventListener("leavepictureinpicture", left);
     };
   }, [media]);
+  const ownBigShare = isLocal && primary;
   const fullscreen = () =>
     run(async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -128,15 +129,8 @@ export function ScreenSharePresentation({
       hidden={hidden}
       style={style}
       className={cn("h-full w-full", className)}
-      chip={
-        <>
-          <StageIcon name="share" size={14} className="shrink-0" />
-          <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
-            {name}
-          </span>
-          {!isLocal && hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
-        </>
-      }
+      // The own-share bar already names a big local share, so its tag would only repeat it and crowd Stop sharing.
+      chip={ownBigShare ? null : <ShareChip name={name} withAudio={!isLocal && hasAudio} />}
     >
       <div
         ref={root}
@@ -263,5 +257,17 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
           : undefined
       }
     />
+  );
+}
+
+function ShareChip({ name, withAudio }: { readonly name: string; readonly withAudio: boolean }) {
+  return (
+    <>
+      <StageIcon name="share" size={14} className="shrink-0" />
+      <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
+        {name}
+      </span>
+      {withAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
+    </>
   );
 }

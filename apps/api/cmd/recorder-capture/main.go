@@ -16,7 +16,7 @@ import (
 func main() {
 	dir := flag.String("dir", "", "directory for a deterministic local fixture")
 	fixture := flag.Bool("fixture", false, "write a synthetic capture fixture")
-	runMode := flag.Bool("run", false, "run the server-authorized Cloudflare SFU capture worker")
+	runMode := flag.Bool("run", false, "run the server-authorized Chalk SFU capture worker")
 	environment := flag.String("environment", os.Getenv("CHALK_RECORDER_ENVIRONMENT"), "recording KMS environment name")
 	controlPlaneURL := flag.String("control-plane-url", os.Getenv("CHALK_RECORDER_CONTROL_PLANE_URL"), "private recorder control-plane URL")
 	workerCertificate := flag.String("worker-cert", os.Getenv("CHALK_RECORDER_WORKER_CERT"), "worker mTLS certificate")

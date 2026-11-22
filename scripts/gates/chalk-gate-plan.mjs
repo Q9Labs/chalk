@@ -1,11 +1,11 @@
 #!/usr/bin/env node
+import { commandBatches } from "./command-batches.mjs";
 import { releaseContractRoots } from "./release-contract-paths.mjs";
-
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { DIAGNOSE_CALL_INPUTS } from "../diagnose-call/inputs.mjs";
+import { DIAGNOSE_CALL_INPUTS, DIAGNOSE_CALL_TESTS } from "../diagnose-call/inputs.mjs";
 import { loadManifest, pathPrefix } from "../../tools/formal/manifest.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
@@ -337,13 +337,13 @@ function workspaceBuildCommand(workspaces) {
   return ["pnpm", "exec", "turbo", "run", "build", "--force", ...runnable.map((workspace) => `--filter=${workspace.name}...`)];
 }
 
-function task(id, label, selected, reason, plannedCommand, env = {}, input = undefined) {
+function task(id, label, selected, reason, plannedCommand, env = {}, fixedCount) {
   requireRegistered(id);
   // A lane that runs bash scripts or Linux services cannot start on Windows: it fails with one line that points to the Gate workflow.
   const command = plannedCommand && isWindows && plannedCommand[0] === "bash" ? ["node", "scripts/gates/needs-linux.mjs", id] : plannedCommand;
   // A demoted check still runs and reports; demoted.mjs turns its failure into a warning so it cannot fail a gate.
   const wrapped = command && demotion(id) ? ["node", "scripts/gates/demoted.mjs", `gate:${id}`, "--", ...command] : command;
-  return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env, input };
+  return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env, batches: wrapped ? commandBatches(wrapped, wrapped === plannedCommand ? (fixedCount ?? wrapped.length) : wrapped.length) : [] };
 }
 
 export function createGatePlan(files, options = {}) {
@@ -477,7 +477,7 @@ export function createGatePlan(files, options = {}) {
   const ratchetArgs = ratchetArgsFor({ scope, base, event: options.event, full: explicitFull });
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
-  const formatCommand = formattedFiles.length > 0 ? [process.execPath, "scripts/gates/format-changed.mjs"] : null;
+  const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
@@ -496,7 +496,7 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "scripts/test/no-network.test.mjs",
       "scripts/lib/platform.test.mjs",
-      ...["chalk-gate-plan", "chalk-gate-plan-release", "format-changed", "feature-map", "references", "ratchets", "analysis", "ast-grep", "mock-calls", "select-leak-shards"].map((name) => `scripts/gates/${name}.test.mjs`),
+      ...["chalk-gate-plan", "chalk-gate-plan-release", "feature-map", "references", "ratchets", "analysis", "ast-grep", "mock-calls", "select-leak-shards"].map((name) => `scripts/gates/${name}.test.mjs`),
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
@@ -511,7 +511,7 @@ export function createGatePlan(files, options = {}) {
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["node", "scripts/gates/gitleaks.mjs"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
-    task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand, {}, JSON.stringify(formattedFiles)),
+    task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand, {}, 4),
     task("oxlint", "JavaScript, TypeScript and test lint", true, "always required", ["pnpm", "run", "lint:oxlint"]),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity", ...ratchetArgs]),
@@ -562,7 +562,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/${CALL_LEAK_SHARDS}`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
-    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis, its thresholds or an emitter of the rows it reads changed" : "call diagnosis is unaffected", ["node", "--test", "scripts/diagnose-call/*.test.mjs"]),
+    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis, its thresholds, observability or an emitter of the rows it reads changed" : "call diagnosis is unaffected", ["node", "--test", ...DIAGNOSE_CALL_TESTS]),
     task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(

@@ -157,6 +157,7 @@ export function errorMessage(error: unknown): string {
   if (error.code === "identity_temporarily_unavailable") return "Sign-in is briefly unavailable. Try again in a moment.";
   if (error.code === "admission_pending") return "The call is still letting you in. Try again in a moment.";
   if (error.code === "api_key_invalid_expiry") return "API key expiry must be in the future and no more than 365 days from now.";
+  if (error.code === "invalid_cursor") return "Your calls had changed, so Home loaded them again.";
   if (error.code === "invalid_request") return "Check the values you entered, then try again.";
   if (error.status === 404) return "This isn’t here anymore. It may have been archived.";
   if (error.status >= 500) return "Chalk couldn’t finish that. Try again in a moment.";

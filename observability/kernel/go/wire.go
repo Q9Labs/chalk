@@ -1,0 +1,163 @@
+package obs
+
+import (
+	"maps"
+	"math"
+	"regexp"
+	"slices"
+)
+
+// wireLabel is the shape of a client's string value that no enum or id kind bounds, such as an SDK version: a short token
+// with no spaces, so no free text reaches a row.
+var wireLabel = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._:+-]{0,63}$`)
+
+// maxWireNumber bounds a client's integer, so it stays exact as a JSON number.
+const maxWireNumber = 1 << 53
+
+// wireEnvelope is every envelope group a client record may carry besides its trail, its event's own fields and the record
+// fields of its kind.
+var wireEnvelope = []string{"delivery", "build", "flags", "clock"}
+
+// kindFields are the record-group fields each kind's records carry, as the kernels stamp them.
+var kindFields = map[string][]string{
+	"op":       {FieldOutcome, FieldReasonCode, FieldDurationMs, FieldOpID, FieldParentOpID},
+	"decision": {FieldDecisionID, FieldDecision, FieldReasonCode},
+	"surface":  {FieldSurfaceState, FieldShownMs},
+	"fact":     {},
+}
+
+// ClientRecordProblem checks one record a client kernel made, as an ingest reads it off the wire, and names the first thing
+// wrong with it, or returns "". fields holds the record's JSON values (string, float64, bool or a map of them), without kind
+// and name. owned names the fields the ingest stamps itself from the credential or the frame, which the record may not carry.
+// The answer is a fixed label: a registry field name and a rule, never text the client sent, so it can go in a log row.
+func ClientRecordProblem(kind, name string, fields map[string]any, owned []string) string {
+	spec, ok := registryEvents[name]
+	switch {
+	case !ok:
+		return "name"
+	case spec.kind != kind:
+		return "kind"
+	case spec.side != "client" && spec.side != "any":
+		return "side"
+	}
+	for _, field := range slices.Sorted(maps.Keys(fields)) {
+		if problem := wireFieldProblem(spec, field, fields[field], owned); problem != "" {
+			return problem
+		}
+	}
+	for _, field := range slices.Sorted(maps.Keys(registryFields)) {
+		rule, declared := spec.fields[field]
+		required := (declared && rule.required) || (registryFields[field].required && field != FieldKind && field != FieldName)
+		if _, given := fields[field]; required && !given && !slices.Contains(owned, field) {
+			return field + "_missing"
+		}
+	}
+	return ""
+}
+
+func wireFieldProblem(spec eventSpec, field string, value any, owned []string) string {
+	fieldSpec, known := registryFields[field]
+	rule, declared := spec.fields[field]
+	if !known {
+		return "field_unknown"
+	}
+	if slices.Contains(owned, field) || !declared && !wireGroupAllows(spec.kind, fieldSpec.group, field) {
+		return field + "_not_allowed"
+	}
+	allowed := rule.values
+	if allowed == nil {
+		allowed = fieldSpec.values
+	}
+	if !wireValueFits(field, fieldSpec.typ, allowed, value) {
+		return field + "_value"
+	}
+	if field == FieldReasonCode {
+		if _, known := registryReasons[value.(string)]; !known {
+			return field + "_value"
+		}
+	}
+	if field == FieldDecision && !slices.Contains(spec.decisions, value.(string)) {
+		return field + "_value"
+	}
+	return ""
+}
+
+// wireGroupAllows says whether a field the event does not declare may still ride on a record of this kind: a trail or envelope
+// field on any record, and a record-group field only on the kinds that carry it.
+func wireGroupAllows(kind, group, field string) bool {
+	switch group {
+	case "trail":
+		return true
+	case "record":
+		return slices.Contains(kindFields[kind], field)
+	}
+	return slices.Contains(wireEnvelope, group)
+}
+
+func wireValueFits(field, typ string, allowed []string, value any) bool {
+	switch typ {
+	case "enum":
+		text, ok := value.(string)
+		return ok && slices.Contains(allowed, text)
+	case "id":
+		text, ok := value.(string)
+		return ok && wireIDFits(field, text)
+	case "string":
+		text, ok := value.(string)
+		return ok && wireLabel.MatchString(text)
+	case "int":
+		number, ok := value.(float64)
+		return ok && number == math.Trunc(number) && math.Abs(number) <= maxWireNumber
+	case "number":
+		number, ok := value.(float64)
+		return ok && !math.IsInf(number, 0) && !math.IsNaN(number)
+	case "bool":
+		_, ok := value.(bool)
+		return ok
+	case "map":
+		return wireMapFits(value)
+	}
+	return false
+}
+
+// wireIDFits accepts an id in its stored form only: a lowercase dashed UUID, lowercase hex of its length, or a label for a token.
+func wireIDFits(field, text string) bool {
+	index := slices.IndexFunc(registryIDKinds, func(entry idKind) bool { return entry.field == field })
+	if index < 0 {
+		return isDashedUUID(text)
+	}
+	entry := registryIDKinds[index]
+	if entry.canonical == "token" {
+		return wireLabel.MatchString(text)
+	}
+	digits, ok := hexOf(entry, text)
+	return ok && stored(entry, digits) == text
+}
+
+func wireMapFits(value any) bool {
+	members, ok := value.(map[string]any)
+	if !ok || len(members) > 64 {
+		return false
+	}
+	for key, member := range members {
+		if !flagKey.MatchString(key) {
+			return false
+		}
+		switch typed := member.(type) {
+		case nil, bool, float64:
+		case string:
+			if !wireLabel.MatchString(typed) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// KnownField says name is a registry field, so a row that carries it uses the registry's name for it.
+func KnownField(name string) bool {
+	_, known := registryFields[name]
+	return known
+}

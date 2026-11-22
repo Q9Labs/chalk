@@ -64,7 +64,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 1. It checks that every fragment in `anchors` is still in its file.
 2. It runs TLC on the real code, one operation at a time on two nodes (`rem`, `end`, `rt`), and needs the rules the code keeps to hold. It checks `OperationsSettle` for each operation on one node with no crashes.
-3. It runs the real code on one node with every rule, and again without the SFU's revision ordering (the Cloudflare path). Only the claim checks protect a provider that applies controls in arrival order.
+3. It runs the real code on one node with every rule, and again without the SFU's revision ordering (the claim-only model variant). Only the claim checks protect a provider that applies controls in arrival order.
 4. It runs each broken variant in `breaks` and needs TLC to report the named rule as broken. This proves the check can still fail.
 
 `MaxAttempts = 2` stands for the 100 attempts of the code. `tools/formal/external-operations/run.sh --deep` uses 3 attempts and 5 control revisions. The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/external-operations/run.sh` in `.github/workflows/formal-models.yml` when a covered file or this model changes.

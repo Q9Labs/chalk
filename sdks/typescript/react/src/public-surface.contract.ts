@@ -67,6 +67,7 @@ type ExpectedChalkProps =
   | "timeLimit"
   | "terminalState"
   | "inviteLink"
+  | "callLinkOpen"
   | "onJoined"
   | "onLeft"
   | "onEpisodeEnded"

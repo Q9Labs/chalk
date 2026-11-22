@@ -1,14 +1,15 @@
 "use client";
 import { CallLimbo } from "../call-limbo/CallLimbo";
 import { createSpaceClient, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChalkProvider } from "../../bindings/context";
 import { useConnection, useRecording, useSpaceClient } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import type { SpaceViewProps } from "../space-view/SpaceView";
 import { SpaceSurface } from "./SpaceSurface";
 import { StatusSurface } from "./StatusSurface";
+import { reportDiagnostics } from "./report-diagnostics";
+import type { SpaceEventCallbacks } from "./space-event-callbacks";
 import { CallDialog } from "../space-header/CallDialog";
 import type { ScreenAnnotationSetup } from "../screen-annotation/model";
 import { ShellStyles } from "../control-bar/ShellStyles";
@@ -36,17 +37,6 @@ type SpaceIntegration =
       readonly space: string;
       readonly getAccess: GetAccess;
     };
-type SpaceEventCallbacks = {
-  readonly onJoined?: () => void;
-  /** Local media has stopped; await client.leave() separately for durable confirmation. */
-  readonly onLeft?: () => void;
-  readonly onEpisodeEnded?: (event: ClientEventMap["episodeEnded"]) => void;
-  readonly onParticipantJoined?: (event: ClientEventMap["participantJoined"]) => void;
-  readonly onParticipantLeft?: (event: ClientEventMap["participantLeft"]) => void;
-  readonly onScreenShareStarted?: (event: ClientEventMap["screenShareStarted"]) => void;
-  readonly onScreenShareStopped?: (event: ClientEventMap["screenShareStopped"]) => void;
-  readonly onError?: (event: ClientEventMap["error"]) => void;
-};
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
     readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
@@ -65,6 +55,8 @@ export type ChalkProps = SpaceIntegration &
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
     readonly inviteLink?: string;
+    /** Pass false when the app has already shown the invite link, so the call menu doesn't open by itself for a host who is alone at call start. */
+    readonly callLinkOpen?: boolean;
     /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
@@ -82,7 +74,7 @@ export type ChalkProps = SpaceIntegration &
 /** A call that could not be recovered stays on screen, dimmed, with a card that offers a way back. */
 const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted";
 
-export function Chalk(props: ChalkProps): React.JSX.Element {
+export function Chalk(props: ChalkProps): JSX.Element {
   const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
   const colorScheme = props.theme?.colorScheme ?? localColorScheme;
   const changeColorScheme = (next: ChalkColorScheme) => {
@@ -133,7 +125,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
                 onClose={() => setReportOpen(false)}
                 onReportProblem={props.onReportProblem}
                 unavailableReason={props.reportUnavailableReason}
-                diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
+                diagnostics={reportDiagnostics(props.spaceName ?? props.space ?? "Call", client.getSnapshot().connection)}
                 focusScope={container}
               />
             </>
@@ -148,7 +140,7 @@ function SpaceExperience(
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly onOpenReport?: () => void;
   },
-): React.JSX.Element {
+): JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const recorded = useRecording().current?.status === "recording";

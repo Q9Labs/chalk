@@ -47,7 +47,7 @@ func TestArchiveLeavesNoActiveEpisode(t *testing.T) {
 	spaceService := spaces.NewService(NewSpaceRepository(sqlc.New(pool), pool))
 	space, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
 		TenantID: tenantID, Name: "Archive replay", Slug: "archive-replay-" + accountTenantIntegrationID(t).String(),
-		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
+		MediaPlane: "chalk_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
 		DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60,
 		RequestKey: accountTenantIntegrationID(t).String(),
 	})
@@ -137,7 +137,7 @@ func newPublicInviteFixture(t *testing.T, mode string) publicInviteFixture {
 	spaceService := spaces.NewService(NewSpaceRepository(sqlc.New(pool), pool))
 	space, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
 		TenantID: tenantID, Name: "Invite fixture", Slug: "invite-fixture-" + accountTenantIntegrationID(t).String(),
-		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"` + mode + `"}`),
+		MediaPlane: "chalk_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"` + mode + `"}`),
 		DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60,
 		RequestKey: accountTenantIntegrationID(t).String(),
 	})

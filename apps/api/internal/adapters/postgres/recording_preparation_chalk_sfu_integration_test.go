@@ -31,11 +31,11 @@ type chalkSFUPlaneCase struct {
 var chalkSFUPlaneCases = []chalkSFUPlaneCase{
 	{"space selects the Chalk SFU", "", "chalk_sfu", "", false, false},
 	{"tenant default is the Chalk SFU", "chalk_sfu", "", "", false, false},
-	{"space overrides a tenant default", "chalk_sfu", "cf_sfu", "", false, true},
-	{"cloudflare control", "", "cf_sfu", "", false, true},
+	{"legacy Space setting does not enable capture", "chalk_sfu", "cf_sfu", "", false, false},
+	{"unconfigured capture", "", "cf_sfu", "", false, false},
 	{"space selects the Chalk SFU with capture on", "", "chalk_sfu", "", true, true},
 	{"tenant default is the Chalk SFU with capture on", "chalk_sfu", "", "", true, true},
-	{"live Cloudflare Episode keeps its recorder after the Space switches", "", "chalk_sfu", "cf_sfu", false, true},
+	{"retired live binding cannot start capture", "", "chalk_sfu", "cf_sfu", true, false},
 	{"live Chalk SFU Episode gets no recorder after the Space switches back", "", "cf_sfu", "chalk_sfu", false, false},
 	{"live Chalk SFU Episode with capture on", "", "cf_sfu", "chalk_sfu", true, true},
 }
@@ -127,12 +127,12 @@ func TestScheduledPreparationFollowsTheChalkSFUCaptureSwitch(t *testing.T) {
 	}
 }
 
-// A preparation made under another plane must not warm a recorder nobody can use.
-func TestExistingPreparationStopsCountingWhenTheSpaceSwitchesToTheChalkSFU(t *testing.T) {
+// Turning off capture must remove existing preparations from fleet demand.
+func TestExistingPreparationStopsCountingWhenSFUCaptureIsDisabled(t *testing.T) {
 	pool := chalkSFUPlanePool(t)
-	tenant, space := seedChalkSFUPlane(t, pool, chalkSFUPlaneCase{spacePlane: "cf_sfu"})
+	tenant, space := seedChalkSFUPlane(t, pool, chalkSFUPlaneCase{spacePlane: "chalk_sfu"})
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	if created, err := postgres.NewRecordingPreparationRepository(pool).PrepareEntrance(t.Context(), tenant, space, now); err != nil || !created {
+	if created, err := postgres.NewRecordingPreparationRepository(pool).WithOwnCapture(true).PrepareEntrance(t.Context(), tenant, space, now); err != nil || !created {
 		t.Fatalf("Entrance preparation = %v, %v", created, err)
 	}
 	queries := sqlc.New(pool)
@@ -143,19 +143,9 @@ func TestExistingPreparationStopsCountingWhenTheSpaceSwitchesToTheChalkSFU(t *te
 		}
 		return row.DesiredNodes
 	}
-	// Other rows may exist, so compare against the demand before the switch.
-	counted := demand(true)
-	if before := demand(false); before != counted {
-		t.Fatalf("fleet demand before the switch = %d with capture off, %d with it on", before, counted)
-	}
-	if _, err := pool.Exec(t.Context(), `update spaces set media_plane='chalk_sfu' where id=$1`, space.Bytes()); err != nil {
-		t.Fatal(err)
-	}
-	if got := demand(false); got != counted-1 {
-		t.Fatalf("fleet demand with capture off = %d, want %d after the switch", got, counted-1)
-	}
-	if got := demand(true); got != counted {
-		t.Fatalf("fleet demand with capture on = %d, want %d", got, counted)
+	enabled, disabled := demand(true), demand(false)
+	if enabled == 0 || disabled >= enabled {
+		t.Fatalf("fleet demand = %d with capture off, %d with it on; expected less demand with capture off", disabled, enabled)
 	}
 	preparation, err := postgres.NewRecordingPreparationRepository(pool).Get(t.Context(), tenant, space, now)
 	if err != nil {

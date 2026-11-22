@@ -30,12 +30,17 @@ var (
 
 const (
 	Audience = "chalk-media"
+	// TelemetryAudience marks the credential that authorizes only the telemetry route. It is signed
+	// with the media credential's key for the same subject, and neither verifies as the other.
+	TelemetryAudience = "chalk-telemetry"
 
-	ProviderCloudflareSFU = "cloudflare_sfu"
-	ProviderChalkSFU      = "chalk_sfu"
-	Lifetime              = 5 * time.Minute
-	ClockSkew             = 30 * time.Second
-	RecoveryGrace         = 2 * time.Minute
+	ProviderChalkSFU = "chalk_sfu"
+	Lifetime         = 5 * time.Minute
+	// TelemetryLifetime is long because the credential buys delivery of a client's last records
+	// after a reload or a long background, not access to anything else.
+	TelemetryLifetime = 24 * time.Hour
+	ClockSkew         = 30 * time.Second
+	RecoveryGrace     = 2 * time.Minute
 )
 
 type Subject struct {
@@ -67,6 +72,22 @@ type MediaCredential struct {
 	ExpiresAt time.Time
 }
 
+type TelemetryCredential struct {
+	Token     string
+	ExpiresAt time.Time
+}
+
+// credentialKind is what tells the two credentials of a subject apart: who may be sent it and for how long.
+type credentialKind struct {
+	audience string
+	lifetime time.Duration
+}
+
+var (
+	mediaKind     = credentialKind{audience: Audience, lifetime: Lifetime}
+	telemetryKind = credentialKind{audience: TelemetryAudience, lifetime: TelemetryLifetime}
+)
+
 type subjectContextKey struct{}
 
 func WithSubject(ctx context.Context, subject Subject) context.Context {
@@ -92,13 +113,7 @@ func RequireRouteSubject(subject Subject, route RouteSubject) error {
 }
 
 func sameProviderBinding(subject Subject, route RouteSubject) bool {
-	switch subject.Provider {
-	case ProviderCloudflareSFU, ProviderChalkSFU:
-		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
-			subject.ConnectionID != "" &&
-			subject.ConnectionID == route.ConnectionID
-
-	default:
-		return false
-	}
+	return subject.Provider == ProviderChalkSFU &&
+		subject.ProviderSubject == "" && route.ProviderSubject == "" &&
+		subject.ConnectionID != "" && subject.ConnectionID == route.ConnectionID
 }

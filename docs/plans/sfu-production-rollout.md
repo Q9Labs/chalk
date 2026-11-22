@@ -1,58 +1,24 @@
 > **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
 
-# Moving production to the Chalk SFU
+# Deploying the Chalk SFU
 
-Judgment for running production on the Chalk SFU, and for undoing it. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git. Watch signals and alerts are in the [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md).
+Chalk SFU is the only media provider. The [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md) covers monitoring and alerts. Keep Tenant IDs, Space IDs, node addresses and environment values in private operator notes.
 
-## Production plane
+## Before deploying the retirement
 
-Production runs on the Chalk SFU as the only plane for new Episodes. Cloudflare is off the production path: a new Episode that no node can take is refused with a retryable `503 media.unavailable` instead of starting on Cloudflare (`CHALK_SFU_CLOUDFLARE_OVERFLOW=false`), and a live Episode never moves to Cloudflare. The Cloudflare adapter stays in the code behind the media plane port, and its one production use is the undo: the database kill switch that sends new Episodes back to it. A second Chalk SFU node as a spare (the 6 USD tier) is planned, so new Episodes have room while one node is down or full.
+1. Finish any live Cloudflare-backed Episodes. Check that their captures and provider cleanup have finished too. The new release can read those Episodes but cannot reconnect them or run their retired media operations.
+2. Update any clients that create Spaces with an explicit old provider to send `chalk_sfu` or omit the field. Joining clients must advertise `chalk_sfu` in `X-Chalk-Media-Providers`; otherwise the API returns `409 media.client_unsupported`.
+3. Save the previous release and its environment so that the [rollback](#undo) does not rely on the retired settings still being present. Keep Cloudflare TURN and storage credentials in place.
 
-The production switch is one deploy that sets these lines, then one restart:
+The API migration converts stored Cloudflare Space settings and Tenant defaults to `chalk_sfu`. It does not rewrite Episode snapshots, recordings or past audit entries.
 
-1. `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` makes the Chalk SFU the plane of every Space and Tenant that stores no plane of its own, and `CHALK_SFU_ALLOWED_SPACES=*` lets every Space use it. A Space that stores `cf_sfu` stays on Cloudflare until `media-settings set --plane chalk_sfu` or `inherit` moves it.
-2. `CHALK_SFU_ENABLED=true` and `CHALK_SFU_CAPTURE_ENABLED=true`. The API refuses to start with the Chalk SFU as the default and capture off, because recording and transcription of a Chalk SFU Episode need capture, and a Space can turn them on at any time.
-3. `CHALK_SFU_CLOUDFLARE_OVERFLOW=false`.
-4. `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=chalk_sfu`. A Space created with no plane, and every public-invite Space, stores its plane when it is created. An unset `CHALK_NEW_SPACE_MEDIA_PLANE` follows the default, but a line that still says `cf_sfu` keeps new Spaces landing on Cloudflare whatever the default says, and the public-invite line is always set, so change both.
-5. The Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`) stay, because the kill switch target and Episodes already bound to Cloudflare need them.
-6. The transcription dispatcher has `CODESWITCH_PROVIDER=mai` and its OpenRouter token, because without them an Auto-language job fails as retryable and the transcript never arrives.
+## Verify the rollout
 
-Start only when `/readyz` shows zero sessions, allocations and cleanup debt, so no real class is live. Then read `/healthz`, and `media-settings get --tenant <tenant> --space <space>` on a throwaway Space: it must report `chalk_sfu`. Run the Chalk SFU proofs and the kill-switch drill alone on the node.
+- Check `/readyz` and node cleanup debt. Create a Space and a public invite without specifying a media plane. Join each from a current client and verify that the new Episode binds to Chalk SFU. Run the recorded-call proof if capture is enabled.
+- When all Chalk SFU nodes are drained or full, new Episodes return a retryable `503 media.unavailable`. Once a node is undrained, let the next readiness poll reach the API before trying again.
+- `media-settings new-episodes --state off --operator <name> --reason <text>` blocks new Episodes and records an audit entry. It does not move or end a live Episode. Turn creation back on with `--state on`.
 
-The web SDK declares `chalk_sfu` since 5.5.0, and the mobile app since the build tagged `mobile-v3.0.6-b40`. A client that declares nothing still gets a Cloudflare call while the Cloudflare application is configured, and that is the one Cloudflare use besides the undo. `CHALK_SFU_CLIENT_SUNSET` turns it into 409 `media.client_unsupported` after the date, so set it once the old builds are gone.
-
-Write each change's undo before making it. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git.
-
-## The production flip
-
-Order matters, because the release that ran in production before the kill switch cannot start with `chalk_sfu` as the default.
-
-1. Deploy the release that carries the kill switch table (the migration only adds tables). Change no setting in that deploy. Confirm `media-settings new-episodes` reads `on`.
-2. Check that no call is live: a deploy restarts the API and drops every socket. Save the current lines of the list above privately, change them in the private API environment, and deploy once. The deploy re-fetches the environment and restarts the API.
-3. Confirm it worked, in this order:
-   - `/readyz` is healthy and the node reports no cleanup debt.
-   - `media-settings get` on a throwaway Space reports `chalk_sfu`.
-   - One new Episode from a current client binds to the Chalk SFU: its `sdk.telemetry` rows have provider `chalk_sfu`, and the API log has no request to Cloudflare's SFU API for it.
-   - A recorded Episode finalizes its Recording.
-   - A Space created with no plane, and a public invite, both report `chalk_sfu`.
-   - Overflow is off: `POST /v1/drain` on every node, wait 10 seconds, then create a fresh Episode from a current client. It must be refused with a retryable `503 media.unavailable`, and the API log must have no request to Cloudflare's SFU API for it. Then `POST /v1/undrain` on every node, confirm `/readyz` reports `draining: false`, and wait 10 seconds again before the next step. The wait matters because the API reads each node's readiness every 2 seconds and places Episodes from what it last read, so an Episode created at once can still land on a node that has just drained, or be refused by one that has just reopened. The checks above pass with overflow on too, because a healthy node never reaches the overflow branch.
-4. Run the kill-switch drill once: `media-settings new-episodes --state off --operator <name> --reason <text>`, create an Episode (it binds to Cloudflare with no restart), then `media-settings new-episodes --state on --operator <name> --reason <text>` and create another (Chalk SFU again). Both flags are required, and the command changes nothing without them.
-
-Undo, fastest first:
-
-1. `media-settings new-episodes --state off --operator <name> --reason <text>`. New Episodes go to Cloudflare at once, and live ones finish where they are.
-2. Restore the saved lines, with `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu`, and deploy. Do this before any binary rollback: the previous release refuses `chalk_sfu` as the default, so a rollback with the new settings in place leaves the API unable to start.
-3. Only then roll the binary back.
-
-**Known risk: one node.** Each environment has one Chalk SFU node until the spare exists. With overflow off, a full or down node refuses new Episodes with a retryable `503 media.unavailable` (the web client says "Calls are unavailable right now. Try again in a few minutes."), and a live Episode on a lost node recovers to another Chalk SFU node only if one has room. Until the spare is in place, the kill switch is the only way to keep new calls working through a node outage, so someone must be able to flip it.
-
-## How a changed value reaches the running API
-
-The private API environment lives in AWS SSM. The deploy controller re-fetches it at every deploy and writes the file the API container loads. The API reads that file only at start, so a change reaches it in one of two ways: a deploy, or a host edit plus a restart. The next deploy overwrites the host file from SSM, so both must hold the same value. Never print the file: change one line and print only a count, and save the old line privately first so the undo can tell "absent" from "empty". To undo, restore that line in SSM and on the host, restart the API, and confirm `/readyz` is healthy.
-
-Apply the allowlist to the running API by host edit and restart before dispatching Promote. Promote's first job runs against the release still in production, and that release lets the public API move a Space to `chalk_sfu` only when the running API already lists it. The deploy's own re-fetch comes after that check.
-
-Add the capture flag only if the staging `call-artifacts` proof passed with the same flags. Otherwise dispatch Promote with `capture_proofs=false` and add the flag in a second deploy. With capture on and the recorder fleet missing, the API refuses to start. The deploy controller then rolls back and Promote restores the Pages deployment, media pins and npm tags. The environment file rollback is not proved, so remove the faulty line in SSM too.
+The deploy controller re-fetches the private API environment on every deploy. The API only reads it at start; editing the host file alone does not survive a deploy. Save any settings you change privately, distinguishing unset values from empty ones.
 
 ## Recording beside the node
 
@@ -93,10 +59,8 @@ The node accepts offers up to 256 KiB (`protocol.MaxSDPBytes`) and its request l
 
 ## Undo
 
-The primary undo returns new Episodes to Cloudflare and keeps the release. It needs no image redeploy and no restart.
+Follow the [incident runbook](../operators/incident.md) to restore the previous compatible release and its saved environment. A runtime-only Release re-fetches configuration but keeps the current images; it does not undo a deploy. Keep web and SFU node versions compatible when rolling back.
 
-1. Run `media-settings new-episodes --state off --operator <name> --reason <text>` (the kill switch). It takes effect on the next new Episode, live Episodes finish where they are, and the database keeps an audit row of who flipped it and why. Turn it back on with `--state on`.
-2. To leave the Chalk SFU for good, restore the saved lines (`CHALK_DEFAULT_MEDIA_PLANE=cf_sfu`, the old allowlist, `CHALK_SFU_CLOUDFLARE_OVERFLOW` as it was) and restart once. A Space that stored `chalk_sfu` itself needs `media-settings set --plane cf_sfu`. Remove the capture flag only after no Space records on the Chalk SFU.
-3. Revert the Promote PR if its change is at fault.
+Before the Cloudflare retirement cut, keep the legacy Realtime credentials and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` in the API environment, and note the baseline's `CHALK_DEFAULT_MEDIA_PLANE` (a baseline that predates Chalk-default support needs `cf_sfu` restored). A workflow rollback reuses the old images but fetches the current SSM inputs, so removing those settings first leaves the previous API unable to boot. Also check, before dispatching Promote or Hotfix, that no Cloudflare Episode is active or ending and that no legacy Episode has unfinished capture work: the migration refuses the cut after the controller has already stopped the API and Sync, and Hotfix skips Promote's live-call check.
 
-A runtime-only Release re-fetches the environment but keeps the new images, so it does not undo a deploy. A failed Promote rolls itself back. Rolling back after a successful Promote means dispatching the CI workflow from master with the identity of the release before it (see `.github/workflows/ci.yml` inputs and the saved `promotion-rollback` artifact of the Promote run). That path has not been run, so prefer the primary undo.
+A rollback does not send migrated Spaces back to Cloudflare. The migration preserves stored Episode history, and its Down restores the old audit trigger without reverting Space settings or later operator changes.

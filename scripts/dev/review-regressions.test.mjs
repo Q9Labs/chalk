@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
+import { createSocket } from "node:dgram";
+import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +12,69 @@ import { containerArguments, containerEnvironment } from "./containers.mjs";
 import { dashboardArtifactBindings } from "./dashboard-seed.mjs";
 import { previewAudio, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { executeDevCommand } from "./exec.mjs";
-import { resolveDevConfig } from "./config.mjs";
+import { preflight, probePort, resolveDevConfig } from "./config.mjs";
+import { startChalkSfu } from "./chalk-sfu.mjs";
 import { spawnCommand, killTree } from "../lib/platform.mjs";
 
 const config = resolveDevConfig({ env: {} });
+
+test("dev SFU publishes reachable media only when an announce address is set", async () => {
+  for (const announceIP of [undefined, "192.0.2.42"]) {
+    const dev = resolveDevConfig({ env: { PUBLIC_ORIGIN: "https://chalk.example.test", CHALK_DEV_SFU_ANNOUNCE_IP: announceIP } });
+    let launch;
+    await startChalkSfu(dev, {
+      network: "test",
+      versions: { go: "test" },
+      runResource: async (_command, args) => {
+        if (args.includes("--detach")) launch = args;
+      },
+    });
+    const bind = announceIP ? "0.0.0.0" : "127.0.0.1";
+    const port = dev.ports.sfuMedia;
+    assert.deepEqual(
+      launch.flatMap((arg, index) => (arg === "--publish" ? [launch[index + 1]] : [])),
+      [`${bind}:${port}:${port}/udp`, `${bind}:${port}:${port}/tcp`],
+    );
+    assert.ok(launch.includes(`SFU_ANNOUNCE_IPS=${announceIP || bind}`));
+    assert.ok(launch.includes(`SFU_ICE_LOOPBACK=${!announceIP}`));
+  }
+});
+
+test("dev SFU rejects announce addresses that cannot identify an IPv4 host", () => {
+  for (const address of ["chalk.example.test", "::1", "127.0.0.2", "0.0.0.0", "239.0.0.1"]) {
+    assert.throws(() => resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: address } }), /CHALK_DEV_SFU_ANNOUNCE_IP must be a non-loopback unicast IPv4 address/);
+  }
+});
+
+test("dev preflight rejects an occupied SFU UDP port before starting containers", async () => {
+  const listener = createSocket("udp4");
+  listener.bind(0, "127.0.0.1");
+  await once(listener, "listening");
+  const port = listener.address().port;
+  const dev = { ...resolveDevConfig({ env: { CHALK_DEV_SFU_ANNOUNCE_IP: "192.0.2.42" } }), ports: { sfuMedia: port } };
+  const options = {
+    requiredTools: [],
+    probe: (port, host, transport) => (transport === "udp" ? probePort(port, host, transport) : { available: true }),
+  };
+  try {
+    await assert.rejects(preflight(dev, options), new RegExp(`ports already in use: sfuMedia:${port}/udp`));
+  } finally {
+    await new Promise((done) => listener.close(done));
+  }
+  assert.equal((await preflight(dev, options)).ok, true);
+});
+
+test("dev preflight reports a denied SFU UDP bind without claiming another listener", async () => {
+  const dev = { ...resolveDevConfig({ env: {} }), ports: { sfuMedia: 40000 } };
+  const error = Object.assign(new Error("bind EACCES 127.0.0.1:40000"), { code: "EACCES" });
+  await assert.rejects(
+    preflight(dev, {
+      requiredTools: [],
+      probe: (_port, _host, transport) => (transport === "udp" ? { available: false, error } : { available: true }),
+    }),
+    /cannot bind sfuMedia:40000\/udp: bind EACCES/,
+  );
+});
 
 test("ownership accepts a real forward-slash Node invocation with Windows recorded separators", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-owner-"));
@@ -40,10 +100,10 @@ test("ownership accepts a real forward-slash Node invocation with Windows record
   }
 });
 
-test("adb CRLF listings forward both ports for every authorized device", async () => {
+test("adb CRLF listings forward the API, Metro and media ports for every authorized device", async () => {
   const forwarded = [];
   await reverseAndroidPorts({
-    env: { CHALK_DEV_API_PORT: "18080", RCT_METRO_PORT: "18081" },
+    env: { CHALK_DEV_API_PORT: "18080", RCT_METRO_PORT: "18081", CHALK_DEV_SFU_MEDIA_PORT: "18082" },
     run: async (_command, args) => {
       if (args[0] === "devices") return { stdout: "List of devices attached\r\nemulator-5554\tdevice\r\nusb-123\tdevice\r\nlocked\tunauthorized\r\n" };
       if (args.includes("reverse")) forwarded.push(args);
@@ -53,8 +113,10 @@ test("adb CRLF listings forward both ports for every authorized device", async (
   assert.deepEqual(forwarded, [
     ["-s", "emulator-5554", "reverse", "tcp:18080", "tcp:18080"],
     ["-s", "emulator-5554", "reverse", "tcp:18081", "tcp:18081"],
+    ["-s", "emulator-5554", "reverse", "tcp:18082", "tcp:18082"],
     ["-s", "usb-123", "reverse", "tcp:18080", "tcp:18080"],
     ["-s", "usb-123", "reverse", "tcp:18081", "tcp:18081"],
+    ["-s", "usb-123", "reverse", "tcp:18082", "tcp:18082"],
   ]);
 });
 

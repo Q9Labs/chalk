@@ -3,22 +3,40 @@ import { strict as assert } from "node:assert";
 function seats(cookies) {
   return cookies.filter((cookie) => /^local_chalk_seats?$|^local_chalk_seat_/.test(cookie.name));
 }
-export async function proveCookieBudget(context, origin) {
+export async function proveCookieBudget(context, origin, endFixtureEpisode) {
   const page = await context.newPage();
   try {
     await page.goto(`${origin}/dashboard`);
-    await page.evaluate(async () => {
-      const session = await (await fetch("/auth/session")).json();
-      const post = async (path, body) => {
-        const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": session.csrfToken }, body: JSON.stringify(body) });
-        if (!response.ok) throw new Error(`Cookie-budget request failed: HTTP ${response.status} ${await response.text()}`);
-        return response.json();
-      };
-      for (let space = 0; space < 12; space++) {
-        const { call } = await post("/dashboard-api/home", { action: "create-call", name: "Cookie budget fixture", admission: "anyone", idempotencyKey: crypto.randomUUID() });
-        for (let join = 0; join < 25; join++) await post("/dashboard-api/call", { action: "join", spaceId: call.id, idempotencyKey: crypto.randomUUID() });
+    for (let space = 1; space <= 12; space++) {
+      let spaceId;
+      for (let batch = 0; batch < 5; batch++) {
+        const subject = await page.evaluate(
+          async ({ space, spaceId, batch }) => {
+            const session = await (await fetch("/auth/session")).json();
+            const post = async (path, body) => {
+              const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": session.csrfToken }, body: JSON.stringify(body) });
+              const dto = await response.json();
+              if (!response.ok) throw new Error(`Cookie-budget Space ${space}, batch ${batch + 1}, ${body.action}: HTTP ${response.status} (${dto.error?.code})`);
+              return dto;
+            };
+            if (!spaceId) {
+              const { call } = await post("/dashboard-api/home", { action: "create-call", name: "Cookie budget fixture", admission: "anyone", idempotencyKey: crypto.randomUUID() });
+              spaceId = call.id;
+            }
+            let subject;
+            for (let join = 0; join < 5; join++) {
+              const { access } = await post("/dashboard-api/call", { action: "join", spaceId, idempotencyKey: crypto.randomUUID() });
+              subject = access.subject;
+            }
+            return subject;
+          },
+          { space, spaceId, batch },
+        );
+        spaceId = subject.space_id;
+        // End outside the browser: release the five real SFU reservations without clearing cookies.
+        await endFixtureEpisode(subject);
       }
-    });
+    }
     const cookies = await context.cookies();
     assert(
       cookies.some((cookie) => cookie.name === "local_chalk_session"),

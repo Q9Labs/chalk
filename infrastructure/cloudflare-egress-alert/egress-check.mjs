@@ -1,6 +1,6 @@
-// Reads Realtime SFU and TURN egress from Cloudflare GraphQL analytics and posts
+// Reads TURN egress from Cloudflare GraphQL analytics and posts
 // to the Oncall webhook when a limit is crossed. Cloudflare's own usage alert
-// cannot watch these products, and they share one monthly free allowance.
+// does not cover Realtime TURN.
 
 import { postToOncall } from "../oncall-alert.mjs";
 
@@ -21,11 +21,8 @@ const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $priorEnd: Time!, $now: Time!) {
   viewer {
     accounts(filter: { accountTag: $account }) {
-      daySfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $dayStart, datetime_lt: $now }) { sum { egressBytes } }
       dayTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $dayStart, datetime_lt: $now }) { sum { egressBytes } }
-      monthSfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $now }) { sum { egressBytes } }
       monthTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $now }) { sum { egressBytes } }
-      priorSfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $priorEnd }) { sum { egressBytes } }
       priorTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $priorEnd }) { sum { egressBytes } }
     }
   }
@@ -58,10 +55,10 @@ export async function readEgress({ fetchImpl = fetch, accountId, token, now }) {
   const account = body.data?.viewer.accounts[0];
   if (body.errors || !account) throw new Error(`Cloudflare GraphQL returned no usage: ${JSON.stringify(body.errors)}`);
   return {
-    dayBytes: groupBytes(account.daySfu) + groupBytes(account.dayTurn),
-    monthBytes: groupBytes(account.monthSfu) + groupBytes(account.monthTurn),
+    dayBytes: groupBytes(account.dayTurn),
+    monthBytes: groupBytes(account.monthTurn),
     // Month-to-date total as of the lookback. It is empty, so 0, while the lookback still falls in last month.
-    priorBytes: groupBytes(account.priorSfu) + groupBytes(account.priorTurn),
+    priorBytes: groupBytes(account.priorTurn),
   };
 }
 
@@ -74,14 +71,14 @@ export function evaluate({ dayBytes, monthBytes, priorBytes }) {
   if (dayBytes >= DAILY_LIMIT_GB * GB) {
     incidents.push({
       key: key("24h"),
-      detail: `Realtime SFU and TURN sent ${gb(dayBytes)} GB in the last 24 h (limit ${DAILY_LIMIT_GB} GB).`,
+      detail: `TURN sent ${gb(dayBytes)} GB in the last 24 h (limit ${DAILY_LIMIT_GB} GB).`,
     });
   }
   for (const threshold of MONTHLY_THRESHOLDS_GB) {
     if (monthBytes >= threshold * GB && priorBytes < threshold * GB) {
       incidents.push({
         key: key(`month-${threshold}gb`),
-        detail: `Realtime SFU and TURN sent ${gb(monthBytes)} GB this month, past ${threshold} GB of the 1,000 GB free allowance.`,
+        detail: `TURN sent ${gb(monthBytes)} GB this month, past ${threshold} GB of the 1,000 GB free allowance.`,
       });
     }
   }
@@ -98,7 +95,7 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   let incidents = [{ key: key("24h"), detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }];
   if (!drill) {
     const usage = await readEgress({ fetchImpl, accountId: CLOUDFLARE_ACCOUNT_ID, token: CLOUDFLARE_ANALYTICS_TOKEN, now });
-    log(`SFU+TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
+    log(`TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
     incidents = evaluate(usage);
   }
   if (incidents.length === 0) return 0;

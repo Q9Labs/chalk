@@ -1,5 +1,5 @@
 import type { PreJoinDevices } from "@q9labsai/chalk-react";
-import { cn, getParticipantAvatarGradient, getParticipantInitials, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "@q9labsai/chalk-react/utils";
+import { cn, getParticipantAvatarGradient, getParticipantInitials, MediaGlyph } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, type ReactNode } from "react";
 
 /** A glass circle on the preview: the same off style as the call's dock, with an amber badge when the device is missing. */
@@ -67,10 +67,10 @@ export function PreviewTile({
       <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[var(--chalk-popover)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>
-          {devices.microphoneOn ? <Microphone01Icon size={20} aria-hidden="true" /> : <MicrophoneOff01Icon size={20} aria-hidden="true" />}
+          <MediaGlyph kind="mic" slashed={!devices.microphoneOn} busy={false} />
         </PreviewButton>
         <PreviewButton label={devices.cameraOn ? "Turn off camera" : "Turn on camera"} on={devices.cameraOn} missing={devices.cameraMissing} disabled={locked} onClick={() => onToggle("camera")}>
-          {devices.cameraOn ? <Video01Icon size={20} aria-hidden="true" /> : <VideoOffIcon size={20} aria-hidden="true" />}
+          <MediaGlyph kind="cam" slashed={!devices.cameraOn} busy={false} />
         </PreviewButton>
       </div>
       {children}

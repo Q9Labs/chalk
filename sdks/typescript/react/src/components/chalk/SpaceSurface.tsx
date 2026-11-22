@@ -118,6 +118,7 @@ export function SpaceSurface(
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       inviteLink={props.inviteLink}
+      callLinkOpen={props.callLinkOpen}
       pickChatFiles={props.pickChatFiles}
       commandError={commandError ?? undefined}
       commandSource={commandSource}

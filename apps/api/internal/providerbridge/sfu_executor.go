@@ -35,8 +35,7 @@ const (
 )
 
 // EpisodeProviders reads the provider and node frozen into an Episode's binding.
-// It returns an empty provider for an Episode that predates the binding, which ran
-// on Cloudflare, and an empty node for a provider with one endpoint.
+// An empty provider marks a historical Episode without a binding.
 type EpisodeProviders interface {
 	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, generation int64, err error)
 }
@@ -84,8 +83,7 @@ func (e SFUExecutor) WithRetiredAllocations(retired func(ctx context.Context, te
 	return e
 }
 
-// WithChalkSFU makes grants and cleanup follow the Episode's binding. Without it
-// every Episode cleans up through the Cloudflare closer.
+// WithChalkSFU makes grants and cleanup follow the Episode's node binding.
 func (e SFUExecutor) WithChalkSFU(episodes EpisodeProviders, chalk ChalkNodes) SFUExecutor {
 	e.episodes = episodes
 	e.chalk = chalk
@@ -335,50 +333,35 @@ func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input 
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
 
-// bound picks the closer from the Episode's binding, and for the Chalk SFU the
-// node the binding names. A provider this build does not know ends the operation
-// as a terminal failure; it never falls back to Cloudflare, which would close
-// another provider's tracks by the wrong rules.
+// bound resolves the Episode's Chalk SFU node. Historical providers are not executed.
 func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, ChalkNode, *ExecutionResult) {
-	name, node, generation := mediaplane.ProviderCloudflareSFU.SettingName(), "", int64(0)
-	if e.episodes != nil {
-		found, foundNode, foundGeneration, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
-		if err != nil {
-			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
-			return "", nil, nil, &result
-		}
-		if found != "" {
-			name, node, generation = found, foundNode, foundGeneration
-		}
+	if e.episodes == nil {
+		return mediaplane.ProviderChalkSFU, e.tracks, nil, nil
 	}
-	provider, _ := mediaplane.ParseSettingName(name)
-	switch provider {
-	case mediaplane.ProviderCloudflareSFU:
-		if e.tracks == nil {
-			return mediaplane.ProviderCloudflareSFU, nil, nil, nil
-		}
-		return mediaplane.ProviderCloudflareSFU, e.tracks, nil, nil
-	case mediaplane.ProviderChalkSFU:
-		unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
-		if e.chalk == nil {
-			return "", nil, nil, &unavailable
-		}
-		// A node missing from this process's configuration may come back with the
-		// next deploy, so the operation retries instead of failing for good.
-		chalk, err := e.chalk(node, generation)
-		if err != nil {
-			return "", nil, nil, &unavailable
-		}
-		return mediaplane.ProviderChalkSFU, chalk, chalk, nil
-	default:
+	name, node, generation, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
+	if err != nil {
+		result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
+		return "", nil, nil, &result
+	}
+	if name == "" {
+		return "", nil, nil, nil
+	}
+	if name != mediaplane.ProviderChalkSFU.SettingName() {
 		result := ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_provider"}
 		return "", nil, nil, &result
 	}
+	unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
+	if e.chalk == nil {
+		return "", nil, nil, &unavailable
+	}
+	chalk, err := e.chalk(node, generation)
+	if err != nil {
+		return "", nil, nil, &unavailable
+	}
+	return mediaplane.ProviderChalkSFU, chalk, chalk, nil
 }
 
-// resumePublication grants the source on the Chalk SFU, which forwards a source only
-// under a grant. Cloudflare needs nothing: the browser publishes on a fresh MID
-// after a forced close, so no previous track is made available again.
+// resumePublication grants the source on the bound Chalk SFU node.
 func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
 	if e.episodes == nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}

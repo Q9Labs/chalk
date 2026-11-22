@@ -3,7 +3,7 @@
 // the intent, its backoff, and the health window that resets the backoff after a quiet
 // spell. The attempts themselves belong to the coordinator and run through #run.
 import type { MediaPublicationSource } from "./plane";
-import { localSourceGroup, RECOVERY_HEALTHY_RESET_MS, recoveryBackoffMs } from "./cloudflare-limits";
+import { localSourceGroup, RECOVERY_HEALTHY_RESET_MS, recoveryBackoffMs } from "./sfu-limits";
 import type { LocalTrackState } from "./local-publications";
 
 export type LocalRecovery = {

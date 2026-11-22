@@ -1,6 +1,6 @@
 # Chalk SFU
 
-A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and milestone plan are in the SFU design pull request (#796). The API reaches it through the `chalk_sfu` media-plane adapter. The module is `github.com/q9labs/chalk/features/media/sfu` and never imports `apps/api/internal`; the public `protocol/` package holds the wire types.
+A standalone Go service that forwards Participants' audio and video as Chalk’s only media provider. The design and milestone plan are in the SFU design pull request (#796). The API reaches it through the `chalk_sfu` media-plane adapter. The module is `github.com/q9labs/chalk/features/media/sfu` and never imports `apps/api/internal`; the public `protocol/` package holds the wire types.
 
 The code is the source of truth for the HTTP surface (`internal/` handlers, `protocol/`) and for every setting: `internal/config/config.go` lists each `SFU_*` variable with its default and range. This file keeps the parts the code cannot explain.
 

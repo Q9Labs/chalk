@@ -75,12 +75,12 @@ async function waitReady(page) {
 }
 
 async function callUnderFault(run, origin, settings) {
-  const space = await createSpace(run, "chalk_sfu");
+  const space = await createSpace(run);
   const { path, episode } = await startTrackedEpisode(run, space);
   const ending = episodeEnd(run, `${path}/${episode.id}`);
   const executablePaths = settings.guest2Chromium ? { 1: settings.guest2Chromium } : undefined;
   try {
-    const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane: "chalk_sfu", observeLeave: true, executablePaths });
+    const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, observeLeave: true, executablePaths });
     const { pages } = guests;
     for (const page of pages) await page.evaluate(installLatencyProbe);
     const join = (guest) => ({ slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });

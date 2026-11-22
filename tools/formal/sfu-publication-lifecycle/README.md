@@ -1,6 +1,6 @@
 # SFU publication lifecycle model
 
-TLA+ model of `CloudflareSFUClient`'s five-state local publication lifecycle
+TLA+ model of `SFUClient`'s five-state local publication lifecycle
 (`sdks/typescript/client/src/media/client.ts`): every owned publication moves
 `pending → confirmed → held → retiring → retired` while reconnect, connection
 replacement, user pause/resume and `stop()` race asynchronous SFU publish

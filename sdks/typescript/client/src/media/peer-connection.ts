@@ -1,5 +1,5 @@
 import { requireDescription } from "./tracks";
-import { CloudflareSFUError, type CloudflareSFUSnapshot } from "./types";
+import { SFUError, type SFUSnapshot } from "./types";
 
 export function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
@@ -21,7 +21,7 @@ export function bundleTagOf(connection: RTCPeerConnection): string | undefined {
   return /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(connection.localDescription?.sdp ?? "")?.[1];
 }
 export function requireTransceiverMid(transceiver: RTCRtpTransceiver): string {
-  if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");
+  if (transceiver.mid === null) throw new SFUError("Browser did not assign a media section", "media_failed");
   return transceiver.mid;
 }
 export function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => void): void {
@@ -50,8 +50,8 @@ export function observeConnectionState(
   iceState: RTCIceConnectionState,
   started: boolean,
 ):
-  | (Pick<CloudflareSFUSnapshot, "failure"> & {
-      readonly phase: CloudflareSFUSnapshot["connection"]["phase"];
+  | (Pick<SFUSnapshot, "failure"> & {
+      readonly phase: SFUSnapshot["connection"]["phase"];
     })
   | null {
   if (peerState === "failed") return { phase: "failed", failure: { code: "peer_connection_failed", recoverable: true } };

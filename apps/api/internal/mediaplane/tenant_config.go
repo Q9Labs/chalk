@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 const (
@@ -21,22 +20,11 @@ var (
 )
 
 // TenantConfig is the media plane document stored on a Tenant. It says whether
-// media is on and whether Chalk or the Tenant supplies the credentials.
+// media is enabled. Provider and mode are retained for the public contract.
 type TenantConfig struct {
-	Enabled    *bool             `json:"enabled"`
-	Provider   string            `json:"provider"`
-	Mode       string            `json:"mode"`
-	Cloudflare *CloudflareConfig `json:"cloudflare,omitempty"`
-}
-
-type CloudflareConfig struct {
-	AccountID string               `json:"account_id"`
-	SFU       *CloudflareSFUConfig `json:"sfu"`
-}
-
-type CloudflareSFUConfig struct {
-	AppID     string `json:"app_id"`
-	AppSecret string `json:"app_secret"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 }
 
 // ChalkManagedTenantConfig is the document of a Tenant that Chalk runs the provider for.
@@ -63,19 +51,12 @@ func (c TenantConfig) Disabled() bool {
 	return c.Enabled != nil && !*c.Enabled
 }
 
-// TenantMediaDisabled is true when the Tenant's document parses and turns media off.
-func TenantMediaDisabled(raw json.RawMessage) bool {
-	config, err := ParseTenantConfig(raw)
-	return err == nil && config.Disabled()
-}
-
-// TenantRunsEveryProvider is true when Chalk runs every provider for the Tenant.
-// A Tenant with its own credentials serves only that provider, a disabled one
-// serves none, and a Tenant with no document gets the deployment's providers.
-func TenantRunsEveryProvider(raw json.RawMessage) bool {
+// TenantMediaEnabled allows the default when no config is stored. Invalid or
+// explicitly disabled config never enables media.
+func TenantMediaEnabled(raw json.RawMessage) bool {
 	config, err := ParseTenantConfig(raw)
 	if errors.Is(err, ErrMissingTenantConfig) {
 		return true
 	}
-	return err == nil && !config.Disabled() && strings.TrimSpace(config.Mode) == ModeChalkManaged
+	return err == nil && !config.Disabled()
 }

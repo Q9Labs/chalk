@@ -29,12 +29,12 @@ type serverResults struct {
 	chatCleanup            <-chan error
 	recordingSourceCleanup <-chan error
 	publicInviteLifecycle  <-chan error
-	receiveHealthDone      <-chan struct{}
 }
 
 func (w *apiWiring) serve(server *http.Server) error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	defer startEvidenceRelay(signalCtx, w.telemetryLedger, w.evidenceSink, w.logger)()
 	results, err := w.startServersAndWorkers(signalCtx, server)
 	if err != nil {
 		return err
@@ -53,11 +53,6 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 		go w.mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(w.pool))
-	receiveHealthDone := make(chan struct{})
-	go func() {
-		w.mediaPublicationService.RunReceiveHealth(signalCtx)
-		close(receiveHealthDone)
-	}()
 	dispatcherOwner, err := utilities.NewID()
 	if err != nil {
 		return serverResults{}, fmt.Errorf("create webhook dispatcher owner: %w", err)
@@ -116,7 +111,6 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 		dispatcher: dispatcherErr, deadlineScheduler: deadlineSchedulerErr, recordingMaintenance: recordingMaintenanceErr,
 		whiteboardCleanup: whiteboardCleanupErr, chatCleanup: chatCleanupErr,
 		recordingSourceCleanup: recordingSourceCleanupErr, publicInviteLifecycle: publicInviteLifecycleErr,
-		receiveHealthDone: receiveHealthDone,
 	}, nil
 }
 
@@ -207,6 +201,5 @@ func (results serverResults) drain(runErr error) error {
 			}
 		}
 	}
-	<-results.receiveHealthDone
 	return runErr
 }

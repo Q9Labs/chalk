@@ -198,6 +198,11 @@ function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string
   return { frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box }, ...floats], pageCount: 1, perPage: floats.length, overflowCount: stripIds.length - shown };
 }
 
+/** A side column is one tile wide, so double-width content there would fold every person into +N. */
+function columnWideIds(beside: boolean, wideIds: readonly string[] | undefined): readonly string[] | undefined {
+  return beside ? [] : wideIds;
+}
+
 /** Content takes whichever placement gives it more visible area; people justify into the remainder. */
 export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry {
   const phone = box.width <= 640;
@@ -210,6 +215,7 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
     const height = options.content || phone ? box.height : width / aspect;
     return { frames: [{ id: primaryId, role: "primary", page: 0, x: (box.width - width) / 2, y: (box.height - height) / 2, width, height }], pageCount: 1, perPage: 0, overflowCount: stripIds.length };
   }
+  // The second face floats at the top right, 12px inside the big tile, so the bottom stays clear for notices; the big tile's menu moves to its top left on a phone.
   if (phone && stripIds.length === 1 && !options.content) {
     return {
       frames: [
@@ -230,7 +236,7 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
   const beside = options.content ? besideMain.width * besideMain.height > belowMain.width * belowMain.height * 1.005 : !phone && Math.abs(Math.log(besideMain.width / besideMain.height / WIDESCREEN)) < Math.abs(Math.log(belowMain.width / belowMain.height / WIDESCREEN));
   const main = { width: beside ? besideMain.width : box.width, height: beside ? box.height : belowMain.height };
   const remaining = { width: beside ? box.width - main.width - options.gap : box.width, height: beside ? box.height : box.height - main.height - options.gap };
-  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: slim ? 52 : phone ? 72 : 96, maxPerPage }, options.wideIds);
+  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: slim ? 52 : phone ? 72 : 96, maxPerPage }, columnWideIds(beside, options.wideIds));
   return {
     ...people,
     frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...main }, ...people.frames.map((frame) => ({ ...frame, role: "strip" as const, x: frame.x + (beside ? main.width + options.gap : 0), y: frame.y + (beside ? 0 : main.height + options.gap) }))],

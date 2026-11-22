@@ -64,8 +64,14 @@ function injectBusyClicks(page, busyMs) {
 function actionsFor(page, device) {
   const click = async (name) => {
     const button = page.getByRole("button", { name, exact: true });
-    if (device.touch) await button.tap();
-    else await button.click();
+    try {
+      if (device.touch) await button.tap({ timeout: 10_000 });
+      else await button.click({ timeout: 10_000 });
+    } catch (error) {
+      const shown = await page.getByRole("button").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label") ?? element.textContent?.trim()));
+      const sheets = await page.getByRole("dialog").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label") ?? element.textContent?.slice(0, 40)));
+      throw new Error(`Could not press ${String(name)}. Buttons on screen: ${JSON.stringify(shown)}. Dialogs: ${JSON.stringify(sheets)}.`, { cause: error });
+    }
     await page.waitForTimeout(350);
   };
   const outsideSample = async (action) => {
@@ -125,13 +131,14 @@ async function reconnectStep({ page, device, click, outsideSample, visitChat }) 
   await page.locator("[data-perf-reconnect]").dispatchEvent("click");
   const notice = page.locator('[data-part="connection-status"]');
   await notice.filter({ hasText: "Reconnecting" }).waitFor({ timeout: 10_000 });
-  if ((await notice.evaluate((element) => getComputedStyle(element).pointerEvents)) !== "none") throw new Error("Recovery notice intercepts call controls");
+  const noticePointerEvents = await notice.evaluate((element) => `${getComputedStyle(element).pointerEvents} on ${element.className} ${element.getAttribute("role")}`);
+  if (!noticePointerEvents.startsWith("none ")) throw new Error(`Recovery notice intercepts call controls: ${noticePointerEvents}`);
   if (await page.locator('[data-call-limbo][data-covered="true"][aria-hidden="false"]').count()) throw new Error("Recovery covers the call");
   // Check recovery usability without turning this connection sample into a panel-navigation benchmark.
   await outsideSample(async () => {
     await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
-    if (device.touch) await click("More options");
-    await visitChat();
+    // Sheets close under the recovery card, so a phone has no Chat to reach until the call returns.
+    if (!device.touch) await visitChat();
   });
   await page.waitForTimeout(350);
   await page.locator("[data-perf-recover]").dispatchEvent("click");

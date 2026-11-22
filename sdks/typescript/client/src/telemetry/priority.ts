@@ -1,0 +1,39 @@
+import type { TelemetryEventType } from "./types";
+
+/** `p0` records explain why a call failed or ended and are kept first. `stats` windows are folded when the queue is full. The table is exhaustive, so a new event type cannot ship without a class. */
+export type Priority = "p0" | "routine" | "stats";
+
+export const PRIORITY: Record<TelemetryEventType, Priority> = {
+  call_ended: "p0",
+  connection_failed: "p0",
+  render_crashed: "p0",
+  problem_reported: "p0",
+  telemetry_dropped: "p0",
+  space_join_span: "p0",
+  recovery_exhausted: "p0",
+  access_refresh_failed: "p0",
+  device_failed: "p0",
+  cleanup_unconfirmed: "p0",
+  call_stats: "stats",
+  access_refreshed: "routine",
+  access_retry: "routine",
+  audio_receive_stuck: "routine",
+  audio_receive_summary: "routine",
+  chat_upload_failed: "routine",
+  cleanup_completed: "routine",
+  media_http_error: "routine",
+  media_intent: "routine",
+  media_projection_mismatch: "routine",
+  media_result: "routine",
+  media_state: "routine",
+  platform_changed: "routine",
+  receivers_closed: "routine",
+  recovery_attempt: "routine",
+  recovery_succeeded: "routine",
+  state_changed: "routine",
+  sync_connect_failed: "routine",
+  sync_dial_timeout: "routine",
+  sync_heartbeat_gap: "routine",
+  sync_socket_close: "routine",
+  sync_socket_open: "routine",
+};

@@ -26,6 +26,7 @@ type spaceQuerier interface {
 	ListSpaceRoles(ctx context.Context, arg sqlc.ListSpaceRolesParams) ([]sqlc.SpaceRole, error)
 	GetTenantSpace(ctx context.Context, arg sqlc.GetTenantSpaceParams) (sqlc.Space, error)
 	ListTenantSpaces(ctx context.Context, arg sqlc.ListTenantSpacesParams) ([]sqlc.Space, error)
+	ListTenantSpacesByActivity(ctx context.Context, arg sqlc.ListTenantSpacesByActivityParams) ([]sqlc.ListTenantSpacesByActivityRow, error)
 	UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error)
 	ArchiveTenantSpace(ctx context.Context, arg sqlc.ArchiveTenantSpaceParams) (sqlc.Space, error)
 	RestoreTenantSpace(ctx context.Context, arg sqlc.RestoreTenantSpaceParams) (sqlc.Space, error)
@@ -76,45 +77,6 @@ func (r SpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, sp
 	}
 
 	return r.withSpaceRoles(ctx, mapSpace(space))
-}
-
-func (r SpaceRepository) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (spaces.SpaceList, error) {
-	return r.listSpaces(ctx, tenantID, page, nil)
-}
-
-func (r SpaceRepository) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
-	return r.listSpaces(ctx, tenantID, page, archived)
-}
-
-func (r SpaceRepository) listSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
-	rows, err := r.queries.ListTenantSpaces(ctx, listTenantSpacesParams(tenantID, page, archived))
-	if err != nil {
-		return spaces.SpaceList{}, fmt.Errorf("list spaces: %w", err)
-	}
-
-	size := page.Size()
-	hasMore := len(rows) > size
-	if hasMore {
-		rows = rows[:size]
-	}
-
-	list := spaces.SpaceList{
-		Spaces: make([]spaces.Space, 0, len(rows)),
-		Page:   pagination.Page{PageSize: size, HasMore: hasMore},
-	}
-	for _, row := range rows {
-		space, err := r.withSpaceRoles(ctx, mapSpace(row))
-		if err != nil {
-			return spaces.SpaceList{}, err
-		}
-		list.Spaces = append(list.Spaces, space)
-	}
-	if hasMore && len(list.Spaces) > 0 {
-		last := list.Spaces[len(list.Spaces)-1]
-		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
-	}
-
-	return list, nil
 }
 
 func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
@@ -244,6 +206,23 @@ func listTenantSpacesParams(tenantID utilities.ID, page pagination.PageRequest, 
 	params.CursorSet = true
 	params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
 	params.CursorID = uuid(cursor.ID)
+	return params
+}
+
+func listTenantSpacesByActivityParams(tenantID utilities.ID, page pagination.PageRequest, archived *bool) sqlc.ListTenantSpacesByActivityParams {
+	params := sqlc.ListTenantSpacesByActivityParams{
+		TenantID: uuid(tenantID),
+		PageSize: int32(page.Size() + 1),
+	}
+	if archived != nil {
+		params.ArchivedSet = true
+		params.Archived = *archived
+	}
+	if cursor := page.Cursor(); cursor != nil {
+		params.CursorSet = true
+		params.CursorActiveAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
+		params.CursorID = uuid(cursor.ID)
+	}
 	return params
 }
 

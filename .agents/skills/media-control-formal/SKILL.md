@@ -48,15 +48,15 @@ The Sync side (`apps/sync/lib/chalk_sync/live/episode.ex`, `apply_live_target`, 
 tools/formal/media-control/run.sh
 ```
 
-It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4) once into `~/.cache/chalk-tla`. The full run has 17 `runs.txt` rows and 33 `heal-runs.txt` rows and takes about 15 minutes. The script exits non-zero if any row's outcome differs from the `pass` or `violated` in its table.
+It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4) once into `~/.cache/chalk-tla`. The full run has 15 `runs.txt` rows and 33 `heal-runs.txt` rows and takes about 15 minutes. The script exits non-zero if any row's outcome differs from the `pass` or `violated` in its table.
 
 CI runs a bounded subset in `.github/workflows/formal-models.yml`. the run script takes row names, and then it does not overwrite the summary files:
 
 ```sh
-tools/formal/media-control/run.sh cf-decided-safety-1src own-decided-safety-1src cf-current-P2-1src cf-current-P4-1src cf-current-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute
+tools/formal/media-control/run.sh dist-decided-safety-1src atomic-decided-safety-1src legacy-P2-1src legacy-P4-1src legacy-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute
 ```
 
-The subset covers: P1 to P3 on the decided rule for both SFUs, the `current` P2 and P4 counterexamples, the two broken variants that must break P1 and P3, and the two witnesses that show "on" is reachable. The slow P4 live rows (`*-live-*`) and `heal-*` rows run in the full local run only. Run those locally when a change touches the resend path or the heal loop.
+The subset covers: P1 to P3 on the decided rule with both authority models, the `current` P2 and P4 counterexamples, the two broken variants that must break P1 and P3, and the two witnesses that show "on" is reachable. The slow P4 live rows (`*-live-*`) and `heal-*` rows run in the full local run only. Run those locally when a change touches the resend path or the heal loop.
 
 `DEEP=1 tools/formal/media-control/run.sh` also runs the `deep-*` rows with several sources (about 20 minutes more).
 

@@ -1,9 +1,12 @@
 defmodule ChalkSync.Application do
   @moduledoc false
   use Application
+  alias ChalkSync.Obs.EvidenceSink
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   @impl true
   def start(_type, _args) do
+    :ok = EvidenceSink.attach()
+
     children =
       [
         %{id: :pg, start: {:pg, :start_link, []}},

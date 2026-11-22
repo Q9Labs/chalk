@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
@@ -357,31 +356,6 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 	}
 
 	return response, nil
-}
-
-func newTenantResponse(tenant tenants.Tenant) tenantResponse {
-	return tenantResponse{
-		RecordingRenderMode: tenant.RecordingRenderMode,
-		ID:                  tenant.ID.String(),
-		Name:                tenant.Name,
-		ExternalID:          tenant.ExternalID,
-
-		DefaultMediaPlane:                tenant.DefaultMediaPlane,
-		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
-		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
-		CORSAllowedOrigins:               append(make([]string, 0, len(tenant.CORSAllowedOrigins)), tenant.CORSAllowedOrigins...),
-		LogoKey:                          tenant.LogoKey,
-		Website:                          tenant.Website,
-		TranscriptionCeiling:             tenant.ArtifactPolicy.TranscriptionCeiling,
-		TranscriptionDefaultMode:         tenant.ArtifactPolicy.TranscriptionDefault,
-		TranscriptLanguage:               tenant.ArtifactPolicy.TranscriptLanguage.String(),
-		ProviderPolicyVersion:            tenant.ArtifactPolicy.ProviderPolicyVersion,
-		RecordingRetentionSeconds:        int64(tenant.ArtifactPolicy.RecordingRetention / time.Second),
-		TranscriptRetentionSeconds:       int64(tenant.ArtifactPolicy.TranscriptRetention / time.Second),
-		TranscriptionSourceWindowSeconds: int64(tenant.ArtifactPolicy.TranscriptionSourceWindow / time.Second),
-		UpdatedAt:                        utilities.FormatTimestamp(tenant.UpdatedAt),
-		CreatedAt:                        utilities.FormatTimestamp(tenant.CreatedAt),
-	}
 }
 
 func (r createTenantRequest) input() tenants.CreateTenantInput {

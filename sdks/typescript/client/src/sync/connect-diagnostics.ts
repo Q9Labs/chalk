@@ -56,3 +56,8 @@ export function syncConnectFailureCode(diagnostic: SyncConnectDiagnostic | undef
 export function formatSyncConnectDiagnostic(diagnostic: SyncConnectDiagnostic): string {
   return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${diagnostic.stage === "upgrade" && diagnostic.closeCode !== null ? "cause=closed_before_open; " : ""}${diagnostic.attempt === undefined ? "" : `attempt=${diagnostic.attempt}; `}${diagnostic.attempts === undefined ? "" : `attempts=${diagnostic.attempts}; `}${Math.round(diagnostic.durationMs)}ms]`;
 }
+/** The line a problem report always carries about a failure: its code, then the sync handshake detail when there is one. Neither holds personal data. */
+export function formatFailureReference(failure: { readonly code: string; readonly sync?: SyncConnectDiagnostic } | null | undefined): string | undefined {
+  if (!failure) return undefined;
+  return "Error: " + failure.code + (failure.sync ? " " + formatSyncConnectDiagnostic(failure.sync) : "");
+}

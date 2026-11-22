@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { oncallPayload } from "../oncall-alert.mjs";
-import { EPISODE_THRESHOLD, PROVIDERS, SIGNALS, evaluate, mergeEpisodes, parseTabular, query, readSignals, run } from "./listener-audio-check.mjs";
+import { evaluate, mergeEpisodes, parseTabular, query, readSignals, run } from "./listener-audio-check.mjs";
 
 const fixture = async (name) => JSON.parse(await readFile(new URL(`./testdata/${name}.json`, import.meta.url), "utf8"));
 const id = "11111111-1111-4111-8111-111111111111";
@@ -13,17 +13,17 @@ const ok = (body) => ({ ok: true, json: async () => body });
 
 test("parses recorded-shape empty, one and several Episode tables by field name", async () => {
   assert.deepEqual(parseTabular(await fixture("empty")), []);
-  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: "api_unpulled", events: 1, participants: 0 }]);
+  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: client, events: 2, participants: 2 }]);
   const rows = parseTabular(await fixture("several"));
   assert.equal(rows.length, 3);
   const merged = mergeEpisodes(rows);
   assert.equal(merged.length, 2);
-  assert.deepEqual(merged[0].counts, { api_unpulled: 1, synthetic_second: 2 });
-  assert.equal(merged[0].total, 3);
+  assert.deepEqual(merged[0].counts, { [client]: 2, synthetic_second: 2 });
+  assert.equal(merged[0].total, 4);
   assert.equal(evaluate(rows, window).length, 2);
   assert.deepEqual(mergeEpisodes([]), []);
   assert.deepEqual(mergeEpisodes([{ episode_id: "injection", signal: "api_unpulled", events: 1, participants: 0 }]), []);
-  assert.deepEqual(mergeEpisodes([...rows, rows[0]])[0].counts, { api_unpulled: 2, synthetic_second: 2 });
+  assert.deepEqual(mergeEpisodes([...rows, rows[0]])[0].counts, { [client]: 4, synthetic_second: 2 });
 });
 
 test("rejects malformed, partial and invalid events results without leaking body", async () => {
@@ -51,19 +51,15 @@ test("rejects malformed, partial and invalid events results without leaking body
   assert.throws(() => parseTabular(threeColumns), /malformed tabular/);
 });
 
-test("threshold is one; stable Episode keys merge signals across overlapping windows", () => {
-  assert.equal(EPISODE_THRESHOLD, 1);
-  assert.deepEqual(evaluate([{ episode_id: id, signal: "api_unpulled", events: 0, participants: 0 }], window), []);
-  const rows = [
-    { episode_id: id, signal: "api_unpulled", events: 1, participants: 0 },
-    { episode_id: id.toUpperCase(), signal: "synthetic_second", events: 2, participants: 0 },
-  ];
+test("stable Episode keys merge reports across overlapping windows", () => {
+  assert.deepEqual(evaluate([row(client, 0, 0)], window), []);
+  const rows = [row(client, 2, 2), { episode_id: id.toUpperCase(), signal: "synthetic_second", events: 2, participants: 0 }];
   const first = evaluate(rows, window);
   const second = evaluate(rows, { startTime: "2026-10-31T11:55:00.000Z", endTime: "2026-10-31T12:05:00.000Z" });
   assert.equal(first.length, 1);
   assert.equal(first[0].key, `listener-audio:chalk:${id}`);
   assert.equal(first[0].key, second[0].key);
-  assert.match(first[0].detail, /api_unpulled: 1, synthetic_second: 2/);
+  assert.match(first[0].detail, /client_audio_stuck:chalk_sfu: 2 \(participants: 2\), synthetic_second: 2/);
   assert.ok(first[0].detail.includes(window.startTime));
   assert.ok(first[0].detail.includes(window.endTime));
 });
@@ -88,13 +84,9 @@ test("posts exact payload, requests a ten-minute APL window and logs aggregates 
   assert.deepEqual(body, { apl: query(env.CHALK_AXIOM_LOG_DATASET), ...window });
   assert.equal(new Date(body.endTime) - new Date(body.startTime), 600000);
   assert.ok(body.apl.includes(env.CHALK_AXIOM_LOG_DATASET));
-  assert.ok(body.apl.includes("media.listener_publication_unpulled"));
+  assert.ok(body.apl.includes("audio_receive_stuck"));
   assert.match(body.apl, /project episode_id, signal, events, participants$/);
   assert.doesNotMatch(body.apl, /publication_id|tenant|space/);
-  assert.deepEqual(SIGNALS, [
-    { name: "api_unpulled", event: "media.listener_publication_unpulled" },
-    { name: "client_audio_stuck", event: "sdk.telemetry", type: "audio_receive_stuck", minParticipants: 2 },
-  ]);
   assert.equal(calls[1].url, env.ONCALL_WEBHOOK_URL);
   const payload = JSON.parse(calls[1].options.body);
   assert.deepEqual(payload, oncallPayload(evaluate(parseTabular(await fixture("several")), window), { drill: false }));
@@ -102,7 +94,7 @@ test("posts exact payload, requests a ten-minute APL window and logs aggregates 
   assert.equal(payload.source, "oncall-poller");
   assert.equal(payload.incidents[0].app, "chalk");
   assert.equal(payload.incidents[0].kind, "new");
-  assert.deepEqual(logs, ["2 Episodes affected, 6 events"]);
+  assert.deepEqual(logs, ["2 Episodes affected, 7 events"]);
   assert.doesNotMatch(logs.join(""), /[a-f0-9]{8}-[a-f0-9-]{27,}|[a-f0-9]{32,}|synthetic-private-dataset|participant|publication/i);
 });
 
@@ -200,19 +192,21 @@ test("HTTP, JSON, malformed and network failures fail safely", async () => {
   }
 });
 
-test("the provider-neutral audio_receive_stuck client report is a signal, tagged with a bounded provider", () => {
+test("the query reads only Chalk SFU stuck-audio reports", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("(['attributes.event'] == 'sdk.telemetry' and ['attributes.type'] == 'audio_receive_stuck' and (isempty(column_ifexists('attributes.legacy_route', '')) or tostring(column_ifexists('attributes.trigger', '')) == 'audio_receive_stuck'))"));
-  assert.ok(apl.includes("['attributes.event'] in ('media.listener_publication_unpulled', 'sdk.telemetry')"));
-  assert.deepEqual(PROVIDERS, ["cloudflare_sfu", "chalk_sfu"]);
-  assert.ok(apl.includes("tostring(['attributes.provider']) in ('cloudflare_sfu', 'chalk_sfu')"));
-  assert.ok(apl.includes("strcat(signal, ':', provider)"));
+  assert.ok(apl.includes("['attributes.event'] == 'sdk.telemetry' and report_type == 'audio_receive_stuck' and (isempty(legacy_route) or trigger == 'audio_receive_stuck')"));
+  assert.match(apl, /parse_json\(iff\(body startswith 'chalk-evidence-v2:', substring\(body, 18\), '\{\}'\)\)/);
+  for (const field of ["type", "legacy_route", "trigger", "provider", "participant_id_hash"]) {
+    assert.ok(apl.includes(`coalesce(tostring(evidence.${field}), tostring(column_ifexists('attributes.${field}', '')))`), field);
+  }
+  assert.ok(apl.includes("provider_hint == 'chalk_sfu'"));
+  assert.doesNotMatch(apl, /cloudflare|listener_publication_unpulled/);
   assert.match(apl, /project episode_id, signal, events, participants$/);
 });
 
 test("the query counts distinct non-empty participant hashes and never projects them", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("extend participant=tostring(['attributes.participant_id_hash'])"));
+  assert.ok(apl.includes("participant=coalesce(tostring(evidence.participant_id_hash)"));
   assert.ok(apl.includes("summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant"));
   assert.ok(apl.includes("summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal"));
   assert.doesNotMatch(apl.split("| project")[1], /participant_id_hash|participant\b/);
@@ -250,7 +244,7 @@ test("run posts to Oncall only when the signal rule is met", async () => {
   for (const [rows, expected, posts] of [
     [[row(client, 6, 1)], 0, 0],
     [[row(client, 6, 2)], 1, 1],
-    [[row("api_unpulled", 1, 0), row(client, 1, 1)], 1, 1],
+    [[row("api_unpulled", 1, 0), row(client, 1, 1)], 0, 0],
   ]) {
     let webhook = 0;
     const result = await run({
@@ -267,17 +261,6 @@ test("run posts to Oncall only when the signal rule is met", async () => {
     });
     assert.deepEqual([result, webhook], [expected, posts]);
   }
-});
-
-test("mixed Episode: api_unpulled alone pages, one client participant alone does not", () => {
-  assert.equal(evaluate([row("api_unpulled", 1, 0)], window).length, 1);
-  assert.deepEqual(evaluate([row(client, 1, 1)], window), []);
-  const mixed = evaluate([row("api_unpulled", 1, 0), row(client, 1, 1)], window);
-  assert.equal(mixed.length, 1);
-  assert.match(mixed[0].detail, /api_unpulled: 1, client_audio_stuck:chalk_sfu: 1 \(participants: 1\)/);
-  const both = evaluate([row("api_unpulled", 2, 0), row(client, 4, 2)], window);
-  assert.equal(both.length, 1);
-  assert.match(both[0].detail, /api_unpulled: 2, client_audio_stuck:chalk_sfu: 4 \(participants: 2\)/);
 });
 
 test("the participant rule applies per provider signal and per Episode", () => {

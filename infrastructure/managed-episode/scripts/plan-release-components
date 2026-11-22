@@ -113,7 +113,7 @@ classify_path() {
     infrastructure/managed-episode/env/sync.env.example|infrastructure/managed-episode/scripts/validate-sync-runtime)
       add_classification sync
       ;;
-    infrastructure/managed-episode/scripts/plan-release-components|infrastructure/managed-episode/scripts/validate-runtime|infrastructure/managed-episode/scripts/validate-database-url|infrastructure/managed-episode/scripts/test-validate-database-url)
+    infrastructure/managed-episode/scripts/plan-release-components|infrastructure/managed-episode/scripts/validate-runtime|infrastructure/managed-episode/scripts/validate-database-url|infrastructure/managed-episode/scripts/test-validate-database-url|infrastructure/managed-episode/scripts/test-validate-media-runtime)
       add_classification none
       ;;
     infrastructure/managed-episode/README.md|infrastructure/managed-episode/scripts/generate-release-manifest|infrastructure/managed-episode/contracts/release-manifest.schema.json|infrastructure/managed-episode/controller/chalk-deployment-controller|infrastructure/managed-episode/scripts/test-deployment-controller|infrastructure/recorder/README.md|infrastructure/recorder/images/cpu/*|scripts/deploy/deploy-managed-release.test.mjs)

@@ -2,7 +2,7 @@ import { EpisodeStatusError, episodeStatusRetryDelay } from "./episode-status";
 import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
-import { CloudflareSFUError, type ConnectionMediaSnapshot } from "../media";
+import { SFUError, type ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
@@ -15,7 +15,7 @@ import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
 import { createDefaultConnectionDependencies } from "./production";
-import { callEndReason, createOutageClock, mediaCredential } from "./telemetry";
+import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
 import { deviceFailedEvent } from "../media/capture-error";
@@ -173,9 +173,9 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       const context = yield* Effect.context<ConnectionAccessService | ConnectionPlatformService | Clock.Clock>();
       const serviceScope = yield* Effect.scope;
       const telemetry = platform.telemetry;
-      telemetry?.bind({ current: () => mediaCredential(access.currentUnsafe()), refresh: () => toPromise(access.refresh("access_retry", false)).then(() => undefined) });
+      telemetry?.bind({ current: () => telemetryCredential(access.currentUnsafe()), refresh: () => toPromise(access.refresh("access_retry", false)).then(() => undefined) });
       const outage = createOutageClock(() => clock.currentTimeMillisUnsafe());
-      telemetry?.onClosing(() => (["joining", "live", "reconnecting"].includes(model.state) ? telemetry.record({ type: "call_ended", end_reason: "page_closed" }) : undefined));
+      telemetry?.onClosing(() => (["joining", "live", "reconnecting"].includes(model.state) ? telemetry.obs.fact("client.call_ended", { client_session_id: telemetry.clientSessionId, end_reason: "page_closed" }) : undefined));
       let grantedMedia: GrantedMedia = { granted_audio: "unknown", granted_video: "unknown" };
       let mediaFailure: ConnectionDiagnostic["media"];
       const diagnostics = new ConnectionDiagnostics({
@@ -273,7 +273,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           const from = model.state;
           model.state = state;
           if (state === "left" || state === "failed") {
-            telemetry?.record({ type: "call_ended", end_reason: callEndReason(from, state, model) });
+            if (telemetry) telemetry.obs.fact("client.call_ended", { client_session_id: telemetry.clientSessionId, end_reason: callEndReason(from, state, model) });
             void telemetry?.flush();
           }
           diagnostics.record({ event: "state_changed", state, epoch: model.epoch });
@@ -1010,7 +1010,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           model.episodeEndReason = model.syncSnapshot?.control?.endReason;
           yield* finishTerminalSnapshot();
         });
-      const needsEpisodeCheck = (failure: ConnectionLifecycleFailure) => failure.code === "invalid_access" || (failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410);
+      const needsEpisodeCheck = (failure: ConnectionLifecycleFailure) => failure.code === "invalid_access" || (failure.cause instanceof SFUError && failure.cause.options.status === 410);
       const episodeHasEnded = () => {
         const snapshot = model.sync?.getSnapshot();
         return model.episodeEndConfirmed || snapshot?.control?.status === "ended" || snapshot?.connection.terminalReason === "episode_ended";
@@ -1093,7 +1093,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                   Effect.suspend(() => {
                     if (model.epoch !== epoch || !active(model)) return Effect.void;
                     const finalFailure = resolved === failure ? check.failure : resolved;
-                    if (finalFailure === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410) {
+                    if (finalFailure === failure && failure.cause instanceof SFUError && failure.cause.options.status === 410) {
                       rejectionCheck = null;
                       return recover("media");
                     }
@@ -1130,7 +1130,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           stopRejectedMedia();
           return failForSnapshot(failure);
         }
-        if ((cause instanceof CloudflareSFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failure);
+        if ((cause instanceof SFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failure);
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
@@ -1149,7 +1149,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
               "media_start_failed",
               "The media client could not apply a replacement access grant",
             ).pipe(
-              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish", new CloudflareSFUError("Automatic media replacement deadline expired", "negotiation_timeout"))),
+              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish", new SFUError("Automatic media replacement deadline expired", "negotiation_timeout"))),
               Effect.tapError((cause) =>
                 Effect.sync(() => {
                   mediaFailure = { ...classifyMediaFailure(cause, "peer_connection"), ...grantedMedia };

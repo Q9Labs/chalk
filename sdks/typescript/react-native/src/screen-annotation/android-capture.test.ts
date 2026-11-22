@@ -1,6 +1,6 @@
 import { createSpaceClient, screenAnnotationFor, type ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { beforeEach, expect, it, vi } from "vitest";
-import { createSfuHarness, fakeStream } from "../../../client/src/media/cloudflare-sfu.test.helpers";
+import { createSfuHarness, fakeStream } from "../../../client/src/media/sfu.test.helpers";
 import { FakePeerConnection } from "../../../client/src/media/fake-peer-connection.test.helpers";
 import { registerAnnotationSession } from "../../../client/src/screen-annotation";
 import { AnnotationSession } from "../../../client/src/screen-annotation/session";
@@ -12,7 +12,7 @@ const nativeEvents = vi.hoisted((): string[] => []);
 const frameSize = { width: 1080, height: 2400 };
 
 vi.mock("@cloudflare/react-native-webrtc", async () => {
-  const { FakeTrack } = await import("../../../client/src/media/cloudflare-sfu.test.helpers");
+  const { FakeTrack } = await import("../../../client/src/media/sfu.test.helpers");
   return {
     MediaStreamTrack: class extends FakeTrack {
       constructor({ id }: { readonly id: string }) {
