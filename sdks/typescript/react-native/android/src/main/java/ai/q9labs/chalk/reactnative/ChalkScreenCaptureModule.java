@@ -45,8 +45,11 @@ public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
           finish(capture, null, "CaptureFailed", "Unable to start Android screen sharing");
         } else if (invalidated.get()) {
           ChalkScreenProjectionService.release(token);
-        } else {
+        } else if (ChalkScreenProjectionService.keepReactTimers(token, context)) {
           ChalkWebRTCExecutor.execute(() -> startTrack(capture, dimensions, permission, token));
+        } else {
+          ChalkScreenProjectionService.release(token);
+          finish(capture, null, "CaptureUnavailable", "The app closed during screen sharing");
         }
       });
     }
