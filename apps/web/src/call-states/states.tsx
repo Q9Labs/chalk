@@ -1,4 +1,3 @@
-import { ScreenAnnotationFixture } from "./screen-annotation";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -15,8 +14,10 @@ import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
+
+const ScreenAnnotationFixture = lazy(() => import("./screen-annotation").then(({ ScreenAnnotationFixture }) => ({ default: ScreenAnnotationFixture })));
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
 export type Action = { readonly click: string; readonly role?: "button" | "menuitem" | "menuitemradio" } | { readonly wait: number };
@@ -42,7 +43,15 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
-  { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
+  {
+    id: "screen-annotation",
+    title: "Screen annotation",
+    render: () => (
+      <Suspense fallback={null}>
+        <ScreenAnnotationFixture />
+      </Suspense>
+    ),
+  },
   { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
   { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
   { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },

@@ -1,8 +1,6 @@
 import type { ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, SpaceClient } from "@q9labsai/chalk-client";
-import { canvasAnnotationTextMeasure, encodeAnnotationCanvasPng } from "@q9labsai/chalk-screen-annotation";
 import type { AnnotationWhiteboardImport } from "@q9labsai/chalk-whiteboard/annotation";
 import { toWhiteboardWireElement } from "../../whiteboard/wire-adapters";
-import { loadAnnotationFont } from "./font";
 import type { ScreenAnnotationFrame } from "./model";
 
 type Snapshot = Extract<ChalkWhiteboardV1Event, { type: "snapshot" }>;
@@ -24,7 +22,13 @@ export function saveAnnotationToBoard(client: SpaceClient, transport: ChalkWhite
       await pending.operation.save();
       return;
     }
-    const [current, whiteboard, annotation] = await Promise.all([readScene(transport, sceneId), import("@q9labsai/chalk-whiteboard"), import("@q9labsai/chalk-whiteboard/annotation"), loadAnnotationFont(frame.image.ownerDocument, fontUrl)]);
+    const [current, whiteboard, annotation, { canvasAnnotationTextMeasure, encodeAnnotationCanvasPng }] = await Promise.all([
+      readScene(transport, sceneId),
+      import("@q9labsai/chalk-whiteboard"),
+      import("@q9labsai/chalk-whiteboard/annotation"),
+      import("@q9labsai/chalk-screen-annotation"),
+      import("./font").then(({ loadAnnotationFont }) => loadAnnotationFont(frame.image.ownerDocument, fontUrl)),
+    ]);
     requireAccess(sceneId);
     const context = frame.image.getContext("2d");
     if (!context) throw new Error("Canvas 2D is unavailable.");
