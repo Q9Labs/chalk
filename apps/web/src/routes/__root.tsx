@@ -1,7 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
-import { DASHBOARD_BOOT_SCRIPT } from "../lib/dashboard-boot";
+import { DASHBOARD_BOOT_SCRIPT } from "../lib/dashboard-boot-script";
 import { CALL_BOOT_CSS, THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
 import { installWhiteboardAssets } from "../lib/whiteboard-assets";

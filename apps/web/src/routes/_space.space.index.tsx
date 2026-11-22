@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { newCallIntent, startCall } from "../components/dashboard/language-choice";
 import { DashboardRequestError, loadSession } from "../lib/dashboard/client";
 import { hasSignedInHint } from "../lib/signed-in-hint";
 
@@ -14,6 +13,8 @@ export const Route = createFileRoute("/_space/space/")({
       if (error instanceof DashboardRequestError && error.status === 401) return;
       throw error;
     }
+    // Loaded here, not at the top: the dashboard's call-start code carries date formatting the call route never needs.
+    const { newCallIntent, startCall } = await import("../components/dashboard/language-choice");
     const { call } = await startCall(newCallIntent());
     throw redirect({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id }, replace: true });
   },
