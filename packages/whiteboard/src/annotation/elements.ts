@@ -96,30 +96,36 @@ function appendShape(elements: OrderedExcalidrawElement[], base: ElementFactory,
       appendInk(elements, base, geometry, style);
       break;
     case "line":
-    case "arrow": {
-      const path = shapePath([geometry.from, geometry.to]);
-      if (!path) break;
-      if (path.bounds.width === 0 && path.bounds.height === 0) {
-        elements.push(dot(base(dotBounds(geometry.from, style.strokeWidth / 2), style)));
-      } else {
-        const line = linear(base(path.bounds, style), path.points);
-        elements.push(geometry.kind === "arrow" ? { ...line, type: "arrow", endArrowhead: "triangle", elbowed: false } : line);
-      }
+    case "arrow":
+      appendLine(elements, base, geometry, style);
       break;
-    }
     case "box":
-    case "circle": {
-      const { bounds } = geometry;
-      if (bounds.width === 0 || bounds.height === 0) {
-        const path = shapePath([bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }]);
-        if (bounds.width === 0 && bounds.height === 0) elements.push(dot(base(dotBounds(bounds, style.strokeWidth / 2), style)));
-        else if (path) elements.push(linear(base(path.bounds, style), path.points));
-      } else {
-        const type = geometry.kind === "box" ? "rectangle" : "ellipse";
-        elements.push({ ...base(bounds, style), type, roundness: geometry.kind === "box" ? { type: 3, value: style.strokeWidth * 2 } : null });
-      }
+    case "circle":
+      appendOutline(elements, base, geometry, style);
       break;
-    }
+  }
+}
+
+function appendLine(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Extract<Geometry, { kind: "line" | "arrow" }>, style: Style): void {
+  const path = shapePath([geometry.from, geometry.to]);
+  if (!path) return;
+  if (path.bounds.width === 0 && path.bounds.height === 0) {
+    elements.push(dot(base(dotBounds(geometry.from, style.strokeWidth / 2), style)));
+  } else {
+    const line = linear(base(path.bounds, style), path.points);
+    elements.push(geometry.kind === "arrow" ? { ...line, type: "arrow", endArrowhead: "triangle", elbowed: false } : line);
+  }
+}
+
+function appendOutline(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Extract<Geometry, { kind: "box" | "circle" }>, style: Style): void {
+  const { bounds } = geometry;
+  if (bounds.width === 0 || bounds.height === 0) {
+    const path = shapePath([bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }]);
+    if (bounds.width === 0 && bounds.height === 0) elements.push(dot(base(dotBounds(bounds, style.strokeWidth / 2), style)));
+    else if (path) elements.push(linear(base(path.bounds, style), path.points));
+  } else {
+    const type = geometry.kind === "box" ? "rectangle" : "ellipse";
+    elements.push({ ...base(bounds, style), type, roundness: geometry.kind === "box" ? { type: 3, value: style.strokeWidth * 2 } : null });
   }
 }
 

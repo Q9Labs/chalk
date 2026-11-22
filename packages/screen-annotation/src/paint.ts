@@ -115,31 +115,18 @@ function paintMark(ctx: AnnotationCanvasContext, geometry: AnnotationMarkGeometr
       strokePath(ctx, geometry.points);
       break;
     case "line":
-    case "arrow":
       strokePath(ctx, [geometry.from, geometry.to]);
-      if (geometry.kind === "arrow" && tracePath(ctx, geometry.head)) {
-        ctx.closePath();
-        ctx.fill();
-      }
+      break;
+    case "arrow":
+      paintArrow(ctx, geometry);
       break;
     case "box":
     case "circle":
       paintShape(ctx, geometry.kind, geometry.bounds, width);
       break;
-    case "text": {
-      ctx.font = annotationFont(geometry.fontSize);
-      const text = layoutAnnotationText(geometry, (line) => ctx.measureText(line).width);
-      if (geometry.note) {
-        ctx.globalAlpha *= NOTE_OPACITY;
-        ctx.fillStyle = NOTE_COLOR;
-        roundedRect(ctx, text.noteBounds, text.radius);
-        ctx.fill();
-        ctx.fillStyle = color;
-        ctx.globalAlpha = opacity;
-      }
-      text.lines.forEach((line, index) => ctx.fillText(line, geometry.at.x, geometry.at.y + text.lineHeight * index));
+    case "text":
+      paintText(ctx, geometry, opacity);
       break;
-    }
     case "stamp":
       ctx.globalAlpha *= NOTE_OPACITY;
       ctx.fillStyle = NOTE_COLOR;
@@ -150,6 +137,29 @@ function paintMark(ctx: AnnotationCanvasContext, geometry: AnnotationMarkGeometr
       for (const path of geometry.paths) strokePath(ctx, path);
       break;
   }
+}
+
+function paintArrow(ctx: AnnotationCanvasContext, geometry: Extract<AnnotationMarkGeometry, { kind: "arrow" }>): void {
+  strokePath(ctx, [geometry.from, geometry.to]);
+  if (tracePath(ctx, geometry.head)) {
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function paintText(ctx: AnnotationCanvasContext, geometry: Extract<AnnotationMarkGeometry, { kind: "text" }>, opacity: number): void {
+  const { color } = geometry;
+  ctx.font = annotationFont(geometry.fontSize);
+  const text = layoutAnnotationText(geometry, (line) => ctx.measureText(line).width);
+  if (geometry.note) {
+    ctx.globalAlpha *= NOTE_OPACITY;
+    ctx.fillStyle = NOTE_COLOR;
+    roundedRect(ctx, text.noteBounds, text.radius);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = opacity;
+  }
+  text.lines.forEach((line, index) => ctx.fillText(line, geometry.at.x, geometry.at.y + text.lineHeight * index));
 }
 
 function paintShape(ctx: AnnotationCanvasContext, kind: "box" | "circle", bounds: AnnotationRect, strokeWidth: number): void {
@@ -222,22 +232,10 @@ function paintCursor(ctx: AnnotationCanvasContext, rect: AnnotationRect, clip: A
   const color = sample.author.color;
   const unit = Math.max(0.7, Math.min(1.5, rect.width / 1000));
   const pointer = sample.cursor.tool === "pointer";
-  const freshness = Math.max(0, 1 - (nowMs - sample.server_at_ms) / LASER_TRAIL_MS);
   if (pointer) {
+    const freshness = Math.max(0, 1 - (nowMs - sample.server_at_ms) / LASER_TRAIL_MS);
     if (freshness === 0) return;
-    ctx.strokeStyle = color;
-    ctx.lineCap = "round";
-    for (let index = 1; index < (sample.laserTrail?.length ?? 0); index++) {
-      const previous = sample.laserTrail?.[index - 1];
-      const next = sample.laserTrail?.[index];
-      if (!previous || !next) continue;
-      const fraction = Math.max(0, Math.min(1, 1 - (nowMs - previous.atMs) / LASER_TRAIL_MS));
-      if (fraction === 0) continue;
-      ctx.globalAlpha = fraction * 0.9;
-      ctx.lineWidth = (2 + fraction * 3) * unit;
-      ctx.fillStyle = color;
-      strokePath(ctx, [projectFramePoint(rect, previous.point), projectFramePoint(rect, next.point)]);
-    }
+    paintLaserTrail(ctx, rect, sample.laserTrail ?? [], nowMs, unit, color);
     const opacity = Math.min(1, freshness * 3);
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.14 * opacity;
@@ -271,4 +269,20 @@ function paintCursor(ctx: AnnotationCanvasContext, rect: AnnotationRect, clip: A
   ctx.fill();
   ctx.fillStyle = "#0b0b0d";
   ctx.fillText(label, x + 6 * unit, y + height / 2);
+}
+
+function paintLaserTrail(ctx: AnnotationCanvasContext, rect: AnnotationRect, trail: NonNullable<AnnotationPresence["laserTrail"]>, nowMs: number, unit: number, color: string): void {
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  for (let index = 1; index < trail.length; index++) {
+    const previous = trail[index - 1];
+    const next = trail[index];
+    if (!previous || !next) continue;
+    const fraction = Math.max(0, Math.min(1, 1 - (nowMs - previous.atMs) / LASER_TRAIL_MS));
+    if (fraction === 0) continue;
+    ctx.globalAlpha = fraction * 0.9;
+    ctx.lineWidth = (2 + fraction * 3) * unit;
+    ctx.fillStyle = color;
+    strokePath(ctx, [projectFramePoint(rect, previous.point), projectFramePoint(rect, next.point)]);
+  }
 }
