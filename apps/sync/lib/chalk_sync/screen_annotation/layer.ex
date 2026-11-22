@@ -3,6 +3,8 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
 
   alias ChalkSync.Contract.GeneratedScreenAnnotationV1, as: Schema
 
+  alias ChalkSync.ScreenAnnotation.History
+
   @limits Schema.limits()
   @colors ~w(#e55050 #2382dd #26965d #a655da #bc7324 #079395 #d74286 #6c6ecb)
 
@@ -21,7 +23,8 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
     %{
       layer
       | marks: Map.reject(layer.marks, fn {_id, mark} -> expired?(mark, now) end),
-        requests: Map.reject(layer.requests, fn {_id, request} -> expired?(request, now) end)
+        requests: Map.reject(layer.requests, fn {_id, request} -> expired?(request, now) end),
+        last_change: live_change(layer.last_change, now)
     }
   end
 
@@ -31,6 +34,12 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
     |> Enum.reject(&is_nil/1)
     |> Enum.min(fn -> nil end)
   end
+
+  defp live_change(%{"kind" => "upsert", "mark" => mark} = change, now) do
+    unless expired?(mark, now), do: change
+  end
+
+  defp live_change(change, _now), do: change
 
   defp expired?(%{"expires_at_ms" => expiry}, now), do: is_integer(expiry) and expiry <= now
 
@@ -62,7 +71,7 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
       id = draft["mark_id"]
 
       cond do
-        Map.has_key?(layer.marks, id) ->
+        Map.has_key?(layer.marks, id) or History.reserved?(layer.history, id) ->
           {:error, "invalid_target"}
 
         map_size(layer.marks) >= @limits["activeMarks"] ->
@@ -88,12 +97,19 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
   end
 
   def apply(layer, %{"kind" => "clear", "scope" => scope}, actor, _now) do
-    if scope["kind"] == "mine" or moderator?(layer, actor) do
-      id = if scope["kind"] == "mine", do: actor.id, else: scope["participant_id"]
+    mine? = scope["kind"] == "mine"
+
+    if mine? or moderator?(layer, actor) do
+      id = if mine?, do: actor.id, else: scope["participant_id"]
       matches = fn mark -> is_nil(id) or mark["author"]["participant_id"] == id end
-      next = %{layer | marks: Map.reject(layer.marks, fn {_id, mark} -> matches.(mark) end)}
-      next = purge_history(next, matches)
-      fence(next, %{"kind" => "clear", "participant_id" => id})
+      marks = Map.reject(layer.marks, fn {_id, mark} -> matches.(mark) end)
+
+      if mine? and marks == layer.marks and not History.has_actions?(layer.history, id) do
+        {:ok, layer}
+      else
+        next = %{layer | marks: marks, history: History.purge(layer.history, matches)}
+        fence(next, %{"kind" => "clear", "participant_id" => id})
+      end
     else
       {:error, "forbidden"}
     end
@@ -170,16 +186,16 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
       own and can_draw?(layer, actor) ->
         next = %{layer | marks: Map.delete(layer.marks, id)}
 
-        next =
+        history =
           if mark["expires_at_ms"],
-            do: drop_redo(next, actor.id),
-            else: remember(next, actor.id, "remove", mark)
+            do: History.drop_redo(layer.history, actor.id),
+            else: History.remember(layer.history, actor.id, "remove", mark)
 
-        change(next, %{"kind" => "remove", "mark_id" => id})
+        change(%{next | history: history}, %{"kind" => "remove", "mark_id" => id})
 
       moderator?(layer, actor) ->
-        next = %{layer | marks: Map.delete(layer.marks, id)}
-        next = purge_history(next, &(&1["draft"]["mark_id"] == id))
+        history = History.purge(layer.history, &(&1["draft"]["mark_id"] == id))
+        next = %{layer | marks: Map.delete(layer.marks, id), history: history}
         fence(next, %{"kind" => "remove", "mark_id" => id})
 
       true ->
@@ -196,75 +212,37 @@ defmodule ChalkSync.ScreenAnnotation.Layer do
       "expires_at_ms" => if(draft["lifetime"] == "fade", do: now + @limits["committedFadeTtlMs"])
     }
 
-    next = put_in(layer.marks[draft["mark_id"]], mark)
-
-    next =
+    history =
       if draft["lifetime"] == "keep",
-        do: remember(next, actor.id, "upsert", mark),
-        else: drop_redo(next, actor.id)
+        do: History.remember(layer.history, actor.id, "upsert", mark),
+        else: History.drop_redo(layer.history, actor.id)
 
+    next = %{layer | marks: Map.put(layer.marks, draft["mark_id"], mark), history: history}
     change(next, %{"kind" => "upsert", "mark" => mark})
   end
 
   defp undo_or_redo(layer, id, key) do
-    history = history(layer, id)
+    {history, effect} = History.replay(layer.history, layer.marks, id, key)
+    next = %{layer | history: history}
 
-    case history[key] do
-      [] ->
-        {:ok, layer}
+    case effect do
+      {:upsert, mark} ->
+        if map_size(layer.marks) < @limits["activeMarks"] do
+          change(put_in(next.marks[mark["draft"]["mark_id"]], mark), %{
+            "kind" => "upsert",
+            "mark" => mark
+          })
+        else
+          {:error, "capacity"}
+        end
 
-      [%{"kind" => kind, "mark" => mark} = action | remaining] ->
-        reverse = if key == "undo", do: "redo", else: "undo"
-        next = history |> Map.put(key, remaining) |> Map.update!(reverse, &[action | &1])
-        layer = put_in(layer.history[id], next)
-        replay_mark(layer, mark, {key, kind})
+      {:remove, id} ->
+        change(%{next | marks: Map.delete(next.marks, id)}, %{"kind" => "remove", "mark_id" => id})
+
+      nil ->
+        {:ok, next}
     end
   end
-
-  defp replay_mark(layer, mark, direction)
-       when direction in [{"redo", "upsert"}, {"undo", "remove"}] do
-    if map_size(layer.marks) < @limits["activeMarks"] do
-      change(put_in(layer.marks[mark["draft"]["mark_id"]], mark), %{
-        "kind" => "upsert",
-        "mark" => mark
-      })
-    else
-      {:error, "capacity"}
-    end
-  end
-
-  defp replay_mark(layer, mark, _direction) do
-    id = mark["draft"]["mark_id"]
-    change(%{layer | marks: Map.delete(layer.marks, id)}, %{"kind" => "remove", "mark_id" => id})
-  end
-
-  defp remember(layer, id, kind, mark) do
-    action = %{"kind" => kind, "mark" => mark}
-    undo = Enum.take([action | history(layer, id)["undo"]], @limits["retainedUndoPerPerson"])
-    put_in(layer.history[id], %{"undo" => undo, "redo" => []})
-  end
-
-  defp drop_redo(layer, id) do
-    case Map.fetch(layer.history, id) do
-      {:ok, history} -> put_in(layer.history[id], %{history | "redo" => []})
-      :error -> layer
-    end
-  end
-
-  defp purge_history(layer, matches) do
-    history =
-      Map.new(layer.history, fn {id, history} ->
-        {id,
-         Map.new(history, fn {key, actions} ->
-           {key, Enum.reject(actions, &matches.(&1["mark"]))}
-         end)}
-      end)
-      |> Map.reject(fn {_id, history} -> history["undo"] == [] and history["redo"] == [] end)
-
-    %{layer | history: history}
-  end
-
-  defp history(layer, id), do: Map.get(layer.history, id, %{"undo" => [], "redo" => []})
 
   defp change(layer, change),
     do: {:ok, %{layer | revision: layer.revision + 1, last_change: change}}

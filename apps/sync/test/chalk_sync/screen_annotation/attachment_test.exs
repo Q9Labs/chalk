@@ -111,6 +111,48 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
 
   test "a current sharer can pause over the attachment but cannot change shared draw policy",
        ctx do
+    {socket, layer} = connect_attachment(ctx)
+
+    socket =
+      TestWSClient.send_json(socket, command(layer, 1, %{"kind" => "pause", "paused" => true}))
+
+    assert {:json, %{"type" => "annotation_receipt", "result" => %{"kind" => "accepted"}}, socket} =
+             TestWSClient.recv(socket)
+
+    assert {:ok, _, %{paused: true, fence: 2}, _, _} = Repository.read(ctx.host)
+
+    socket =
+      TestWSClient.send_json(
+        socket,
+        command(layer, 2, %{"kind" => "set_policy", "policy" => "hosts"})
+      )
+
+    assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
+    assert {:ok, %{draw_policy: "everyone"}, _, _, _} = Repository.read(ctx.host)
+  end
+
+  test "an attachment already receives state and cannot request another snapshot", ctx do
+    {socket, _layer} = connect_attachment(ctx)
+    socket = TestWSClient.send_json(socket, %{"type" => "annotation_state_request"})
+    assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
+  end
+
+  test "an attachment cannot publish presence to the Episode", ctx do
+    {socket, layer} = connect_attachment(ctx)
+
+    socket =
+      TestWSClient.send_json(socket, %{
+        "type" => "annotation_presence",
+        "layer_id" => layer,
+        "fence" => 1,
+        "cursor" => %{"point" => %{"x" => 1, "y" => 1}, "tool" => "pointer"},
+        "draft" => nil
+      })
+
+    assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
+  end
+
+  defp connect_attachment(ctx) do
     %{publication: publication} = Proof.publish_screen(ctx.host, ctx.connection, &on_exit/1)
 
     bind = %{
@@ -144,22 +186,7 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
             socket} =
              TestWSClient.recv(socket)
 
-    socket =
-      TestWSClient.send_json(socket, command(layer, 1, %{"kind" => "pause", "paused" => true}))
-
-    assert {:json, %{"type" => "annotation_receipt", "result" => %{"kind" => "accepted"}}, socket} =
-             TestWSClient.recv(socket)
-
-    assert {:ok, _, %{paused: true, fence: 2}, _, _} = Repository.read(ctx.host)
-
-    socket =
-      TestWSClient.send_json(
-        socket,
-        command(layer, 2, %{"kind" => "set_policy", "policy" => "hosts"})
-      )
-
-    assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
-    assert {:ok, %{draw_policy: "everyone"}, _, _, _} = Repository.read(ctx.host)
+    {socket, layer}
   end
 
   defp command(layer, fence, payload) do
