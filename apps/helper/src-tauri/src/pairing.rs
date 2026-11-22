@@ -470,9 +470,11 @@ impl Pairing {
             let before =
                 window_follow::observe(id).filter(|observed| observed.identity == identity)?;
             let projection =
-                window_follow::matching_projection(id, before.bounds, (width, height), &landmarks)?;
+                window_follow::matching_projection(id, before, (width, height), &landmarks)?;
             let observed = window_follow::observe(id).filter(|current| {
-                current.identity == identity && current.bounds == before.bounds
+                current.identity == identity
+                    && current.bounds == before.bounds
+                    && current.project(projection).is_some()
             })?;
             Some((observed, projection))
         })

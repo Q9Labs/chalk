@@ -14,6 +14,7 @@ typedef struct {
     uint32_t height;
     uint32_t pid;
     uint64_t birth;
+    uint32_t covered_top;
 } ChalkWindowBounds;
 
 static _Atomic(uint32_t) live_overlay;
@@ -30,8 +31,32 @@ static bool covers(CGRect target, CGRect above) {
     return !CGRectIsEmpty(CGRectIntersection(target, above));
 }
 
-bool chalk_window_test_cover(uint32_t width, uint32_t height) {
-    return covers(CGRectMake(0, 0, 800, 600), CGRectMake(799, 1, width, height));
+static bool compositor_surface_layer(int layer) {
+    return layer == CGWindowLevelForKey(kCGDockWindowLevelKey) ||
+           layer >= CGWindowLevelForKey(kCGMainMenuWindowLevelKey);
+}
+
+static bool compositor_surface(const char *path, int layer) {
+    if (layer == CGWindowLevelForKey(kCGDockWindowLevelKey) &&
+        strcmp(path, "/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock") == 0) return true;
+    return layer >= CGWindowLevelForKey(kCGMainMenuWindowLevelKey) &&
+           strcmp(path, "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/Resources/WindowServer") == 0;
+}
+
+static bool can_cover(int layer, int target_layer, double alpha) {
+    return layer >= target_layer && !(alpha <= 0);
+}
+
+static bool full_display_surface(CGRect frame, CGRect display, int layer) {
+    return CGRectEqualToRect(frame, display) && compositor_surface_layer(layer);
+}
+
+bool chalk_window_test_cover(uint32_t width, uint32_t height, int layer, double alpha,
+                             bool full_display, const char *path) {
+    CGRect display = CGRectMake(0, 0, 1920, 1080);
+    CGRect frame = full_display ? display : CGRectMake(799, 1, width, height);
+    return can_cover(layer, 0, alpha) && covers(CGRectMake(0, 0, 800, 600), frame) &&
+           !(full_display_surface(frame, display, layer) && compositor_surface(path, layer));
 }
 
 // Tauri uses physical coordinates. A mirrored or ambiguous match is not safe.
@@ -72,22 +97,11 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
         if (index == NSNotFound || index > 128) return false;
         NSDictionary *target = windows[index];
         int pid = [target[(__bridge NSString *)kCGWindowOwnerPID] intValue];
-        if (pid <= 0 || pid == getpid() || [target[(__bridge NSString *)kCGWindowLayer] intValue] != 0) return false;
+        int layer = [target[(__bridge NSString *)kCGWindowLayer] intValue];
+        if (pid <= 0 || pid == getpid() || layer != 0) return false;
         CGRect rect;
         if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)target[(__bridge NSString *)kCGWindowBounds], &rect)) return false;
         if (CGRectGetWidth(rect) < 320 || CGRectGetHeight(rect) < 240) return false;
-        // Conservatively count any overlap above the target, ignoring the Helper
-        // overlay and transparent windows, which do not obscure the target.
-        for (NSUInteger i = 0; i < index; i++) {
-            NSDictionary *candidate = windows[i];
-            uint32_t number = [candidate[(__bridge NSString *)kCGWindowNumber] unsignedIntValue];
-            if (number != 0 && number == atomic_load(&live_overlay)) continue;
-            NSNumber *alpha = candidate[(__bridge NSString *)kCGWindowAlpha];
-            if (alpha != nil && alpha.doubleValue <= 0) continue;
-            CGRect frame;
-            if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)candidate[(__bridge NSString *)kCGWindowBounds], &frame)) return false;
-            if (covers(rect, frame)) return false;
-        }
         // Resolve coordinates into the physical pixel space used by Tauri.
         // One scale in the virtual desktop keeps negative origins unambiguous.
         CGDirectDisplayID display[2];
@@ -98,12 +112,36 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
         CGRect primary = CGDisplayBounds(CGMainDisplayID());
         CGFloat mainScale = CGDisplayPixelsWide(CGMainDisplayID()) / CGRectGetWidth(primary);
         if (!CGRectContainsRect(displayBounds, rect) || scale != mainScale || scale <= 0) return false;
+        // The list is front-to-back. A fullscreen compositor surface at a reserved
+        // system level is not an app cover; ordinary system UI still is.
+        uint32_t overlay = atomic_load(&live_overlay);
+        uint32_t covered_top = 0;
+        for (NSUInteger i = 0; i < index; i++) {
+            NSDictionary *candidate = windows[i];
+            uint32_t number = [candidate[(__bridge NSString *)kCGWindowNumber] unsignedIntValue];
+            if (number != 0 && number == overlay) continue;
+            int above_layer = [candidate[(__bridge NSString *)kCGWindowLayer] intValue];
+            NSNumber *alpha = candidate[(__bridge NSString *)kCGWindowAlpha];
+            if (!can_cover(above_layer, layer, alpha ? alpha.doubleValue : 1)) continue;
+            CGRect frame;
+            if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)candidate[(__bridge NSString *)kCGWindowBounds], &frame)) return false;
+            CGRect overlap = CGRectIntersection(rect, frame);
+            if (CGRectIsEmpty(overlap)) continue;
+            if (full_display_surface(frame, displayBounds, above_layer)) {
+                int owner = [candidate[(__bridge NSString *)kCGWindowOwnerPID] intValue];
+                char path[PROC_PIDPATHINFO_MAXSIZE];
+                if (proc_pidpath(owner, path, sizeof(path)) > 0 && compositor_surface(path, above_layer)) continue;
+            }
+            uint32_t bottom = (uint32_t)ceil((CGRectGetMaxY(overlap) - CGRectGetMinY(rect)) * scale);
+            if (bottom > covered_top) covered_top = bottom;
+        }
         struct proc_bsdinfo info = {0};
         if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info)) return false;
         *out = (ChalkWindowBounds){
             .x = (int32_t)llround(rect.origin.x * scale), .y = (int32_t)llround(rect.origin.y * scale),
             .width = (uint32_t)llround(rect.size.width * scale), .height = (uint32_t)llround(rect.size.height * scale),
             .pid = (uint32_t)pid, .birth = info.pbi_start_tvsec * 1000000 + info.pbi_start_tvusec,
+            .covered_top = covered_top,
         };
         return true;
     }

@@ -46,7 +46,7 @@ impl FollowWindow {
         let projection = self.projection?;
         let observed = window_follow::observe(self.id)
             .filter(|current| Some(current.identity) == self.identity)?;
-        Some((observed.bounds, projection.at(observed.bounds)?))
+        Some((observed.bounds, observed.project(projection)?))
     }
 }
 
@@ -208,7 +208,9 @@ impl Capture {
             || self.unsupported
             || observed.identity != identity
             || !window_follow::observe(id).is_some_and(|current| {
-                current.identity == identity && current.bounds == observed.bounds
+                current.identity == identity
+                    && current.bounds == observed.bounds
+                    && current.project(projection).is_some()
             })
             || !app.available_monitors().is_ok_and(|monitors| {
                 monitors.iter().any(|monitor| {
@@ -219,7 +221,7 @@ impl Capture {
         {
             return Err(());
         }
-        let bounds = projection.at(observed.bounds).ok_or(())?;
+        let bounds = observed.project(projection).ok_or(())?;
         let spec = make_probe()?;
         if desktop::show_live_overlay(app, bounds, true).is_err() {
             self.await_window(app);
