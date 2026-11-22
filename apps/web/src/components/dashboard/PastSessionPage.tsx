@@ -1,3 +1,4 @@
+import { Delete02Icon } from "@q9labsai/chalk-react/utils";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -178,7 +179,7 @@ function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly 
   return (
     <Dialog
       alert
-      icon="trash"
+      icon={<Delete02Icon size={20} />}
       title="Delete this transcript?"
       description="The transcript is deleted for good. The recording and the session stay."
       onClose={onClose}
@@ -188,7 +189,7 @@ function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly 
             Cancel
           </button>
           <button type="button" className="btn dz lg" aria-busy={busy || undefined} disabled={busy} onClick={() => void remove()}>
-            {busy ? <span className="spin" aria-hidden="true" /> : <Icon name="trash" size={16} />}
+            {busy ? <span className="spin" aria-hidden="true" /> : <Delete02Icon size={16} />}
             Delete transcript
           </button>
         </>

@@ -31,6 +31,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon as StaticCancel01Icon,
   Copy01Icon as StaticCopy01Icon,
+  Delete02Icon as StaticDelete02Icon,
   CrownIcon as StaticCrown01Icon,
   Download01Icon as StaticDownload01Icon,
   Edit02Icon as StaticEdit02Icon,
@@ -82,6 +83,7 @@ export const CircleIcon = createIcon(CircleIconSvg);
 export const ColumnIcon = createIcon(LayoutTwoColumnIconSvg);
 export const Copy01Icon = createIcon(StaticCopy01Icon);
 export const Crown01Icon = createIcon(StaticCrown01Icon);
+export const Delete02Icon = createIcon(StaticDelete02Icon);
 export const Download01Icon = createIcon(StaticDownload01Icon);
 export const Edit02Icon = createIcon(StaticEdit02Icon);
 export const FileTextIcon = createIcon(FileTextIconSvg);

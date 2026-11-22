@@ -1,4 +1,4 @@
-import { Cancel01Icon, CheckmarkCircle02Icon, Copy01Icon, Tick01Icon, Video01Icon } from "@q9labsai/chalk-react/utils";
+import { CheckmarkCircle02Icon, Copy01Icon, Tick01Icon, Video01Icon } from "@q9labsai/chalk-react/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contracts";
@@ -40,7 +40,6 @@ export function CallReadyDialog({ call, link, joining, onLanguage, onJoin, onClo
       title="Your call is ready"
       description="Share this link with the people you want in the call. It keeps working after the call ends."
       icon={<CheckmarkCircle02Icon size={20} />}
-      closeIcon={<Cancel01Icon size={16} />}
       tone="ok"
       onClose={onClose}
       actions={

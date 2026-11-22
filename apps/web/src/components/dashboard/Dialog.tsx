@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 
+import { Cancel01Icon } from "@q9labsai/chalk-react/utils";
+
 import { trapDialogFocus } from "../../lib/dialog-focus";
 import { Icon, type IconName } from "../site/Icon";
 
@@ -14,8 +16,6 @@ type DialogProps = {
   readonly lead?: ReactNode;
   /** A tile beside the title, the heading shape the Developer dialogs use. Body and actions get their own bands. */
   readonly icon?: IconName | ReactElement;
-  /** Replaces the close button's icon, for a dialog drawn with the Chalk icon set. */
-  readonly closeIcon?: ReactElement;
   readonly tone?: "ok";
   /** Quiet text on the left of the actions. */
   readonly hint?: ReactNode;
@@ -25,12 +25,12 @@ type DialogProps = {
   readonly actions: ReactNode;
 };
 
-type InnerProps = Pick<DialogProps, "title" | "description" | "lead" | "icon" | "closeIcon" | "tone" | "hint" | "onClose" | "children" | "actions"> & {
+type InnerProps = Pick<DialogProps, "title" | "description" | "lead" | "icon" | "tone" | "hint" | "onClose" | "children" | "actions"> & {
   readonly titleId: string;
   readonly descriptionId: string;
 };
 
-function DialogInner({ title, description, lead, icon, closeIcon, tone, hint, onClose, children, actions, titleId, descriptionId }: InnerProps) {
+function DialogInner({ title, description, lead, icon, tone, hint, onClose, children, actions, titleId, descriptionId }: InnerProps) {
   const heading = (
     <>
       <h2 id={titleId}>{title}</h2>
@@ -40,7 +40,7 @@ function DialogInner({ title, description, lead, icon, closeIcon, tone, hint, on
   return (
     <>
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
-        {closeIcon ?? <Icon name="x" />}
+        <Cancel01Icon size={16} />
       </button>
       {lead}
       {icon ? (
