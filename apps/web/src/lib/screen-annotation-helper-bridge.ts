@@ -5,10 +5,11 @@ const attachLifetimeMs = 60_000;
 export const networkTimeoutMs = 10_000;
 const statusSchema = z.enum(["waiting_for_sync", "unbound", "calibrating", "ready", "unsupported_surface", "update_required", "disconnected"]);
 const secret = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const signature = z.string().regex(/^[A-Za-z0-9_-]{86}$/);
 const deadline = z.number().int().positive();
-export const challengeSchema = z.strictObject({ version: z.number().int().positive().max(255), helperPublicKey: secret, challenge: secret, expiresAtMs: deadline });
-export const attachSchema = z.strictObject({ sessionSecret: secret, leaseExpiresAtMs: deadline, confirmation: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
-const statusEvent = z.strictObject({ type: z.literal("status"), status: statusSchema, sequence: deadline, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
+export const challengeSchema = z.strictObject({ version: z.number().int().positive().max(255), helperPublicKey: secret, challenge: secret, expiresAtMs: deadline, keyProof: signature.optional() });
+export const attachSchema = z.strictObject({ sessionSecret: secret, leaseExpiresAtMs: deadline, confirmation: signature });
+const statusEvent = z.strictObject({ type: z.literal("status"), status: statusSchema, sequence: deadline, signature });
 const helperEvent = statusEvent;
 const ticket = z.strictObject({
   ticket: z
@@ -17,11 +18,11 @@ const ticket = z.strictObject({
     .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
   expiresAtMs: deadline,
 });
-export const ticketsSchema = z.strictObject({ pair: ticket, attachment: ticket });
+export const ticketsSchema = z.strictObject({ pair: ticket, attachment: ticket, remembered: z.boolean().optional() });
 
 export type Challenge = z.infer<typeof challengeSchema>;
 export type Tickets = z.infer<typeof ticketsSchema>;
-type HelperPath = "/v1/challenge" | "/v1/attach" | "/v1/events" | "/v1/exchange";
+type HelperPath = "/v1/challenge" | "/v1/challenge?rememberedKeyProof=true" | "/v1/attach" | "/v1/events" | "/v1/exchange";
 
 export function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();

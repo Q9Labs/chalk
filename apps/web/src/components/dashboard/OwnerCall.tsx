@@ -82,6 +82,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
       <OwnerCallSurface
         client={client}
         owner={owner}
+        accountId={profile?.id}
         baseURL={apiBaseURL}
         onStartNewCall={() => {
           if (startingCall.current) return;
@@ -117,10 +118,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
 function OwnerCallSurface({
   client,
   owner,
+  accountId,
   baseURL,
   onStartNewCall,
   ...props
-}: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string; readonly onStartNewCall: () => void }) {
+}: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly accountId?: string; readonly baseURL: string; readonly onStartNewCall: () => void }) {
   const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const [extension, setExtension] = useState<"idle" | "pending" | "failed">("idle");
@@ -153,10 +155,11 @@ function OwnerCallSurface({
       callAnnotation({
         apiBaseUrl: baseURL,
         tenantId,
+        accountId,
         mediaProof: owner.reportCredential,
         screenShare: () => client.getSnapshot().media.screenShare,
       }),
-    [baseURL, tenantId, owner, client],
+    [baseURL, tenantId, accountId, owner, client],
   );
   if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
     return (

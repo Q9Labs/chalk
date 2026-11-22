@@ -14,6 +14,8 @@ pub struct Identity {
 pub struct Observation {
     pub bounds: Rect,
     pub identity: Identity,
+    // The deepest covered pixel measured from the top of the outer window.
+    covered_top: u32,
 }
 
 #[repr(C)]
@@ -25,6 +27,7 @@ struct NativeBounds {
     height: u32,
     pid: u32,
     birth: u64,
+    covered_top: u32,
 }
 
 impl From<NativeBounds> for Observation {
@@ -40,6 +43,7 @@ impl From<NativeBounds> for Observation {
                 pid: value.pid,
                 birth: value.birth,
             },
+            covered_top: value.covered_top,
         }
     }
 }
@@ -52,15 +56,80 @@ pub fn observe(id: u64) -> Option<Observation> {
     platform::bounds(id).map(Observation::from)
 }
 
-pub fn matches(id: u64, expected: &[i8]) -> bool {
+#[derive(Clone, Copy)]
+pub struct Projection {
+    outer_size: (u32, u32),
+    top: u32,
+}
+
+impl Observation {
+    pub fn project(self, projection: Projection) -> Option<Rect> {
+        if self.covered_top > projection.top {
+            return None;
+        }
+        projection.at(self.bounds)
+    }
+}
+
+impl Projection {
+    fn at(self, outer: Rect) -> Option<Rect> {
+        if (outer.width, outer.height) != self.outer_size {
+            return None;
+        }
+        Some(Rect {
+            y: outer.y.checked_add(i32::try_from(self.top).ok()?)?,
+            height: outer.height - self.top,
+            ..outer
+        })
+    }
+}
+
+fn capture_projection(
+    outer: Rect,
+    (width, height): (u32, u32),
+    can_crop_titlebar: bool,
+) -> Option<Projection> {
+    if !(320..=16_384).contains(&width) || !(240..=16_384).contains(&height) {
+        return None;
+    }
+    let incoming = f64::from(width) / f64::from(height);
+    let matches_aspect =
+        |height: u32| (f64::from(outer.width) / f64::from(height) / incoming - 1.0).abs() <= 0.004;
+    let top = if matches_aspect(outer.height) {
+        0
+    } else if can_crop_titlebar {
+        // Some macOS capture sources omit the title bar. Infer the one top
+        // inset consistent with the decoded aspect, then verify the pixels.
+        let content_height = (f64::from(outer.width) / incoming).round() as u32;
+        let top = outer.height.checked_sub(content_height)?;
+        if top == 0 || top > outer.height / 5 || !matches_aspect(content_height) {
+            return None;
+        }
+        top
+    } else {
+        return None;
+    };
+    Some(Projection {
+        outer_size: (outer.width, outer.height),
+        top,
+    })
+}
+
+pub fn matching_projection(
+    id: u64,
+    observed: Observation,
+    frame: (u32, u32),
+    expected: &[i8],
+) -> Option<Projection> {
     if expected.len() != LANDMARK_COUNT {
-        return false;
+        return None;
     }
+    let projection = capture_projection(observed.bounds, frame, cfg!(target_os = "macos"))?;
+    observed.project(projection)?;
     let mut pixels = vec![0; SAMPLES];
-    if !platform::sample(id, &mut pixels) {
-        return false;
-    }
-    landmarks_match(&pixels, expected)
+    let top_fraction = f64::from(projection.top) / f64::from(observed.bounds.height);
+    (platform::sample(id, top_fraction, &mut pixels) && landmarks_match(&pixels, expected))
+        .then_some(projection)
 }
 
 fn landmarks_match(pixels: &[u8], expected: &[i8]) -> bool {
@@ -70,7 +139,9 @@ fn landmarks_match(pixels: &[u8], expected: &[i8]) -> bool {
         (i16::from(r) + 2 * i16::from(g) + i16::from(b)) / 4
     };
     let mut actual = Vec::with_capacity(LANDMARK_COUNT);
-    for (left, top) in [(3, 3), (48, 3), (3, 48)] {
+    // Skip the toolbar, which macOS and Chromium can render differently.
+    // Keep these positions in sync with the browser's preview landmarks.
+    for (left, top) in [(3, 12), (48, 12), (3, 48)] {
         for y in 0..5 {
             for x in 0..5 {
                 let px = left + x * 5;
@@ -114,7 +185,7 @@ mod platform {
     extern "C" {
         fn chalk_window_ignore_overlay(window: *mut std::ffi::c_void) -> bool;
         fn chalk_window_bounds(id: u32, output: *mut NativeBounds) -> bool;
-        fn chalk_window_sample(id: u32, output: *mut u8, size: usize) -> bool;
+        fn chalk_window_sample(id: u32, top_fraction: f64, output: *mut u8, size: usize) -> bool;
     }
 
     pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -132,21 +203,16 @@ mod platform {
         unsafe { chalk_window_bounds(id, &mut output) }.then_some(output)
     }
 
-    pub fn sample(id: u64, pixels: &mut [u8]) -> bool {
+    pub fn sample(id: u64, top_fraction: f64, pixels: &mut [u8]) -> bool {
         let Ok(id) = u32::try_from(id) else {
             return false;
         };
-        // A grant given after Helper started reaches only processes that start later.
-        if crate::permission::in_process() {
-            capture_in_process(id, pixels)
-        } else {
-            crate::sampler::shared().sample(id, pixels)
-        }
+        crate::sampler::shared().sample(id, top_fraction, pixels)
     }
 
-    pub fn capture_in_process(id: u32, pixels: &mut [u8]) -> bool {
+    pub fn capture_in_process(id: u32, top_fraction: f64, pixels: &mut [u8]) -> bool {
         // The bridge copies only after the callback finishes; it never retains this buffer.
-        unsafe { chalk_window_sample(id, pixels.as_mut_ptr(), SIZE) }
+        unsafe { chalk_window_sample(id, top_fraction, pixels.as_mut_ptr(), SIZE) }
     }
 }
 
@@ -170,7 +236,9 @@ mod platform {
         },
         System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
         UI::WindowsAndMessaging::{
-            GetWindow, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, GW_HWNDPREV,
+            GetLayeredWindowAttributes, GetWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
+            IsIconic, IsWindow, IsWindowVisible, GWL_EXSTYLE, GW_HWNDPREV, LWA_ALPHA,
+            WS_EX_LAYERED,
         },
     };
 
@@ -261,9 +329,13 @@ mod platform {
                         pid,
                         birth: (u64::from(birth.dwHighDateTime) << 32)
                             | u64::from(birth.dwLowDateTime),
+                        covered_top: 0,
                     });
                 }
-                if above as usize != LIVE_OVERLAY.load(Ordering::Relaxed) && visible(above) {
+                if above as usize != LIVE_OVERLAY.load(Ordering::Relaxed)
+                    && visible(above)
+                    && !fully_transparent(above)
+                {
                     let other = frame(above)?;
                     let w = rect
                         .right
@@ -285,7 +357,50 @@ mod platform {
         }
     }
 
-    pub fn sample(id: u64, pixels: &mut [u8]) -> bool {
+    unsafe fn fully_transparent(hwnd: HWND) -> bool {
+        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED == 0 {
+            return false;
+        }
+        let (mut alpha, mut flags) = (0, 0);
+        GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut flags) != 0
+            && flags & LWA_ALPHA != 0
+            && alpha == 0
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn zero_opacity_layered_windows_do_not_cover() {
+        use std::ptr::null_mut;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, SetLayeredWindowAttributes, WS_POPUP,
+        };
+
+        let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WS_EX_LAYERED,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                40,
+                40,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                std::ptr::null(),
+            );
+            assert!(!hwnd.is_null());
+            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA), 0);
+            assert!(fully_transparent(hwnd));
+            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA), 0);
+            assert!(!fully_transparent(hwnd));
+            DestroyWindow(hwnd);
+        }
+    }
+
+    pub fn sample(id: u64, _top_fraction: f64, pixels: &mut [u8]) -> bool {
         let Some(window) = bounds(id) else {
             return false;
         };
@@ -364,7 +479,7 @@ mod platform {
     pub fn bounds(_: u64) -> Option<NativeBounds> {
         None
     }
-    pub fn sample(_: u64, _: &mut [u8]) -> bool {
+    pub fn sample(_: u64, _: f64, _: &mut [u8]) -> bool {
         false
     }
 }
@@ -374,10 +489,81 @@ mod tests {
     use super::*;
 
     #[test]
+    fn window_projection_tracks_only_the_content_preview_verified() {
+        let outer = Rect {
+            x: -140,
+            y: 373,
+            width: 650,
+            height: 317,
+        };
+        let content = Rect {
+            y: 402,
+            height: 288,
+            ..outer
+        };
+        let projected =
+            |frame, mac| capture_projection(outer, frame, mac).and_then(|proof| proof.at(outer));
+        assert_eq!(projected((650, 317), true), Some(outer));
+        assert_eq!(projected((650, 288), true), Some(content));
+        assert_eq!(projected((650, 288), false), None);
+        assert_eq!(projected((650, 360), true), None);
+        assert_eq!(projected((650, 240), true), None);
+        assert_eq!(projected((1300, 576), true), Some(content));
+        let proof = capture_projection(outer, (650, 288), true).unwrap();
+        assert_eq!(
+            proof.at(Rect {
+                x: -92,
+                y: 40,
+                ..outer
+            }),
+            Some(Rect {
+                x: -92,
+                y: 69,
+                ..content
+            })
+        );
+        assert_eq!(
+            proof.at(Rect {
+                width: 651,
+                ..outer
+            }),
+            None
+        );
+        assert_eq!(
+            proof.at(Rect {
+                height: 318,
+                ..outer
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn only_covers_intersecting_the_verified_content_block_projection() {
+        let outer = Rect {
+            x: 120,
+            y: 243,
+            width: 770,
+            height: 507,
+        };
+        let observation = |covered_top| Observation {
+            bounds: outer,
+            identity: Identity { pid: 1, birth: 1 },
+            covered_top,
+        };
+        let cropped = capture_projection(outer, (770, 475), true).unwrap();
+        let uncropped = capture_projection(outer, (770, 507), true).unwrap();
+        // The macOS window controls occupy the first 26 pixels, outside the capture.
+        assert_eq!(observation(26).project(cropped).unwrap().y, 275);
+        assert!(observation(26).project(uncropped).is_none());
+        assert!(observation(33).project(cropped).is_none());
+    }
+
+    #[test]
     fn window_match_requires_three_textured_landmarks_of_the_same_orientation() {
         let mut pixels = vec![0; SAMPLES];
         assert!(!landmarks_match(&pixels, &[0; LANDMARK_COUNT]));
-        for (left, top) in [(3, 3), (48, 3), (3, 48)] {
+        for (left, top) in [(3, 12), (48, 12), (3, 48)] {
             for y in 0..5 {
                 for x in 0..5 {
                     let pixel = ((top + y * 5) * SIZE + left + x * 5) * 4;
@@ -413,11 +599,26 @@ mod tests {
 
 #[cfg(all(test, target_os = "macos"))]
 #[test]
-fn any_covering_pixels_prevent_overlay() {
+fn only_visible_app_covers_prevent_overlay() {
     extern "C" {
-        fn chalk_window_test_cover(width: u32, height: u32) -> bool;
+        fn chalk_window_test_cover(
+            width: u32,
+            height: u32,
+            layer: i32,
+            alpha: f64,
+            full_display: bool,
+            path: *const std::ffi::c_char,
+        ) -> bool;
     }
-    // One visible pixel at the edge is still a covering window.
-    assert!(unsafe { chalk_window_test_cover(1, 8) });
-    assert!(!unsafe { chalk_window_test_cover(0, 8) });
+    let dock = c"/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock";
+    let app = c"/Applications/Dock.app/Contents/MacOS/Dock";
+    let cover = |layer, alpha, full_display, path: &std::ffi::CStr| unsafe {
+        chalk_window_test_cover(1, 8, layer, alpha, full_display, path.as_ptr())
+    };
+    assert!(!cover(20, 1., true, dock));
+    assert!(cover(20, 1., true, app));
+    assert!(cover(20, 1., false, dock));
+    assert!(cover(0, 0.1, false, app));
+    assert!(!cover(0, 0., false, app));
+    assert!(!cover(-1, 1., false, app));
 }

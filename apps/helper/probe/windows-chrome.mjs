@@ -45,70 +45,78 @@ async function sample(session, protectedMarker, minimizeId) {
     const [out] = await once(lines, "line", { signal: AbortSignal.timeout(20_000) });
     const target = JSON.parse(out);
     if (target.affinity !== (protectedMarker ? 17 : 0)) throw Error("Unexpected affinity.");
-    await session("Browser.setWindowBounds", { windowId: minimizeId, bounds: { windowState: "normal" } });
-    await session("Page.navigate", { url: pageUrl });
-    const coordinates = await until(async () => {
-      const evaluated = await session("Runtime.evaluate", {
-        returnByValue: true,
-        expression: "document.querySelector('#start') && (() => {const r = document.querySelector('#start').getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y+r.height/2 };})()",
-      });
-      return evaluated.result.value;
-    }, 5);
-    await session("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...coordinates });
-    await session("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...coordinates });
-    const result = await until(async () => {
-      const evaluated = await session("Runtime.evaluate", {
-        returnByValue: true,
-        expression: "document.querySelector('#result').textContent",
-      });
-      return evaluated.result.value && JSON.parse(evaluated.result.value);
-    }, 30);
-    if (result.error || result.surface !== "monitor" || !result.samples?.length) throw Error(JSON.stringify(result));
+    const result = await sampleChromeWindow(session, minimizeId);
     return { ...result, target };
   } finally {
     marker.kill();
   }
 }
 
+async function sampleChromeWindow(session, minimizeId) {
+  await session("Browser.setWindowBounds", { windowId: minimizeId, bounds: { windowState: "normal" } });
+  await session("Page.navigate", { url: pageUrl });
+  const coordinates = await until(async () => {
+    const evaluated = await session("Runtime.evaluate", {
+      returnByValue: true,
+      expression: "document.querySelector('#start') && (() => {const r = document.querySelector('#start').getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y+r.height/2 };})()",
+    });
+    return evaluated.result.value;
+  }, 5);
+  await session("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, ...coordinates });
+  await session("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, ...coordinates });
+  const result = await until(async () => {
+    const evaluated = await session("Runtime.evaluate", {
+      returnByValue: true,
+      expression: "document.querySelector('#result').textContent",
+    });
+    return evaluated.result.value && JSON.parse(evaluated.result.value);
+  }, 30);
+  const { error, surface, samples = [] } = result;
+  if (error || surface !== "monitor" || !samples.length) throw Error(JSON.stringify(result));
+  return result;
+}
+
 try {
-  launch(chrome, [
-    `--user-data-dir=${directory}`, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1",
-    "--auto-select-desktop-capture-source=Entire screen", "--no-first-run", "--no-default-browser-check",
-    "--window-position=550,100", "--window-size=650,500", "about:blank",
-  ]);
+  launch(chrome, [`--user-data-dir=${directory}`, "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--auto-select-desktop-capture-source=Entire screen", "--no-first-run", "--no-default-browser-check", "--window-position=550,100", "--window-size=650,500", "about:blank"]);
   const port = await until(async () => (await readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => "")).split("\n")[0], 20);
-  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(response => response.json());
-  const target = targets.find(item => item.type === "page");
+  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
+  const target = targets.find((item) => item.type === "page");
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   await once(socket, "open", { signal: AbortSignal.timeout(10_000) });
   try {
     let nextId = 1;
-    const session = (method, params) => new Promise((resolve, reject) => {
-      const id = nextId++;
-      const timer = setTimeout(() => {
-        socket.removeEventListener("message", receive);
-        reject(Error(`Chrome did not respond to ${method}.`));
-      }, 5000);
-      function receive(event) {
-        const response = JSON.parse(event.data);
-        if (response.id !== id) return;
-        clearTimeout(timer);
-        socket.removeEventListener("message", receive);
-        if (response.error) reject(Error(response.error.message));
-        else resolve(response.result);
-      }
-      socket.addEventListener("message", receive);
-      socket.send(JSON.stringify({ id, method, params }));
-    });
+    const session = (method, params) =>
+      new Promise((resolve, reject) => {
+        const id = nextId++;
+        const timer = setTimeout(() => {
+          socket.removeEventListener("message", receive);
+          reject(Error(`Chrome did not respond to ${method}.`));
+        }, 5000);
+        function receive(event) {
+          const response = JSON.parse(event.data);
+          if (response.id !== id) return;
+          clearTimeout(timer);
+          socket.removeEventListener("message", receive);
+          if (response.error) reject(Error(response.error.message));
+          else resolve(response.result);
+        }
+        socket.addEventListener("message", receive);
+        socket.send(JSON.stringify({ id, method, params }));
+      });
     const { windowId } = await session("Browser.getWindowForTarget", { targetId: target.id });
     proof.baseline = await sample(session, false, windowId);
     proof.excluded = await sample(session, true, windowId);
-    const { width, height, target: { center }, samples } = proof.baseline;
-    if (samples.some(frame => frame.markerPixels < 1000 || !frame.markerCenter)) throw Error("No positive marker control.");
-    const errors = samples.map(({ markerCenter: [x, y] }) => Math.hypot(x - center[0], (y - center[1]) * height / width)).sort((a, b) => a - b);
+    const {
+      width,
+      height,
+      target: { center },
+      samples,
+    } = proof.baseline;
+    if (samples.some((frame) => frame.markerPixels < 1000 || !frame.markerCenter)) throw Error("No positive marker control.");
+    const errors = samples.map(({ markerCenter: [x, y] }) => Math.hypot(x - center[0], ((y - center[1]) * height) / width)).sort((a, b) => a - b);
     proof.markerAlignmentP95 = errors[Math.ceil(0.95 * errors.length) - 1];
     if (proof.markerAlignmentP95 >= 0.005) throw Error("Capture marker alignment missed 0.5% of frame width.");
-    if (proof.excluded.samples.some(frame => frame.markerPixels !== 0)) throw Error("The marker leaked in the excluded capture.");
+    if (proof.excluded.samples.some((frame) => frame.markerPixels !== 0)) throw Error("The marker leaked in the excluded capture.");
   } finally {
     socket.close();
   }

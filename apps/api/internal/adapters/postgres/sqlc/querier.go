@@ -326,6 +326,7 @@ type Querier interface {
 	ListWebhookDeliveryAttempts(ctx context.Context, arg ListWebhookDeliveryAttemptsParams) ([]WebhookDeliveryAttempt, error)
 	ListWebhookEndpoints(ctx context.Context, arg ListWebhookEndpointsParams) ([]ListWebhookEndpointsRow, error)
 	LockActiveHelperDevice(ctx context.Context, id pgtype.UUID) (HelperDevice, error)
+	LockActiveHelperLoopbackDevice(ctx context.Context, arg LockActiveHelperLoopbackDeviceParams) (pgtype.UUID, error)
 	LockActiveParticipantsForTenantEnd(ctx context.Context, arg LockActiveParticipantsForTenantEndParams) ([]LockActiveParticipantsForTenantEndRow, error)
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
@@ -409,6 +410,7 @@ type Querier interface {
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)
 	RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg RecoverExpiredTranscriptionCleanupJobsParams) ([]TranscriptionCleanupJob, error)
 	RegisterHelperDevice(ctx context.Context, arg RegisterHelperDeviceParams) error
+	RegisterHelperLoopbackDevice(ctx context.Context, arg RegisterHelperLoopbackDeviceParams) error
 	// Hands back a lease the worker never used. The claim's attempt is refunded
 	// because no work ran. The job waits 30 seconds so a chunk the API can never
 	// hand out is retried at a bounded rate instead of on every claim.

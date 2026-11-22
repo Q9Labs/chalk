@@ -975,6 +975,17 @@
       "sample": "4 of 23 completed runs failed on 7 and 8 November, while it ran every six hours; the causes were not reviewed. It no longer has a timer and runs after each Promote."
     },
     {
+      "id": "workflow:helper-development.yml#installer",
+      "owner": "Screen annotation",
+      "catches": "An unsigned desktop Helper cannot be built on macOS or Windows, or the Windows video capture includes ink.",
+      "runs": ["manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Builds and measures the desktop Helper on demand.",
+      "reason": "The signed release pipeline is separate. The unsigned development artifact and capture probe run only on request on native runners."
+    },
+    {
       "id": "workflow:mobile-ci.yml#fingerprint",
       "owner": "Mobile",
       "catches": "A native change that the over-the-air update path cannot carry.",

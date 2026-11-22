@@ -16,7 +16,7 @@ function styleButtons() {
 }
 
 function bindStyleButtons() {
-  root.querySelectorAll("[data-style]").forEach(button => {
+  root.querySelectorAll("[data-style]").forEach((button) => {
     button.addEventListener("click", () => void run("change_style", { style: button.dataset.style }).catch(showError));
   });
 }
@@ -32,28 +32,28 @@ if (isOverlay) {
   const canvas = root.querySelector("canvas");
   let stroke = Promise.resolve();
   let lastMove = 0;
-  const point = event => ({ x: event.clientX * devicePixelRatio, y: event.clientY * devicePixelRatio });
+  const point = (event) => ({ x: event.clientX * devicePixelRatio, y: event.clientY * devicePixelRatio });
   const send = (kind, fields) => {
     stroke = stroke.then(() => run(kind, fields)).catch(showError);
   };
-  canvas.addEventListener("pointerdown", event => {
+  canvas.addEventListener("pointerdown", (event) => {
     if (!event.isPrimary || event.button !== 0) return;
     canvas.setPointerCapture(event.pointerId);
     send("begin_stroke", point(event));
   });
-  canvas.addEventListener("pointermove", event => {
+  canvas.addEventListener("pointermove", (event) => {
     if (canvas.hasPointerCapture(event.pointerId) && performance.now() - lastMove > 15) {
       lastMove = performance.now();
       send("add_point", point(event));
     }
   });
-  canvas.addEventListener("pointerup", event => {
+  canvas.addEventListener("pointerup", (event) => {
     if (!canvas.hasPointerCapture(event.pointerId)) return;
     send("add_point", point(event));
     send("finish_stroke");
   });
   canvas.addEventListener("pointercancel", () => send("cancel_stroke"));
-  window.addEventListener("keydown", event => {
+  window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") send("cancel_draw");
   });
 } else if (label === "hud") {
@@ -69,13 +69,15 @@ if (isOverlay) {
   const grip = root.querySelector(".grip");
   let lastMove = 0;
   let drag = Promise.resolve();
-  const send = kind => { drag = drag.then(() => run(kind)).catch(showError); };
-  grip.addEventListener("pointerdown", event => {
+  const send = (kind) => {
+    drag = drag.then(() => run(kind)).catch(showError);
+  };
+  grip.addEventListener("pointerdown", (event) => {
     if (!event.isPrimary || event.button !== 0) return;
     grip.setPointerCapture(event.pointerId);
     send("begin_drag");
   });
-  grip.addEventListener("pointermove", event => {
+  grip.addEventListener("pointermove", (event) => {
     if (grip.hasPointerCapture(event.pointerId) && performance.now() - lastMove > 24) {
       lastMove = performance.now();
       send("drag");
@@ -87,9 +89,9 @@ if (isOverlay) {
 } else if (label === "draw-bar") {
   const colors = ["white", "blue", "yellow", "red"];
   root.innerHTML = `<div class="drawbar"><span>Draw</span>
-    ${colors.map(color => `<button class="color ${color}" type="button" data-color="${color}" aria-label="${color} ink"></button>`).join("")}
+    ${colors.map((color) => `<button class="color ${color}" type="button" data-color="${color}" aria-label="${color} ink"></button>`).join("")}
     <button type="button" class="done">Done</button><span role="status" class="sr-only"></span></div>`;
-  root.querySelectorAll("[data-color]").forEach(button => {
+  root.querySelectorAll("[data-color]").forEach((button) => {
     button.addEventListener("click", () => void run("change_color", { color: button.dataset.color }).catch(showError));
   });
   control("cancel_draw", ".done");
@@ -98,6 +100,13 @@ if (isOverlay) {
     <h1>Chalk Helper</h1>
     <p id="connection">Not connected</p>
     <p id="connection-help">Start sharing in Chalk to connect.</p>
+    <div class="approval" hidden>
+      <p id="approval-instruction"></p>
+      <p id="fingerprint"></p>
+      <p id="confirmation-code"></p>
+      <button type="button" id="deny">Deny</button>
+      <button type="button" id="allow">Allow</button>
+    </div>
     <div class="permission" hidden>
       <h2 id="permission-title"></h2>
       <p id="permission-body"></p>
@@ -107,13 +116,6 @@ if (isOverlay) {
         <button type="button" class="quiet" id="permission-later">Not now</button>
       </div>
       <button type="button" class="link" id="permission-finder">Show Chalk Helper in Finder</button>
-    </div>
-    <div class="approval" hidden>
-      <p>Compare this code with the code in Chalk.</p>
-      <p id="fingerprint"></p>
-      <p id="confirmation-code"></p>
-      <button type="button" id="deny">Deny</button>
-      <button type="button" id="allow">Allow</button>
     </div>
     <button type="button" id="follow-window" hidden>Follow captured window</button>
     <button type="button" id="live-draw" hidden>Draw one mark</button>
@@ -137,29 +139,129 @@ if (isOverlay) {
   control("follow_window", "#follow-window");
   control("later_screen_recording", "#permission-later");
   control("show_app_in_finder", "#permission-finder");
-  listen("#permission-primary", "click", event => {
+  listen("#permission-primary", "click", (event) => {
     const kind = event.currentTarget.dataset.action;
     if (kind) void run(kind).catch(showError);
   });
-  listen("#new-device-code", "click", () => void run("start_device_code", {
-    tenant_id: root.querySelector("#device-account").value
-  }).catch(showError));
+  listen(
+    "#new-device-code",
+    "click",
+    () =>
+      void run("start_device_code", {
+        tenant_id: root.querySelector("#device-account").value,
+      }).catch(showError),
+  );
   control("forget_device", "#forget-device");
-  for (const [id, allowed] of [["#allow", true], ["#deny", false]]) {
-    listen(id, "click", () => void run("decide_pairing", {
-      fingerprint: root.querySelector("#fingerprint").textContent,
-      allowed
-    }).catch(showError));
+  for (const [id, allowed] of [
+    ["#allow", true],
+    ["#deny", false],
+  ]) {
+    listen(
+      id,
+      "click",
+      () =>
+        void run("decide_pairing", {
+          fingerprint: root.querySelector("#fingerprint").textContent,
+          allowed,
+        }).catch(showError),
+    );
   }
 }
 
-// Words for each onboarding step. Marks always work in the call preview, so the panel says so.
+let renderedProbe;
+function paintLiveView(view) {
+  const canvas = root.querySelector("canvas");
+  paintLive(canvas, view.overlay);
+  acknowledgeProbe(canvas, view.overlay);
+}
+
+function acknowledgeProbe(canvas, overlay) {
+  if (overlay?.kind !== "probe") {
+    renderedProbe = undefined;
+    return;
+  }
+  const probe = overlay.spec;
+  if (probe.nonce === renderedProbe) return;
+  renderedProbe = probe.nonce;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (renderedProbe !== probe.nonce) return;
+      const ctx = canvas.getContext("2d");
+      if (
+        probe.points.every(({ x, y, rgb }) => {
+          const pixel = ctx.getImageData(Math.round(x * canvas.width), Math.round(y * canvas.height), 1, 1).data;
+          return rgb.every((component, channel) => pixel[channel] === component) && pixel[3] === 255;
+        })
+      )
+        void run("probe_painted", { nonce: probe.nonce }).catch(showError);
+    }),
+  );
+}
+
+function paintHud(view) {
+  const hud = root.querySelector(".hud");
+  hud.dataset.look = view.preferences.style;
+  hud.dataset.edge = view.preferences.dock.edge;
+  hud.querySelector(".word").textContent = view.paused ? "Marks paused" : "Sharing screen";
+  hud.querySelector(".pencil").setAttribute("aria-pressed", String(view.drawing));
+  hud.querySelector(".pencil").disabled = view.paused;
+}
+
+function paintDisplays(view) {
+  const displays = root.querySelector("#displays");
+  const options = root.querySelector("#display-options");
+  displays.hidden = view.monitors.length === 0;
+  if (JSON.stringify(view.monitors) !== options.dataset.monitors) {
+    options.dataset.monitors = JSON.stringify(view.monitors);
+    options.replaceChildren(
+      ...view.monitors.map((monitor, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = monitor;
+        button.addEventListener("click", () => void run("select_monitor", { index }).catch(showError));
+        return button;
+      }),
+    );
+  }
+}
+
+function paintApproval(view) {
+  root.querySelector(".approval").hidden = !view.approval;
+  const { approved, fingerprint, confirmationCode } = view.approval ?? { approved: false, fingerprint: "", confirmationCode: "" };
+  root.querySelector("#approval-instruction").textContent = approved ? "Enter this confirmation code in Chalk." : "Compare this fingerprint with the fingerprint in Chalk.";
+  const printed = root.querySelector("#fingerprint");
+  printed.textContent = fingerprint;
+  printed.hidden = approved;
+  root.querySelector("#confirmation-code").textContent = approved ? confirmationCode : "";
+  root.querySelector("#allow").hidden = approved;
+  root.querySelector("#deny").hidden = approved;
+}
+
+function paintDevice(view) {
+  const device = view.device ?? { available: false, status: "", code: "", fingerprint: null };
+  root.querySelector("#device-code").hidden = !device.available;
+  paintDeviceStatus(device.status ?? "");
+  root.querySelector("#device-value").textContent = device.code;
+  root.querySelector("#device-fingerprint").textContent = device.fingerprint ? `Fingerprint: ${device.fingerprint}` : "";
+}
+
+function paintDeviceStatus(status) {
+  const node = root.querySelector("#device-status");
+  if (node.textContent !== status) node.textContent = status;
+}
+
+function paintConnection(view) {
+  const name = view.connected ? "Connected" : "Not connected";
+  root.querySelector("#connection").textContent = view.fixture ? "Development fixture" : name;
+  root.querySelector("#connection-help").textContent = view.connected ? "Use the preview in Chalk while this capture is unverified." : "Start sharing in Chalk to connect.";
+}
+
 const permissionCopy = {
   needed: {
     title: "Allow Screen Recording",
     body: "Chalk Helper needs it to keep marks on the window you share. Without it, marks still show in the call preview.",
     primary: ["Open System Settings", "open_screen_recording_settings"],
-    later: true
+    later: true,
   },
   settings_open: {
     title: "Add Chalk Helper",
@@ -167,17 +269,17 @@ const permissionCopy = {
     primary: ["Open System Settings", "open_screen_recording_settings"],
     later: true,
     waiting: true,
-    finder: true
+    finder: true,
   },
   later: {
     title: "Window follow is off",
     body: "Marks still show in the call preview.",
-    primary: ["Turn on window follow", "follow_window"]
-  }
+    primary: ["Turn on window follow", "follow_window"],
+  },
 };
 
-function renderPermission(view) {
-  const copy = view.approval ? undefined : permissionCopy[view.permission.phase];
+function paintPermission(view) {
+  const copy = view.approval ? undefined : permissionCopy[view.permission?.phase];
   root.querySelector(".permission").hidden = !copy;
   root.querySelector("#follow-window").hidden = !view.canFollowWindow || Boolean(copy);
   if (!copy) return;
@@ -185,80 +287,58 @@ function renderPermission(view) {
   root.querySelector("#permission-body").textContent = copy.body;
   root.querySelector("#permission-wait").hidden = !copy.waiting;
   const primary = root.querySelector("#permission-primary");
-  primary.hidden = !copy.primary;
-  primary.textContent = copy.primary?.[0] ?? "";
-  primary.dataset.action = copy.primary?.[1] ?? "";
+  primary.textContent = copy.primary[0];
+  primary.dataset.action = copy.primary[1];
   root.querySelector("#permission-later").hidden = !copy.later;
   root.querySelector("#permission-finder").hidden = !copy.finder;
 }
 
-let renderedProbe;
-async function refresh() {
+function paintSettings(view) {
+  root.querySelector("#shortcut").hidden = !view.hotkey;
+  paintConnection(view);
+  paintPermission(view);
+  root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
+  paintDisplays(view);
+  paintApproval(view);
+  paintDevice(view);
+  if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
+  root.querySelectorAll("[data-style]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));
+  });
+}
+
+function paintFixtureWindow(view) {
+  if (isOverlay && view.segment) paintFixture(root.querySelector("canvas"), view);
+}
+const paintWindow = { "ink-live": paintLiveView, hud: paintHud, settings: paintSettings }[label] ?? paintFixtureWindow;
+
+async function paintView() {
   try {
-    const view = await invoke("view");
-    if (label === "ink-live") {
-      const canvas = root.querySelector("canvas");
-      paintLive(canvas, view.overlay);
-      const probe = view.overlay?.kind === "probe" ? view.overlay.spec : undefined;
-      if (probe?.nonce !== renderedProbe) {
-        renderedProbe = probe?.nonce;
-        if (probe) requestAnimationFrame(() => requestAnimationFrame(() => {
-          if (renderedProbe !== probe.nonce) return;
-          const ctx = canvas.getContext("2d");
-          if (probe.points.every(({ x, y, rgb }) => {
-            const pixel = ctx.getImageData(Math.round(x * canvas.width), Math.round(y * canvas.height), 1, 1).data;
-            return rgb.every((component, channel) => pixel[channel] === component) && pixel[3] === 255;
-          })) void run("probe_painted", { nonce: probe.nonce }).catch(showError);
-        }));
-      }
-    } else if (isOverlay && view.segment) {
-      paintFixture(root.querySelector("canvas"), view);
-    } else if (label === "hud") {
-      const hud = root.querySelector(".hud");
-      hud.dataset.look = view.preferences.style;
-      hud.dataset.edge = view.preferences.dock.edge;
-      hud.querySelector(".word").textContent = view.paused ? "Marks paused" : "Sharing screen";
-      hud.querySelector(".pencil").setAttribute("aria-pressed", String(view.drawing));
-      hud.querySelector(".pencil").disabled = view.paused;
-    } else if (label === "settings") {
-      root.querySelector("#shortcut").hidden = !view.hotkey;
-      root.querySelector("#connection").textContent = view.fixture ? "Development fixture" : view.connected ? "Connected" : "Not connected";
-      root.querySelector("#connection-help").textContent = view.connected
-        ? "Use the preview in Chalk while this capture is unverified."
-        : "Start sharing in Chalk to connect.";
-      renderPermission(view);
-      root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
-      const displays = root.querySelector("#displays");
-      const options = root.querySelector("#display-options");
-      displays.hidden = view.monitors.length === 0;
-      if (JSON.stringify(view.monitors) !== options.dataset.monitors) {
-        options.dataset.monitors = JSON.stringify(view.monitors);
-        options.replaceChildren(...view.monitors.map((monitor, index) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = monitor;
-          button.addEventListener("click", () => void run("select_monitor", { index }).catch(showError));
-          return button;
-        }));
-      }
-      root.querySelector(".approval").hidden = !view.approval;
-      root.querySelector("#fingerprint").textContent = view.approval?.fingerprint ?? "";
-      root.querySelector("#confirmation-code").textContent = view.approval ? `Confirmation code: ${view.approval.confirmationCode}` : "";
-      root.querySelector("#device-code").hidden = !view.device?.available;
-      const deviceStatus = root.querySelector("#device-status");
-      if (deviceStatus.textContent !== (view.device?.status ?? "")) deviceStatus.textContent = view.device?.status ?? "";
-      root.querySelector("#device-value").textContent = view.device?.code ?? "";
-      root.querySelector("#device-fingerprint").textContent = view.device?.fingerprint ? `Fingerprint: ${view.device.fingerprint}` : "";
-      if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
-      root.querySelectorAll("[data-style]").forEach(button => {
-        button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));
-      });
-    }
+    paintWindow(await invoke("view"));
   } catch (error) {
     showError(error);
-  } finally {
-    setTimeout(refresh, isOverlay ? 35 : 200);
   }
 }
 
+let refreshTimer;
+let refreshing = false;
+let refreshAgain = false;
+async function refresh() {
+  if (refreshing) {
+    refreshAgain = true;
+    return;
+  }
+  clearTimeout(refreshTimer);
+  refreshing = true;
+  do {
+    refreshAgain = false;
+    await paintView();
+  } while (refreshAgain);
+  refreshing = false;
+  refreshTimer = setTimeout(refresh, isOverlay ? 35 : 200);
+}
+
+if (label === "ink-live") {
+  void window.__TAURI__.event.listen("chalk-overlay-changed", () => void refresh()).catch(showError);
+}
 void refresh();

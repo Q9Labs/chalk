@@ -71,30 +71,53 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
   };
   const connect = async () => {
     const controller = start();
-    if (!helper.challenge) {
-      setScreen({ kind: "code" });
-      return;
-    }
+    if (!helper.challenge) return setScreen({ kind: "code" });
     setScreen({ kind: "looking" });
     try {
       const response = await helper.challenge(share, controller.signal);
       if (controller.signal.aborted) return;
       if (response.kind === "update_required") setScreen({ kind: "status", status: "update_required" });
-      else {
+      else if (response.remembered) {
+        await attach(
+          controller,
+          (status) =>
+            response.attach(status, async () => {
+              throw new Error("A remembered Helper must not ask for a code.");
+            }),
+          response.fingerprint,
+        );
+      } else {
         setScreen({
           kind: "fingerprint",
           value: response.fingerprint,
-          approve: () => attach(controller, (status) => response.attach(status, (signal) => new Promise<string>((resolve, reject) => {
-            if (signal.aborted) { reject(signal.reason); return; }
-            const abort = () => reject(signal.reason);
-            signal.addEventListener("abort", abort, { once: true });
-            setCode("");
-            setScreen({ kind: "confirm", fingerprint: response.fingerprint, submit: (entered) => {
-              signal.removeEventListener("abort", abort);
-              setScreen({ kind: "attaching" });
-              resolve(entered);
-            } });
-          })), response.fingerprint),
+          approve: () =>
+            attach(
+              controller,
+              (status) =>
+                response.attach(
+                  status,
+                  (signal) =>
+                    new Promise<string>((resolve, reject) => {
+                      if (signal.aborted) {
+                        reject(signal.reason);
+                        return;
+                      }
+                      const abort = () => reject(signal.reason);
+                      signal.addEventListener("abort", abort, { once: true });
+                      setCode("");
+                      setScreen({
+                        kind: "confirm",
+                        fingerprint: response.fingerprint,
+                        submit: (entered) => {
+                          signal.removeEventListener("abort", abort);
+                          setScreen({ kind: "attaching" });
+                          resolve(entered);
+                        },
+                      });
+                    }),
+                ),
+              response.fingerprint,
+            ),
         });
       }
     } catch {
@@ -216,17 +239,24 @@ function HelperStep({
         </>
       ) : null}
       {screen.kind === "confirm" ? (
-        <form className="grid gap-2" onSubmit={(event) => {
-          event.preventDefault();
-          screen.submit(code);
-          setCode("");
-        }}>
-          <p>Match <code dir="ltr">{screen.fingerprint}</code> and choose Allow in the Chalk Helper app.</p>
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            screen.submit(code);
+            setCode("");
+          }}
+        >
+          <p>
+            Match <code dir="ltr">{screen.fingerprint}</code> and choose Allow in the Chalk Helper app.
+          </p>
           <label className="grid gap-1">
             Confirmation code shown in the app
             <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={19} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
           </label>
-          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.replaceAll("-", "").trim().length !== 16}>Confirm</button>
+          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.replaceAll("-", "").trim().length !== 16}>
+            Confirm
+          </button>
         </form>
       ) : null}
       {screen.kind === "device" ? (
@@ -245,6 +275,11 @@ function HelperStep({
         </>
       ) : null}
       {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
+      {helper.challenge && ((screen.kind === "status" && screen.status === "disconnected") || (screen.kind === "code" && screen.error)) ? (
+        <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
+          Reconnect Chalk Helper
+        </button>
+      ) : null}
     </>
   );
 }

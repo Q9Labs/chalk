@@ -3815,6 +3815,134 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/helper-devices/remember": {
+      "post": {
+        "operationId": "rememberScreenAnnotationHelperDevice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelperDeviceRemember"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Remember screen annotation helper device",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/helper-devices/revoke": {
       "post": {
         "operationId": "revokeScreenAnnotationHelperDevice",
@@ -15692,6 +15820,17 @@
         },
         "type": "object"
       },
+      "HelperDeviceRemember": {
+        "additionalProperties": false,
+        "properties": {
+          "publicKey": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["publicKey"],
+        "type": "object"
+      },
       "HelperDeviceRevoke": {
         "additionalProperties": false,
         "properties": {
@@ -16811,6 +16950,9 @@
             "minLength": 1,
             "type": "string"
           },
+          "remembered": {
+            "type": "boolean"
+          },
           "version": {
             "minimum": 0,
             "type": "integer"
@@ -16847,6 +16989,9 @@
             },
             "required": ["expiresAtMs", "ticket"],
             "type": "object"
+          },
+          "remembered": {
+            "type": "boolean"
           }
         },
         "required": ["attachment", "pair"],

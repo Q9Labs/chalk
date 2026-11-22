@@ -10,6 +10,7 @@ export const helperDeviceAction = z.discriminatedUnion("action", [
     publicationId: z.string().min(1).max(512),
     refresh: z.boolean(),
   }),
+  z.strictObject({ action: z.literal("remember"), tenantId: z.uuid(), publicKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }),
   z.strictObject({ action: z.literal("revoke"), deviceId: z.uuid() }),
 ]);
 

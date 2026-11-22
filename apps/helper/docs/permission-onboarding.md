@@ -14,16 +14,16 @@ Helper never relaunches itself for a grant, so the pairing and the Sync attachme
 
 - The child starts when follow is enabled without in-process access and stops when the window share ends. It also exits when Helper's pipe closes, so a crashed Helper leaves no orphan.
 - A dead or silent child is killed and replaced once per request. If the replacement fails too, the next attempt waits a second.
-- When the grant arrives, macOS may offer to quit Helper. The panel tells the sharer to choose **Later**, because Helper doesn't need it. If they quit anyway, Helper reopens normally and the call offers pairing again.
+- When the grant arrives, macOS may offer to quit Helper. The panel tells the sharer to choose **Later**, because Helper doesn't need it. If they choose **Quit & Reopen**, choose **Reconnect Chalk Helper** in the same call. A remembered device needs only one new native **Allow** for that exact share.
 
 ## What came from where
 
 - **Hex** (open source dictation app) shows the pattern: read access without prompting, deep-link into the right Settings pane, and re-check when the app becomes active. Hex has no drag tile.
-- **PermissionFlow** (MIT, Swift package) shows the drag tile: a non-activating floating panel that follows the System Settings window and a drag source carrying the app bundle. Helper is Rust and Objective-C, so it does not depend on the package. The roughly 150 lines in `native/permission_mac.m` find the Settings window by bundle id through the window list, which needs no Accessibility permission.
+- **PermissionFlow** (MIT, Swift package) shows the drag tile: a non-activating floating panel that follows the System Settings window and a drag source carrying the app bundle. Helper is Rust and Objective-C, so it does not depend on the package. `native/permission_mac.m` finds the Settings window by bundle id through the window list, which needs no Accessibility permission.
 
 ## Limits
 
-- Quitting Helper after the grant loses the pairing, because a pairing needs a fresh signed ticket, a native **Allow** click and a typed confirmation code. Making a known device pair in one click is a pairing protocol change and is not part of this.
+- Quitting ends the current attachment. Reconnecting requests a fresh signed ticket. A remembered device key for this account and origin skips the code, but not native **Allow**. Unrecognized, cleared or revoked keys require the code.
 - The grant click itself cannot be automated or skipped, and nothing here tries to.
 - Preview builds (`--features fixture`) can open any onboarding state with `--preview=<first_run|needed|settings|later>` and save PNGs of their own windows with `--snapshot=<dir>`. Real Helper windows are excluded from capture, so the preview window is not. `--preview=sampler` writes `sampler.txt`, a timeline of a simulated grant and a killed capture child with Helper's process ID on every line.
 

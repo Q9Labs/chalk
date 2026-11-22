@@ -5,7 +5,7 @@
 //! grant, and asks this child to capture instead. The child reads requests
 //! from stdin and answers on stdout until stdin closes.
 //!
-//! Request: `window <id>\n`. Reply: one status byte, then `FRAME` pixel bytes
+//! Request: `window <id> <top-fraction>\n`. Reply: one status byte, then `FRAME` pixel bytes
 //! when the status is `OK`.
 
 use std::{
@@ -73,8 +73,8 @@ impl Running {
     }
 
     /// `Err` means the child is gone or stuck and must be replaced.
-    fn request(&mut self, id: u32, timeout: Duration) -> Result<Reply, ()> {
-        writeln!(self.input, "window {id}")
+    fn request(&mut self, id: u32, top_fraction: f64, timeout: Duration) -> Result<Reply, ()> {
+        writeln!(self.input, "window {id} {top_fraction}")
             .and_then(|()| self.input.flush())
             .map_err(|_| ())?;
         self.replies.recv_timeout(timeout).map_err(|_| ())
@@ -115,6 +115,12 @@ impl Sampler {
     /// Start the child if it is not running, so the first sample is not slow.
     pub fn start(&self) {
         let mut slot = self.slot.lock().expect("sampler");
+        if let Some(running) = slot.running.as_mut() {
+            if matches!(running.process.try_wait(), Ok(None)) {
+                return;
+            }
+            slot.running = None;
+        }
         self.ensure_running(&mut slot);
     }
 
@@ -133,7 +139,7 @@ impl Sampler {
 
     /// Fill `out` with the window's pixels. A dead or stuck child is replaced
     /// once per call. If the replacement fails too, the next try waits a second.
-    pub fn sample(&self, id: u32, out: &mut [u8]) -> bool {
+    pub fn sample(&self, id: u32, top_fraction: f64, out: &mut [u8]) -> bool {
         if out.len() != FRAME {
             return false;
         }
@@ -145,7 +151,7 @@ impl Sampler {
             let Some(running) = slot.running.as_mut() else {
                 return false;
             };
-            match running.request(id, self.timeout) {
+            match running.request(id, top_fraction, self.timeout) {
                 Ok(Some(pixels)) => {
                     out.copy_from_slice(&pixels);
                     slot.failed_at = None;
@@ -213,11 +219,9 @@ pub fn run_child() -> i32 {
             Ok(0) | Err(_) => return 0,
             Ok(_) => {}
         }
-        let captured = line
-            .trim()
-            .strip_prefix("window ")
-            .and_then(|id| id.parse::<u32>().ok())
-            .is_some_and(|id| window_follow::capture_in_process(id, &mut pixels));
+        let captured = request(&line).is_some_and(|(id, top_fraction)| {
+            window_follow::capture_in_process(id, top_fraction, &mut pixels)
+        });
         let written = if captured {
             output
                 .write_all(&[OK])
@@ -229,6 +233,16 @@ pub fn run_child() -> i32 {
             return 1;
         }
     }
+}
+
+fn request(line: &str) -> Option<(u32, f64)> {
+    let mut words = line.split_ascii_whitespace();
+    if words.next()? != "window" {
+        return None;
+    }
+    let id = words.next()?.parse().ok()?;
+    let top_fraction = words.next()?.parse().ok()?;
+    ((0.0..=0.2).contains(&top_fraction) && words.next().is_none()).then_some((id, top_fraction))
 }
 
 #[cfg(test)]
@@ -263,11 +277,23 @@ mod tests {
     fn one_child_answers_many_requests() {
         let sampler = sampler(frames);
         let mut pixels = vec![9; FRAME];
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         let child = sampler.child_id().unwrap();
         assert!(pixels.iter().all(|&byte| byte == 0));
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         assert_eq!(sampler.child_id(), Some(child));
+    }
+
+    #[test]
+    fn the_sampler_receives_the_verified_title_bar_crop() {
+        fn cropped() -> Command {
+            shell("while read request; do if [ \"$request\" = 'window 7 0.125' ]; then printf '\\001'; head -c 20736 /dev/zero; else printf '\\000'; fi; done")
+        }
+        let mut pixels = vec![0; FRAME];
+        assert!(sampler(cropped).sample(7, 0.125, &mut pixels));
+        assert_eq!(request("window 7 0.125\n"), Some((7, 0.125)));
+        assert!(request("window 7 NaN").is_none());
+        assert!(request("window 7 0.3").is_none());
     }
 
     #[test]
@@ -277,9 +303,9 @@ mod tests {
         }
         let sampler = sampler(failing);
         let mut pixels = vec![0; FRAME];
-        assert!(!sampler.sample(7, &mut pixels));
+        assert!(!sampler.sample(7, 0.0, &mut pixels));
         let child = sampler.child_id().unwrap();
-        assert!(!sampler.sample(7, &mut pixels));
+        assert!(!sampler.sample(7, 0.0, &mut pixels));
         assert_eq!(sampler.child_id(), Some(child));
     }
 
@@ -287,10 +313,10 @@ mod tests {
     fn a_child_that_dies_is_replaced_and_the_request_still_succeeds() {
         let sampler = sampler(frames);
         let mut pixels = vec![0; FRAME];
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         let first = sampler.child_id().unwrap();
         kill(first);
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         assert_ne!(sampler.child_id(), Some(first));
     }
 
@@ -308,7 +334,7 @@ mod tests {
         let sampler = sampler(stuck_then_fine);
         let mut pixels = vec![0; FRAME];
         let started = Instant::now();
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         assert!(started.elapsed() < Duration::from_secs(5));
         let _ = std::fs::remove_file(
             std::env::temp_dir().join(format!("chalk-stuck-{}", std::process::id())),
@@ -322,10 +348,10 @@ mod tests {
         }
         let sampler = sampler(dying);
         let mut pixels = vec![0; FRAME];
-        assert!(!sampler.sample(7, &mut pixels));
+        assert!(!sampler.sample(7, 0.0, &mut pixels));
         assert_eq!(sampler.child_id(), None);
         // Inside the pause nothing is spawned, so there is no child to see.
-        assert!(!sampler.sample(7, &mut pixels));
+        assert!(!sampler.sample(7, 0.0, &mut pixels));
         assert_eq!(sampler.child_id(), None);
         assert!(sampler.slot.lock().unwrap().failed_at.is_some());
     }
@@ -337,7 +363,7 @@ mod tests {
         }
         let sampler = sampler(missing);
         let mut pixels = vec![0; FRAME];
-        assert!(!sampler.sample(7, &mut pixels));
+        assert!(!sampler.sample(7, 0.0, &mut pixels));
         assert_eq!(sampler.child_id(), None);
     }
 
@@ -345,19 +371,19 @@ mod tests {
     fn stopping_ends_the_child_and_the_next_sample_starts_a_new_one() {
         let sampler = sampler(frames);
         let mut pixels = vec![0; FRAME];
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         let first = sampler.child_id().unwrap();
         sampler.stop();
         assert_eq!(sampler.child_id(), None);
         assert!(!alive(first));
-        assert!(sampler.sample(7, &mut pixels));
+        assert!(sampler.sample(7, 0.0, &mut pixels));
         assert_ne!(sampler.child_id(), Some(first));
     }
 
     #[test]
     fn a_buffer_of_the_wrong_size_is_refused_without_starting_a_child() {
         let sampler = sampler(frames);
-        assert!(!sampler.sample(7, &mut [0; 8]));
+        assert!(!sampler.sample(7, 0.0, &mut [0; 8]));
         assert_eq!(sampler.child_id(), None);
     }
 

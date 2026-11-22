@@ -161,8 +161,8 @@ fn sampler_timeline() -> String {
     );
     let _ = writeln!(
         log,
-        "tick, share starts, no grant: {:?}",
-        onboarding.tick(true, &denied)
+        "Follow captured window, no grant: {:?}",
+        onboarding.ask(&denied)
     );
 
     let mut pixels = vec![0; window_follow::SAMPLES];
@@ -193,7 +193,7 @@ fn sampler_timeline() -> String {
                 format!("{},{} {}x{}", rect.x, rect.y, rect.width, rect.height)
             })
             .unwrap_or_else(|| "none".to_owned());
-        let capture = following.then(|| sampler::shared().sample(window as u32, &mut pixels));
+        let capture = following.then(|| sampler::shared().sample(window as u32, 0.0, &mut pixels));
         let _ = writeln!(
             log,
             "t={:>4}ms helper pid {} window list {},{} {}x{} observe [{bounds}] child {:?} pixels {}",

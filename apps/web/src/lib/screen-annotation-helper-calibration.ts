@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HelperConflict } from "./screen-annotation-helper-bridge";
 
 const channel = z.number().int().min(0).max(255);
 const point = z.strictObject({
@@ -108,8 +109,8 @@ export async function calibrateWindow(options: {
   if (!track.enabled || track.readyState !== "live") return;
   const { video, dispose } = localPreview(track);
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(3500)]);
-  let probing = false;
-  let completed = false;
+  let paused = false;
+  let mustAbort = false;
   try {
     await Promise.race([video.play(), cancelled(deadline)]);
     await nextFrame(video, deadline);
@@ -122,8 +123,13 @@ export async function calibrateWindow(options: {
     // matches the browser preview. The independent clone still runs.
     deadline.throwIfAborted();
     track.enabled = false;
-    probing = true;
-    const probe = await options.start(deadline);
+    paused = true;
+    mustAbort = true;
+    const probe = await options.start(deadline).catch((error: unknown) => {
+      // A queued status can arrive after a different probe made the overlay ready.
+      if (error instanceof HelperConflict) mustAbort = false;
+      throw error;
+    });
     await options.painted(probe.nonce, deadline);
     // Capture time on the local clone uses the same clock as the browser's
     // receipt of the ACK. Leave 1 ms for timestamp rounding; presentation
@@ -133,10 +139,7 @@ export async function calibrateWindow(options: {
     let frames = 0;
     while (frames < 4) {
       await nextFrame(video, deadline, (_, { captureTime }) => {
-        if (
-          video.videoWidth !== width || video.videoHeight !== height || captureTime === undefined ||
-          !Number.isFinite(captureTime) || captureTime > performance.now()
-        ) {
+        if (video.videoWidth !== width || video.videoHeight !== height || captureTime === undefined || !Number.isFinite(captureTime) || captureTime > performance.now()) {
           throw new Error("Chalk could not verify the window frame's capture time or size.");
         }
         if (captureTime <= lastCapture) {
@@ -148,19 +151,19 @@ export async function calibrateWindow(options: {
       });
     }
     await options.complete(probe.nonce, deadline);
-    completed = true;
+    mustAbort = false;
   } catch {
     // A moving, occluded or mismatched window stays hidden. The caller can
     // retry with a new local sample when a valid window becomes visible.
   } finally {
-    if (probing && !completed) {
+    if (mustAbort) {
       try {
         await options.abort();
       } catch {
         await pause(4300);
       }
     }
-    if (probing && track.readyState === "live") track.enabled = true;
+    if (paused && track.readyState === "live") track.enabled = true;
     dispose();
   }
 }
@@ -178,9 +181,10 @@ function windowLandmarks(video: HTMLVideoElement): number[] {
     return Math.floor(((pixels[offset] ?? 0) + 2 * (pixels[offset + 1] ?? 0) + (pixels[offset + 2] ?? 0)) / 4);
   };
   const landmarks: number[] = [];
+  // Skip browser chrome. Keep these positions in sync with Helper's native sample.
   for (const [left, top] of [
-    [3, 3],
-    [48, 3],
+    [3, 12],
+    [48, 12],
     [3, 48],
   ] as const) {
     for (let y = 0; y < 5; y++) {

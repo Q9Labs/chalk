@@ -2,6 +2,15 @@ name: Helper development installers
 
 on:
   workflow_dispatch:
+    inputs:
+      web_origin:
+        description: Non-production Chalk web origin (leave blank for the offline fixture)
+      api_origin:
+        description: Matching API origin
+      sync_origin:
+        description: Matching Sync origin
+      pair_ticket_public_key:
+        description: Public Ed25519 ticket verification key (base64url)
 
 permissions:
   contents: read
@@ -26,13 +35,34 @@ jobs:
         working-directory: apps/helper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check native dependency exclusions
+        shell: bash
+        run: |
+          tree="$(cargo tree --locked --manifest-path src-tauri/Cargo.toml --prefix none --edges normal,build,dev)"
+          if grep -Eq '^(glib|proc-macro-error|chrono) v' <<< "$tree"; then
+            echo "::error::A dependency excluded from the Helper lockfile audit is compiled for this target."
+            exit 1
+          fi
       - name: Test the Helper
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --features fixture
       - name: Build local development installer
         env:
           HELPER_BUNDLE: ${{ matrix.bundle }}
+          CHALK_HELPER_WEB_ORIGIN: ${{ inputs.web_origin }}
+          CHALK_HELPER_API_ORIGIN: ${{ inputs.api_origin }}
+          CHALK_HELPER_SYNC_ORIGIN: ${{ inputs.sync_origin }}
+          CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY: ${{ inputs.pair_ticket_public_key }}
         shell: bash
-        run: npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles "$HELPER_BUNDLE"
+        run: |
+          if [[ -n "$CHALK_HELPER_WEB_ORIGIN$CHALK_HELPER_API_ORIGIN$CHALK_HELPER_SYNC_ORIGIN$CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY" ]]; then
+            : "${CHALK_HELPER_WEB_ORIGIN:?Required for a live development build}"
+            : "${CHALK_HELPER_API_ORIGIN:?Required for a live development build}"
+            : "${CHALK_HELPER_SYNC_ORIGIN:?Required for a live development build}"
+            : "${CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY:?Required for a live development build}"
+          else
+            unset CHALK_HELPER_WEB_ORIGIN CHALK_HELPER_API_ORIGIN CHALK_HELPER_SYNC_ORIGIN CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY
+          fi
+          npx --yes @tauri-apps/cli@2.12.6 build --ci --bundles "$HELPER_BUNDLE" --features fixture
       - name: Archive macOS app
         if: runner.os == 'macOS'
         run: |

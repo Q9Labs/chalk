@@ -17,7 +17,7 @@ import (
 
 var (
 	ErrInvalid         = errors.New("invalid Helper ticket request")
-	ErrShareNotCurrent = errors.New("Helper attachment does not match the current share")
+	ErrShareNotCurrent = errors.New("helper attachment does not match the current share")
 )
 
 const (
@@ -64,6 +64,7 @@ type Ticket struct {
 type LocalTickets struct {
 	Pair       Ticket `json:"pair"`
 	Attachment Ticket `json:"attachment"`
+	Remembered bool   `json:"remembered,omitempty"`
 }
 
 func validSecret(value string) bool {
@@ -71,7 +72,7 @@ func validSecret(value string) bool {
 	return len(value) == 43 && err == nil && len(decoded) == 32
 }
 
-func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, binding Binding, origin, challenge string) (LocalTickets, error) {
+func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, binding Binding, origin, challenge string, remembered bool) (LocalTickets, error) {
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" ||
 		origin != "https://"+parsed.Host || !validSecret(challenge) {
@@ -80,16 +81,38 @@ func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, 
 	if err := s.authorize(ctx, subject, binding); err != nil {
 		return LocalTickets{}, err
 	}
+	if remembered && s.DevicesEnabled() {
+		var tickets LocalTickets
+		err := s.devices.WithActiveHelperLoopbackDevice(ctx, subject.TenantID, binding.DeviceKey, func() error {
+			var err error
+			tickets, err = s.localTickets(subject, binding, origin, challenge, true)
+			return err
+		})
+		if err == nil {
+			return tickets, nil
+		}
+		if !errors.Is(err, ErrDeviceUnavailable) {
+			return LocalTickets{}, err
+		}
+	}
+	return s.localTickets(subject, binding, origin, challenge, false)
+}
+
+func (s *Service) localTickets(subject accessgrants.Subject, binding Binding, origin, challenge string, remembered bool) (LocalTickets, error) {
 	now := s.now().UTC()
 	expires := now.Add(lifetime)
-	local, err := s.sign(map[string]string{"alg": "EdDSA", "typ": "chalk-helper-pair-ticket+jwt"}, map[string]any{
+	claims := map[string]any{
 		"aud": localAudience, "role": "sharer", "version": 1,
 		"origin": origin, "challenge": challenge, "helperPublicKey": binding.DeviceKey,
 		"tenantId": subject.TenantID.String(), "spaceId": subject.SpaceID.String(),
 		"episodeId": subject.EpisodeID.String(), "participantId": subject.ParticipantID.String(),
 		"generation": subject.ParticipantGeneration, "publicationId": binding.PublicationID,
 		"layerId": binding.LayerID.String(), "expiresAtMs": expires.UnixMilli(),
-	}, expires)
+	}
+	if remembered {
+		claims["remembered"] = true
+	}
+	local, err := s.sign(map[string]string{"alg": "EdDSA", "typ": "chalk-helper-pair-ticket+jwt"}, claims, expires)
 	if err != nil {
 		return LocalTickets{}, err
 	}
@@ -97,7 +120,7 @@ func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, 
 	if err != nil {
 		return LocalTickets{}, err
 	}
-	return LocalTickets{Pair: local, Attachment: attachment}, nil
+	return LocalTickets{Pair: local, Attachment: attachment, Remembered: remembered}, nil
 }
 
 func (s *Service) authorize(ctx context.Context, subject accessgrants.Subject, binding Binding) error {

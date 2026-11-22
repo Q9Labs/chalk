@@ -402,6 +402,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/helper-devices/remember": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Remember screen annotation helper device */
+    post: operations["rememberScreenAnnotationHelperDevice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/helper-devices/revoke": {
     parameters: {
       query?: never;
@@ -1971,6 +1988,9 @@ export interface components {
         ticket: string;
       } | null;
     };
+    HelperDeviceRemember: {
+      publicKey: string;
+    };
     HelperDeviceRevoke: {
       deviceId: string;
     };
@@ -2304,6 +2324,7 @@ export interface components {
       helperPublicKey: string;
       layerId: string;
       publicationId: string;
+      remembered?: boolean;
       version: number;
     };
     ScreenAnnotationHelperPairResponse: {
@@ -2315,6 +2336,7 @@ export interface components {
         expiresAtMs: number;
         ticket: string;
       };
+      remembered?: boolean;
     };
     SetEpisodeDeadlineRequest: {
       deadline_at: components["schemas"]["DateTimeString"];
@@ -5869,6 +5891,87 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["HelperDeviceOffer"];
         };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  rememberScreenAnnotationHelperDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["HelperDeviceRemember"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Bad Request */
       400: {

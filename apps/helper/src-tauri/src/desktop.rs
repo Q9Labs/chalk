@@ -236,12 +236,10 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Ask for Screen Recording when a window share starts, then notice a grant
-/// without the sharer coming back to click.
+/// Notice a grant without asking the sharer to return and click again.
 async fn watch_permission(app: AppHandle, pairing: Pairing) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let window_share = pairing.offers_window();
         let watching = app
             .state::<Desktop>()
             .0
@@ -255,15 +253,18 @@ async fn watch_permission(app: AppHandle, pairing: Pairing) {
         else {
             continue;
         };
+        let sampling = pairing.window_sampling();
         let effects = app
             .state::<Desktop>()
             .0
             .lock()
             .expect("Helper state")
             .permission
-            .tick(window_share, &access);
-        if !window_share {
-            permission::stop_sampling();
+            .tick(sampling.is_some(), &access);
+        match sampling {
+            Some(true) => permission::start_sampling(),
+            Some(false) => (),
+            None => permission::stop_sampling(),
         }
         apply(&app, effects);
     }
@@ -271,13 +272,7 @@ async fn watch_permission(app: AppHandle, pairing: Pairing) {
 
 fn apply(app: &AppHandle, effects: Vec<Effect>) {
     for effect in effects {
-        let handle = app.clone();
         match effect {
-            Effect::ShowPanel => {
-                let _ = app.run_on_main_thread(move || {
-                    let _ = show_settings(&handle);
-                });
-            }
             Effect::OpenSettings => {
                 let _ = app.run_on_main_thread(|| {
                     permission::open_system_settings();
@@ -288,7 +283,6 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 let _ = app.run_on_main_thread(permission::hide_tile);
             }
             Effect::Follow => {
-                permission::start_sampling();
                 let pairing = app
                     .state::<Desktop>()
                     .0
@@ -297,6 +291,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                     .pairing
                     .clone();
                 if pairing.is_some_and(|pairing| pairing.enable_follow().is_ok()) {
+                    permission::start_sampling();
                     if let Some(settings) = app.get_webview_window("settings") {
                         let _ = settings.hide();
                     }
@@ -875,8 +870,8 @@ pub fn act(
             if ask == Ask::Panel {
                 return Ok(());
             }
-            permission::start_sampling();
             pairing.enable_follow().map_err(str::to_owned)?;
+            permission::start_sampling();
             let _ = window.hide();
             return Ok(());
         }

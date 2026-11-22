@@ -30,7 +30,6 @@ pub enum Phase {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Effect {
-    ShowPanel,
     OpenSettings,
     HideTile,
     Follow,
@@ -50,7 +49,6 @@ pub struct View {
 #[derive(Default)]
 pub struct Onboarding {
     phase: Phase,
-    asked_this_share: bool,
     /// A new process saw a grant this one cannot use. Later shares skip the panel.
     granted_to_new_processes: bool,
 }
@@ -68,7 +66,6 @@ impl Onboarding {
 
     /// The sharer asked to follow the window.
     pub fn ask(&mut self, access: &impl ScreenAccess) -> Ask {
-        self.asked_this_share = true;
         if access.in_process() || self.granted_to_new_processes {
             self.phase = Phase::Idle;
             return Ask::Proceed;
@@ -87,8 +84,7 @@ impl Onboarding {
         vec![Effect::OpenSettings]
     }
 
-    /// The sharer chose to wait. Nothing asks again until a new share or an
-    /// explicit follow request.
+    /// The sharer chose to wait. Only another explicit follow request asks again.
     pub fn later(&mut self) -> Vec<Effect> {
         if !self.watching() {
             return Vec::new();
@@ -100,7 +96,6 @@ impl Onboarding {
     /// Runs about once a second with whether a window share is active.
     pub fn tick(&mut self, window_share: bool, access: &impl ScreenAccess) -> Vec<Effect> {
         if !window_share {
-            self.asked_this_share = false;
             if self.phase == Phase::Idle {
                 return Vec::new();
             }
@@ -114,15 +109,6 @@ impl Onboarding {
                 self.granted_to_new_processes = !access.in_process();
                 self.phase = Phase::Idle;
                 vec![Effect::HideTile, Effect::Follow]
-            }
-            Phase::Idle
-                if !self.asked_this_share
-                    && !self.granted_to_new_processes
-                    && !access.in_process() =>
-            {
-                self.asked_this_share = true;
-                self.phase = Phase::Needed;
-                vec![Effect::ShowPanel]
             }
             _ => Vec::new(),
         }
@@ -194,12 +180,12 @@ pub fn reveal_in_finder() {
 }
 
 /// Whether this running process can capture the screen.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "fixture"))]
 pub fn in_process() -> bool {
     platform::in_process()
 }
 
-/// Start the capture child once a grant exists that this process cannot use.
+/// Start or replace the capture child while a granted window follow is active.
 pub fn start_sampling() {
     platform::start_sampling();
 }
@@ -275,9 +261,7 @@ mod platform {
     }
 
     pub fn start_sampling() {
-        if !in_process() {
-            crate::sampler::shared().start();
-        }
+        crate::sampler::shared().start();
     }
 
     pub fn stop_sampling() {
@@ -344,10 +328,12 @@ mod tests {
     }
 
     #[test]
-    fn a_window_share_without_access_shows_the_panel_once() {
+    fn a_window_share_without_access_waits_for_the_sharer_to_choose_follow() {
         let fake = Fake::default();
         let mut onboarding = Onboarding::default();
-        assert_eq!(onboarding.tick(true, &fake), vec![Effect::ShowPanel]);
+        assert!(onboarding.tick(true, &fake).is_empty());
+        assert_eq!(onboarding.view().phase, Phase::Idle);
+        assert_eq!(onboarding.ask(&fake), Ask::Panel);
         assert_eq!(onboarding.view().phase, Phase::Needed);
         assert!(onboarding.tick(true, &fake).is_empty());
     }
@@ -417,6 +403,8 @@ mod tests {
         assert!(!onboarding.watching());
         onboarding.tick(false, &fake);
         onboarding.tick(true, &fake);
+        assert!(!onboarding.watching());
+        onboarding.ask(&fake);
         assert!(onboarding.watching());
         assert_eq!(fake.fresh_calls.get(), 0);
         onboarding.tick(true, &fake);
@@ -427,7 +415,7 @@ mod tests {
     fn later_does_not_nag_during_the_share_and_asks_again_for_the_next() {
         let fake = Fake::default();
         let mut onboarding = Onboarding::default();
-        onboarding.tick(true, &fake);
+        onboarding.ask(&fake);
         assert_eq!(onboarding.later(), vec![Effect::HideTile]);
         for _ in 0..5 {
             assert!(onboarding.tick(true, &fake).is_empty());
@@ -436,14 +424,15 @@ mod tests {
 
         assert!(onboarding.tick(false, &fake).len() == 1);
         assert_eq!(onboarding.view().phase, Phase::Idle);
-        assert_eq!(onboarding.tick(true, &fake), vec![Effect::ShowPanel]);
+        assert!(onboarding.tick(true, &fake).is_empty());
+        assert_eq!(onboarding.ask(&fake), Ask::Panel);
     }
 
     #[test]
     fn an_explicit_follow_request_brings_the_panel_back_after_later() {
         let fake = Fake::default();
         let mut onboarding = Onboarding::default();
-        onboarding.tick(true, &fake);
+        onboarding.ask(&fake);
         onboarding.later();
         assert_eq!(onboarding.ask(&fake), Ask::Panel);
         assert_eq!(onboarding.view().phase, Phase::Needed);
@@ -453,7 +442,7 @@ mod tests {
     fn ending_the_share_closes_the_panel() {
         let fake = Fake::default();
         let mut onboarding = Onboarding::default();
-        onboarding.tick(true, &fake);
+        onboarding.ask(&fake);
         onboarding.open_settings();
         assert_eq!(onboarding.tick(false, &fake), vec![Effect::HideTile]);
         assert_eq!(onboarding.view().phase, Phase::Idle);

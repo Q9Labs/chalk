@@ -54,6 +54,17 @@ pub fn confirmation_code() -> Result<String, ()> {
         .collect())
 }
 
+pub fn key_proof(
+    key: &Ed25519KeyPair,
+    origin: &str,
+    browser: &str,
+    challenge: &str,
+    expires: u64,
+) -> String {
+    let message = format!("chalk.helper.key.v1\n{origin}\n{browser}\n{challenge}\n{expires}");
+    URL_SAFE_NO_PAD.encode(key.sign(message.as_bytes()))
+}
+
 pub fn confirmation(
     key: &Ed25519KeyPair,
     transcript: &str,
