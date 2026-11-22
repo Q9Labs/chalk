@@ -234,6 +234,7 @@ overrides:
   ws@>=7.0.0 <7.5.11: ^7.5.11
   ws@>=8.0.0 <8.21.0: ^8.21.0
   zod@>=4.0.0 <4.6.6: 4.6.7
+  '@expo/cli@55.0.19>zod': 4.6.7
 
 patchedDependencies:
   '@redocly/openapi-core@1.34.17': 2ce4959e1555cddcaa3ace4fa90cf5c75c71412b92b632497c2344ea137ebef1
@@ -10034,9 +10035,6 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
   zod@4.6.6:
     resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
@@ -11725,7 +11723,7 @@ snapshots:
       toqr: 0.1.1
       wrap-ansi: 7.0.0
       ws: 8.21.1
-      zod: 3.25.76
+      zod: 4.6.7
     optionalDependencies:
       react-native: 0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -11800,7 +11798,7 @@ snapshots:
       toqr: 0.1.1
       wrap-ansi: 7.0.0
       ws: 8.21.1
-      zod: 3.25.76
+      zod: 4.6.7
     optionalDependencies:
       react-native: 0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -20071,8 +20069,6 @@ snapshots:
       '@speed-highlight/core': 1.2.17
       cookie: 1.1.1
       youch-core: 0.3.3
-
-  zod@3.25.76: {}
 
   zod@4.6.6: {}
 
