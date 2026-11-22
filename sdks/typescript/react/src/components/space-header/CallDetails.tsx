@@ -88,12 +88,7 @@ export function CallDetails({
       ) : (
         <p className="chalk-shell-detail-helper">This link is too long for a QR code. Copy the link to share it.</p>
       )}
-      {hostControls?.whoCanJoin || hostControls?.muteEveryone ? (
-        <>
-          <div className="chalk-shell-sep" />
-          <HostControlRows {...hostControls} />
-        </>
-      ) : null}
+      <HostControlRows controls={hostControls} />
       {network && quality ? (
         <>
           <div className="chalk-shell-sep" />

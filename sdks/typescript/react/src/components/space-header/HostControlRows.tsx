@@ -14,7 +14,9 @@ const WHO_CAN_JOIN = [
 const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
 
 /** The host's call-wide controls in the call menu: who can join and mute everyone. Each opens in place under its row. */
-export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) {
+/** The host-only rows, with the hairline above them. A menu without host controls gets nothing. */
+export function HostControlRows({ controls }: { readonly controls?: CallHostControls }) {
+  const { whoCanJoin, muteEveryone } = controls ?? {};
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinPending, setJoinPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -66,8 +68,11 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
     }
   };
 
+  if (!whoCanJoin && !muteEveryone) return null;
+
   return (
     <>
+      <div className="chalk-shell-sep" />
       {whoCanJoin && current ? (
         <>
           <button
