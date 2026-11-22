@@ -9,7 +9,7 @@ const expiresAt = "2030-01-01T00:00:00.000Z";
 const grantWire = (telemetry?: unknown) => ({
   subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
   sync: { token: credential("chalk-sync"), expires_at: expiresAt },
-  media: { token: credential("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
+  media: { token: credential("chalk-media"), expires_at: expiresAt, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref-1" } },
   ...(telemetry === undefined ? {} : { telemetry }),
 });
 
@@ -29,6 +29,6 @@ describe("issueAccess", () => {
   it("parses a grant from a server that predates the telemetry credential", async () => {
     const grant = await issueAccess(grantWire());
     expect(grant.telemetry).toBeUndefined();
-    expect(grant.media.provider).toBe("cloudflare_sfu");
+    expect(grant.media.provider).toBe("chalk_sfu");
   });
 });

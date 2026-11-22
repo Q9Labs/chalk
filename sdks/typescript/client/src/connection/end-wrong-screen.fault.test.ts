@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { symptom } from "../../../../../observability/rules/end.wrong_screen.mjs";
-import { CloudflareSFUError } from "../media";
+import { SFUError } from "../media";
 import { SCHEMA_VER } from "../obs/registry";
 import { TelemetryOutbox } from "../telemetry/outbox";
 import type { LedgerFrame, TelemetryPlatform } from "../telemetry/types";
@@ -74,7 +74,7 @@ function scenario(run: Run) {
       },
     },
   };
-  return { platform, telemetry, ...terminalTestClient(platform), revokeMedia: () => onFailure(new CloudflareSFUError("Publications rejected", "signaling_failed", { status: 403 })) };
+  return { platform, telemetry, ...terminalTestClient(platform), revokeMedia: () => onFailure(new SFUError("Publications rejected", "signaling_failed", { status: 403 })) };
 }
 
 // A frame as JSON without its records' schema_ver: the registry's content hash changes with any registry edit, so the hand-off is
