@@ -758,6 +758,12 @@ export const HelperDevicePollSchema = /* @__PURE__ */ (() =>
   }))();
 export type HelperDevicePoll = typeof HelperDevicePollSchema.Type;
 
+export const HelperDeviceRememberSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    publicKey: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceRemember = typeof HelperDeviceRememberSchema.Type;
+
 export const HelperDeviceRevokeSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     deviceId: Schema.String.check(Schema.isMinLength(1)),
@@ -1181,6 +1187,7 @@ export const ScreenAnnotationHelperPairRequestSchema = /* @__PURE__ */ (() =>
     helperPublicKey: Schema.String.check(Schema.isMinLength(1)),
     layerId: Schema.String.check(Schema.isMinLength(1)),
     publicationId: Schema.String.check(Schema.isMinLength(1)),
+    remembered: Schema.optional(Schema.Boolean),
     version: Schema.Number,
   }))();
 export type ScreenAnnotationHelperPairRequest = typeof ScreenAnnotationHelperPairRequestSchema.Type;
@@ -1195,6 +1202,7 @@ export const ScreenAnnotationHelperPairResponseSchema = /* @__PURE__ */ (() =>
       expiresAtMs: Schema.Number,
       ticket: Schema.String,
     }),
+    remembered: Schema.optional(Schema.Boolean),
   }))();
 export type ScreenAnnotationHelperPairResponse = typeof ScreenAnnotationHelperPairResponseSchema.Type;
 
@@ -3743,6 +3751,23 @@ export const RefreshSpacePublicInviteAccess429ResponseHeadersSchema = /* @__PURE
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type RefreshSpacePublicInviteAccess429ResponseHeaders = typeof RefreshSpacePublicInviteAccess429ResponseHeadersSchema.Type;
+
+export const RememberScreenAnnotationHelperDevicePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type RememberScreenAnnotationHelperDevicePathParams = typeof RememberScreenAnnotationHelperDevicePathParamsSchema.Type;
+
+export const RememberScreenAnnotationHelperDeviceRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceRememberSchema)();
+export type RememberScreenAnnotationHelperDeviceRequestBody = typeof RememberScreenAnnotationHelperDeviceRequestBodySchema.Type;
+
+export const RememberScreenAnnotationHelperDevice429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type RememberScreenAnnotationHelperDevice429ResponseHeaders = typeof RememberScreenAnnotationHelperDevice429ResponseHeadersSchema.Type;
 
 export const RemoveEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -7448,6 +7473,9 @@ export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
 ]);
 export type RefreshSpacePublicInviteAccessError = typeof RefreshSpacePublicInviteAccessErrorSchema.Type;
 
+export const RememberScreenAnnotationHelperDeviceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type RememberScreenAnnotationHelperDeviceError = typeof RememberScreenAnnotationHelperDeviceErrorSchema.Type;
+
 export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7835,6 +7863,7 @@ export const ChalkOperationPolicies = {
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  rememberScreenAnnotationHelperDevice: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

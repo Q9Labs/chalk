@@ -147,6 +147,7 @@ type HelperDevice struct {
 	CredentialHash []byte             `json:"credential_hash"`
 	RegisteredAt   pgtype.Timestamptz `json:"registered_at"`
 	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	Loopback       bool               `json:"loopback"`
 }
 
 type HelperDeviceRequest struct {

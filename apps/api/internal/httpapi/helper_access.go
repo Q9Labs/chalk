@@ -16,6 +16,7 @@ type helperPairBody struct {
 	HelperPublicKey string `json:"helperPublicKey"`
 	LayerID         string `json:"layerId"`
 	PublicationID   string `json:"publicationId"`
+	Remembered      bool   `json:"remembered,omitempty"`
 }
 
 type helperPairRequest struct {
@@ -49,7 +50,7 @@ func helperPairTicketEndpoint(service *helperaccess.Service, origins []string) E
 			binding := helperaccess.Binding{
 				LayerID: request.layer, PublicationID: request.body.PublicationID, DeviceKey: request.body.HelperPublicKey,
 			}
-			return service.IssueLocal(ctx, subject, binding, request.origin, request.body.Challenge)
+			return service.IssueLocal(ctx, subject, binding, request.origin, request.body.Challenge, request.body.Remembered)
 		}).
 		Auth(APIAuthParticipantMedia).
 		Needs(service).

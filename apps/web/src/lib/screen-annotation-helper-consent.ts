@@ -21,7 +21,17 @@ export async function startConsent() {
   const browserPublicKey = encode(await crypto.subtle.exportKey("raw", keys.publicKey));
   return {
     browserPublicKey,
-    async bind(challenge: Challenge, pairTicket: string, attachmentTicket: string) {
+    async provesKey(origin: string, challenge: Challenge) {
+      if (!challenge.keyProof) return false;
+      try {
+        const key = await crypto.subtle.importKey("raw", decode(challenge.helperPublicKey), "Ed25519", false, ["verify"]);
+        const message = `chalk.helper.key.v1\n${origin}\n${browserPublicKey}\n${challenge.challenge}\n${challenge.expiresAtMs}`;
+        return await crypto.subtle.verify("Ed25519", key, decode(challenge.keyProof), bytes(message));
+      } catch {
+        return false;
+      }
+    },
+    async bind(challenge: Challenge, pairTicket: string, attachmentTicket: string, remembered: boolean) {
       const attachmentHash = await hash(attachmentTicket);
       const transcript = [
         "chalk.helper.pair.v2",
@@ -50,9 +60,11 @@ ${event.status}`;
         attachmentHash,
         fingerprint: `${fingerprint.slice(0, 4)}-${fingerprint.slice(4)}`,
         browserProof: encode(await crypto.subtle.sign("Ed25519", keys.privateKey, bytes(transcript))),
-        async confirm(code: string, reply: { readonly sessionSecret: string; readonly leaseExpiresAtMs: number; readonly confirmation: string }) {
-          const normalized = code.replaceAll("-", "").trim().toUpperCase();
-          if (!/^[A-HJ-NP-Z2-9]{16}$/.test(normalized)) throw new Error("Invalid Helper confirmation code.");
+        async confirm(code: string | null, reply: { readonly sessionSecret: string; readonly leaseExpiresAtMs: number; readonly confirmation: string }) {
+          const normalized = code?.replaceAll("-", "").trim().toUpperCase() ?? "";
+          if (remembered ? code !== null : !/^[A-HJ-NP-Z2-9]{16}$/.test(normalized)) {
+            throw new Error("Invalid Helper confirmation code.");
+          }
           const message = `chalk.helper.confirm.v2\n${transcript}\n${reply.sessionSecret}\n${reply.leaseExpiresAtMs}\n${normalized}`;
           if (!(await crypto.subtle.verify("Ed25519", helperKey, decode(reply.confirmation), bytes(message)))) {
             throw new Error("Chalk Helper did not confirm this tab and share.");

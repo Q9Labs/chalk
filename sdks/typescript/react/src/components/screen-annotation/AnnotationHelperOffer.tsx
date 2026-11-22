@@ -80,7 +80,11 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       const response = await helper.challenge(share, controller.signal);
       if (controller.signal.aborted) return;
       if (response.kind === "update_required") setScreen({ kind: "status", status: "update_required" });
-      else {
+      else if (response.remembered) {
+        await attach(controller, (status) => response.attach(status, async () => {
+          throw new Error("A remembered Helper must not ask for a code.");
+        }), response.fingerprint);
+      } else {
         setScreen({
           kind: "fingerprint",
           value: response.fingerprint,

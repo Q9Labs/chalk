@@ -22,6 +22,8 @@ type DeviceRepository interface {
 	ApproveDeviceRequest(context.Context, utilities.ID, utilities.ID, DeviceShare, bool) error
 	PollDeviceRequest(context.Context, [32]byte) (*DeviceApproval, error)
 	IssueDeviceTicket(context.Context, utilities.ID, func() (DevicePoll, error)) (DevicePoll, error)
+	RegisterHelperLoopbackDevice(ctx context.Context, id, tenant utilities.ID, key string, unusedCredentialHash [32]byte) error
+	WithActiveHelperLoopbackDevice(ctx context.Context, tenant utilities.ID, key string, issue func() error) error
 	ListHelperDevices(context.Context, utilities.ID) ([]Device, error)
 	RevokeHelperDevice(context.Context, utilities.ID, utilities.ID) error
 }
@@ -88,6 +90,23 @@ func (s *Service) StartDevice(ctx context.Context, intendedTenant utilities.ID, 
 		CredentialHash: sha256.Sum256([]byte(credential)),
 	})
 	return DeviceCode{Code: code[:4] + "-" + code[4:], IntervalSeconds: 3}, err
+}
+
+// RememberLoopbackDevice adds a revocable public identity, not a login credential.
+func (s *Service) RememberLoopbackDevice(ctx context.Context, tenant utilities.ID, key string) error {
+	if tenant.IsZero() || !validSecret(key) {
+		return ErrInvalid
+	}
+	id, err := utilities.NewID()
+	if err != nil {
+		return err
+	}
+	// No device-code credential is issued for a loopback-only registration.
+	var reserved [32]byte
+	if _, err := rand.Read(reserved[:]); err != nil {
+		return err
+	}
+	return s.devices.RegisterHelperLoopbackDevice(ctx, id, tenant, key, reserved)
 }
 
 func (s *Service) LookupDevice(ctx context.Context, tenant utilities.ID, code string) (DeviceOffer, error) {

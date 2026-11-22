@@ -50,7 +50,7 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 	service.now = func() time.Time { return now }
 	challenge := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 
-	tickets, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge)
+	tickets, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +86,14 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 		"connection swap": {TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: 3, ConnectionID: "retired-connection"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := service.IssueLocal(t.Context(), graft, binding, "https://chalk.test", challenge)
+			_, err := service.IssueLocal(t.Context(), graft, binding, "https://chalk.test", challenge, false)
 			if !errors.Is(err, ErrShareNotCurrent) {
 				t.Fatalf("got %v", err)
 			}
 		})
 	}
 	repository.current = false
-	if _, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge); !errors.Is(err, ErrShareNotCurrent) {
+	if _, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false); !errors.Is(err, ErrShareNotCurrent) {
 		t.Fatalf("refresh of a closed share: %v", err)
 	}
 }

@@ -74,7 +74,7 @@ export type ScreenAnnotationHelperStatus = "waiting_for_sync" | "unbound" | "cal
 
 export interface ScreenAnnotationHelper {
   readonly installUrl?: string;
-  readonly challenge?: (share: ScreenAnnotationHelperShare, signal: AbortSignal) => Promise<{ readonly kind: "update_required" } | { readonly kind: "approval"; readonly fingerprint: string; readonly attach: (onStatus: (status: ScreenAnnotationHelperStatus) => void, confirm: (signal: AbortSignal) => Promise<string>) => Promise<void> }>;
+  readonly challenge?: (share: ScreenAnnotationHelperShare, signal: AbortSignal) => Promise<{ readonly kind: "update_required" } | { readonly kind: "approval"; readonly fingerprint: string; readonly remembered?: boolean; readonly attach: (onStatus: (status: ScreenAnnotationHelperStatus) => void, confirm: (signal: AbortSignal) => Promise<string>) => Promise<void> }>;
   readonly deviceAccount?: string;
   readonly lookupCode?: (
     code: string,

@@ -42,3 +42,11 @@ select id, name from helper_devices where tenant_id = $1 and revoked_at is null 
 
 -- name: RevokeHelperDevice :exec
 update helper_devices set revoked_at = now() where id = $1 and tenant_id = $2 and revoked_at is null;
+
+-- name: RegisterHelperLoopbackDevice :exec
+insert into helper_devices (id, tenant_id, name, public_key, credential_hash, loopback)
+values ($1, $2, 'Chalk Helper (browser pairing)', $3, $4, true)
+on conflict (tenant_id, public_key) where loopback do nothing;
+
+-- name: LockActiveHelperLoopbackDevice :one
+select id from helper_devices where tenant_id = $1 and public_key = $2 and loopback and revoked_at is null for update;

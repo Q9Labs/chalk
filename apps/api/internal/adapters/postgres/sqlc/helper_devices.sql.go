@@ -39,7 +39,7 @@ func (q *Queries) ExpireHelperDeviceRequests(ctx context.Context) error {
 }
 
 const findHelperDeviceByCredential = `-- name: FindHelperDeviceByCredential :one
-select id, tenant_id, name, public_key, credential_hash, registered_at, revoked_at from helper_devices where credential_hash = $1 and revoked_at is null
+select id, tenant_id, name, public_key, credential_hash, registered_at, revoked_at, loopback from helper_devices where credential_hash = $1 and revoked_at is null
 `
 
 func (q *Queries) FindHelperDeviceByCredential(ctx context.Context, credentialHash []byte) (HelperDevice, error) {
@@ -53,12 +53,13 @@ func (q *Queries) FindHelperDeviceByCredential(ctx context.Context, credentialHa
 		&i.CredentialHash,
 		&i.RegisteredAt,
 		&i.RevokedAt,
+		&i.Loopback,
 	)
 	return i, err
 }
 
 const lockActiveHelperDevice = `-- name: LockActiveHelperDevice :one
-select id, tenant_id, name, public_key, credential_hash, registered_at, revoked_at from helper_devices where id = $1 and revoked_at is null for update
+select id, tenant_id, name, public_key, credential_hash, registered_at, revoked_at, loopback from helper_devices where id = $1 and revoked_at is null for update
 `
 
 func (q *Queries) LockActiveHelperDevice(ctx context.Context, id pgtype.UUID) (HelperDevice, error) {
@@ -72,8 +73,25 @@ func (q *Queries) LockActiveHelperDevice(ctx context.Context, id pgtype.UUID) (H
 		&i.CredentialHash,
 		&i.RegisteredAt,
 		&i.RevokedAt,
+		&i.Loopback,
 	)
 	return i, err
+}
+
+const lockActiveHelperLoopbackDevice = `-- name: LockActiveHelperLoopbackDevice :one
+select id from helper_devices where tenant_id = $1 and public_key = $2 and loopback and revoked_at is null for update
+`
+
+type LockActiveHelperLoopbackDeviceParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	PublicKey string      `json:"public_key"`
+}
+
+func (q *Queries) LockActiveHelperLoopbackDevice(ctx context.Context, arg LockActiveHelperLoopbackDeviceParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockActiveHelperLoopbackDevice, arg.TenantID, arg.PublicKey)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockHelperDeviceRequest = `-- name: LockHelperDeviceRequest :one
@@ -205,6 +223,29 @@ func (q *Queries) RegisterHelperDevice(ctx context.Context, arg RegisterHelperDe
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
+		arg.PublicKey,
+		arg.CredentialHash,
+	)
+	return err
+}
+
+const registerHelperLoopbackDevice = `-- name: RegisterHelperLoopbackDevice :exec
+insert into helper_devices (id, tenant_id, name, public_key, credential_hash, loopback)
+values ($1, $2, 'Chalk Helper (browser pairing)', $3, $4, true)
+on conflict (tenant_id, public_key) where loopback do nothing
+`
+
+type RegisterHelperLoopbackDeviceParams struct {
+	ID             pgtype.UUID `json:"id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	PublicKey      string      `json:"public_key"`
+	CredentialHash []byte      `json:"credential_hash"`
+}
+
+func (q *Queries) RegisterHelperLoopbackDevice(ctx context.Context, arg RegisterHelperLoopbackDeviceParams) error {
+	_, err := q.db.Exec(ctx, registerHelperLoopbackDevice,
+		arg.ID,
+		arg.TenantID,
 		arg.PublicKey,
 		arg.CredentialHash,
 	)

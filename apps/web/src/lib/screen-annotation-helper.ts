@@ -7,31 +7,51 @@ import { startConsent } from "./screen-annotation-helper-consent";
 type BrowserHelper = ScreenAnnotationHelper & Required<Pick<ScreenAnnotationHelper, "challenge">>;
 
 export interface HelperPairAuthority {
-  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; signal: AbortSignal }) => Promise<Tickets>;
+  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; remembered: boolean; signal: AbortSignal }) => Promise<Tickets>;
+  readonly rememberKey?: (key: string, signal: AbortSignal) => Promise<void>;
   readonly lookupCode?: ScreenAnnotationHelper["lookupCode"];
 }
 
 type CaptureTrack = (share: ScreenAnnotationHelperShare) => MediaStreamTrack | undefined;
 
-export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string }): BrowserHelper {
+export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount, accountId }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string; readonly accountId?: string }): BrowserHelper {
   return {
     installUrl,
     lookupCode: authority.lookupCode,
     deviceAccount,
     async challenge(share, parent) {
       if (!window.isSecureContext || window.location.origin !== origin || !origin.startsWith("https://") || !activeShare(share)) throw new Error("Helper is not available for this share.");
+      const pinSlot = accountId && `chalk.helper.key:${JSON.stringify([deviceAccount ?? "", accountId])}`;
+      let pinned: string | null = null;
+      try {
+        if (pinSlot) pinned = window.localStorage.getItem(pinSlot);
+      } catch {
+        // Private or restricted browser profiles can still use a fresh code.
+      }
       const consent = await startConsent();
-      const challenge = await localRequest("/v1/challenge", AbortSignal.any([parent, AbortSignal.timeout(networkTimeoutMs)]), {
-        browserPublicKey: consent.browserPublicKey,
-      }).then((response) => readJson(response, challengeSchema));
+      const challengeSignal = AbortSignal.any([parent, AbortSignal.timeout(networkTimeoutMs)]);
+      const hello = { browserPublicKey: consent.browserPublicKey };
+      const challenge = await localRequest("/v1/challenge?rememberedKeyProof=true", challengeSignal, hello)
+        .catch((error: unknown) => {
+          if (!(error instanceof TypeError) || challengeSignal.aborted) throw error;
+          // Older Helpers reject query strings before adding CORS headers.
+          return localRequest("/v1/challenge", challengeSignal, hello);
+        })
+        .then((response) => readJson(response, challengeSchema));
       if (challenge.version !== 2) return { kind: "update_required" };
       const signal = AbortSignal.any([parent, AbortSignal.timeout(remaining(challenge.expiresAtMs))]);
-      const tickets = await authority.issueLocalTicket({ challenge, origin, share, signal });
-      const binding = await consent.bind(challenge, tickets.pair.ticket, tickets.attachment.ticket);
+      const provenKey = await consent.provesKey(origin, challenge);
+      const issue = (remembered: boolean, signal: AbortSignal) => authority.issueLocalTicket({ challenge, origin, share, signal, remembered });
+      const requestedRemembered = provenKey && pinned === challenge.helperPublicKey;
+      const tickets = await issue(requestedRemembered, signal);
+      const remembered = tickets.remembered === true;
+      if (remembered && !requestedRemembered) throw new Error("Unexpected remembered Helper ticket.");
+      const binding = await consent.bind(challenge, tickets.pair.ticket, tickets.attachment.ticket, remembered);
       let started = false;
       return {
         kind: "approval",
         fingerprint: binding.fingerprint,
+        remembered,
         async attach(onStatus, askConfirmation) {
           if (started || signal.aborted || !activeShare(share)) throw new Error("The Helper challenge is no longer valid.");
           started = true;
@@ -50,9 +70,20 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
                 pairTicket: tickets.pair.ticket,
                 attachmentHash: binding.attachmentHash,
               }).then((response) => readJson(response, attachSchema)),
-              askConfirmation(attachSignal),
+              remembered ? null : askConfirmation(attachSignal),
             ]);
             await binding.confirm(code, attachment);
+            attachSignal.throwIfAborted();
+            if (!remembered && pinSlot && provenKey && authority.rememberKey) {
+              // Persist only after the Helper signed the exact native approval and typed code.
+              // Registration alone never permits this browser to skip the code.
+              try {
+                window.localStorage.setItem(pinSlot, challenge.helperPublicKey);
+                void authority.rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs)).catch(() => undefined);
+              } catch {
+                // A failed pin or registration leaves code pairing available.
+              }
+            }
             const renewal = new AbortController();
             const track = captureTrack?.(share);
             try {
@@ -76,7 +107,11 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
                   attachmentSecret: attachment.sessionSecret,
                   expiresAtMs: Math.min(attachment.leaseExpiresAtMs, tickets.attachment.expiresAtMs),
                   signal: live,
-                  issue: (signal) => authority.issueLocalTicket({ challenge, origin, share, signal }),
+                  issue: async (signal) => {
+                    const next = await issue(remembered, signal);
+                    if ((next.remembered === true) !== remembered) throw new Error("Chalk Helper trust changed.");
+                    return next;
+                  },
                 }),
               ]);
             } finally {
@@ -94,7 +129,7 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
   };
 }
 
-export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly tenantId: string }): BrowserHelper & Required<Pick<ScreenAnnotationHelper, "lookupCode">> {
+export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly tenantId: string; readonly accountId?: string }): BrowserHelper & Required<Pick<ScreenAnnotationHelper, "lookupCode">> {
   const api = new URL("/v1/screen-annotation/helper/pair-ticket", options.apiBaseUrl);
   if (api.protocol !== "https:" || api.username || api.password) throw new Error("Invalid Helper API.");
   const authority = {
@@ -129,7 +164,10 @@ export function createManagedAnnotationHelper(options: { readonly origin: string
         },
       };
     },
-    async issueLocalTicket({ challenge, share, signal }) {
+    async rememberKey(publicKey, signal) {
+      await manageHelperDevice({ action: "remember", publicKey, tenantId: options.tenantId }, signal);
+    },
+    async issueLocalTicket({ challenge, share, signal, remembered }) {
       const proof = options.mediaProof();
       if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
       const response = await fetch(api, {
@@ -142,6 +180,7 @@ export function createManagedAnnotationHelper(options: { readonly origin: string
           version: 1,
           challenge: challenge.challenge,
           helperPublicKey: challenge.helperPublicKey,
+          ...(remembered ? { remembered: true } : {}),
           layerId: share.layer.layer_id,
           publicationId: share.layer.publication_id,
         }),
@@ -157,6 +196,7 @@ export function createManagedAnnotationHelper(options: { readonly origin: string
       installUrl: options.installUrl,
       captureTrack: options.captureTrack,
       deviceAccount: options.tenantId,
+      accountId: options.accountId,
       authority,
     }),
     lookupCode: authority.lookupCode,

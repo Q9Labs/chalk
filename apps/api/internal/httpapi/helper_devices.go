@@ -27,6 +27,10 @@ var (
 	}
 )
 
+type helperRemember struct {
+	PublicKey string `json:"publicKey"`
+}
+
 type helperCodeStart struct {
 	TenantID   string `json:"tenantId"`
 	Name       string `json:"name"`
@@ -154,6 +158,15 @@ func helperDashboardEndpoints(service *helperaccess.Service, verifier Participan
 		}).Needs(service).Permission(authorizer, readTenantPermission).Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).Parameters(tenantIDParameter()).
 		Responds(http.StatusOK, "HelperDeviceList", helperDeviceList{}).Errors(helperDeviceErrors...)
+	remember := Post(helperDeviceTenantBase+"/remember", "rememberScreenAnnotationHelperDevice", decodeHelperOwnerRequest[helperRemember],
+		func(ctx context.Context, req helperOwnerRequest[helperRemember]) (struct{}, error) {
+			if !service.DevicesEnabled() {
+				return struct{}{}, apiErrorServiceUnavailable
+			}
+			return struct{}{}, service.RememberLoopbackDevice(ctx, req.tenant, req.body.PublicKey)
+		}).Needs(service).Permission(authorizer, writeTenantPermission).Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter()).RequestBody("HelperDeviceRemember", helperRemember{}).
+		RespondsNoBody(http.StatusNoContent).Errors(helperDeviceErrors...).ErrorRules(helperDeviceRules)
 	revoke := Post(helperDeviceTenantBase+"/revoke", "revokeScreenAnnotationHelperDevice", decodeHelperOwnerRequest[helperRevoke],
 		func(ctx context.Context, req helperOwnerRequest[helperRevoke]) (struct{}, error) {
 			if !service.DevicesEnabled() {
@@ -167,5 +180,5 @@ func helperDashboardEndpoints(service *helperaccess.Service, verifier Participan
 		}).Needs(service).Permission(authorizer, writeTenantPermission).Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter()).RequestBody("HelperDeviceRevoke", helperRevoke{}).
 		RespondsNoBody(http.StatusNoContent).Errors(helperDeviceErrors...)
-	return []RouteEndpoint{lookup, approve, list, revoke}
+	return []RouteEndpoint{lookup, approve, list, remember, revoke}
 }

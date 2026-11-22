@@ -8,7 +8,7 @@ use crate::{geometry::Rect, helper_scene::Scene, live};
 use crate::{pairing_consent as consent, window_follow};
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
-    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri},
     middleware::{self, Next},
     response::{
         sse::{Event, Sse},
@@ -33,6 +33,7 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 const PORT: u16 = 47361;
 const HOST: &str = "127.0.0.1:47361";
+const REMEMBERED_KEY_QUERY: &str = "rememberedKeyProof=true";
 const VERSION: u8 = 1;
 const LIFETIME: Duration = Duration::from_secs(60);
 const ISSUER_CLOCK_TOLERANCE: Duration = Duration::from_secs(1);
@@ -46,6 +47,7 @@ struct PairingInner {
     issuer_key: [u8; 32],
     helper_public_key: String,
     key: Arc<Ed25519KeyPair>,
+    persistent_key: bool,
     app: Mutex<Option<AppHandle>>,
     window_sample: Arc<Semaphore>,
     state: Mutex<Local>,
@@ -68,7 +70,7 @@ struct Outstanding {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPrompt {
     fingerprint: String,
-    confirmation_code: String,
+    confirmation_code: Option<String>,
 }
 
 struct Approval {
@@ -122,6 +124,8 @@ struct ChallengeResponse {
     helper_public_key: String,
     challenge: String,
     expires_at_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_proof: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -152,6 +156,8 @@ struct Ticket {
     challenge: String,
     origin: String,
     helper_public_key: String,
+    #[serde(default)]
+    remembered: bool,
     role: String,
     tenant_id: String,
     space_id: String,
@@ -237,12 +243,12 @@ impl Pairing {
         let issuer = option_env!("CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY");
         match (origin, issuer) {
             (None, None) => Ok(None),
-            (Some(origin), Some(key)) => Self::new(origin, key).map(Some),
+            (Some(origin), Some(key)) => Self::new(origin, key, true).map(Some),
             _ => Err("Configure both the Chalk origin and the pair-ticket verification key."),
         }
     }
 
-    fn new(origin: &str, issuer: &str) -> Result<Self, &'static str> {
+    fn new(origin: &str, issuer: &str, use_credential_store: bool) -> Result<Self, &'static str> {
         if !tauri::Url::parse(origin).is_ok_and(|url| {
             url.scheme() == "https" && url.origin().ascii_serialization() == origin
         }) {
@@ -254,16 +260,36 @@ impl Pairing {
             .ok()
             .and_then(|key| key.try_into().ok())
             .ok_or("Pair-ticket public key is invalid.")?;
-        let rng = SystemRandom::new();
-        let document = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|_| "Could not make a Helper key.")?;
-        let key = ring::signature::Ed25519KeyPair::from_pkcs8(document.as_ref())
-            .map_err(|_| "Could not read the Helper key.")?;
+        let make_key = || {
+            Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+                .map_err(|_| "Could not make a Helper key.")
+        };
+        let stored = use_credential_store
+            .then(|| {
+                let target = format!("com.q9labs.chalk.helper.loopback:{}", origin.to_str().ok()?);
+                match crate::credentials::read(&target).ok()? {
+                    Some(document) => Ed25519KeyPair::from_pkcs8(&document).ok(),
+                    None => {
+                        let document = make_key().ok()?;
+                        crate::credentials::store(&target, document.as_ref()).ok()?;
+                        Ed25519KeyPair::from_pkcs8(document.as_ref()).ok()
+                    }
+                }
+            })
+            .flatten();
+        let persistent_key = stored.is_some();
+        let key = match stored {
+            Some(key) => key,
+            // Unavailable key storage must not disable first-use code pairing.
+            None => Ed25519KeyPair::from_pkcs8(make_key()?.as_ref())
+                .map_err(|_| "Could not read the Helper key.")?,
+        };
         Ok(Self(Arc::new(PairingInner {
             origin,
             issuer_key,
             helper_public_key: URL_SAFE_NO_PAD.encode(key.public_key().as_ref()),
             key: Arc::new(key),
+            persistent_key,
             app: Mutex::default(),
             window_sample: Arc::new(Semaphore::new(1)),
             state: Mutex::default(),
@@ -788,7 +814,9 @@ async fn request_boundary(
     if exact_header(headers, header::ORIGIN) != Some(&pairing.0.origin)
         || !exact_header(headers, header::HOST).is_some_and(|host| host == HOST)
         || headers.contains_key(header::COOKIE)
-        || request.uri().query().is_some()
+        || request.uri().query().is_some_and(|query| {
+            request.uri().path() != "/v1/challenge" || query != REMEMBERED_KEY_QUERY
+        })
         || request.uri().authority().is_some()
     {
         return StatusCode::FORBIDDEN.into_response();
@@ -857,6 +885,7 @@ async fn request_boundary(
 
 async fn challenge(
     State(pairing): State<Pairing>,
+    uri: Uri,
     Json(request): Json<ChallengeRequest>,
 ) -> Result<Json<ChallengeResponse>, StatusCode> {
     consent::public_key(&request.browser_public_key).ok_or(StatusCode::BAD_REQUEST)?;
@@ -888,17 +917,28 @@ async fn challenge(
     } else {
         let challenge = random_secret()?;
         state.challenge = Some(Outstanding {
-            browser_public_key: request.browser_public_key,
+            browser_public_key: request.browser_public_key.clone(),
             challenge: challenge.clone(),
             until: now + LIFETIME,
         });
         (challenge, utc_ms() + LIFETIME.as_millis() as u64)
     };
+    let key_proof =
+        (pairing.0.persistent_key && uri.query() == Some(REMEMBERED_KEY_QUERY)).then(|| {
+            consent::key_proof(
+                &pairing.0.key,
+                pairing.0.origin.to_str().expect("validated origin"),
+                &request.browser_public_key,
+                &challenge,
+                expires_at_ms,
+            )
+        });
     Ok(Json(ChallengeResponse {
         version: consent::VERSION,
         helper_public_key: pairing.0.helper_public_key.clone(),
         challenge,
         expires_at_ms,
+        key_proof,
     }))
 }
 
@@ -936,15 +976,23 @@ async fn attach(
         ) {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        let code = consent::confirmation_code().map_err(|()| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let code = if ticket.remembered {
+            if !pairing.0.persistent_key {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            String::new()
+        } else {
+            consent::confirmation_code().map_err(|()| StatusCode::INTERNAL_SERVER_ERROR)?
+        };
         let prompt = ApprovalPrompt {
             fingerprint: consent::fingerprint(&transcript),
-            confirmation_code: code
-                .as_bytes()
-                .chunks(4)
-                .map(|part| std::str::from_utf8(part).expect("base32"))
-                .collect::<Vec<_>>()
-                .join("-"),
+            confirmation_code: (!code.is_empty()).then(|| {
+                code.as_bytes()
+                    .chunks(4)
+                    .map(|part| std::str::from_utf8(part).expect("base32"))
+                    .collect::<Vec<_>>()
+                    .join("-")
+            }),
         };
         let until = challenge.until.min(ticket_until);
         let (respond, receive) = oneshot::channel();
@@ -1158,8 +1206,12 @@ mod tests {
         let rng = SystemRandom::new();
         let seed = Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
         let key = Ed25519KeyPair::from_pkcs8(seed.as_ref()).unwrap();
-        let pairing =
-            Pairing::new(ORIGIN, &URL_SAFE_NO_PAD.encode(key.public_key().as_ref())).unwrap();
+        let pairing = Pairing::new(
+            ORIGIN,
+            &URL_SAFE_NO_PAD.encode(key.public_key().as_ref()),
+            false,
+        )
+        .unwrap();
         (pairing, key)
     }
 
@@ -1198,6 +1250,7 @@ mod tests {
         browser: &Ed25519KeyPair,
         audience: &str,
         expires_at_ms: u64,
+        remembered: bool,
     ) -> String {
         let protected =
             URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"chalk-helper-pair-ticket+jwt"}"#);
@@ -1208,6 +1261,7 @@ mod tests {
             "challenge": challenge["challenge"],
             "origin": ORIGIN,
             "helperPublicKey": challenge["helperPublicKey"],
+            "remembered": remembered,
             "role": "sharer",
             "tenantId": "test-tenant",
             "spaceId": "test-space",
@@ -1323,9 +1377,10 @@ mod tests {
         .await;
         let accepts = |remaining_ms: i64| {
             let expiry = utc_ms().checked_add_signed(remaining_ms).unwrap();
-            let body: Value =
-                serde_json::from_str(&signed_attach(&challenge, &key, &browser, AUDIENCE, expiry))
-                    .unwrap();
+            let body: Value = serde_json::from_str(&signed_attach(
+                &challenge, &key, &browser, AUDIENCE, expiry, false,
+            ))
+            .unwrap();
             pairing.verify_ticket(body["pairTicket"].as_str().unwrap())
         };
         let (_, until) = accepts(60_500).expect("a signed ticket from a clock 500 ms ahead");
@@ -1338,6 +1393,65 @@ mod tests {
             accepts(-500).is_none(),
             "an expired ticket does not get a grace period"
         );
+    }
+
+    #[tokio::test]
+    async fn remembered_key_attests_to_this_tab_and_requires_bound_native_allow() {
+        let (mut pairing, key) = issuer();
+        Arc::get_mut(&mut pairing.0).unwrap().persistent_key = true;
+        let router = pairing.clone().router();
+        let browser = browser_key();
+        let public_browser = URL_SAFE_NO_PAD.encode(browser.public_key());
+        let mut hello = hello(&browser);
+        *hello.uri_mut() = "/v1/challenge?rememberedKeyProof=true".parse().unwrap();
+        let challenge = body(router.clone().oneshot(hello).await.unwrap()).await;
+        let public_helper = challenge["helperPublicKey"].as_str().unwrap();
+        let nonce = challenge["challenge"].as_str().unwrap();
+        let expires = challenge["expiresAtMs"].as_u64().unwrap();
+        assert!(consent::verifies(
+            public_helper,
+            &format!("chalk.helper.key.v1\n{ORIGIN}\n{public_browser}\n{nonce}\n{expires}"),
+            challenge["keyProof"].as_str().unwrap(),
+        ));
+        let signed = signed_attach(
+            &challenge,
+            &key,
+            &browser,
+            AUDIENCE,
+            utc_ms() + 30_000,
+            true,
+        );
+        let attach = request("POST", "/v1/attach")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(signed.clone()))
+            .unwrap();
+        let mut pending = Box::pin(router.oneshot(attach));
+        assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
+            .await
+            .is_err());
+        let approval = pairing
+            .approval_prompt()
+            .expect("remembered key still requires native approval");
+        assert!(approval.confirmation_code.is_none());
+        pairing.decide("0000-0000", true);
+        assert!(pairing.approval_prompt().is_some());
+        pairing.decide(&approval.fingerprint, true);
+        let reply = body(pending.await.unwrap()).await;
+        let signed: Value = serde_json::from_str(&signed).unwrap();
+        let transcript = consent::transcript(
+            nonce,
+            &public_browser,
+            public_helper,
+            signed["pairTicket"].as_str().unwrap(),
+            signed["attachmentHash"].as_str().unwrap(),
+        );
+        let secret = reply["sessionSecret"].as_str().unwrap();
+        let expires = reply["leaseExpiresAtMs"].as_u64().unwrap();
+        assert!(consent::verifies(
+            public_helper,
+            &format!("chalk.helper.confirm.v2\n{transcript}\n{secret}\n{expires}\n"),
+            reply["confirmation"].as_str().unwrap(),
+        ));
     }
 
     #[tokio::test]
@@ -1359,6 +1473,7 @@ mod tests {
             &browser,
             "screen_annotation_helper_v1",
             utc_ms() + 30_000,
+            false,
         );
         assert_eq!(
             router
@@ -1370,7 +1485,14 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
 
-        let valid = signed_attach(&challenge, &key, &browser, AUDIENCE, utc_ms() + 30_000);
+        let valid = signed_attach(
+            &challenge,
+            &key,
+            &browser,
+            AUDIENCE,
+            utc_ms() + 30_000,
+            false,
+        );
         let mut pending = Box::pin(router.clone().oneshot(attach(valid.clone())));
         assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
             .await
@@ -1398,7 +1520,7 @@ mod tests {
         let session = body(pending.await.unwrap()).await;
         let secret = session["sessionSecret"].as_str().unwrap();
         let expiration = session["leaseExpiresAtMs"].as_u64().unwrap();
-        let code = approval.confirmation_code.replace('-', "");
+        let code = approval.confirmation_code.unwrap().replace('-', "");
         let proof = session["confirmation"].as_str().unwrap();
         let witness =
             format!("chalk.helper.confirm.v2\n{transcript}\n{secret}\n{expiration}\n{code}");
@@ -1456,7 +1578,14 @@ mod tests {
         let router = pairing.clone().router();
         let browser = browser_key();
         let challenge = body(router.clone().oneshot(hello(&browser)).await.unwrap()).await;
-        let signed = signed_attach(&challenge, &key, &browser, AUDIENCE, utc_ms() + 30_000);
+        let signed = signed_attach(
+            &challenge,
+            &key,
+            &browser,
+            AUDIENCE,
+            utc_ms() + 30_000,
+            false,
+        );
         let attach = || {
             request("POST", "/v1/attach")
                 .header(header::CONTENT_TYPE, "application/json")

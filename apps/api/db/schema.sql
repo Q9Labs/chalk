@@ -5479,9 +5479,11 @@ create table helper_devices (
     public_key text not null,
     credential_hash bytea not null unique,
     registered_at timestamptz not null default now(),
-    revoked_at timestamptz
+    revoked_at timestamptz,
+    loopback boolean not null default false
 );
 create index helper_devices_tenant_idx on helper_devices (tenant_id, registered_at desc);
+create unique index helper_loopback_devices_key_idx on helper_devices (tenant_id, public_key) where loopback;
 
 create table helper_device_requests (
     id uuid primary key,

@@ -188,7 +188,7 @@ async function paintView() {
       }
       root.querySelector(".approval").hidden = !view.approval;
       root.querySelector("#fingerprint").textContent = view.approval?.fingerprint ?? "";
-      root.querySelector("#confirmation-code").textContent = view.approval ? `Confirmation code: ${view.approval.confirmationCode}` : "";
+      root.querySelector("#confirmation-code").textContent = view.approval?.confirmationCode ? `Confirmation code: ${view.approval.confirmationCode}` : "";
       root.querySelector("#device-code").hidden = !view.device?.available;
       const deviceStatus = root.querySelector("#device-status");
       if (deviceStatus.textContent !== (view.device?.status ?? "")) deviceStatus.textContent = view.device?.status ?? "";
