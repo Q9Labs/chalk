@@ -131,7 +131,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, annotati
 
   const sharedBoard = useWhiteboard().engine.presenting;
   const boardVisible = useStageView().boardOpen ?? sharedBoard;
-  const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered && annotationControls === 0, boardVisible });
+  const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered, boardVisible, annotationControls });
   const chromeOpacity = useSharedValue(1);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate committed chrome visibility on the native UI runtime.
   useEffect(() => {

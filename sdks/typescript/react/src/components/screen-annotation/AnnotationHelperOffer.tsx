@@ -91,6 +91,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
             setCode("");
             setScreen({ kind: "confirm", fingerprint: response.fingerprint, submit: (entered) => {
               signal.removeEventListener("abort", abort);
+              setScreen({ kind: "attaching" });
               resolve(entered);
             } });
           })), response.fingerprint),
@@ -121,6 +122,39 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
 
   return (
     <div data-part="annotation-helper-offer" className="chalk-ann-card">
+      <HelperStep screen={screen} drawing={drawing} helper={helper} code={code} setCode={setCode} connect={connect} lookup={lookup} />
+      <HelperOfferActions
+        screen={screen}
+        helper={helper}
+        dismiss={dismiss}
+        useCode={() => {
+          start();
+          setScreen({ kind: "code" });
+        }}
+      />
+    </div>
+  );
+}
+
+function HelperStep({
+  screen,
+  drawing,
+  helper,
+  code,
+  setCode,
+  connect,
+  lookup,
+}: {
+  readonly screen: HelperScreen;
+  readonly drawing: string;
+  readonly helper: ScreenAnnotationHelper;
+  readonly code: string;
+  readonly setCode: (value: string) => void;
+  readonly connect: () => Promise<void>;
+  readonly lookup: () => Promise<void>;
+}) {
+  return (
+    <>
       {screen.kind === "idle" ? (
         <>
           <p>
@@ -186,7 +220,6 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
           event.preventDefault();
           screen.submit(code);
           setCode("");
-          setScreen({ kind: "attaching" });
         }}>
           <p>Match <code dir="ltr">{screen.fingerprint}</code> and choose Allow in the Chalk Helper app.</p>
           <label className="grid gap-1">
@@ -212,28 +245,26 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
         </>
       ) : null}
       {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
-      <div className="chalk-ann-card-actions">
-        {helper.installUrl && (screen.kind === "idle" || screen.kind === "code" || (screen.kind === "status" && screen.status === "update_required")) ? (
-          <a className="chalk-ann-textbtn" href={helper.installUrl} target="_blank" rel="noopener noreferrer">
-            Get Chalk Helper
-          </a>
-        ) : null}
-        {helper.lookupCode && screen.kind !== "idle" && screen.kind !== "code" && screen.kind !== "device" && (screen.kind !== "status" || screen.status !== "ready") ? (
-          <button
-            type="button"
-            className="chalk-ann-textbtn"
-            onClick={() => {
-              start();
-              setScreen({ kind: "code" });
-            }}
-          >
-            Use a device code
-          </button>
-        ) : null}
-        <button type="button" className="chalk-ann-textbtn" onClick={dismiss}>
-          {screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved") ? "Disconnect" : "Not now"}
+    </>
+  );
+}
+
+function HelperOfferActions({ screen, helper, dismiss, useCode }: { readonly screen: HelperScreen; readonly helper: ScreenAnnotationHelper; readonly dismiss: () => void; readonly useCode: () => void }) {
+  return (
+    <div className="chalk-ann-card-actions">
+      {helper.installUrl && (screen.kind === "idle" || screen.kind === "code" || (screen.kind === "status" && screen.status === "update_required")) ? (
+        <a className="chalk-ann-textbtn" href={helper.installUrl} target="_blank" rel="noopener noreferrer">
+          Get Chalk Helper
+        </a>
+      ) : null}
+      {helper.lookupCode && screen.kind !== "idle" && screen.kind !== "code" && screen.kind !== "device" && (screen.kind !== "status" || screen.status !== "ready") ? (
+        <button type="button" className="chalk-ann-textbtn" onClick={useCode}>
+          Use a device code
         </button>
-      </div>
+      ) : null}
+      <button type="button" className="chalk-ann-textbtn" onClick={dismiss}>
+        {screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved") ? "Disconnect" : "Not now"}
+      </button>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 defmodule ChalkSync.ScreenAnnotation.SQL do
   @moduledoc false
 
-  alias ChalkSync.WhiteboardV1.SQL, as: Whiteboard
+  alias ChalkSync.WhiteboardV1.DrawingSQL
 
   def episode_status do
     "select status from episodes where tenant_id = $1 and space_id = $2 and id = $3"
@@ -31,7 +31,7 @@ defmodule ChalkSync.ScreenAnnotation.SQL do
 
   def read do
     """
-    with actor as (#{Whiteboard.drawing_authority()}),
+    with actor as (#{DrawingSQL.drawing_authority()}),
     screens as (
       select item->>'publication_id' as publication_id
       from provider_operation_observation_heads head

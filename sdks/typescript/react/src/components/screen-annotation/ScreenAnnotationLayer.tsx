@@ -1,3 +1,4 @@
+import { AnnotationTextForm } from "./AnnotationTextForm";
 import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
@@ -22,6 +23,14 @@ export interface ScreenAnnotationLayerProps {
 
 type Preview = { readonly draft: ScreenAnnotationDraft; readonly expiresAt: number; readonly revision?: number };
 type TextAnchor = { readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
+
+function previewEnded(preview: Preview, state: ScreenAnnotationState, nowMs: number): boolean {
+  return preview.expiresAt <= nowMs || (preview.revision !== undefined && state.revision >= preview.revision) || state.marks.some((mark) => mark.draft.mark_id === preview.draft.mark_id);
+}
+
+function hasTimeVaryingInk(state: ScreenAnnotationState, remote: readonly ScreenAnnotationPresence[], nowMs: number): boolean {
+  return state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
+}
 
 function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, track: MediaStreamTrack, fit: AnnotationFit) {
   const frame = video && videoMatchesTrack(video, track) ? decodedSize(video) : null;
@@ -75,7 +84,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       context.clearRect(0, 0, clip.width, clip.height);
       const nowMs = client.serverNowMs();
       const preview = optimistic.current;
-      if (preview && (preview.expiresAt <= nowMs || (preview.revision !== undefined && state.revision >= preview.revision) || state.marks.some((mark) => mark.draft.mark_id === preview.draft.mark_id))) optimistic.current = null;
+      if (preview && previewEnded(preview, state, nowMs)) optimistic.current = null;
       const ownDraft = gesture.current ? gestureDraft(gesture.current) : (optimistic.current?.draft ?? null);
       const remote = presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
       const local =
@@ -94,7 +103,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
             ]
           : [];
       paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.marks, presence: tracker.current.update([...remote, ...local], nowMs), nowMs });
-      const expiring = state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
+      const expiring = hasTimeVaryingInk(state, remote, nowMs);
       if (expiring || optimistic.current || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < 380)) schedule();
     };
     const schedule = () => {
@@ -282,43 +291,5 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         />
       ) : null}
     </>
-  );
-}
-
-function AnnotationTextForm({ onClose, onApply }: { readonly onClose: () => void; readonly onApply: (text: string, note: boolean) => void }) {
-  const [text, setText] = useState("");
-  const [note, setNote] = useState(false);
-  const tooLong = new TextEncoder().encode(text.trim()).length > 512;
-  return (
-    <form
-      className="absolute inset-x-3 top-3 z-30 mx-auto grid max-w-sm gap-2 rounded-lg bg-[var(--chalk-overlay-strong)] p-3 text-[var(--chalk-on-overlay)]"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (text.trim() && !tooLong) onApply(text.trim(), note);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <label className="grid gap-1">
-        Annotation text
-        <input autoFocus className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" value={text} maxLength={512} onChange={(event) => setText(event.target.value)} />
-      </label>
-      {tooLong ? <span role="status">This text is too long for a mark.</span> : null}
-      <label className="flex gap-2">
-        <input type="checkbox" checked={note} onChange={(event) => setNote(event.target.checked)} /> Note background
-      </label>
-      <div className="flex justify-end gap-3">
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="submit" disabled={!text.trim() || tooLong}>
-          Add text
-        </button>
-      </div>
-    </form>
   );
 }

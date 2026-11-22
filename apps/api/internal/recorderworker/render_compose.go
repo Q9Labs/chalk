@@ -92,18 +92,11 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 	if err := requestFile.Close(); err != nil {
 		return ComposeResult{}, fmt.Errorf("close recording compose request: %w", err)
 	}
-	resultFile, err := os.CreateTemp(request.WorkspaceDirectory, "compose-result-*.json")
+	resultPath, err := vacantComposeResultPath(request.WorkspaceDirectory)
 	if err != nil {
-		return ComposeResult{}, fmt.Errorf("create recording compose result path: %w", err)
+		return ComposeResult{}, err
 	}
-	resultPath := resultFile.Name()
 	defer os.Remove(resultPath)
-	if err := resultFile.Close(); err != nil {
-		return ComposeResult{}, fmt.Errorf("close recording compose result path: %w", err)
-	}
-	if err := os.Remove(resultPath); err != nil {
-		return ComposeResult{}, fmt.Errorf("prepare recording compose result path: %w", err)
-	}
 
 	args := []string{producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--output", output,
 		"--ffmpeg", producer.FFmpegPath, "--encoder", string(producer.Encoder), "--threads", strconv.Itoa(producer.Threads)}
@@ -141,4 +134,20 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 	}
 	validOutput = true
 	return result, nil
+}
+
+func vacantComposeResultPath(directory string) (string, error) {
+	resultFile, err := os.CreateTemp(directory, "compose-result-*.json")
+	if err != nil {
+		return "", fmt.Errorf("create recording compose result path: %w", err)
+	}
+	resultPath := resultFile.Name()
+	if err := resultFile.Close(); err != nil {
+		_ = os.Remove(resultPath)
+		return "", fmt.Errorf("close recording compose result path: %w", err)
+	}
+	if err := os.Remove(resultPath); err != nil {
+		return "", fmt.Errorf("prepare recording compose result path: %w", err)
+	}
+	return resultPath, nil
 }

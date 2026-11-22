@@ -25,7 +25,7 @@
     "apps/web/src/call-states/main.tsx",
     "apps/web/src/call-states/pre-join-main.tsx",
     "apps/web/src/call-states/web-space-boundary.ts",
-    "apps/web/src/call-states/performance.tsx",
+    "apps/web/src/call-states/performance-main.tsx",
     "apps/web/vite.call-states.config.ts",
     "apps/web/vite.call-performance.config.ts",
     "apps/web/e2e.annotation.config.ts",

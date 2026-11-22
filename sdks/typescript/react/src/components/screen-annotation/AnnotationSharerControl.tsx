@@ -1,4 +1,5 @@
-import { DragDropVerticalIcon, Settings02Icon } from "@hugeicons/core-free-icons";
+import DragDropVerticalIcon from "@hugeicons/core-free-icons/DragDropVerticalIcon";
+import Settings02Icon from "@hugeicons/core-free-icons/Settings02Icon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { ChalkPopover, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
