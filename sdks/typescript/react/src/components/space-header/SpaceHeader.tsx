@@ -9,7 +9,7 @@ import { Avatar } from "../atomic/Avatar";
 import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
-import { callTimerStyle, detailsTitle, formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+import { detailsTitle, formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
@@ -24,6 +24,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
+  const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);
@@ -56,8 +57,6 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   useCallShortcuts(props.shortcuts, showShortcuts);
   const narrowWindow = useMediaQuery("(max-width: 640px)");
   const phone = useNarrowCall() || narrowWindow;
-  // Desktop shows recording as the Rec pill beside the name; the pill is hidden on phones, so there the elapsed time turns red instead.
-  const timerStyle = callTimerStyle(remaining, isRecording && phone);
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />

@@ -7,7 +7,7 @@ Breaking: `CallReady` and `CallReadyProps` are no longer exported from `@q9labsa
 
 The call invite now lives in the call menu. A host who is alone at call start sees the menu open once the call is live, titled "Your call is ready", with the QR code expanded, and it closes when someone joins; a link too long for a QR code says so there. The rest of the menu is unchanged. The dock has no link button, and the phone call menu has no Show call link row.
 
-Record sits with the dock's centre controls, keeps its neutral fill, and only its glyph turns red while recording. The desktop header keeps its Rec pill, and on a phone the elapsed time turns red while recording. A standalone `ControlBar` shows its media notice or command failure as a dismissible error toast. Each half of a split dock button shows its own focus ring, and the phone dock fits at 200% zoom.
+Record sits with the dock's centre controls, keeps its neutral fill, and only its glyph turns red while recording. The header keeps its Rec pill while recording, on a phone as on desktop. A standalone `ControlBar` shows its media notice or command failure as a dismissible error toast. Each half of a split dock button shows its own focus ring, and the phone dock fits at 200% zoom.
 
 The dock and header stay visible while the pointer rests on them, and any click on the stage wakes them. The camera menu and the phone device sheets load on intent, so they open at full height. The call menu waits behind the joining card instead of opening over it.
 

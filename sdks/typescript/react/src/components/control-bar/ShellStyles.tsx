@@ -532,11 +532,6 @@ ${PHONE_DOCK_CSS}
   border-radius: 50%;
   background: var(--chalk-danger);
 }
-${phoneRules(`
-  .chalk-shell-recording {
-    display: none;
-  }
-`)}
 .chalk-shell-people-pill {
   display: flex;
   align-items: center;

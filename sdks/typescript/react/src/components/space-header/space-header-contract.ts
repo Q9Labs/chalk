@@ -48,12 +48,6 @@ export function formatDuration(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-/** The elapsed time turns red for a minute left, or while recording on a phone, where the Rec pill is hidden; under ten minutes left it turns amber. */
-export function callTimerStyle(remaining: number | null, recordingOnPhone: boolean): { readonly color: string } | undefined {
-  if (recordingOnPhone || (remaining !== null && remaining <= 60)) return { color: "var(--chalk-danger-text)" };
-  return remaining === null ? undefined : { color: "var(--chalk-warning)" };
-}
-
 /** A host alone at call start sees the menu titled for what to do next. */
 export function detailsTitle(spaceName: string, inviteOpen: boolean | undefined): string {
   return inviteOpen ? "Your call is ready" : spaceName;

@@ -378,7 +378,7 @@ A toast says one thing in at most two lines: a `20px` icon or `28px` avatar, a s
 - Info toasts cover requests and events: "Akash asks you to unmute" with Unmute, "Nora Patel joined", "Nora muted you. Unmute when you're ready.", "Nora left. You're now the host.", "Nora stopped sharing", and the start and stop of recording.
 - A hint above the microphone says "You're muted. Press ⌘D to unmute." when you speak while muted.
 - A banner under the header reads "Your browser paused the sound. Click to hear the call." It is an inverted `44px` pill.
-- When recording starts, everyone already in the call sees the "Recording started" toast, and "Recording stopped" when it ends. While a call is recorded, the header shows the Rec label (the timer turns red on a phone), and the Name needed, Joining, and Knocking cards carry the line "This call is recorded. By joining, you agree to be recorded."
+- When recording starts, everyone already in the call sees the "Recording started" toast, and "Recording stopped" when it ends. While a call is recorded, the header shows the Rec label on a phone as on desktop, and the Name needed, Joining, and Knocking cards carry the line "This call is recorded. By joining, you agree to be recorded."
 
 ### Alone at the start
 
