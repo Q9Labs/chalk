@@ -104,7 +104,7 @@ test("window exclusion does not complete before the renderer acknowledges the pr
 
 test("delayed pre-paint frames cannot prove window exclusion after acknowledgement", async () => {
   let capturedBeforePaint = 0;
-  const options = windowCalibration(() => capturedBeforePaint);
+  const options = windowCalibration(() => capturedBeforePaint++);
   options.painted.mockImplementationOnce(async () => {
     capturedBeforePaint = performance.now() - 100;
     expect(options.track.enabled).toBe(false);
