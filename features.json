@@ -23,6 +23,7 @@
         "apps/api/internal/publicinvites",
         "apps/mobile/android",
         "apps/mobile/assets",
+        "apps/mobile/e2e",
         "apps/mobile/ios",
         "apps/mobile/plugins",
         "apps/mobile/scripts",
