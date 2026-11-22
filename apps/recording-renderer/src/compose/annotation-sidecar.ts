@@ -147,10 +147,16 @@ function validateCommittedMark(mark: ScreenAnnotationMark, item: Revision): void
 }
 
 function parseLayerBinding(value: unknown): { readonly fields: object; readonly burned: boolean } {
+  const fields = objectValue(value, LABEL);
   const baseFields = ["layer_id", "publication_id", "sharer_id", "frame"];
-  if (typeof value !== "object" || value === null || !("burned_in" in value)) return { fields: record(value, baseFields), burned: false };
-  if (value.burned_in !== true) throw invalid("has an invalid capture mode");
-  return { fields: record(value, [...baseFields, "burned_in"]), burned: true };
+  const burned = Object.hasOwn(fields, "burned_in");
+  exactKeys(fields, burned ? [...baseFields, "burned_in"] : baseFields, LABEL);
+  if (burned) assertBurnedLayer(fields);
+  return { fields, burned };
+}
+
+function assertBurnedLayer(fields: object): void {
+  if (field(fields, "burned_in") !== true) throw invalid("has an invalid capture mode");
 }
 
 function parseLayer(value: unknown): ScreenAnnotationLayer {

@@ -17,7 +17,8 @@ fi
 
 pnpm install --frozen-lockfile
 pnpm --dir apps/mobile run prepare:native-dependencies
-pnpm --dir apps/mobile exec node scripts/gradle.mjs :app:assembleRelease -PreactNativeArchitectures=arm64-v8a
+# Gradle does not track rebuilt workspace SDK chunks or a changed Orb URL as bundle inputs.
+pnpm --dir apps/mobile exec node scripts/gradle.mjs :app:createBundleReleaseJsAndAssets --rerun :app:assembleRelease -PreactNativeArchitectures=arm64-v8a
 
 mkdir -p .verify/android-annotation-phone
 apk=.verify/android-annotation-phone/chalk-orb.apk
