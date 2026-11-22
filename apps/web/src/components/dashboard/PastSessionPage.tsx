@@ -180,7 +180,8 @@ function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly 
       alert
       icon="trash"
       title="Delete this transcript?"
-      description="The transcript is deleted for good. The recording and the session stay."
+      description="Only the transcript goes. The recording and the session stay."
+      hint="You can’t undo this."
       onClose={onClose}
       actions={
         <>
@@ -193,12 +194,7 @@ function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly 
           </button>
         </>
       }
-    >
-      <div className="warnbox">
-        <Icon name="alert" size={16} />
-        <span>You can’t undo this.</span>
-      </div>
-    </Dialog>
+    />
   );
 }
 
