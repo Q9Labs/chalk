@@ -2,7 +2,7 @@ import { memo, useLayoutEffect, useRef, useState, type RefObject, type ReactNode
 import { flushSync } from "react-dom";
 import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
-import { noticeAnnouncement, noticeIdentity } from "./notice-announcement";
+import { mergeRepeats, noticeAnnouncement, noticeIdentity } from "./notice-announcement";
 import { useToastCapacity } from "./useToastCapacity";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
@@ -10,6 +10,7 @@ export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
 export interface ToastStackProps {
   readonly toasts: readonly Toast[];
   readonly onDismiss: (id: string) => void;
+  /** At most three: a fourth notice would cover the call it reports on. */
   readonly maxVisible?: number;
   readonly className?: string;
   readonly children?: ReactNode;
@@ -25,11 +26,16 @@ export interface ToastStackProps {
  * 8px gaps), and the 242px the open drawing tools lift notices by, 611px in all.
  */
 export const FOLD_BELOW_PX = 620;
-export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className, onFold, children }: ToastStackProps) {
+export const ToastStack = memo(function ToastStack({ toasts: all, onDismiss, maxVisible = 3, className, onFold, children }: ToastStackProps) {
+  const groups = mergeRepeats(all);
+  const toasts = groups.map((group) => group.notice);
+  const dismiss = (id: string) => {
+    for (const each of groups.find((group) => group.notice.id === id)?.ids ?? [id]) onDismiss(each);
+  };
   const stack = useRef<HTMLDivElement>(null);
   const short = useShortCall(stack, onFold !== undefined);
   // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
-  const candidates = maxVisible > 0 ? toasts.slice(-maxVisible) : [];
+  const candidates = maxVisible > 0 ? toasts.slice(-Math.min(maxVisible, 3)) : [];
   const [ownedIds, setOwnedIds] = useState<readonly string[]>([]);
   const fold = useRef(onFold);
   const capacity = useToastCapacity(stack, candidates, onFold !== undefined && short === false, ownedIds);
@@ -39,7 +45,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   // second resource instance even for one synchronous layout-effect commit.
   const shown = onFold || fold.current ? selected.filter((toast) => ownedIds.includes(toast.id)) : selected;
   const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !selected.includes(toast)) : [];
-  const foldedIds = folded.map((toast) => toast.id);
+  const foldedIds = groups.filter((group) => folded.includes(group.notice)).flatMap((group) => group.ids);
   // Each message is announced once, even when a host reuses a notice id for a new failure.
   const announced = useRef(new Map<string, string>());
   const wasAnnounced = (toast: Toast) => announced.current.get(toast.id) === noticeIdentity(toast);
@@ -89,7 +95,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => dismiss(toast.id)} />
         ))}
         {children}
       </div>
