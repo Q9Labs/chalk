@@ -163,7 +163,7 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     });
   }
 
-  @ReactMethod public void render(String trackId, String sceneJson, String presenceJson, double nowMs, boolean active) {
+  @ReactMethod public void render(String trackId, String sceneJson, double nowMs, boolean active) {
     main.post(() -> {
       Session current = session;
       if (current == null || !current.trackId.equals(trackId) || !current.verified || renderer == null) return;
@@ -175,7 +175,8 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
         current.hold = current.activated;
         current.resumeId++;
       }
-      renderer.evaluateJavascript("window.chalkAnnotationSystemOverlay?.(" + sceneJson + "," + presenceJson + "," + nowMs + ");", null);
+      // Cursors are live presence, never pixels in a saved frame or recording.
+      renderer.evaluateJavascript("window.chalkAnnotationSystemOverlay?.(" + sceneJson + "," + nowMs + ");", null);
       if (active && (current.hold || !current.activated)) {
         current.activated = true;
         current.hold = true;
@@ -257,9 +258,9 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     View marker = new View(activity) {
       private final Paint paint = new Paint();
       @Override protected void onSizeChanged(int w, int h, int oldWidth, int oldHeight) {
-        if (next.verified) {
-          main.post(() -> { if (session == next) remove(next, true); });
-        } else if (w > 0 && h > 0) {
+        // The proved overlay keeps filling the same captured display.
+        // Its WebView relayouts when the window rotates or changes size.
+        if (!next.verified && w > 0 && h > 0) {
           next.witness = new ChalkProjectionWitness(random.nextInt(), w, h, Math.max(8, w / 100));
         }
       }
@@ -334,12 +335,8 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     @Override public void onFrameCaptured(VideoFrame frame) {
       VideoSink target = sink;
       if (finished || verified) {
-        // A verified capture is immutable. Losing its overlay stops this
+        // Resize keeps the overlay. Actual overlay loss still stops this
         // publication rather than sending clean frames under a baked binding.
-        if (verified && (frame.getRotatedWidth() != width || frame.getRotatedHeight() != height)) {
-          main.post(() -> { if (session == this) remove(this, true); });
-          return;
-        }
         if (target != null && !hold && !(finished && verified)) target.onFrame(frame);
         return;
       }

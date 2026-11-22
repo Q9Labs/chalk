@@ -1,4 +1,4 @@
-import type { AnnotationFit } from "@q9labsai/chalk-screen-annotation";
+import { BakedExportProof, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -98,11 +98,13 @@ function ActiveAnnotationSurface({
 }): React.JSX.Element {
   const [brush, setBrush] = useState(defaultBrush);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const exportProof = useMemo(() => new BakedExportProof(), [state.layer.layer_id, state.fence, track]);
+  const bakedFrame = useRef<HTMLCanvasElement | null>(null);
   const editable = canDraw(state, actorId);
   // A window share may be this browser window. Only an excluded call tab can host ink in-tab.
   const safePreview = !isLocal || capture?.surface === "browser";
   const showToolbar = connected && toolsOpen && editable && safePreview;
-  const exportActions = useAnnotationActions({ client, state, actions, videoRef, track, actorId, allowExport: connected && editable && safePreview });
+  const exportActions = useAnnotationActions({ client, state, actions, videoRef, track, actorId, allowExport: connected && editable && safePreview, exportProof, bakedFrame });
 
   const annotationProps = { client, state, presence, fontUrl };
   const annotate = editable && safePreview ? <AnnotateButton expanded={showToolbar} hints={isLocal} onClick={() => setToolsOpen(!toolsOpen)} /> : null;
@@ -110,7 +112,15 @@ function ActiveAnnotationSurface({
     <>
       {safePreview && canvasHost
         ? createPortal(
-            <ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: exportActions.onError } : undefined} />,
+            <ScreenAnnotationLayer
+              {...annotationProps}
+              videoRef={videoRef}
+              track={track}
+              fit={fit}
+              exportProof={exportProof}
+              bakedFrame={bakedFrame}
+              input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: exportActions.onError } : undefined}
+            />,
             canvasHost,
           )
         : null}

@@ -44,7 +44,7 @@ static CGSize FrameSize(RTKRTCVideoFrame *frame) {
 }
 @end
 
-static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
+static CIImage *AnnotationFrameImage(RTKRTCVideoFrame *frame) {
   id<RTKRTCI420Buffer> yuv = [frame.buffer toI420];
   NSInteger width = yuv.width;
   NSInteger height = yuv.height;
@@ -77,7 +77,12 @@ static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
   if (frame.rotation == 90) image = [image imageByApplyingOrientation:kCGImagePropertyOrientationRight];
   if (frame.rotation == 180) image = [image imageByApplyingOrientation:kCGImagePropertyOrientationDown];
   if (frame.rotation == 270) image = [image imageByApplyingOrientation:kCGImagePropertyOrientationLeft];
+  return image;
+}
 
+static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
+  CIImage *image = AnnotationFrameImage(frame);
+  if (!image) return nil;
   NSURL *directory = [[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
   NSString *name = [NSString stringWithFormat:@"chalk-annotation-%@.png", NSUUID.UUID.UUIDString];
   NSURL *url = [directory URLByAppendingPathComponent:name];
@@ -94,6 +99,7 @@ static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
 @implementation ChalkAnnotationFrames {
   NSMutableDictionary<NSString *, ChalkAnnotationObservation *> *_observers;
   BOOL _encoding;
+  BOOL _sampling;
 }
 
 RCT_EXPORT_MODULE(ChalkAnnotationFrames)
@@ -159,6 +165,36 @@ RCT_EXPORT_METHOD(capture:(NSString *)key
       self->_encoding = NO;
       if (url) resolve(url.absoluteString);
       else reject(@"annotation_frame_capture", @"Unable to encode the shared frame.", nil);
+    });
+  });
+}
+
+// A decoded sample can prove an export on iOS, but never retires displayed ink.
+RCT_EXPORT_METHOD(sample:(NSString *)key
+                  width:(double)width
+                  height:(double)height
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+  RTKRTCVideoFrame *frame = [_observers[key] frameForSize:CGSizeMake(width, height)];
+  if (!frame || _sampling) {
+    resolve(nil);
+    return;
+  }
+  _sampling = YES;
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    CIImage *image = AnnotationFrameImage(frame);
+    NSData *png = nil;
+    if (image) {
+      CGFloat scale = MIN(1, 272 / MAX(image.extent.size.width, image.extent.size.height));
+      CIImage *sample = [image imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
+      CIContext *context = [CIContext contextWithOptions:nil];
+      CGColorSpaceRef color = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+      png = [context PNGRepresentationOfImage:sample format:kCIFormatRGBA8 colorSpace:color options:@{}];
+      CGColorSpaceRelease(color);
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      self->_sampling = NO;
+      resolve([png base64EncodedStringWithOptions:0]);
     });
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NATIVE_INK_PROOF_TIMEOUT_MS, frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "../src/baked-stroke-proof";
+import { INK_PROOF_TIMEOUT_MS, frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "../src/baked-stroke-proof";
 
 // A narrow stroke and its unchanged surroundings; values are straight-alpha pixels.
 function raster(background: number, stroke?: { dark: number; bright: number; alpha: number }): InkRaster {
@@ -141,7 +141,7 @@ describe("own ink paint source", () => {
   });
 
   it("bounds native ink when pixels never supply proof without using a receipt as proof", () => {
-    const deadline = input.nowMs + NATIVE_INK_PROOF_TIMEOUT_MS;
+    const deadline = input.nowMs + INK_PROOF_TIMEOUT_MS;
     const preview = { ...input.preview, proofTimeoutAt: deadline };
     expect(inkHandoff({ ...input, preview, nowMs: deadline - 1 })).toBe("local");
     expect(inkHandoff({ ...input, preview, nowMs: deadline })).toBe("removed");

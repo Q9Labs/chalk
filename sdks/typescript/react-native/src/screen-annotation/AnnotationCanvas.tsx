@@ -19,7 +19,9 @@ export type AnnotationScene = {
 };
 export type AnnotationCanvasHandle = {
   readonly presented: (frame: PresentedAnnotationFrame) => void;
+  readonly sampled: (png: string) => void;
   readonly holdInk: (sample: ScreenAnnotationPresence) => void;
+  readonly watchInk: (sample: ScreenAnnotationPresence, revision: number) => void;
   readonly settleInk: (id: string, revision: number | null) => void;
   readonly hit: (request: number, point: ScreenAnnotationPoint, actor: string | null) => void;
   readonly measure: (frame: ScreenAnnotationFrame) => Promise<AnnotationTextMeasure>;
@@ -33,6 +35,7 @@ export type AnnotationCanvasProps = {
   readonly localTouch?: { readonly point: ScreenAnnotationPoint; readonly untilMs: number };
   readonly onReady: (ready: boolean) => void;
   readonly onHit: (request: number, markId: string | null) => void;
+  readonly onBakedInk: (id: string) => void;
 };
 
 type ExportJob = {
@@ -62,7 +65,7 @@ function annotationPngPart(result: object, currentLength: number): result is { p
   return !("failed" in result) && "part" in result && "final" in result && typeof result.part === "string" && typeof result.final === "boolean" && result.part.length <= chunkSize && /^[\w+/=]+$/.test(result.part) && currentLength + result.part.length <= maxBase64Length;
 }
 
-export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit }, ref) {
+export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit, onBakedInk }, ref) {
   const view = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const job = useRef<ExportJob | null>(null);
@@ -87,7 +90,9 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
 
   useImperativeHandle(ref, () => ({
     presented: (frame) => view.current?.injectJavaScript(`window.chalkAnnotationPresented?.(${JSON.stringify(frame)});true;`),
+    sampled: (png) => view.current?.injectJavaScript(`window.chalkAnnotationDecodedSample?.(${JSON.stringify(png)});true;`),
     holdInk: (sample) => view.current?.injectJavaScript(`window.chalkAnnotationHoldInk?.(${JSON.stringify(sample)});true;`),
+    watchInk: (sample, revision) => view.current?.injectJavaScript(`window.chalkAnnotationWatchInk?.(${JSON.stringify(sample)},${revision});true;`),
     settleInk: (id, revision) => view.current?.injectJavaScript(`window.chalkAnnotationSettleInk?.(${JSON.stringify(id)},${JSON.stringify(revision)});true;`),
     hit: (request, point, actor) => view.current?.injectJavaScript(`window.chalkAnnotationHit?.(${request},${JSON.stringify(point)},${JSON.stringify(actor)});true;`),
     async measure({ size, marks }) {
@@ -159,6 +164,10 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     try {
       const result: unknown = JSON.parse(data);
       if (typeof result !== "object" || result === null) return;
+      if ("bakedInk" in result && typeof result.bakedInk === "string" && result.bakedInk.length <= 36) {
+        onBakedInk(result.bakedInk);
+        return;
+      }
       if (annotationHit(result)) {
         onHit(result.hit, result.markId);
         return;

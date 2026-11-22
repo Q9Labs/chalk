@@ -1,4 +1,5 @@
 import type { ScreenAnnotationClient, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
+import type { BakedExportProof } from "@q9labsai/chalk-screen-annotation";
 import type { RefObject } from "react";
 import type { AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { shareAnnotationPng } from "./export-native-png";
@@ -18,6 +19,7 @@ export function nativeAnnotationExport({
   reportError,
   canvas,
   exporting,
+  exportProof,
 }: {
   readonly client: ScreenAnnotationClient;
   readonly publicationId: string;
@@ -29,14 +31,24 @@ export function nativeAnnotationExport({
   readonly reportError?: (message: string) => void;
   readonly canvas: RefObject<AnnotationCanvasHandle | null>;
   readonly exporting: RefObject<boolean>;
+  readonly exportProof: BakedExportProof;
 }) {
   async function exportFrame(action: ExportAction) {
-    const live = matchLayer(client, publicationId);
+    let live = matchLayer(client, publicationId);
     if (exporting.current || !source.captureFrame || !hasTarget(live, target)) return;
     exporting.current = true;
-    const at = client.serverNowMs();
-    const marks = live.layer.burned_in ? [] : visibleCommittedMarks(live, at);
     try {
+      if (live.layer.burned_in) {
+        const ids = visibleCommittedMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id);
+        if (!(await exportProof.wait(ids))) {
+          reportError?.("Couldn’t confirm the marks in the shared video. Wait for the ink to appear and try again.");
+          return;
+        }
+        live = matchLayer(client, publicationId);
+        if (!hasTarget(live, target)) return;
+      }
+      const at = client.serverNowMs();
+      const marks = live.layer.burned_in ? [] : visibleCommittedMarks(live, at);
       const frame = await source.captureFrame();
       if (frame === null) {
         reportError?.("Wait for the shared video to resume before saving a frame.");

@@ -9,7 +9,7 @@ type AndroidAnnotationOverlay = {
   readonly requestPermission: () => Promise<boolean>;
   readonly protectControls: (trackId: string) => Promise<boolean>;
   readonly probe: (trackId: string) => Promise<ScreenAnnotationFrameSize | null>;
-  readonly render: (trackId: string, scene: string, presence: string, nowMs: number, active: boolean) => void;
+  readonly render: (trackId: string, scene: string, nowMs: number, active: boolean) => void;
   readonly stop: (trackId: string) => void;
 };
 
@@ -79,13 +79,7 @@ export function createNativeAnnotationCapture() {
         const local = client.getSnapshot();
         const state = snapshot.status === "ready" ? snapshot.state : null;
         const active = state?.layer.burned_in === true && state.layer.publication_id === local.media.screenShare.publicationId && state.layer.sharer_id === local.self.participantId;
-        overlay.render(
-          track.id,
-          JSON.stringify({ sharerId: local.self.participantId, paused: active ? state.paused : true, marks: active ? state.marks : [] }),
-          JSON.stringify(active && snapshot.status === "ready" ? snapshot.presence.map((sample) => ({ ...sample, draft: null })) : []),
-          annotation.serverNowMs(),
-          active,
-        );
+        overlay.render(track.id, JSON.stringify({ sharerId: local.self.participantId, paused: active ? state.paused : true, marks: active ? state.marks : [] }), annotation.serverNowMs(), active);
       };
       const unbindAnnotation = annotation.subscribe(emit);
       const unbindSpace = client.subscribe(emit);

@@ -14,7 +14,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { NameTag } from "../primitives/NameTag";
 import { ScreenAnnotationLayer } from "../screen-annotation/ScreenAnnotationLayer";
 import { AnnotationVideoView } from "../screen-annotation/AnnotationVideoView";
-import { AnnotationDock } from "../screen-annotation/AnnotationDock";
+import { AnnotationDock, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
 import { matchLayer, type StageAnnotation } from "../screen-annotation/model";
 import { useNativeAnnotationSource } from "../screen-annotation/use-native-annotation-source";
 import { useTheme } from "../theme/theme";
@@ -82,8 +82,7 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
   const transport = useSpaceSelector(selectBoardTransport);
   const toasts = useToasts();
   const roster = useSpaceSelector(selectRoster);
-  const access = useSpaceSelector(selectAccess);
-  const selectCanSave = (snapshot: SpaceSnapshot) => snapshot.self.can("drawWhiteboard");
+  const people = useAnnotationPeople(selfId);
   const canSave = useSpaceSelector(selectCanSave);
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
   const getMatch = useCallback(() => matchLayer(client, publicationId) !== null, [client, publicationId]);
@@ -91,14 +90,6 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
   const source = useNativeAnnotationSource(matched ? streamURL : null);
   const viewport = { x: 0, y: 0, width: inner.width, height: inner.height };
   const ownName = roster.find((person) => person.participantId === selfId)?.displayName ?? "";
-  const people = roster
-    .filter((person) => person.participantId !== selfId)
-    .map((person) => ({
-      id: person.participantId,
-      name: person.displayName,
-      manages: person.capabilities.includes("manageWhiteboard"),
-      canDraw: access.permissions.find((permission) => permission.participantId === person.participantId)?.canDraw ?? (access.policy === "everyone" && person.capabilities.includes("drawWhiteboard")),
-    }));
   return (
     <ScreenAnnotationLayer
       client={client}
@@ -125,6 +116,7 @@ const selectRoster = (snapshot: SpaceSnapshot) => snapshot.participants.roster;
 const selectSelfId = (snapshot: SpaceSnapshot) => snapshot.self.participantId;
 const selectConnection = (snapshot: SpaceSnapshot) => snapshot.connection.status;
 const selectAccess = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access;
+const selectCanSave = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access.canDraw;
 const selectCanManage = (snapshot: SpaceSnapshot) => snapshot.self.can("manageWhiteboard");
 const selectSceneId = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.sceneId;
 

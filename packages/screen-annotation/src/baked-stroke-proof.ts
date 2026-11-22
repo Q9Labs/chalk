@@ -1,5 +1,5 @@
 // Escape hatch for ambiguous or unreadable native frames, not evidence that ink arrived.
-export const NATIVE_INK_PROOF_TIMEOUT_MS = 1800;
+export const INK_PROOF_TIMEOUT_MS = 1800;
 
 export interface InkRaster {
   readonly width: number;

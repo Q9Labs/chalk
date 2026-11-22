@@ -11,6 +11,7 @@ type AnnotationFrames = {
   readonly observe: (key: string, streamUrl: string) => void;
   readonly stop: (key: string) => void;
   readonly capture: (key: string, width: number, height: number) => Promise<string | null>;
+  readonly sample?: (key: string, width: number, height: number) => Promise<string | null>;
   readonly addListener: (event: string) => void;
   readonly removeListeners: (count: number) => void;
 };
@@ -44,6 +45,7 @@ export function useNativeAnnotationSource(streamUrl: string | null): ScreenAnnot
         source: {
           rendererUrl,
           size: expected,
+          sampleFrame: sink.sample ? () => sink.sample?.(key, expected.width, expected.height) ?? Promise.resolve(null) : undefined,
           captureFrame: async () => {
             const image = await sink.capture(key, expected.width, expected.height);
             if (!image?.startsWith("file://")) return null;

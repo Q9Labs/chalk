@@ -10,11 +10,16 @@ export function mount(engine) {
   let serverNow = 0;
   let receivedAt = 0;
   let animation = 0;
-  let presented;
+  let latestRaster;
+  let decodedSampleId = 0;
+  let systemOverlay = false;
   const heldInk = new Map();
+  const exportInk = new Map();
   const committedIds = new Set();
   const stencil = document.createElement("canvas");
   const stencilContext = stencil.getContext("2d", { willReadFrequently: true });
+  const decodedCanvas = document.createElement("canvas");
+  const decodedContext = decodedCanvas.getContext("2d", { willReadFrequently: true });
 
   function unpack(frame) {
     const { width, height, rgb } = frame;
@@ -32,8 +37,9 @@ export function mount(engine) {
   }
 
   function buildProof(sample) {
-    const baseline = presented && unpack(presented);
-    if (!baseline || !stencilContext) return null;
+    const baseline = latestRaster;
+    if (!baseline) return undefined;
+    if (!stencilContext) return null;
     const { width, height } = baseline;
     stencil.width = width;
     stencil.height = height;
@@ -71,7 +77,9 @@ export function mount(engine) {
     const nowMs = serverNow + performance.now() - receivedAt;
     const presence = trackPresence.update([...samples, ...pendingInk(nowMs)], nowMs);
     const touch = localTouch?.untilMs > nowMs ? localTouch.point : undefined;
-    engine.paintAnnotation(context, { ...scene, marks: scene.burnedIn ? [] : scene.marks, nowMs, presence, localTouch: touch });
+    const bounds = { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight };
+    const layout = systemOverlay ? { rect: bounds, clip: bounds } : scene;
+    engine.paintAnnotation(context, { ...scene, ...layout, marks: scene.burnedIn ? [] : scene.marks, nowMs, presence, localTouch: touch });
     if (presence.length || touch || scene.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs)) {
       animation = requestAnimationFrame(paint);
     }
@@ -83,6 +91,9 @@ export function mount(engine) {
 
   window.chalkAnnotationScene = (next) => {
     scene = next;
+    for (const [id, preview] of exportInk) {
+      if (!scene.burnedIn || (preview.revision !== undefined && scene.revision >= preview.revision && !scene.marks.some((mark) => mark.draft.mark_id === id))) exportInk.delete(id);
+    }
     requestPaint();
   };
   window.chalkAnnotationPresence = (presence, nowMs, touch = null) => {
@@ -98,47 +109,77 @@ export function mount(engine) {
     committedIds.add(id);
     samples = samples.filter((live) => live.draft?.mark_id !== id);
     // Ambiguous or moving backgrounds provide no proof. The bounded fallback is not a frame match.
-    heldInk.set(id, { sample, proof: buildProof(sample), startedBaked: true, expiresAt: sample.expires_at_ms, proofTimeoutAt: sample.expires_at_ms, proved: false });
+    const preview = { sample, proof: buildProof(sample), startedBaked: true, expiresAt: sample.expires_at_ms, proofTimeoutAt: sample.expires_at_ms, proved: false };
+    heldInk.set(id, preview);
+    if (preview.proof !== null) exportInk.set(id, preview);
     setTimeout(() => {
       heldInk.delete(id);
       committedIds.delete(id);
       requestPaint();
-    }, engine.NATIVE_INK_PROOF_TIMEOUT_MS);
+    }, engine.INK_PROOF_TIMEOUT_MS);
     requestPaint();
+  };
+
+  window.chalkAnnotationWatchInk = (sample, revision) => {
+    if (!sample.draft || !engine.makeStrokeProof) return;
+    const proof = buildProof(sample);
+    if (proof !== null) exportInk.set(sample.draft.mark_id, { proof, revision, sample });
   };
 
   window.chalkAnnotationSettleInk = (id, revision) => {
-    const preview = heldInk.get(id);
+    const preview = heldInk.get(id) ?? exportInk.get(id);
     if (!preview) return;
-    if (revision === null) heldInk.delete(id);
-    else preview.revision = revision;
+    if (revision === null) {
+      heldInk.delete(id);
+      exportInk.delete(id);
+    } else preview.revision = revision;
     requestPaint();
   };
 
-  window.chalkAnnotationPresented = (frame) => {
-    presented = frame;
-    if (!heldInk.size) return;
-    const pixels = unpack(frame);
+  function observeInk(pixels, presented) {
     if (!pixels) return;
+    latestRaster = pixels;
     let changed = false;
-    for (const preview of heldInk.values()) {
-      if (preview.proof && engine.frameProvesStroke(pixels, preview.proof)) {
-        preview.proved = changed = true;
+    for (const [id, preview] of exportInk) {
+      if (preview.proof === undefined) {
+        preview.proof = buildProof(preview.sample);
+        if (!preview.proof) exportInk.delete(id);
+        continue;
+      }
+      if (engine.frameProvesStroke(pixels, preview.proof)) {
+        if (presented) preview.proved = changed = true;
+        exportInk.delete(id);
+        window.ReactNativeWebView?.postMessage(JSON.stringify({ bakedInk: id }));
       }
     }
     if (changed) {
       cancelAnimationFrame(animation);
       paint();
     }
+  }
+
+  window.chalkAnnotationPresented = (frame) => observeInk(unpack(frame), true);
+  window.chalkAnnotationDecodedSample = async (png) => {
+    if (!decodedContext) return;
+    const id = ++decodedSampleId;
+    const image = new Image();
+    image.src = "data:image/png;base64," + png;
+    try {
+      await image.decode();
+    } catch {
+      return;
+    }
+    if (id !== decodedSampleId || Math.max(image.naturalWidth, image.naturalHeight) > 273) return;
+    decodedCanvas.width = image.naturalWidth;
+    decodedCanvas.height = image.naturalHeight;
+    decodedContext.drawImage(image, 0, 0);
+    observeInk(decodedContext.getImageData(0, 0, decodedCanvas.width, decodedCanvas.height), false);
   };
 
-  window.chalkAnnotationSystemOverlay = (content, presence, nowMs) => {
-    scene = {
-      ...content,
-      rect: { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight },
-      clip: { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight },
-    };
-    window.chalkAnnotationPresence(presence, nowMs);
+  window.chalkAnnotationSystemOverlay = (content, nowMs) => {
+    systemOverlay = true;
+    scene = content;
+    window.chalkAnnotationPresence([], nowMs);
   };
   window.chalkAnnotationMeasure = async (request, samples) => {
     await document.fonts.load('600 16px "Chalk Annotation Figtree"');

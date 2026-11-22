@@ -21,6 +21,8 @@ export type ScreenAnnotationSource = {
   readonly size: ScreenAnnotationFrameSize;
   /** Capture the current decoded frame; return null if it is unavailable or changed size. */
   readonly captureFrame?: () => Promise<{ readonly image: unknown; readonly release?: () => void } | null>;
+  /** Decode-only sample for export proof when the platform has no presentation hook. */
+  readonly sampleFrame?: () => Promise<string | null>;
 };
 
 export type ScreenAnnotationOptions = {

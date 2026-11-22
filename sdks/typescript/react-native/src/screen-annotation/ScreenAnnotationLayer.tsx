@@ -1,6 +1,6 @@
 import { corners, space } from "../theme/tokens";
 import type { ScreenAnnotationCommand, ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
-import { LASER_TRAIL_MS, NATIVE_INK_PROOF_TIMEOUT_MS } from "@q9labsai/chalk-screen-annotation";
+import { BakedExportProof, INK_PROOF_TIMEOUT_MS, LASER_TRAIL_MS } from "@q9labsai/chalk-screen-annotation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
 import type { PresentedAnnotationFrame } from "../components/rtc-video-view-availability";
@@ -9,7 +9,7 @@ import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
 import { AnnotationCanvas, type AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { ScreenAnnotationToolbar, ToolButton, type ScreenAnnotationToolbarProps } from "./ScreenAnnotationToolbar";
-import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleFrame, type Ink, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
+import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame, type Ink, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
 import { nativeAnnotationExport } from "./native-annotation-export";
 import type { NativeAnnotationBoard } from "./save-to-board";
 import { useAnnotationInput, type TextAnchor } from "./use-annotation-input";
@@ -61,6 +61,8 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const exporting = useRef(false);
   const [finishingInk, setFinishingInk] = useState(false);
   const finishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const exportProof = useMemo(() => new BakedExportProof(), [state.fence]);
+  const onBakedInk = useCallback((id: string) => exportProof.confirm(id), [exportProof]);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Cancel the post-gesture observation window on layer teardown.
   useEffect(() => () => clearTimeout(finishTimer.current), []);
   const onPresented = useCallback((frame: PresentedAnnotationFrame) => canvas.current?.presented(frame), []);
@@ -70,6 +72,51 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const allowed = ready && canCapture(state, person.id);
   const nowMs = client.serverNowMs();
   const target = targetFor(state);
+  const sampling = Boolean(state.layer.burned_in && ready && (open || finishingInk || state.marks.length > 0));
+
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Observe decoded pixels for exports only on iOS; Android uses the displayed track.
+  useEffect(() => {
+    const sample = source.sampleFrame;
+    if (!sampling || !sample) return;
+    let stopped = false;
+    let next: ReturnType<typeof setTimeout>;
+    async function readSample() {
+      if (stopped || !sample) return;
+      const png = await sample().catch(() => null);
+      if (stopped) return;
+      if (png) canvas.current?.sampled(png);
+      next = setTimeout(() => void readSample(), 200);
+    }
+    void readSample();
+    return () => {
+      stopped = true;
+      clearTimeout(next);
+    };
+  }, [sampling, source]);
+
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Wake saves when their unproved ink has been removed from the authoritative scene.
+  useEffect(() => {
+    if (!state.layer.burned_in || !ready) return;
+    const at = client.serverNowMs();
+    const marks = visibleCommittedMarks(state, at);
+    exportProof.reconcile(state.revision, new Set(marks.map(({ draft }) => draft.mark_id)));
+    for (const mark of marks) {
+      if (!exportProof.observe(mark.draft.mark_id, mark.created_revision)) continue;
+      canvas.current?.watchInk(
+        {
+          type: "annotation_presence",
+          layer_id: state.layer.layer_id,
+          fence: state.fence,
+          author: mark.author,
+          server_at_ms: at,
+          expires_at_ms: mark.expires_at_ms ?? at + INK_PROOF_TIMEOUT_MS,
+          cursor: null,
+          draft: mark.draft,
+        },
+        mark.created_revision,
+      );
+    }
+  }, [client, exportProof, ready, state]);
 
   async function dispatch(frozen: ScreenAnnotationTarget, command: ScreenAnnotationCommand) {
     if (!hasTarget(matchLayer(client, publicationId), frozen)) return null;
@@ -92,22 +139,28 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     if (live.layer.burned_in) {
       const now = client.serverNowMs();
       const id = draft.mark_id;
+      exportProof.expect(id);
       canvas.current?.holdInk({
         type: "annotation_presence",
         layer_id: frozen.layerId,
         fence: frozen.fence,
         author: { participant_id: person.id, display_name: person.name, color: live.access.default_color },
         server_at_ms: now,
-        expires_at_ms: now + NATIVE_INK_PROOF_TIMEOUT_MS,
+        expires_at_ms: now + INK_PROOF_TIMEOUT_MS,
         cursor: null,
         draft,
       });
       setFinishingInk(true);
       clearTimeout(finishTimer.current);
-      finishTimer.current = setTimeout(() => setFinishingInk(false), NATIVE_INK_PROOF_TIMEOUT_MS);
+      finishTimer.current = setTimeout(() => setFinishingInk(false), INK_PROOF_TIMEOUT_MS);
       void dispatch(frozen, { kind: "commit", draft }).then((result) => {
-        if (result?.kind === "accepted") canvas.current?.settleInk(id, result.revision);
-        else if (result?.kind !== "delivery_unknown") canvas.current?.settleInk(id, null);
+        if (result?.kind === "accepted") {
+          exportProof.accepted(id, result.revision);
+          canvas.current?.settleInk(id, result.revision);
+        } else if (result?.kind !== "delivery_unknown") {
+          exportProof.settle(id);
+          canvas.current?.settleInk(id, null);
+        }
       });
       return;
     }
@@ -149,7 +202,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   });
 
   const { layerPresence, localTouch } = layerPresenceFor({ presence, localSample: input.local, committing, target, allowed, open, state, person, nowMs });
-  const { save, download, exportFrame } = nativeAnnotationExport({ client, publicationId, source, target, canSave, actions, boardSave, reportError, canvas, exporting });
+  const { save, download, exportFrame } = nativeAnnotationExport({ client, publicationId, source, target, canSave, actions, boardSave, reportError, canvas, exporting, exportProof });
   const scene = useMemo(
     () => ({
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -193,8 +246,8 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
 
   return (
     <>
-      {video(rect, state.layer.burned_in && (open || finishingInk) ? onPresented : undefined, state.layer.burned_in)}
-      <AnnotationCanvas ref={canvas} rendererUrl={rendererUrl} onReady={setCanvasReady} onHit={onHit} scene={scene} nowMs={nowMs} localTouch={localTouch} presence={layerPresence} />
+      {video(rect, sampling ? onPresented : undefined, state.layer.burned_in)}
+      <AnnotationCanvas ref={canvas} rendererUrl={rendererUrl} onReady={setCanvasReady} onHit={onHit} onBakedInk={onBakedInk} scene={scene} nowMs={nowMs} localTouch={localTouch} presence={layerPresence} />
       {open && allowed ? <View accessible={false} style={StyleSheet.absoluteFill} testID="annotation.surface" onStartShouldSetResponder={() => true} onResponderStart={input.onStart} onResponderMove={input.onMove} onResponderEnd={input.onEnd} onResponderTerminate={input.cancel} /> : null}
       {controls ? (
         controls(tray)
@@ -287,6 +340,7 @@ function layerPresenceFor({
 
   const localTouch = state.layer.burned_in && local?.cursor ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS } : undefined;
   const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
-  const remote = state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id);
+  const peers = presence.filter(({ author }) => author.participant_id !== person.id);
+  const remote = state.layer.burned_in ? peers.map((peer) => ({ ...peer, draft: null })) : peers;
   return { layerPresence: [...remote, ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])], localTouch };
 }

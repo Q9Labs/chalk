@@ -7,8 +7,8 @@ after installation.
 
 ## Install
 
-From a checkout of the screen annotation branch with JDK 17, the Android SDK,
-and pnpm available, start an Orb and copy the HTTPS **web** origin it prints:
+Install JDK 17, the Android SDK, and `pnpm`. From a checkout of the screen
+annotation branch, start an Orb and copy the HTTPS **web** origin it prints:
 
 ```sh
 orb up chalk feat/screen-annotation
@@ -27,8 +27,9 @@ recording-enabled Orb with running capture and render workers for playback.
   open **More options → Share screen**, then choose **Entire screen** in
   Android's sharing prompt. Allow the overlay, then show a dark, moving screen.
   Draw a kept stroke from the web viewer. Check the stroke on Android and in the
-  video at the viewer. Pause, resume, and clear. The controls must work and must
-  not appear in the video.
+  video at the viewer. Rotate the phone; the share must stay active, and new
+  marks must align with the rotated video. Pause, resume, and clear. The
+  controls must work and must not appear in the video.
 - **Single app:** Open **More options → Stop sharing screen**, then start sharing
   again and choose one app in Android's prompt. Move or scroll in that app: the
   web viewer must receive changing video. Draw again; the viewer should see the
