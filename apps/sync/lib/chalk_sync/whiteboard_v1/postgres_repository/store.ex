@@ -6,8 +6,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
   alias ChalkSync.Database
   alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.UUID
-  alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.DrawingSQL
+  alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.SQL
 
   @doc false

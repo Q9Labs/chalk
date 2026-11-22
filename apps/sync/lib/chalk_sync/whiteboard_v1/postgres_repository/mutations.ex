@@ -3,8 +3,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
   Row writes for scenes, elements, presentation, draw permissions and draw policy.
   """
 
-  alias ChalkSync.WhiteboardV1.PostgresRepository.Store
   alias ChalkSync.WhiteboardV1.FileSQL
+  alias ChalkSync.WhiteboardV1.PostgresRepository.Store
   alias ChalkSync.WhiteboardV1.SQL
 
   # Policy changes allowed in one Episode; far above what a real call needs.
