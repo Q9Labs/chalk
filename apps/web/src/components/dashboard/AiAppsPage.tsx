@@ -9,6 +9,7 @@ import { useLoad } from "./use-dashboard";
 import { DisconnectPrompt } from "./DisconnectPrompt";
 import { CopyAction, ErrorPanel, MoreButton, Sk, SkeletonRows, useToast } from "./kit";
 import { McpClients } from "./McpClients";
+import { HelperDevices } from "./HelperDevices";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
@@ -137,6 +138,7 @@ export function AiAppsPage() {
           <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       ) : null}
+      <HelperDevices />
       {revoking ? (
         <RevokeConnection
           connection={revoking}

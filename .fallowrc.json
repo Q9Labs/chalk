@@ -1,5 +1,8 @@
 {
   "entry": [
+    "apps/helper/bundle-renderer.mjs",
+    "apps/helper/probe/windows-chrome.mjs",
+    "apps/helper/ui/style.css",
     "gate.config.ts",
     "apps/api/scripts/db-migrate.mjs",
     "apps/api/scripts/dev-postgres.mjs",

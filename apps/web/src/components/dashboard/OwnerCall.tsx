@@ -1,6 +1,6 @@
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
-import { webAnnotation } from "../../lib/screen-annotation";
+import { callAnnotation } from "../../lib/screen-annotation";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -82,6 +82,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
       <OwnerCallSurface
         client={client}
         owner={owner}
+        accountId={profile?.id}
         baseURL={apiBaseURL}
         onStartNewCall={() => {
           if (startingCall.current) return;
@@ -117,10 +118,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
 function OwnerCallSurface({
   client,
   owner,
+  accountId,
   baseURL,
   onStartNewCall,
   ...props
-}: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string; readonly onStartNewCall: () => void }) {
+}: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly accountId?: string; readonly baseURL: string; readonly onStartNewCall: () => void }) {
   const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const [extension, setExtension] = useState<"idle" | "pending" | "failed">("idle");
@@ -148,6 +150,17 @@ function OwnerCallSurface({
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [baseURL, tenantId, owner, client]);
+  const annotation = useMemo(
+    () =>
+      callAnnotation({
+        apiBaseUrl: baseURL,
+        tenantId,
+        accountId,
+        mediaProof: owner.reportCredential,
+        screenShare: () => client.getSnapshot().media.screenShare,
+      }),
+    [baseURL, tenantId, accountId, owner, client],
+  );
   if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
     return (
       <SiteRoot>
@@ -166,7 +179,7 @@ function OwnerCallSurface({
     );
   return (
     <Chalk
-      screenAnnotation={webAnnotation}
+      screenAnnotation={annotation}
       {...props}
       client={client}
       timeLimit={{

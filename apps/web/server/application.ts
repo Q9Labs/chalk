@@ -7,6 +7,7 @@ import { sealSession } from "./session";
 import { body, form, DashboardError, exactOrigin, json, query, redirect } from "./http";
 import { withSessionEngine, resolveTenant } from "./engine";
 import { pages, type Context } from "./pages";
+import { helperDevices } from "./helper-devices";
 import { edgeCache, favicon } from "./favicon";
 import { DASHBOARD_RETURN_PATH } from "../src/lib/dashboard/return-path";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
@@ -112,6 +113,7 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   const person = await current(request, env, provider);
   if (request.method === "POST") await checkCsrf(request, person, env);
   if (request.method === "GET" && path === "/dashboard-api/favicon") return favicon(faviconQuery.parse(query(request)).host, { fetcher: fetch, cache: edgeCache() });
+  if (path === "/dashboard-api/helper-devices") return withSessionEngine(request, env, person, (engine) => helperDevices(request, env, engine.tenantId));
   const name = path.slice("/dashboard-api/".length);
   const page = Object.hasOwn(pages, name) ? pages[name as keyof typeof pages] : undefined;
   if (!page) throw new DashboardError(404, "route_not_found");

@@ -23,6 +23,22 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("approveScreenAnnotationHelperDeviceCode", "/v1/tenants/:tenant_id/helper-devices/approve", {
+      params: S.ApproveScreenAnnotationHelperDeviceCodePathParamsSchema,
+      payload: S.ApproveScreenAnnotationHelperDeviceCodeRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
       params: S.CreateAPIKeyPathParamsSchema,
       headers: S.CreateAPIKeyRequestHeadersSchema,
@@ -355,6 +371,20 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("issueScreenAnnotationHelperPairTicket", "/v1/screen-annotation/helper/pair-ticket", {
+      payload: S.IssueScreenAnnotationHelperPairTicketRequestBodySchema,
+      success: S.IssueScreenAnnotationHelperPairTicketResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listAPIKeys", "/v1/tenants/:tenant_id/api-keys", {
       params: S.ListAPIKeysPathParamsSchema,
       query: S.ListAPIKeysQueryParamsSchema,
@@ -383,6 +413,21 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listScreenAnnotationHelperDevices", "/v1/tenants/:tenant_id/helper-devices", {
+      params: S.ListScreenAnnotationHelperDevicesPathParamsSchema,
+      success: S.ListScreenAnnotationHelperDevicesResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -432,6 +477,37 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("lookupScreenAnnotationHelperDeviceCode", "/v1/tenants/:tenant_id/helper-devices/lookup", {
+      params: S.LookupScreenAnnotationHelperDeviceCodePathParamsSchema,
+      payload: S.LookupScreenAnnotationHelperDeviceCodeRequestBodySchema,
+      success: S.LookupScreenAnnotationHelperDeviceCodeResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("pollScreenAnnotationHelperDeviceCode", "/v1/screen-annotation/helper/device/poll", {
+      payload: S.PollScreenAnnotationHelperDeviceCodeRequestBodySchema,
+      success: S.PollScreenAnnotationHelperDeviceCodeResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("redeliverWebhookDelivery", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id/deliveries/:delivery_id/redeliver", {
       params: S.RedeliverWebhookDeliveryPathParamsSchema,
       headers: S.RedeliverWebhookDeliveryRequestHeadersSchema,
@@ -466,6 +542,22 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("rememberScreenAnnotationHelperDevice", "/v1/tenants/:tenant_id/helper-devices/remember", {
+      params: S.RememberScreenAnnotationHelperDevicePathParamsSchema,
+      payload: S.RememberScreenAnnotationHelperDeviceRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.delete("revokeAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id", {
       params: S.RevokeAPIKeyPathParamsSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
@@ -493,6 +585,22 @@ const defaultGroup = HttpApiGroup.make("default")
         S.McpOauthConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("revokeScreenAnnotationHelperDevice", "/v1/tenants/:tenant_id/helper-devices/revoke", {
+      params: S.RevokeScreenAnnotationHelperDevicePathParamsSchema,
+      payload: S.RevokeScreenAnnotationHelperDeviceRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -595,6 +703,21 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("startScreenAnnotationHelperDeviceCode", "/v1/screen-annotation/helper/device/start", {
+      payload: S.StartScreenAnnotationHelperDeviceCodeRequestBodySchema,
+      success: S.StartScreenAnnotationHelperDeviceCodeResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
