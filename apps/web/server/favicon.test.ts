@@ -169,12 +169,16 @@ it("stops reading a body that grows past the cap, even when it never declares a 
 });
 
 it("gives every request a deadline and treats a timeout as no icon", async () => {
-  const real = AbortSignal.timeout.bind(AbortSignal);
-  vi.spyOn(AbortSignal, "timeout").mockImplementation(() => real(10));
+  vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+    const deadline = new AbortController();
+    queueMicrotask(() => deadline.abort(new DOMException("Request timed out", "TimeoutError")));
+    return deadline.signal;
+  });
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const hangs: IconFetcher = (_url, init) =>
     new Promise<Response>((_resolve, reject) => {
-      init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      init.signal?.throwIfAborted();
+      init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
     });
   expect((await favicon("example.com", deps(hangs))).status).toBe(204);
 });
