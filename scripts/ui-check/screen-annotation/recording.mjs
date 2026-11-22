@@ -204,7 +204,7 @@ const bakedX = Math.round(bakedPoint.x * width);
 const bakedY = Math.round(bakedPoint.y * height);
 ffmpeg("-i", track, "-vf", `drawbox=x=${bakedX - 12}:y=${bakedY - 4}:w=24:h=8:color=magenta:t=fill`, "-c:v", "libvpx", "-deadline", "realtime", "-crf", "10", "-b:v", "1M", bakedTrack);
 const bakedBytes = readFileSync(bakedTrack);
-const bakedMedia = join(output, "baked-media.json");
+const bakedMedia = join(dirname(request.decoded_media_path), "baked-media.json");
 const bakedMediaSHA = write(bakedMedia, {
   ...media,
   sources: media.sources.map((item) => (item.source_id === source.source_id ? { ...item, path: "baked-ink.webm", sha256: hash(bakedBytes), byte_size: bakedBytes.length } : item)),
