@@ -34,9 +34,10 @@ type TenantAuthorizer interface {
 }
 
 type CapabilityStatus struct {
-	Recording       bool
-	Transcription   bool
-	WhiteboardFiles bool
+	Recording        bool
+	Transcription    bool
+	WhiteboardFiles  bool
+	ScreenAnnotation func(context.Context) bool
 }
 
 type Options struct {
@@ -202,12 +203,13 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
+		annotationEnabled := capabilities.ScreenAnnotation != nil && capabilities.ScreenAnnotation(ctx)
 		body := map[string]any{
 			"status": "ok",
 			"dependencies": map[string]string{
 				"postgres": "ok",
 			},
-			"capabilities": capabilityReadiness(capabilities),
+			"capabilities": capabilityReadiness(capabilities, annotationEnabled),
 		}
 		if backlog != nil {
 			if count, oldest, observed := backlog(); observed {
@@ -238,15 +240,16 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus, d
 		"dependencies": map[string]string{
 			dependency: "unavailable",
 		},
-		"capabilities": capabilityReadiness(capabilities),
+		"capabilities": capabilityReadiness(capabilities, false),
 	})
 }
 
-func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
+func capabilityReadiness(capabilities CapabilityStatus, annotationEnabled bool) map[string]string {
 	return map[string]string{
-		"recording":        enabledStatus(capabilities.Recording),
-		"transcription":    enabledStatus(capabilities.Transcription),
-		"whiteboard_files": enabledStatus(capabilities.WhiteboardFiles),
+		"recording":         enabledStatus(capabilities.Recording),
+		"transcription":     enabledStatus(capabilities.Transcription),
+		"whiteboard_files":  enabledStatus(capabilities.WhiteboardFiles),
+		"screen_annotation": enabledStatus(annotationEnabled),
 	}
 }
 

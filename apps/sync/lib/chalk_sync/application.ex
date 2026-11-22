@@ -23,6 +23,7 @@ defmodule ChalkSync.Application do
         {ChalkSync.Operations, []},
         fanout_child(),
         whiteboard_fanout_child(),
+        annotation_availability_child(),
         annotation_presence_child(),
         annotation_housekeeping_child(),
         lifecycle_consumer_child(),
@@ -135,6 +136,10 @@ defmodule ChalkSync.Application do
       {ChalkSync.WhiteboardV1.Fanout,
        url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
     end
+  end
+
+  defp annotation_availability_child do
+    if database_workers?(), do: {ChalkSync.ScreenAnnotation.Availability, []}
   end
 
   defp annotation_presence_child do

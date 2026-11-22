@@ -24,6 +24,7 @@ var (
 	helperDeviceRules     = errorRules{
 		ruleFor(apiErrorInvalidRequest, helperaccess.ErrInvalid),
 		ruleFor(apiErrorForbidden, helperaccess.ErrDeviceUnavailable, helperaccess.ErrShareNotCurrent),
+		ruleFor(apiErrorServiceUnavailable, helperaccess.ErrAnnotationDisabled),
 	}
 )
 

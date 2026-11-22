@@ -59,5 +59,9 @@ func helperPairTicketEndpoint(service *helperaccess.Service, origins []string) E
 		RequestBody("ScreenAnnotationHelperPairRequest", helperPairBody{}).
 		Responds(http.StatusOK, "ScreenAnnotationHelperPairResponse", helperaccess.LocalTickets{}).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable).
-		ErrorRules(errorRules{ruleFor(apiErrorInvalidRequest, helperaccess.ErrInvalid), ruleFor(apiErrorForbidden, helperaccess.ErrShareNotCurrent)})
+		ErrorRules(errorRules{
+			ruleFor(apiErrorInvalidRequest, helperaccess.ErrInvalid),
+			ruleFor(apiErrorForbidden, helperaccess.ErrShareNotCurrent),
+			ruleFor(apiErrorServiceUnavailable, helperaccess.ErrAnnotationDisabled),
+		})
 }

@@ -460,6 +460,7 @@ type Querier interface {
 	RotateActiveAPIKey(ctx context.Context, arg RotateActiveAPIKeyParams) (RotateActiveAPIKeyRow, error)
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
 	RotateWebhookEndpointSecret(ctx context.Context, arg RotateWebhookEndpointSecretParams) (RotateWebhookEndpointSecretRow, error)
+	ScreenAnnotationEnabled(ctx context.Context, defaultEnabled bool) (bool, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
 	SetMediaPlaneKillSwitch(ctx context.Context, paused bool) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
