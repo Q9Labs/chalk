@@ -200,7 +200,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
         end_reason: end_reason
       })
 
-    EvidenceSink.enqueue!(connection, record)
+    EvidenceSink.enqueue_witness!(connection, record)
   end
 
   defp complete_external_episode(connection, episode, external, end_reason) do

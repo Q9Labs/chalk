@@ -37,13 +37,23 @@ defmodule ChalkSync.Obs.EvidenceSink do
   transaction rolls back.
   """
   @spec enqueue!(DBConnection.conn(), map()) :: :ok
-  def enqueue!(connection, %{"tenant_id" => tenant} = record) do
+  def enqueue!(connection, record), do: insert!(connection, record, false)
+
+  @doc """
+  Like `enqueue!/2` for the record that commits with a state change. The outbox cap does not
+  count or refuse it, so a full outbox, or a Participant's upload holding the Tenant's usage
+  row, cannot keep that state change from committing.
+  """
+  @spec enqueue_witness!(DBConnection.conn(), map()) :: :ok
+  def enqueue_witness!(connection, record), do: insert!(connection, record, true)
+
+  defp insert!(connection, %{"tenant_id" => tenant} = record, witness) do
     payload = JSON.encode!([%{service: %{name: "chalk-sync"}, attributes: record}])
 
     Postgrex.query!(
       connection,
-      "insert into telemetry_outbox (tenant_id, payload) values ($1, $2::text::jsonb)",
-      [UUID.dump!(tenant), payload],
+      "insert into telemetry_outbox (tenant_id, payload, witness) values ($1, $2::text::jsonb, $3)",
+      [UUID.dump!(tenant), payload, witness],
       timeout: 1_000
     )
 

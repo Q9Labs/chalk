@@ -1597,6 +1597,7 @@ type TelemetryOutbox struct {
 	Payload     []byte             `json:"payload"`
 	AvailableAt pgtype.Timestamptz `json:"available_at"`
 	Retry       bool               `json:"retry"`
+	Witness     bool               `json:"witness"`
 }
 
 type TelemetryOutboxUsage struct {

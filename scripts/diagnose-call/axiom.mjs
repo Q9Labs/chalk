@@ -24,13 +24,15 @@ export async function axiom({ token, org, dataset, apl, start, end, signal }, fe
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(org ? { "x-axiom-org-id": org } : {}) },
     body: JSON.stringify({ apl: `['${dataset}'] | ${apl} | take ${ROW_CAP}`, startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString() }),
   });
-  if (!response.ok) throw new Error(`Axiom answered HTTP ${response.status} for dataset ${dataset}: ${(await response.text()).slice(0, 300)}`);
+  if (!response.ok) throw new Error(`Axiom answered HTTP ${response.status}`);
   const body = await response.json();
   const rows = (body.matches ?? []).map((match) => unpackEvidence({ _time: match._time, _rowId: match._rowId, ...match.data }));
   return { rows, truncated: rows.length >= ROW_CAP };
 }
 
-function unpackEvidence(row) {
+function unpackEvidence(logRow) {
+  // A row the API relay logged for another producer (no Axiom grant) names it in `evidence_service`; the log's own `service` is the API's.
+  const row = typeof logRow.evidence_service === "string" ? { ...logRow, service: logRow.evidence_service } : logRow;
   if (typeof row.body !== "string" || !row.body.startsWith(EVIDENCE_PREFIX)) return row;
   try {
     const attributes = JSON.parse(row.body.slice(EVIDENCE_PREFIX.length));

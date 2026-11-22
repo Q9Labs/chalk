@@ -37,3 +37,28 @@ func TestLogEvidenceKeepsARowItCannotRead(t *testing.T) {
 		t.Fatal("an unreadable row was reported as exported, so the relay would delete it")
 	}
 }
+
+func TestLogEvidenceKeepsRowsWhenTheLoggerDropsThem(t *testing.T) {
+	var logs bytes.Buffer
+	export := LogEvidence(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.Level(100)})))
+	row := json.RawMessage(`{"service":{"name":"chalk-sync"},"attributes":{"event":"sync.episode.ended"}}`)
+	if err := export(t.Context(), []json.RawMessage{row}); err == nil {
+		t.Fatal("a logger that drops the line reported it as exported, so the relay would delete the evidence")
+	}
+}
+
+func TestLogEvidenceWritesAtAnyConfiguredLevelAndNamesTheProducer(t *testing.T) {
+	var logs bytes.Buffer
+	export := LogEvidence(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
+	row := json.RawMessage(`{"service":{"name":"chalk-sync"},"attributes":{"event":"sync.episode.ended"}}`)
+	if err := export(t.Context(), []json.RawMessage{row}); err != nil {
+		t.Fatal(err)
+	}
+	var line map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &line); err != nil {
+		t.Fatalf("no line at the error level: %q", logs.String())
+	}
+	if line["evidence_service"] != "chalk-sync" || line["event"] != "sync.episode.ended" {
+		t.Fatalf("line = %v, want the producer and the row's attributes", line)
+	}
+}

@@ -82,7 +82,7 @@ defmodule ChalkSync.ObsChainTest do
     end
   end
 
-  test "an end whose witness cannot be stored is not committed", ctx do
+  test "an end commits with its witness even when the Tenant's outbox is full", ctx do
     tenant = UUID.dump!(ctx.seed.episode.tenant_id)
 
     Postgrex.query!(
@@ -104,9 +104,9 @@ defmodule ChalkSync.ObsChainTest do
         UUID.dump!(ctx.seed.episode.episode_id)
       ])
 
-    assert status != "ended"
+    assert status == "ended"
 
-    assert %{rows: [[0]]} =
+    assert %{rows: [[1]]} =
              Postgrex.query!(
                ctx.connection,
                "select count(*)::int from telemetry_outbox where tenant_id = $1",
