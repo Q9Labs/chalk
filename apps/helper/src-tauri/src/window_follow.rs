@@ -1,7 +1,7 @@
 use crate::geometry::Rect;
 
 const SIZE: usize = 72;
-const SAMPLES: usize = SIZE * SIZE * 4;
+pub const SAMPLES: usize = SIZE * SIZE * 4;
 pub const LANDMARK_COUNT: usize = 3 * 40;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -136,10 +136,22 @@ mod platform {
         let Ok(id) = u32::try_from(id) else {
             return false;
         };
+        // A grant given after Helper started reaches only processes that start later.
+        if crate::permission::in_process() {
+            capture_in_process(id, pixels)
+        } else {
+            crate::sampler::shared().sample(id, pixels)
+        }
+    }
+
+    pub fn capture_in_process(id: u32, pixels: &mut [u8]) -> bool {
         // The bridge copies only after the callback finishes; it never retains this buffer.
         unsafe { chalk_window_sample(id, pixels.as_mut_ptr(), SIZE) }
     }
 }
+
+#[cfg(target_os = "macos")]
+pub use platform::capture_in_process;
 
 #[cfg(target_os = "windows")]
 mod platform {

@@ -194,6 +194,24 @@ bool chalk_tile_snapshot(const char *path) {
     return true;
 }
 
+// The on-screen System Settings window id and bounds, so a preview can follow a window of another app.
+uint32_t chalk_preview_settings_window(int32_t *rect) {
+    NSRunningApplication *settings = [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.systempreferences"].firstObject;
+    if (settings == nil) return 0;
+    NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
+    for (NSDictionary *window in windows) {
+        if ([window[(id)kCGWindowOwnerPID] intValue] == settings.processIdentifier && [window[(id)kCGWindowLayer] intValue] == 0) {
+            CGRect bounds;
+            if (CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)window[(id)kCGWindowBounds], &bounds)) {
+                rect[0] = (int32_t)bounds.origin.x; rect[1] = (int32_t)bounds.origin.y;
+                rect[2] = (int32_t)bounds.size.width; rect[3] = (int32_t)bounds.size.height;
+            }
+            return [window[(id)kCGWindowNumber] unsignedIntValue];
+        }
+    }
+    return 0;
+}
+
 static WKWebView *findWebView(NSView *view) {
     if ([view isKindOfClass:WKWebView.class]) return (WKWebView *)view;
     for (NSView *child in view.subviews) {

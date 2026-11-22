@@ -6,9 +6,15 @@ Helper asks for one permission, and only when the sharer chooses **Follow captur
 
 1. The sharer chooses **Follow captured window**. If Screen Recording is already on, follow starts. If not, Settings shows **Allow Screen Recording** and nothing else happens: Helper never triggers the system prompt, so the sharer is never surprised by a dialog mid-call.
 2. **Open System Settings** opens the Screen & System Audio Recording pane and shows a small floating tile with Chalk Helper's icon below the Settings window. The sharer drags the tile into the list, or switches Chalk Helper on if it is already there. The tile follows the Settings window, never takes focus, and is excluded from capture like every Helper window. A **Show Chalk Helper in Finder** link covers the case where the drag fails.
-3. Helper watches for the grant once a second while the panel is open. macOS applies a new grant to a process only after it restarts, so Helper checks in a short child process (`--check-screen-recording`) that sees the new state. When that child reports access, Helper writes a resume note, relaunches itself and opens Settings with **Screen Recording is on**. Settings can also be dismissed with **Not now**, which leaves marks in the call preview and offers **Turn on window follow** later.
+3. Helper watches for the grant once a second while the panel is open. macOS applies a new grant only to processes that start after it, so the check runs in a short child process (`--check-screen-recording`). When that child reports access, Helper closes the panel and starts following the window. **Not now** leaves marks in the call preview and offers **Turn on window follow** later.
 
-The resume note is a timestamp and a flag. It holds no secrets, expires after ten minutes, and is read once.
+## No restart
+
+Helper never relaunches itself for a grant, so the pairing and the Sync attachment survive it. A running process keeps its old answer about Screen Recording, so window pixels come from a long-lived child (`chalk-helper --window-sampler`, in `src/sampler.rs`) that starts after the grant and therefore has it. Helper writes `window <id>` lines to the child's stdin and reads back one status byte and, on success, one 72 by 72 RGBA frame, the same buffer the landmark match always read. Window bounds and identity stay in Helper: they need no permission and depend on Helper's own overlay window.
+
+- The child starts when follow is enabled without in-process access and stops when the window share ends. It also exits when Helper's pipe closes, so a crashed Helper leaves no orphan.
+- A dead or silent child is killed and replaced once per request. If the replacement fails too, the next attempt waits a second.
+- When the grant arrives, macOS may offer to quit Helper. The panel tells the sharer to choose **Later**, because Helper doesn't need it. If they quit anyway, Helper reopens normally and the call offers pairing again.
 
 ## What came from where
 
@@ -17,9 +23,9 @@ The resume note is a timestamp and a flag. It holds no secrets, expires after te
 
 ## Limits
 
-- The browser cannot reconnect on its own after the relaunch. A pairing needs a fresh signed ticket, a native **Allow** click and a typed confirmation code, so the sharer reconnects from the call. Removing that step needs a resume token in the pairing protocol, or sampling windows in a child process so Helper never has to restart.
+- Quitting Helper after the grant loses the pairing, because a pairing needs a fresh signed ticket, a native **Allow** click and a typed confirmation code. Making a known device pair in one click is a pairing protocol change and is not part of this.
 - The grant click itself cannot be automated or skipped, and nothing here tries to.
-- Preview builds (`--features fixture`) can open any onboarding state with `--preview=<first_run|needed|settings|restarting|resumed|later>` and save PNGs of their own windows with `--snapshot=<dir>`. Real Helper windows are excluded from capture, so the preview window is not.
+- Preview builds (`--features fixture`) can open any onboarding state with `--preview=<first_run|needed|settings|later>` and save PNGs of their own windows with `--snapshot=<dir>`. Real Helper windows are excluded from capture, so the preview window is not. `--preview=sampler` writes `sampler.txt`, a timeline of a simulated grant and a killed capture child with Helper's process ID on every line.
 
 ## Windows
 

@@ -163,27 +163,21 @@ const permissionCopy = {
   },
   settings_open: {
     title: "Add Chalk Helper",
-    body: "Drag the Chalk Helper tile into the Screen Recording list, or switch it on if it’s already there.",
+    body: "Drag the Chalk Helper tile into the Screen Recording list, or switch it on if it’s already there. If macOS offers to quit Chalk Helper, choose Later.",
     primary: ["Open System Settings", "open_screen_recording_settings"],
     later: true,
     waiting: true,
     finder: true
   },
-  restarting: { title: "Screen Recording is on", body: "Restarting Chalk Helper…" },
   later: {
     title: "Window follow is off",
     body: "Marks still show in the call preview.",
     primary: ["Turn on window follow", "follow_window"]
-  },
-  resumed: {
-    title: "Screen Recording is on",
-    body: "Chalk Helper restarted. Reconnect from your Chalk call to follow your window."
   }
 };
 
 function renderPermission(view) {
-  const { phase, resumed } = view.permission;
-  const copy = view.approval ? undefined : permissionCopy[phase === "idle" && resumed ? "resumed" : phase];
+  const copy = view.approval ? undefined : permissionCopy[view.permission.phase];
   root.querySelector(".permission").hidden = !copy;
   root.querySelector("#follow-window").hidden = !view.canFollowWindow || Boolean(copy);
   if (!copy) return;

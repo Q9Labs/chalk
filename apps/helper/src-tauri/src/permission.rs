@@ -3,18 +3,13 @@
 //! macOS asks for the permission only when a sharer follows a shared window.
 //! `Onboarding` is a plain state machine over a `ScreenAccess` provider so the
 //! flow is tested without System Settings. `System` is the real provider.
+//!
+//! Helper never restarts for a grant. A process started after the grant sees
+//! it, so Helper keeps running and captures through the `sampler` child.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
-
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 pub const PROBE_FLAG: &str = "--check-screen-recording";
-const RESUME_FILE: &str = "resume.json";
-const RESUME_FRESH: Duration = Duration::from_secs(10 * 60);
 
 /// What the process may capture. A process started after a grant sees it at
 /// once. A running process keeps its old answer until it restarts.
@@ -30,7 +25,6 @@ pub enum Phase {
     Idle,
     Needed,
     SettingsOpen,
-    Restarting,
     Later,
 }
 
@@ -40,7 +34,6 @@ pub enum Effect {
     OpenSettings,
     HideTile,
     Follow,
-    Restart,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,29 +45,19 @@ pub enum Ask {
 #[derive(Serialize)]
 pub struct View {
     phase: Phase,
-    resumed: bool,
 }
 
 #[derive(Default)]
 pub struct Onboarding {
     phase: Phase,
     asked_this_share: bool,
-    resumed: bool,
+    /// A new process saw a grant this one cannot use. Later shares skip the panel.
+    granted_to_new_processes: bool,
 }
 
 impl Onboarding {
-    pub fn after_restart(resumed: bool) -> Self {
-        Self {
-            resumed,
-            ..Self::default()
-        }
-    }
-
     pub fn view(&self) -> View {
-        View {
-            phase: self.phase,
-            resumed: self.resumed,
-        }
+        View { phase: self.phase }
     }
 
     /// True while the machine waits for a grant, so only then is a fresh
@@ -86,7 +69,7 @@ impl Onboarding {
     /// The sharer asked to follow the window.
     pub fn ask(&mut self, access: &impl ScreenAccess) -> Ask {
         self.asked_this_share = true;
-        if access.in_process() {
+        if access.in_process() || self.granted_to_new_processes {
             self.phase = Phase::Idle;
             return Ask::Proceed;
         }
@@ -97,7 +80,7 @@ impl Onboarding {
     }
 
     pub fn open_settings(&mut self) -> Vec<Effect> {
-        if self.phase == Phase::Idle || self.phase == Phase::Restarting {
+        if self.phase == Phase::Idle {
             return Vec::new();
         }
         self.phase = Phase::SettingsOpen;
@@ -118,23 +101,25 @@ impl Onboarding {
     pub fn tick(&mut self, window_share: bool, access: &impl ScreenAccess) -> Vec<Effect> {
         if !window_share {
             self.asked_this_share = false;
-            if matches!(self.phase, Phase::Idle | Phase::Restarting) {
+            if self.phase == Phase::Idle {
                 return Vec::new();
             }
             self.phase = Phase::Idle;
             return vec![Effect::HideTile];
         }
-        self.resumed = false;
         match self.phase {
-            Phase::Needed | Phase::SettingsOpen if access.in_process() => {
+            Phase::Needed | Phase::SettingsOpen
+                if access.in_process() || access.fresh_process() =>
+            {
+                self.granted_to_new_processes = !access.in_process();
                 self.phase = Phase::Idle;
                 vec![Effect::HideTile, Effect::Follow]
             }
-            Phase::Needed | Phase::SettingsOpen if access.fresh_process() => {
-                self.phase = Phase::Restarting;
-                vec![Effect::HideTile, Effect::Restart]
-            }
-            Phase::Idle if !self.asked_this_share && !access.in_process() => {
+            Phase::Idle
+                if !self.asked_this_share
+                    && !self.granted_to_new_processes
+                    && !access.in_process() =>
+            {
                 self.asked_this_share = true;
                 self.phase = Phase::Needed;
                 vec![Effect::ShowPanel]
@@ -142,38 +127,6 @@ impl Onboarding {
             _ => Vec::new(),
         }
     }
-}
-
-#[derive(Serialize, Deserialize)]
-struct Resume {
-    at_ms: u64,
-}
-
-pub fn resume_path(config_dir: &Path) -> PathBuf {
-    config_dir.join(RESUME_FILE)
-}
-
-pub fn write_resume(path: &Path, now_ms: u64) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, serde_json::to_vec(&Resume { at_ms: now_ms })?)
-}
-
-/// Reads and removes the restart note. It is true only for a recent one.
-pub fn take_resume(path: &Path, now_ms: u64) -> bool {
-    let note = fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Resume>(&bytes).ok());
-    let _ = fs::remove_file(path);
-    note.is_some_and(|note| now_ms.saturating_sub(note.at_ms) <= RESUME_FRESH.as_millis() as u64)
-}
-
-pub fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 /// A process started with `PROBE_FLAG` answers whether it can capture the
@@ -240,11 +193,20 @@ pub fn reveal_in_finder() {
     platform::reveal_in_finder();
 }
 
-pub fn relaunch(app: &tauri::AppHandle, resume: &Path) {
-    if let Err(error) = write_resume(resume, now_ms()) {
-        eprintln!("chalk-helper: resume_note_failed {error}");
-    }
-    platform::relaunch(app);
+/// Whether this running process can capture the screen.
+#[cfg(target_os = "macos")]
+pub fn in_process() -> bool {
+    platform::in_process()
+}
+
+/// Start the capture child once a grant exists that this process cannot use.
+pub fn start_sampling() {
+    platform::start_sampling();
+}
+
+/// Stop the capture child when the share ends.
+pub fn stop_sampling() {
+    platform::stop_sampling();
 }
 
 #[cfg(target_os = "macos")]
@@ -312,24 +274,14 @@ mod platform {
         }
     }
 
-    /// Start a new instance once this one has released the pairing port.
-    pub fn relaunch(app: &tauri::AppHandle) {
-        let Some(bundle) = bundle() else {
-            app.restart();
-        };
-        let wait_then_open = format!(
-            "while kill -0 {} 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open -n \"$1\"",
-            std::process::id()
-        );
-        if Command::new("/bin/sh")
-            .args(["-c", &wait_then_open, "sh"])
-            .arg(bundle)
-            .spawn()
-            .is_err()
-        {
-            app.restart();
+    pub fn start_sampling() {
+        if !in_process() {
+            crate::sampler::shared().start();
         }
-        app.exit(0);
+    }
+
+    pub fn stop_sampling() {
+        crate::sampler::shared().stop();
     }
 }
 
@@ -352,9 +304,9 @@ mod platform {
 
     pub fn reveal_in_finder() {}
 
-    pub fn relaunch(app: &tauri::AppHandle) {
-        app.restart();
-    }
+    pub fn start_sampling() {}
+
+    pub fn stop_sampling() {}
 }
 
 #[cfg(test)]
@@ -412,10 +364,35 @@ mod tests {
         fake.fresh.set(true);
         assert_eq!(
             onboarding.tick(true, &fake),
-            vec![Effect::HideTile, Effect::Restart]
+            vec![Effect::HideTile, Effect::Follow]
         );
-        assert_eq!(onboarding.view().phase, Phase::Restarting);
+        assert_eq!(onboarding.view().phase, Phase::Idle);
         assert!(onboarding.tick(true, &fake).is_empty());
+    }
+
+    #[test]
+    fn a_grant_only_a_new_process_can_use_never_asks_for_a_restart() {
+        let fake = Fake::default();
+        let mut onboarding = Onboarding::default();
+        onboarding.ask(&fake);
+        fake.fresh.set(true);
+        let effects = onboarding.tick(true, &fake);
+        assert_eq!(effects, vec![Effect::HideTile, Effect::Follow]);
+        assert!(!fake.in_process.get());
+    }
+
+    #[test]
+    fn after_such_a_grant_the_next_share_goes_straight_to_follow() {
+        let fake = Fake::default();
+        let mut onboarding = Onboarding::default();
+        onboarding.ask(&fake);
+        fake.fresh.set(true);
+        onboarding.tick(true, &fake);
+        onboarding.tick(false, &fake);
+
+        assert!(onboarding.tick(true, &fake).is_empty());
+        assert_eq!(onboarding.ask(&fake), Ask::Proceed);
+        assert_eq!(onboarding.view().phase, Phase::Idle);
     }
 
     #[test]
@@ -483,51 +460,10 @@ mod tests {
     }
 
     #[test]
-    fn a_restart_keeps_the_note_until_the_next_share_starts() {
-        let fake = Fake::default();
-        fake.in_process.set(true);
-        let mut onboarding = Onboarding::after_restart(true);
-        assert!(onboarding.view().resumed);
-        onboarding.tick(true, &fake);
-        assert!(!onboarding.view().resumed);
-    }
-
-    #[test]
-    fn a_recent_restart_note_is_used_once() {
-        let dir = tempdir("resume-fresh");
-        let path = resume_path(&dir);
-        write_resume(&path, 1_000).unwrap();
-        assert!(take_resume(&path, 1_000 + 60_000));
-        assert!(!take_resume(&path, 1_000 + 60_000));
-    }
-
-    #[test]
-    fn a_stale_or_damaged_restart_note_is_ignored_and_removed() {
-        let dir = tempdir("resume-stale");
-        let path = resume_path(&dir);
-        write_resume(&path, 1_000).unwrap();
-        assert!(!take_resume(
-            &path,
-            1_000 + RESUME_FRESH.as_millis() as u64 + 1
-        ));
-        assert!(!path.exists());
-        fs::write(&path, b"not json").unwrap();
-        assert!(!take_resume(&path, 1_000));
-        assert!(!path.exists());
-    }
-
-    #[test]
     fn this_platform_provider_matches_its_permission_model() {
         let granted = System.in_process();
         if cfg!(not(target_os = "macos")) {
             assert!(granted && System.fresh_process());
         }
-    }
-
-    fn tempdir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("chalk-helper-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
     }
 }

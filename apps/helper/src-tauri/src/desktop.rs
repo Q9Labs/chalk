@@ -161,10 +161,6 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         let mut local = state.0.lock().expect("Helper state");
         local.preferences = preferences;
         local.preferences_file = Some(preferences_file);
-        local.permission = permission::Onboarding::after_restart(permission::take_resume(
-            &permission::resume_path(&app.path().app_config_dir()?),
-            permission::now_ms(),
-        ));
     }
 
     let handle = app.handle();
@@ -245,6 +241,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
 async fn watch_permission(app: AppHandle, pairing: Pairing) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let window_share = pairing.offers_window();
         let watching = app
             .state::<Desktop>()
             .0
@@ -264,7 +261,10 @@ async fn watch_permission(app: AppHandle, pairing: Pairing) {
             .lock()
             .expect("Helper state")
             .permission
-            .tick(pairing.offers_window(), &access);
+            .tick(window_share, &access);
+        if !window_share {
+            permission::stop_sampling();
+        }
         apply(&app, effects);
     }
 }
@@ -288,6 +288,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 let _ = app.run_on_main_thread(permission::hide_tile);
             }
             Effect::Follow => {
+                permission::start_sampling();
                 let pairing = app
                     .state::<Desktop>()
                     .0
@@ -301,10 +302,6 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                     }
                 }
             }
-            Effect::Restart => match app.path().app_config_dir() {
-                Ok(config) => permission::relaunch(app, &permission::resume_path(&config)),
-                Err(_) => app.restart(),
-            },
         }
     }
 }
@@ -878,6 +875,7 @@ pub fn act(
             if ask == Ask::Panel {
                 return Ok(());
             }
+            permission::start_sampling();
             pairing.enable_follow().map_err(str::to_owned)?;
             let _ = window.hide();
             return Ok(());
