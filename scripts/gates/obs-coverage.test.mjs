@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const graph = JSON.parse(readFileSync(join(root, "observability/generated/coverage-graph.json"), "utf8"));
 const example = graph.symptoms.find((symptom) => symptom.code === "end.wrong_screen");
 const only = (symptom) => ({ symptoms: [symptom] });
+
+/** A scratch folder under the repository (git-ignored `.tmp`): the graph names files relative to root, which cannot reach another drive on Windows. */
+function scratch() {
+  mkdirSync(join(root, ".tmp"), { recursive: true });
+  return mkdtempSync(join(root, ".tmp", "obs-coverage-"));
+}
 
 test("the worked example is covered end to end and every other symptom is allow-listed", async () => {
   const result = await checkCoverage({ root, graph });
@@ -44,7 +50,7 @@ test("a positive fixture with no row of a witnessing event fails", async () => {
 });
 
 test("a fault scenario that only names the symptom and the chain, and skips its test, fails because it is not the chain's first hop", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "obs-coverage-"));
+  const dir = scratch();
   writeFileSync(join(dir, "fake.fault.test.ts"), '// end.wrong_screen\n// observability/fixtures/end.wrong_screen/chain/\nit.skip("never runs", () => {});\n');
   const { failures } = await checkCoverage({ root, graph: only({ ...example, fault_scenario: relative(root, join(dir, "fake.fault.test.ts")) }) });
   assert.match(failures.join("\n"), /the first hop in observability\/fixtures\/end\.wrong_screen\/chain\/hops\.json must be the fault scenario/u);
@@ -69,7 +75,7 @@ test("a fixture whose rows are not its chain's rows fails, so a hop that renames
   const positive = JSON.parse(readFileSync(join(root, example.fixtures.positive), "utf8"));
   const edited = { ...positive, rows: positive.rows.map((row) => ({ ...row, est_server_ms: row.est_server_ms + 1 })) };
   const unchained = { ...positive, chain: undefined };
-  const dir = mkdtempSync(join(tmpdir(), "obs-coverage-"));
+  const dir = scratch();
   writeFileSync(join(dir, "edited.json"), JSON.stringify(edited));
   writeFileSync(join(dir, "unchained.json"), JSON.stringify(unchained));
   const at = (name) => relative(root, join(dir, name));
