@@ -12,7 +12,7 @@ await client.participants.admit(requestId);
 await client.participants.deny(requestId);
 ```
 
-The current policy is in `participants.admissionPolicy`, and it is `null` until Sync sends the call's state. A Participant with `manageAdmission` can switch it between `open` and `knock` during the call. The call menu shows this to a host as "Who can join".
+The current policy is in `participants.admissionPolicy`, and it is `null` until Sync sends the call's state. A Participant with `manageAdmission` can switch it between `open` and `knock` during the call. This sets the live call's policy only: people who arrive through a public invite are still admitted by the Space's own admission policy.
 
 ```ts
 await client.participants.setAdmissionPolicy("knock");
