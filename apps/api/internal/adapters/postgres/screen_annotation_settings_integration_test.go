@@ -7,7 +7,7 @@ import (
 )
 
 func TestScreenAnnotationSettingsOverrideTheStartupDefault(t *testing.T) {
-	pool := settingsPool(t)
+	pool := accountTenantIntegrationPool(t)
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)

@@ -72,7 +72,7 @@ insert into screen_annotation_settings (singleton, enabled) values (true, false)
 on conflict (singleton) do update set enabled = excluded.enabled;
 ```
 
-API `/readyz` shows `capabilities.screen_annotation: disabled` on the next request. Sync checks the override once a second per node. In a healthy call, allow about two seconds for Sync to stop accepting annotation commands and withdraw the ink and controls on every connected client. Helper attachments close with `screen_annotation_disabled`. The main Sync socket, screen share and saved recordings stay in place.
+API `/readyz` shows `capabilities.screen_annotation: disabled` on the next request. Sync checks the override once a second per node. In a healthy call, allow about two seconds for Sync to withdraw the ink and controls. It rejects annotation commands with `not_active`, which older SDKs already understand. Helper attachments close with `screen_annotation_disabled`. The main Sync socket, screen share and saved recordings stay in place.
 
 Use the same statement with `true` to turn annotation back on, or `delete from screen_annotation_settings where singleton;` to use the startup default again. A client that connected while annotation was off must reconnect to negotiate it. Clients already using annotation before the flip get the current layer back without reconnecting.
 

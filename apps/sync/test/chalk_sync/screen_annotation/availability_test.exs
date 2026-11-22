@@ -32,11 +32,11 @@ defmodule ChalkSync.ScreenAnnotation.AvailabilityTest do
     {%{"state" => %{"layer" => %{"layer_id" => ^layer}, "marks" => [_]}}, observer} =
       observer
       |> Client.send_json(%{"type" => "annotation_state_request"})
-      |> receive_frame("annotation_state")
+      |> receive_frame("annotation_state", &match?(%{"state" => %{"marks" => [_]}}, &1))
 
     Proof.set_availability(db, false)
-    {%{"state" => nil}, sharer} = receive_frame(sharer, "annotation_state")
-    {%{"state" => nil}, observer} = receive_frame(observer, "annotation_state")
+    {_, sharer} = receive_frame(sharer, "annotation_state", &match?(%{"state" => nil}, &1))
+    {_, observer} = receive_frame(observer, "annotation_state", &match?(%{"state" => nil}, &1))
     sharer = rejected(sharer, Proof.command(layer, 1, %{"kind" => "pause", "paused" => true}))
     observer = Client.send_json(observer, %{"type" => "ping"})
     {_, observer} = receive_frame(observer, "pong")
@@ -107,11 +107,16 @@ defmodule ChalkSync.ScreenAnnotation.AvailabilityTest do
     client
   end
 
-  defp receive_frame(client, type) do
+  defp receive_frame(client, type, matches? \\ fn _ -> true end) do
     case Client.recv(client, 3_000) do
-      {:json, %{"type" => ^type} = frame, client} -> {frame, client}
-      {:json, %{"type" => _}, client} -> receive_frame(client, type)
-      other -> flunk("waiting for #{type}: #{inspect(other)}")
+      {:json, %{"type" => ^type} = frame, client} ->
+        if matches?.(frame), do: {frame, client}, else: receive_frame(client, type, matches?)
+
+      {:json, %{"type" => _}, client} ->
+        receive_frame(client, type, matches?)
+
+      other ->
+        flunk("waiting for #{type}: #{inspect(other)}")
     end
   end
 end
