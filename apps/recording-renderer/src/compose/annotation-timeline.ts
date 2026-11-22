@@ -66,8 +66,10 @@ function hasRecordedMarks(layer: BoundAnnotationLayer): boolean {
 }
 
 function firstShareSource(segment: VideoSegment, eligible: (sourceId: string) => boolean): string | undefined {
-  const first = segment.spans[0];
-  return first?.scene.tiles.find((tile) => tile.kind === "screen_share" && tile.video !== undefined && eligible(tile.video.sourceId))?.video?.sourceId;
+  for (const tile of segment.spans[0]?.scene.tiles ?? []) {
+    if (tile.kind === "screen_share" && tile.video !== undefined && eligible(tile.video.sourceId)) return tile.video.sourceId;
+  }
+  return undefined;
 }
 
 function overlapsSegment(layer: BoundAnnotationLayer, segment: VideoSegment, firstFrame: (atMs: number) => number): boolean {
