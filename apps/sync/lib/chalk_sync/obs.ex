@@ -13,9 +13,7 @@ defmodule ChalkSync.Obs do
 
   A test may also set `clock`, a function that returns Unix milliseconds, to pin `est_server_ms`, and `event_id` and
   `seq`, functions that return the next record's id and sequence number, so a recorded row is the same on every run.
-  `ChalkSync.Obs.EvidenceSink` enqueues Episode records for the API evidence relay.
-
-  See observability/registry/README.md for how a slice declares and emits its events.
+  `ChalkSync.Obs.EvidenceSink` enqueues Episode records for the API evidence relay. See observability/registry/README.md for how a slice declares and emits its events.
   """
 
   alias ChalkSync.Obs.{Check, Flags, Registry, Violation}
@@ -30,12 +28,8 @@ defmodule ChalkSync.Obs do
   @violations 2
   @export_failures 3
 
-  @doc """
-  Creates the counters and this node's source id once. `ChalkSync.Application` calls it before any record
-  is emitted. It is not an `@on_load` hook because `:crypto`, which the id needs, is not loaded while a
-  release loads its modules.
-  """
-  @spec init() :: :ok
+  # Not @on_load: a release loads its modules before :crypto, which the source id needs.
+  @doc false
   def init do
     if :persistent_term.get(@counters, nil) == nil do
       :persistent_term.put(@source_id, UUID.generate())
