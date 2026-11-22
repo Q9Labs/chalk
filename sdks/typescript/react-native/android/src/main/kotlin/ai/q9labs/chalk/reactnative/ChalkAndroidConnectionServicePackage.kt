@@ -13,6 +13,7 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
       ChalkCallServiceModule(reactContext),
       ChalkAnnotationFramesModule(reactContext),
       ChalkAnnotationOverlayModule(reactContext),
+      ChalkScreenCaptureModule(reactContext),
     )
   }
 

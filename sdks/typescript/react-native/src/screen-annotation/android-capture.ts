@@ -1,6 +1,7 @@
 import { screenAnnotationFor, type ScreenAnnotationFrameSize, type SpaceClient } from "@q9labsai/chalk-client";
 import { mediaDevices } from "@cloudflare/react-native-webrtc";
 import { Alert, DeviceEventEmitter, NativeModules, Platform } from "react-native";
+import { captureAndroidScreen } from "../media/android-screen-capture";
 import { releaseNativeTrack } from "../media/native-release-track";
 
 type AndroidAnnotationOverlay = {
@@ -35,7 +36,7 @@ export function createNativeAnnotationCapture() {
           });
         }
       }
-      const stream = (await mediaDevices.getDisplayMedia()) as unknown as MediaStream;
+      const stream = Platform.OS === "android" ? await captureAndroidScreen() : (await mediaDevices.getDisplayMedia()) as unknown as MediaStream;
       const track = stream.getVideoTracks()[0];
       if (!track || !overlay) return stream;
 
