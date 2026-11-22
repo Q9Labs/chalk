@@ -7,7 +7,7 @@ import { useSpaceClient } from "../context/space-client-context";
 import { useMeasuredRef } from "../frame/measurement";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
-import { useCan, useConnection, useChat, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
+import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { announce } from "../primitives/announce";
@@ -56,6 +56,9 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
   const live = useConnection().status === "live";
   const canReact = useCan("sendReaction") && live;
   const canManageBoard = useCan("manageWhiteboard");
+  const canPublishScreen = useCan("publishScreen");
+  const screen = useMedia().local.screen.state;
+  const sharingScreen = screen === "enabled" || screen === "requesting";
 
   const fail = useCallback((message: string) => () => toasts.show({ kind: "error", dismissible: true, message }), [toasts]);
   const toggleHand = useCallback(() => {
@@ -88,6 +91,17 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
       <SheetGroup>
         {inviteLink ? <CopyLinkRow link={inviteLink} /> : null}
         {inviteLink ? <SheetRow icon="iosShare" label="Share link" onPress={() => shareLink(inviteLink)} testID="more.share" /> : null}
+        {Platform.OS === "android" && (sharingScreen || (canPublishScreen && live)) ? (
+          <SheetRow
+            icon={sharingScreen ? "shareOff" : "monitor"}
+            label={sharingScreen ? "Stop sharing screen" : "Share screen"}
+            onPress={() => {
+              onClose();
+              client.media.setScreenShareEnabled(!sharingScreen).catch(fail(sharingScreen ? "Couldn’t stop sharing your screen." : "Couldn’t share your screen."));
+            }}
+            testID="more.screenShare"
+          />
+        ) : null}
         <SheetRow
           icon="pen"
           label="Board"
