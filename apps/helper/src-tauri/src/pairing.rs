@@ -39,6 +39,7 @@ const PORT: u16 = 47361;
 const HOST: &str = "127.0.0.1:47361";
 const VERSION: u8 = 1;
 const LIFETIME: Duration = Duration::from_secs(60);
+const ISSUER_CLOCK_TOLERANCE: Duration = Duration::from_secs(1);
 const AUDIENCE: &str = "screen_annotation_helper_local_v1";
 
 #[derive(Clone)]
@@ -607,12 +608,10 @@ impl Pairing {
             &ticket.participant_id,
             &ticket.layer_id,
         ];
-        let lifetime = ticket.expires_at_ms.checked_sub(now)?;
+        let lifetime = ticket_lifetime(ticket.expires_at_ms, now)?;
         if ticket.aud != AUDIENCE
             || ticket.role != "sharer"
             || ticket.version != VERSION
-            || lifetime == 0
-            || lifetime > LIFETIME.as_millis() as u64
             || ticket.origin.as_bytes() != self.0.origin.as_bytes()
             || ticket.helper_public_key != self.0.helper_public_key
             || ticket.generation == 0
@@ -624,7 +623,7 @@ impl Pairing {
         {
             return None;
         }
-        Some((ticket, Instant::now() + Duration::from_millis(lifetime)))
+        Some((ticket, Instant::now() + lifetime))
     }
 
     fn verify_attachment(&self, encoded: &str, local: &Ticket) -> Option<Duration> {
@@ -632,7 +631,7 @@ impl Pairing {
         let ticket: AttachmentTicket =
             serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload).ok()?).ok()?;
         let expires = ticket.exp.checked_mul(1000)?;
-        let lifetime = expires.checked_sub(utc_ms())?;
+        let lifetime = ticket_lifetime(expires, utc_ms())?;
         if ticket.aud != "screen_annotation_helper_v1"
             || ticket.role != "sharer"
             || ticket.version != VERSION
@@ -644,15 +643,13 @@ impl Pairing {
             || ticket.publication_id != local.publication_id
             || ticket.layer_id != local.layer_id
             || expires > local.expires_at_ms
-            || lifetime == 0
-            || lifetime > LIFETIME.as_millis() as u64
             || ticket.cnf.jwk.kty != "OKP"
             || ticket.cnf.jwk.crv != "Ed25519"
             || ticket.cnf.jwk.x != local.helper_public_key
         {
             return None;
         }
-        Some(Duration::from_millis(lifetime))
+        Some(lifetime)
     }
 
     fn connect_attachment(&self, session: &mut Session, token: String, lifetime: Duration) {
@@ -745,6 +742,14 @@ impl Pairing {
             })
             .map(|session| session.until)
     }
+}
+
+fn ticket_lifetime(expires_at_ms: u64, now_ms: u64) -> Option<Duration> {
+    let remaining = Duration::from_millis(expires_at_ms.checked_sub(now_ms)?);
+    // Allow a small difference between issuer and Helper wall clocks, but
+    // never grant more than the normal lease or accept an expired ticket.
+    (!remaining.is_zero() && remaining <= LIFETIME + ISSUER_CLOCK_TOLERANCE)
+        .then_some(remaining.min(LIFETIME))
 }
 
 fn utc_ms() -> u64 {
@@ -1187,12 +1192,13 @@ mod tests {
         issuer: &Ed25519KeyPair,
         browser: &Ed25519KeyPair,
         audience: &str,
+        expires_at_ms: u64,
     ) -> String {
         let protected =
             URL_SAFE_NO_PAD.encode(br#"{"alg":"EdDSA","typ":"chalk-helper-pair-ticket+jwt"}"#);
         let claims = json!({
             "aud": audience,
-            "expiresAtMs": utc_ms() + 30_000,
+            "expiresAtMs": expires_at_ms,
             "version": 1,
             "challenge": challenge["challenge"],
             "origin": ORIGIN,
@@ -1298,6 +1304,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn signed_ticket_tolerates_small_clock_skew_without_extending_the_lease() {
+        let (pairing, key) = issuer();
+        let browser = browser_key();
+        let challenge = body(
+            pairing
+                .clone()
+                .router()
+                .oneshot(hello(&browser))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let accepts = |remaining_ms: i64| {
+            let expiry = utc_ms().checked_add_signed(remaining_ms).unwrap();
+            let body: Value =
+                serde_json::from_str(&signed_attach(&challenge, &key, &browser, AUDIENCE, expiry))
+                    .unwrap();
+            pairing.verify_ticket(body["pairTicket"].as_str().unwrap())
+        };
+        let (_, until) = accepts(60_500).expect("a signed ticket from a clock 500 ms ahead");
+        assert!(until.saturating_duration_since(Instant::now()) <= LIFETIME);
+        assert!(
+            accepts(65_000).is_none(),
+            "large clock differences fail closed"
+        );
+        assert!(
+            accepts(-500).is_none(),
+            "an expired ticket does not get a grace period"
+        );
+    }
+
+    #[tokio::test]
     async fn attachment_needs_a_signed_audience_bound_ticket_and_local_approval() {
         let (pairing, key) = issuer();
         let router = pairing.clone().router();
@@ -1310,8 +1348,13 @@ mod tests {
                 .body(Body::from(body))
                 .unwrap()
         };
-        let wrong_audience =
-            signed_attach(&challenge, &key, &browser, "screen_annotation_helper_v1");
+        let wrong_audience = signed_attach(
+            &challenge,
+            &key,
+            &browser,
+            "screen_annotation_helper_v1",
+            utc_ms() + 30_000,
+        );
         assert_eq!(
             router
                 .clone()
@@ -1322,7 +1365,7 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
 
-        let valid = signed_attach(&challenge, &key, &browser, AUDIENCE);
+        let valid = signed_attach(&challenge, &key, &browser, AUDIENCE, utc_ms() + 30_000);
         let mut pending = Box::pin(router.clone().oneshot(attach(valid.clone())));
         assert!(tokio::time::timeout(Duration::from_millis(5), &mut pending)
             .await
@@ -1408,7 +1451,7 @@ mod tests {
         let router = pairing.clone().router();
         let browser = browser_key();
         let challenge = body(router.clone().oneshot(hello(&browser)).await.unwrap()).await;
-        let signed = signed_attach(&challenge, &key, &browser, AUDIENCE);
+        let signed = signed_attach(&challenge, &key, &browser, AUDIENCE, utc_ms() + 30_000);
         let attach = || {
             request("POST", "/v1/attach")
                 .header(header::CONTENT_TYPE, "application/json")
