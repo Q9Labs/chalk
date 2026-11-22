@@ -5,7 +5,7 @@ import { SnapshotSchema } from "../generated/sync";
 import { decodeV1ServerFrame } from "./v1-codec";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { applyV1Event, computeV1StateDigest, restoreV1Snapshot, snapshotToState } from "./v1-reducer";
-import { commandIds, ownerId, peerId, recordingClient, recoverSocket, settle, stateWithPeer, syncClient, wireSnapshot } from "../../tests/helpers/sync-v1";
+import { commandIds, ownerId, peerId, recordingClient, recoverSocket, recoveryId, settle, stateWithPeer, wireSnapshot } from "../../tests/helpers/sync-v1";
 describe("V1SyncClient", () => {
   it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
     const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
