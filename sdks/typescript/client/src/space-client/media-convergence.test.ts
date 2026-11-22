@@ -9,9 +9,11 @@ it("publishes a consented screen capture after a short reconnect during the syst
   const screen = track("video");
   const pickerOpened = Promise.withResolvers<void>();
   const pickerResult = Promise.withResolvers<MediaStream>();
-  const send = vi.fn<ConnectionSyncClient["setScreenShareEnabled"]>(async () => ({
-    operationId: "screen", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied",
-  }));
+  const screenCommands: boolean[] = [];
+  const setScreenShareEnabled: ConnectionSyncClient["setScreenShareEnabled"] = async (enabled) => {
+    screenCommands.push(enabled);
+    return { operationId: "screen", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+  };
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
     {
@@ -27,7 +29,7 @@ it("publishes a consented screen capture after a short reconnect during the syst
         },
         createSyncClient: () => ({
           ...platform.sync,
-          setScreenShareEnabled: send,
+          setScreenShareEnabled,
           offReasonNegotiated: () => true,
           link: { proof: () => ({ wall: 0, mono: 0, suspends: 0 }), longSince: () => false },
         }),
@@ -44,10 +46,10 @@ it("publishes a consented screen capture after a short reconnect during the syst
     pickerResult.resolve(stream([screen]));
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(screen.readyState).toBe("live");
-    expect(send).not.toHaveBeenCalled();
+    expect(screenCommands).toEqual([]);
     platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
     await sharing;
-    expect(send.mock.calls).toEqual([[true]]);
+    expect(screenCommands).toEqual([true]);
     expect(screen.readyState).toBe("live");
   } finally {
     pickerResult.resolve(stream([screen]));
