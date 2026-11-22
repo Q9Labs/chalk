@@ -23,13 +23,16 @@ recording-enabled Orb with running capture and render workers for playback.
 
 ## Check on the phone
 
-- **Entire screen:** In the Android call choose **Share screen → Entire screen**.
-  Allow the overlay, then show a dark, moving screen. Draw a kept stroke from
-  the web viewer. Check the stroke on Android and in the video at the viewer.
-  Pause, resume, and clear. The controls must work and must not appear in the video.
-- **Single app:** Stop sharing, start again, and select one app. Move or scroll in
-  that app: the web viewer must receive changing video. Draw again; the viewer
-  should see the data-layer stroke, but the selected app on Android must not.
+- **Entire screen:** Join as someone allowed to share. In the call controls,
+  open **More options → Share screen**, then choose **Entire screen** in
+  Android's sharing prompt. Allow the overlay, then show a dark, moving screen.
+  Draw a kept stroke from the web viewer. Check the stroke on Android and in the
+  video at the viewer. Pause, resume, and clear. The controls must work and must
+  not appear in the video.
+- **Single app:** Open **More options → Stop sharing screen**, then start sharing
+  again and choose one app in Android's prompt. Move or scroll in that app: the
+  web viewer must receive changing video. Draw again; the viewer should see the
+  data-layer stroke, but the selected app on Android must not.
 - **Android viewer:** Join as a viewer of another Android phone sharing its full
   screen. Draw a kept stroke; it must appear at touch-down. Record the viewer
   at 60 fps or faster, preferably with a high-speed camera and a dark, moving
