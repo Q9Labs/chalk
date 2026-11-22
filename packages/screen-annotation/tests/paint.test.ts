@@ -86,6 +86,14 @@ describe("annotation Canvas renderer", () => {
     }
   });
 
+  it("renders a hollow local touch target without a second laser dot, trail, or name", () => {
+    const ctx = createCanvas(400, 260).getContext("2d");
+    paintAnnotation(ctx, { rect, marks: [], localTouch: point(0.5, 0.5), nowMs: 1000 });
+    expect(ctx.getImageData(200, 130, 1, 1).data[3]).toBe(0);
+    expect(ctx.getImageData(188, 130, 1, 1).data[3]).toBeGreaterThan(0);
+    expect(ctx.getImageData(240, 149, 1, 1).data[3]).toBe(0);
+  });
+
   it("clips cropped ink, restores caller state, and paints revisions before previews", () => {
     const ctx = createCanvas(400, 260).getContext("2d");
     ctx.globalAlpha = 0.23;

@@ -5,7 +5,7 @@
   "license": "MIT",
   "main": "./index.ts",
   "scripts": {
-    "prepare:native-dependencies": "pnpm --filter @q9labsai/chalk-client build && pnpm --filter @q9labsai/facehash build && pnpm --filter @q9labsai/chalk-whiteboard build:embedded && pnpm --filter @q9labsai/chalk-react-native build",
+    "prepare:native-dependencies": "pnpm --filter @q9labsai/chalk-client build && pnpm --filter @q9labsai/facehash build && pnpm --filter @q9labsai/chalk-screen-annotation build && pnpm --filter @q9labsai/chalk-whiteboard build:embedded && pnpm --filter @q9labsai/chalk-react-native build",
     "eas-build-post-install": "pnpm run prepare:native-dependencies",
     "brand-assets": "tsx ./scripts/brand-assets.ts",
     "start": "node ../../scripts/dev-log.mjs start:raw",

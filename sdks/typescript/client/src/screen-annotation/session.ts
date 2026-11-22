@@ -1,8 +1,12 @@
 import type { ConnectionPorts } from "../connection";
-import type { ConnectionLifecycleCapability } from "../connection/lifecycle";
 import { confirmedScreenPublication } from "../space-client/media-snapshot";
-import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
+import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
 import type { AnnotationReplica } from "./replica";
+
+type AnnotationPorts = {
+  readonly sync: Pick<ConnectionPorts["sync"], "annotation" | "getSnapshot" | "subscribe">;
+  readonly media: Pick<ConnectionPorts["media"], "getSnapshot" | "subscribe">;
+};
 
 const unavailable: ScreenAnnotationSnapshot = { status: "unavailable" };
 
@@ -13,10 +17,14 @@ export class AnnotationSession implements ScreenAnnotationClient {
   #unbind: (() => void) | undefined;
   readonly #unsubscribePorts: () => void;
 
-  constructor(connection: ConnectionLifecycleCapability) {
+  constructor(
+    connection: { readonly subscribePorts: (listener: (ports: AnnotationPorts | null) => void) => () => void },
+    private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined,
+  ) {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
+  supportsBurnIn = (): boolean => this.#replica?.burnInNegotiated === true;
   getSnapshot = () => this.#replica?.getSnapshot() ?? unavailable;
   serverNowMs = () => this.#replica?.serverNowMs() ?? Date.now();
   subscribe = (listener: () => void): (() => void) => {
@@ -34,7 +42,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
     this.#listeners.clear();
   }
 
-  #bind(ports: ConnectionPorts | null): void {
+  #bind(ports: AnnotationPorts | null): void {
     this.#unbind?.();
     const replica = ports?.sync.annotation;
     this.#replica = replica;
@@ -46,7 +54,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
     let disposed = false;
     const bindLocal = () => {
       if (disposed || binding || retry !== undefined) return;
-      const local = localScreenBinding(ports, replica.getSnapshot());
+      const local = localScreenBinding(ports, replica.getSnapshot(), replica.burnInNegotiated ? this.verifiedCapture : undefined);
       if (local.kind === "unavailable") return;
       if (local.kind === "waiting_for_dimensions") {
         schedule();
@@ -54,7 +62,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
       }
 
       binding = true;
-      void replica.bind(local.publicationId, local.frame).finally(() => {
+      void replica.bind(local.publicationId, local.frame, local.burnedIn).finally(() => {
         binding = false;
         if (!disposed) schedule();
       });
@@ -88,15 +96,16 @@ export class AnnotationSession implements ScreenAnnotationClient {
   }
 }
 
-function localScreenBinding(ports: ConnectionPorts, annotation: ScreenAnnotationSnapshot) {
+function localScreenBinding(ports: AnnotationPorts, annotation: ScreenAnnotationSnapshot, verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined) {
   if (annotation.status !== "ready") return { kind: "unavailable" } as const;
   const sync = ports.sync.getSnapshot();
   const screen = ports.media.getSnapshot().localTracks.find((track) => track.source === "screen" && track.enabled);
   // Wait for Sync to observe this exact locally published track.
   const publicationId = confirmedScreenPublication(screen, sync);
   if (!screen || !publicationId || annotation.state?.layer.publication_id === publicationId) return { kind: "unavailable" } as const;
-  const frame = screenDimensions(screen.track);
-  return frame ? ({ kind: "ready", publicationId, frame } as const) : ({ kind: "waiting_for_dimensions" } as const);
+  const witness = verifiedCapture?.(screen.track);
+  const frame = witness ?? screenDimensions(screen.track);
+  return frame ? ({ kind: "ready", publicationId, frame, burnedIn: witness !== undefined } as const) : ({ kind: "waiting_for_dimensions" } as const);
 }
 
 function screenDimensions(track: MediaStreamTrack) {

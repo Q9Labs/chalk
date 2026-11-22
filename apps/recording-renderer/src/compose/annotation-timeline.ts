@@ -62,7 +62,7 @@ function indexAnnotationLayers(layers: readonly BoundAnnotationLayer[]): Map<str
 }
 
 function hasRecordedMarks(layer: BoundAnnotationLayer): boolean {
-  return layer.initial.marks.length > 0 || layer.changes.some(({ change }) => change.kind === "upsert");
+  return !layer.layer.burned_in && (layer.initial.marks.length > 0 || layer.changes.some(({ change }) => change.kind === "upsert"));
 }
 
 function firstShareSource(segment: VideoSegment, eligible: (sourceId: string) => boolean): string | undefined {

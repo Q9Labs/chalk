@@ -15,6 +15,7 @@
     "!src/**/*.test.tsx",
     "embedded",
     "android",
+    "!android/build",
     "!android/src/test",
     "ios",
     "*.podspec"
@@ -122,6 +123,7 @@
   },
   "dependencies": {
     "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/chalk-screen-annotation": "workspace:^",
     "@q9labsai/chalk-whiteboard": "workspace:^",
     "@q9labsai/facehash": "workspace:^",
     "uqr": "^0.1.3"

@@ -76,6 +76,7 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
         "layer_id" => %{"type" => "string", "format" => "uuid"},
         "publication_id" => %{"type" => "string", "minLength" => 1, "maxLength" => 256},
         "sharer_id" => %{"type" => "string", "format" => "uuid"},
+        "burned_in" => %{"const" => true},
         "frame" => %{"$ref" => "#/$defs/FrameSize"}
       }
     },
@@ -255,6 +256,7 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
       "properties" => %{
         "kind" => %{"enum" => ["bind"]},
         "publication_id" => %{"type" => "string", "minLength" => 1, "maxLength" => 256},
+        "burned_in" => %{"const" => true},
         "frame" => %{"$ref" => "#/$defs/FrameSize"}
       }
     },
@@ -474,6 +476,7 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
           "minimum" => 1,
           "maximum" => 9_007_199_254_740_991
         },
+        "enabled" => %{"enum" => [false]},
         "state" => %{"oneOf" => [%{"$ref" => "#/$defs/State"}, %{"type" => "null"}]}
       }
     },

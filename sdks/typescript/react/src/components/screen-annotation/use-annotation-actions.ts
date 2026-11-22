@@ -1,7 +1,7 @@
-import { captureAnnotationVideoFrame } from "@q9labsai/chalk-screen-annotation";
+import { captureAnnotationVideoFrame, type BakedExportProof } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import { useRef, useState, type RefObject } from "react";
-import { canDraw, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationFrame } from "./model";
+import { canDraw, matchesTarget, targetOf, videoMatchesTrack, visibleMarks, type ScreenAnnotationActions, type ScreenAnnotationFrame } from "./model";
 
 export function useAnnotationActions({
   client,
@@ -11,6 +11,8 @@ export function useAnnotationActions({
   track,
   actorId,
   allowExport,
+  exportProof,
+  bakedFrame,
 }: {
   readonly client: ScreenAnnotationClient;
   readonly state: ScreenAnnotationState;
@@ -19,6 +21,8 @@ export function useAnnotationActions({
   readonly track: MediaStreamTrack;
   readonly actorId: string;
   readonly allowExport: boolean;
+  readonly exportProof: BakedExportProof;
+  readonly bakedFrame: RefObject<HTMLCanvasElement | null>;
 }) {
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,25 +42,31 @@ export function useAnnotationActions({
       if (matchesTarget(client, target)) onError("The annotation action could not be applied.");
     }
   };
+  function currentShare(video: HTMLVideoElement | null): ScreenAnnotationState | null {
+    const live = matchesTarget(client, target);
+    return live && video && videoRef.current === video && videoMatchesTrack(video, track) && canDraw(live, actorId) ? live : null;
+  }
+  function captureFrame(video: HTMLVideoElement, live: ScreenAnnotationState): ScreenAnnotationFrame {
+    const { layer, marks, paused } = live;
+    const scene = { publicationId: layer.publication_id, marks: layer.burned_in ? [] : marks, paused, sharerId: layer.sharer_id, nowMs: client.serverNowMs() };
+    return captureAnnotationVideoFrame(video, scene, layer.burned_in ? bakedFrame.current : null);
+  }
   const exportFrame = async (action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]>, toBoard: boolean) => {
     if (saving.current) return;
-    const live = matchesTarget(client, target);
     const video = videoRef.current;
-    if (!live || !video || !videoMatchesTrack(video, track) || !canDraw(live, actorId)) return;
+    let live = currentShare(video);
+    if (!live || !video) return;
     saving.current = true;
     setBusy(true);
     setFeedback(null);
     try {
       const retry = toBoard && boardRetry.current?.action === action && boardRetry.current.target.fence === target.fence ? boardRetry.current : null;
-      const frame =
-        retry?.frame ??
-        captureAnnotationVideoFrame(video, {
-          publicationId: live.layer.publication_id,
-          marks: live.marks,
-          paused: live.paused,
-          sharerId: live.layer.sharer_id,
-          nowMs: client.serverNowMs(),
-        });
+      if (!retry && live.layer.burned_in) {
+        await exportProof.wait(visibleMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id));
+        live = currentShare(video);
+        if (!live) return;
+      }
+      const frame = retry?.frame ?? captureFrame(video, live);
       if (toBoard) boardRetry.current = { frame, action, target };
       await action(frame);
       if (toBoard) boardRetry.current = null;

@@ -151,13 +151,13 @@ function InkControls({ ink, assignedColor, formatOpen, onInk, onCommand, onToggl
   );
 }
 
-function ManageMarks({ state, people, nowMs, onCommand }: Pick<ScreenAnnotationToolbarProps, "state" | "onCommand"> & { readonly people: readonly Person[]; readonly nowMs: number }) {
+export function ManageMarks({ state, people, nowMs, onCommand, showPauseAndClear = true }: Pick<ScreenAnnotationToolbarProps, "state" | "onCommand"> & { readonly people: readonly Person[]; readonly nowMs: number; readonly showPauseAndClear?: boolean }) {
   const { access } = state;
   const canModerate = access.can_moderate;
   const canManagePolicy = access.can_manage_policy;
   return (
     <>
-      {canModerate ? (
+      {canModerate && showPauseAndClear ? (
         <View style={styles.row}>
           <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => onCommand({ kind: "pause", paused: !state.paused })} />
           <ToolButton label="Clear all" onPress={() => onCommand({ kind: "clear", scope: { kind: "all" } })} />
@@ -179,11 +179,11 @@ function ManageMarks({ state, people, nowMs, onCommand }: Pick<ScreenAnnotationT
             </ChalkText>
             {canManagePolicy && request ? (
               <>
-                <ToolButton label="Allow" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: true })} />
-                <ToolButton label="Decline" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: false })} />
+                <ToolButton label="Allow" accessibilityLabel={`Allow ${person.name} to draw`} onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: true })} />
+                <ToolButton label="Decline" accessibilityLabel={`Decline request from ${person.name}`} onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: false })} />
               </>
             ) : canManagePolicy && !person.manages && access.draw_policy !== "hosts" ? (
-              <ToolButton label={person.canDraw ? "Block" : "Allow"} onPress={() => onCommand({ kind: "set_draw_permission", participant_id: person.id, allow: !person.canDraw })} />
+              <ToolButton label={person.canDraw ? "Block" : "Allow"} accessibilityLabel={person.canDraw ? `Block ${person.name} from drawing` : `Allow ${person.name} to draw`} onPress={() => onCommand({ kind: "set_draw_permission", participant_id: person.id, allow: !person.canDraw })} />
             ) : null}
             {canModerate ? <ToolButton label="Clear" onPress={() => onCommand({ kind: "clear", scope: { kind: "participant", participant_id: person.id } })} /> : null}
           </View>
@@ -195,6 +195,7 @@ function ManageMarks({ state, people, nowMs, onCommand }: Pick<ScreenAnnotationT
 
 export function ToolButton({
   label,
+  accessibilityLabel = label,
   icon,
   path,
   circle,
@@ -205,6 +206,7 @@ export function ToolButton({
   onPress,
 }: {
   readonly label: string;
+  readonly accessibilityLabel?: string;
   readonly icon?: IconName;
   readonly path?: string;
   readonly circle?: true;
@@ -218,7 +220,7 @@ export function ToolButton({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={selected === undefined ? undefined : { selected }}
       onPress={onPress}
       style={({ pressed }) => [styles.button, { backgroundColor: selected ? theme.focus : pressed ? theme.pressed : theme.hover }]}

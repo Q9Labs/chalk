@@ -1,13 +1,31 @@
 import { space } from "../theme/tokens";
-import type { ScreenAnnotationCommand } from "@q9labsai/chalk-client";
-import { useCallback, useSyncExternalStore, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import type { ScreenAnnotationCommand, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
 import { frameRegions } from "../frame/regions";
 import { useToasts } from "../primitives/toast/ToastStack";
-import { ToolButton } from "./ScreenAnnotationToolbar";
+import { useSpaceSelector } from "../stage/space-selector";
+import { useTheme } from "../theme/theme";
+import { ManageMarks, ToolButton } from "./ScreenAnnotationToolbar";
 import { hasTarget, matchLayer, targetFor, type StageAnnotation } from "./model";
+
+const selectRoster = (snapshot: SpaceSnapshot) => snapshot.participants.roster;
+const selectAccess = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access;
+
+export function useAnnotationPeople(participantId: string) {
+  const roster = useSpaceSelector(selectRoster);
+  const access = useSpaceSelector(selectAccess);
+  return roster
+    .filter((person) => person.participantId !== participantId)
+    .map((person) => ({
+      id: person.participantId,
+      name: person.displayName,
+      manages: person.capabilities.includes("manageWhiteboard"),
+      canDraw: access.permissions.find((permission) => permission.participantId === person.participantId)?.canDraw ?? (access.policy === "everyone" && person.capabilities.includes("drawWhiteboard")),
+    }));
+}
 
 export function AnnotationDock({ children }: { readonly children: ReactNode }): React.JSX.Element {
   const { arrangement, width, height, insets } = useDeviceLayout();
@@ -21,10 +39,12 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
   );
 }
 
-/** MediaProjection may capture Chalk itself. Without exclusion proof, expose controls but no ink. */
-export function AndroidShareAnnotationControls({ annotation, publicationId, participantId }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string }): React.JSX.Element | null {
+/** Controls live in Chalk, not in the system ink window. */
+export function AndroidShareAnnotationControls({ annotation, publicationId, participantId, people }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string; readonly people: ReturnType<typeof useAnnotationPeople> }): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
+  const { colors } = useTheme();
+  const [showPolicy, setShowPolicy] = useState(false);
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
   const get = useCallback(() => matchLayer(client, publicationId), [client, publicationId]);
   const state = useSyncExternalStore(subscribe, get, get);
@@ -47,7 +67,13 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
       <View style={styles.controls}>
         <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
         <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
+        {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
       </View>
+      {showPolicy && state.access.can_manage_policy ? (
+        <ScrollView style={[styles.policy, { backgroundColor: colors.canvas }]} contentContainerStyle={styles.policyContent}>
+          <ManageMarks state={state} people={people} nowMs={client.serverNowMs()} onCommand={(command) => void run(command)} showPauseAndClear={false} />
+        </ScrollView>
+      ) : null}
     </AnnotationDock>
   );
 }
@@ -55,4 +81,6 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
 const styles = StyleSheet.create({
   dock: { position: "absolute", maxHeight: "50%", alignItems: "center" },
   controls: { width: "100%", maxWidth: 320, flexDirection: "row", gap: space[1] },
+  policy: { width: "100%", maxWidth: 320, flexShrink: 1 },
+  policyContent: { padding: space[2], gap: space[1] },
 });

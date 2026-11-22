@@ -146,10 +146,24 @@ function validateCommittedMark(mark: ScreenAnnotationMark, item: Revision): void
   if (mark.committed_at_ms > item.atMs || mark.created_revision > item.revision) throw invalid("has an invalid committed mark");
 }
 
+function parseLayerBinding(value: unknown): { readonly fields: object; readonly burned: boolean } {
+  const fields = objectValue(value, LABEL);
+  const baseFields = ["layer_id", "publication_id", "sharer_id", "frame"];
+  const burned = Object.hasOwn(fields, "burned_in");
+  exactKeys(fields, burned ? [...baseFields, "burned_in"] : baseFields, LABEL);
+  if (burned) assertBurnedLayer(fields);
+  return { fields, burned };
+}
+
+function assertBurnedLayer(fields: object): void {
+  if (field(fields, "burned_in") !== true) throw invalid("has an invalid capture mode");
+}
+
 function parseLayer(value: unknown): ScreenAnnotationLayer {
-  const layer = record(value, ["layer_id", "publication_id", "sharer_id", "frame"]);
+  const { fields: layer, burned } = parseLayerBinding(value);
   const frame = record(field(layer, "frame"), ["width", "height"]);
   return {
+    ...(burned ? { burned_in: true } : {}),
     layer_id: uuid(layer, "layer_id"),
     publication_id: stringField(layer, "publication_id", LABEL, 256),
     sharer_id: uuid(layer, "sharer_id"),

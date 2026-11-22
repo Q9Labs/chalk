@@ -1,4 +1,4 @@
-import type { AnnotationFit } from "@q9labsai/chalk-screen-annotation";
+import { BakedExportProof, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -50,18 +50,33 @@ export default function AnnotationSurface({ annotation, board, ...props }: Surfa
     () => client.getSnapshot(),
     () => client.getSnapshot(),
   );
-  const state = snapshot.status === "ready" ? snapshot.state : null;
-  if (snapshot.status !== "ready" || !state || state.layer.publication_id !== publicationId || !props.live) return null;
+  const { state, connected } = useShareLayer(snapshot, publicationId, props.track, props.live);
+  if (!state) return null;
   const activeActions = {
     saveToWhiteboard: actions?.saveToWhiteboard ?? (board?.allowSave ? save : undefined),
     downloadPng: actions?.downloadPng ?? (offerPngDownload ? downloadAnnotationPng : undefined),
   };
-  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={activeActions} state={state} presence={snapshot.presence} />;
+  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={activeActions} state={state} presence={snapshot.status === "ready" ? snapshot.presence : []} connected={connected} />;
+}
+
+function useShareLayer(snapshot: ReturnType<ScreenAnnotationClient["getSnapshot"]>, publicationId: string, track: MediaStreamTrack, shareIsLive: boolean) {
+  const [last, setLast] = useState<{ readonly track: MediaStreamTrack; readonly state: ScreenAnnotationState } | null>(null);
+  const live = snapshot.status === "ready" && shareIsLive && snapshot.state?.layer.publication_id === publicationId ? snapshot.state : null;
+  if (live && live.layer.burned_in && (last?.state !== live || last.track !== track)) {
+    setLast({ track: track, state: live });
+  } else if (last && !live?.layer.burned_in && snapshot.status !== "connecting") {
+    setLast(null);
+  }
+  // Keep observing the same video through a Sync-only disconnect, without permitting stale interactions.
+  const recovering = snapshot.status === "connecting" && shareIsLive && last?.track === track && last.state.layer.publication_id === publicationId;
+  const state = live ?? (recovering ? last.state : null);
+  return { state, connected: live !== null };
 }
 
 function ActiveAnnotationSurface({
   client,
   state,
+  connected,
   presence,
   fontUrl,
   helper,
@@ -79,6 +94,7 @@ function ActiveAnnotationSurface({
   grants,
 }: Omit<SurfaceProps, "annotation" | "live"> & {
   readonly client: ScreenAnnotationClient;
+  readonly connected: boolean;
   readonly state: ScreenAnnotationState;
   readonly presence: readonly ScreenAnnotationPresence[];
   readonly fontUrl?: string;
@@ -87,11 +103,13 @@ function ActiveAnnotationSurface({
 }): React.JSX.Element {
   const [brush, setBrush] = useState(defaultBrush);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const exportProof = useMemo(() => new BakedExportProof(), [state.layer.layer_id, state.fence, track]);
+  const bakedFrame = useRef<HTMLCanvasElement | null>(null);
   const editable = canDraw(state, actorId);
   // A window share may be this browser window. Only an excluded call tab can host ink in-tab.
   const safePreview = !isLocal || capture?.surface === "browser";
-  const showToolbar = toolsOpen && editable && safePreview;
-  const exportActions = useAnnotationActions({ client, state, actions, videoRef, track, actorId, allowExport: editable && safePreview });
+  const showToolbar = connected && toolsOpen && editable && safePreview;
+  const exportActions = useAnnotationActions({ client, state, actions, videoRef, track, actorId, allowExport: connected && editable && safePreview, exportProof, bakedFrame });
 
   const annotationProps = { client, state, presence, fontUrl };
   const annotate = editable && safePreview ? <AnnotateButton expanded={showToolbar} hints={isLocal} onClick={() => setToolsOpen(!toolsOpen)} /> : null;
@@ -99,11 +117,19 @@ function ActiveAnnotationSurface({
     <>
       {safePreview && canvasHost
         ? createPortal(
-            <ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: exportActions.onError } : undefined} />,
+            <ScreenAnnotationLayer
+              {...annotationProps}
+              videoRef={videoRef}
+              track={track}
+              fit={fit}
+              exportProof={exportProof}
+              bakedFrame={bakedFrame}
+              input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: exportActions.onError } : undefined}
+            />,
             canvasHost,
           )
         : null}
-      {primary ? (
+      {primary && connected ? (
         <AnnotationDock
           presentation={annotationProps}
           actorId={actorId}

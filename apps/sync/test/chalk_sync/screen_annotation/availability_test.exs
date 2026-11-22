@@ -26,7 +26,10 @@ defmodule ChalkSync.ScreenAnnotation.AvailabilityTest do
 
     Proof.set_availability(db, true)
     {%{"screen_annotation" => true}, sharer} = connect(port, host)
-    {%{"screen_annotation" => true}, observer} = connect(port, viewer)
+
+    {%{"screen_annotation" => true, "screen_annotation_burn_in" => true}, observer} =
+      connect(port, viewer, "?screen_annotation=1&screen_annotation_burn_in=1")
+
     {layer, sharer} = draw(sharer, bind)
 
     {%{"state" => %{"layer" => %{"layer_id" => ^layer}, "marks" => [_]}}, observer} =
@@ -36,7 +39,10 @@ defmodule ChalkSync.ScreenAnnotation.AvailabilityTest do
 
     Proof.set_availability(db, false)
     {_, sharer} = receive_frame(sharer, "annotation_state", &match?(%{"state" => nil}, &1))
-    {_, observer} = receive_frame(observer, "annotation_state", &match?(%{"state" => nil}, &1))
+
+    {%{"enabled" => false}, observer} =
+      receive_frame(observer, "annotation_state", &match?(%{"state" => nil}, &1))
+
     sharer = rejected(sharer, Proof.command(layer, 1, %{"kind" => "pause", "paused" => true}))
     observer = Client.send_json(observer, %{"type" => "ping"})
     {_, observer} = receive_frame(observer, "pong")
@@ -52,8 +58,8 @@ defmodule ChalkSync.ScreenAnnotation.AvailabilityTest do
     Client.close_tcp(sharer)
   end
 
-  defp connect(port, identity) do
-    {:ok, client} = Client.connect(port, "/v1/sync?screen_annotation=1")
+  defp connect(port, identity, query \\ "?screen_annotation=1") do
+    {:ok, client} = Client.connect(port, "/v1/sync" <> query)
 
     client =
       Client.send_json(client, %{

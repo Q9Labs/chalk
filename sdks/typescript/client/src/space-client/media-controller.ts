@@ -7,7 +7,7 @@ import { cameraEffectFailure } from "../media/camera-effects";
 import { describeMediaCaptureError, failCapture } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
-import { displayMediaConstraints, releaseTracks, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
+import { displayMediaConstraints, releaseTracks, requireDisplayVideoTrack, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
@@ -718,7 +718,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.ensuring(
         Effect.sync(() => {
           if (this.#track("screen") === track) this.#deleteTrack("screen");
-          track?.stop();
+          if (track) this.#selection.releaseTrack(track);
           this.#publish();
         }),
       ),
@@ -738,19 +738,24 @@ class MediaControllerRuntime implements MediaControllerEffects {
           () => this.#selection.getDisplayMedia(displayMediaConstraints(intent.options)).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, "screen")),
           (stream) =>
             Effect.gen({ self: this }, function* () {
+              // The OS picker outlives a short reconnect. The capture consent is
+              // still usable if the same transports and screen intent survive.
+              track = requireDisplayVideoTrack(stream);
+              yield* this.#waitForLive("screen", intent.revision, ports);
               this.#assertActivePorts(ports, "startScreenShare");
               this.#assertCurrentIntent("screen", intent.revision);
-              track = requireDisplayVideoTrack(stream);
+              if (track.readyState === "ended") return yield* Effect.fail(this.#cancelledCaptureError());
               const previous = this.#track("screen");
               if (previous) {
                 yield* this.#send(ports, "screen", intent, false);
                 yield* this.#clearScreenAudio(ports.media);
                 yield* foreign(() => ports.media.clearPreparedLocalTrack("screen"));
                 this.#deleteTrack("screen");
-                previous.stop();
+                this.#selection.releaseTrack(previous);
               }
               this.#assertActivePorts(ports, "startScreenShare");
               this.#assertCurrentIntent("screen", intent.revision);
+              if (track.readyState !== "live") return yield* Effect.fail(this.#cancelledCaptureError());
               const audio = stream.getAudioTracks()[0];
               for (const extra of stream.getAudioTracks().slice(1)) extra.stop();
               ports.media.prepareLocalTrack("screen", track);
@@ -768,7 +773,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               Effect.catch((cause) =>
                 (prepared ? this.#clearScreenAudio(ports.media) : Effect.void).pipe(
                   Effect.ignore,
-                  Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                  Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.void, media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
                 ),
               ),
             ),
@@ -926,7 +931,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
 
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
-    const waitLive = enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
+    const waitLive = enabled ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
     const command = this.#mediaAction(
       enabled,
       foreign(async () => {

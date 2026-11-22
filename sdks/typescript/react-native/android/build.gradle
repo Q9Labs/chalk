@@ -42,6 +42,7 @@ dependencies {
   implementation("androidx.core:core:1.16.0")
   implementation(project(":cloudflare_react-native-webrtc"))
   implementation("com.cloudflare.realtimekit:webrtc-android:125.6422.07")
+  testImplementation("junit:junit:4.13.2")
 }
 
 def compatibilityClasses = layout.buildDirectory.dir("compatibility/classes")
@@ -61,11 +62,13 @@ tasks.register("checkModuleApiCompatibility", JavaExec) {
   mainClass = "ModuleApiCompatibility"
   doFirst {
     def manifest = layout.buildDirectory.file("compatibility/classpath.txt").get().asFile
+    def compileJava = tasks.named("compileDebugJavaWithJavac", JavaCompile).get()
     def paths = [android.bootClasspath.first(),
         tasks.named("compileDebugUnitTestKotlin").get().destinationDirectory.get().asFile,
         tasks.named("compileDebugKotlin").get().destinationDirectory.get().asFile,
-        tasks.named("compileDebugJavaWithJavac").get().destinationDirectory.get().asFile]
-    paths.addAll(configurations.debugCompileClasspath.files)
+        compileJava.destinationDirectory.get().asFile]
+    // The probe substitutes an older platform at runtime; javac's platform stubs must not be a fallback.
+    paths.addAll(compileJava.classpath.files - android.bootClasspath)
     manifest.text = paths.collect { it.absolutePath }.join("\n")
     def platforms = [android.defaultConfig.minSdkVersion.apiLevel, 30].unique().collect {
       new File(android.sdkDirectory, "platforms/android-${it}/android.jar")
@@ -79,5 +82,6 @@ tasks.register("checkModuleApiCompatibility", JavaExec) {
 
 // The published package leaves out src/test and its fixtures, so only the Chalk repo runs this check.
 if (file("src/test").isDirectory()) {
+  tasks.named("checkModuleApiCompatibility").configure { dependsOn "testDebugUnitTest" }
   tasks.named("check").configure { dependsOn "checkModuleApiCompatibility" }
 }

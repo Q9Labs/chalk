@@ -24,6 +24,8 @@ export interface components {
       readonly publication_id: string;
       /** Format: uuid */
       readonly sharer_id: string;
+      /** @constant */
+      readonly burned_in?: true;
       readonly frame: components["schemas"]["FrameSize"];
     };
     readonly Cursor: {
@@ -111,6 +113,8 @@ export interface components {
       /** @enum {unknown} */
       readonly kind: "bind";
       readonly publication_id: string;
+      /** @constant */
+      readonly burned_in?: true;
       readonly frame: components["schemas"]["FrameSize"];
     };
     readonly Command:
@@ -236,6 +240,8 @@ export interface components {
       /** @enum {unknown} */
       readonly type: "annotation_state";
       readonly server_at_ms: number;
+      /** @enum {unknown} */
+      readonly enabled?: false;
       readonly state: components["schemas"]["State"] | null;
     };
     readonly ServerChange: {
@@ -419,6 +425,9 @@ export const screenAnnotationDefinitions = {
       sharer_id: {
         type: "string",
         format: "uuid",
+      },
+      burned_in: {
+        const: true,
       },
       frame: {
         $ref: "#/$defs/FrameSize",
@@ -692,6 +701,9 @@ export const screenAnnotationDefinitions = {
         type: "string",
         minLength: 1,
         maxLength: 256,
+      },
+      burned_in: {
+        const: true,
       },
       frame: {
         $ref: "#/$defs/FrameSize",
@@ -1051,6 +1063,9 @@ export const screenAnnotationDefinitions = {
         type: "integer",
         minimum: 1,
         maximum: 9007199254740991,
+      },
+      enabled: {
+        enum: [false],
       },
       state: {
         oneOf: [

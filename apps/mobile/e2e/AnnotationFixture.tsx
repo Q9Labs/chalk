@@ -118,7 +118,7 @@ function AnnotationFixture(): React.JSX.Element {
         {count} committed marks
       </Text>
       {presenting ? (
-        <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} />
+        <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} people={[{ id: viewer.id, name: viewer.name, canDraw: false, manages: false }]} />
       ) : (
         <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
           <ScreenAnnotationLayer

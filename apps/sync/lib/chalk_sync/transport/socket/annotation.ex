@@ -74,7 +74,10 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   defp refresh(state, forced?) do
     if Availability.enabled?() do
-      Projection.refresh(Map.delete(state, :annotation_withdrawn), forced?)
+      Projection.refresh(
+        Map.delete(state, :annotation_withdrawn),
+        forced? or Map.get(state, :annotation_withdrawn, false)
+      )
     else
       disabled(state)
     end
@@ -102,7 +105,14 @@ defmodule ChalkSync.Transport.Socket.Annotation do
       |> Map.put(:annotation, nil)
       |> Map.delete(:annotation_snapshot_request)
 
-    {next, [Projection.snapshot(nil, System.system_time(:millisecond))]}
+    snapshot = Projection.snapshot(nil, System.system_time(:millisecond))
+
+    snapshot =
+      if Map.get(state, :screen_annotation_burn_in, false),
+        do: Map.put(snapshot, "enabled", false),
+        else: snapshot
+
+    {next, [snapshot]}
   end
 
   defp withdraw(state), do: {state, []}
@@ -137,15 +147,21 @@ defmodule ChalkSync.Transport.Socket.Annotation do
     recent = Enum.filter(state.annotation_commands, &(now - &1 < 1_000))
 
     result =
-      if length(recent) < 24 do
-        Repository.command(
-          state.identity,
-          frame,
-          state.observability,
-          Map.get(state, :attachment)
-        )
-      else
-        {:error, "rate_limited"}
+      cond do
+        length(recent) >= 24 ->
+          {:error, "rate_limited"}
+
+        get_in(frame, ["command", "burned_in"]) == true and
+            not Map.get(state, :screen_annotation_burn_in, false) ->
+          {:error, "forbidden"}
+
+        true ->
+          Repository.command(
+            state.identity,
+            frame,
+            state.observability,
+            Map.get(state, :attachment)
+          )
       end
 
     response = receipt(result)

@@ -1,10 +1,10 @@
 import { AnnotationTextForm } from "./AnnotationTextForm";
-import { canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, hitTestAnnotation, paintAnnotation, type AnnotationFit, type AnnotationRect } from "@q9labsai/chalk-screen-annotation";
+import { type BakedExportProof, canvasAnnotationTextMeasure, framePoint, INK_PROOF_TIMEOUT_MS, hitTestAnnotation, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationCursor, ScreenAnnotationDraft, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { loadAnnotationFont } from "./font";
+import { annotationCanvasGeometry, useAnnotationFramePaint, type Preview } from "./use-annotation-frame-paint";
 import { addGesturePoint, clampPoint, gestureDraft, localPoint, sameRect, type Gesture } from "./gesture";
-import { canDraw, decodedSize, matchesTarget, targetOf, videoMatchesTrack, type AnnotationAuthor, type AnnotationBrush } from "./model";
+import { canDraw, matchesTarget, targetOf, type AnnotationAuthor, type AnnotationBrush } from "./model";
 
 export interface ScreenAnnotationLayerProps {
   readonly client: ScreenAnnotationClient;
@@ -14,6 +14,8 @@ export interface ScreenAnnotationLayerProps {
   readonly track: MediaStreamTrack;
   readonly videoRef: RefObject<HTMLVideoElement | null>;
   readonly fit: AnnotationFit;
+  readonly exportProof?: BakedExportProof;
+  readonly bakedFrame?: RefObject<HTMLCanvasElement | null>;
   readonly input?: {
     readonly actor: AnnotationAuthor;
     readonly brush: AnnotationBrush;
@@ -21,122 +23,27 @@ export interface ScreenAnnotationLayerProps {
   };
 }
 
-type Preview = { readonly draft: ScreenAnnotationDraft; readonly expiresAt: number; readonly revision?: number };
-type TextAnchor = { readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
-
-function previewEnded(preview: Preview, state: ScreenAnnotationState, nowMs: number): boolean {
-  return preview.expiresAt <= nowMs || (preview.revision !== undefined && state.revision >= preview.revision) || state.marks.some((mark) => mark.draft.mark_id === preview.draft.mark_id);
-}
-
-function hasTimeVaryingInk(state: ScreenAnnotationState, remote: readonly ScreenAnnotationPresence[], nowMs: number): boolean {
-  return state.marks.some((mark) => mark.expires_at_ms !== null && mark.expires_at_ms > nowMs) || remote.some((peer) => peer.expires_at_ms > nowMs);
-}
-
-function geometry(canvas: HTMLCanvasElement, video: HTMLVideoElement | null, track: MediaStreamTrack, fit: AnnotationFit) {
-  const frame = video && videoMatchesTrack(video, track) ? decodedSize(video) : null;
-  if (!frame || !canvas.clientWidth || !canvas.clientHeight) return null;
-  const clip: AnnotationRect = { x: 0, y: 0, width: canvas.clientWidth, height: canvas.clientHeight };
-  const rect = contentRect(frame, clip, fit);
-  return rect && { frame, clip, rect };
-}
+type TextAnchor = { readonly fence: number; readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
 
 /** The canvas and video must occupy the same positioned box and use the same fit and transforms. */
 export function ScreenAnnotationLayer(props: ScreenAnnotationLayerProps): React.JSX.Element {
-  return <LayerCanvas key={`${props.state.layer.layer_id}:${props.state.fence}`} {...props} />;
+  return <LayerCanvas key={`${props.state.layer.layer_id}:${props.state.layer.publication_id}:${props.track.id}`} {...props} />;
 }
 
-function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, input }: ScreenAnnotationLayerProps): React.JSX.Element {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, input, exportProof, bakedFrame }: ScreenAnnotationLayerProps): React.JSX.Element {
   const gesture = useRef<Gesture | null>(null);
   const cursor = useRef<ScreenAnnotationCursor | null>(null);
   const localPresenceAt = useRef(0);
-  const optimistic = useRef<Preview | null>(null);
-  const tracker = useRef(createAnnotationPresenceTracker());
-  const refresh = useRef<() => void>(() => undefined);
+  const optimistic = useRef(new Map<string, Preview>());
   const previewUpdate = useRef<number>(-Infinity);
-  const [textAnchor, setTextAnchor] = useState<TextAnchor | null>(null);
+  const [anchor, setTextAnchor] = useState<TextAnchor | null>(null);
+  const textAnchor = anchor?.fence === state.fence ? anchor : null;
   const actor = input?.actor;
   const drawing = Boolean(input && actor && canDraw(state, actor.participant_id));
   const target = targetOf(state);
+  const baked = state.layer.burned_in === true;
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Paint the canvas on committed state, geometry, animation and pointer changes; release observers and frames on teardown.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const window = canvas?.ownerDocument.defaultView;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !window || !context) return;
-    let raf = 0;
-    const paint = () => {
-      raf = 0;
-      const mapped = geometry(canvas, video, track, fit);
-      if (!mapped) {
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-      const { clip, rect } = mapped;
-      const scale = window.devicePixelRatio || 1;
-      const width = Math.round(clip.width * scale);
-      const height = Math.round(clip.height * scale);
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== height) canvas.height = height;
-      context.setTransform(width / clip.width, 0, 0, height / clip.height, 0, 0);
-      context.clearRect(0, 0, clip.width, clip.height);
-      const nowMs = client.serverNowMs();
-      const preview = optimistic.current;
-      if (preview && previewEnded(preview, state, nowMs)) optimistic.current = null;
-      const ownDraft = gesture.current ? gestureDraft(gesture.current) : (optimistic.current?.draft ?? null);
-      const remote = presence.filter((peer) => peer.author.participant_id !== actor?.participant_id);
-      const local =
-        actor && drawing && (cursor.current || ownDraft)
-          ? [
-              {
-                type: "annotation_presence",
-                layer_id: state.layer.layer_id,
-                fence: state.fence,
-                author: actor,
-                server_at_ms: localPresenceAt.current,
-                expires_at_ms: nowMs + 1000,
-                cursor: cursor.current,
-                draft: ownDraft,
-              } satisfies ScreenAnnotationPresence,
-            ]
-          : [];
-      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.marks, presence: tracker.current.update([...remote, ...local], nowMs), nowMs });
-      const expiring = hasTimeVaryingInk(state, remote, nowMs);
-      if (expiring || optimistic.current || (cursor.current?.tool === "pointer" && nowMs - localPresenceAt.current < 380)) schedule();
-    };
-    const schedule = () => {
-      if (!raf) raf = window.requestAnimationFrame(paint);
-    };
-    const observer = new ResizeObserver(schedule);
-    observer.observe(canvas);
-    video?.addEventListener("loadeddata", schedule);
-    video?.addEventListener("resize", schedule);
-    video?.addEventListener("emptied", schedule);
-    video?.addEventListener("playing", schedule);
-    window.addEventListener("resize", schedule);
-    refresh.current = schedule;
-    schedule();
-    let active = true;
-    void loadAnnotationFont(canvas.ownerDocument, fontUrl).then(
-      () => {
-        if (active) schedule();
-      },
-      () => undefined,
-    );
-    return () => {
-      active = false;
-      observer.disconnect();
-      video?.removeEventListener("loadeddata", schedule);
-      video?.removeEventListener("resize", schedule);
-      video?.removeEventListener("emptied", schedule);
-      video?.removeEventListener("playing", schedule);
-      window.removeEventListener("resize", schedule);
-      window.cancelAnimationFrame(raf);
-      refresh.current = () => undefined;
-    };
-  }, [client, state, presence, fontUrl, track, videoRef, fit, actor, drawing]);
+  const { canvasRef, refresh, videoSurface, exportSamples } = useAnnotationFramePaint({ client, state, presence, fontUrl, track, videoRef, fit, actor, drawing, baked, exportProof, bakedFrame, gesture, cursor, localPresenceAt, optimistic });
 
   const { layerId, fence } = target;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Cancel latest-value presence and input on disable or when the gesture's authority is retired.
@@ -145,7 +52,6 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     return () => {
       gesture.current = null;
       cursor.current = null;
-      optimistic.current = null;
       const previous = { layerId, fence };
       if (matchesTarget(client, previous)) client.setPresence(previous, null, null);
     };
@@ -165,26 +71,64 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     cursor.current = null;
     publish(true);
   };
+  function showPreview(draft: ScreenAnnotationDraft, author: AnnotationAuthor): Preview {
+    const surface = videoSurface.current;
+    const proof = baked ? surface?.proofFor(draft) : undefined;
+    const preview: Preview = {
+      draft,
+      author,
+      startedBaked: baked,
+      proof: proof?.changed ?? null,
+      expiresAt: client.serverNowMs() + 1000,
+      proofTimeoutAt: baked ? client.serverNowMs() + INK_PROOF_TIMEOUT_MS : undefined,
+    };
+    const id = preview.draft.mark_id;
+    optimistic.current.set(id, preview);
+    if (baked) {
+      if (proof) {
+        exportProof?.expect(id);
+        exportSamples.current.set(id, { expiresAt: client.serverNowMs() + INK_PROOF_TIMEOUT_MS, proof });
+      } else if (proof === null) {
+        exportProof?.expect(id);
+        exportProof?.finish(id);
+      }
+    }
+    return preview;
+  }
+  function settlePreview(preview: Preview, result: Awaited<ReturnType<ScreenAnnotationClient["dispatch"]>>) {
+    const id = preview.draft.mark_id;
+    if (result.kind === "accepted") {
+      preview.revision = result.revision;
+      const sample = exportSamples.current.get(id);
+      if (sample) exportSamples.current.set(id, { ...sample, revision: result.revision });
+      exportProof?.accepted(id, result.revision);
+      return;
+    }
+    if (result.kind !== "delivery_unknown") {
+      exportSamples.current.delete(id);
+      exportProof?.settle(id);
+    }
+    if (optimistic.current.get(id) === preview) optimistic.current.delete(id);
+  }
   const send = async (command: ScreenAnnotationCommand) => {
     if (!input || !actor) return;
     const live = matchesTarget(client, target);
     if (!live || !canDraw(live, actor.participant_id)) return;
-    const preview = command.kind === "commit" ? { draft: command.draft, expiresAt: client.serverNowMs() + 1000 } : null;
-    if (preview) optimistic.current = preview;
+    const preview = command.kind === "commit" ? showPreview(command.draft, actor) : null;
     refresh.current();
     try {
       const result = await client.dispatch(target, command);
-      if (preview && optimistic.current === preview) optimistic.current = result.kind === "accepted" ? { ...preview, revision: result.revision } : null;
+      if (preview) settlePreview(preview, result);
       if (result.kind !== "accepted" && matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     } catch {
-      if (optimistic.current === preview) optimistic.current = null;
+      if (preview && optimistic.current.get(preview.draft.mark_id) === preview) optimistic.current.delete(preview.draft.mark_id);
       if (matchesTarget(client, target)) input.onCommandError("The mark could not be applied.");
     }
     refresh.current();
   };
   const pointFrom = (event: PointerEvent<HTMLCanvasElement>, clamp = false) => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    const mapped = geometry(event.currentTarget, videoRef.current, track, fit);
+    const mapped = annotationCanvasGeometry(event.currentTarget, videoRef.current, track, fit);
     if (!mapped || !bounds.width || !bounds.height) return null;
     const point = localPoint(bounds, mapped.clip, event);
     const normalized = framePoint(mapped.rect, clamp ? clampPoint(mapped.rect, clampPoint(mapped.clip, point)) : point);
@@ -239,7 +183,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
             width: brush.width,
           };
           if (brush.tool === "text") {
-            setTextAnchor({ at: point, style });
+            setTextAnchor({ fence: live.fence, at: point, style });
             return;
           }
           event.currentTarget.setPointerCapture(event.pointerId);

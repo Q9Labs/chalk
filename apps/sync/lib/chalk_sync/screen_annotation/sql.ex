@@ -56,7 +56,7 @@ defmodule ChalkSync.ScreenAnnotation.SQL do
            (extract(epoch from least(lease.renewed_until, lease.hard_expires_at)) * 1000)::bigint,
            (select min(publication_id) from screens having count(*) = 1),
            layer.layer_id::text, layer.publication_id, layer.sharer_id::text, layer.sharer_generation,
-           layer.frame, layer.revision, layer.fence, layer.paused, layer.marks,
+           layer.frame, layer.burned_in, layer.revision, layer.fence, layer.paused, layer.marks,
            layer.requests, layer.history, layer.last_change,
            (extract(epoch from clock_timestamp()) * 1000)::bigint
     from actor
@@ -78,10 +78,10 @@ defmodule ChalkSync.ScreenAnnotation.SQL do
   def create_layer do
     """
     insert into sync_screen_annotation_layers (
-      tenant_id, space_id, episode_id, layer_id, publication_id, sharer_id, sharer_generation, frame,
+      tenant_id, space_id, episode_id, layer_id, publication_id, sharer_id, sharer_generation, frame, burned_in,
       journey_id, parent_event_id, producing_trace_id, producing_span_id
     )
-    select $1, $2, $3, $4, $5, $6, $7, $8, parent.journey_id, parent.parent_journey_event_id, $9, $10
+    select $1, $2, $3, $4, $5, $6, $7, $8, $9, parent.journey_id, parent.parent_journey_event_id, $10, $11
     from (values (true)) anchor(present)
     left join lateral (
       select intent.journey_id, intent.parent_journey_event_id

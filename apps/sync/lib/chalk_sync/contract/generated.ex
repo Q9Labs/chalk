@@ -1011,13 +1011,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
-    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation"],
+    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
         &Map.has_key?(frame, &1))
     base = base ++ flags
     valid_flags = Enum.all?(flags, &(frame[&1] == true))
+    valid_burn_in = frame["screen_annotation_burn_in"] != true or
+        frame["screen_annotation"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_flags and
-        valid_generation and valid_identity
+        valid_burn_in and valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,

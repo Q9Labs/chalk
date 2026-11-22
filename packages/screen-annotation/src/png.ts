@@ -1,7 +1,8 @@
 import type { ScreenAnnotationFrameSize } from "@q9labsai/chalk-client";
 
 import { freezeAnnotationFrame, type FreezeAnnotationFrameInput, type ScreenAnnotationFrame } from "./frame";
-import { paintAnnotation, type AnnotationCanvasContext } from "./paint";
+import type { AnnotationCanvasContext } from "./canvas";
+import { paintAnnotation } from "./paint";
 
 export type AnnotationPngSurface<Image, Png> = {
   readonly context: AnnotationCanvasContext;
@@ -17,15 +18,15 @@ export async function renderAnnotationPng<Image, Png>(frame: ScreenAnnotationFra
 }
 
 /** The stage must first check that the playing video still belongs to the matched publication. */
-export function captureAnnotationVideoFrame(video: HTMLVideoElement, snapshot: Omit<FreezeAnnotationFrameInput<HTMLCanvasElement>, "image" | "size">): ScreenAnnotationFrame<HTMLCanvasElement> {
-  const size = { width: video.videoWidth, height: video.videoHeight };
+export function captureAnnotationVideoFrame(video: HTMLVideoElement, snapshot: Omit<FreezeAnnotationFrameInput<HTMLCanvasElement>, "image" | "size">, sampledFrame?: HTMLCanvasElement | null): ScreenAnnotationFrame<HTMLCanvasElement> {
+  const size = { width: sampledFrame?.width ?? video.videoWidth, height: sampledFrame?.height ?? video.videoHeight };
   if (video.readyState < video.HAVE_CURRENT_DATA || size.width <= 0 || size.height <= 0) throw new Error("No current video frame");
   const image = video.ownerDocument.createElement("canvas");
   image.width = size.width;
   image.height = size.height;
   const context = image.getContext("2d");
   if (!context) throw new Error("Canvas 2D is unavailable");
-  context.drawImage(video, 0, 0, size.width, size.height);
+  context.drawImage(sampledFrame ?? video, 0, 0, size.width, size.height);
   return freezeAnnotationFrame({ ...snapshot, image, size });
 }
 

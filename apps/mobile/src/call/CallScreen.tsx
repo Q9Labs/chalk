@@ -22,6 +22,14 @@ type CallScreenProps = {
 export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose, onRejoin, onError }: CallScreenProps): React.JSX.Element {
   const { arrival, route } = call;
   const [readyOpen, setReadyOpen] = useState(false);
+  const [uploadsAvailableAt, setUploadsAvailableAt] = useState<string>();
+  useEffect(() => {
+    const request = new AbortController();
+    void whiteboardUploadsAvailable(apiBaseURL, request.signal).then((enabled) => {
+      if (!request.signal.aborted) setUploadsAvailableAt(enabled ? apiBaseURL : undefined);
+    });
+    return () => request.abort();
+  }, [apiBaseURL]);
   const client = useMemo(() => {
     const getAccess = createGuestAccessGetter({ apiBaseURL, credential: arrival.credential, initialAccess: arrival.access });
     return createMobileSpaceClient({ apiBaseURL, defaults: arrival.defaults, getAccess, space: route.space });
@@ -55,6 +63,7 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
   return (
     <>
       <Chalk
+        annotationBoardSaveEnabled={uploadsAvailableAt === apiBaseURL}
         callName={arrival.spaceName}
         client={client}
         colorScheme={preferences.colorScheme}
@@ -77,4 +86,17 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
       <ReadySheet link={route.inviteLink} onClose={() => setReadyOpen(false)} open={readyOpen} />
     </>
   );
+}
+
+async function whiteboardUploadsAvailable(baseUrl: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch(new URL("/readyz", baseUrl).href, { signal });
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    if (!body || typeof body !== "object" || !("capabilities" in body)) return false;
+    const { capabilities } = body;
+    return !!capabilities && typeof capabilities === "object" && "whiteboard_files" in capabilities && capabilities.whiteboard_files === "enabled";
+  } catch {
+    return false;
+  }
 }

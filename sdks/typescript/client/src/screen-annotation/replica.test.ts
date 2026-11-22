@@ -62,3 +62,27 @@ it("does not flush a queued preview once its fence has been retired", () => {
   vi.runAllTimers();
   expect(outbound).toEqual([]);
 });
+
+it("withdraws tools and burn-in while annotation is off without losing the live connection", async () => {
+  const outbound: unknown[] = [];
+  const replica = new AnnotationReplica((frame) => {
+    outbound.push(JSON.parse(frame));
+    return true;
+  });
+  const live = { type: "annotation_state", state, server_at_ms: Date.now() } as const;
+  replica.enterLive(true, true);
+  replica.receive(live);
+  expect(replica.burnInNegotiated).toBe(true);
+
+  replica.receive({ ...live, state: null, enabled: false });
+  expect(replica.getSnapshot()).toEqual({ status: "unavailable" });
+  expect(replica.burnInNegotiated).toBe(false);
+  const sent = outbound.length;
+  expect(await replica.dispatch(target, { kind: "pause", paused: true })).toEqual({ kind: "unavailable" });
+  expect(await replica.bind("another-share", layer.frame, true)).toEqual({ kind: "unavailable" });
+  expect(outbound).toHaveLength(sent);
+
+  replica.receive(live);
+  expect(replica.getSnapshot()).toMatchObject({ status: "ready", state });
+  expect(replica.burnInNegotiated).toBe(true);
+});

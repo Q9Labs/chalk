@@ -1,3 +1,4 @@
+import { v1NegotiatedExtensions } from "./v1-negotiated-extensions";
 import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
@@ -87,7 +88,6 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #liveTargets: V1LiveTargetCoordinator;
   #entryPending = false;
   // Older Sync rejects new hello fields, so entry confirmation is requested on the URL and granted in welcome.
-  #entryNegotiated = false;
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -113,13 +113,9 @@ export class V1SyncClient implements V1CollaborationClient {
   #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
-  /** Whether this connection's welcome advertised `media_off_reason`; reset for each connection. */
-  #offReasonNegotiated = false;
-  /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
-  #connectionQualityNegotiated = false;
-  #annotationNegotiated = false;
+  #extensions = v1NegotiatedExtensions();
   readonly annotation = new AnnotationReplica((wire) => {
-    if (!this.#socket || this.#phase.phase !== "live" || !this.#annotationNegotiated) return false;
+    if (!this.#socket || this.#phase.phase !== "live" || !this.#extensions.annotation) return false;
     try {
       this.#socket.send(wire);
       return true;
@@ -258,16 +254,16 @@ export class V1SyncClient implements V1CollaborationClient {
     // connection may negotiate confirmation for the first time.
     this.#entryPending = true;
     // Without negotiation, Sync confirmed the entry at hello.
-    if (!this.#entryNegotiated) return;
+    if (!this.#extensions.entryConfirmation) return;
     this.#send({ type: "entered" });
   }
   /** True when the connected Sync advertised `media_off_reason` in its welcome, so media items may carry `off_reason`. */
   offReasonNegotiated(): boolean {
-    return this.#offReasonNegotiated;
+    return this.#extensions.mediaOffReason;
   }
   /** Tells the other guests how well this link carries the call. A Sync without the extension is never sent the frame. */
   setConnectionQuality(quality: "good" | "weak" | "poor"): void {
-    if (!this.#connectionQualityNegotiated || this.#phase.phase !== "live") return;
+    if (!this.#extensions.connectionQuality || this.#phase.phase !== "live") return;
     this.#send({ type: "connection_quality_set", quality });
   }
   getSnapshot(): V1EpisodeSnapshot {
@@ -440,10 +436,7 @@ export class V1SyncClient implements V1CollaborationClient {
     // no longer the failing stage once its replacement is trying to open.
     if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
-    this.#entryNegotiated = false;
-    this.#offReasonNegotiated = false;
-    this.#connectionQualityNegotiated = false;
-    this.#annotationNegotiated = false;
+    this.#extensions = v1NegotiatedExtensions();
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -542,7 +535,7 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       const frame = decodeInboundV1Frame(data);
       if (frame.kind === "annotation") {
-        if (this.#annotationNegotiated && this.#phase.phase === "live") this.annotation.receive(frame.value);
+        if (this.#extensions.annotation && this.#phase.phase === "live") this.annotation.receive(frame.value);
         return;
       }
       await this.#handleFrame(frame.value);
@@ -685,10 +678,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
-    this.#entryNegotiated = frame.entry_confirmation === true;
-    this.#offReasonNegotiated = frame.media_off_reason === true;
-    this.#connectionQualityNegotiated = frame.connection_quality === true;
-    this.#annotationNegotiated = frame.screen_annotation === true;
+    this.#extensions = v1NegotiatedExtensions(frame);
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -817,8 +807,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
-    if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
-    this.annotation.enterLive(this.#annotationNegotiated);
+    if (this.#entryPending && this.#extensions.entryConfirmation) this.#send({ type: "entered" });
+    this.annotation.enterLive(this.#extensions.annotation, this.#extensions.annotationBurnIn);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();

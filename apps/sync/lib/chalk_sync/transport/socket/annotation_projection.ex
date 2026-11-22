@@ -38,6 +38,13 @@ defmodule ChalkSync.Transport.Socket.AnnotationProjection do
     close_layer(state, forced?, now, share, epoch, :lost_publication)
   end
 
+  # Older viewers must not be offered a second copy of the ink.
+  defp project(state, forced?, _actor, %{binding: %{"burned_in" => true}}, now, _share, epoch)
+       when not is_map_key(state, :screen_annotation_burn_in) or
+              state.screen_annotation_burn_in == false do
+    suspend(state, forced?, now, epoch)
+  end
+
   defp project(state, forced?, actor, layer, now, share, epoch) do
     id = layer.binding["layer_id"]
     access = Layer.access(layer, actor)

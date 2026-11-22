@@ -5,6 +5,6 @@
     "incremental": false,
     "paths": {}
   },
-  "include": ["src/embedded/index.ts"],
+  "include": ["src/embedded/index.ts", "src/annotation/index.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

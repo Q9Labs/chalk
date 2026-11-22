@@ -31,7 +31,18 @@ function collectSockets(sockets: TestSocket[]): SyncWebSocketFactory {
     },
   };
 }
-export async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false, connectionQuality = false, screenAnnotation = false): Promise<void> {
+export async function recoverSocket(
+  client: V1SyncClient,
+  socket: TestSocket,
+  state: V1ControlState,
+  snapshot: Snapshot,
+  mode: "snapshot" | "up_to_date",
+  entryConfirmation = true,
+  entryGeneration?: number,
+  mediaOffReason = false,
+  connectionQuality = false,
+  screenAnnotation: boolean | "burn-in" = false,
+): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -48,6 +59,7 @@ export async function recoverSocket(client: V1SyncClient, socket: TestSocket, st
     ...(mediaOffReason ? { media_off_reason: true } : {}),
     ...(connectionQuality ? { connection_quality: true } : {}),
     ...(screenAnnotation ? { screen_annotation: true } : {}),
+    ...(screenAnnotation === "burn-in" ? { screen_annotation_burn_in: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

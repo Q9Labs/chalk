@@ -914,6 +914,9 @@ importers:
       '@q9labsai/chalk-client':
         specifier: workspace:^
         version: link:../client
+      '@q9labsai/chalk-screen-annotation':
+        specifier: workspace:^
+        version: link:../../../packages/screen-annotation
       '@q9labsai/chalk-whiteboard':
         specifier: workspace:^
         version: link:../../../packages/whiteboard

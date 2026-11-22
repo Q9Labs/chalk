@@ -102,8 +102,13 @@ function validUploadDestination(value: object): boolean {
 }
 
 function isHttpUrl(url: unknown): boolean {
-  if (typeof url !== "string" || !URL.canParse(url)) return false;
-  return ["https:", "http:"].includes(new URL(url).protocol);
+  if (typeof url !== "string") return false;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function isHeaderRecord(headers: unknown): boolean {
