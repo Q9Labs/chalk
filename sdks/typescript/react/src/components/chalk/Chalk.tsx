@@ -1,7 +1,7 @@
 "use client";
 import { commandFailure, type MediaCommandAction, type MediaCommandSource } from "../control-bar/command-failure";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChalkProvider } from "../../bindings/context";
@@ -13,6 +13,7 @@ import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
 import { reportDiagnostics } from "./report-diagnostics";
+import type { SpaceEventCallbacks } from "./space-event-callbacks";
 import { CallDialog } from "../space-header/CallDialog";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
@@ -39,17 +40,6 @@ type SpaceIntegration =
       readonly space: string;
       readonly getAccess: GetAccess;
     };
-type SpaceEventCallbacks = {
-  readonly onJoined?: () => void;
-  /** Local media has stopped; await client.leave() separately for durable confirmation. */
-  readonly onLeft?: () => void;
-  readonly onEpisodeEnded?: (event: ClientEventMap["episodeEnded"]) => void;
-  readonly onParticipantJoined?: (event: ClientEventMap["participantJoined"]) => void;
-  readonly onParticipantLeft?: (event: ClientEventMap["participantLeft"]) => void;
-  readonly onScreenShareStarted?: (event: ClientEventMap["screenShareStarted"]) => void;
-  readonly onScreenShareStopped?: (event: ClientEventMap["screenShareStopped"]) => void;
-  readonly onError?: (event: ClientEventMap["error"]) => void;
-};
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
     readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
