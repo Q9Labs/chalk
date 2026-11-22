@@ -1,11 +1,12 @@
 import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
-import { Loading01Icon } from "@q9labsai/chalk-react/utils";
+import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
 import { BottomSheet, SAFE_BOTTOM } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
+import { Spinner } from "./Spinner";
 
 /** One column on phones and tablets, two columns when the preview and the form fit side by side. */
 const STACKED = "(max-width: 1023px)";
@@ -99,7 +100,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 w-full" style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }} disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
-              <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              <Spinner size={18} />
               Joining…
             </>
           ) : (
@@ -129,6 +130,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           <div className="flex flex-1 flex-col justify-end">{form}</div>
         </div>
         {sheet}
+        <ShellStyles />
       </div>
     );
   return (
@@ -143,6 +145,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           {form}
         </div>
       </div>
+      <ShellStyles />
     </div>
   );
 }

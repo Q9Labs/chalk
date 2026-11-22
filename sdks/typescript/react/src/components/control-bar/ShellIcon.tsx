@@ -62,6 +62,20 @@ const GLYPHS = {
       <path d="M15 5l4 4" />
     </>
   ),
+  speaker: <path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14" />,
+  check: <path d="M20 6L9 17l-5-5" />,
+  declined: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15 9l-6 6M9 9l6 6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   rec: (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -115,11 +129,11 @@ const MEDIA_BODY = {
  * device starts a light runs along its outline (`busy`), so the button needs no separate loader.
  * Motion lives in ShellStyles, keyed on the data attributes.
  */
-export function MediaGlyph({ kind, slashed, busy }: { readonly kind: keyof typeof MEDIA_BODY; readonly slashed: boolean; readonly busy: boolean }) {
+export function MediaGlyph({ kind, slashed, busy, size = 20 }: { readonly kind: keyof typeof MEDIA_BODY; readonly slashed: boolean; readonly busy: boolean; readonly size?: number }) {
   const cut = useId();
   const body = MEDIA_BODY[kind];
   return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="chalk-shell-media" data-slashed={slashed} data-busy={busy} aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="chalk-shell-media" data-slashed={slashed} data-busy={busy} aria-hidden="true">
       <mask id={cut} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
         {/* token-ratchet-ignore: mask luminance (white keeps, black cuts), not a theme colour */}
         <rect width="24" height="24" fill="white" stroke="none" />

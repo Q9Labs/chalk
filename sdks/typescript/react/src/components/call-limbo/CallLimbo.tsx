@@ -6,7 +6,7 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { CallEventIcon } from "../toast-stack/CallEventIcon";
 import { ChalkButton } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
-import { CancelCircleIcon, Clock01Icon } from "../../utils/icons";
+import { ShellIcon } from "../control-bar/ShellIcon";
 import { cn } from "../../utils/cn";
 
 export interface CallLimboProps {
@@ -100,8 +100,8 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, seconda
           <span aria-hidden="true" className="mb-1 flex h-8 items-center text-[var(--chalk-soft-text)] [&>svg]:h-8 [&>svg]:w-8">
             {stacked === "name" ? <CallEventIcon kind="host" /> : null}
             {stacked === "waiting" ? <CallEventIcon kind="hand" /> : null}
-            {stacked === "declined" ? <CancelCircleIcon /> : null}
-            {stacked === "expired" ? <Clock01Icon /> : null}
+            {stacked === "declined" ? <ShellIcon name="declined" /> : null}
+            {stacked === "expired" ? <ShellIcon name="clock" /> : null}
             {stacked === "entering" ? <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
           </span>
         ) : null}
