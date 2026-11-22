@@ -24,8 +24,18 @@ test("runBatches runs every batch in order and returns the last result", async (
     calls.push([command, ...args, options.cwd]);
     return { failed: false, exitCode: 0, at: calls.length };
   };
-  const result = await runBatches(exec, [["a", "1"], ["b", "2"]], { cwd: "/r" });
-  assert.deepEqual(calls, [["a", "1", "/r"], ["b", "2", "/r"]]);
+  const result = await runBatches(
+    exec,
+    [
+      ["a", "1"],
+      ["b", "2"],
+    ],
+    { cwd: "/r" },
+  );
+  assert.deepEqual(calls, [
+    ["a", "1", "/r"],
+    ["b", "2", "/r"],
+  ]);
   assert.equal(result.at, 2);
 });
 
