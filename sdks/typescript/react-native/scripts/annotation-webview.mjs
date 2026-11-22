@@ -49,7 +49,7 @@ export function mount(engine) {
       nowMs: sample.server_at_ms,
       presence: [sample],
     });
-    return engine.makeStrokeProof(baseline, stencilContext.getImageData(0, 0, width, height));
+    return engine.makeBakedStrokeProof(baseline, stencilContext.getImageData(0, 0, width, height));
   }
 
   function pendingInk(nowMs) {
@@ -104,14 +104,14 @@ export function mount(engine) {
     requestPaint();
   };
   window.chalkAnnotationHoldInk = (sample) => {
-    if (!sample.draft || !scene?.burnedIn || !engine.makeStrokeProof) return;
+    if (!sample.draft || !scene?.burnedIn || !engine.makeBakedStrokeProof) return;
     const id = sample.draft.mark_id;
     committedIds.add(id);
     samples = samples.filter((live) => live.draft?.mark_id !== id);
     // Ambiguous or moving backgrounds provide no proof. The bounded fallback is not a frame match.
     const preview = { sample, proof: buildProof(sample), startedBaked: true, expiresAt: sample.expires_at_ms, proofTimeoutAt: sample.expires_at_ms, proved: false };
     heldInk.set(id, preview);
-    if (preview.proof !== null) exportInk.set(id, preview);
+    trackExportInk(id, preview);
     setTimeout(() => {
       heldInk.delete(id);
       committedIds.delete(id);
@@ -120,10 +120,24 @@ export function mount(engine) {
     requestPaint();
   };
 
+  function notifyInk(id, handoff = false) {
+    window.ReactNativeWebView?.postMessage(JSON.stringify({ bakedInk: id, handoff }));
+  }
+
+  function trackExportInk(id, preview) {
+    if (preview.proof === null) {
+      notifyInk(id);
+      return;
+    }
+    exportInk.set(id, preview);
+    setTimeout(() => {
+      if (exportInk.get(id) === preview) exportInk.delete(id);
+    }, engine.INK_PROOF_TIMEOUT_MS);
+  }
+
   window.chalkAnnotationWatchInk = (sample, revision) => {
-    if (!sample.draft || !engine.makeStrokeProof) return;
-    const proof = buildProof(sample);
-    if (proof !== null) exportInk.set(sample.draft.mark_id, { proof, revision, sample });
+    if (!sample.draft || !engine.makeBakedStrokeProof) return;
+    trackExportInk(sample.draft.mark_id, { proof: buildProof(sample), revision, sample });
   };
 
   window.chalkAnnotationSettleInk = (id, revision) => {
@@ -141,15 +155,19 @@ export function mount(engine) {
     latestRaster = pixels;
     let changed = false;
     for (const [id, preview] of exportInk) {
-      if (preview.proof === undefined) {
-        preview.proof = buildProof(preview.sample);
-        if (!preview.proof) exportInk.delete(id);
-        continue;
-      }
-      if (engine.frameProvesStroke(pixels, preview.proof)) {
-        if (presented) preview.proved = changed = true;
+      if (preview.proof === undefined) preview.proof = buildProof(preview.sample);
+      if (preview.proof === null || (preview.proof && engine.frameContainsStroke(pixels, preview.proof))) {
         exportInk.delete(id);
-        window.ReactNativeWebView?.postMessage(JSON.stringify({ bakedInk: id }));
+        notifyInk(id);
+      }
+    }
+    // A spatial match can unblock save but does not retire live local ink.
+    if (presented) {
+      for (const [id, preview] of heldInk) {
+        if (preview.proof?.changed && engine.frameProvesStroke(pixels, preview.proof.changed)) {
+          preview.proved = changed = true;
+          notifyInk(id, true);
+        }
       }
     }
     if (changed) {

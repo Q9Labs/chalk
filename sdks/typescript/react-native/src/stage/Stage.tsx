@@ -11,7 +11,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
-import { AndroidShareAnnotationControls } from "../screen-annotation/AnnotationDock";
+import { AndroidShareAnnotationControls, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
 import type { StageAnnotation } from "../screen-annotation/model";
 import { useTheme } from "../theme/theme";
 import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
@@ -146,7 +146,7 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
           pinned={pinned}
         />
       ))}
-      {annotation && structure.ownShare && structure.selfId ? <AndroidShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
+      {annotation && structure.ownShare && structure.selfId ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
   );
@@ -207,3 +207,8 @@ const styles = StyleSheet.create({
   more: { flex: 1, borderRadius: radii.tilePhone, alignItems: "center", justifyContent: "center" },
   moreText: { fontFamily: fontFamilies[600], fontSize: fontSizes.title, lineHeight: 22 * 1.4 },
 });
+
+function LiveShareAnnotationControls(props: Omit<React.ComponentProps<typeof AndroidShareAnnotationControls>, "people">): React.JSX.Element | null {
+  const people = useAnnotationPeople(props.participantId);
+  return <AndroidShareAnnotationControls {...props} people={people} />;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INK_PROOF_TIMEOUT_MS, frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "../src/baked-stroke-proof";
+import { INK_PROOF_TIMEOUT_MS, frameContainsStroke, frameProvesStroke, inkHandoff, makeBakedStrokeProof, makeStrokeProof, type InkRaster } from "../src/baked-stroke-proof";
 
 // A narrow stroke and its unchanged surroundings; values are straight-alpha pixels.
 function raster(background: number, stroke?: { dark: number; bright: number; alpha: number }): InkRaster {
@@ -34,6 +34,33 @@ function proofFor(alpha = 254) {
   if (!proof) throw new Error("Fixture has no readable stroke");
   return proof;
 }
+
+describe("exporting baked ink", () => {
+  it.each([
+    { alpha: 254, dark: 35, bright: 203 },
+    { alpha: 96, dark: 44, bright: 110 },
+  ])("finds kept ink already in the first frame at alpha $alpha", ({ alpha, dark, bright }) => {
+    const first = raster(50, { dark, bright, alpha: 255 });
+    const proof = makeBakedStrokeProof(first, stencil(alpha));
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(proof.changed && frameProvesStroke(first, proof.changed)).toBeFalsy();
+    expect(frameContainsStroke(first, proof)).toBe(true);
+    expect(frameContainsStroke(raster(50), proof)).toBe(false);
+  });
+
+  it("does not confuse a flat matching background for ink against that background", () => {
+    const matching = raster(203, { dark: 203, bright: 203, alpha: 255 });
+    const proof = makeBakedStrokeProof(matching, stencil(254));
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(frameContainsStroke(matching, proof)).toBe(false);
+  });
+
+  it("bypasses proof for a dot with too few detectable pixels", () => {
+    const dot = stencil(254);
+    dot.data.fill(0, (6 * dot.width + 3) * 4);
+    expect(makeBakedStrokeProof(raster(50), dot)).toBeNull();
+  });
+});
 
 describe("baked stroke frame evidence", () => {
   it("does not hand off on old frames or if the first qualifying frame dropped", () => {

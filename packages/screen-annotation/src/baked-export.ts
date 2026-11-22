@@ -1,8 +1,8 @@
-const EXPORT_PROOF_TIMEOUT_MS = 4_000;
+import { INK_PROOF_TIMEOUT_MS } from "./baked-stroke-proof";
 
-type Ink = { revision?: number; observed: boolean; confirmed: boolean };
+type Ink = { revision?: number; observed: boolean; complete: boolean; deadline: number };
 
-/** Export proof survives the shorter deadline that hides the local preview. */
+/** Saving may briefly wait for new ink, but never repaints unproved ink over decoded video. */
 export class BakedExportProof {
   readonly #ink = new Map<string, Ink>();
   readonly #listeners = new Set<() => void>();
@@ -10,7 +10,7 @@ export class BakedExportProof {
   #entry(id: string): Ink {
     const ink = this.#ink.get(id);
     if (ink) return ink;
-    const pending = { observed: false, confirmed: false };
+    const pending = { observed: false, complete: false, deadline: Date.now() + INK_PROOF_TIMEOUT_MS };
     this.#ink.set(id, pending);
     return pending;
   }
@@ -36,10 +36,10 @@ export class BakedExportProof {
     if (this.#ink.delete(id)) this.#notify();
   }
 
-  confirm(id: string): void {
+  finish(id: string): void {
     const ink = this.#ink.get(id);
     if (!ink) return;
-    ink.confirmed = true;
+    ink.complete = true;
     this.#notify();
   }
 
@@ -53,24 +53,26 @@ export class BakedExportProof {
     for (const notify of this.#listeners) notify();
   }
 
-  async wait(markIds: readonly string[] = []): Promise<boolean> {
-    // Include marks already in Sync even if the paint hook hasn't observed
-    // their commit yet; server acceptance alone never makes a mark safe.
+  async wait(markIds: readonly string[]): Promise<void> {
+    // Include committed marks not observed by the paint hook yet.
     for (const id of markIds) this.#entry(id);
-    const pending = [...this.#ink.values()].filter((ink) => !ink.confirmed);
-    if (!pending.length) return true;
-    const snapshot = new Set(pending);
+    const pending = new Map(this.#ink);
+    const deadline = Math.max(Date.now(), ...[...pending.values()].filter((ink) => !ink.complete).map((ink) => ink.deadline));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
     return new Promise((resolve) => {
-      const finish = (ready: boolean) => {
+      const finish = () => {
         clearTimeout(timer);
         this.#listeners.delete(check);
-        resolve(ready);
+        resolve();
       };
       const check = () => {
-        for (const ink of this.#ink.values()) if (snapshot.has(ink) && !ink.confirmed) return;
-        finish(true);
+        const waiting = [...pending].some(([id, ink]) => this.#ink.get(id) === ink && !ink.complete && Date.now() < ink.deadline);
+        if (!waiting) finish();
       };
-      const timer = setTimeout(() => finish(false), EXPORT_PROOF_TIMEOUT_MS);
+      // At the deadline use the pristine decoded image, even if a mark is
+      // missing. Repainting it could darken already-baked translucent ink.
+      const timer = setTimeout(finish, remaining);
       this.#listeners.add(check);
     });
   }

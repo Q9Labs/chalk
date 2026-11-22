@@ -20,6 +20,7 @@ export function nativeAnnotationExport({
   canvas,
   exporting,
   exportProof,
+  setWaitingForInk,
 }: {
   readonly client: ScreenAnnotationClient;
   readonly publicationId: string;
@@ -32,6 +33,7 @@ export function nativeAnnotationExport({
   readonly canvas: RefObject<AnnotationCanvasHandle | null>;
   readonly exporting: RefObject<boolean>;
   readonly exportProof: BakedExportProof;
+  readonly setWaitingForInk: (waiting: boolean) => void;
 }) {
   async function exportFrame(action: ExportAction) {
     let live = matchLayer(client, publicationId);
@@ -40,9 +42,11 @@ export function nativeAnnotationExport({
     try {
       if (live.layer.burned_in) {
         const ids = visibleCommittedMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id);
-        if (!(await exportProof.wait(ids))) {
-          reportError?.("Couldn’t confirm the marks in the shared video. Wait for the ink to appear and try again.");
-          return;
+        setWaitingForInk(true);
+        try {
+          await exportProof.wait(ids);
+        } finally {
+          setWaitingForInk(false);
         }
         live = matchLayer(client, publicationId);
         if (!hasTarget(live, target)) return;
@@ -71,7 +75,8 @@ export function nativeAnnotationExport({
     canSave && source.captureFrame
       ? (actions?.saveToWhiteboard ??
         (boardSave
-          ? async ({ image, ...frame }) => {
+          ? async (marked) => {
+              const { image, ...frame } = marked;
               if (typeof image !== "string" || !canvas.current) throw new Error("No native frame");
               const measureText = await canvas.current.measure({ ...frame, image });
               await saveNativeAnnotationToBoard(boardSave, { ...frame, image }, measureText, () => hasTarget(matchLayer(client, publicationId), target));
@@ -80,7 +85,8 @@ export function nativeAnnotationExport({
       : null;
   const download: ExportAction | null = source.captureFrame
     ? (actions?.downloadPng ??
-      (async ({ image, ...frame }) => {
+      (async (marked) => {
+        const { image, ...frame } = marked;
         if (!canvas.current || typeof image !== "string") throw new Error("No native frame");
         await shareAnnotationPng(await canvas.current.png({ ...frame, image }));
       }))

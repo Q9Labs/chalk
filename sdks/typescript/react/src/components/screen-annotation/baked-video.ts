@@ -1,4 +1,4 @@
-import { makeStrokeProof, paintAnnotation, type InkRaster } from "@q9labsai/chalk-screen-annotation";
+import { makeBakedStrokeProof, paintAnnotation, type InkRaster } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationDraft } from "@q9labsai/chalk-client";
 
 /** Keeps the exact sampled video frame until the next presentation callback. */
@@ -42,7 +42,7 @@ export function createBakedVideoSurface(document: Document) {
       snapshot = null;
     },
     pixels,
-    baselineFor(draft: ScreenAnnotationDraft) {
+    proofFor(draft: ScreenAnnotationDraft) {
       const base = pixels();
       if (!base) return null;
       const { width, height } = base;
@@ -56,7 +56,7 @@ export function createBakedVideoSurface(document: Document) {
         marks: [],
         presence: [{ server_at_ms: 0, expires_at_ms: 1, author: { participant_id: "local", display_name: "", color: draft.color }, cursor: null, draft }],
       });
-      return makeStrokeProof(base, read(stencilContext));
+      return makeBakedStrokeProof(base, read(stencilContext));
     },
   };
 }

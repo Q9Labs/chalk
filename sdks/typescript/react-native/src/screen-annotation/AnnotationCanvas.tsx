@@ -35,7 +35,7 @@ export type AnnotationCanvasProps = {
   readonly localTouch?: { readonly point: ScreenAnnotationPoint; readonly untilMs: number };
   readonly onReady: (ready: boolean) => void;
   readonly onHit: (request: number, markId: string | null) => void;
-  readonly onBakedInk: (id: string) => void;
+  readonly onBakedInk: (id: string, handedOff: boolean) => void;
 };
 
 type ExportJob = {
@@ -165,7 +165,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
       const result: unknown = JSON.parse(data);
       if (typeof result !== "object" || result === null) return;
       if ("bakedInk" in result && typeof result.bakedInk === "string" && result.bakedInk.length <= 36) {
-        onBakedInk(result.bakedInk);
+        onBakedInk(result.bakedInk, "handoff" in result && result.handoff === true);
         return;
       }
       if (annotationHit(result)) {

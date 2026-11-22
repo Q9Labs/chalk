@@ -476,6 +476,7 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
           "minimum" => 1,
           "maximum" => 9_007_199_254_740_991
         },
+        "enabled" => %{"enum" => [false]},
         "state" => %{"oneOf" => [%{"$ref" => "#/$defs/State"}, %{"type" => "null"}]}
       }
     },

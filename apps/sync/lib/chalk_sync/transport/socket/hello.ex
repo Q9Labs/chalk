@@ -151,7 +151,10 @@ defmodule ChalkSync.Transport.Socket.Hello do
       |> Map.put(:entry_confirmation, state.entry_confirmation)
       |> Map.put(:media_off_reason, state.media_off_reason)
       |> Map.put(:screen_annotation, state.screen_annotation)
-      |> Map.put(:screen_annotation_burn_in, state.screen_annotation_burn_in)
+      |> Map.put(
+        :screen_annotation_burn_in,
+        state.screen_annotation && state.screen_annotation_burn_in
+      )
       |> Map.put(:connection_quality, state.connection_quality)
       |> Map.put(
         :entry_generation,

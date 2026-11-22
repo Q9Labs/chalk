@@ -74,7 +74,10 @@ defmodule ChalkSync.Transport.Socket.Annotation do
 
   defp refresh(state, forced?) do
     if Availability.enabled?() do
-      Projection.refresh(Map.delete(state, :annotation_withdrawn), forced?)
+      Projection.refresh(
+        Map.delete(state, :annotation_withdrawn),
+        forced? or Map.get(state, :annotation_withdrawn, false)
+      )
     else
       disabled(state)
     end
@@ -102,7 +105,14 @@ defmodule ChalkSync.Transport.Socket.Annotation do
       |> Map.put(:annotation, nil)
       |> Map.delete(:annotation_snapshot_request)
 
-    {next, [Projection.snapshot(nil, System.system_time(:millisecond))]}
+    snapshot = Projection.snapshot(nil, System.system_time(:millisecond))
+
+    snapshot =
+      if Map.get(state, :screen_annotation_burn_in, false),
+        do: Map.put(snapshot, "enabled", false),
+        else: snapshot
+
+    {next, [snapshot]}
   end
 
   defp withdraw(state), do: {state, []}

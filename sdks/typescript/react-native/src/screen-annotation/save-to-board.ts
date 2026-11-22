@@ -12,12 +12,7 @@ export type NativeAnnotationBoard = {
   readonly transport: ChalkWhiteboardV1Transport;
 };
 
-export async function saveNativeAnnotationToBoard(
-  { space, transport }: NativeAnnotationBoard,
-  frame: ScreenAnnotationFrame<string>,
-  measureText: AnnotationTextMeasure,
-  isCurrent: () => boolean,
-): Promise<void> {
+export async function saveNativeAnnotationToBoard({ space, transport }: NativeAnnotationBoard, frame: ScreenAnnotationFrame<string>, measureText: AnnotationTextMeasure, isCurrent: () => boolean): Promise<void> {
   const sceneId = space.getSnapshot().whiteboard.engine.sceneId;
   const uploadFile = transport.files.uploadFile;
   if (!sceneId || !uploadFile) throw new Error("The board cannot save files.");
@@ -41,9 +36,7 @@ export async function saveNativeAnnotationToBoard(
   checkAccess();
   if (!snapshot || snapshot.sceneId !== sceneId) throw new Error("The board changed while saving.");
 
-  const elements = snapshot.elements.map(({ id, type, version, index, isDeleted, versionNonce, payload }) =>
-    fromWireElement({ id, type, version, index, is_deleted: isDeleted, version_nonce: versionNonce, payload }),
-  );
+  const elements = snapshot.elements.map(({ id, type, version, index, isDeleted, versionNonce, payload }) => fromWireElement({ id, type, version, index, is_deleted: isDeleted, version_nonce: versionNonce, payload }));
   const operation = createAnnotationWhiteboardImport({
     frame,
     sceneId,

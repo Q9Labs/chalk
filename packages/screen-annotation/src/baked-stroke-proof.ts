@@ -40,62 +40,131 @@ function matchesInk(observed: Color, { before, painted }: Sample): boolean {
   return distance(observed, mix(before, painted, strength)) <= Math.min(18, distance(observed, before) * 0.3);
 }
 
-/** The stencil is straight-alpha ink rendered over transparency at the analysis size. */
-export function makeStrokeProof(baseline: InkRaster, stencil: InkRaster): StrokeProof | null {
-  if (baseline.width !== stencil.width || baseline.height !== stencil.height) return null;
-  const { width, height } = baseline;
-  const candidates = [];
-  const background = new Map<number, Background>();
-  const stride = width * 4;
+type StencilPixel = { readonly offset: number; readonly color: Color; readonly opacity: number };
+type PresenceSample = StencilPixel & { readonly pairs: readonly (readonly [number, number])[] };
+type PresenceProof = { readonly width: number; readonly height: number; readonly samples: readonly PresenceSample[] };
+
+export type BakedStrokeProof = { readonly changed: StrokeProof | null; readonly present: PresenceProof };
+
+function bodyPixel(data: Uint8ClampedArray, offset: number, stride: number): boolean {
+  const alpha = data[offset + 3] ?? 0;
+  if (alpha < 0.18 * 255) return false;
+  const column = offset % stride;
+  const left = column > 0 ? (data[offset - 1] ?? 0) : 0;
+  const right = column + 4 < stride ? (data[offset + 7] ?? 0) : 0;
+  return alpha >= Math.max(left, right, data[offset + 3 - stride] ?? 0, data[offset + 3 + stride] ?? 0) * 0.75;
+}
+
+function stencilPixels(stencil: InkRaster): StencilPixel[] {
+  const ink: StencilPixel[] = [];
   for (let offset = 0; offset < stencil.data.length; offset += 4) {
-    const alpha = stencil.data[offset + 3] ?? 0;
-    if (alpha < 0.18 * 255) continue;
-    const column = offset % stride;
-    // Rasterization can move, split or drop a faint edge. Sample the body of
-    // the stroke by coverage relative to its neighbors, even for highlighter.
-    const nearbyAlpha = Math.max(stencil.data[offset + 3 - stride] ?? 0, stencil.data[offset + 3 + stride] ?? 0, column > 0 ? (stencil.data[offset - 1] ?? 0) : 0, column + 4 < stride ? (stencil.data[offset + 7] ?? 0) : 0);
-    if (alpha < nearbyAlpha * 0.75) continue;
+    if (!bodyPixel(stencil.data, offset, stencil.width * 4)) continue;
     // A tappable Android overlay is capped at 80% window opacity.
-    const opacity = (alpha / 255) * 0.8;
-    const before = pixel(baseline.data, offset);
-    const color = pixel(stencil.data, offset);
-    const painted = mix(before, color, opacity);
-    if (distance(before, painted) < 26) continue;
-    candidates.push({ offset, color, opacity });
+    ink.push({ offset, color: pixel(stencil.data, offset), opacity: ((stencil.data[offset + 3] ?? 0) / 255) * 0.8 });
   }
-  if (candidates.length < 4) return null;
-  const samples = [];
+  return ink;
+}
+
+function distributed<T>(candidates: readonly T[]): readonly T[] {
   const count = Math.min(24, candidates.length);
-  for (let index = 0; index < count; index++) {
-    const ink = candidates[Math.floor(((index + 0.5) * candidates.length) / count)];
-    if (!ink) continue;
-    // The sharer's window and the decoded video can rasterize a thin line on
-    // neighboring pixels. Each neighbor must change from its own baseline;
-    // existing ink of the same color nearby is not proof.
-    const local: Sample[] = [];
-    const x = (ink.offset % stride) / 4;
-    const y = Math.floor(ink.offset / stride);
-    for (let row = Math.max(0, y - 1); row <= Math.min(height - 1, y + 1); row++) {
-      for (let column = Math.max(0, x - 1); column <= Math.min(width - 1, x + 1); column++) {
-        const offset = row * stride + column * 4;
-        const before = pixel(baseline.data, offset);
-        const painted = mix(before, ink.color, ink.opacity);
-        if (distance(before, painted) >= 26) local.push({ offset, before, painted });
-      }
-    }
-    samples.push(local);
-    for (const neighbor of [ink.offset - 3 * stride, ink.offset + 3 * stride]) {
-      if (neighbor < 0 || neighbor >= stencil.data.length || stencil.data[neighbor + 3]) continue;
-      const before = pixel(baseline.data, neighbor);
-      background.set(neighbor, { offset: neighbor, before });
-      break;
+  return Array.from({ length: count }, (_, index) => candidates[Math.floor(((index + 0.5) * candidates.length) / count)] as T);
+}
+
+function sampleAgainst(ink: StencilPixel, offset: number, before: Color): Sample | null {
+  const painted = mix(before, ink.color, ink.opacity);
+  return distance(before, painted) >= 26 ? { offset, before, painted } : null;
+}
+
+function nearbySamples(baseline: InkRaster, ink: StencilPixel): Sample[] {
+  const stride = baseline.width * 4;
+  const x = (ink.offset % stride) / 4;
+  const y = Math.floor(ink.offset / stride);
+  const local: Sample[] = [];
+  for (let row = Math.max(0, y - 1); row <= Math.min(baseline.height - 1, y + 1); row++) {
+    for (let column = Math.max(0, x - 1); column <= Math.min(baseline.width - 1, x + 1); column++) {
+      const offset = row * stride + column * 4;
+      const sample = sampleAgainst(ink, offset, pixel(baseline.data, offset));
+      if (sample) local.push(sample);
     }
   }
+  return local;
+}
+
+function changedProof(baseline: InkRaster, stencil: InkRaster, ink: readonly StencilPixel[]): StrokeProof | null {
+  const { width, height } = baseline;
+  const candidates = ink.filter((point) => sampleAgainst(point, point.offset, pixel(baseline.data, point.offset)));
+  if (candidates.length < 4) return null;
+  const background = new Map<number, Background>();
+  const samples = distributed(candidates).map((point) => {
+    const neighbor = [point.offset - 12 * width, point.offset + 12 * width].find((offset) => offset >= 0 && offset < stencil.data.length && !stencil.data[offset + 3]);
+    if (neighbor !== undefined) background.set(neighbor, { offset: neighbor, before: pixel(baseline.data, neighbor) });
+    return nearbySamples(baseline, point);
+  });
   return { width, height, samples, background: [...background.values()] };
 }
 
+function sameSize(left: InkRaster, right: { readonly width: number; readonly height: number }): boolean {
+  return left.width === right.width && left.height === right.height;
+}
+
+/** Temporal evidence for the live hand-off; existing ink nearby is not proof. */
+export function makeStrokeProof(baseline: InkRaster, stencil: InkRaster): StrokeProof | null {
+  return sameSize(baseline, stencil) ? changedProof(baseline, stencil, stencilPixels(stencil)) : null;
+}
+
+function outsideStencil(stencil: InkRaster, x: number, y: number): number | null {
+  if (x < 0 || x >= stencil.width || y < 0 || y >= stencil.height) return null;
+  const offset = (y * stencil.width + x) * 4;
+  return stencil.data[offset + 3] ? null : offset;
+}
+
+function backgroundPairs(stencil: InkRaster, ink: StencilPixel): PresenceSample["pairs"] {
+  const x = (ink.offset / 4) % stencil.width;
+  const y = Math.floor(ink.offset / (stencil.width * 4));
+  const pairs: [number, number][] = [];
+  for (const radius of [3, 5, 9, 17, 33]) {
+    for (const [dx, dy] of [
+      [radius, 0],
+      [0, radius],
+    ] as const) {
+      const left = outsideStencil(stencil, x - dx, y - dy);
+      const right = outsideStencil(stencil, x + dx, y + dy);
+      if (left !== null && right !== null) pairs.push([left, right]);
+    }
+  }
+  return pairs;
+}
+
+/** A null means the rasterized mark is too small to prove at this frame size. */
+export function makeBakedStrokeProof(baseline: InkRaster, stencil: InkRaster): BakedStrokeProof | null {
+  if (!sameSize(baseline, stencil)) return null;
+  const ink = stencilPixels(stencil);
+  if (ink.length < 4) return null;
+  const samples = distributed(ink).map((point) => ({ ...point, pairs: backgroundPairs(stencil, point) }));
+  return { changed: changedProof(baseline, stencil, ink), present: { width: stencil.width, height: stencil.height, samples } };
+}
+
+function presenceHit(frame: InkRaster, ink: PresenceSample): boolean {
+  const observed = pixel(frame.data, ink.offset);
+  return ink.pairs.some(([left, right]) => {
+    const near = pixel(frame.data, left);
+    const far = pixel(frame.data, right);
+    if (distance(near, far) > 20) return false;
+    const sample = sampleAgainst(ink, ink.offset, mix(near, far, 0.5));
+    return sample !== null && matchesInk(observed, sample);
+  });
+}
+
+/** Save can also use spatial evidence when the first decoded frame already contains the mark. */
+export function frameContainsStroke(frame: InkRaster, proof: BakedStrokeProof): boolean {
+  if (proof.changed && frameProvesStroke(frame, proof.changed)) return true;
+  if (!sameSize(frame, proof.present)) return false;
+  const { samples } = proof.present;
+  return samples.filter((ink) => presenceHit(frame, ink)).length >= Math.max(4, Math.ceil(samples.length * 0.8));
+}
+
 export function frameProvesStroke(frame: InkRaster, proof: StrokeProof): boolean {
-  if (frame.width !== proof.width || frame.height !== proof.height) return false;
+  if (!sameSize(frame, proof)) return false;
   const hits = proof.samples.filter((local) => local.some((sample) => matchesInk(pixel(frame.data, sample.offset), sample)));
   if (hits.length < Math.max(4, Math.ceil(proof.samples.length * 0.8))) return false;
   const steady = proof.background.filter(({ offset, before }) => distance(pixel(frame.data, offset), before) <= 35);

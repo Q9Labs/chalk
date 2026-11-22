@@ -40,11 +40,10 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
 }
 
 /** Controls live in Chalk, not in the system ink window. */
-export function AndroidShareAnnotationControls({ annotation, publicationId, participantId }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string }): React.JSX.Element | null {
+export function AndroidShareAnnotationControls({ annotation, publicationId, participantId, people }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string; readonly people: ReturnType<typeof useAnnotationPeople> }): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
   const { colors } = useTheme();
-  const people = useAnnotationPeople(participantId);
   const [showPolicy, setShowPolicy] = useState(false);
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
   const get = useCallback(() => matchLayer(client, publicationId), [client, publicationId]);

@@ -1,8 +1,11 @@
 import { AnnotationTextForm } from "./AnnotationTextForm";
+import { CHALK_THEME_TOKENS } from "../../theme";
 import {
+  frameContainsStroke,
   frameProvesStroke,
   inkHandoff,
   type BakedExportProof,
+  type BakedStrokeProof,
   type StrokeProof,
   canvasAnnotationTextMeasure,
   contentRect,
@@ -48,6 +51,7 @@ type Preview = {
   readonly proofTimeoutAt?: number;
   revision?: number;
 };
+type ExportSample = { readonly proof: BakedStrokeProof; readonly revision?: number; readonly expiresAt: number };
 type TextAnchor = { readonly fence: number; readonly at: ScreenAnnotationCursor["point"]; readonly style: Omit<ScreenAnnotationDraft, "shape"> };
 
 function hasTimeVaryingInk(marks: ScreenAnnotationState["marks"], remote: readonly ScreenAnnotationPresence[], nowMs: number): boolean {
@@ -73,7 +77,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const cursor = useRef<ScreenAnnotationCursor | null>(null);
   const localPresenceAt = useRef(0);
   const optimistic = useRef(new Map<string, Preview>());
-  const exportSamples = useRef(new Map<string, Preview>());
+  const exportSamples = useRef(new Map<string, ExportSample>());
   const videoSurface = useRef<ReturnType<typeof createBakedVideoSurface>>(null);
   const paintCurrent = useRef<() => void>(() => undefined);
   const tracker = useRef(createAnnotationPresenceTracker());
@@ -143,7 +147,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       const surface = videoSurface.current;
       const image = surface?.image();
       if (image) {
-        context.fillStyle = "#000";
+        context.fillStyle = CHALK_THEME_TOKENS.stage;
         context.fillRect(0, 0, clip.width, clip.height);
         context.drawImage(image, rect.x, rect.y, rect.width, rect.height);
       }
@@ -153,16 +157,17 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         for (const mark of visibleMarks(state, nowMs)) {
           const id = mark.draft.mark_id;
           if (!exportProof.observe(id, mark.created_revision)) continue;
-          const proof = surface?.baselineFor(mark.draft);
-          if (proof) exportSamples.current.set(id, { draft: mark.draft, author: mark.author, startedBaked: true, expiresAt: Infinity, revision: mark.created_revision, proof });
+          const proof = surface?.proofFor(mark.draft);
+          if (proof) exportSamples.current.set(id, { expiresAt: nowMs + INK_PROOF_TIMEOUT_MS, revision: mark.created_revision, proof });
+          else exportProof.finish(id);
         }
       }
       const decoded = image && (optimistic.current.size || exportSamples.current.size) ? surface?.pixels() : null;
-      for (const [id, preview] of exportSamples.current) {
-        if (decoded && preview.proof && frameProvesStroke(decoded, preview.proof)) {
-          exportProof?.confirm(id);
-          exportSamples.current.delete(id);
-        } else if (!baked || (preview.revision !== undefined && state.revision >= preview.revision && !state.marks.some((mark) => mark.draft.mark_id === id))) {
+      for (const [id, sample] of exportSamples.current) {
+        const removed = sample.revision !== undefined && state.revision >= sample.revision && !state.marks.some((mark) => mark.draft.mark_id === id);
+        if (!baked || removed || sample.expiresAt <= nowMs) exportSamples.current.delete(id);
+        else if (decoded && frameContainsStroke(decoded, sample.proof)) {
+          exportProof?.finish(id);
           exportSamples.current.delete(id);
         }
       }
@@ -252,13 +257,15 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
     if (!input || !actor) return;
     const live = matchesTarget(client, target);
     if (!live || !canDraw(live, actor.participant_id)) return;
+    const surface = videoSurface.current;
+    const proof = baked && command.kind === "commit" ? surface?.proofFor(command.draft) : undefined;
     const preview: Preview | null =
       command.kind === "commit"
         ? {
             draft: command.draft,
             author: actor,
             startedBaked: baked,
-            proof: baked ? (videoSurface.current?.baselineFor(command.draft) ?? null) : null,
+            proof: proof?.changed ?? null,
             expiresAt: client.serverNowMs() + 1000,
             proofTimeoutAt: baked ? client.serverNowMs() + INK_PROOF_TIMEOUT_MS : undefined,
           }
@@ -267,8 +274,13 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       const id = preview.draft.mark_id;
       optimistic.current.set(id, preview);
       if (baked) {
-        exportProof?.expect(id);
-        if (preview.proof) exportSamples.current.set(id, preview);
+        if (proof) {
+          exportProof?.expect(id);
+          exportSamples.current.set(id, { expiresAt: client.serverNowMs() + INK_PROOF_TIMEOUT_MS, proof });
+        } else if (proof === null) {
+          exportProof?.expect(id);
+          exportProof?.finish(id);
+        }
       }
     }
     refresh.current();
@@ -278,6 +290,8 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
         const id = preview.draft.mark_id;
         if (result.kind === "accepted") {
           preview.revision = result.revision;
+          const sample = exportSamples.current.get(id);
+          if (sample) exportSamples.current.set(id, { ...sample, revision: result.revision });
           exportProof?.accepted(id, result.revision);
         } else if (result.kind !== "delivery_unknown") {
           exportSamples.current.delete(id);

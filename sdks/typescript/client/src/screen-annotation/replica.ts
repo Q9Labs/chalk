@@ -52,7 +52,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   serverNowMs = (): number => performance.now() + this.#clockOffset;
 
   get burnInNegotiated(): boolean {
-    return this.#live && this.#burnIn;
+    return this.#live && this.#burnIn && this.#snapshot.status === "ready";
   }
 
   enterLive(negotiated: boolean, burnIn = false): void {
@@ -159,6 +159,11 @@ export class AnnotationReplica implements ScreenAnnotationClient {
   }
 
   #receiveState(frame: Wire["ServerState"]): void {
+    if (frame.enabled === false) {
+      this.#retryAfterReconnect = false;
+      this.#reset("unavailable", true);
+      return;
+    }
     const recovering = this.#snapshot.status === "connecting";
     this.#anchorClock(frame.server_at_ms, recovering);
     this.#clearPresence();

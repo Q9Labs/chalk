@@ -1,6 +1,4 @@
-import {
-  createChalkWhiteboardV1FileDownloadTransport, type ChalkWhiteboardV1Event, type ChalkWhiteboardV1Transport, type ChalkWhiteboardV1UpdateInput, type SpaceClient,
-} from "@q9labsai/chalk-client";
+import { createChalkWhiteboardV1FileDownloadTransport, type ChalkWhiteboardV1Event, type ChalkWhiteboardV1Transport, type ChalkWhiteboardV1UpdateInput, type SpaceClient } from "@q9labsai/chalk-client";
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { saveNativeAnnotationToBoard } from "./save-to-board";
@@ -21,7 +19,9 @@ vi.mock("expo-file-system", () => ({
   File: class {
     readonly size = fixtures.bytes.byteLength;
     readonly exists = true;
-    bytes() { return Promise.resolve(fixtures.bytes); }
+    bytes() {
+      return Promise.resolve(fixtures.bytes);
+    }
   },
 }));
 
@@ -31,13 +31,27 @@ it.each([true, false])("reconciles a lost finalize response without duplicating 
     publicationId: "screen",
     size: { width: 1080, height: 2400 },
     nowMs: 1000,
-    marks: [{
-      author: { participant_id: "test-artist", display_name: "Test Artist", color: "#000000" },
-      created_revision: 1,
-      committed_at_ms: 1000,
-      expires_at_ms: null,
-      draft: { mark_id: "chalk-mark", shape: { kind: "pen", points: [{ x: 10, y: 10 }, { x: 20, y: 30 }] }, width: 30, color: "#000000", lifetime: "keep" },
-    }],
+    marks: [
+      {
+        author: { participant_id: "test-artist", display_name: "Test Artist", color: "#000000" },
+        created_revision: 1,
+        committed_at_ms: 1000,
+        expires_at_ms: null,
+        draft: {
+          mark_id: "chalk-mark",
+          shape: {
+            kind: "pen",
+            points: [
+              { x: 10, y: 10 },
+              { x: 20, y: 30 },
+            ],
+          },
+          width: 30,
+          color: "#000000",
+          lifetime: "keep",
+        },
+      },
+    ],
   };
   const requests: string[] = [];
   let ready = false;
@@ -61,31 +75,41 @@ it.each([true, false])("reconciles a lost finalize response without duplicating 
     ready = true;
     throw new TypeError("response lost after finalizing");
   };
-  const submitUpdate = vi.fn(async (_input: ChalkWhiteboardV1UpdateInput) => ({ sceneId: "board", operationId: "result", revision: "1" }));
+  const updates: ChalkWhiteboardV1UpdateInput[] = [];
+  const submitUpdate = async (update: ChalkWhiteboardV1UpdateInput) => {
+    updates.push(update);
+    return { sceneId: "board", operationId: "result", revision: String(updates.length) };
+  };
   const subscribe = (listener: (event: ChalkWhiteboardV1Event) => void) => {
     listener({ type: "snapshot", sceneId: "board", revision: "0", elements: [] } as ChalkWhiteboardV1Event);
     return () => {};
   };
   const transport = {
     files: createChalkWhiteboardV1FileDownloadTransport({ baseUrl: "https://api.test", token: async () => "test", fetch: fetchImplementation }),
-    submitUpdate, subscribe,
+    submitUpdate,
+    subscribe,
   } as ChalkWhiteboardV1Transport;
   const space = {
     getSnapshot: () => ({ whiteboard: { engine: { sceneId: "board", status: "ready" }, access: { canDraw: true } } }),
     whiteboard: { transport: () => transport },
   } as SpaceClient;
 
-  const save = saveNativeAnnotationToBoard({ space, transport }, frame, () => 0, () => !ready || current);
+  const save = saveNativeAnnotationToBoard(
+    { space, transport },
+    frame,
+    () => 0,
+    () => !ready || current,
+  );
   if (!current) {
     await expect(save).rejects.toThrow("changed while saving");
-    expect(submitUpdate).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
     expect(requests).toEqual(["upload", "put", "finalize"]);
     return;
   }
   await save;
   expect(requests).toEqual(["upload", "put", "finalize", "upload"]);
-  expect(submitUpdate).toHaveBeenCalledTimes(1);
-  const update = submitUpdate.mock.calls[0]?.[0];
+  expect(updates).toHaveLength(1);
+  const update = updates[0];
   expect(update?.syncAll).toBe(false);
   expect(update?.elements.map(({ type }) => type)).toEqual(["image", "freedraw"]);
   expect(update?.elements[0]?.payload.fileId).toBe(fileId);

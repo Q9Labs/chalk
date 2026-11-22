@@ -53,10 +53,7 @@ export function useAnnotationActions({
     try {
       const retry = toBoard && boardRetry.current?.action === action && boardRetry.current.target.fence === target.fence ? boardRetry.current : null;
       if (!retry && live.layer.burned_in) {
-        if (!(await exportProof.wait(visibleMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id)))) {
-          onError("Couldn’t confirm the marks in the shared video. Wait for the ink to appear and try again.");
-          return;
-        }
+        await exportProof.wait(visibleMarks(live, client.serverNowMs()).map(({ draft }) => draft.mark_id));
         live = matchesTarget(client, target);
         if (!live || videoRef.current !== video || !videoMatchesTrack(video, track) || !canDraw(live, actorId)) return;
       }

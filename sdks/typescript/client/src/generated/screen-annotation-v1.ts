@@ -240,6 +240,8 @@ export interface components {
       /** @enum {unknown} */
       readonly type: "annotation_state";
       readonly server_at_ms: number;
+      /** @enum {unknown} */
+      readonly enabled?: false;
       readonly state: components["schemas"]["State"] | null;
     };
     readonly ServerChange: {
@@ -1061,6 +1063,9 @@ export const screenAnnotationDefinitions = {
         type: "integer",
         minimum: 1,
         maximum: 9007199254740991,
+      },
+      enabled: {
+        enum: [false],
       },
       state: {
         oneOf: [

@@ -60,9 +60,20 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const canvas = useRef<AnnotationCanvasHandle>(null);
   const exporting = useRef(false);
   const [finishingInk, setFinishingInk] = useState(false);
+  const [waitingForInk, setWaitingForInk] = useState(false);
+  const pendingHandoffs = useRef(new Set<string>());
   const finishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const exportProof = useMemo(() => new BakedExportProof(), [state.fence]);
-  const onBakedInk = useCallback((id: string) => exportProof.confirm(id), [exportProof]);
+  const onBakedInk = useCallback(
+    (id: string, handedOff: boolean) => {
+      exportProof.finish(id);
+      if (handedOff && pendingHandoffs.current.delete(id) && pendingHandoffs.current.size === 0) {
+        clearTimeout(finishTimer.current);
+        setFinishingInk(false);
+      }
+    },
+    [exportProof],
+  );
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Cancel the post-gesture observation window on layer teardown.
   useEffect(() => () => clearTimeout(finishTimer.current), []);
   const onPresented = useCallback((frame: PresentedAnnotationFrame) => canvas.current?.presented(frame), []);
@@ -72,28 +83,6 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const allowed = ready && canCapture(state, person.id);
   const nowMs = client.serverNowMs();
   const target = targetFor(state);
-  const sampling = Boolean(state.layer.burned_in && ready && (open || finishingInk || state.marks.length > 0));
-
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Observe decoded pixels for exports only on iOS; Android uses the displayed track.
-  useEffect(() => {
-    const sample = source.sampleFrame;
-    if (!sampling || !sample) return;
-    let stopped = false;
-    let next: ReturnType<typeof setTimeout>;
-    async function readSample() {
-      if (stopped || !sample) return;
-      const png = await sample().catch(() => null);
-      if (stopped) return;
-      if (png) canvas.current?.sampled(png);
-      next = setTimeout(() => void readSample(), 200);
-    }
-    void readSample();
-    return () => {
-      stopped = true;
-      clearTimeout(next);
-    };
-  }, [sampling, source]);
-
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Wake saves when their unproved ink has been removed from the authoritative scene.
   useEffect(() => {
     if (!state.layer.burned_in || !ready) return;
@@ -150,9 +139,13 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
         cursor: null,
         draft,
       });
+      pendingHandoffs.current.add(id);
       setFinishingInk(true);
       clearTimeout(finishTimer.current);
-      finishTimer.current = setTimeout(() => setFinishingInk(false), INK_PROOF_TIMEOUT_MS);
+      finishTimer.current = setTimeout(() => {
+        pendingHandoffs.current.clear();
+        setFinishingInk(false);
+      }, INK_PROOF_TIMEOUT_MS);
       void dispatch(frozen, { kind: "commit", draft }).then((result) => {
         if (result?.kind === "accepted") {
           exportProof.accepted(id, result.revision);
@@ -201,8 +194,30 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     onCommit: commit,
   });
 
+  const sampling = Boolean(state.layer.burned_in && ready && (input.local?.draft || finishingInk || waitingForInk));
+
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Observe decoded pixels for exports only on iOS; Android uses the displayed track.
+  useEffect(() => {
+    const sample = source.sampleFrame;
+    if (!sampling || !sample) return;
+    let stopped = false;
+    let next: ReturnType<typeof setTimeout>;
+    async function readSample() {
+      if (stopped || !sample) return;
+      const png = await sample().catch(() => null);
+      if (stopped) return;
+      if (png) canvas.current?.sampled(png);
+      next = setTimeout(() => void readSample(), 200);
+    }
+    void readSample();
+    return () => {
+      stopped = true;
+      clearTimeout(next);
+    };
+  }, [sampling, source]);
+
   const { layerPresence, localTouch } = layerPresenceFor({ presence, localSample: input.local, committing, target, allowed, open, state, person, nowMs });
-  const { save, download, exportFrame } = nativeAnnotationExport({ client, publicationId, source, target, canSave, actions, boardSave, reportError, canvas, exporting, exportProof });
+  const { save, download, exportFrame } = nativeAnnotationExport({ client, publicationId, source, target, canSave, actions, boardSave, reportError, canvas, exporting, exportProof, setWaitingForInk });
   const scene = useMemo(
     () => ({
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },

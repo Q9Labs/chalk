@@ -43,19 +43,20 @@ export function createNativeAnnotationCapture() {
       }
       const stream = Platform.OS === "android" ? await captureAndroidScreen() : ((await mediaDevices.getDisplayMedia()) as unknown as MediaStream);
       const track = stream.getVideoTracks()[0];
-      if (!track || !overlay) return stream;
+      if (!track || !overlay || annotation?.getSnapshot().status !== "ready") return stream;
 
       share = track;
       // Chalk's own UI (including annotation controls) must not enter its screen share.
       const protectedControls = await overlay.protectControls(track.id).catch(() => false);
       if (!protectedControls) {
         share = undefined;
+        if (annotation.getSnapshot().status !== "ready") return stream;
         releaseNativeTrack(track);
         throw new Error("Chalk could not protect the sharing controls.");
       }
-      if (permission) {
+      if (permission && annotation.supportsBurnIn?.()) {
         const frame = await overlay.probe(track.id).catch(() => null);
-        if (frame && share === track && track.readyState !== "ended") witnesses.set(track, frame);
+        if (frame && share === track && track.readyState !== "ended" && annotation.supportsBurnIn?.()) witnesses.set(track, frame);
       }
       return stream;
     },
