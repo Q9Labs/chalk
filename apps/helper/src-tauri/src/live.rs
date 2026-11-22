@@ -148,6 +148,10 @@ impl Capture {
                 .is_some_and(|window| window.identity.is_none())
     }
 
+    pub fn has_window_share(&self) -> bool {
+        !self.unsupported && self.window.is_some()
+    }
+
     pub fn enable_follow(&mut self) -> Result<(), &'static str> {
         let window = self
             .window
