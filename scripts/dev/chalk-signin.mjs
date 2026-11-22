@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { cloudflareSfuPlane } from "./config.mjs";
 import { FailureKind, failure } from "./model.mjs";
 
 // Chalk has no password accounts. The user a reviewer can be is a guest who arrives through the seeded Space's public invite,
@@ -26,7 +27,8 @@ export async function proveSeededSignIn({ origin, invite, mediaPlane, fetchImpl 
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
   }
-  const arrival = await admitSeededGuest({ origin, invite, mediaPlane, fetchImpl, attempts, episodeAttempts, retryDelayMs });
+  const mediaProvider = mediaPlane === cloudflareSfuPlane ? "cloudflare_sfu" : mediaPlane;
+  const arrival = await admitSeededGuest({ origin, invite, mediaProvider, fetchImpl, attempts, episodeAttempts, retryDelayMs });
   if (arrival.status !== 201) throw failure(FailureKind.STARTUP, `seeded guest arrival through ${origin} failed with HTTP ${arrival.status}: ${(await arrival.text()).slice(0, 200)}`, { stage: "signin" });
   const body = await arrival.json();
   const leave = await fetchImpl(new URL("/v1/public/space-invite-arrival", origin), {
@@ -42,19 +44,19 @@ export async function proveSeededSignIn({ origin, invite, mediaPlane, fetchImpl 
   });
   if (!leave.ok) throw failure(FailureKind.STARTUP, `seeded guest could not leave (HTTP ${leave.status}): ${(await leave.text()).slice(0, 200)}`, { stage: "signin" });
   const actual = body.access?.media?.provider;
-  if (mediaPlane && actual !== mediaPlane) {
-    throw failure(FailureKind.STARTUP, `seeded guest received ${actual || "no media provider"}; expected ${mediaPlane}`, { stage: "signin" });
+  if (mediaProvider && actual !== mediaProvider) {
+    throw failure(FailureKind.STARTUP, `seeded guest received ${actual || "no media provider"}; expected ${mediaProvider}`, { stage: "signin" });
   }
   return { state: body.state };
 }
 
-async function admitSeededGuest({ origin, invite, mediaPlane, fetchImpl, attempts, episodeAttempts, retryDelayMs }) {
+async function admitSeededGuest({ origin, invite, mediaProvider, fetchImpl, attempts, episodeAttempts, retryDelayMs }) {
   // A restart can interrupt the previous guest's cleanup. Sync's external-operation
   // lease lasts 60 seconds; allow its retry plus a 30-second provider request.
   for (let attempt = 1; ; attempt += 1) {
     const arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
       method: "POST",
-      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin, ...(mediaPlane ? { "X-Chalk-Media-Providers": mediaPlane } : {}) },
+      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin, ...(mediaProvider ? { "X-Chalk-Media-Providers": mediaProvider } : {}) },
       body: JSON.stringify({ display_name: "Seeded guest", space_invite_token: invite.code }),
     });
     const endingEpisode =

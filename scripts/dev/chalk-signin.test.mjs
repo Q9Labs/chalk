@@ -49,23 +49,25 @@ test("a rejected invite is not retried as a transient Episode transition", async
   });
 });
 
-test("an Orb admits the seeded guest on Chalk SFU, never on Cloudflare", async () => {
+test("an Orb checks the selected provider on the seeded guest grant", async () => {
   const calls = [];
   const fetchImpl = async (_url, options) => {
     calls.push(options);
     if (!options.method) return new Response("<html></html>", { headers: { "content-type": "text/html" } });
     if (options.method === "DELETE") return new Response(null, { status: 200 });
-    return Response.json({ state: "admitted", arrival_handle: "proof", access: { media: { provider: cloudflareSfuPlane } } }, { status: 201 });
+    return Response.json({ state: "admitted", arrival_handle: "proof", access: { media: { provider: "cloudflare_sfu" } } }, { status: 201 });
   };
-  await assert.rejects(
-    proveSeededSignIn({
-      origin: "https://3070-example.instabox.tech",
-      invite: { path: "/seeded-invite", code: "seeded-invite" },
-      mediaPlane: chalkSfuPlane,
-      fetchImpl,
-    }),
-    /expected chalk_sfu/,
-  );
+  const options = {
+    origin: "https://3070-example.instabox.tech",
+    invite: { path: "/seeded-invite", code: "seeded-invite" },
+    fetchImpl,
+  };
+  await assert.rejects(proveSeededSignIn({ ...options, mediaPlane: chalkSfuPlane }), /expected chalk_sfu/);
   assert.equal(calls[1].headers["X-Chalk-Media-Providers"], chalkSfuPlane);
+  assert.equal(calls[2].method, "DELETE");
+
+  calls.length = 0;
+  assert.deepEqual(await proveSeededSignIn({ ...options, mediaPlane: cloudflareSfuPlane }), { state: "admitted" });
+  assert.equal(calls[1].headers["X-Chalk-Media-Providers"], "cloudflare_sfu");
   assert.equal(calls[2].method, "DELETE");
 });
