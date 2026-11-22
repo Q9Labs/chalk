@@ -32,7 +32,7 @@ type options struct {
 }
 
 func main() {
-	if slices.Contains(os.Args[1:], "--check-cutover") {
+	if slices.ContainsFunc(os.Args[1:], isCutoverFlag) {
 		runCutoverCheck(os.Args[1:])
 		return
 	}

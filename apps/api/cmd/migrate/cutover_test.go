@@ -106,6 +106,10 @@ func TestCheckCutover(t *testing.T) {
 }
 
 func TestCutoverCheckTakesOnlyTheDatabaseFile(t *testing.T) {
+	got, err := parseCutoverArgs([]string{"--check-cutover=true", "--database-url-file", "/run/url"})
+	if err != nil || got != "/run/url" {
+		t.Fatalf("parseCutoverArgs = %q, %v", got, err)
+	}
 	for _, args := range [][]string{
 		{"--check-cutover"},
 		{"--check-cutover", "--database-url-file", "relative"},
@@ -113,8 +117,13 @@ func TestCutoverCheckTakesOnlyTheDatabaseFile(t *testing.T) {
 		{"--check-cutover", "--database-url-file", "/run/url", "--down-to", "1"},
 		{"--check-cutover", "--database-url-file", "/run/url", "extra"},
 	} {
-		if err := cutoverCheck(args); err == nil {
-			t.Fatalf("cutoverCheck(%v) accepted the arguments", args)
+		if _, err := parseCutoverArgs(args); err == nil {
+			t.Fatalf("parseCutoverArgs(%v) accepted the arguments", args)
+		}
+	}
+	for arg, want := range map[string]bool{"--check-cutover": true, "-check-cutover": true, "--check-cutover=true": true, "--check-cutoverx": false, "check-cutover": false, "--target": false} {
+		if isCutoverFlag(arg) != want {
+			t.Fatalf("isCutoverFlag(%q) = %v, want %v", arg, !want, want)
 		}
 	}
 }

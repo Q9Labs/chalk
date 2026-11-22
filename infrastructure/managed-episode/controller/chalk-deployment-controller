@@ -912,7 +912,10 @@ check_cutover() {
   ((target >= CLOUDFLARE_RETIREMENT_MIGRATION)) || return 0
   # A host that has never run a release has nothing live to protect. Any other host must be able to run the check.
   [[ "${stable_exists:-false}" == true ]] || return 0
-  run_user_podman network exists chalk-runtime >/dev/null 2>"${stage_root}/cutover-network.log" || fail "cutover check needs the chalk-runtime network, which this host does not have"
+  if ! run_user_podman network exists chalk-runtime >/dev/null 2>"${stage_root}/cutover-network.log"; then
+    tail -n 5 "${stage_root}/cutover-network.log" >&2 || true
+    fail "cutover check needs the chalk-runtime network, which this host does not have or podman could not inspect"
+  fi
 
   local destination image
   destination="$(jq -er --arg id "$MIGRATOR_INPUT_ID" 'first(.[] | select(.id == $id and .missing == false) | .destination)' <<<"${input_records_json}")" || fail "release migration credential is missing"

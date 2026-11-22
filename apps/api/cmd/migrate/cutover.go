@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
@@ -34,20 +35,33 @@ func runCutoverCheck(args []string) {
 	fmt.Println("cutover check passed")
 }
 
-func cutoverCheck(args []string) error {
+func isCutoverFlag(arg string) bool {
+	name, _, _ := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+	return name == "check-cutover" && strings.HasPrefix(arg, "-")
+}
+
+func parseCutoverArgs(args []string) (string, error) {
 	flags := flag.NewFlagSet("chalk-migrate", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	flags.Bool("check-cutover", false, "read-only: refuse when the database is not ready to retire Cloudflare media")
 	databaseURLFile := flags.String("database-url-file", "", "file containing the dedicated migration database URL")
 	if err := flags.Parse(args); err != nil {
-		return err
+		return "", err
 	}
 	if flags.NArg() != 0 || *databaseURLFile == "" || !filepath.IsAbs(*databaseURLFile) {
-		return errors.New("--check-cutover takes only an absolute --database-url-file")
+		return "", errors.New("--check-cutover takes only an absolute --database-url-file")
+	}
+	return *databaseURLFile, nil
+}
+
+func cutoverCheck(args []string) error {
+	databaseURLFile, err := parseCutoverArgs(args)
+	if err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), migrationTimeout)
 	defer cancel()
-	database, _, err := openDatabase(ctx, *databaseURLFile)
+	database, _, err := openDatabase(ctx, databaseURLFile)
 	if err != nil {
 		return err
 	}

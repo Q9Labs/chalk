@@ -10,7 +10,7 @@ Chalk SFU is the only media provider. The [SFU runbook](../../infrastructure/obs
 2. Update any clients that create Spaces with an explicit old provider to send `chalk_sfu` or omit the field. Joining clients must advertise `chalk_sfu` in `X-Chalk-Media-Providers`; otherwise the API returns `409 media.client_unsupported`.
 3. Save the previous release and its environment, and keep the legacy API settings the [rollback](#undo) reads in place. Keep Cloudflare TURN and storage credentials too.
 4. If `CHALK_RECORDING_ENABLED=true`, set `CHALK_SFU_CAPTURE_ENABLED=true` so new Recordings start. Without it every new Recording fails with `recording_capture_unsupported`, so the preflight refuses the deploy unless `CHALK_RECORDING_HISTORY_ONLY=true` says that serving only existing Recordings is intended.
-5. Resume new Episodes if they are paused (`media-settings new-episodes --state on`).
+5. Resume new Episodes if they are paused (`media-settings new-episodes --state on --operator <name> --reason <text>`).
 
 The API migration converts stored Cloudflare Space settings and Tenant defaults to `chalk_sfu`. It does not rewrite Episode snapshots, recordings or past audit entries.
 
@@ -18,7 +18,7 @@ The API migration converts stored Cloudflare Space settings and Tenant defaults 
 
 - Check `/readyz` and node cleanup debt. Create a Space and a public invite without specifying a media plane. Join each from a current client and verify that the new Episode binds to Chalk SFU. Run the recorded-call proof if capture is enabled.
 - When all Chalk SFU nodes are drained or full, new Episodes return a retryable `503 media.unavailable`. Once a node is undrained, let the next readiness poll reach the API before trying again.
-- `media-settings new-episodes --state off --operator <name> --reason <text>` blocks new Episodes and records an audit entry. It does not move or end a live Episode. Turn creation back on with `--state on`.
+- `media-settings new-episodes --state off --operator <name> --reason <text>` blocks new Episodes and records an audit entry. It does not move or end a live Episode. Turn creation back on with `--state on`, with the same `--operator` and `--reason`.
 
 The deploy controller re-fetches the private API environment on every deploy. The API only reads it at start; editing the host file alone does not survive a deploy. Save any settings you change privately, distinguishing unset values from empty ones.
 
