@@ -1,7 +1,7 @@
 use crate::geometry::Rect;
 
 const SIZE: usize = 72;
-const SAMPLES: usize = SIZE * SIZE * 4;
+pub const SAMPLES: usize = SIZE * SIZE * 4;
 pub const LANDMARK_COUNT: usize = 3 * 40;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -50,10 +50,6 @@ impl From<NativeBounds> for Observation {
 
 pub fn ignore_overlay(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     platform::ignore_overlay(window)
-}
-
-pub fn request_capture_access() -> bool {
-    platform::request_capture_access()
 }
 
 pub fn observe(id: u64) -> Option<Observation> {
@@ -188,7 +184,6 @@ mod platform {
 
     extern "C" {
         fn chalk_window_ignore_overlay(window: *mut std::ffi::c_void) -> bool;
-        fn chalk_window_request_capture_access() -> bool;
         fn chalk_window_bounds(id: u32, output: *mut NativeBounds) -> bool;
         fn chalk_window_sample(id: u32, top_fraction: f64, output: *mut u8, size: usize) -> bool;
     }
@@ -199,11 +194,6 @@ mod platform {
         } else {
             Err(std::io::Error::other("The Helper overlay has no native window identity.").into())
         }
-    }
-
-    pub fn request_capture_access() -> bool {
-        // Only called from the user’s explicit Follow action in native Settings.
-        unsafe { chalk_window_request_capture_access() }
     }
 
     pub fn bounds(id: u64) -> Option<NativeBounds> {
@@ -217,10 +207,17 @@ mod platform {
         let Ok(id) = u32::try_from(id) else {
             return false;
         };
+        crate::sampler::shared().sample(id, top_fraction, pixels)
+    }
+
+    pub fn capture_in_process(id: u32, top_fraction: f64, pixels: &mut [u8]) -> bool {
         // The bridge copies only after the callback finishes; it never retains this buffer.
         unsafe { chalk_window_sample(id, top_fraction, pixels.as_mut_ptr(), SIZE) }
     }
 }
+
+#[cfg(target_os = "macos")]
+pub use platform::capture_in_process;
 
 #[cfg(target_os = "windows")]
 mod platform {
@@ -287,10 +284,6 @@ mod platform {
             rect.right.saturating_sub(rect.left),
             rect.bottom.saturating_sub(rect.top),
         )
-    }
-
-    pub fn request_capture_access() -> bool {
-        true
     }
 
     pub fn bounds(id: u64) -> Option<NativeBounds> {
@@ -483,9 +476,6 @@ mod platform {
         Err(std::io::Error::other("The Helper overlay has no native window identity.").into())
     }
 
-    pub fn request_capture_access() -> bool {
-        false
-    }
     pub fn bounds(_: u64) -> Option<NativeBounds> {
         None
     }

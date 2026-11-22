@@ -20,7 +20,11 @@ use crate::{
     geometry::{Dock, Point, Rect, Segment},
     live,
     pairing::Pairing,
+    permission::{self, Ask, Effect},
 };
+
+#[cfg(feature = "fixture")]
+mod preview;
 
 const MAX_STROKES: usize = 64;
 const MAX_POINTS: usize = 512;
@@ -59,6 +63,7 @@ struct Local {
     hotkey: bool,
     update_status: Option<&'static str>,
     device: DeviceConnection,
+    permission: permission::Onboarding,
 }
 
 struct Fixture {
@@ -93,6 +98,7 @@ pub struct View {
     overlay: Option<live::Overlay>,
     update_status: Option<&'static str>,
     device: Option<DeviceView>,
+    permission: Option<permission::View>,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +111,9 @@ pub enum Action {
     DecidePairing { fingerprint: String, allowed: bool },
     SelectMonitor { index: usize },
     FollowWindow,
+    OpenScreenRecordingSettings,
+    LaterScreenRecording,
+    ShowAppInFinder,
     ToggleLiveDraw,
     ChangeColor { color: PenColor },
     ToggleDraw,
@@ -175,6 +184,10 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
             _ => {}
         })
         .build(handle)?;
+    #[cfg(feature = "fixture")]
+    if let Some(state) = preview::requested() {
+        return preview::run(handle, &state);
+    }
     if cfg!(feature = "fixture") && std::env::args().any(|arg| arg == "--fixture") {
         create_settings(handle)?;
         show_settings(handle)?;
@@ -204,6 +217,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                     .lock()
                     .expect("Helper state")
                     .pairing = Some(pairing.clone());
+                tauri::async_runtime::spawn(watch_permission(app.clone(), pairing.clone()));
                 pairing.set_app(app);
                 let upkeep = pairing.clone();
                 tauri::async_runtime::spawn(async move {
@@ -220,6 +234,71 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     });
 
     Ok(())
+}
+
+/// Notice a grant without asking the sharer to return and click again.
+async fn watch_permission(app: AppHandle, pairing: Pairing) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let watching = app
+            .state::<Desktop>()
+            .0
+            .lock()
+            .expect("Helper state")
+            .permission
+            .watching();
+        let Ok(access) =
+            tauri::async_runtime::spawn_blocking(move || permission::Observed::take(watching))
+                .await
+        else {
+            continue;
+        };
+        let sampling = pairing.window_sampling();
+        let effects = app
+            .state::<Desktop>()
+            .0
+            .lock()
+            .expect("Helper state")
+            .permission
+            .tick(sampling.is_some(), &access);
+        match sampling {
+            Some(true) => permission::start_sampling(),
+            Some(false) => (),
+            None => permission::stop_sampling(),
+        }
+        apply(&app, effects);
+    }
+}
+
+fn apply(app: &AppHandle, effects: Vec<Effect>) {
+    for effect in effects {
+        match effect {
+            Effect::OpenSettings => {
+                let _ = app.run_on_main_thread(|| {
+                    permission::open_system_settings();
+                    permission::show_tile();
+                });
+            }
+            Effect::HideTile => {
+                let _ = app.run_on_main_thread(permission::hide_tile);
+            }
+            Effect::Follow => {
+                let pairing = app
+                    .state::<Desktop>()
+                    .0
+                    .lock()
+                    .expect("Helper state")
+                    .pairing
+                    .clone();
+                if pairing.is_some_and(|pairing| pairing.enable_follow().is_ok()) {
+                    permission::start_sampling();
+                    if let Some(settings) = app.get_webview_window("settings") {
+                        let _ = settings.hide();
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn create_settings(app: &AppHandle) -> tauri::Result<()> {
@@ -642,6 +721,9 @@ fn allowed(label: &str, action: &Action) -> bool {
         | Action::ForgetDevice
         | Action::DecidePairing { .. }
         | Action::FollowWindow
+        | Action::OpenScreenRecordingSettings
+        | Action::LaterScreenRecording
+        | Action::ShowAppInFinder
         | Action::SelectMonitor { .. }
         | Action::ToggleLiveDraw => label == "settings",
         Action::ChangeColor { .. } => label == "draw-bar",
@@ -704,6 +786,7 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
             .flatten(),
         update_status: local.update_status,
         device: (window.label() == "settings").then(|| local.device.view()),
+        permission: (window.label() == "settings").then(|| local.permission.view()),
     };
     if let Some(fixture) = local.fixture.as_mut() {
         view.drawing = fixture.drawing;
@@ -778,11 +861,35 @@ pub fn act(
             if !pairing.offers_window() {
                 return Err("No active window share.".into());
             }
-            if !crate::window_follow::request_capture_access() {
-                return Err("Allow Screen Recording for Chalk Helper, then try again. Until then, use the call preview.".into());
+            let ask = state
+                .0
+                .lock()
+                .expect("Helper state")
+                .permission
+                .ask(&permission::System);
+            if ask == Ask::Panel {
+                return Ok(());
             }
             pairing.enable_follow().map_err(str::to_owned)?;
+            permission::start_sampling();
             let _ = window.hide();
+            return Ok(());
+        }
+        Action::OpenScreenRecordingSettings => {
+            let effects = local.permission.open_settings();
+            drop(local);
+            apply(app, effects);
+            return Ok(());
+        }
+        Action::LaterScreenRecording => {
+            let effects = local.permission.later();
+            drop(local);
+            apply(app, effects);
+            return Ok(());
+        }
+        Action::ShowAppInFinder => {
+            drop(local);
+            permission::reveal_in_finder();
             return Ok(());
         }
         Action::SelectMonitor { index } => {

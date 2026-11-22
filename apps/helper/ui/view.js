@@ -1,4 +1,5 @@
 import { paintFixture, paintLive } from "./fixture-paint.js";
+import { paintPermission, permissionMarkup } from "./permission-panel.js";
 
 const { invoke } = window.__TAURI__.core;
 const label = window.__TAURI_INTERNALS__.metadata.currentWindow.label;
@@ -107,6 +108,7 @@ if (isOverlay) {
       <button type="button" id="deny">Deny</button>
       <button type="button" id="allow">Allow</button>
     </div>
+    ${permissionMarkup}
     <button type="button" id="follow-window" hidden>Follow captured window</button>
     <button type="button" id="live-draw" hidden>Draw one mark</button>
     <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
@@ -127,6 +129,12 @@ if (isOverlay) {
   control("check_for_update", "#update");
   control("toggle_live_draw", "#live-draw");
   control("follow_window", "#follow-window");
+  control("later_screen_recording", "#permission-later");
+  control("show_app_in_finder", "#permission-finder");
+  listen("#permission-primary", "click", (event) => {
+    const kind = event.currentTarget.dataset.action;
+    if (kind) void run(kind).catch(showError);
+  });
   listen(
     "#new-device-code",
     "click",
@@ -243,7 +251,7 @@ function paintConnection(view) {
 function paintSettings(view) {
   root.querySelector("#shortcut").hidden = !view.hotkey;
   paintConnection(view);
-  root.querySelector("#follow-window").hidden = !view.canFollowWindow;
+  paintPermission(root, view.approval ? null : view.permission, view.canFollowWindow);
   root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
   paintDisplays(view);
   paintApproval(view);

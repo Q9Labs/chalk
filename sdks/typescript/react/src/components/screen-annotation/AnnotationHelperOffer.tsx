@@ -1,15 +1,7 @@
 import type { ScreenAnnotationClient, ScreenAnnotationState, ScreenShareCapture } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState } from "react";
+import { HelperOfferActions, type HelperScreen } from "./HelperOfferActions";
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./model";
-
-type HelperScreen =
-  | { readonly kind: "idle" | "looking" }
-  | { readonly kind: "attaching"; readonly fingerprint?: string }
-  | { readonly kind: "confirm"; readonly fingerprint: string; readonly submit: (code: string) => void }
-  | { readonly kind: "code"; readonly error?: string }
-  | { readonly kind: "fingerprint"; readonly value: string; readonly approve: () => Promise<void> }
-  | { readonly kind: "device"; readonly name: string; readonly fingerprint?: string; readonly approve: () => Promise<void> }
-  | { readonly kind: "status"; readonly status: ScreenAnnotationHelperStatus };
 
 const statuses: Record<ScreenAnnotationHelperStatus, string> = {
   waiting_for_sync: "Connecting Chalk Helper to the call…",
@@ -210,34 +202,7 @@ function HelperStep({
           </code>
         </>
       ) : null}
-      {screen.kind === "code" ? (
-        <>
-          {screen.error ? <p role="status">{screen.error}</p> : null}
-          {helper.lookupCode ? (
-            <form
-              className="grid gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void lookup();
-              }}
-            >
-              {helper.deviceAccount ? (
-                <label className="chalk-ann-field">
-                  Paste this account ID into Chalk Helper
-                  <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
-                </label>
-              ) : null}
-              <label className="chalk-ann-field">
-                Device code from Chalk Helper
-                <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
-              </label>
-              <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
-                Find device
-              </button>
-            </form>
-          ) : null}
-        </>
-      ) : null}
+      {screen.kind === "code" ? <HelperDeviceCode error={screen.error} helper={helper} code={code} setCode={setCode} lookup={lookup} /> : null}
       {screen.kind === "confirm" ? (
         <form
           className="grid gap-2"
@@ -275,26 +240,49 @@ function HelperStep({
         </>
       ) : null}
       {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
+      <ReconnectHelper screen={screen} enabled={Boolean(helper.challenge)} connect={connect} />
     </>
   );
 }
 
-function HelperOfferActions({ screen, helper, dismiss, useCode }: { readonly screen: HelperScreen; readonly helper: ScreenAnnotationHelper; readonly dismiss: () => void; readonly useCode: () => void }) {
+function ReconnectHelper({ screen, enabled, connect }: { readonly screen: HelperScreen; readonly enabled: boolean; readonly connect: () => Promise<void> }) {
+  const disconnected = screen.kind === "status" && screen.status === "disconnected";
+  const failed = screen.kind === "code" && screen.error;
+  if (!enabled || (!disconnected && !failed)) return null;
   return (
-    <div className="chalk-ann-card-actions">
-      {helper.installUrl && (screen.kind === "idle" || screen.kind === "code" || (screen.kind === "status" && screen.status === "update_required")) ? (
-        <a className="chalk-ann-textbtn" href={helper.installUrl} target="_blank" rel="noopener noreferrer">
-          Get Chalk Helper
-        </a>
+    <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
+      Reconnect Chalk Helper
+    </button>
+  );
+}
+
+function HelperDeviceCode({ error, helper, code, setCode, lookup }: { readonly error?: string; readonly helper: ScreenAnnotationHelper; readonly code: string; readonly setCode: (value: string) => void; readonly lookup: () => Promise<void> }) {
+  return (
+    <>
+      {error ? <p role="status">{error}</p> : null}
+      {helper.lookupCode ? (
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void lookup();
+          }}
+        >
+          {helper.deviceAccount ? (
+            <label className="chalk-ann-field">
+              Paste this account ID into Chalk Helper
+              <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
+            </label>
+          ) : null}
+          <label className="chalk-ann-field">
+            Device code from Chalk Helper
+            <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
+          </label>
+          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
+            Find device
+          </button>
+        </form>
       ) : null}
-      {helper.lookupCode && screen.kind !== "idle" && screen.kind !== "code" && screen.kind !== "device" && (screen.kind !== "status" || screen.status !== "ready") ? (
-        <button type="button" className="chalk-ann-textbtn" onClick={useCode}>
-          Use a device code
-        </button>
-      ) : null}
-      <button type="button" className="chalk-ann-textbtn" onClick={dismiss}>
-        {screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved") ? "Disconnect" : "Not now"}
-      </button>
-    </div>
+    </>
   );
 }

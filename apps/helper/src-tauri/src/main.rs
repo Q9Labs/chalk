@@ -10,6 +10,9 @@ mod helper_scene;
 mod live;
 mod pairing;
 mod pairing_consent;
+mod permission;
+#[cfg(target_os = "macos")]
+mod sampler;
 mod window_follow;
 #[cfg(target_os = "windows")]
 mod windows_key;
@@ -19,6 +22,15 @@ use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_updater::UpdaterExt;
 
 fn main() {
+    // A new process answers whether it can capture the screen, so Helper can see a grant without restarting.
+    if std::env::args().any(|arg| arg == permission::PROBE_FLAG) {
+        std::process::exit(permission::probe_exit_code());
+    }
+    // Helper's capture child: it starts after a grant, so it can use one Helper cannot.
+    #[cfg(target_os = "macos")]
+    if std::env::args().any(|arg| arg == sampler::FLAG) {
+        sampler::run_child();
+    }
     tauri::Builder::default()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
