@@ -738,6 +738,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
           () => this.#selection.getDisplayMedia(displayMediaConstraints(intent.options)).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, "screen")),
           (stream) =>
             Effect.gen({ self: this }, function* () {
+              // The OS picker outlives a short reconnect. The capture consent is
+              // still usable if the same transports and screen intent survive.
+              yield* this.#waitForLive("screen", intent.revision, ports);
               this.#assertActivePorts(ports, "startScreenShare");
               this.#assertCurrentIntent("screen", intent.revision);
               track = requireDisplayVideoTrack(stream);
@@ -926,7 +929,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
 
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
-    const waitLive = enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
+    const waitLive = enabled ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
     const command = this.#mediaAction(
       enabled,
       foreign(async () => {

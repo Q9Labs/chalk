@@ -4,6 +4,57 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { stream, track } from "./capture.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
+it("publishes a consented screen capture after a short reconnect during the system picker", async () => {
+  const platform = createCoreTestPlatform();
+  const screen = track("video");
+  const pickerOpened = Promise.withResolvers<void>();
+  const pickerResult = Promise.withResolvers<MediaStream>();
+  const send = vi.fn<ConnectionSyncClient["setScreenShareEnabled"]>(async () => ({
+    operationId: "screen", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied",
+  }));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: {
+          ...platform.dependencies.mediaDevices,
+          getDisplayMedia: () => {
+            pickerOpened.resolve();
+            return pickerResult.promise;
+          },
+        },
+        createSyncClient: () => ({
+          ...platform.sync,
+          setScreenShareEnabled: send,
+          offReasonNegotiated: () => true,
+          link: { proof: () => ({ wall: 0, mono: 0, suspends: 0 }), longSince: () => false },
+        }),
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    const sharing = client.media.setScreenShareEnabled(true);
+    void sharing.catch(() => {});
+    await pickerOpened.promise;
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+    pickerResult.resolve(stream([screen]));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(screen.readyState).toBe("live");
+    expect(send).not.toHaveBeenCalled();
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+    await sharing;
+    expect(send.mock.calls).toEqual([[true]]);
+    expect(screen.readyState).toBe("live");
+  } finally {
+    pickerResult.resolve(stream([screen]));
+    client.dispose();
+  }
+});
+
 it("replays Stop, not a late Enable, when Sync recovers", async () => {
   const platform = createCoreTestPlatform();
   const microphone = track("audio");
