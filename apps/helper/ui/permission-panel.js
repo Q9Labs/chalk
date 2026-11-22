@@ -31,10 +31,10 @@ const permissionCopy = {
   },
 };
 
-export function paintPermission(root, view) {
-  const copy = view.approval ? undefined : permissionCopy[view.permission?.phase];
+export function paintPermission(root, permission, canFollowWindow) {
+  const copy = permissionCopy[permission?.phase];
   root.querySelector(".permission").hidden = !copy;
-  root.querySelector("#follow-window").hidden = !view.canFollowWindow || Boolean(copy);
+  root.querySelector("#follow-window").hidden = !canFollowWindow || Boolean(copy);
   if (!copy) return;
   root.querySelector("#permission-title").textContent = copy.title;
   root.querySelector("#permission-body").textContent = copy.body;

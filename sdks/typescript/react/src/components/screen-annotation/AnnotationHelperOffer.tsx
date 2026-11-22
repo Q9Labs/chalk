@@ -202,34 +202,7 @@ function HelperStep({
           </code>
         </>
       ) : null}
-      {screen.kind === "code" ? (
-        <>
-          {screen.error ? <p role="status">{screen.error}</p> : null}
-          {helper.lookupCode ? (
-            <form
-              className="grid gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void lookup();
-              }}
-            >
-              {helper.deviceAccount ? (
-                <label className="chalk-ann-field">
-                  Paste this account ID into Chalk Helper
-                  <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
-                </label>
-              ) : null}
-              <label className="chalk-ann-field">
-                Device code from Chalk Helper
-                <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
-              </label>
-              <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
-                Find device
-              </button>
-            </form>
-          ) : null}
-        </>
-      ) : null}
+      {screen.kind === "code" ? <HelperDeviceCode error={screen.error} helper={helper} code={code} setCode={setCode} lookup={lookup} /> : null}
       {screen.kind === "confirm" ? (
         <form
           className="grid gap-2"
@@ -267,10 +240,48 @@ function HelperStep({
         </>
       ) : null}
       {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
-      {helper.challenge && ((screen.kind === "status" && screen.status === "disconnected") || (screen.kind === "code" && screen.error)) ? (
-        <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
-          Reconnect Chalk Helper
-        </button>
+      <ReconnectHelper screen={screen} enabled={Boolean(helper.challenge)} connect={connect} />
+    </>
+  );
+}
+
+function ReconnectHelper({ screen, enabled, connect }: { readonly screen: HelperScreen; readonly enabled: boolean; readonly connect: () => Promise<void> }) {
+  const disconnected = screen.kind === "status" && screen.status === "disconnected";
+  const failed = screen.kind === "code" && screen.error;
+  if (!enabled || (!disconnected && !failed)) return null;
+  return (
+    <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
+      Reconnect Chalk Helper
+    </button>
+  );
+}
+
+function HelperDeviceCode({ error, helper, code, setCode, lookup }: { readonly error?: string; readonly helper: ScreenAnnotationHelper; readonly code: string; readonly setCode: (value: string) => void; readonly lookup: () => Promise<void> }) {
+  return (
+    <>
+      {error ? <p role="status">{error}</p> : null}
+      {helper.lookupCode ? (
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void lookup();
+          }}
+        >
+          {helper.deviceAccount ? (
+            <label className="chalk-ann-field">
+              Paste this account ID into Chalk Helper
+              <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
+            </label>
+          ) : null}
+          <label className="chalk-ann-field">
+            Device code from Chalk Helper
+            <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
+          </label>
+          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
+            Find device
+          </button>
+        </form>
       ) : null}
     </>
   );

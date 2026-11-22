@@ -251,7 +251,7 @@ function paintConnection(view) {
 function paintSettings(view) {
   root.querySelector("#shortcut").hidden = !view.hotkey;
   paintConnection(view);
-  paintPermission(root, view);
+  paintPermission(root, view.approval ? null : view.permission, view.canFollowWindow);
   root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
   paintDisplays(view);
   paintApproval(view);
