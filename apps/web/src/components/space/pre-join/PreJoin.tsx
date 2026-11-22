@@ -71,9 +71,12 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
   const preview = (
-    <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
-      {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)]">{card}</div> : null}
-    </PreviewTile>
+    <>
+      <ShellStyles />
+      <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
+        {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)]">{card}</div> : null}
+      </PreviewTile>
+    </>
   );
   const rows = stacked ? <DevicesSheetRow devices={devices} locked={joining} onNeedAccess={askAgain} /> : <DeviceRows devices={devices} locked={joining} onNeedAccess={askAgain} />;
   const form = (
@@ -130,7 +133,6 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           <div className="flex flex-1 flex-col justify-end">{form}</div>
         </div>
         {sheet}
-        <ShellStyles />
       </div>
     );
   return (
@@ -145,7 +147,6 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           {form}
         </div>
       </div>
-      <ShellStyles />
     </div>
   );
 }

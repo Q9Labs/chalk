@@ -21,6 +21,7 @@ it("draws every lobby icon in the call's family: 1.75 outline glyphs, none from 
   const icons = [...document.querySelectorAll("svg")];
   expect(icons.length).toBeGreaterThan(3);
   expect(icons.map((icon) => icon.getAttribute("stroke-width"))).toEqual(icons.map(() => "1.75"));
+  expect(document.querySelectorAll("style[data-href]").length).toBeGreaterThan(0);
   await act(async () => root.unmount());
 });
 
