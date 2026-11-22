@@ -28,7 +28,7 @@ defmodule ChalkSync.Obs do
   @violations 2
   @export_failures 3
 
-  # Not @on_load: a release loads its modules before :crypto, which the source id needs.
+  # Not an on-load hook: a release loads its modules before :crypto, which the source id needs.
   @doc false
   def init do
     if :persistent_term.get(@counters, nil) == nil do

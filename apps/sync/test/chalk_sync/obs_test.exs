@@ -203,6 +203,20 @@ defmodule ChalkSync.ObsTest do
     assert Obs.stats().violations == before + 1
   end
 
+  # A release loads every module before :crypto exists, so an @on_load that needs it kills the kernel
+  # (on_load_function_failed). Mix has already started :crypto, so only the source can show that.
+  test "no module runs code while it loads" do
+    lib = Path.expand("../../lib", __DIR__)
+
+    offenders =
+      lib
+      |> Path.join("**/*.ex")
+      |> Path.wildcard()
+      |> Enum.filter(&(&1 |> File.read!() |> String.contains?("@on_load")))
+
+    assert offenders == []
+  end
+
   test "init keeps the counters it already made" do
     previous = Application.get_env(:chalk_sync, Obs)
     Application.put_env(:chalk_sync, Obs, Keyword.put(previous, :mode, :open))
