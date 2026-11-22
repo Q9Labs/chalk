@@ -18,7 +18,14 @@ function nativeRequest() {
     send = (body: string) => sent.resolve({ body, headers: this.headers });
   }
   const xhr = new NativeRequest();
-  vi.stubGlobal("XMLHttpRequest", class { constructor() { return xhr; } });
+  vi.stubGlobal(
+    "XMLHttpRequest",
+    class {
+      constructor() {
+        return xhr;
+      }
+    },
+  );
   return { xhr, sent: sent.promise };
 }
 
@@ -51,7 +58,11 @@ describe("Android signaling during app capture", () => {
     const { xhr, sent } = nativeRequest();
     vi.useFakeTimers();
     const controller = new AbortController();
-    const response = fetchAndroidSignaling("https://example.test/media/sfu/signal", { method: "POST", body: "{}", signal: controller.signal });
+    const response = fetchAndroidSignaling("https://example.test/media/sfu/signal", {
+      method: "POST",
+      body: "{}",
+      signal: controller.signal,
+    });
     await sent;
     controller.abort();
 
