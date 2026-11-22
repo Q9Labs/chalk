@@ -521,7 +521,7 @@ impl Pairing {
         let (respond, receive) = oneshot::channel();
         let queued_at = Instant::now();
         app.run_on_main_thread(move || {
-            if matches!(action, Exchange::ProbeStart)
+            if matches!(action, Exchange::ProbeStart | Exchange::WindowProbeStart)
                 && (queued_at.elapsed() > Duration::from_millis(200) || respond.is_closed())
             {
                 let _ = respond.send(Err(StatusCode::CONFLICT));

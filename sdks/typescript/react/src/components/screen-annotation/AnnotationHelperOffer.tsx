@@ -193,7 +193,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
             Confirmation code shown in the app
             <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={19} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
           </label>
-          <button type="submit" className={annotationControl} disabled={code.replaceAll("-", "").trim().length !== 16}>Confirm</button>
+          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.replaceAll("-", "").trim().length !== 16}>Confirm</button>
         </form>
       ) : null}
       {screen.kind === "device" ? (

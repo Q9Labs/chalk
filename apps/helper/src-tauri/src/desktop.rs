@@ -175,73 +175,99 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
             _ => {}
         })
         .build(handle)?;
-    show_settings(handle)?;
-
     if cfg!(feature = "fixture") && std::env::args().any(|arg| arg == "--fixture") {
+        create_settings(handle)?;
+        show_settings(handle)?;
         start_fixture(handle)?;
-    } else {
-        let pairing = Pairing::configured().map_err(|error| {
-            tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-        })?;
-        if let Some(pairing) = pairing {
-            app.state::<Desktop>()
-                .0
-                .lock()
-                .expect("Helper state")
-                .pairing = Some(pairing.clone());
-            pairing.set_app(handle.clone());
-            let upkeep = pairing.clone();
-            tauri::async_runtime::spawn(async move {
-                loop {
-                    if !upkeep.upkeep() {
-                        break;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-                }
-            });
-            tauri::async_runtime::spawn(pairing.serve());
-        }
+        return Ok(());
     }
+
+    let pairing = Pairing::configured().map_err(|error| {
+        tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+    })?;
+    // WebView2 can deadlock when a window is constructed inside a GUI callback.
+    // Create both windows off the GUI thread; capture requests can only use the prepared overlay.
+    let owner = handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = create_settings(&owner);
+        if pairing.is_some() && create_live_overlay(&owner).is_err() {
+            eprintln!("Chalk Helper could not prepare the live overlay.");
+        }
+        let app = owner.clone();
+        let _ = owner.run_on_main_thread(move || {
+            if settings.is_err() || show_settings(&app).is_err() {
+                eprintln!("Chalk Helper could not open Settings.");
+            }
+            if let Some(pairing) = pairing {
+                app.state::<Desktop>()
+                    .0
+                    .lock()
+                    .expect("Helper state")
+                    .pairing = Some(pairing.clone());
+                pairing.set_app(app);
+                let upkeep = pairing.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        if !upkeep.upkeep() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                    }
+                });
+                tauri::async_runtime::spawn(pairing.serve());
+            }
+        });
+    });
 
     Ok(())
 }
 
+fn create_settings(app: &AppHandle) -> tauri::Result<()> {
+    let window = window(app, "settings")
+        .title("Chalk Helper")
+        .inner_size(360.0, 410.0)
+        .center()
+        .content_protected(true)
+        .visible(false)
+        .resizable(false)
+        .build()?;
+    let hide = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = hide.hide();
+        }
+    });
+    Ok(())
+}
+
 pub(crate) fn show_settings(app: &AppHandle) -> tauri::Result<()> {
-    let window = if let Some(window) = app.get_webview_window("settings") {
-        window
-    } else {
-        let window = window(app, "settings")
-            .title("Chalk Helper")
-            .inner_size(360.0, 410.0)
-            .center()
-            .content_protected(true)
-            .visible(false)
-            .resizable(false)
-            .build()?;
-        verify_capture_affinity(&window)?;
-        let hide = window.clone();
-        window.on_window_event(move |event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = hide.hide();
-            }
-        });
-        window
-    };
+    let window = app
+        .get_webview_window("settings")
+        .ok_or_else(|| std::io::Error::other("Chalk Helper Settings are not ready."))?;
+    verify_capture_affinity(&window)?;
     window.show()?;
     window.set_focus()
 }
 
 fn window<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())).on_navigation(
-        |url| {
-            (url.scheme() == "tauri" && url.host_str() == Some("localhost")
-                || url.scheme() == "http" && url.host_str() == Some("tauri.localhost"))
-                && matches!(url.path(), "/" | "/index.html")
-                && url.query().is_none()
-                && url.fragment().is_none()
-        },
-    )
+    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .on_navigation(is_local_window_navigation)
+}
+
+fn is_local_window_navigation(url: &tauri::Url) -> bool {
+    // Tauri uses the pathless custom-protocol origin on macOS for index.html.
+    let bundled = match (url.scheme(), url.host_str()) {
+        ("tauri", Some("localhost")) => matches!(url.path(), "" | "/" | "/index.html"),
+        ("http", Some("tauri.localhost")) => matches!(url.path(), "/" | "/index.html"),
+        _ => false,
+    };
+    bundled
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
 }
 
 fn floating(app: &AppHandle, label: &str, focusable: bool) -> tauri::Result<WebviewWindow> {
@@ -262,26 +288,30 @@ fn floating(app: &AppHandle, label: &str, focusable: bool) -> tauri::Result<Webv
     Ok(window)
 }
 
+fn create_live_overlay(app: &AppHandle) -> tauri::Result<()> {
+    window(app, live::OVERLAY)
+        .title("Chalk Helper calibration")
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .focusable(false)
+        .visible(false)
+        .build()?;
+    Ok(())
+}
+
 pub(crate) fn show_live_overlay(
     app: &AppHandle,
     bounds: Rect,
     protected: bool,
 ) -> tauri::Result<()> {
-    let overlay = match app.get_webview_window(live::OVERLAY) {
-        Some(overlay) => overlay,
-        None => window(app, live::OVERLAY)
-            .title("Chalk Helper calibration")
-            .decorations(false)
-            .transparent(true)
-            .shadow(false)
-            .resizable(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .focused(false)
-            .focusable(false)
-            .visible(false)
-            .build()?,
-    };
+    let overlay = app
+        .get_webview_window(live::OVERLAY)
+        .ok_or_else(|| std::io::Error::other("Chalk Helper live overlay is not ready."))?;
     if protected {
         verify_capture_affinity(&overlay)?;
     } else {
@@ -904,4 +934,45 @@ pub fn act(
         _ => {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local_window_navigation;
+    use tauri::Url;
+
+    #[test]
+    fn windows_and_macos_can_navigate_to_the_bundled_renderer() {
+        for url in [
+            "http://tauri.localhost/",
+            "tauri://localhost",
+            "tauri://localhost/",
+            "tauri://localhost/index.html",
+        ] {
+            assert!(
+                is_local_window_navigation(&Url::parse(url).unwrap()),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn helper_windows_do_not_navigate_outside_the_bundled_entrypoint() {
+        for url in [
+            "https://localhost/",
+            "https://tauri.localhost/",
+            "http://localhost/",
+            "tauri://localhost.example/",
+            "tauri://user@localhost",
+            "tauri://localhost:1234",
+            "tauri://localhost/elsewhere.html",
+            "tauri://localhost?from=outside",
+            "tauri://localhost#outside",
+        ] {
+            assert!(
+                !is_local_window_navigation(&Url::parse(url).unwrap()),
+                "{url}"
+            );
+        }
+    }
 }
