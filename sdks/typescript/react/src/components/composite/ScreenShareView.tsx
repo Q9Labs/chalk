@@ -5,6 +5,7 @@ import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-cli
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
+import { ChalkButton } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { SignalBars } from "../participant-tile/ParticipantTile";

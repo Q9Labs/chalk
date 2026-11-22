@@ -251,6 +251,8 @@
       "summary": "Projects publication-bound marks onto a shared screen and reproduces committed marks in recording exports.",
       "paths": [
         "apps/mobile/e2e",
+        "apps/recording-renderer/src/compose/annotation-archive-fields.ts",
+        "apps/recording-renderer/src/compose/annotation-mark.ts",
         "apps/recording-renderer/src/compose/annotation-sidecar.ts",
         "apps/recording-renderer/src/compose/annotation-timeline.ts",
         "apps/sync/lib/chalk_sync/screen_annotation",

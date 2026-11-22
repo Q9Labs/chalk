@@ -1,6 +1,8 @@
-import type { ScreenAnnotationLayer, ScreenAnnotationMark, ScreenAnnotationPoint, ScreenAnnotationShape } from "@q9labsai/chalk-client";
+import type { ScreenAnnotationLayer, ScreenAnnotationMark } from "@q9labsai/chalk-client";
 import { MAXIMUM_RECORDING_DURATION_MS } from "../generated/render-contract.js";
-import { exactKeys, field, integerField, literalField, objectValue, patternedStringField, stringField } from "../validation.js";
+import { exactKeys, field, objectValue } from "../validation.js";
+import { parseMark } from "./annotation-mark.js";
+import { LABEL, record, list, literal, integer, uuid, booleanField, invalid } from "./annotation-archive-fields.js";
 
 type AnnotationChange = { readonly kind: "upsert"; readonly mark: ScreenAnnotationMark } | { readonly kind: "remove"; readonly mark_id: string } | { readonly kind: "clear"; readonly participant_id: string | null } | { readonly kind: "control"; readonly paused: boolean };
 
@@ -32,14 +34,7 @@ export interface AnnotationRecordingBinding {
 
 // Freeze the v1 archive limits independently of future Sync negotiation.
 export const ACTIVE_MARKS_V1 = 512;
-const COMMITTED_FADE_TTL_MS_V1 = 2_000;
-const MAX_MARK_POINTS = 384;
-const MAX_MARK_TEXT_BYTES = 512;
-const LABEL = "recording annotation sidecar";
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SOURCE_ID = /^rps_[0-9a-f]{64}$/;
-const COLOR = /^#[0-9a-f]{6}$/i;
-const MAXIMUM_TIME = Number.MAX_SAFE_INTEGER;
 
 export function parseRecordingAnnotation(value: unknown, binding: AnnotationRecordingBinding): readonly BoundAnnotationLayer[] {
   const root = record(value, ["version", "recordingId", "episodeId", "originAuthorityId", "captureEpoch", "layers"]);
@@ -48,22 +43,30 @@ export function parseRecordingAnnotation(value: unknown, binding: AnnotationReco
   literal(root, "episodeId", binding.episodeId);
   literal(root, "originAuthorityId", binding.originAuthorityId);
   literal(root, "captureEpoch", binding.captureEpoch);
-  const ids = new Set<string>();
-  const endOfSource = new Map<string, number>();
   const layers = list(field(root, "layers"), 4096).map((item) => parseBoundLayer(item, binding));
   layers.sort((left, right) => left.initial.atMs - right.initial.atMs);
+  validateLayerBindings(layers);
+  return layers;
+}
+
+function validateLayerBindings(layers: readonly BoundAnnotationLayer[]): void {
+  const ids = new Set<string>();
+  const endOfSource = new Map<string, number>();
   for (const layer of layers) {
     const id = layer.layer.layer_id;
     for (const source of layer.sourceIds) {
-      // A capture retry can checkpoint the same live layer against a new source ID.
-      const binding = `${id}:${source}`;
-      if (ids.has(binding)) throw invalid("has a duplicate layer binding");
-      ids.add(binding);
-      if ((endOfSource.get(source) ?? 0) > layer.initial.atMs) throw invalid("has overlapping source bindings");
-      endOfSource.set(source, layer.closedAtMs);
+      validateSourceBinding(layer, id, source, ids, endOfSource);
     }
   }
-  return layers;
+}
+
+function validateSourceBinding(layer: BoundAnnotationLayer, id: string, source: string, ids: Set<string>, endOfSource: Map<string, number>): void {
+  // A capture retry can checkpoint the same live layer against a new source ID.
+  const binding = `${id}:${source}`;
+  if (ids.has(binding)) throw invalid("has a duplicate layer binding");
+  ids.add(binding);
+  if ((endOfSource.get(source) ?? 0) > layer.initial.atMs) throw invalid("has overlapping source bindings");
+  endOfSource.set(source, layer.closedAtMs);
 }
 
 function parseBoundLayer(value: unknown, binding: AnnotationRecordingBinding): BoundAnnotationLayer {
@@ -90,29 +93,49 @@ function parseSidecar(value: unknown): AnnotationSidecar {
     marks: list(field(rawInitial, "marks"), ACTIVE_MARKS_V1).map(parseMark),
   };
   const closedAtMs = integer(sidecar, "closedAtMs", initial.atMs, MAXIMUM_RECORDING_DURATION_MS);
-  const marks = new Map<string, ScreenAnnotationMark>();
-  for (const mark of initial.marks) {
-    if (mark.committed_at_ms > initial.atMs || mark.created_revision > initial.revision || marks.has(mark.draft.mark_id)) throw invalid("has an invalid checkpoint mark");
-    marks.set(mark.draft.mark_id, mark);
-  }
+  validateCheckpoint(initial);
+  const changes = parseChanges(field(sidecar, "changes"), initial, closedAtMs);
+  return { version: 1, layer, initial, changes, closedAtMs };
+}
 
+function validateCheckpoint(initial: AnnotationSidecar["initial"]): void {
+  const ids = new Set<string>();
+  for (const mark of initial.marks) {
+    if (mark.committed_at_ms > initial.atMs || mark.created_revision > initial.revision || ids.has(mark.draft.mark_id)) throw invalid("has an invalid checkpoint mark");
+    ids.add(mark.draft.mark_id);
+  }
+}
+
+function parseChanges(value: unknown, initial: Revision, closedAtMs: number): AnnotationSidecar["changes"] {
   const revisions = new Map<number, AnnotationSidecar["changes"][number]>();
-  for (const value of list(field(sidecar, "changes"), 262_144)) {
-    const raw = record(value, ["atMs", "revision", "change"]);
+  for (const itemValue of list(value, 262_144)) {
+    const raw = record(itemValue, ["atMs", "revision", "change"]);
     const item = { ...revision(raw), change: parseChange(field(raw, "change")) };
-    if (item.atMs < initial.atMs || item.atMs > closedAtMs || item.revision <= initial.revision) throw invalid("has a change outside its capture boundary");
+    validateChangeBoundary(item, initial, closedAtMs);
     const duplicate = revisions.get(item.revision);
     if (duplicate !== undefined && JSON.stringify(duplicate) !== JSON.stringify(item)) throw invalid("has conflicting changes at one revision");
     revisions.set(item.revision, item);
   }
   const changes = [...revisions.values()].sort((left, right) => left.revision - right.revision);
-  let lastTime = initial.atMs;
+  validateChangeOrder(changes, initial.atMs);
+  return changes;
+}
+
+function validateChangeBoundary(item: Revision, initial: Revision, closedAtMs: number): void {
+  if (item.atMs < initial.atMs || item.atMs > closedAtMs || item.revision <= initial.revision) throw invalid("has a change outside its capture boundary");
+}
+
+function validateChangeOrder(changes: AnnotationSidecar["changes"], initialTime: number): void {
+  let lastTime = initialTime;
   for (const item of changes) {
     if (item.atMs < lastTime) throw invalid("has changes out of capture-clock order");
-    if (item.change.kind === "upsert" && (item.change.mark.committed_at_ms > item.atMs || item.change.mark.created_revision > item.revision)) throw invalid("has an invalid committed mark");
+    if (item.change.kind === "upsert") validateCommittedMark(item.change.mark, item);
     lastTime = item.atMs;
   }
-  return { version: 1, layer, initial, changes, closedAtMs };
+}
+
+function validateCommittedMark(mark: ScreenAnnotationMark, item: Revision): void {
+  if (mark.committed_at_ms > item.atMs || mark.created_revision > item.revision) throw invalid("has an invalid committed mark");
 }
 
 function parseLayer(value: unknown): ScreenAnnotationLayer {
@@ -126,121 +149,44 @@ function parseLayer(value: unknown): ScreenAnnotationLayer {
   };
 }
 
+const changeParsers = new Map<unknown, (change: object) => AnnotationChange>([
+  [
+    "upsert",
+    (change) => {
+      exactKeys(change, ["kind", "mark"], LABEL);
+      return { kind: "upsert", mark: parseMark(field(change, "mark")) };
+    },
+  ],
+  [
+    "remove",
+    (change) => {
+      exactKeys(change, ["kind", "mark_id"], LABEL);
+      return { kind: "remove", mark_id: uuid(change, "mark_id") };
+    },
+  ],
+  [
+    "clear",
+    (change) => {
+      exactKeys(change, ["kind", "participant_id"], LABEL);
+      return { kind: "clear", participant_id: field(change, "participant_id") === null ? null : uuid(change, "participant_id") };
+    },
+  ],
+  [
+    "control",
+    (change) => {
+      exactKeys(change, ["kind", "paused"], LABEL);
+      return { kind: "control", paused: booleanField(change, "paused") };
+    },
+  ],
+]);
+
 function parseChange(value: unknown): AnnotationChange {
   const change = objectValue(value, LABEL);
-  const kind = field(change, "kind");
-  switch (kind) {
-    case "upsert":
-      exactKeys(change, ["kind", "mark"], LABEL);
-      return { kind, mark: parseMark(field(change, "mark")) };
-    case "remove":
-      exactKeys(change, ["kind", "mark_id"], LABEL);
-      return { kind, mark_id: uuid(change, "mark_id") };
-    case "clear":
-      exactKeys(change, ["kind", "participant_id"], LABEL);
-      return { kind, participant_id: field(change, "participant_id") === null ? null : uuid(change, "participant_id") };
-    case "control":
-      exactKeys(change, ["kind", "paused"], LABEL);
-      return { kind, paused: booleanField(change, "paused") };
-    default:
-      throw invalid("has an invalid change kind");
-  }
-}
-
-function parseMark(value: unknown): ScreenAnnotationMark {
-  const mark = record(value, ["draft", "author", "created_revision", "committed_at_ms", "expires_at_ms"]);
-  const draft = record(field(mark, "draft"), ["mark_id", "lifetime", "color", "width", "shape"]);
-  const lifetime = field(draft, "lifetime");
-  if (lifetime !== "fade" && lifetime !== "keep") throw invalid("has an invalid mark lifetime");
-  const committedAtMs = integer(mark, "committed_at_ms", -MAXIMUM_TIME);
-  const expiry = field(mark, "expires_at_ms");
-  if (lifetime === "fade" ? expiry !== committedAtMs + COMMITTED_FADE_TTL_MS_V1 : expiry !== null) throw invalid("has an invalid mark expiry");
-  const author = record(field(mark, "author"), ["participant_id", "display_name", "color"]);
-  return {
-    draft: { mark_id: uuid(draft, "mark_id"), lifetime, color: color(draft), width: integer(draft, "width", 32, 3277), shape: parseShape(field(draft, "shape")) },
-    author: { participant_id: uuid(author, "participant_id"), display_name: stringField(author, "display_name", LABEL, 256), color: color(author) },
-    created_revision: integer(mark, "created_revision", 1),
-    committed_at_ms: committedAtMs,
-    expires_at_ms: lifetime === "fade" ? integer(mark, "expires_at_ms", -MAXIMUM_TIME) : null,
-  };
-}
-
-function parseShape(value: unknown): ScreenAnnotationShape {
-  const shape = objectValue(value, LABEL);
-  const kind = field(shape, "kind");
-  switch (kind) {
-    case "pen":
-    case "highlighter": {
-      exactKeys(shape, ["kind", "points"], LABEL);
-      const points = list(field(shape, "points"), MAX_MARK_POINTS).map(point);
-      if (points.length === 0) throw invalid("has an empty stroke");
-      return { kind, points };
-    }
-    case "line":
-    case "arrow":
-    case "box":
-    case "circle":
-      exactKeys(shape, ["kind", "from_point", "to_point"], LABEL);
-      return { kind, from_point: point(field(shape, "from_point")), to_point: point(field(shape, "to_point")) };
-    case "text": {
-      exactKeys(shape, ["kind", "at", "text", "note"], LABEL);
-      const text = stringField(shape, "text", LABEL, MAX_MARK_TEXT_BYTES);
-      if (Buffer.byteLength(text, "utf8") > MAX_MARK_TEXT_BYTES) throw invalid("has oversized mark text");
-      return { kind, at: point(field(shape, "at")), note: booleanField(shape, "note"), text };
-    }
-    case "stamp": {
-      exactKeys(shape, ["kind", "at", "stamp"], LABEL);
-      const stamp = field(shape, "stamp");
-      if (stamp !== "check" && stamp !== "cross" && stamp !== "star" && stamp !== "question" && stamp !== "heart") throw invalid("has an invalid stamp");
-      return { kind, at: point(field(shape, "at")), stamp };
-    }
-    default:
-      throw invalid("has an invalid shape kind");
-  }
-}
-
-function point(value: unknown): ScreenAnnotationPoint {
-  const point = record(value, ["x", "y"]);
-  return { x: integer(point, "x", 0, 65535), y: integer(point, "y", 0, 65535) };
+  const parse = changeParsers.get(field(change, "kind"));
+  if (!parse) throw invalid("has an invalid change kind");
+  return parse(change);
 }
 
 function revision(value: object): Revision {
   return { atMs: integer(value, "atMs", 0, MAXIMUM_RECORDING_DURATION_MS), revision: integer(value, "revision", 1) };
-}
-
-function record(value: unknown, keys: readonly string[]): object {
-  const result = objectValue(value, LABEL);
-  exactKeys(result, keys, LABEL);
-  return result;
-}
-
-function list(value: unknown, maximum: number): readonly unknown[] {
-  if (!Array.isArray(value) || value.length > maximum) throw invalid("has an invalid array");
-  return value;
-}
-
-function booleanField(value: object, key: string): boolean {
-  const result = field(value, key);
-  if (typeof result !== "boolean") throw invalid("has an invalid boolean");
-  return result;
-}
-
-function literal(value: object, key: string, expected: string | number): void {
-  literalField(value, key, expected, `${LABEL} has a mismatched ${key}`);
-}
-
-function integer(value: object, key: string, minimum: number, maximum = MAXIMUM_TIME): number {
-  return integerField(value, key, minimum, maximum, LABEL);
-}
-
-function uuid(value: object, key: string): string {
-  return patternedStringField(value, key, UUID, LABEL, 36);
-}
-
-function color(value: object): string {
-  return patternedStringField(value, "color", COLOR, LABEL, 7);
-}
-
-function invalid(message: string): TypeError {
-  return new TypeError(`${LABEL} ${message}`);
 }
