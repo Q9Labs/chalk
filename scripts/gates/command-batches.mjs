@@ -20,3 +20,13 @@ export function commandBatches(command, fixedCount, limit = maxCommandArgumentLe
   if (batch.length > 0) batches.push([...fixed, ...batch]);
   return batches;
 }
+
+/** runBatches runs the batches in order and returns the first failed result, or the last result when every batch passes. */
+export async function runBatches(exec, batches, options) {
+  let result;
+  for (const [command, ...args] of batches) {
+    result = await exec(command, args, options);
+    if (result.failed) return result;
+  }
+  return result;
+}

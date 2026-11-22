@@ -1,5 +1,6 @@
 import { defineGate, lanes } from "@q9labsai/gates";
 import { gateTaskIds } from "./scripts/gates/register.mjs";
+import { runBatches } from "./scripts/gates/command-batches.mjs";
 import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
 
 // The checks register lists the lanes in run order; a lane without an entry cannot be planned.
@@ -57,11 +58,7 @@ const chalkLanes = taskIds.map((id) =>
       if (!task?.command) return { status: "skipped" };
       const env = laneEnvironment(id, task.env, context.allChangedFiles, explicitFiles);
       // A long file list runs as several commands so no single one overflows a Windows command line.
-      let result;
-      for (const [command, ...args] of task.batches) {
-        result = await context.exec(command, args, { cwd: context.repoRoot, env });
-        if (result.failed) break;
-      }
+      const result = await runBatches((command, args, options) => context.exec(command, args, options), task.batches, { cwd: context.repoRoot, env });
       return laneResult(id, result);
     },
   }),
