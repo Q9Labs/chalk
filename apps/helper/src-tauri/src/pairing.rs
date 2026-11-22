@@ -4,11 +4,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use crate::{
-    geometry::Rect,
-    helper_scene::Scene,
-    live,
-};
+use crate::{geometry::Rect, helper_scene::Scene, live};
 use crate::{pairing_consent as consent, window_follow};
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
@@ -28,7 +24,7 @@ use ring::{
 };
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::{
     sync::{mpsc, oneshot, Semaphore},
     task::JoinHandle,
@@ -659,6 +655,7 @@ impl Pairing {
         session.next_attachment += 1;
         let serial = session.next_attachment;
         let pairing = Arc::downgrade(&self.0);
+        let app = self.0.app.lock().expect("app handle").clone();
         let key = Arc::clone(&self.0.key);
         let secret = session.secret.clone();
         let (commands, receiver) = mpsc::channel(8);
@@ -706,8 +703,13 @@ impl Pairing {
                             scene.presence(frame);
                         }
                     }
-                    Some("annotation_receipt") if session.usable() => {}
+                    Some("annotation_receipt") if session.usable() => return true,
                     _ => return false,
+                }
+                drop(state);
+                if let Some(app) = &app {
+                    // Wake the renderer; it reads the latest protected view itself.
+                    let _ = app.emit_to(live::OVERLAY, "chalk-overlay-changed", ());
                 }
                 true
             });

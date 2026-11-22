@@ -138,7 +138,7 @@ if (isOverlay) {
 }
 
 let renderedProbe;
-async function refresh() {
+async function paintView() {
   try {
     const view = await invoke("view");
     if (label === "ink-live") {
@@ -201,9 +201,28 @@ async function refresh() {
     }
   } catch (error) {
     showError(error);
-  } finally {
-    setTimeout(refresh, isOverlay ? 35 : 200);
   }
 }
 
+let refreshTimer;
+let refreshing = false;
+let refreshAgain = false;
+async function refresh() {
+  if (refreshing) {
+    refreshAgain = true;
+    return;
+  }
+  clearTimeout(refreshTimer);
+  refreshing = true;
+  do {
+    refreshAgain = false;
+    await paintView();
+  } while (refreshAgain);
+  refreshing = false;
+  refreshTimer = setTimeout(refresh, isOverlay ? 35 : 200);
+}
+
+if (label === "ink-live") {
+  void window.__TAURI__.event.listen("chalk-overlay-changed", () => void refresh()).catch(showError);
+}
 void refresh();
