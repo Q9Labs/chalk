@@ -293,49 +293,6 @@ mod platform {
         true
     }
 
-    unsafe fn fully_transparent(hwnd: HWND) -> bool {
-        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED == 0 {
-            return false;
-        }
-        let (mut alpha, mut flags) = (0, 0);
-        GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut flags) != 0
-            && flags & LWA_ALPHA != 0
-            && alpha == 0
-    }
-
-    #[cfg(test)]
-    #[test]
-    fn zero_opacity_layered_windows_do_not_cover() {
-        use std::ptr::null_mut;
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            CreateWindowExW, DestroyWindow, SetLayeredWindowAttributes, WS_POPUP,
-        };
-
-        let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
-        unsafe {
-            let hwnd = CreateWindowExW(
-                WS_EX_LAYERED,
-                class.as_ptr(),
-                std::ptr::null(),
-                WS_POPUP,
-                0,
-                0,
-                40,
-                40,
-                null_mut(),
-                null_mut(),
-                null_mut(),
-                std::ptr::null(),
-            );
-            assert!(!hwnd.is_null());
-            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA), 0);
-            assert!(fully_transparent(hwnd));
-            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA), 0);
-            assert!(!fully_transparent(hwnd));
-            DestroyWindow(hwnd);
-        }
-    }
-
     pub fn bounds(id: u64) -> Option<NativeBounds> {
         // HWND is resolved afresh. DWM, thread/process queries and every returned
         // rectangle are checked; no owned window memory is dereferenced.
@@ -404,6 +361,49 @@ mod platform {
                 above = GetWindow(above, GW_HWNDPREV);
             }
             None
+        }
+    }
+
+    unsafe fn fully_transparent(hwnd: HWND) -> bool {
+        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED == 0 {
+            return false;
+        }
+        let (mut alpha, mut flags) = (0, 0);
+        GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut flags) != 0
+            && flags & LWA_ALPHA != 0
+            && alpha == 0
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn zero_opacity_layered_windows_do_not_cover() {
+        use std::ptr::null_mut;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, SetLayeredWindowAttributes, WS_POPUP,
+        };
+
+        let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WS_EX_LAYERED,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                40,
+                40,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                std::ptr::null(),
+            );
+            assert!(!hwnd.is_null());
+            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA), 0);
+            assert!(fully_transparent(hwnd));
+            assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA), 0);
+            assert!(!fully_transparent(hwnd));
+            DestroyWindow(hwnd);
         }
     }
 

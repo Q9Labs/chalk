@@ -33,11 +33,11 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 const PORT: u16 = 47361;
 const HOST: &str = "127.0.0.1:47361";
-const REMEMBERED_KEY_QUERY: &str = "rememberedKeyProof=true";
 const VERSION: u8 = 1;
 const LIFETIME: Duration = Duration::from_secs(60);
 const ISSUER_CLOCK_TOLERANCE: Duration = Duration::from_secs(1);
 const AUDIENCE: &str = "screen_annotation_helper_local_v1";
+const REMEMBERED_KEY_QUERY: &str = "rememberedKeyProof=true";
 
 #[derive(Clone)]
 pub struct Pairing(Arc<PairingInner>);
