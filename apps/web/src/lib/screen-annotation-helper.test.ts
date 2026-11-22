@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { ScreenAnnotationHelperShare } from "@q9labsai/chalk-react";
 import { createBrowserAnnotationHelper } from "./screen-annotation-helper";
+import { HelperConflict } from "./screen-annotation-helper-bridge";
 import { calibrateWindow } from "./screen-annotation-helper-calibration";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -128,5 +129,31 @@ test("window exclusion can complete with four distinct post-paint captures", asy
   await calibrateWindow(options);
   expect(options.complete).toHaveBeenCalledOnce();
   expect(options.abort).not.toHaveBeenCalled();
+  expect(options.track.enabled).toBe(true);
+});
+
+test("a stale request to start a window probe does not tear down a ready overlay", async () => {
+  const options = windowCalibration(now => now);
+  await calibrateWindow({
+    ...options,
+    start: async () => {
+      throw new HelperConflict("A probe is already ready.");
+    },
+  });
+  expect(options.painted).not.toHaveBeenCalled();
+  expect(options.abort).not.toHaveBeenCalled();
+  expect(options.track.enabled).toBe(true);
+});
+
+test("an uncertain window probe start still clears the native probe before resuming the share", async () => {
+  const options = windowCalibration(now => now);
+  options.abort.mockImplementationOnce(async () => {
+    expect(options.track.enabled).toBe(false);
+  });
+  await calibrateWindow({
+    ...options,
+    start: async () => { throw new Error("The response was lost."); },
+  });
+  expect(options.abort).toHaveBeenCalledOnce();
   expect(options.track.enabled).toBe(true);
 });

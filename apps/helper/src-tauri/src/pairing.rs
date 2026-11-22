@@ -525,10 +525,11 @@ impl Pairing {
                 return;
             }
             let mut state = pairing.0.state.lock().expect("pairing state");
+            let aborting = matches!(action, Exchange::ProbeAbort);
             let response = state
                 .session
                 .as_mut()
-                .filter(|session| session.authorizes(&secret) && session.usable())
+                .filter(|session| session.authorizes(&secret) && (aborting || session.usable()))
                 .ok_or(StatusCode::UNAUTHORIZED)
                 .and_then(|session| {
                     let capture = &mut session.capture;
