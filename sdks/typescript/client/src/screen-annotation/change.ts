@@ -24,3 +24,9 @@ function isCommittedPreview(state: Wire["State"], draftId: string | undefined): 
 export function isObsoletePresence(state: Wire["State"], frame: Wire["ServerPresence"], previous: Wire["ServerPresence"] | undefined): boolean {
   return Boolean(previous && previous.server_at_ms > frame.server_at_ms) || isCommittedPreview(state, frame.draft?.mark_id);
 }
+
+export function discardCommittedPreview(presence: Map<string, Wire["ServerPresence"]>, mark: Wire["Mark"]): void {
+  if (presence.get(mark.author.participant_id)?.draft?.mark_id === mark.draft.mark_id) {
+    presence.delete(mark.author.participant_id);
+  }
+}

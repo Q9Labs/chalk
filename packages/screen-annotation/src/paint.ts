@@ -1,6 +1,6 @@
 import type { ScreenAnnotationMark, ScreenAnnotationPoint } from "@q9labsai/chalk-client";
 
-import { annotationFont, canvasAnnotationTextMeasure, type AnnotationCanvasContext } from "./canvas";
+import { annotationFont, type AnnotationCanvasContext } from "./canvas";
 import { containsPoint, intersectRects, projectFramePoint, type AnnotationPoint, type AnnotationRect } from "./geometry";
 import { HIGHLIGHTER_OPACITY, NOTE_COLOR, NOTE_OPACITY, annotationMarkOpacity, compareAnnotationMarks, layoutAnnotationText, projectAnnotationMark, type AnnotationMarkGeometry } from "./mark-geometry";
 import { LASER_TRAIL_MS, type AnnotationPresence } from "./presence";

@@ -1,4 +1,5 @@
-import { applyChange, isObsoletePresence } from "./change";
+import { expireAnnotationPresence, expireAnnotationState } from "./expire-state";
+import { applyChange, discardCommittedPreview, isObsoletePresence } from "./change";
 import { screenAnnotationV1, type components } from "../generated/screen-annotation-v1";
 import { encodeAnnotationFrame } from "./codec";
 import type { ScreenAnnotationClient, ScreenAnnotationResult, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
@@ -15,9 +16,8 @@ type Pending = {
 };
 type Sample = Wire["ClientPresence"];
 
-const limits = screenAnnotationV1.limits;
 const maxPending = 32;
-const sampleIntervalMs = Math.ceil(1_000 / limits.previewPerSecond);
+const sampleIntervalMs = Math.ceil(1_000 / screenAnnotationV1.limits.previewPerSecond);
 const unknown = { kind: "delivery_unknown" } as const;
 const unavailable = { kind: "unavailable" } as const;
 
@@ -194,14 +194,8 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     this.#anchorClock(frame.server_at_ms, false);
     if (frame.fence !== state.fence) this.#clearPresence();
     const next = applyChange(state, frame);
-    if (frame.change.kind === "upsert") this.#discardCommittedPreview(frame.change.mark);
+    if (frame.change.kind === "upsert") discardCommittedPreview(this.#presence, frame.change.mark);
     this.#set({ status: "ready", state: next, presence: Array.from(this.#presence.values()) });
-  }
-
-  #discardCommittedPreview(mark: Wire["Mark"]): void {
-    if (this.#presence.get(mark.author.participant_id)?.draft?.mark_id === mark.draft.mark_id) {
-      this.#presence.delete(mark.author.participant_id);
-    }
   }
 
   #receivePresence(frame: Wire["ServerPresence"]): void {
@@ -218,11 +212,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
     if (this.#snapshot.status !== "ready") return;
     clearTimeout(this.#expiryTimer);
     const now = this.serverNowMs();
-    let nextExpiry = Infinity;
-    for (const [id, sample] of this.#presence) {
-      if (sample.expires_at_ms <= now) this.#presence.delete(id);
-      else nextExpiry = Math.min(nextExpiry, sample.expires_at_ms);
-    }
+    const nextExpiry = expireAnnotationPresence(this.#presence, now);
     if (Number.isFinite(nextExpiry)) this.#expiryTimer = setTimeout(() => this.#publishPresence(), Math.ceil(nextExpiry - now));
     this.#set({ ...this.#snapshot, presence: Array.from(this.#presence.values()) });
   }
@@ -284,16 +274,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
 
   #expireState(state: Wire["State"]): Wire["State"] {
     const now = this.serverNowMs();
-    let nextExpiry = Infinity;
-    const fresh = (value: { readonly expires_at_ms: number | null }): boolean => {
-      const expiry = value.expires_at_ms;
-      if (expiry === null) return true;
-      if (expiry <= now) return false;
-      nextExpiry = Math.min(nextExpiry, expiry);
-      return true;
-    };
-    const marks = state.marks.filter(fresh);
-    const requests = state.access.requests.filter(fresh);
+    const { freshState, nextExpiry } = expireAnnotationState(state, now);
     if (Number.isFinite(nextExpiry)) {
       this.#stateExpiryTimer = setTimeout(
         () => {
@@ -304,7 +285,7 @@ export class AnnotationReplica implements ScreenAnnotationClient {
         Math.ceil(nextExpiry - now),
       );
     }
-    return { ...state, marks, access: { ...state.access, requests } };
+    return freshState;
   }
 }
 

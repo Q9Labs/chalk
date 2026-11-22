@@ -1,15 +1,14 @@
-import { corners, space } from "../theme/tokens";
 import type { ScreenAnnotationCommand, ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
-import { BakedExportProof, INK_PROOF_TIMEOUT_MS, LASER_TRAIL_MS } from "@q9labsai/chalk-screen-annotation";
+import { BakedExportProof, INK_PROOF_TIMEOUT_MS } from "@q9labsai/chalk-screen-annotation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Modal, StyleSheet, TextInput, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { PresentedAnnotationFrame } from "../components/rtc-video-view-availability";
 import type { Frame } from "../motion/MovingFrame";
-import { ChalkText } from "../primitives/ChalkText";
-import { useTheme } from "../theme/theme";
+import { AnnotationNote } from "./AnnotationNote";
+import { layerPresenceFor, type CommittingMark } from "./layer-presence";
 import { AnnotationCanvas, type AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { ScreenAnnotationToolbar, ToolButton, type ScreenAnnotationToolbarProps } from "./ScreenAnnotationToolbar";
-import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame, type Ink, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
+import { canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame, type Ink, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
 import { nativeAnnotationExport } from "./native-annotation-export";
 import type { NativeAnnotationBoard } from "./save-to-board";
 import { useAnnotationInput, type TextAnchor } from "./use-annotation-input";
@@ -45,8 +44,6 @@ type MatchedProps = ScreenAnnotationLayerProps & {
   readonly source: ScreenAnnotationSource;
   readonly state: ScreenAnnotationState;
 };
-
-type CommittingMark = { readonly target: ScreenAnnotationTarget; readonly draft: ScreenAnnotationDraft; readonly untilRevision?: number };
 
 function MatchedLayer({ actions, boardSave, canSave, client, controls, people, person, presence, publicationId, rendererUrl, reportError, source, state, video, viewport }: MatchedProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -285,77 +282,10 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   );
 }
 
-function AnnotationNote({ onClose, onSave }: { readonly onClose: () => void; readonly onSave: (text: string, note: boolean) => void }): React.JSX.Element {
-  const { colors } = useTheme();
-  const [body, setBody] = useState("");
-  const [note, setNote] = useState(false);
-  const text = boundedNote(body);
-  return (
-    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modal}>
-        <View style={[styles.panel, { backgroundColor: colors.popover, borderColor: colors.lineStrong }]}>
-          <ChalkText>Add text</ChalkText>
-          <TextInput autoFocus multiline accessibilityLabel="Annotation text" maxLength={512} value={body} onChangeText={setBody} style={[styles.field, { backgroundColor: colors.raised, color: colors.text }]} />
-          <View style={styles.actions}>
-            <ToolButton label="Note background" selected={note} onPress={() => setNote(!note)} />
-            <ToolButton label="Cancel" onPress={onClose} />
-            {text ? <ToolButton label="Add text" selected onPress={() => onSave(text, note)} /> : null}
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 function hasSize(size: { readonly width: number; readonly height: number }): boolean {
   return Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0;
 }
 
 const styles = StyleSheet.create({
   defaultTray: { position: "absolute", bottom: 0, left: 8, right: 8, alignItems: "center" },
-  modal: { flex: 1, justifyContent: "center", alignItems: "center" },
-  panel: { width: "88%", maxWidth: 440, borderWidth: 1, borderRadius: corners["2xl"], padding: space[4], gap: space["2-5"] },
-  field: { minHeight: 70, padding: space["2-5"], borderRadius: corners.lg },
-  actions: { flexDirection: "row", gap: space[1] },
 });
-
-function layerPresenceFor({
-  presence,
-  localSample,
-  committing,
-  target,
-  allowed,
-  open,
-  state,
-  person,
-  nowMs,
-}: Pick<MatchedProps, "presence" | "state" | "person"> & {
-  readonly localSample: ScreenAnnotationPresence | null;
-  readonly committing: CommittingMark | null;
-  readonly target: ScreenAnnotationTarget;
-  readonly allowed: boolean;
-  readonly open: boolean;
-  readonly nowMs: number;
-}) {
-  const local = localSample?.fence === target.fence && allowed && open ? localSample : null;
-  const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
-  const pending: ScreenAnnotationPresence | null =
-    waiting && allowed
-      ? {
-          type: "annotation_presence",
-          layer_id: target.layerId,
-          fence: target.fence,
-          author: { participant_id: person.id, display_name: person.name, color: state.access.default_color },
-          server_at_ms: nowMs,
-          expires_at_ms: nowMs + 1000,
-          cursor: null,
-          draft: committing.draft,
-        }
-      : null;
-
-  const localTouch = state.layer.burned_in && local?.cursor ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS } : undefined;
-  const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
-  const peers = presence.filter(({ author }) => author.participant_id !== person.id);
-  const remote = state.layer.burned_in ? peers.map((peer) => ({ ...peer, draft: null })) : peers;
-  return { layerPresence: [...remote, ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])], localTouch };
-}

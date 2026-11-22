@@ -14,7 +14,7 @@ export class AnnotationSession implements ScreenAnnotationClient {
   readonly #unsubscribePorts: () => void;
 
   constructor(
-    connection: ConnectionLifecycleCapability,
+    connection: Pick<ConnectionLifecycleCapability, "subscribePorts">,
     private readonly verifiedCapture?: (track: MediaStreamTrack) => ScreenAnnotationFrameSize | undefined,
   ) {
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
