@@ -1,3 +1,4 @@
+import { corners, space } from "../theme/tokens";
 import type { ScreenAnnotationCommand, ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
@@ -6,11 +7,9 @@ import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
 import { AnnotationCanvas, type AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { ScreenAnnotationToolbar, ToolButton, type ScreenAnnotationToolbarProps } from "./ScreenAnnotationToolbar";
-import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame, type Ink, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
-import { shareAnnotationPng } from "./export-native-png";
+import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleFrame, type Ink, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
+import { nativeAnnotationExport } from "./native-annotation-export";
 import { useAnnotationInput, type TextAnchor } from "./use-annotation-input";
-
-type ExportAction = NonNullable<ScreenAnnotationActions["downloadPng"]>;
 
 export type ScreenAnnotationLayerProps = ScreenAnnotationOptions & {
   readonly person: { readonly id: string; readonly name: string };
@@ -43,13 +42,15 @@ type MatchedProps = ScreenAnnotationLayerProps & {
   readonly state: ScreenAnnotationState;
 };
 
+type CommittingMark = { readonly target: ScreenAnnotationTarget; readonly draft: ScreenAnnotationDraft; readonly untilRevision?: number };
+
 function MatchedLayer({ actions, canSave, client, controls, people, person, presence, publicationId, rendererUrl, reportError, source, state, video, viewport }: MatchedProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [style, setStyle] = useState<Omit<Ink, "color"> & { readonly color: string | null }>({ tool: "pen", lifetime: "fade", width: 193, stamp: "check", color: null });
   const [pan, setPan] = useState(initialViewport);
   const [textAnchor, setTextAnchor] = useState<TextAnchor | null>(null);
-  const [committing, setCommitting] = useState<{ readonly target: ScreenAnnotationTarget; readonly draft: ScreenAnnotationDraft; readonly untilRevision?: number } | null>(null);
+  const [committing, setCommitting] = useState<CommittingMark | null>(null);
   const erase = useRef<{ readonly id: number; readonly target: ScreenAnnotationTarget } | null>(null);
   const eraseCounter = useRef(0);
   const canvas = useRef<AnnotationCanvasHandle>(null);
@@ -115,51 +116,8 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
     onCommit: commit,
   });
 
-  const local = input.local?.fence === target.fence && allowed && open ? input.local : null;
-  const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
-  const pending: ScreenAnnotationPresence | null =
-    waiting && allowed
-      ? {
-          type: "annotation_presence",
-          layer_id: target.layerId,
-          fence: target.fence,
-          author: { participant_id: person.id, display_name: person.name, color: state.access.default_color },
-          server_at_ms: nowMs,
-          expires_at_ms: nowMs + 1000,
-          cursor: null,
-          draft: committing.draft,
-        }
-      : null;
-
-  async function exportFrame(action: ExportAction) {
-    const live = matchLayer(client, publicationId);
-    if (!source.captureFrame || !hasTarget(live, target)) return;
-    const at = client.serverNowMs();
-    const marks = visibleCommittedMarks(live, at);
-    try {
-      const frame = await source.captureFrame();
-      if (frame === null) {
-        reportError?.("Wait for the shared video to resume before saving a frame.");
-        return;
-      }
-      try {
-        await action({ publicationId, size: source.size, image: frame.image, marks, nowMs: at });
-      } finally {
-        frame.release?.();
-      }
-    } catch {
-      reportError?.("Couldn’t save the marked frame.");
-    }
-  }
-
-  const save = canSave && actions?.saveToWhiteboard && source.captureFrame ? actions.saveToWhiteboard : null;
-  const download: ExportAction | null = source.captureFrame
-    ? (actions?.downloadPng ??
-      (async ({ image, ...frame }) => {
-        if (!canvas.current || typeof image !== "string") throw new Error("No native frame");
-        await shareAnnotationPng(await canvas.current.png({ ...frame, image }));
-      }))
-    : null;
+  const layerPresence = layerPresenceFor({ presence, localSample: input.local, committing, target, allowed, open, state, person, nowMs });
+  const { save, download, exportFrame } = nativeAnnotationExport({ client, publicationId, source, target, canSave, actions, reportError, canvas });
   const scene = useMemo(
     () => ({
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -202,7 +160,7 @@ function MatchedLayer({ actions, canSave, client, controls, people, person, pres
   return (
     <>
       {video(rect)}
-      <AnnotationCanvas ref={canvas} rendererUrl={rendererUrl} onReady={setCanvasReady} onHit={onHit} scene={scene} nowMs={nowMs} presence={[...presence.filter(({ author }) => author.participant_id !== person.id), ...(pending ? [pending] : []), ...(local ? [local] : [])]} />
+      <AnnotationCanvas ref={canvas} rendererUrl={rendererUrl} onReady={setCanvasReady} onHit={onHit} scene={scene} nowMs={nowMs} presence={layerPresence} />
       {open && allowed ? <View accessible={false} style={StyleSheet.absoluteFill} testID="annotation.surface" onStartShouldSetResponder={() => true} onResponderStart={input.onStart} onResponderMove={input.onMove} onResponderEnd={input.onEnd} onResponderTerminate={input.cancel} /> : null}
       {controls ? (
         controls(tray)
@@ -254,7 +212,44 @@ function hasSize(size: { readonly width: number; readonly height: number }): boo
 const styles = StyleSheet.create({
   defaultTray: { position: "absolute", bottom: 0, left: 8, right: 8, alignItems: "center" },
   modal: { flex: 1, justifyContent: "center", alignItems: "center" },
-  panel: { width: "88%", maxWidth: 440, borderWidth: 1, borderRadius: 18, padding: 14, gap: 10 },
-  field: { minHeight: 70, padding: 10, borderRadius: 8 },
-  actions: { flexDirection: "row", gap: 4 },
+  panel: { width: "88%", maxWidth: 440, borderWidth: 1, borderRadius: corners["2xl"], padding: space[4], gap: space["2-5"] },
+  field: { minHeight: 70, padding: space["2-5"], borderRadius: corners.lg },
+  actions: { flexDirection: "row", gap: space[1] },
 });
+
+function layerPresenceFor({
+  presence,
+  localSample,
+  committing,
+  target,
+  allowed,
+  open,
+  state,
+  person,
+  nowMs,
+}: Pick<MatchedProps, "presence" | "state" | "person"> & {
+  readonly localSample: ScreenAnnotationPresence | null;
+  readonly committing: CommittingMark | null;
+  readonly target: ScreenAnnotationTarget;
+  readonly allowed: boolean;
+  readonly open: boolean;
+  readonly nowMs: number;
+}): readonly ScreenAnnotationPresence[] {
+  const local = localSample?.fence === target.fence && allowed && open ? localSample : null;
+  const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
+  const pending: ScreenAnnotationPresence | null =
+    waiting && allowed
+      ? {
+          type: "annotation_presence",
+          layer_id: target.layerId,
+          fence: target.fence,
+          author: { participant_id: person.id, display_name: person.name, color: state.access.default_color },
+          server_at_ms: nowMs,
+          expires_at_ms: nowMs + 1000,
+          cursor: null,
+          draft: committing.draft,
+        }
+      : null;
+
+  return [...presence.filter(({ author }) => author.participant_id !== person.id), ...(pending ? [pending] : []), ...(local ? [local] : [])];
+}

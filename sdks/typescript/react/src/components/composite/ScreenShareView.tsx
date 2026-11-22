@@ -1,16 +1,20 @@
+import { LocalShareControls } from "./LocalShareControls";
+import { ShareControl } from "./ShareControl";
 import { commandFailure, commandFailureMessage, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
+import { ChalkButton } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
-import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { SignalBars } from "../participant-tile/ParticipantTile";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
-import { AnnotationSurface, type AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
+import type { AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
 import type { ScreenAnnotationOptions } from "../screen-annotation/model";
+
+const AnnotationSurface = lazy(() => import("../screen-annotation/AnnotationSurface"));
 
 export type ScreenShareState = "live" | "connecting" | "paused" | "low-quality";
 export interface ScreenShareViewProps {
@@ -77,7 +81,6 @@ export function ScreenSharePresentation({
   const [error, setError] = useState<string | null>(null);
   const status = state ?? (mediaVisible ? "live" : "connecting");
   const name = isLocal ? "Your screen" : `${sharedByName}'s screen`;
-  const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : capture?.surface === "monitor" ? "your screen" : null;
   const run = async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
     if (pending) return;
     setPending(true);
@@ -151,7 +154,11 @@ export function ScreenSharePresentation({
             {annotation && annotationMedia ? <div ref={setCanvasHost} className="pointer-events-none absolute inset-0" /> : null}
           </div>
         </div>
-        {annotation && annotationMedia && !hidden ? <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} /> : null}
+        {annotation && annotationMedia && !hidden ? (
+          <Suspense fallback={null}>
+            <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} />
+          </Suspense>
+        ) : null}
         {poppedOut ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
             <StageIcon name="pip" size={32} />
@@ -183,38 +190,7 @@ export function ScreenSharePresentation({
         ) : null}
         {primary ? switcher : null}
         {isLocal && primary ? (
-          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-(--corner-xl) bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:flex-wrap">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
-              {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-(length:--type-caption) text-[var(--chalk-on-overlay)]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
-            </div>
-            {onChangeShare ? (
-              <ChalkMenu
-                trigger={
-                  <ChalkButton disabled={pending} className="!h-8 !bg-[var(--chalk-on-overlay)]/[.14] !px-3 !text-[var(--chalk-on-overlay)] hover:!bg-[var(--chalk-on-overlay)]/[.22]">
-                    Change
-                  </ChalkButton>
-                }
-              >
-                {(
-                  [
-                    { surface: "monitor", label: "Entire screen" },
-                    { surface: "window", label: "Window" },
-                    { surface: "browser", label: "Browser tab" },
-                  ] as const
-                ).map((option) => (
-                  <ChalkMenuItem key={option.surface} onClick={() => void run(() => onChangeShare({ surface: option.surface, audio: option.surface === "browser" }), "screen", "start")}>
-                    {option.label}
-                  </ChalkMenuItem>
-                ))}
-              </ChalkMenu>
-            ) : null}
-            {onStopSharing ? (
-              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-[var(--chalk-on-overlay)] hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing, "screen", "stop")}>
-                Stop sharing
-              </ChalkButton>
-            ) : null}
-          </div>
+          <LocalShareControls capture={capture} pending={pending} onChangeShare={onChangeShare ? (options) => void run(() => onChangeShare(options), "screen", "start") : undefined} onStopSharing={onStopSharing ? () => void run(onStopSharing, "screen", "stop") : undefined} />
         ) : null}
         {primary && !isLocal && status !== "connecting" ? (
           <div role="toolbar" aria-label="Share controls" className={cn("absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100", controlsOpen && "opacity-100")}>
@@ -239,19 +215,6 @@ export function ScreenSharePresentation({
         ) : null}
       </div>
     </TileShell>
-  );
-}
-function ShareControl({ label, pressed, onClick, children }: { readonly label: string; readonly pressed?: boolean; readonly onClick: () => void; readonly children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      onClick={onClick}
-      className="relative grid h-8 w-8 place-items-center rounded-[50%] bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] aria-pressed:bg-[var(--chalk-on-overlay)] aria-pressed:text-[var(--chalk-overlay)] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out] active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
-    >
-      {children}
-    </button>
   );
 }
 export function ScreenShareViewSurface({ screenShareTrack, annotationContext, ...props }: ScreenShareViewSurfaceProps): React.JSX.Element {

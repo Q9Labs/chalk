@@ -293,25 +293,11 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		return fmt.Errorf("decode authenticated recording media: %w", err)
 	}
 
-	if len(decoded.Index.Sources) == 0 {
-		return fmt.Errorf("%w: recording has no decodable video or audio", recordingdecode.ErrDecode)
+	frameRequest, err := videoFrameRequest(resolved, timeline, decoded, attempt.workspace, presentationPath, assetDirectory)
+	if err != nil {
+		return err
 	}
 	videoPath := filepath.Join(attempt.workspace, renderVideoName)
-	frameRequest := FrameRenderRequest{
-		SchemaVersion: FrameRenderRequestVersion, RecordingID: resolved.RecordingID.String(), EpisodeID: resolved.EpisodeID.String(),
-		WorkspaceDirectory: attempt.workspace, PresentationPath: presentationPath, PresentationSHA256: hex.EncodeToString(resolved.PresentationSHA256),
-		AssetDirectory: assetDirectory, DecodedMediaPath: decoded.IndexPath,
-		DecodedMediaSHA256: decoded.IndexSHA256, Width: timeline.Initial.Profile.Viewport.Width, Height: timeline.Initial.Profile.Viewport.Height,
-		FPS: nativeRenderFPS, DurationMs: resolved.DurationMillis,
-	}
-	for _, asset := range timeline.Assets {
-		if asset.Kind == recordingpresentation.ScreenAnnotationAssetKind {
-			if frameRequest.AnnotationSidecar != nil {
-				return fmt.Errorf("%w: multiple frozen screen annotation assets", ErrInvalidProductionRenderAttempt)
-			}
-			frameRequest.AnnotationSidecar = &FrameAnnotationSidecar{Path: filepath.Join(assetDirectory, asset.SHA256), SHA256: asset.SHA256}
-		}
-	}
 	expected, err := attempt.renderVideo(ctx, frameRequest, videoPath)
 	if err != nil {
 		return err
@@ -937,41 +923,4 @@ func deterministicRenderID(authority recordingrender.Authority, name string) uti
 	value[8] = (value[8] & 0x3f) | 0x80
 	clear(sum)
 	return utilities.IDFromBytes(value)
-}
-
-func participantDisplayNameAt(timeline recordingpresentation.Timeline, participantID string, atMillis int64) string {
-	names := make(map[string]string, len(timeline.Initial.Participants))
-	for _, participant := range timeline.Initial.Participants {
-		names[participant.ID] = participant.DisplayName
-	}
-	for _, event := range timeline.Events {
-		switch value := event.(type) {
-		case recordingpresentation.ParticipantJoinedEvent:
-			if value.AtMillis <= atMillis {
-				names[value.Participant.ID] = value.Participant.DisplayName
-			}
-		case *recordingpresentation.ParticipantJoinedEvent:
-			if value != nil && value.AtMillis <= atMillis {
-				names[value.Participant.ID] = value.Participant.DisplayName
-			}
-		case recordingpresentation.ParticipantDisplayNameChangedEvent:
-			if value.AtMillis <= atMillis {
-				names[value.ParticipantID] = value.DisplayName
-			}
-		case *recordingpresentation.ParticipantDisplayNameChangedEvent:
-			if value != nil && value.AtMillis <= atMillis {
-				names[value.ParticipantID] = value.DisplayName
-			}
-		}
-	}
-	return names[participantID]
-}
-
-func microphoneOverlap(sources []recordingdecode.Source, currentID string, start, end int64) bool {
-	for _, source := range sources {
-		if source.SourceID != currentID && source.StartMS < end && source.EndMS > start {
-			return true
-		}
-	}
-	return false
 }

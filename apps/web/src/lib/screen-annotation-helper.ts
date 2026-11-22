@@ -4,6 +4,8 @@ import { attachSchema, challengeSchema, delay, localRequest, networkTimeoutMs, r
 import { activeShare, liveProjection } from "./screen-annotation-helper-projection";
 import { startConsent } from "./screen-annotation-helper-consent";
 
+type BrowserHelper = ScreenAnnotationHelper & Required<Pick<ScreenAnnotationHelper, "challenge">>;
+
 export interface HelperPairAuthority {
   readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; signal: AbortSignal }) => Promise<Tickets>;
   readonly lookupCode?: ScreenAnnotationHelper["lookupCode"];
@@ -11,7 +13,7 @@ export interface HelperPairAuthority {
 
 type CaptureTrack = (share: ScreenAnnotationHelperShare) => MediaStreamTrack | undefined;
 
-export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string }): ScreenAnnotationHelper {
+export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string }): BrowserHelper {
   return {
     installUrl,
     lookupCode: authority.lookupCode,
@@ -92,67 +94,71 @@ export function createBrowserAnnotationHelper({ origin, installUrl, authority, c
   };
 }
 
-export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly tenantId: string }): ScreenAnnotationHelper {
+export function createManagedAnnotationHelper(options: { readonly origin: string; readonly apiBaseUrl: string; readonly mediaProof: () => string | null | undefined; readonly installUrl?: string; readonly captureTrack?: CaptureTrack; readonly tenantId: string }): BrowserHelper & Required<Pick<ScreenAnnotationHelper, "lookupCode">> {
   const api = new URL("/v1/screen-annotation/helper/pair-ticket", options.apiBaseUrl);
   if (api.protocol !== "https:" || api.username || api.password) throw new Error("Invalid Helper API.");
-  return createBrowserAnnotationHelper({
-    origin: options.origin,
-    installUrl: options.installUrl,
-    captureTrack: options.captureTrack,
-    deviceAccount: options.tenantId,
-    authority: {
-      async lookupCode(code, share, signal) {
-        if (!activeShare(share)) throw new Error("The screen share is no longer authorized.");
-        const offer = await manageHelperDevice({ action: "lookup", code }, signal).then((response) => readJson(response, helperDeviceOffer));
-        return {
-          deviceName: offer.name,
-          fingerprint: offer.fingerprint,
-          async approve(onStatus) {
-            const approve = async (refresh: boolean) => {
-              const mediaProof = options.mediaProof();
-              if (!mediaProof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
-              await manageHelperDevice(
-                {
-                  action: "approve",
-                  requestId: offer.requestId,
-                  mediaProof,
-                  refresh,
-                  layerId: share.layer.layer_id,
-                  publicationId: share.layer.publication_id,
-                },
-                AbortSignal.any([signal, AbortSignal.timeout(networkTimeoutMs)]),
-              );
-            };
-            await approve(false);
-            onStatus("device_approved");
-            while (!signal.aborted) {
-              await delay(10_000, signal);
-              if (!signal.aborted) await approve(true);
-            }
-          },
-        };
-      },
-      async issueLocalTicket({ challenge, share, signal }) {
-        const proof = options.mediaProof();
-        if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
-        const response = await fetch(api, {
-          method: "POST",
-          credentials: "omit",
-          redirect: "error",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${proof}` },
-          body: JSON.stringify({
-            version: 1,
-            challenge: challenge.challenge,
-            helperPublicKey: challenge.helperPublicKey,
-            layerId: share.layer.layer_id,
-            publicationId: share.layer.publication_id,
-          }),
-          signal,
-        });
-        if (!response.ok) throw new Error("The Helper ticket could not be issued.");
-        return readJson(response, ticketsSchema);
-      },
+  const authority = {
+    async lookupCode(code, share, signal) {
+      if (!activeShare(share)) throw new Error("The screen share is no longer authorized.");
+      const offer = await manageHelperDevice({ action: "lookup", code }, signal).then((response) => readJson(response, helperDeviceOffer));
+      return {
+        deviceName: offer.name,
+        fingerprint: offer.fingerprint,
+        async approve(onStatus) {
+          const approve = async (refresh: boolean) => {
+            const mediaProof = options.mediaProof();
+            if (!mediaProof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
+            await manageHelperDevice(
+              {
+                action: "approve",
+                requestId: offer.requestId,
+                mediaProof,
+                refresh,
+                layerId: share.layer.layer_id,
+                publicationId: share.layer.publication_id,
+              },
+              AbortSignal.any([signal, AbortSignal.timeout(networkTimeoutMs)]),
+            );
+          };
+          await approve(false);
+          onStatus("device_approved");
+          while (!signal.aborted) {
+            await delay(10_000, signal);
+            if (!signal.aborted) await approve(true);
+          }
+        },
+      };
     },
-  });
+    async issueLocalTicket({ challenge, share, signal }) {
+      const proof = options.mediaProof();
+      if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
+      const response = await fetch(api, {
+        method: "POST",
+        credentials: "omit",
+        redirect: "error",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${proof}` },
+        body: JSON.stringify({
+          version: 1,
+          challenge: challenge.challenge,
+          helperPublicKey: challenge.helperPublicKey,
+          layerId: share.layer.layer_id,
+          publicationId: share.layer.publication_id,
+        }),
+        signal,
+      });
+      if (!response.ok) throw new Error("The Helper ticket could not be issued.");
+      return readJson(response, ticketsSchema);
+    },
+  } satisfies Required<HelperPairAuthority>;
+  return {
+    ...createBrowserAnnotationHelper({
+      origin: options.origin,
+      installUrl: options.installUrl,
+      captureTrack: options.captureTrack,
+      deviceAccount: options.tenantId,
+      authority,
+    }),
+    lookupCode: authority.lookupCode,
+  };
 }

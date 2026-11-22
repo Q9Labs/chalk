@@ -26,7 +26,7 @@ function watchAssets(page) {
 }
 
 async function openScenario(page, origin, scenario) {
-  await page.goto(`${origin}/call-states.html?state=${scenario.state}`, { waitUntil: "load" });
+  await page.goto(`${origin}/src/call-states/performance.html?state=${scenario.state}`, { waitUntil: "load" });
   await page.getByRole("button", { name: "Leave call", exact: true }).waitFor();
   await page.waitForFunction(() => {
     return [...document.querySelectorAll("video")].some((video) => {

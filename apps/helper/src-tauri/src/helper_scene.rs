@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,13 +125,10 @@ impl Scene {
     }
 }
 
-pub fn request() -> Value {
-    json!({"type": "annotation_state_request"})
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn accepts_only_matching_sync_state_and_does_not_skip_a_missing_revision() {

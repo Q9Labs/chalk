@@ -1,5 +1,5 @@
 import type { ScreenAnnotationActions as SharedActions, ScreenAnnotationFrame as SharedFrame } from "@q9labsai/chalk-screen-annotation";
-import type { ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
+import type { ChalkWhiteboardV1Transport, ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationState, ScreenAnnotationTarget, SpaceClient } from "@q9labsai/chalk-client";
 
 export type AnnotationAuthor = ScreenAnnotationMark["author"];
 
@@ -10,11 +10,18 @@ export interface ScreenAnnotationOptions {
   readonly client: ScreenAnnotationClient;
   readonly publicationId: string;
   readonly actions?: ScreenAnnotationActions;
+  readonly offerPngDownload?: boolean;
   readonly fontUrl?: string;
   readonly helper?: ScreenAnnotationHelper;
 }
 
-export type ScreenAnnotationSetup = Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper">;
+export type ScreenAnnotationSetup = Pick<ScreenAnnotationOptions, "actions" | "fontUrl" | "helper" | "offerPngDownload">;
+
+export interface ScreenAnnotationBoard {
+  readonly client: SpaceClient;
+  readonly transport: ChalkWhiteboardV1Transport;
+  readonly allowSave: boolean;
+}
 
 export type AnnotationTool = ScreenAnnotationDraft["shape"]["kind"] | "pointer" | "eraser";
 export type AnnotationStamp = Extract<ScreenAnnotationDraft["shape"], { kind: "stamp" }>["stamp"];

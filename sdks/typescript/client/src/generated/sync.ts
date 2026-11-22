@@ -639,20 +639,9 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
-  if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
-  if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
-  if (Object.hasOwn(value, "connection_quality") && value.connection_quality !== true) return false;
-  if (Object.hasOwn(value, "screen_annotation") && value.screen_annotation !== true) return false;
-  const fields = [
-    ...base,
-    ...(extensionValid ? ["extensions"] : []),
-    ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
-    ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
-    ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
-    ...(Object.hasOwn(value, "screen_annotation") ? ["screen_annotation"] : []),
-    ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
-    ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
-  ];
+  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "screen_annotation"].filter((key) => Object.hasOwn(value, key));
+  if (flags.some((key) => value[key] !== true)) return false;
+  const fields = [...base, ...flags, ...(extensionValid ? ["extensions"] : []), ...["entry_generation", "participant_identity_id"].filter((key) => Object.hasOwn(value, key))];
   if (!strictCursor(value.head)) return false;
   if (value.mode === "snapshot") return exactObjectWithCorrelation(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
   if (value.mode === "terminal") return exactObjectWithCorrelation(value, [...fields, "reason"]);

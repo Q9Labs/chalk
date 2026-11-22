@@ -30,34 +30,43 @@ function hitsGeometry(point: AnnotationPoint, geometry: AnnotationMarkGeometry, 
       return hitsPath(point, geometry.points, maxSquared);
     case "line":
       return segmentDistanceSquared(point, geometry.from, geometry.to) <= maxSquared;
-    case "arrow": {
-      if (segmentDistanceSquared(point, geometry.from, geometry.to) <= maxSquared) return true;
-      const [tip, left, right] = geometry.head;
-      if (!tip || !left || !right) return false;
-      const edges = [
-        [tip, left],
-        [left, right],
-        [right, tip],
-      ] as const;
-      const signs = edges.map(([from, to]) => (to.x - from.x) * (point.y - from.y) - (to.y - from.y) * (point.x - from.x));
-      return signs.every((value) => value >= 0) || signs.every((value) => value <= 0) || edges.some(([from, to]) => segmentDistanceSquared(point, from, to) <= tolerance ** 2);
-    }
+    case "arrow":
+      return hitsArrow(point, geometry, maxSquared, tolerance);
     case "box":
-    case "circle": {
-      const { bounds } = geometry;
-      if (!containsPoint(expand(bounds, radius), point)) return false;
-      if (bounds.width === 0 || bounds.height === 0) {
-        return segmentDistanceSquared(point, bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }) <= maxSquared;
-      }
-      return geometry.kind === "box" ? roundedOutlineDistance(point, bounds, geometry.width * 2) <= radius : ellipseDistance(point, bounds) <= radius;
-    }
-    case "text": {
-      const text = layoutAnnotationText(geometry, measureText);
-      return containsPoint(expand(geometry.note ? text.noteBounds : text.bounds, tolerance), point);
-    }
+    case "circle":
+      return hitsOutline(point, geometry, radius);
+    case "text":
+      return hitsText(point, geometry, tolerance, measureText);
     case "stamp":
       return Math.hypot(point.x - geometry.at.x, point.y - geometry.at.y) <= geometry.radius + radius;
   }
+}
+
+function hitsText(point: AnnotationPoint, geometry: Extract<AnnotationMarkGeometry, { kind: "text" }>, tolerance: number, measureText: AnnotationTextMeasure): boolean {
+  const text = layoutAnnotationText(geometry, measureText);
+  return containsPoint(expand(geometry.note ? text.noteBounds : text.bounds, tolerance), point);
+}
+
+function hitsArrow(point: AnnotationPoint, geometry: Extract<AnnotationMarkGeometry, { kind: "arrow" }>, maxSquared: number, tolerance: number): boolean {
+  if (segmentDistanceSquared(point, geometry.from, geometry.to) <= maxSquared) return true;
+  const [tip, left, right] = geometry.head;
+  if (!tip || !left || !right) return false;
+  const edges = [
+    [tip, left],
+    [left, right],
+    [right, tip],
+  ] as const;
+  const signs = edges.map(([from, to]) => (to.x - from.x) * (point.y - from.y) - (to.y - from.y) * (point.x - from.x));
+  return signs.every((value) => value >= 0) || signs.every((value) => value <= 0) || edges.some(([from, to]) => segmentDistanceSquared(point, from, to) <= tolerance ** 2);
+}
+
+function hitsOutline(point: AnnotationPoint, geometry: Extract<AnnotationMarkGeometry, { kind: "box" | "circle" }>, radius: number): boolean {
+  const { bounds } = geometry;
+  if (!containsPoint(expand(bounds, radius), point)) return false;
+  if (bounds.width === 0 || bounds.height === 0) {
+    return segmentDistanceSquared(point, bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }) <= radius ** 2;
+  }
+  return geometry.kind === "box" ? roundedOutlineDistance(point, bounds, geometry.width * 2) <= radius : ellipseDistance(point, bounds) <= radius;
 }
 
 function hitsPath(point: AnnotationPoint, points: readonly AnnotationPoint[], maxSquared: number): boolean {

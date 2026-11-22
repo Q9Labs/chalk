@@ -1,3 +1,4 @@
+import type { RendererFileWrite } from "./file-protocol";
 import { EXCALIDRAW_VERSION, RENDERER_BUILD_ID } from "../pins";
 import type { DrawPerson, DrawPolicy } from "../collab/draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
@@ -147,19 +148,7 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
       readonly type: "file_read";
       readonly payload: { readonly requestId: string; readonly fileId: string };
     }
-  | {
-      readonly type: "file_write";
-      readonly payload: {
-        readonly requestId: string;
-        readonly sceneId: string;
-        readonly sceneGeneration: string;
-        readonly fileId: string;
-        readonly mimeType: string;
-        readonly byteLength: number;
-        readonly sha256: string;
-        readonly dataURL: string;
-      };
-    }
+  | { readonly type: "file_write"; readonly payload: RendererFileWrite }
   | {
       readonly type: "user_export";
       readonly payload: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" };

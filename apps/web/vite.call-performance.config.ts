@@ -5,6 +5,6 @@ import callStates from "./vite.call-states.config";
 export default mergeConfig(callStates, {
   build: {
     outDir: ".call-performance",
-    rollupOptions: { input: fileURLToPath(new URL("./call-states.html", import.meta.url)) },
+    rollupOptions: { input: fileURLToPath(new URL("./src/call-states/performance.html", import.meta.url)) },
   },
 });

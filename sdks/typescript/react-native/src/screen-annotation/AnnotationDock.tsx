@@ -1,3 +1,4 @@
+import { space } from "../theme/tokens";
 import type { ScreenAnnotationCommand } from "@q9labsai/chalk-client";
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
@@ -53,5 +54,5 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
 
 const styles = StyleSheet.create({
   dock: { position: "absolute", maxHeight: "50%", alignItems: "center" },
-  controls: { width: "100%", maxWidth: 320, flexDirection: "row", gap: 4 },
+  controls: { width: "100%", maxWidth: 320, flexDirection: "row", gap: space[1] },
 });

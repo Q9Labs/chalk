@@ -4,7 +4,9 @@ import type { ScreenAnnotationActions } from "@q9labsai/chalk-react";
 import { ScreenShareViewSurface } from "@q9labsai/chalk-react";
 import { webAnnotation } from "../lib/screen-annotation";
 
+// token-ratchet-ignore: fixture ink is a wire-format color, not a UI theme color.
 const viewer = { participant_id: "2dca7fd4-6ab1-4bf2-8f0a-df06ec2d5f61", display_name: "Omar", color: "#ff734e" };
+// token-ratchet-ignore: fixture ink is a wire-format color, not a UI theme color.
 const sharer = { participant_id: "2b058c78-1651-43b6-8b13-647aeb6b35be", display_name: "Sara", color: "#786bff" };
 const layer = { layer_id: "04acfe87-75d3-4374-90e9-61cab633fbfd", publication_id: "screen-fixture", sharer_id: sharer.participant_id, frame: { width: 1600, height: 900 } };
 const ready = (state: ScreenAnnotationState, presence: readonly ScreenAnnotationPresence[]): ScreenAnnotationSnapshot => ({ status: "ready", state, presence });
@@ -27,6 +29,33 @@ function createAnnotationFixture() {
   const fence = () => {
     state = { ...state, fence: state.fence + 1 };
     presence = [];
+  };
+  type AccessCommand = Extract<ScreenAnnotationCommand, { kind: "request_draw" | "decide_draw" | "set_policy" | "set_draw_permission" | "pause" }>;
+  const changeAccess = (command: AccessCommand, author: typeof viewer, host: boolean, now: number): boolean => {
+    if (!host && command.kind !== "request_draw") return false;
+    switch (command.kind) {
+      case "request_draw":
+        if (state.access.draw_policy === "hosts") return false;
+        state = { ...state, access: { ...state.access, requests: [{ request_id: crypto.randomUUID(), participant_id: author.participant_id, expires_at_ms: now + 30000 }] } };
+        break;
+      case "decide_draw":
+        state = { ...state, access: { ...state.access, can_draw: command.allow, requests: [] } };
+        fence();
+        break;
+      case "set_policy":
+        state = { ...state, access: { ...state.access, draw_policy: command.policy, can_draw: command.policy === "everyone", requests: [] } };
+        fence();
+        break;
+      case "set_draw_permission":
+        state = { ...state, access: { ...state.access, can_draw: command.allow } };
+        fence();
+        break;
+      case "pause":
+        state = { ...state, paused: command.paused };
+        fence();
+        break;
+    }
+    return true;
   };
   const controller = (author: typeof viewer, host: boolean): ScreenAnnotationClient => ({
     getSnapshot: () => (host ? hostSnapshot : viewerSnapshot),
@@ -72,30 +101,8 @@ function createAnnotationFixture() {
           undo.length = 0;
           fence();
           break;
-        case "request_draw":
-          if (state.access.draw_policy === "hosts") return { kind: "rejected", reason: "forbidden" };
-          state = { ...state, access: { ...state.access, requests: [{ request_id: crypto.randomUUID(), participant_id: author.participant_id, expires_at_ms: now + 30000 }] } };
-          break;
-        case "decide_draw":
-          if (!host) return { kind: "rejected", reason: "forbidden" };
-          state = { ...state, access: { ...state.access, can_draw: command.allow, requests: [] } };
-          fence();
-          break;
-        case "set_policy":
-          if (!host) return { kind: "rejected", reason: "forbidden" };
-          state = { ...state, access: { ...state.access, draw_policy: command.policy, can_draw: command.policy === "everyone", requests: [] } };
-          fence();
-          break;
-        case "set_draw_permission":
-          if (!host) return { kind: "rejected", reason: "forbidden" };
-          state = { ...state, access: { ...state.access, can_draw: command.allow } };
-          fence();
-          break;
-        case "pause":
-          if (!host) return { kind: "rejected", reason: "forbidden" };
-          state = { ...state, paused: command.paused };
-          fence();
-          break;
+        default:
+          if (!changeAccess(command, author, host, now)) return { kind: "rejected", reason: "forbidden" };
       }
       state = { ...state, revision };
       notify();
@@ -156,7 +163,7 @@ export function ScreenAnnotationFixture() {
   const [saved, setSaved] = useState(0);
   const [hostView, setHostView] = useState(false);
   const track = useFixtureTrack();
-  const actions: ScreenAnnotationActions = { ...webAnnotation.actions, saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
+  const actions: ScreenAnnotationActions = { saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
   const people = [viewer, sharer].map((person) => ({ id: person.participant_id, name: person.display_name, roleCanDraw: true, managesPolicy: person === sharer }));
   const actor = hostView ? sharer : viewer;
   return (
@@ -190,6 +197,7 @@ export function ScreenAnnotationFixture() {
               publicationId: layer.publication_id,
               actions,
               fontUrl: webAnnotation.fontUrl,
+              offerPngDownload: webAnnotation.offerPngDownload,
               helper: {
                 challenge: async () => {
                   throw new DOMException("Local access denied", "NotAllowedError");
