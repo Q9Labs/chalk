@@ -1,5 +1,3 @@
-import { HOST_CONTROLS_CSS } from "./host-controls-css";
-
 const styles = `.call-card-tabs {
   display: flex;
   align-items: center;
@@ -113,7 +111,6 @@ const styles = `.call-card-tabs {
 .lcard input::placeholder {
   color: var(--chalk-muted-text);
 }
-${HOST_CONTROLS_CSS}
 .call-people-section {
   display: flex;
   align-items: baseline;

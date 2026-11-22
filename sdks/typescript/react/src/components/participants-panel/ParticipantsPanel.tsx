@@ -1,7 +1,5 @@
 import { deviceHint } from "../../selectors/device-hint";
 import React, { useMemo, useState } from "react";
-import type { AdmissionPolicyTarget } from "@q9labsai/chalk-client";
-import { HostControls } from "./HostControls";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
@@ -77,10 +75,6 @@ interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly canManageParticipants?: boolean;
   readonly canManageAdmission?: boolean;
   readonly admissionCount?: number;
-  readonly onMuteEveryone?: () => Promise<void>;
-  /** The call's current "Who can join" value. A host can change it only while it is one of the two the call offers. */
-  readonly admissionPolicy?: AdmissionPolicyTarget;
-  readonly onAdmissionPolicyChange?: (policy: AdmissionPolicyTarget) => Promise<void>;
 }
 
 function PeopleLabel({ text, count }: { readonly text: string; readonly count: number }) {
@@ -98,9 +92,6 @@ export const ParticipantsPanelSurface = React.memo(
     canManageAdmission = false,
     admissionCount = 0,
     admissionEnabled = true,
-    onMuteEveryone,
-    admissionPolicy,
-    onAdmissionPolicyChange,
     searchable = true,
     className,
     variant = "default",
@@ -121,14 +112,12 @@ export const ParticipantsPanelSurface = React.memo(
   }: ParticipantsPanelSurfaceProps) => {
     const [query, setQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const searching = query.trim().length > 0;
     const found = matchParticipants(participants, query);
     const groups = orderParticipants(participants);
     const numbered = handNumbers(participants);
     const waitingBlock = canManageAdmission && admissionEnabled && admissionCount > 0;
     const labelled = participants.length > 8 || waitingBlock;
-    const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
     const row = (participant: ParticipantListParticipant) => (
       <ParticipantRow
         key={participant.id}
@@ -159,9 +148,7 @@ export const ParticipantsPanelSurface = React.memo(
     return (
       <section className={cn("call-people", className)} aria-label="People">
         <CallCardStyles />
-        <HostControls canChooseWhoCanJoin={canManageAdmission && admissionEnabled} admissionPolicy={admissionPolicy} onAdmissionPolicyChange={onAdmissionPolicyChange} onMuteEveryone={onMuteEveryone} participantCount={participants.length} unmutedCount={unmutedCount} onError={setError} />
         <div className="call-people-list">
-          {error ? <p role="alert">{error}</p> : null}
           {searchable && (participants.length > 8 || query.length > 0) ? (
             <label className="call-people-search" data-active={searching || undefined}>
               <Search01Icon aria-hidden="true" />
@@ -264,15 +251,6 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       onStopParticipantScreenShare={canStopScreenOthers ? (id) => client.participants.stopScreenShare(id) : undefined}
       canManageAdmission={canManageAdmission}
       admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length : 0}
-      admissionPolicy={participantsSlice.admissionPolicy === "open" || participantsSlice.admissionPolicy === "knock" ? participantsSlice.admissionPolicy : undefined}
-      onAdmissionPolicyChange={canManageAdmission ? (policy) => client.participants.setAdmissionPolicy(policy) : undefined}
-      onMuteEveryone={
-        canMuteOthers
-          ? async () => {
-              await Promise.all(participants.filter((person) => !person.isLocal && !person.isMuted).map((person) => client.participants.mute(person.id)));
-            }
-          : undefined
-      }
       onMuteParticipant={canMuteOthers ? (id) => client.participants.mute(id) : undefined}
       onRequestUnmute={canRequestMedia ? (props.onRequestUnmute ?? ((id) => client.participants.requestMedia(id, "microphone"))) : undefined}
       onStopParticipantCamera={canStopVideoOthers ? (id) => client.participants.stopVideo(id) : undefined}

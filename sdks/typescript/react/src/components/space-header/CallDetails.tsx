@@ -6,6 +6,7 @@ import { ShellIcon } from "../control-bar/ShellIcon";
 import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
+import { HostControlRows } from "./HostControlRows";
 import { RowIcon } from "./RowIcon";
 import { detailsTitle, type SpaceHeaderProps } from "./space-header-contract";
 
@@ -29,7 +30,8 @@ export function CallDetails({
   revealConnection = false,
   hideShortcuts = false,
   revealQr,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+  hostControls,
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "hostControls" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
   readonly hideShortcuts?: boolean;
   readonly onClose: () => void;
@@ -86,6 +88,12 @@ export function CallDetails({
       ) : (
         <p className="chalk-shell-detail-helper">This link is too long for a QR code. Copy the link to share it.</p>
       )}
+      {hostControls?.whoCanJoin || hostControls?.muteEveryone ? (
+        <>
+          <div className="chalk-shell-sep" />
+          <HostControlRows {...hostControls} />
+        </>
+      ) : null}
       {network && quality ? (
         <>
           <div className="chalk-shell-sep" />

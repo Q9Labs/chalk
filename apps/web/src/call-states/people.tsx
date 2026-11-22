@@ -45,6 +45,10 @@ const variants = [
   { id: "menu-muted", title: "People: host row menu, muted person", others: BIG, panel: true },
   { id: "confirm", title: "People: remove confirm", others: BIG, panel: true },
   { id: "guest", title: "People: guest view", others: BIG, panel: true, host: false },
+  { id: "call-menu", title: "Call menu: host", others: SMALL, clicks: ["Call details"] },
+  { id: "call-menu-join", title: "Call menu: host, who can join open", others: SMALL, clicks: ["Call details", "Who can join"] },
+  { id: "call-menu-mute", title: "Call menu: host, mute everyone confirm", others: SMALL, clicks: ["Call details", "Mute everyone"] },
+  { id: "call-menu-guest", title: "Call menu: guest view", others: SMALL, host: false, clicks: ["Call details"] },
   { id: "wait-one", title: "Waiting room: one knock", others: SMALL, knocks: 1 },
   { id: "wait-several", title: "Waiting room: several knocks", others: SMALL, knocks: 3 },
   { id: "wait-list", title: "Waiting room: host list", others: SMALL, knocks: 3, panel: true },
@@ -56,7 +60,7 @@ export const PEOPLE_STATES: readonly CallState[] = (["dark", "light"] as const).
     return {
       id: `people-${variant.id}-${scheme}`,
       title: `${variant.title} (${scheme})`,
-      actions: panel ? [{ click: "People" }] : undefined,
+      actions: panel ? [{ click: "People" }] : "clicks" in variant ? variant.clicks.map((click) => ({ click })) : undefined,
       render: () => <PeopleState scheme={scheme} others={variant.others} host={"host" in variant ? variant.host : true} knocks={"knocks" in variant ? variant.knocks : 0} />,
     };
   }),

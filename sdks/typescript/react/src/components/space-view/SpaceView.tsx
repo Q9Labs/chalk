@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
-import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
+import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -34,6 +34,7 @@ import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useMediaNotice } from "./useMediaNotice";
 import { useMicrophoneNotice } from "./useMicrophoneNotice";
 import { useBoardNotices } from "./useBoardNotices";
+import { useHostControls } from "./useHostControls";
 import { useCallToasts } from "../toast-stack/useCallToasts";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
@@ -45,7 +46,6 @@ import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "../stage/SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
-import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 
 // The knock notice is not needed to start a call, so it loads when the first request arrives.
@@ -170,7 +170,7 @@ export function SpaceView({
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
-  const canManageAdmission = useCan("manageAdmission");
+  const { canManageAdmission, hostHeader } = useHostControls(participantsSlice, self.participantId, features?.admission !== false);
   const callLink = useCallLink(participantsSlice.roster.length <= 1, live, canManageAdmission);
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
@@ -342,7 +342,7 @@ export function SpaceView({
                 spaceName,
                 people: participantsSlice.roster,
                 onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
-                knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
+                ...hostHeader,
                 shareUrl: effectiveShareUrl,
                 callLinkOpen: (callLinkOpen ?? callLink.open) && live,
                 onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
