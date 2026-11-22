@@ -1,5 +1,11 @@
 import { MediaStreamTrack } from "@cloudflare/react-native-webrtc";
-import { NativeModules } from "react-native";
+import { AppRegistry, NativeModules, Platform } from "react-native";
+
+if (Platform.OS === "android") {
+  // The native projection service ends this task with the capture. While the
+  // shared app is in front, React Native must still run call and SFU timers.
+  AppRegistry.registerHeadlessTask("ChalkScreenProjection", () => () => new Promise<void>(() => {}));
+}
 
 type ScreenCaptureModule = {
   capture(): Promise<ConstructorParameters<typeof MediaStreamTrack>[0]>;

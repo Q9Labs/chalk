@@ -21,7 +21,6 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState, Platform } from "react-native";
 import { captureAndroidScreen } from "../media/android-screen-capture";
-import { fetchAndroidSignaling } from "../media/android-signaling-fetch";
 import { toNativeCaptureError } from "../media/native-capture-error";
 import { releaseNativeTrack } from "../media/native-release-track";
 import { createAndroidCallSyncLifecycle } from "./android-call-sync-lifecycle";
@@ -86,7 +85,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       getDisplayMedia: Platform.OS === "android" ? captureAndroidScreen : async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
       releaseTrack: releaseNativeTrack,
     },
-    createMediaClient: (input) => createMediaClient(apiBaseURL, input, Platform.OS === "android" ? fetchAndroidSignaling : fetch),
+    createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
     createSyncClient: (input) => createSyncClient(syncURL, input, callLifecycle, syncWebSocket, storage, syncDialTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncDialTimeoutMs),

@@ -17,9 +17,14 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.jstasks.HeadlessJsTaskConfig;
+import com.facebook.react.jstasks.HeadlessJsTaskContext;
 import java.util.function.IntConsumer;
 
 public final class ChalkScreenProjectionService extends Service {
+  private static final String TASK = "ChalkScreenProjection";
   private static final String CHANNEL = "chalk-screen-projection";
   private static final String RECEIVER = "foreground_ready";
   private static final int NOTIFICATION_ID = 14683;
@@ -29,6 +34,8 @@ public final class ChalkScreenProjectionService extends Service {
 
   private int token;
   private int latestStartId;
+  private ReactApplicationContext taskReactContext;
+  private int taskId;
 
   static void start(Context context, IntConsumer ready) {
     ResultReceiver receiver = new ResultReceiver(MAIN) {
@@ -44,6 +51,21 @@ public final class ChalkScreenProjectionService extends Service {
       Log.w("ChalkScreenProjection", "Unable to start service", failure);
       ready.accept(0);
     }
+  }
+
+  static boolean keepReactTimers(int token, ReactApplicationContext context) {
+    ChalkScreenProjectionService owner = active;
+    if (owner == null || owner.token != token || !context.hasActiveReactInstance()) return false;
+    owner.taskId = HeadlessJsTaskContext.getInstance(context).startTask(
+        new HeadlessJsTaskConfig(TASK, Arguments.createMap(), 0, true));
+    owner.taskReactContext = context;
+    return true;
+  }
+
+  private void finishReactTask() {
+    if (taskReactContext == null) return;
+    HeadlessJsTaskContext.getInstance(taskReactContext).finishTask(taskId);
+    taskReactContext = null;
   }
 
   static void release(int token) {
@@ -75,6 +97,7 @@ public final class ChalkScreenProjectionService extends Service {
       ServiceCompat.startForeground(
           this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
       active = this;
+      finishReactTask();
       latestStartId = startId;
       token = ++nextToken;
       receiver.send(token, null);
@@ -89,6 +112,7 @@ public final class ChalkScreenProjectionService extends Service {
   @Override
   public void onDestroy() {
     if (active == this) active = null;
+    finishReactTask();
     super.onDestroy();
   }
 
