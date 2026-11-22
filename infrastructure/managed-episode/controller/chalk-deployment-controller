@@ -930,6 +930,10 @@ check_cutover() {
     >"${stage_root}/cutover-check.log" 2>&1 || status=$?
   remove_migrator_secret
   cutover_secret_armed=false
+  if ((status != 0)) && grep -Fq 'flag provided but not defined: -check-cutover' "${stage_root}/cutover-check.log"; then
+    printf 'WARN cutover check skipped: the API image predates --check-cutover, so only the migration guards live Episodes\n' >&2
+    return 0
+  fi
   if ((status != 0)); then
     tail -n 5 "${stage_root}/cutover-check.log" >&2 || true
     fail "database is not ready for the Cloudflare retirement"
@@ -1513,12 +1517,12 @@ ensure_runtime_user_manager() {
 }
 
 run_candidate() {
-  local runtime_source="$1"
+  local runtime_source="$1" recheck_cutover="${2:-false}"
   ensure_runtime_user_manager
   inject_runtime_identity
   install_runtime_files "$runtime_source"
   stop_runtime || fail "runtime services could not be stopped for cutover"
-  [[ "${recheck_cutover:-false}" != true ]] || check_cutover "$runtime_source"
+  [[ "$recheck_cutover" != true ]] || check_cutover "$runtime_source"
   activate_runtime_inputs
   reconcile_secrets
   run_migrations "$runtime_source"
@@ -1625,7 +1629,6 @@ deploy() {
     chmod 600 "$stable_pointer_copy"
   fi
   check_cutover "$rendered_root"
-  local recheck_cutover=true
   local candidate_status
   local promotion_status=0
   local installed_runtime_status=0
@@ -1633,7 +1636,7 @@ deploy() {
   set +e
   (
     set -e
-    run_candidate "$rendered_root"
+    run_candidate "$rendered_root" true
   )
   candidate_status=$?
   set -e

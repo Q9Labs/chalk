@@ -99,7 +99,8 @@ case "$(env_value "${api_env}" CHALK_API_ENV || true)" in
 esac
 if [[ "${legacy_required}" == true ]]; then
   case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" in
-    cf_sfu | chalk_sfu) ;;
+    cf_sfu) ;;
+    chalk_sfu) env_enabled CHALK_SFU_CAPTURE_ENABLED || fail "CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu needs CHALK_SFU_CAPTURE_ENABLED=true so the previous release still boots on rollback" ;;
     *) fail "CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu: a rollback to the previous release reads it" ;;
   esac
   case "$(env_value "${api_env}" CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE || true)" in
@@ -116,9 +117,5 @@ turn_token_set=false
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
 [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
-if [[ "${legacy_required}" == true ]]; then
-  require_env CHALK_CLOUDFLARE_TURN_KEY_ID
-  require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
-fi
 
 echo "PASS API runtime contract"

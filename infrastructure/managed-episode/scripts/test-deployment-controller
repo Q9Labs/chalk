@@ -287,6 +287,10 @@ case "${1:-} ${2:-}" in
       printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL" >&2
       exit 1
     fi
+    if [[ "${FAKE_CUTOVER_NO_FLAG:-false}" == true ]]; then
+      printf 'flag provided but not defined: -check-cutover\n' >&2
+      exit 2
+    fi
     if [[ -n "${FAKE_CUTOVER_REFUSAL_AFTER_STOP:-}" ]] && grep -q '^systemctl .*stop ' "${FAKE_COMMAND_LOG:?}"; then
       printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL_AFTER_STOP" >&2
       exit 1
@@ -1299,6 +1303,14 @@ fi
 grep -Fq 'database is not ready for the Cloudflare retirement' "${fixture_root}/cutover-raced.log" || fail "the second cutover refusal was not reported"
 ! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "the second cutover check left the migration credential registered"
 jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "a raced cutover changed the active release"
+[[ "$(grep -c -- '--check-cutover' "${fixture_root}/commands.log")" == 2 ]] || fail "the automatic rollback ran the cutover check again"
+grep -Eq '^systemctl .*start chalk-runtime.target' "${fixture_root}/commands.log" || fail "the stable release was not started again after the raced cutover"
+# An API image from before the check existed cannot be asked; the migration still guards live Episodes.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+FAKE_CUTOVER_NO_FLAG=true run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-no-flag.log" 2>&1 || fail "an API image without --check-cutover blocked the deploy"
+grep -Fq 'predates --check-cutover' "${fixture_root}/cutover-no-flag.log" || fail "the skipped cutover check was not reported"
 # With a running release, a ready database passes both checks: one before the runtime stops and one after.
 : >"${fixture_root}/commands.log"
 printf '0' >"${fixture_root}/health-index"

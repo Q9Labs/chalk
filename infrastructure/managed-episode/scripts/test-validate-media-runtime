@@ -52,6 +52,8 @@ sed 's/^CHALK_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_DEFAULT_MEDIA_PLANE=other/' "$fi
 check_refusal 'CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
 sed 's/^CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=other/' "$fixture/full.env" > "$fixture_api"
 check_refusal 'CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
+sed 's/^CHALK_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu/' "$fixture/full.env" | grep -v '^CHALK_SFU_CAPTURE_ENABLED=' > "$fixture_api"
+check_refusal 'CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu needs CHALK_SFU_CAPTURE_ENABLED=true'
 grep -v '^CHALK_CLOUDFLARE_TURN_KEY_ID=' "$fixture/full.env" > "$fixture_api"
 check_refusal 'CHALK_CLOUDFLARE_TURN_KEY_ID'
 # Only production keeps a rollback target: nightly may drop the legacy settings.
