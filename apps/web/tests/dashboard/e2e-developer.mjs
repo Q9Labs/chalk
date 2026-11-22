@@ -14,7 +14,7 @@ export async function knockChecks(h, s) {
   {
     const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
       method: "POST",
-      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "X-Chalk-Media-Providers": "chalk_sfu", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ space_invite_token: inviteToken, display_name: "Knocking guest" }),
     });
     assert.equal(arrival.status, 201, await arrival.clone().text());
@@ -25,7 +25,7 @@ export async function knockChecks(h, s) {
     for (let index = 0; index < 50; index++) {
       const stale = await fetch(`${apiOrigin}/v1/public/space-invite-arrivals`, {
         method: "POST",
-        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "X-Chalk-Media-Providers": "chalk_sfu", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ space_invite_token: inviteToken, display_name: `Expired guest ${index}` }),
       });
       assert.equal(stale.status, 201, await stale.clone().text());

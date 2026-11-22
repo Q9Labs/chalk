@@ -58,11 +58,11 @@ func parsePlane(text string) (*mediaplane.Provider, error) {
 	case "inherit":
 		return nil, nil
 	case "":
-		return nil, errors.New("set needs --plane cf_sfu, chalk_sfu or inherit")
+		return nil, errors.New("set needs --plane chalk_sfu or inherit")
 	}
 	plane, err := mediaplane.ParseSettingName(text)
 	if err != nil {
-		return nil, errors.New("--plane must be cf_sfu, chalk_sfu or inherit")
+		return nil, errors.New("--plane must be chalk_sfu or inherit")
 	}
 	return &plane, nil
 }

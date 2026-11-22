@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { resolveDevConfig, probePort } from "./config.mjs";
+import { waitForSeededSpaceIdle } from "./chalk-signin.mjs";
 import { readManifest, validateOwnedPid } from "./ownership.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 import { containerNames } from "./containers.mjs";
@@ -98,7 +99,7 @@ async function verifyHostIsolation() {
     ),
   ];
   assert.ok(addresses.length, "isolation proof needs a non-loopback interface");
-  const ports = [config.ports.api, config.ports.sync, config.ports.postgres, config.ports.redis, config.ports.providerBridge];
+  const ports = [config.ports.api, config.ports.sync, config.ports.postgres, config.ports.redis, config.ports.providerBridge, config.ports.sfuMedia];
   if (!config.publicOrigin) ports.push(config.ports.web);
   for (const host of addresses) for (const port of ports) await assertUnreachable(host, port);
   console.log(`isolation: ${ports.length} host ports refuse connections on ${addresses.length} non-loopback interfaces`);
@@ -128,6 +129,9 @@ if (process.argv[2] === "--network") {
   console.log("network: mounted artifact reads, API transcript reads and loopback-only host bindings passed");
 } else if (process.argv[2] === "--reload") {
   for (const service of ["api", "sync"]) await verifyReload(service);
+  // The Doctor guest has left, but a reload can interrupt its Episode cleanup.
+  const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
+  await waitForSeededSpaceIdle({ origin: config.urls.api, seed });
 } else if (process.argv[2] === "--teardown") {
   const before = await readManifest(config);
   try {

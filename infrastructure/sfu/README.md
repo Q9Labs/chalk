@@ -60,57 +60,16 @@ The API reaches a node with its provider-bridge certificate, reissued by `certs 
 - `CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` is a primary; `standby:id=url` takes a new Episode only when every primary is silent, draining, host-guard closed or full, and is held to `CHALK_SFU_STANDBY_PACKET_BUDGET`. At least one node must be a primary.
 - `CHALK_SFU_CAPTURE_ENABLED` lets the recorder pull from nodes through capture sessions and needs `CHALK_SFU_ENABLED=true`. While off, an Episode bound to `chalk_sfu` refuses to start a Recording. It also needs the recorder fleet (`CHALK_RECORDING_ENABLED=true` and the private provider bridge), because the API registers the Chalk SFU capture provider only when it builds the fleet. Nightly runs with it on; keep it off in production until M10 recording parity passes.
 - `CHALK_SFU_COLOCATED_CAPTURE` (default `false`; needs `CHALK_SFU_CAPTURE_ENABLED=true`) makes the API register one capture worker per node in `CHALK_SFU_NODES` and prefer it for the captures of that node's Episodes. `CHALK_SFU_COLOCATED_CAPTURE_GRACE_SECONDS` (default 20) is how long a capture waits for the healthy worker of its node before the on-demand fleet may take it, so an unhealthy or full worker costs a delay and never a recording. Off is the default and leaves every capture to the fleet. The worker itself is deployed by `features/media/sfu/deploy/deploy`.
-- `CHALK_SFU_CLOUDFLARE_OVERFLOW` (default `true`) starts a new Episode that no node can take on Cloudflare when its Tenant has a Cloudflare application. `false` refuses it with a retryable `503 media.unavailable`. An Episode already bound to a node never moves either way.
-- `CHALK_SFU_ALLOWED_SPACES` is a comma-separated list of Space IDs allowed to use `chalk_sfu`. Empty or missing allows none even with the switch on; `*` allows every Space (staging only). A Space outside the list starts on Cloudflare even if its Space or Tenant says `chalk_sfu`. Changing it affects only new Episodes. Keep the real list in the private API settings. Production keeps the switch off until the M7 canary.
 
-## Which plane a new Episode gets
+## Pausing new Episodes
 
-The first rule that names a plane wins:
-
-1. The kill switch sends every new Episode to Cloudflare, and live Episodes keep their node. It is stored in the database, so `media-settings new-episodes --state off --operator <name> --reason <text>` takes effect on the next new Episode with no API restart, and `--state on` puts it back. Every flip writes an audit row (who, why, before, after). Without `--state` the command shows the live value. `CHALK_SFU_NEW_EPISODES=off` is a deploy-time floor under it: while the variable says off, the switch is off whatever the database says.
-2. The Space's own setting (`media_plane_setting`), if it has one.
-3. The Tenant's `default_media_plane`, when it names a known plane. Before operators owned it any caller could write it unchecked, so a value counts only if it parses, and `chalk_sfu` counts only if an operator wrote it (`tenants.default_media_plane_approved`). The migration left every existing row unapproved; `media-settings backfill --dry-run` reports how many Tenants hold an unapproved `chalk_sfu` or an unknown value, and `set --tenant` clears or re-sets them.
-4. `CHALK_DEFAULT_MEDIA_PLANE`.
-
-The guards still apply after that: a Space outside the allowlist, an SDK that cannot run the Chalk SFU, and a pool with no room all send the Episode to Cloudflare, and an Episode that already has a binding keeps it. A Tenant on its own Cloudflare credentials, or with media disabled, never gets the Chalk SFU, whoever chose it.
-
-**Rollback rule.** The previous release does not read `media_plane_setting` or `default_media_plane_approved`, and keeps writing `spaces.media_plane` and `tenants.default_media_plane`. So a stored choice is authoritative only while the legacy column written beside it still holds the same value. After a rollback and redeploy, a `media_plane` the older release wrote is the Space's choice. A Tenant default is approved only by the operator command: a trigger clears the approval whenever the default changes and refuses any other write of the flag unless the transaction sets `chalk.operator_write` (only `media-settings` does), so no sequence of writes from the API or the older release can create or restore an approval.
-
-Only an operator sets `chalk_sfu`. The public API refuses it with 403 `space.media_plane_not_permitted` or `tenant.media_plane_not_permitted` and accepts `null` (inherit) or the deployment's default plane. Proof runs name no plane in Create Space: the deployment fills it (`CHALK_NEW_SPACE_MEDIA_PLANE`), the operator sets the Tenant default, or `CHALK_CANARY_SPACE_ID` names a Space moved with `media-settings`. A proof that runs both planes (`prod:latency`) takes `CHALK_PROOF_SPACE_ID_<PLANE>` for each moved Space and stops at once when a Space is not on the plane it asked for.
-
-The operator command runs from `apps/api` with the API's own database and plane settings (without `CHALK_DEFAULT_MEDIA_PLANE`, `--plane inherit` is refused):
-
-```sh
-CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
-CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane chalk_sfu --operator <name> --reason <text>
-CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings backfill --dry-run
-```
-
-Leave out `--space` to act on the Tenant's default. `set` and `new-episodes --state` refuse to run without `--operator` and `--reason`; `get` and `backfill` take neither. Each change prints one JSON line with the stored before and after values and a `change_trace_id`, and the database writes one `media_plane_changes` row (actor, reason, scope, old and new plane, trace) in the same transaction. The API announces it as the `media_plane.changed` event within about 10 seconds (see `docs/observability.md`). A change to the plane it already has prints "unchanged: no audit row" and writes nothing. An undo is just another `set` with its own reason, and so is a Space the public API changed: its row names the credential (`api_key:<id>`). `backfill` moves Spaces that stored `chalk_sfu` before the setting existed, and are on the allowlist, onto the setting; Tenants with their own credentials or media disabled are skipped, and the write is conditional so a Space whose owner pinned Cloudflare after the listing is left alone. A setting-only change sends no `space.updated` webhook, because the Space's `media_plane` payload does not change.
-
-### Send one Space back to Cloudflare, and return it
-
-The Space setting is the kill switch for one Space. It moves the Space's next Episodes to Cloudflare (`cf_sfu`) and back with no deploy and no API reload. To stop every new Episode instead, run `media-settings new-episodes --state off --operator <name> --reason <text>`; it needs no reload. Use the Space setting first.
-
-**Who runs it.** A Chalk operator holding the API's database and plane settings, because `media-settings` is the only way to set `chalk_sfu` and the API has no operator principal. A Tenant owner with the Tenant API key can do the one-way half with `PATCH /v1/tenants/{tenant_id}/spaces/{space_id}` and `{"media_plane":"cf_sfu"}`, but the return always goes through an operator.
-
-**The rule that shapes the steps.** The flip changes only Episodes that start after it. An Episode keeps the plane its binding pinned, so guests who reload and rejoin a live Episode land on the same plane. Moving a live call means ending the Episode and starting a new one.
-
-1. Run `get` and confirm the IDs. `effective_plane` is what the next Episode gets and `selected_by` is the rule that picks it; `kill_switch_on` and `on_allowlist` explain it when it is not what you expect.
-2. Run `set ... --plane cf_sfu --operator <name> --reason <incident>`. The audit row keeps who, why and the before and after planes, so the printed line needs no copy; note its `change_trace_id` in the incident log. Use `cf_sfu`, not `inherit`, because `inherit` hands the choice to the Tenant and deployment defaults, which may be `chalk_sfu`.
-3. If a call is live and must move, end its Episode through the owner API (`POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end`) or the host's End button, then start a new one. Guests in the ended Episode see the call end (`left` with `episodeEnded: true`); a guest who opens the invite link joins the new Episode on Cloudflare. With no live call, skip this step.
-4. Verify: `get` shows `cf_sfu`, and a new Episode's join grant reports `media.provider` as `cloudflare_sfu` with audio and video. `media-provider-inventory` counts live Episodes by provider.
-5. To return, run `set ... --plane chalk_sfu` and repeat step 3. The new Episode binds the Chalk SFU only when the Space is on the allowlist, the SDK declares `chalk_sfu` and a node has room; otherwise it starts on Cloudflare (overflow on) or the create fails. Treat the return as done when the new join grant reports `media.provider` as `chalk_sfu`, not when `get` says so.
-
-## Client sunset
-
-An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is Cloudflare-only, so a new Episode in an allowlisted Space starts on Cloudflare for it. `CHALK_SFU_CLIENT_SUNSET` (an RFC 3339 instant; invalid stops the API at startup) can end that by answering `409 media.client_unsupported` from that instant, but no sunset is planned: Chalk has no outside clients, and the only users, our sister companies, stay off Chalk until the Chalk SFU is stable. The setting exists and stays unset. Hosted MCP tools count as capable; a Space off the allowlist and a Tenant with media disabled are unaffected, and a live Episode keeps its provider. Each refusal logs `event=chalk_sfu.client_refused reason=client_sunset`, which is how to count who still runs old builds. To undo, unset the variable and redeploy.
+`media-settings new-episodes --state off --operator <name> --reason <text>`
+stops new Episodes without interrupting live ones. Use `--state on` to resume.
+`CHALK_SFU_NEW_EPISODES=off` also pauses them until the deploy-time setting changes.
 
 ## Run the canary
 
-Move internal Spaces one at a time: add the Space ID to `CHALK_SFU_ALLOWED_SPACES`, redeploy the API, then run `media-settings set --plane chalk_sfu` for that Space. To roll a Space back run it with `--plane inherit` (or `cf_sfu`); live Episodes finish on the node and new Episodes use Cloudflare. To stop every new Chalk SFU Episode at once, run `media-settings new-episodes --state off --operator <name> --reason <text>`; no setting needs to change, and `--state on` puts everything back.
-
-`pnpm prod:canary` joins two real SDK clients per trial, measures time to render audio and video, blocks UDP to the media provider, proves video stopped, restores it and measures recovery, once with the first client's microphone on and once muted. Playwright's offline mode does not stop established WebRTC media, so you supply the commands that block and restore the path. Run it once per provider from the same machine so the reports compare, using that provider's media address:
+`pnpm prod:canary` joins two real SDK clients per trial, measures time to render audio and video, blocks UDP to the media provider, proves video stopped, restores it and measures recovery, once with the first client's microphone on and once muted. Playwright's offline mode does not stop established WebRTC media, so you supply the commands that block and restore the path. Use the Chalk SFU media address:
 
 ```sh
 export CHALK_CANARY_FAULT_DOWN='sudo iptables -I OUTPUT -p udp -d <media address> -j DROP'
@@ -118,7 +77,7 @@ export CHALK_CANARY_FAULT_UP='sudo iptables -D OUTPUT -p udp -d <media address> 
 CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
 ```
 
-A report passes when every join renders within 10 seconds of the second client's join call, every short fault recovers rendered media within 15 seconds without a manual toggle, and recovery never turns a muted microphone back on. `CHALK_CANARY_SPACE_ID` reuses one allowlisted Space.
+A report passes when every join renders within 10 seconds of the second client's join call, every short fault recovers rendered media within 15 seconds without a manual toggle, and recovery never turns a muted microphone back on. `CHALK_CANARY_SPACE_ID` reuses one Space.
 
 ## Watch the cohort
 

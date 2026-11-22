@@ -3,13 +3,13 @@ import { launchGuests } from "./media.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
 import { sampleGuest } from "./long-call.mjs";
 import { judgeCall, longestGaps } from "./deploy-hold-criteria.mjs";
-import { check, save } from "./runtime.mjs";
+import { check, mediaPlane, save } from "./runtime.mjs";
 
 const sampleIntervalMs = 500;
 const settleMs = 20_000;
 const tailMs = 90_000;
 const guestsPerCall = 3;
-const calls = (process.env.DEPLOY_HOLD_PLANES ?? "chalk_sfu,cf_sfu,cf_sfu").split(",");
+const callCount = 3;
 const startedFile = process.env.DEPLOY_HOLD_STARTED_FILE;
 const doneFile = process.env.DEPLOY_HOLD_DONE_FILE;
 const maxHoldMs = Number(process.env.DEPLOY_HOLD_MAX_MS ?? 25 * 60_000);
@@ -28,13 +28,13 @@ export async function deployHoldProof(run, receiver) {
   check(startedFile && doneFile, "DEPLOY_HOLD_STARTED_FILE and DEPLOY_HOLD_DONE_FILE are required");
   check(!(await exists(doneFile)), `${doneFile} exists from an earlier run: remove it before the proof starts`);
   const joined = [];
-  for (const [index, plane] of calls.entries()) {
-    const space = await createSpace(run, plane);
-    check(!joined.some((call) => call.space.id === space.id), `Calls ${index} and ${index + 1} would share Space ${space.id}: unset the pinned Space variable for ${plane}, or give each plane one call`);
+  for (let index = 0; index < callCount; index++) {
+    const space = await createSpace(run);
+    check(!joined.some((call) => call.space.id === space.id), `Calls ${index} and ${index + 1} would share Space ${space.id}: unset the pinned Space variable`);
     const { episode, end } = await createEpisode(run, space);
-    const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestsPerCall, { plane });
-    joined.push({ index, plane, space, episode, guests, end, ticks: [] });
-    console.log(`Call ${index + 1}: ${guestsPerCall} guests on ${plane}`);
+    const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestsPerCall);
+    joined.push({ index, space, episode, guests, end, ticks: [] });
+    console.log(`Call ${index + 1}: ${guestsPerCall} guests on ${mediaPlane}`);
   }
   const startedAtMs = Date.now();
   let deployStartedAtMs = null;
@@ -73,7 +73,7 @@ export async function deployHoldProof(run, receiver) {
     const offLive = call.ticks.flatMap((tick) => tick.guests.map((sample, guest) => ({ t: tick.t, guest, live: sample.reachable && sample.status === "live" }))).filter((entry) => !entry.live);
     results.push({
       call: call.index + 1,
-      plane: call.plane,
+      plane: mediaPlane,
       survived: failures.length === 0,
       failures,
       longestAudioGapMs: worst.ms,
@@ -91,7 +91,7 @@ export async function deployHoldProof(run, receiver) {
     longestAudioGapMs: Math.max(...results.map((result) => result.longestAudioGapMs)),
     results,
   };
-  await save(`${run.directory}/deploy-hold.json`, { evidence, ticks: joined.map((call) => ({ plane: call.plane, ticks: call.ticks })) });
+  await save(`${run.directory}/deploy-hold.json`, { evidence, ticks: joined.map((call) => ({ plane: mediaPlane, ticks: call.ticks })) });
   console.log(`DEPLOY_HOLD_RESULT ${JSON.stringify(evidence)}`);
   for (const call of joined) await call.end();
   for (const call of joined) for (const page of call.guests.pages) await page.context().close();

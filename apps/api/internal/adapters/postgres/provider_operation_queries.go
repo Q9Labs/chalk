@@ -25,7 +25,6 @@ func newProviderOperationQueries(db providerOperationDBTX) *providerOperationQue
 }
 
 type providerOperationQuerier interface {
-	ListReceiveHealthEpisodes(context.Context, int) ([]mediapublications.ReceiveHealthEpisode, error)
 	LockPublicationParticipant(context.Context, publicationParticipantIdentityParams) (mediapublications.PublicationParticipant, error)
 	GetProviderOperationReceipt(context.Context, getProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	InsertProviderOperationReceipt(context.Context, insertProviderOperationReceiptParams) (providerOperationReceiptRow, error)

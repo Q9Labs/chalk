@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,7 +43,7 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 			if getErr != nil {
 				return spaces.Space{}, fmt.Errorf("get space create replay: %w", getErr)
 			}
-			if !bytes.Equal(existing.RequestFingerprint, input.RequestFingerprint[:]) {
+			if !input.MatchesRequestFingerprint(existing.RequestFingerprint) {
 				return spaces.Space{}, spaces.ErrIdempotencyConflict
 			}
 			if !existing.SpaceID.Valid {

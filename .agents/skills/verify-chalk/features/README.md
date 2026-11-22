@@ -6,7 +6,7 @@ This directory is the maintained source for verifying the user-facing behavior o
 
 - The shared harness for the two-person journeys is `.agents/skills/verify-chalk/scripts/journey.mjs`: the host starts a call from `/space/` and the guest opens the host's link.
 - Launch with `pnpm dev` as described in [SKILL.md](../SKILL.md) and require `pnpm dev:doctor` to report `"ok": true`.
-- The seed has one tenant and one Space with the `cf_sfu` media plane and an enabled public invite (`invite.path` in .private/chalk-dev/seed.json). The user is a guest: arrive through the invite, type a name, join.
+- The seed has one tenant and one Space with the `chalk_sfu` media plane and an enabled public invite (`invite.path` in .private/chalk-dev/seed.json). The user is a guest: arrive through the invite, type a name, join.
 - Give each participant its own browser context and fake camera and microphone fixture number from `scripts/web-proof/media.mjs` (`webMediaFixture(<n>)` as a context init script).
 
 ## Driving conventions

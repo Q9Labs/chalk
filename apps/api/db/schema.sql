@@ -4,23 +4,12 @@ create table tenants (
     id uuid primary key,
     name text not null,
     default_region text,
-    -- cf_sfu
+    -- Retained for the public contract and rollback; new media uses chalk_sfu.
     default_media_plane text,
     -- Set only by the operator command; a trigger clears it whenever the default changes otherwise.
     default_media_plane_approved boolean not null default false,
-    -- {
-    --   "enabled": true,
-    --   "provider": "cf_sfu",
-    --   "mode": "chalk_managed" | "tenant_managed",
-    --   "cloudflare": {
-    --     "account_id": "cloudflare-account-id",
-    --     "sfu": {
-    --       "enabled": true,
-    --       "app_id": "realtime-app-id",
-    --       "app_secret": string
-    --     }
-    --   }
-    -- }
+    -- A Tenant can disable media with {"enabled": false}.
+    -- Previous-release provider documents can remain stored for rollback.
     media_plane_provider_config jsonb,
     ai_provider_config jsonb,
     -- {
@@ -230,7 +219,7 @@ create table spaces (
     name text not null,
     tenant_id uuid not null references tenants(id),
     slug text not null,
-    -- cf_sfu
+    -- chalk_sfu for new Spaces; historical snapshots retain their original binding.
     media_plane text not null,
     -- The Space's own plane choice, with the media_plane value it was written against; null inherits the Tenant, then the platform default.
     media_plane_setting_written text check (media_plane_setting_written in ('cf_sfu', 'chalk_sfu')),

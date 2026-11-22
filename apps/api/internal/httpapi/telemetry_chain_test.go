@@ -47,7 +47,7 @@ func chainSubject(t *testing.T) accessgrants.Subject {
 		EpisodeID:             parse("0f8fad5b-d9cb-469f-a165-70867728950e"),
 		ParticipantID:         parse("a1000000-0000-4000-8000-000000000001"),
 		ParticipantGeneration: 1,
-		Provider:              accessgrants.ProviderCloudflareSFU,
+		Provider:              accessgrants.ProviderChalkSFU,
 		ConnectionID:          "pm-chain-0001",
 	}
 }
@@ -226,7 +226,7 @@ func seedChainEpisode(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Sub
 		}
 		write(`delete from tenants where id = $1::text::uuid`, tenant)
 	})
-	plane := mediaplane.ProviderCloudflareSFU.SettingName()
+	plane := mediaplane.ProviderChalkSFU.SettingName()
 	write(`insert into spaces(id, tenant_id, name, slug, media_plane) values ($1::text::uuid, $2::text::uuid, 'Chain', 'chain', $3)`, space, tenant, plane)
 	write(`insert into episodes(id, tenant_id, space_id, status, config_snapshot)
 	       values ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'active', jsonb_build_object('media_plane_binding', jsonb_build_object('provider', $4::text)))`, episode, tenant, space, plane)

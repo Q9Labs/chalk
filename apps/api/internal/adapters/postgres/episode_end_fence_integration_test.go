@@ -47,7 +47,7 @@ func TestTenantEndWithExistingPublicationFenceReturnsControlBusy(t *testing.T) {
 		args  []any
 	}{
 		{`insert into tenants(id, name) values($1, 'Episode end regression')`, []any{tenantID.Bytes()}},
-		{`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Episode end regression', $2, $3, 'cf_sfu')`, []any{spaceID.Bytes(), tenantID.Bytes(), "end-fence-" + spaceID.String()}},
+		{`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Episode end regression', $2, $3, 'chalk_sfu')`, []any{spaceID.Bytes(), tenantID.Bytes(), "end-fence-" + spaceID.String()}},
 		{`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{}'::jsonb)`, []any{episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()}},
 		{`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes) values($1, $2, $3, '{}'::jsonb, 1, $4, 2)`, []any{tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), make([]byte, 32)}},
 		{`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role) values($1, $2, $3, $4, '{publishAudio}', 1, 'leaving', 'collaborator')`, []any{participantID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes()}},

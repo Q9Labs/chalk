@@ -1,35 +1,23 @@
 import { postToOncall } from "../oncall-alert.mjs";
 
-export const EPISODE_THRESHOLD = 1;
 const WINDOW_MS = 10 * 60 * 1000;
 const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
-// api_unpulled exists only on Cloudflare SFU and goes away with it. The client report is provider-neutral and
-// carries the provider from the participant's media credential; the query tags it onto the signal name.
-export const PROVIDERS = ["cloudflare_sfu", "chalk_sfu"];
-// A signal pages on EPISODE_THRESHOLD events unless it sets minParticipants: then it pages only when that many distinct
-// participants reported it. One client can repeat or mis-report; the server-side sampler has no such doubt.
-// Reports without a participant hash never count as a participant.
-export const SIGNALS = [
-  { name: "api_unpulled", event: "media.listener_publication_unpulled" },
-  { name: "client_audio_stuck", event: "sdk.telemetry", type: "audio_receive_stuck", minParticipants: 2 },
-];
+const CLIENT_SIGNAL = "client_audio_stuck:chalk_sfu";
+const MIN_PARTICIPANTS = 2;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const evidenceField = (field) => `coalesce(tostring(evidence.${field}), tostring(column_ifexists('attributes.${field}', '')))`;
 // An SDK from before client telemetry replays its earlier events in every report, so a row from the old route counts only
 // when its report was sent for this type. A current SDK sends each event once.
 const typeClause = (type) => ` and report_type == ${literal(type)} and (isempty(legacy_route) or trigger == ${literal(type)})`;
-const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.type ? typeClause(signal.type) : ""})`;
-
 export function query(dataset) {
   return `[${literal(dataset)}]
-| where ['service.name'] == 'chalk-api' and ['attributes.event'] in (${SIGNALS.map((s) => literal(s.event)).join(", ")})
+| where ['service.name'] == 'chalk-api' and ['attributes.event'] == 'sdk.telemetry'
 | extend evidence=parse_json(iff(body startswith 'chalk-evidence-v2:', substring(body, 18), '{}'))
 | extend report_type=${evidenceField("type")}, legacy_route=${evidenceField("legacy_route")}, trigger=${evidenceField("trigger")}, provider_hint=${evidenceField("provider")}, participant=${evidenceField("participant_id_hash")}
-| where ${SIGNALS.map(predicate).join(" or ")}
-| extend provider=iff(provider_hint in (${PROVIDERS.map(literal).join(", ")}), provider_hint, 'unknown')
-| extend signal=case(${SIGNALS.map((s) => `${predicate(s)}, ${literal(s.name)}`).join(", ")}, '')
-| extend signal=iff(signal == 'client_audio_stuck', strcat(signal, ':', provider), signal)
+| where ['attributes.event'] == 'sdk.telemetry'${typeClause("audio_receive_stuck")}
+| where provider_hint == 'chalk_sfu'
+| extend signal=${literal(CLIENT_SIGNAL)}
 | summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant
 | summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal
 | project episode_id, signal, events, participants`;
@@ -79,15 +67,9 @@ export function mergeEpisodes(rows) {
     });
 }
 
-// "client_audio_stuck:chalk_sfu" follows the rule of "client_audio_stuck"; an unlisted signal pages on any event.
-function pages(signal, { events, participants }) {
-  const minParticipants = SIGNALS.find((s) => signal === s.name || signal.startsWith(`${s.name}:`))?.minParticipants;
-  return minParticipants ? participants >= minParticipants : events >= EPISODE_THRESHOLD;
-}
-
 export function evaluate(rows, { startTime, endTime }) {
   return mergeEpisodes(rows)
-    .filter((e) => Object.entries(e.counts).some(([signal, events]) => pages(signal, { events, participants: e.participants[signal] })))
+    .filter((e) => e.participants[CLIENT_SIGNAL] >= MIN_PARTICIPANTS)
     .map((e) => ({
       key: `listener-audio:chalk:${e.episode_id}`,
       detail: `Listener audio missing. ${Object.entries(e.counts)

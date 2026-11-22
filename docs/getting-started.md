@@ -75,26 +75,6 @@ pnpm hooks:install
 
 The repository attributes keep text files as LF. `core.longpaths` helps Windows check out nested package paths. Keep the checkout outside OneDrive and other synced folders.
 
-## Set the non-production SFU credential
-
-Ask the Chalk lead for the shared non-production Cloudflare SFU credential. Do not create an account or use production keys. Set both variables in the terminal that runs Chalk.
-
-On macOS or Linux:
-
-```sh
-export CHALK_CLOUDFLARE_REALTIME_APP_ID='<shared app id>'
-export CHALK_CLOUDFLARE_REALTIME_APP_SECRET='<shared app secret>'
-```
-
-On PowerShell:
-
-```powershell
-$env:CHALK_CLOUDFLARE_REALTIME_APP_ID = '<shared app id>'
-$env:CHALK_CLOUDFLARE_REALTIME_APP_SECRET = '<shared app secret>'
-```
-
-Q9 staff with an authenticated 1Password CLI need no variables. Chalk selects the single non-production Chalk SFU API credential with `app_id` and `app_secret`. Missing or ambiguous credentials stop startup. Never commit the values.
-
 ## Start the stack
 
 Check the Docker engine, then start Chalk:
@@ -110,6 +90,8 @@ Wait for `Chalk dev ready`. The first run downloads images and dependencies and 
 The core profile starts Postgres, Redis, API, and Sync containers. SDK watchers and the web server run on the host. Source changes reload the affected services. Go module/build caches and Mix `deps`/`_build` stay in named Docker volumes. Host builds never share those outputs.
 
 All default host listeners are loopback-only. The API reads dashboard artifacts from a dedicated read-only mount, served only inside its container. It does not connect to the host web server. Setting `PUBLIC_ORIGIN` explicitly opts the web dev server into listening on all interfaces for a reverse proxy or Orb. That exposes the passwordless fixture dashboard to reachable peers; use this only in an isolated development environment.
+
+For calls from another machine, set `CHALK_DEV_SFU_ANNOUNCE_IP` to the dev host's reachable IPv4 address in addition to setting the HTTPS `PUBLIC_ORIGIN`. This publishes only the SFU media port on all IPv4 interfaces, over UDP and TCP. Allow that port (`CHALK_DEV_SFU_MEDIA_PORT`, default `50000`) through the firewall to the test clients, and forward it unchanged if using NAT. The HTTPS proxy does not carry WebRTC media. Leave the announce address unset for same-machine browsers and Orbs that expose only the web origin.
 
 Backend edits keep the web server running. Sync fetches dependencies at startup and when `apps/sync/mix.exs` or `apps/sync/mix.lock` changes. Source-only edits compile incrementally.
 

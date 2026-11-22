@@ -351,7 +351,7 @@ func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.
 // that names one connection. Both SFU providers do, and their names match the
 // accessgrants vocabulary.
 func grantProvider(provider mediaplane.Provider) bool {
-	return provider == mediaplane.ProviderCloudflareSFU || provider == mediaplane.ProviderChalkSFU
+	return provider == mediaplane.ProviderChalkSFU
 }
 
 func accessGrantScope(request issueAccessGrantRequest) mediaplane.Scope {

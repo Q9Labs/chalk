@@ -3,7 +3,7 @@
 (* Does every listener eventually hear every publication that stays on?    *)
 (*                                                                         *)
 (* One PUBLISHER (a microphone), SYNC (owns the publication list and its   *)
-(* versions), the API with the SFU (owns the Cloudflare ledger and calls),  *)
+(* versions), the API with the SFU (owns the publication ledger and calls),  *)
 (* and LISTENERS. Two repair mechanisms are modelled and can be switched   *)
 (* off one by one (the mutants):                                           *)
 (*   a. the listener heal loop in the client: compare desired publications *)
@@ -53,7 +53,7 @@ CONSTANTS
                           \* "grant" = proposed: pause only if Sync has seen this on-revision and its grant is off (moderation);
                           \* "none" = never pause on recovery
   LazyClose,              \* TRUE = retiring a publication leaves its track at the SFU until a separate close call
-  SfuExpiresStale         \* TRUE = the SFU eventually expires a track that gets no packets (Cloudflare: 30 s)
+  SfuExpiresStale         \* TRUE = the SFU eventually expires a track that gets no packets
 
 \* Listeners are interchangeable. Used for safety runs only: symmetry is unsound for liveness.
 ListenerSymmetry == Permutations(Listeners)
@@ -320,7 +320,7 @@ HealFlatDrop(l, g) ==
 ----------------------------------------------------------------------------
 (* SFU *)
 
-\* Cloudflare expires a track that gets no packets.
+\* The SFU may expire a track that gets no packets.
 SfuGc(g) ==
   /\ SfuExpiresStale /\ g \in stale
   /\ sfu' = sfu \ {g} /\ stale' = stale \ {g}

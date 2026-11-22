@@ -195,18 +195,6 @@ func listPublications(ctx context.Context, publications mediapublications.Regist
 }
 
 func pullOrPushTracks(ctx context.Context, request sfuTracksEndpointRequest, subject accessgrants.Subject, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
-	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
-	var capture mediapublications.ListenerPullCapture
-	for _, track := range request.Body.Tracks {
-		if track.Location == "remote" {
-			if observer, ok := publications.(interface {
-				CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
-			}); ok {
-				capture = observer.CaptureListenerPull(episode)
-			}
-			break
-		}
-	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		Scope:              sfuScope(ctx),
@@ -215,13 +203,6 @@ func pullOrPushTracks(ctx context.Context, request sfuTracksEndpointRequest, sub
 		SpaceID:            request.SpaceID.String(),
 		EpisodeID:          request.EpisodeID.String(),
 	})
-	if observer, ok := publications.(mediapublications.ListenerPullObserver); ok {
-		observer.ObserveListenerPull(ctx, mediapublications.ListenerPullInput{
-			ReceiveHealthEpisode: episode,
-			ParticipantID:        request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
-			ConnectionID: request.Body.ConnectionID, Capture: capture, Requested: request.Body.Tracks, Response: response, Err: err,
-		})
-	}
 	confirmFailedRemoteTracks(ctx, service, publications, request, response, err)
 	if err != nil {
 		observation, observed := remoteTrackObservationForFailure(request, err)
@@ -391,8 +372,8 @@ func logRemoteTrackResponse(ctx context.Context, response mediaplane.TracksRespo
 			descriptionType = "unknown"
 		}
 	}
-	slog.InfoContext(ctx, "Cloudflare SFU remote track response",
-		"event", "cloudflare_sfu.remote_track_response",
+	slog.InfoContext(ctx, "Chalk SFU remote track response",
+		"event", "chalk_sfu.remote_track_response",
 		"partial", partial,
 		"requested_track_count", len(observation.Requested),
 		"missing_track_count", len(observation.Missing),

@@ -1,8 +1,9 @@
 import { writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { writeJsonAtomic } from "./json-file.mjs";
 import { runChecked } from "./chalk-resources.mjs";
-import { cloudflareSfuPlane } from "./config.mjs";
+import { chalkSfuPlane } from "./config.mjs";
 
 export const dashboardServiceScopes =
   "tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete";
@@ -30,39 +31,49 @@ export function dashboardOAuthBindings(config) {
 }
 
 export async function seedDashboard({ config, serviceToken, systemToken }) {
-  async function api(path, body, { method = body ? "POST" : "GET", token = serviceToken } = {}) {
-    const response = await fetch(`${config.urls.api}/v1${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), ...(config.localOrbSfu ? { "X-Chalk-Media-Providers": config.mediaPlane } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) throw new Error(`Local dashboard seed ${path}: HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
-    return response.json();
+  async function api(path, body, { method = body ? "POST" : "GET", token = serviceToken, retryMedia = false } = {}) {
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Chalk-Media-Providers": chalkSfuPlane };
+    const deadline = Date.now() + 45_000;
+    for (;;) {
+      const response = await fetch(`${config.urls.api}/v1${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (response.ok) return response.json();
+      if (retryMedia && response.status === 503 && Date.now() < deadline) {
+        const problem = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        if (problem?.error?.code === "media.unavailable") {
+          // A cold build on the same host can briefly close the SFU admission guard.
+          console.log("Local dashboard seed: media temporarily unavailable; retrying in 5 seconds");
+          await delay(5000);
+          continue;
+        }
+      }
+      throw new Error(`Local dashboard seed ${path}: HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    }
   }
   async function sql(statement) {
     await runChecked("docker", ["exec", "-e", "PGOPTIONS=-c chalk.entry_writer=1", config.postgres.container, "psql", "-U", "postgres", "-d", config.databaseName || "chalk_dev", "-v", "ON_ERROR_STOP=1", "-c", statement], { cwd: config.root });
   }
-  const mediaPlane = config.mediaPlane;
-  const tenantMedia = mediaPlane === cloudflareSfuPlane ? { default_media_plane: mediaPlane, media_plane_provider_config: { enabled: true, provider: mediaPlane, mode: "chalk_managed" } } : { default_media_plane: null };
   const owner = await api("/tenants", {
     name: "Ada's workspace",
     external_id: "google:local:fixture_ada",
     cors_allowed_origins: [...new Set([config.urls.web, config.publicOrigin || config.urls.web])],
-    ...tenantMedia,
   });
-  if (config.orb && (owner.default_media_plane ?? null) !== tenantMedia.default_media_plane) {
-    await api(`/tenants/${owner.id}`, tenantMedia, { method: "PATCH", token: systemToken });
-  }
   const artifacts = {};
   const spaces = await api(`/tenants/${owner.id}/spaces?page_size=100`);
   for (const [index, name] of ["Product planning", "Design review", "Weekly catch-up"].entries()) {
-    const slug = config.localOrbSfu ? `local-dashboard-chalk-sfu-${index}` : `local-dashboard-${index}`;
-    const space = spaces.spaces.find((item) => item.slug === slug) || (await api(`/tenants/${owner.id}/spaces`, { name, slug, media_plane: mediaPlane, recording_policy: "disabled", transcription_policy: "disabled" }));
+    const slug = `local-dashboard-chalk-sfu-${index}`;
+    const space = spaces.spaces.find((item) => item.slug === slug) || (await api(`/tenants/${owner.id}/spaces`, { name, slug, recording_policy: "disabled", transcription_policy: "disabled" }));
     const episodes = await api(`/tenants/${owner.id}/spaces/${space.id}/episodes?page_size=1`);
     let episode = episodes.episodes[0];
     if (!episode || episode.status !== "ended") {
-      episode ||= await api(`/tenants/${owner.id}/spaces/${space.id}/episodes`, {});
+      episode ||= await api(`/tenants/${owner.id}/spaces/${space.id}/episodes`, {}, { retryMedia: true });
       const recordingId = randomUUID();
       const transcriptId = randomUUID();
       const age = index + 1;

@@ -1,6 +1,6 @@
 # Chalk
 
-Chalk is an open-source monorepo for low-latency real-time collaboration and communication on Cloudflare Realtime. A Space is the durable place where Users and Agents participate; each bounded run is an Episode that can leave Recording and Transcript artifacts. The repository contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
+Chalk is an open-source monorepo for low-latency real-time collaboration and communication with the Chalk SFU. A Space is the durable place where Users and Agents participate; each bounded run is an Episode that can leave Recording and Transcript artifacts. The repository contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
 
 ## Project documents
 

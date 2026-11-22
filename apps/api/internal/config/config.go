@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -16,10 +15,9 @@ type Config struct {
 	TenantLimits                    tenantlimits.Config
 	API                             APIConfig
 
-	Capabilities       CapabilityConfig
-	CloudflareRealtime CloudflareRealtimeConfig
-	ChalkSFU           ChalkSFUConfig
-	DefaultMediaPlane  mediaplane.Provider
+	Capabilities CapabilityConfig
+	TURN         CloudflareTURNConfig
+	ChalkSFU     ChalkSFUConfig
 	// NewSpace holds what a Create Space request gets for the fields it omits.
 	// Each field is empty when new Spaces keep the existing default.
 	NewSpace          spaces.NewSpaceDefaults
@@ -53,7 +51,7 @@ func Load() (Config, error) {
 	if err := cfg.loadCredentials(environment); err != nil {
 		return Config{}, err
 	}
-	if err := cfg.loadMedia(environment); err != nil {
+	if err := cfg.loadMedia(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.loadStorage(); err != nil {

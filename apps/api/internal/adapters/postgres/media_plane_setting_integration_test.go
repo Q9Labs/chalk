@@ -1,11 +1,9 @@
 package postgres
 
 import (
-	"encoding/json"
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -56,67 +54,6 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 	return tenant, space
 }
 
-// The Episode creation transaction reads the locked Space row and the Tenant policy, then
-// binds the Episode. This runs that read for every combination and reads the stored binding.
-func TestEpisodeCreationBindsThePlaneTheSettingsSelect(t *testing.T) {
-	pool := settingsPool(t)
-	everyone, err := spaces.ParseChalkSFUAllowlist([]string{"*"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cf, own := "cf_sfu", "chalk_sfu"
-	cases := []struct {
-		name          string
-		tenantDefault *string
-		setting       *string
-		stored        string
-		paused        bool
-		allowed       bool
-		want          string
-		by            string
-	}{
-		{"nothing set", nil, nil, cf, false, true, cf, "default"},
-		{"tenant sets the Chalk SFU", &own, nil, cf, false, true, own, "tenant"},
-		{"space sets the Chalk SFU", nil, &own, own, false, true, own, "space"},
-		{"space sets Cloudflare under a tenant on the Chalk SFU", &own, &cf, cf, false, true, cf, "space"},
-		{"space sets the Chalk SFU under a tenant on Cloudflare", &cf, &own, own, false, true, own, "space"},
-		{"kill switch beats the space", nil, &own, own, true, true, cf, "kill_switch"},
-		{"kill switch beats the tenant", &own, nil, cf, true, true, cf, "kill_switch"},
-		{"allowlist stays an AND", &own, &own, own, false, false, cf, "allowlist"},
-		{"a Space stored before the setting existed", nil, nil, own, false, true, own, "space"},
-		{"that Space behind the kill switch", nil, nil, own, true, true, cf, "kill_switch"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			tenant, space := seedSettingsSpace(t, pool, c.tenantDefault, c.setting, c.stored)
-			policy := spaces.PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, NewEpisodesPaused: c.paused}
-			if c.allowed {
-				policy.Allowed = everyone
-			}
-			repository := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, policyResolver{policy})
-			var stored []byte
-			err := repository.transaction(t.Context(), func(queries *sqlc.Queries, tx pgx.Tx) error {
-				row, err := queries.LockTenantSpaceForUpdate(t.Context(), sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(tenant), ID: uuid(space)})
-				if err != nil {
-					return err
-				}
-				stored, err = repository.resolveEpisodeMediaBinding(t.Context(), queries, tenant, row, mediaplane.ClientProviders{})
-				return err
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			var binding struct {
-				Provider   string `json:"provider"`
-				SelectedBy string `json:"selected_by"`
-			}
-			if err := json.Unmarshal(stored, &binding); err != nil || binding.Provider != c.want || binding.SelectedBy != c.by {
-				t.Fatalf("binding = %s (%v), want provider %s selected by %s", stored, err, c.want, c.by)
-			}
-		})
-	}
-}
-
 // Changing a setting after an Episode started leaves the Episode's stored binding as it was.
 func TestSettingChangesLeaveAStoredBindingAlone(t *testing.T) {
 	pool := settingsPool(t)
@@ -129,7 +66,7 @@ func TestSettingChangesLeaveAStoredBindingAlone(t *testing.T) {
 	mustExec(t, pool, `insert into episodes (id,status,space_id,tenant_id,config_snapshot) values ($1,'active',$2,$3,'{"media_plane_binding":{"provider":"chalk_sfu","node":"node-a","generation":3}}'::jsonb)`, episode.Bytes(), space.Bytes(), tenant.Bytes())
 
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	cloudflare := mediaplane.ProviderCloudflareSFU
+	cloudflare := mediaplane.Provider("cf_sfu")
 	legacy := "cf_sfu"
 	if _, err := repository.UpdateSpace(t.Context(), tenant, space, spaces.UpdateSpaceInput{
 		MediaPlane:        utilities.OptionalString{Set: true, Value: &legacy},
@@ -157,7 +94,7 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	pool := settingsPool(t)
 	tenant, space := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
+	own := mediaplane.ProviderChalkSFU
 
 	got, err := repository.GetSpace(t.Context(), tenant, space)
 	if err != nil || got.MediaPlaneSetting != nil {
@@ -184,9 +121,9 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	}
 
 	// An update that leaves the field out must not touch it.
-	set(&cloudflare, "cf_sfu")
+	set(&own, "chalk_sfu")
 	got, err = repository.GetSpace(t.Context(), tenant, space)
-	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != cloudflare {
+	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != own {
 		t.Fatalf("setting a plane equal to the stored media_plane was dropped: %v, %v", got.MediaPlaneSetting, err)
 	}
 	name := "Renamed"
@@ -194,7 +131,7 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err = repository.GetSpace(t.Context(), tenant, space)
-	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != cloudflare {
+	if err != nil || got.MediaPlaneSetting == nil || *got.MediaPlaneSetting != own {
 		t.Fatalf("unrelated update changed the setting: %v, %v", got.MediaPlaneSetting, err)
 	}
 
@@ -327,8 +264,8 @@ func TestAnOlderReleaseWritingMediaPlaneWinsOverTheStoredSetting(t *testing.T) {
 	if got := setting(space); got == nil || *got != cloudflare {
 		t.Fatalf("after the older release wrote cf_sfu: setting = %v, want cf_sfu", got)
 	}
-	if read, err := repository.GetSpace(t.Context(), tenant, space); err != nil || read.MediaPlaneSetting == nil || *read.MediaPlaneSetting != mediaplane.ProviderCloudflareSFU {
-		t.Fatalf("the application read = %v, %v, want cf_sfu", read.MediaPlaneSetting, err)
+	if read, err := repository.GetSpace(t.Context(), tenant, space); err != nil || read.MediaPlaneSetting != nil {
+		t.Fatalf("the application read = %v, %v, want nil", read.MediaPlaneSetting, err)
 	}
 	olderRelease(space, "")
 	if got := setting(space); got != nil {

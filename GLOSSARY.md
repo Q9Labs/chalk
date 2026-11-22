@@ -2,7 +2,7 @@
 
 The canonical vocabulary for Chalk's domain and contracts: database, API,
 sync wire, SDKs, infrastructure, and observability. Keep those names consistent
-in code. Vendored standard terms (WebRTC "track", CallKit, Cloudflare SFU
+in code. Vendored standard terms (WebRTC "track", CallKit, Chalk SFU
 vocabulary) stay foreign and are translated at adapter seams.
 
 Space and Episode are the names used in the model and API contracts. In the
@@ -207,23 +207,11 @@ it and Connection manages its refresh.
 Vendor names stay foreign and live at adapter seams. Name the exact product,
 never the family.
 
-### Cloudflare SFU
+### Chalk SFU
 
-Cloudflare Realtime SFU: the media server that receives each Participant's
-tracks and forwards them to the others. It is one of Chalk's MediaPlane
-adapters (the Chalk SFU is the other), reached through the HTTPS API at
-`rtc.live.cloudflare.com`. Say "Cloudflare SFU", not "Cloudflare Realtime".
-
-- **Cloudflare Realtime** is the product family (formerly Cloudflare Calls):
-  Realtime SFU, Realtime TURN, and RealtimeKit. Use it only when you mean
-  the family.
-- **Cloudflare TURN** is the relay a browser uses when a firewall blocks a
-  direct media path. It is separate from the SFU but shares its free egress
-  allowance.
-- **RealtimeKit** (formerly Dyte) is Cloudflare's ready-made video UI SDK
-  built on top of the SFU. Chalk does not use it.
-- The `CHALK_CLOUDFLARE_REALTIME_*` environment variables hold Cloudflare SFU
-  app credentials despite the family name.
+The selective forwarding unit that receives and forwards Participants' media.
+Chalk uses the `chalk_sfu` provider. TURN relays traffic on networks that
+cannot reach the SFU directly; it is not a signaling provider.
 
 ## Laws
 

@@ -4,7 +4,7 @@ run-name: Hotfix rehearsal ${{ inputs.sha }}
 # nightly cut, deliver the cut, then the hotfix over it, then roll back to the cut as the Release job does (a fresh envelope of the
 # older source) (scripts/nightly-host-proof/run). The Pages rollback is rehearsed on the nightly Pages project, which nobody serves
 # (scripts/releases/web.py rehearse). After the hotfix leg and after the rollback leg the host serves nightly-api.chalkmeet.com and
-# runs a real call through it (the camera-share proof on the Cloudflare plane, without recording). The recorder path is not run here:
+# runs a real call through it (the camera-share proof on the Chalk SFU, without recording). The recorder path is not run here:
 # the per-cut lanes cover it, and Hotfix runs the full smoke on production after every hotfix.
 # Cost: one on-demand t4g.small for about 20 minutes, under 0.02 USD, plus the build minutes of a release.
 on:
@@ -91,7 +91,7 @@ jobs:
         with:
           node-version-file: .tool-versions
           cache: pnpm
-      # What the call proof needs, as the Nightly cloudflare-plane lane installs it (nightly-proofs.yml).
+      # Browser dependencies for the camera-share proof.
       - name: Install proof dependencies
         run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
       - uses: ./.github/actions/apt-install

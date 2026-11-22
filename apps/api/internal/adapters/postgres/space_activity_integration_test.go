@@ -50,7 +50,7 @@ func TestListSpacesByActivityPutsTheMostRecentlyUsedFirst(t *testing.T) {
 	oldest, older, newest, archived := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	live, ended := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	mustExec(t, tx, `insert into tenants(id, name) values($1, 'Space activity order')`, tenantID.Bytes())
-	plane := mediaplane.ProviderCloudflareSFU.SettingName()
+	plane := mediaplane.ProviderChalkSFU.SettingName()
 	for _, space := range []struct {
 		id  utilities.ID
 		age time.Duration

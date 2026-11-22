@@ -15,7 +15,6 @@ func TestConsumerPackagesDoNotDependOnConcreteMediaPlaneProviders(t *testing.T) 
 	}
 	forbidden := []string{
 		"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk",
-		"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu",
 		"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders",
 	}
 

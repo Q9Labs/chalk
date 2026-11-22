@@ -63,7 +63,7 @@
     {
       "id": "media-control",
       "title": "Media control model",
-      "run": "tools/formal/media-control/run.sh cf-decided-safety-1src own-decided-safety-1src cf-current-P2-1src cf-current-P4-1src cf-current-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute",
+      "run": "tools/formal/media-control/run.sh dist-decided-safety-1src atomic-decided-safety-1src legacy-P2-1src legacy-P4-1src legacy-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute",
       "timeoutMinutes": 20,
       "ci": "matrix",
       "skill": ".agents/skills/media-control-formal/SKILL.md",

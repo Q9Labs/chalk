@@ -1,6 +1,6 @@
 # Real-call proofs
 
-`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans, their media planes and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:latency`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
+`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:latency`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -8,7 +8,7 @@ pnpm --filter @q9labsai/chalk-client exec playwright install chromium
 pnpm prod:proof                              # all release proofs, including a forced camera layer switch
 pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
-CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts
+pnpm prod:proof call-artifacts
 pnpm prod:proof chat-upload                  # Node only: a chat upload from an origin on no list, through the storage bucket's CORS rule, and a check that the storage endpoint refuses an unsigned read (not a public r2.dev URL or custom domain: check those in the Cloudflare dashboard)
 ```
 
@@ -32,7 +32,7 @@ Every run creates its own key, Space, Episode and Recording. There is no hard-de
 
 ### Media plane
 
-The proof Space uses Cloudflare by default. The public API always refuses `media_plane: chalk_sfu`, so to run on the Chalk SFU set `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` and point at a Space an operator moved with `go run ./cmd/media-settings set` (`CHALK_CANARY_SPACE_ID`), or leave the plane out where the deployment gives new Spaces the Chalk SFU (`CHALK_NEW_SPACE_MEDIA_PLANE`). The two-plane latency benchmark names its Spaces with `CHALK_PROOF_SPACE_ID_CF_SFU` and `CHALK_PROOF_SPACE_ID_CHALK_SFU` and stops at once when a Space is not on the plane it asked for. `call-artifacts` needs automatic Recording and Transcription, so it uses `CHALK_PROOF_SPACE_ID_<PLANE>_AUTOMATIC`. The older Recording, export and transcript proofs need Cloudflare: use `camera-share` for the Chalk SFU's call alone and `call-artifacts` for its Recording and Transcript. `pnpm prod:proof chalk-sfu-spaces` finds or creates the two Chalk SFU proof Spaces by slug (`CHALK_PROOF_SPACE_BY_SLUG=true` makes proofs reuse them).
+Proof Spaces run on the Chalk SFU. Reused proof Spaces must have the required Recording and Transcription policies.
 
 ### Recovery times
 
@@ -88,7 +88,7 @@ node scripts/prod-proof/integrator.mjs
 
 ## Action latency
 
-`pnpm prod:latency` times what a person in a call waits for, on the Chalk SFU (`chalk_sfu`) and Cloudflare (`cf_sfu`), with the same client on the same network. Each cycle is a new Space and Episode with two headless guests: guest 1 acts, guest 2 watches. The planes take turns so a slow minute lands on both.
+`pnpm prod:latency` times what a person in a call waits for, on the Chalk SFU. Each cycle is a new Space and Episode with two headless guests: guest 1 acts, guest 2 watches. The planes take turns so a slow minute lands on both.
 
 ```sh
 pnpm prod:latency --environment staging --region do-sgp1 --size s-4vcpu-8gb
@@ -99,7 +99,7 @@ pnpm prod:latency --environment staging --samples 3 --planes chalk_sfu
 - Spin-up is the API create time plus the first admit time plus the first guest's `join()` until live with a connected peer connection. The browser launch is left out because the API does the media plane's Episode and join work inside admit.
 - `--lobby-dwell-ms N` makes the second guest call `preconnect()` and wait N ms before its join timer starts, like a person in a lobby, so `join.prepare` and `join.sync_connect` read 0. Sync closes a socket with no hello within 5 s, so `preconnect` replaces an unused socket every 4 s for the dwell. Compare runs only with the same setting.
 - `--path <mode>` forces how the second guest reaches the SFU, to price each way in: `direct` (default), `relay-udp`, `relay-tcp`, `relay-tls` (TURN over TLS, port 443 when offered), `blocked-no-relay` (no UDP and no TURN server; the join is expected to fail and the cycle records `joined: false` and timed-out join metrics) and `blocked-relay-tls` (no UDP, TURN over TLS). Relay modes rewrite the guest's ICE servers and set `iceTransportPolicy: relay` in the page; blocked modes launch Chromium with `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`. Only guest 2 takes the path, so the join metrics and every `action.*` metric include the forced leg on the receiving side; the sender stays direct. Compare runs of one path with a `direct` run from the same host, because the card has no field for the path.
-- A cycle is dropped and rerun when admission lands on the other plane (`wrong_media_plane`, for example when a full Chalk SFU falls back to Cloudflare), fails (`cycle_failed`) or cannot end its Episode (`teardown_failed`). A watch that sees nothing in 20 seconds is a `timeout`.
+- A cycle is dropped and rerun when admission returns any provider other than `chalk_sfu` (`wrong_media_plane`), fails (`cycle_failed`) or cannot end its Episode (`teardown_failed`). A watch that sees nothing in 20 seconds is a `timeout`.
 - It writes a private report and one `scorecard-<plane>.json` per plane in the public `chalk.scorecard/v1` shape (no hosts, IPs, URLs or Tenant or Space IDs). It fails on a p95 over the `action.*` budgets in [`perf/budgets.json`](../../perf/budgets.json), on any timeout, or when a plane has fewer kept cycles than `--samples`.
 - Diagnostics (round trips, one-way audio estimate, selected ICE pair, stage timings from a wire trace that only this kit installs) go to the sidecar `latency-diagnostics-<plane>.json`, never into a card, budget or verdict. See [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
 

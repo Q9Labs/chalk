@@ -117,9 +117,7 @@ api_required=(
 
   CHALK_PROVIDER_BRIDGE_ADDRESS CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE
   CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE
-  CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN CHALK_CLOUDFLARE_ACCOUNT_ID
-  CHALK_CLOUDFLARE_REALTIME_APP_ID
-  CHALK_CLOUDFLARE_REALTIME_APP_SECRET CHALK_R2_ACCOUNT_ID
+  CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN CHALK_R2_ACCOUNT_ID
   CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET
   CHALK_RECORDING_ENABLED
   CHALK_TRANSCRIPTION_ENABLED CHALK_WHITEBOARD_FILES_ENABLED
@@ -138,23 +136,25 @@ sync_required=(
 
 api_available=true
 sync_available=true
+[[ -f "${manifest}" && ! -L "${manifest}" ]] || fail "release manifest is not a regular file"
+migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")" || fail "manifest migration target is invalid"
+[[ "${migration_target}" =~ ^[0-9]{14}$ ]] || fail "manifest migration target is invalid"
 if is_excluded api-env && input_is_absent "${api_env}"; then
   api_available=false
 else
   secure_regular_file "${api_env}"
   grep -Eq '__[A-Z0-9_]+__' "${api_env}" && fail "runtime API environment contains unresolved placeholders"
   for name in "${api_required[@]}"; do require_env "${api_env}" "${name}"; done
-  # Relay (TURN) is optional for the API, which then serves STUN only, so the
-  # two inputs are set together or not at all. A nightly or production
-  # deployment on the Cloudflare SFU must have them, because strict networks
-  # cannot connect without a relay.
-  turn_key_set=false
-  turn_token_set=false
-  env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
-  env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
-  [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
-  if [[ "${turn_key_set}" == false && ( "${environment}" == nightly || "${environment}" == production ) && "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" == cf_sfu ]]; then
-    fail "${environment} on the Cloudflare SFU requires CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN"
+  # Keep the previous release's environment valid for rollback.
+  if ((migration_target >= 20261121120000)); then
+    "${managed_root}/scripts/validate-api-runtime" --env-file "${api_env}"
+  else
+    # Relay is optional, but the two TURN inputs are set together or not at all.
+    turn_key_set=false
+    turn_token_set=false
+    env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
+    env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
+    [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
   fi
 fi
 if is_excluded sync-env && input_is_absent "${sync_env}"; then
@@ -308,7 +308,6 @@ if [[ "$sync_available" == true ]] && grep -q '^CHALK_SYNC_REQUIRE_SYNCHRONOUS_S
 fi
 bash "${managed_root}/scripts/validate-sync-proof" "$sync_proof" "$require_standby" || fail "PlanetScale does not have an accepted Sync production-probe proof"
 
-[[ -f "${manifest}" && ! -L "${manifest}" ]] || fail "release manifest is not a regular file"
 image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
 for component in api sync redis cloudflared; do
   image="$(jq -er ".images.${component}" "${manifest}")" || fail "manifest is missing the ${component} image"
@@ -456,8 +455,6 @@ if [[ -n "${rendered_root}" ]]; then
   ((manager_stop >= stop_budget)) || fail "user manager TimeoutStopSec ${manager_stop} is below the ordered stop budget ${stop_budget}"
   # Quadlet has no optional "-" prefix: it would resolve the path next to the unit file.
   ! grep -Eq '^EnvironmentFile=-' "${rendered_root}"/quadlet/*.container || fail "rendered Quadlet uses an EnvironmentFile with a '-' prefix"
-  migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")" || fail "manifest migration target is invalid"
-  [[ "${migration_target}" =~ ^[0-9]{14}$ ]] || fail "manifest migration target is invalid"
   migration_unit="${rendered_root}/quadlet/chalk-api-migrate.container"
   [[ -f "${migration_unit}" && ! -L "${migration_unit}" ]] || fail "rendered migration Quadlet is missing"
   grep -Fqx "Image=$(jq -er '.images.api' "${manifest}")" "${migration_unit}" || fail "migration Quadlet image does not match the API image"

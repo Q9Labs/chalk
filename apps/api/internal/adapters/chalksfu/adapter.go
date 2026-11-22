@@ -649,7 +649,7 @@ func knownSubscriptionState(state, reason string) bool {
 	}
 }
 
-// RemoveParticipant is unsupported, as on Cloudflare: public-access removal gets
+// RemoveParticipant is unsupported: public-access removal gets
 // a provider subject, not the SFU connection ID the remove route needs. Leaving
 // the Episode closes the session through track cleanup and the Episode end.
 func (a *Adapter) RemoveParticipant(context.Context, mediaplane.RemoveParticipantInput) error {
@@ -737,7 +737,7 @@ func tracksResponseOf(connectionID string, response protocol.TracksResponse) med
 		out.Tracks = append(out.Tracks, mediaplane.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: mediaplane.PublicationSource(track.Source)})
 	}
 	for _, failed := range response.TrackErrors {
-		// A pull error names the publisher's connection, as Cloudflare's does, so
+		// A pull error names the publisher's connection so
 		// clients match it to the publication they asked for. A push error names none.
 		owner := failed.SessionID
 		if owner == "" {

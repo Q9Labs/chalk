@@ -80,6 +80,7 @@ export async function ownerChecks(h) {
     const grant = joinedDTO.access;
     sourceEpisodeId = grant.subject.episode_id;
     assert(grant.sync.token && grant.media.token);
+    assert.equal(grant.media.provider, "chalk_sfu");
     // Exercise Sync's real UUID decoder, not a second copy of its regex.
     assert.equal(execFileSync("elixir", ["-r", resolve(import.meta.dirname, "../../../../apps/sync/lib/chalk_sync/uuid.ex"), "-e", "[id] = System.argv(); ChalkSync.UUID.dump!(id); IO.write(id)", "--", grant.subject.participant_id], { encoding: "utf8" }), grant.subject.participant_id);
     assert.equal(grant.subject.tenant_id, firstTenant);
@@ -143,7 +144,7 @@ export async function ownerChecks(h) {
     if (admission === "knock") {
       const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
         method: "POST",
-        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "X-Chalk-Media-Providers": "chalk_sfu", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ name: "Guest", role: "observer", participant_id: crypto.randomUUID() }),
       });
       assert.equal(guest.status, 201, await guest.clone().text());

@@ -1,9 +1,6 @@
-// Seeds the stack through the API's system token: one Tenant and Space on the stack's plane (the Chalk SFU, or Cloudflare when
-// the stack has real Cloudflare credentials) and an API key, then writes the
-// values a proof run reads to <dir>/proof.env.
-//
+// Seed one local Tenant, Space and API key for Chalk SFU proofs.
 // The Nightly host proof seeds a deployed host the same way: <dir>/system-token then holds the host's service secret (a service
-// principal owns the Tenants it creates), CHALK_SEED_PLANE names the plane because the host's api.env is not on this machine, and
+// principal owns the Tenants it creates),
 // CHALK_SEED_TENANT_CORS_ORIGINS lists origins the Tenant allows, since the host's deployment origins do not include the proof's, and
 // CHALK_SEED_WEB_URL is the web origin when it is not the API's.
 import { randomUUID } from "node:crypto";
@@ -13,8 +10,7 @@ import { join } from "node:path";
 const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 // identity.mjs wrote the plane new Spaces land on; the Tenant and the proof Space follow it.
-const plane = process.env.CHALK_SEED_PLANE ?? readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(chalk_sfu|cf_sfu)$/m)?.[1];
-if (plane !== "chalk_sfu" && plane !== "cf_sfu") throw new Error("seed: no media plane named in CHALK_SEED_PLANE or api.env");
+const plane = "chalk_sfu";
 
 async function send(method, path, body) {
   const response = await fetch(new URL(path, apiOrigin), {

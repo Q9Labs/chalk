@@ -34,9 +34,8 @@ const (
 	// with the media credential's key for the same subject, and neither verifies as the other.
 	TelemetryAudience = "chalk-telemetry"
 
-	ProviderCloudflareSFU = "cloudflare_sfu"
-	ProviderChalkSFU      = "chalk_sfu"
-	Lifetime              = 5 * time.Minute
+	ProviderChalkSFU = "chalk_sfu"
+	Lifetime         = 5 * time.Minute
 	// TelemetryLifetime is long because the credential buys delivery of a client's last records
 	// after a reload or a long background, not access to anything else.
 	TelemetryLifetime = 24 * time.Hour
@@ -114,13 +113,7 @@ func RequireRouteSubject(subject Subject, route RouteSubject) error {
 }
 
 func sameProviderBinding(subject Subject, route RouteSubject) bool {
-	switch subject.Provider {
-	case ProviderCloudflareSFU, ProviderChalkSFU:
-		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
-			subject.ConnectionID != "" &&
-			subject.ConnectionID == route.ConnectionID
-
-	default:
-		return false
-	}
+	return subject.Provider == ProviderChalkSFU &&
+		subject.ProviderSubject == "" && route.ProviderSubject == "" &&
+		subject.ConnectionID != "" && subject.ConnectionID == route.ConnectionID
 }

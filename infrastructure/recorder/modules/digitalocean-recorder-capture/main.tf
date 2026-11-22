@@ -52,12 +52,6 @@ resource "digitalocean_firewall" "capture" {
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 
-  # Cloudflare SFU media can negotiate UDP 1473, below the STUN/high-port range.
-  outbound_rule {
-    protocol              = "udp"
-    port_range            = "1473"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
-  }
 }
 
 resource "terraform_data" "runtime_capacity_contract" {

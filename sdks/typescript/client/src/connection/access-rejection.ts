@@ -1,10 +1,10 @@
 import { ConnectionAccessFailure } from "../access/manager";
-import { CloudflareSFUError } from "../media";
+import { SFUError } from "../media";
 import { arrivalErrorCode } from "../public-invites/entrance.js";
 
 /** The media API refused the credential. */
 export function sfuAccessRejected(cause: unknown): boolean {
-  return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);
+  return cause instanceof SFUError && (cause.options.status === 401 || cause.options.status === 403);
 }
 
 /** A media call was refused: the API refused the credential, or the refresh that followed found the access invalid (the Episode is over). */

@@ -55,7 +55,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   let captured;
   if (plan.media) {
     receiver = await prepareIntegration(run, plan.webhooks);
-    captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch, plan.rejoin);
+    captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch, plan.rejoin, plan.recordingRequired);
   }
   let call;
   if (plan.callArtifacts) {

@@ -39,7 +39,7 @@ func TestDashboardParticipantCanReenterWithoutReusingOldAdmission(t *testing.T) 
 	}{
 		{`insert into users(id,name,email) values($1,'Reentry account',$2)`, []interface{}{uuid(accountID), accountID.String() + "@reentry.test"}},
 		{`insert into tenants(id,name) values($1,'Reentry Tenant')`, []interface{}{uuid(tenantID)}},
-		{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Reentry Space',$3,'cf_sfu')`, []interface{}{uuid(spaceID), uuid(tenantID), spaceID.String()}},
+		{`insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Reentry Space',$3,'chalk_sfu')`, []interface{}{uuid(spaceID), uuid(tenantID), spaceID.String()}},
 	} {
 		if _, err := tx.Exec(ctx, statement.sql, statement.args...); err != nil {
 			t.Fatal(err)

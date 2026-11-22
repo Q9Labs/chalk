@@ -38,7 +38,7 @@ try {
     {
       name: "Student first proof",
       slug: `student-first-${crypto.randomUUID()}`,
-      mediaPlane: "cf_sfu",
+      mediaPlane: "chalk_sfu",
       defaultEpisodeDurationSeconds: 3600,
       maximumEpisodeDurationSeconds: 3600,
       lingerWindowSeconds: 120,

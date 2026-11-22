@@ -1,6 +1,6 @@
 ---
 name: verify-chalk
-description: Launch Chalk (web, API, Sync, Postgres, Redis) headless on one machine, check it, drive a real call in Chromium with fake camera and microphone through the development stack’s media plane, and capture evidence into .verify/<run-id>/. Use when a task needs proof that Chalk's web app works as a user sees it.
+description: Launch Chalk (web, API, Sync, SFU, Postgres, Redis) headless on one machine, check it, drive a real call in Chromium with fake camera and microphone through the Chalk SFU, and capture evidence into .verify/<run-id>/. Use when a task needs proof that Chalk's web app works as a user sees it.
 ---
 
 # Verify Chalk
@@ -14,20 +14,17 @@ Only one Chalk runtime can own a machine. `pnpm dev` refuses to start a second o
 Run from the repo root. The command is the same on a Mac with OrbStack and on a headless Linux box.
 
 ```sh
-export CHALK_CLOUDFLARE_REALTIME_APP_ID=...        # non-production Chalk/SFU item, app_id
-export CHALK_CLOUDFLARE_REALTIME_APP_SECRET=...    # non-production Chalk/SFU item, app_secret
 export PUBLIC_ORIGIN=http://localhost:3070         # optional, see below
 pnpm install --frozen-lockfile
 pnpm dev                                           # run it in tmux or another session that stays alive
 ```
 
 - The journeys drive browsers from two installs: Chromium from `pnpm exec playwright install chromium`, and WebKit (iPad, iPhone and the screen-share viewer) from `pnpm exec e2e-web install webkit chromium --with-deps`. The repo's own Playwright WebKit is older and cannot join a call.
-- With both SFU variables set the launcher does not call the 1Password CLI. With neither set it reads the item through `op` as before. Setting only one fails startup.
 - `PUBLIC_ORIGIN` is the origin a person or browser uses to reach the web app. It sets the Sync token issuer, the CORS list, the Vite host allow-list and the browser's Sync WebSocket URL. Unset, the issuer stays `http://chalk.local`.
 - Chalk's guest cookie is `__Host-chalk_space_guest_*` and is `Secure`. A browser only stores it on `https://` origins or on `localhost`. Use `http://localhost:3070` (or `http://<name>.localhost:3070`, which Chromium resolves to loopback) for a plain-HTTP run. A real remote origin needs HTTPS in front of port 3070. A name such as `http://chalk-orb.test` fails: the browser cannot resolve it.
 - From an empty data dir the first run starts Postgres and Redis containers, pulls their images, compiles the API, runs `mix deps.get` and compile for Sync, runs migrations, creates a tenant and a Space, and enables the Space's public invite. Plan for about 3 GB of memory for the stack and about 6 GB with two Chromium contexts, so keep other work off the box while you drive.
 
-- Public Orb previews use the non-production Cloudflare SFU so browsers outside the Orb can send and receive media. To exercise the local Chalk SFU from browsers on the Orb itself, start the dev stack on the Orb with `CHALK_DEV_ORB_LOCAL_SFU=1 pnpm dev`. That mode advertises loopback ICE and cannot carry media to outside browsers. Orb startup and doctor check the grant for the selected provider.
+- The dev stack and Orbs run Chalk SFU locally. Use same-machine browsers by default: the Orb’s HTTPS preview carries the web app and signaling, not WebRTC media. For a dev host reachable from a separate browser, set `CHALK_DEV_SFU_ANNOUNCE_IP` to its reachable IPv4 address and allow `CHALK_DEV_SFU_MEDIA_PORT` over UDP and TCP. Startup and doctor require a Chalk SFU grant.
 
 Ready means the supervisor printed `Chalk dev ready`. That line only appears after a seeded guest has arrived through the invite page and left again, using the web origin. The seed is in .private/chalk-dev/seed.json (mode 0600, git-ignored) and holds `tenantId`, `spaceId`, `invite.path`, `systemToken`, `urls`. The `systemToken` is a credential: read it, never copy it into evidence.
 
@@ -43,7 +40,7 @@ Read-only. It prints JSON `{ "ok": true|false, "checks": [...] }` and exits 0 on
 
 Use the existing harness. Pick the journey in [features/README.md](features/README.md).
 
-- **Join a call (real path).** `node .agents/skills/verify-chalk/scripts/join-call.mjs <run-id>`. Two Chromium contexts arrive through the seeded invite, publish the fake camera and microphone from `scripts/web-proof/media.mjs` (`webMediaFixture`), see each other's video advance through the Cloudflare SFU, and leave. Exit 0 means every step passed.
+- **Join a call (real path).** `node .agents/skills/verify-chalk/scripts/join-call.mjs <run-id>`. Two Chromium contexts arrive through the seeded invite, publish the fake camera and microphone from `scripts/web-proof/media.mjs` (`webMediaFixture`), see each other's video advance through the Chalk SFU, and leave. Exit 0 means every step passed.
 - **Two people on the board.** `node .agents/skills/verify-chalk/scripts/board-draw.mjs <run-id>`. A host starts a call from `/space/` (the starter is the owner, so there is no separate seeded host), a second person joins by the host's link, the host opens the board, both draw, each sees every stroke, and the host clears it.
 - **Two-person media.** `node .agents/skills/verify-chalk/scripts/two-person-media.mjs <run-id>`. Both turn on microphone and camera, each sees the other's video advance and hears audio, controls and badges agree on both sides (`scripts/web-proof/agreement.mjs`), a mute shows on both sides, and the API's attendance lists both.
 - **Knock and admit.** `node .agents/skills/verify-chalk/scripts/knock-admit.mjs <run-id>`. The host sets the Space to ask first (through the API with the system token), a person who opens the link waits, the host lets them in, a second person is declined and is told.

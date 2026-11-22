@@ -65,27 +65,23 @@ func (i Issuer) sign(subject Subject, kind credentialKind) (string, time.Time, e
 	if err != nil {
 		return "", time.Time{}, ErrSigningFailed
 	}
-	connectionClaims := jwtClaims{ConnectionID: subject.ConnectionID}
-	if subject.Provider == ProviderCloudflareSFU {
-		connectionClaims = jwtClaims{CloudflareConnectionID: subject.ConnectionID}
-	}
 	claims, err := encodeJWTPart(jwtClaims{
-		Issuer:                 i.config.Issuer,
-		Audience:               json.RawMessage(`"` + kind.audience + `"`),
-		Subject:                subject.ParticipantID.String(),
-		TokenID:                tokenID,
-		IssuedAt:               now.Unix(),
-		NotBefore:              now.Unix(),
-		ExpiresAt:              expiresAt.Unix(),
-		TenantID:               subject.TenantID.String(),
-		SpaceID:                subject.SpaceID.String(),
-		EpisodeID:              subject.EpisodeID.String(),
-		ParticipantID:          subject.ParticipantID.String(),
-		ParticipantGeneration:  subject.ParticipantGeneration,
-		MediaProvider:          subject.Provider,
-		CloudflareConnectionID: connectionClaims.CloudflareConnectionID,
-		ConnectionID:           connectionClaims.ConnectionID,
-		ProviderSubject:        subject.ProviderSubject,
+		Issuer:                i.config.Issuer,
+		Audience:              json.RawMessage(`"` + kind.audience + `"`),
+		Subject:               subject.ParticipantID.String(),
+		TokenID:               tokenID,
+		IssuedAt:              now.Unix(),
+		NotBefore:             now.Unix(),
+		ExpiresAt:             expiresAt.Unix(),
+		TenantID:              subject.TenantID.String(),
+		SpaceID:               subject.SpaceID.String(),
+		EpisodeID:             subject.EpisodeID.String(),
+		ParticipantID:         subject.ParticipantID.String(),
+		ParticipantGeneration: subject.ParticipantGeneration,
+		MediaProvider:         subject.Provider,
+
+		ConnectionID:    subject.ConnectionID,
+		ProviderSubject: subject.ProviderSubject,
 	})
 	if err != nil {
 		return "", time.Time{}, ErrSigningFailed

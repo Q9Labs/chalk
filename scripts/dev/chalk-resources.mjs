@@ -7,7 +7,7 @@ import { FailureKind, failure } from "./model.mjs";
 import { preflight, probePort } from "./config.mjs";
 import { containerArguments, containerNames, containerPath, imageName, prepareImages } from "./containers.mjs";
 import { generateSigningIdentity } from "./identity.mjs";
-import { orbAPIIdentity, startOrbSfu } from "./orb-sfu.mjs";
+import { devAPIIdentity, startChalkSfu } from "./chalk-sfu.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -97,7 +97,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
         await runResource("docker", containerArguments(config, "api", { image: imageName("api", state.versions), command: ["openssl", ...containerArgs] }), { cwd: config.root }, "identity");
       });
       state.identity = { ...identity, generatedAt: new Date().toISOString() };
-      if (config.localOrbSfu) await startOrbSfu(config, { network, versions: state.versions, runResource });
+      await startChalkSfu(config, { network, versions: state.versions, runResource });
     },
     async stop() {
       await stopContainers();
@@ -212,18 +212,14 @@ async function prepareIdentity(config, identityGenerator = generateSigningIdenti
   const apiExt = join(extRoot, "api.ext");
   const syncExt = join(extRoot, "sync.ext");
   const sfuExt = join(extRoot, "sfu.ext");
-  const apiUsage = config.localOrbSfu ? "serverAuth,clientAuth" : "serverAuth";
-  const apiSANs = config.localOrbSfu ? `,URI:${orbAPIIdentity(config)}` : "";
-  await writeFile(apiExt, `basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=${apiUsage}\nsubjectAltName=DNS:localhost,DNS:api,IP:127.0.0.1${apiSANs}\n`, { mode: 0o600 });
+  await writeFile(apiExt, `basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:localhost,DNS:api,IP:127.0.0.1,URI:${devAPIIdentity(config)}\n`, { mode: 0o600 });
   await writeFile(syncExt, `basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=clientAuth\nsubjectAltName=URI:spiffe://${config.auth.trustDomain || "chalk.local"}/environment/${config.auth.environment || "local"}/sync/${runtimeId}\n`, { mode: 0o600 });
   try {
     await openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", config.identity.caKey, "-out", config.identity.caCertificate, "-subj", "/CN=chalk-local-ca", "-days", "2", "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign"]);
     await makeLeaf(config.identity.apiKey, config.identity.apiCertificate, "/CN=chalk-api-provider-bridge", apiExt, config.identity.caCertificate, config.identity.caKey, serial, openssl, true);
     await makeLeaf(config.identity.syncKey, config.identity.syncCertificate, "/CN=chalk-sync-provider-bridge", syncExt, config.identity.caCertificate, config.identity.caKey, serial, openssl);
-    if (config.localOrbSfu) {
-      await writeFile(sfuExt, "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:sfu\n", { mode: 0o600 });
-      await makeLeaf(config.identity.sfuKey, config.identity.sfuCertificate, "/CN=chalk-sfu", sfuExt, config.identity.caCertificate, config.identity.caKey, serial, openssl);
-    }
+    await writeFile(sfuExt, "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:sfu\n", { mode: 0o600 });
+    await makeLeaf(config.identity.sfuKey, config.identity.sfuCertificate, "/CN=chalk-sfu", sfuExt, config.identity.caCertificate, config.identity.caKey, serial, openssl);
   } finally {
     await Promise.all([unlink(sfuExt).catch(() => {}), unlink(apiExt).catch(() => {}), unlink(syncExt).catch(() => {}), unlink(serial).catch(() => {})]);
   }

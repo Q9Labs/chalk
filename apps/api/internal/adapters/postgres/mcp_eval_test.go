@@ -64,7 +64,7 @@ func TestMCPEvalHost(t *testing.T) {
 	keys := apikeys.NewService(NewAPIKeyRepository(q, pool), apikeys.Config{})
 	spaceService := spaces.NewService(NewSpaceRepository(q, pool))
 	tenantService := tenants.NewService(NewTenantRepository(q))
-	binding, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "eval-local")
+	binding, err := mediaplane.NewBinding(mediaplane.ProviderChalkSFU, mediaplane.BindingSourceDeploymentDefault, "eval-local")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestMCPEvalHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{ManagedTenantID: managedTenant, DefaultMediaPlane: "cf_sfu"})
+	spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{ManagedTenantID: managedTenant, DefaultMediaPlane: "chalk_sfu"})
 	if err != nil {
 		t.Fatal(err)
 	}

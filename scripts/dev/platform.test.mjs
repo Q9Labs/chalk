@@ -12,21 +12,17 @@ import { openRuntimeControl, requestRuntimeStop } from "./control.mjs";
 import { containerArguments, containerEnvironment } from "./containers.mjs";
 import { parseInstallArguments, connectedSerial, installLocalApk } from "./android.mjs";
 
-const credentials = { CHALK_CLOUDFLARE_REALTIME_APP_ID: "test", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "test" };
-
-test("core preflight needs only Node, pnpm and Docker with supplied SFU credentials", async () => {
-  const config = resolveDevConfig({ env: credentials });
+test("core preflight needs only Node, pnpm and Docker without SFU credentials", async () => {
+  const config = resolveDevConfig({ env: {} });
   assert.deepEqual(config.requiredTools, ["node", "pnpm", "docker"]);
   await preflight(config, { which: async (tool) => ["node", "pnpm", "docker"].includes(tool), probe: async () => ({ available: true }) });
-  assert.ok(resolveDevConfig({ env: {} }).requiredTools.includes("op"));
-  assert.ok(!resolveDevConfig({ env: { CHALK_CLOUDFLARE_REALTIME_APP_ID: "one" } }).requiredTools.every((tool) => tool !== "op"));
   for (const profile of ["mobile", "android"]) {
-    const mobile = resolveDevConfig({ env: credentials, profile });
+    const mobile = resolveDevConfig({ env: {}, profile });
     assert.ok(mobile.requiredTools.includes("adb"));
     assert.ok(!mobile.requiredTools.includes("xcrun"));
     assert.equal(parseArguments(["--profile", profile]).profile, profile);
   }
-  assert.ok(resolveDevConfig({ env: credentials, profile: "ios" }).requiredTools.includes("xcrun"));
+  assert.ok(resolveDevConfig({ env: {}, profile: "ios" }).requiredTools.includes("xcrun"));
 });
 
 test("Windows state uses LOCALAPPDATA, not XDG or the checkout", () => {
@@ -90,7 +86,7 @@ test("local control refuses an unauthenticated stop and accepts the private owne
 });
 
 test("containers use their private network and paths, never host build output", () => {
-  const config = resolveDevConfig({ env: credentials });
+  const config = resolveDevConfig({ env: {} });
   const env = containerEnvironment(config, "sync", { CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE: config.identity.syncKey });
   assert.equal(env.CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE, "/workspace/.private/chalk-dev/identity/sync-client-key.pem");
   assert.equal(env.CHALK_SYNC_PROVIDER_BRIDGE_URL, `https://api:${config.ports.providerBridge}`);
