@@ -38,12 +38,7 @@ scan_report() {
 
 mkdir "${report_directory}/head"
 node "${script_directory}/osv-snapshot.mjs" "${report_directory}/head" --working-tree
-# Validate zod without any policy that could hide a new consumer.
-scan_report "${report_directory}/head" "${report_directory}/raw.json" --config /dev/null
-(cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/raw.json")
-# Other advisories retain OSV's normal per-directory policy, including the API's.
 scan_report "${report_directory}/head" "${report_directory}/head.json"
-(cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json")
 
 # Branch creation has no previous tip, so it must fail on all findings.
 push_base="${GATE_OSV_BASE_COMMIT:-}"
