@@ -30,11 +30,18 @@ defmodule ChalkSync.Obs do
   @violations 2
   @export_failures 3
 
-  @on_load :init_counters
-  @doc false
-  def init_counters do
-    :persistent_term.put(@counters, :atomics.new(3, signed: false))
-    :persistent_term.put(@source_id, UUID.generate())
+  @doc """
+  Creates the counters and this node's source id once. `ChalkSync.Application` calls it before any record
+  is emitted. It is not an `@on_load` hook because `:crypto`, which the id needs, is not loaded while a
+  release loads its modules.
+  """
+  @spec init() :: :ok
+  def init do
+    if :persistent_term.get(@counters, nil) == nil do
+      :persistent_term.put(@source_id, UUID.generate())
+      :persistent_term.put(@counters, :atomics.new(3, signed: false))
+    end
+
     :ok
   end
 

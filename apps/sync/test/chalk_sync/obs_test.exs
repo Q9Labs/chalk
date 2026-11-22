@@ -203,6 +203,18 @@ defmodule ChalkSync.ObsTest do
     assert Obs.stats().violations == before + 1
   end
 
+  test "init keeps the counters it already made" do
+    previous = Application.get_env(:chalk_sync, Obs)
+    Application.put_env(:chalk_sync, Obs, Keyword.put(previous, :mode, :open))
+    on_exit(fn -> Application.put_env(:chalk_sync, Obs, previous) end)
+    Obs.fact("selftest.note", %{note_kind: "b"})
+    %{violations: counted} = Obs.stats()
+    assert counted > 0
+
+    assert :ok = Obs.init()
+    assert %{violations: ^counted} = Obs.stats()
+  end
+
   test "transition, decision, surface and flags" do
     Obs.transition("selftest.door", "closed", "open", "push", %{}, reason: "selftest.busy")
 
