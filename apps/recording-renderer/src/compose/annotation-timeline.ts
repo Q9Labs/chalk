@@ -1,6 +1,6 @@
 import type { ScreenAnnotationMark } from "@q9labsai/chalk-client";
 import { ACTIVE_MARKS_V1, type BoundAnnotationLayer } from "./annotation-sidecar.js";
-import type { Rect, SceneSpan, VideoSegment } from "./scene.js";
+import type { Rect, SceneSpan, SceneTile, VideoSegment } from "./scene.js";
 
 const FADE_OUT_MS_V1 = 600;
 
@@ -66,10 +66,9 @@ function hasRecordedMarks(layer: BoundAnnotationLayer): boolean {
 }
 
 function firstShareSource(segment: VideoSegment, eligible: (sourceId: string) => boolean): string | undefined {
-  for (const tile of segment.spans[0]?.scene.tiles ?? []) {
-    if (tile.kind === "screen_share" && tile.video !== undefined && eligible(tile.video.sourceId)) return tile.video.sourceId;
-  }
-  return undefined;
+  const first = segment.spans[0];
+  const tile = first?.scene.tiles.find((tile): tile is Extract<SceneTile, { kind: "screen_share" }> => tile.kind === "screen_share" && tile.video !== undefined && eligible(tile.video.sourceId));
+  return tile?.video?.sourceId;
 }
 
 function overlapsSegment(layer: BoundAnnotationLayer, segment: VideoSegment, firstFrame: (atMs: number) => number): boolean {
