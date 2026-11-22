@@ -24,6 +24,12 @@ export function dashboardArtifactBindings(config) {
   };
 }
 
+// AI apps sign in to the local MCP server here and consent in the dashboard. Without OAuth the dashboard's
+// connected apps list answers 503, so AI apps showed "Couldn't load" on every local stack and Orb.
+export function dashboardOAuthBindings(config) {
+  return { CHALK_OAUTH_ISSUER: config.urls.api, CHALK_OAUTH_CONSENT_URL: `${config.urls.public}/dashboard/connect` };
+}
+
 export async function seedDashboard({ config, serviceToken, systemToken }) {
   async function api(path, body, { method = body ? "POST" : "GET", token = serviceToken, retryMedia = false } = {}) {
     const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Chalk-Media-Providers": chalkSfuPlane };

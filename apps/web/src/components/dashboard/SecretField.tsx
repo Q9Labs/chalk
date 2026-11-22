@@ -4,10 +4,13 @@ import { Icon } from "../site/Icon";
 import { maskSecret } from "./developer-snippets";
 import { useCopy } from "./kit";
 
-/** A secret as it is shown on screen: redacted, with an eye to show it and a Copy that always copies the whole thing. */
-export function SecretField({ secret, prefixLength, copyLabel = "Copy", copiedMessage = "Secret copied", noun = "key" }: { readonly secret: string; readonly prefixLength: number; readonly copyLabel?: string; readonly copiedMessage?: string; readonly noun?: string }) {
+/**
+ * A secret as it is shown on screen: redacted, with an eye to show it and a Copy that always copies the whole thing.
+ * Copying is the reason this field is open, so it stays a labelled primary button rather than the quiet icon.
+ */
+export function SecretField({ secret, prefixLength, copyLabel = "Copy", noun = "key" }: { readonly secret: string; readonly prefixLength: number; readonly copyLabel?: string; readonly noun?: string }) {
   const [shown, setShown] = useState(false);
-  const { copied, copy } = useCopy(copiedMessage);
+  const { copied, copy } = useCopy();
   return (
     <div className="secbox">
       <span className="mono" data-testid="secret-text">

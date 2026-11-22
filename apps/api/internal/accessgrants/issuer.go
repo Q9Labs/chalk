@@ -34,27 +34,40 @@ func NewIssuer(config IssuerConfig) (Issuer, error) {
 	return Issuer{config: config}, nil
 }
 
+// Issue signs the participant media credential for the subject.
 func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, error) {
+	token, expiresAt, err := i.sign(subject, mediaKind)
+	return MediaCredential{Token: token, ExpiresAt: expiresAt}, err
+}
+
+// IssueTelemetry signs the telemetry credential for the subject: the same claims as the media
+// credential, audience chalk-telemetry and a 24-hour lifetime.
+func (i Issuer) IssueTelemetry(_ context.Context, subject Subject) (TelemetryCredential, error) {
+	token, expiresAt, err := i.sign(subject, telemetryKind)
+	return TelemetryCredential{Token: token, ExpiresAt: expiresAt}, err
+}
+
+func (i Issuer) sign(subject Subject, kind credentialKind) (string, time.Time, error) {
 	if !validSubject(subject) {
-		return MediaCredential{}, ErrInvalidSubject
+		return "", time.Time{}, ErrInvalidSubject
 	}
 	now := i.config.Now().UTC().Truncate(time.Second)
 	if now.Unix() <= 0 {
-		return MediaCredential{}, ErrInvalidTimeClaims
+		return "", time.Time{}, ErrInvalidTimeClaims
 	}
-	expiresAt := now.Add(Lifetime)
+	expiresAt := now.Add(kind.lifetime)
 	tokenID, err := newTokenID()
 	if err != nil {
-		return MediaCredential{}, ErrSigningFailed
+		return "", time.Time{}, ErrSigningFailed
 	}
 
 	header, err := encodeJWTPart(jwtHeader{Algorithm: "EdDSA", Type: "JWT", KeyID: i.config.KeyID})
 	if err != nil {
-		return MediaCredential{}, ErrSigningFailed
+		return "", time.Time{}, ErrSigningFailed
 	}
 	claims, err := encodeJWTPart(jwtClaims{
 		Issuer:                i.config.Issuer,
-		Audience:              json.RawMessage(`"` + Audience + `"`),
+		Audience:              json.RawMessage(`"` + kind.audience + `"`),
 		Subject:               subject.ParticipantID.String(),
 		TokenID:               tokenID,
 		IssuedAt:              now.Unix(),
@@ -71,15 +84,12 @@ func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, erro
 		ProviderSubject: subject.ProviderSubject,
 	})
 	if err != nil {
-		return MediaCredential{}, ErrSigningFailed
+		return "", time.Time{}, ErrSigningFailed
 	}
 
 	signingInput := header + "." + claims
 	signature := ed25519.Sign(i.config.PrivateKey, []byte(signingInput))
-	return MediaCredential{
-		Token:     signingInput + "." + base64.RawURLEncoding.EncodeToString(signature),
-		ExpiresAt: expiresAt,
-	}, nil
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature), expiresAt, nil
 }
 
 func encodeJWTPart(value any) (string, error) {

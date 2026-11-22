@@ -128,7 +128,8 @@ export async function runJourney(journey, body) {
     const mediaPlane = call.arrival?.access?.media?.provider;
     if (mediaPlane !== "chalk_sfu") throw new Error(`Start call issued ${mediaPlane ?? "no media grant"}, not chalk_sfu`);
     await host.page.getByRole("button", { name: `Video tile for ${host.name}`, exact: true }).waitFor({ timeout: 60_000 });
-    await host.page.getByRole("button", { name: "Close call link", exact: true }).click();
+    // A host alone at call start sees the call menu open by itself; closing it leaves the call clear for the journey.
+    await host.page.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
     const { tenant_id: tenantId, space_id: spaceId } = call.arrival.access.subject;
     return { link: new URL(call.invite_link, web).href, tenantId, spaceId, mediaPlane };
   };

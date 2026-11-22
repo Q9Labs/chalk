@@ -1,0 +1,109 @@
+package obs
+
+import (
+	"fmt"
+	"log/slog"
+	"slices"
+)
+
+type fieldSpec struct {
+	typ, group string
+	required   bool
+	values     []string
+}
+
+type fieldRule struct {
+	required bool
+	values   []string
+}
+
+type eventSpec struct {
+	kind, dataset, side string
+	testOnly            bool
+	decisions           []string
+	fields              map[string]fieldRule
+}
+
+type machineSpec struct {
+	states   []string
+	edges    [][2]string
+	triggers []string
+}
+
+func eventProblems(name, kind string, attrs []slog.Attr) []string {
+	spec, ok := registryEvents[name]
+	if !ok {
+		return []string{"unknown event " + name}
+	}
+	if spec.kind != kind {
+		return []string{fmt.Sprintf("%s is declared as %s, not %s", name, spec.kind, kind)}
+	}
+	return fieldProblems(name, attrs, spec.fields)
+}
+
+func fieldProblems(name string, attrs []slog.Attr, rules map[string]fieldRule) []string {
+	problems := []string{}
+	present := map[string]bool{}
+	for _, attr := range attrs {
+		present[attr.Key] = true
+		spec, known := registryFields[attr.Key]
+		rule, declared := rules[attr.Key]
+		switch {
+		case !known:
+			problems = append(problems, fmt.Sprintf("%s: field %s is not in the registry", name, attr.Key))
+		case !declared && spec.group != "trail":
+			problems = append(problems, fmt.Sprintf("%s: field %s is not declared on this event", name, attr.Key))
+		default:
+			allowed := rule.values
+			if allowed == nil {
+				allowed = spec.values
+			}
+			if !valueFits(spec.typ, allowed, attr.Value.Resolve()) {
+				problems = append(problems, fmt.Sprintf("%s: field %s has %v, which is not a valid %s", name, attr.Key, attr.Value, spec.typ))
+			}
+		}
+	}
+	for field, rule := range rules {
+		if rule.required && !present[field] {
+			problems = append(problems, fmt.Sprintf("%s: required field %s is missing", name, field))
+		}
+	}
+	slices.Sort(problems)
+	return problems
+}
+
+func valueFits(typ string, allowed []string, value slog.Value) bool {
+	kind := value.Kind()
+	switch typ {
+	case "enum":
+		return kind == slog.KindString && slices.Contains(allowed, value.String())
+	case "string", "id":
+		return kind == slog.KindString && value.String() != ""
+	case "int":
+		return kind == slog.KindInt64 || kind == slog.KindUint64
+	case "number":
+		return kind == slog.KindInt64 || kind == slog.KindUint64 || kind == slog.KindFloat64
+	case "bool":
+		return kind == slog.KindBool
+	case "map":
+		switch value.Any().(type) {
+		case Flags, map[string]any:
+			return kind == slog.KindAny
+		}
+	}
+	return false
+}
+
+func reasonProblem(code, outcome string) string {
+	if code == "" {
+		return ""
+	}
+	known, ok := registryReasons[code]
+	if !ok {
+		return "unknown reason code " + code
+	}
+	if outcome != "" && known != outcome {
+		return fmt.Sprintf("reason %s is %s, not %s", code, known, outcome)
+	}
+	return ""
+}

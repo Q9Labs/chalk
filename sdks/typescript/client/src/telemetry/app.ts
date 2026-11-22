@@ -10,7 +10,7 @@ export type AppTelemetry = {
 };
 
 export const appTelemetry = (outbox: TelemetryOutbox): AppTelemetry => ({
-  sessionId: outbox.sessionId,
+  sessionId: outbox.clientSessionId,
   problemReported: () => {
     outbox.record({ type: "problem_reported" });
     void outbox.flush();

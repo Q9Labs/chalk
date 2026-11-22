@@ -17,7 +17,8 @@ export function ConnectShell({ app, broken, title, children }: { readonly app: s
       </header>
       <main className="si">
         <div className="sibox cbox">
-          <AppPair name={app} broken={broken} />
+          {/* Without an app there is nothing to pair, and the lockup above already names Chalk. */}
+          {app ? <AppPair name={app} broken={broken} /> : null}
           <h1>{title}</h1>
           {children}
         </div>
@@ -38,7 +39,7 @@ export function ConnectMissing() {
 
 function ToDashboard() {
   return (
-    <div className="sib">
+    <div className="sib fit">
       <Link to="/dashboard" className="btn sec lg">
         Go to your dashboard
       </Link>

@@ -1,5 +1,5 @@
 import type { PreJoinDevices } from "@q9labsai/chalk-react";
-import { ArrowDown01Icon, cn, Microphone01Icon, Tick01Icon, Video01Icon, VolumeHighIcon } from "@q9labsai/chalk-react/utils";
+import { cn, MediaGlyph, ShellIcon } from "@q9labsai/chalk-react/utils";
 import { useState, type ReactNode } from "react";
 import { BottomSheet, useDismiss } from "./Overlay";
 import { LevelMeter } from "./LevelMeter";
@@ -9,7 +9,12 @@ type RowView = { readonly kind: Kind; readonly caption: string; readonly value: 
 
 const FALLBACK: Record<Kind, string> = { microphone: "Microphone", camera: "Camera", speaker: "System default speaker" };
 const CAPTION: Record<Kind, string> = { microphone: "Microphone", camera: "Camera", speaker: "Speaker" };
-const LEAD: Record<Kind, typeof Microphone01Icon> = { microphone: Microphone01Icon, camera: Video01Icon, speaker: VolumeHighIcon };
+
+/** The row's leading glyph: the same drawings as the dock and the call's device menu, at the menu row size. */
+function LeadIcon({ kind }: { readonly kind: Kind }) {
+  if (kind === "speaker") return <ShellIcon name="speaker" size={18} />;
+  return <MediaGlyph kind={kind === "microphone" ? "mic" : "cam"} slashed={false} busy={false} size={18} />;
+}
 
 const nameOf = (list: readonly MediaDeviceInfo[], deviceId: string | undefined, kind: Kind) => list.find((device) => device.deviceId === deviceId)?.label || FALLBACK[kind];
 
@@ -51,7 +56,7 @@ function DeviceOption({ devices, kind, device, role, onPick }: { readonly device
       }}
       className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
     >
-      <span className="grid w-[18px] flex-none place-items-center">{chosen ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
+      <span className="grid w-[18px] flex-none place-items-center">{chosen ? <ShellIcon name="check" size={18} /> : null}</span>
       <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
       {kind === "microphone" && chosen && devices.microphoneOn ? <LevelMeter level={devices.microphoneLevel} small /> : null}
     </button>
@@ -71,18 +76,17 @@ function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevice
 const rowClass = "flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
 
 function RowBody({ view, reserve = false }: { readonly view: RowView; readonly reserve?: boolean }) {
-  const Lead = LEAD[view.kind];
   return (
     <>
       <span className="grid w-[18px] flex-none place-items-center text-[var(--chalk-muted-text)]">
-        <Lead size={18} aria-hidden="true" />
+        <LeadIcon kind={view.kind} />
       </span>
       <span className={cn("grid min-w-0 flex-1", view.tone === "muted" && "opacity-60", reserve && "mr-24")}>
         <small className="text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.caption}</small>
         <span className={cn("truncate text-(length:--type-body) leading-snug", view.tone === "warn" && "text-[var(--chalk-warning)]", view.tone === "muted" && "text-[var(--chalk-muted-text)]")}>{view.value}</span>
       </span>
       {view.trailing}
-      <ArrowDown01Icon size={16} aria-hidden="true" className="flex-none text-[var(--chalk-muted-text)]" />
+      <ShellIcon name="down" size={16} className="flex-none text-[var(--chalk-muted-text)]" />
     </>
   );
 }
@@ -104,7 +108,7 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
           onClick={() => void devices.testSpeaker()}
           className={cn("absolute right-10 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1.5 rounded-full bg-[var(--chalk-hover)] px-3 text-(length:--type-caption) font-medium", devices.speakerTesting && "text-[var(--chalk-accent)]")}
         >
-          <VolumeHighIcon size={14} aria-hidden="true" />
+          <ShellIcon name="speaker" size={14} />
           Test
         </button>
       ) : null}
@@ -152,7 +156,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
             })}
             {devices.canChooseSpeaker ? (
               <button type="button" onClick={() => void devices.testSpeaker()} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--chalk-hover)] text-(length:--type-body) font-medium">
-                <VolumeHighIcon size={16} aria-hidden="true" />
+                <ShellIcon name="speaker" size={16} />
                 Test speaker
               </button>
             ) : null}

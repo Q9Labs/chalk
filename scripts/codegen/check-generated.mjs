@@ -14,6 +14,10 @@ const checks = [
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
   { name: "Tracker views", command: ["pnpm", "run", "check:tracker"] },
   { name: "Docs search index", command: ["node", "apps/web/scripts/docs-search-index.mjs"] },
+  { name: "Observability registry", command: ["node", "scripts/codegen/obs-registry.mjs"] },
+  // The coverage graph is generated; this proves every symptom in it still has each link, or is allow-listed.
+  { name: "Observability coverage", command: ["node", "scripts/gates/obs-coverage.mjs"] },
+  { name: "Observability coverage proof", command: ["node", "--test", "scripts/gates/obs-coverage.test.mjs", "scripts/codegen/obs-registry.test.mjs"] },
 ];
 
 function run({ name, command, fix }) {

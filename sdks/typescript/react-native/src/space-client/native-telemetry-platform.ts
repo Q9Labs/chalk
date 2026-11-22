@@ -8,6 +8,7 @@ type NativeAppState = {
 /**
  * The React Native side of telemetry. The app has no reachability source, so the outbox learns the network is down from failed sends and backs off.
  * `window` is not used: Hermes defines `window` without `addEventListener`, and the outbox needs only AppState.
+ * It has no `journal`, so nothing survives an app kill: the records still queued are lost, and the server sees an unknown tail for the source. A journal can be added through the same `TelemetryJournal` port.
  */
 export function createNativeTelemetryPlatform(environment: { readonly appState: NativeAppState; readonly fetch: typeof globalThis.fetch }): TelemetryPlatform {
   const send = withRequestContext(environment.fetch);

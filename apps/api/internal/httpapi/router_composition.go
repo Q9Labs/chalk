@@ -49,7 +49,7 @@ func v1RouteGroups(options Options) []routeGroup {
 		{
 			endpoints: append([]RouteEndpoint{
 				participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify),
-				telemetryEndpoint(options.ParticipantMediaVerify),
+				telemetryEndpoint(options.TelemetryVerify, options.ParticipantMediaVerify, options.TelemetryLedger),
 				cancelParticipantJoinEndpoint(options.ParticipantJoins, options.ParticipantMediaVerify),
 			}, problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit)...),
 		},

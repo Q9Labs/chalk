@@ -58,16 +58,12 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
   return (
     <section className="panel card" id="calls" aria-labelledby="calls-title">
       <div className="ph">
-        <Icon name="rec" size={18} />
         <div>
           <h2 id="calls-title">Calls</h2>
           <div className="sub">Defaults for every call in this account.</div>
         </div>
       </div>
       <div className="set" id="recording-videos">
-        <span className="tile">
-          <Icon name="film" size={18} />
-        </span>
         <div>
           <b id="recording-render-mode-label">Recording videos</b>
           <p>On demand makes an MP4 when you request a video. Automatic makes one after each recorded call ends.</p>
@@ -75,9 +71,6 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
         <Seg labelledBy="recording-render-mode-label" options={RENDER_MODES} value={renderMode} onChange={(mode) => void changeMode(mode)} />
       </div>
       <div className="set" id="transcript-language">
-        <span className="tile">
-          <Icon name="file" size={18} />
-        </span>
         <div>
           <b id="tenant-transcript-language-label">Transcript language</b>
           <p id="tenant-transcript-language-help">The default for new transcripts, unless a call has its own setting.</p>

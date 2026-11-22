@@ -851,34 +851,6 @@ func newPublicSpaceArrivalResponse(arrival publicinvites.PublicSpaceArrival) pub
 	return response
 }
 
-func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicAccessGrantResponse {
-	expiresAt := grant.ExpiresAt.UTC().Format(time.RFC3339)
-	response := publicAccessGrantResponse{
-		EpisodeStartedAt: episodeStartedAt(grant.StartedAt),
-		Subject: accessGrantSubjectResponse{
-			TenantID: grant.TenantID.String(), SpaceID: grant.SpaceID.String(), EpisodeID: grant.EpisodeID.String(),
-			ParticipantID: grant.ParticipantID.String(), ParticipantGeneration: grant.ParticipantGeneration,
-		},
-		Sync:  accessGrantTokenResponse{Token: grant.SyncToken, ExpiresAt: expiresAt},
-		Media: accessGrantMediaResponse{Token: grant.MediaToken, ExpiresAt: expiresAt, Provider: grant.Provider, ClientPayload: publicAccessClientPayload(grant)},
-	}
-
-	return response
-}
-
-func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string]any {
-	if grant.Provider != publicinvites.PublicProviderChalkSFU {
-		return map[string]any{}
-	}
-	return map[string]any{
-		"connectionId": grant.ClientPayload.ConnectionID,
-		"provider":     publicinvites.PublicProviderChalkSFU,
-		"episodeRef":   grant.ClientPayload.EpisodeRef,
-		"iceServers":   grant.ClientPayload.ICEServers,
-		"capabilities": chalkSFUCapabilities(grant.ClientPayload.Capabilities),
-	}
-}
-
 func chalkSFUCapabilities(c publicinvites.PublicAccessCapabilities) map[string]any {
 	capabilities := map[string]any{
 		"serverLayerAdaptation": c.ServerLayerAdaptation,

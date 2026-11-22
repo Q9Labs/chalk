@@ -1,0 +1,13 @@
+Episode 9feb0ff6  TH  18 Nov 14:45-15:45 PKT  4 Participants  checked fully (rules v37)
+
+F-71c2  BROKE  Couldn't be heard   Haris (owner)   14:52:10-14:55:40
+  Lived:  Haris was unmuted for 3 min 30 s and nobody heard him.
+  Cause:  his microphone sent about 50 packets/s with no voice in them. A wrong or
+          muted input device is likely; the device name isn't collected yet.
+  Where:  sending / client   confidence: likely
+  Proof:  [sfu a1f3]     10,480 audio packets received, 0 voiced
+          [client c9d0]  mic unmuted at 14:52:10
+          [absent]       no voice-detected event 14:52:10-14:55:40 (client source complete)
+          [report r-22]  "Haris's audio not audible"
+F-0b9e  EXPECTED  Call ended at the 60-minute limit   everyone   15:45:00
+Missing data: board behaviour not collected (blinds: Board moved)

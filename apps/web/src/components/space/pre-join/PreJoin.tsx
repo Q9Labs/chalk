@@ -1,11 +1,12 @@
 import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
-import { Loading01Icon } from "@q9labsai/chalk-react/utils";
+import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
 import { BottomSheet, SAFE_BOTTOM } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
+import { Spinner } from "./Spinner";
 
 /** One column on phones and tablets, two columns when the preview and the form fit side by side. */
 const STACKED = "(max-width: 1023px)";
@@ -70,9 +71,12 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
   const preview = (
-    <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
-      {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)]">{card}</div> : null}
-    </PreviewTile>
+    <>
+      <ShellStyles />
+      <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
+        {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)]">{card}</div> : null}
+      </PreviewTile>
+    </>
   );
   const rows = stacked ? <DevicesSheetRow devices={devices} locked={joining} onNeedAccess={askAgain} /> : <DeviceRows devices={devices} locked={joining} onNeedAccess={askAgain} />;
   const form = (
@@ -99,7 +103,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 w-full" style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }} disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
-              <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              <Spinner size={18} />
               Joining…
             </>
           ) : (

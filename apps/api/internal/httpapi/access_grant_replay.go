@@ -25,5 +25,6 @@ func decodeAccessGrantReplay(token string, ciphertext []byte) (accessGrantRespon
 		return accessGrantResponse{}, false, err
 	}
 	now := time.Now()
-	return response, mediaExpiry.After(now) && syncExpiry.After(now), nil
+	// A body sealed before responses carried telemetry has no token, so it is renewed, not replayed.
+	return response, mediaExpiry.After(now) && syncExpiry.After(now) && response.Telemetry != nil && response.Telemetry.Token != "", nil
 }

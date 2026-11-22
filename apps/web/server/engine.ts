@@ -77,6 +77,7 @@ function dashboardErrorFor(code: string, status: number | undefined): DashboardE
   if (status === 429) return new DashboardError(429, "engine_rate_limited");
   if (code === "api_key.invalid_expiry") return new DashboardError(400, "api_key_invalid_expiry");
   if (code === "request.invalid") return new DashboardError(400, "invalid_request");
+  if (code === "pagination.invalid_cursor") return new DashboardError(400, "invalid_cursor");
   if (code.endsWith("not_found") || code === "access.forbidden") return new DashboardError(404, "resource_not_found");
   if (code === "participant.connection_superseded" || code === "media_token.subject_mismatch" || CONFLICT_CODES.some((part) => code.includes(part))) return new DashboardError(409, "engine_conflict");
   if (code.includes("rate_limited")) return new DashboardError(429, "engine_rate_limited");

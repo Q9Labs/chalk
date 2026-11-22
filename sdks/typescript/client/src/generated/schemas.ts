@@ -110,6 +110,14 @@ export const AccessGrantSchema = /* @__PURE__ */ (() =>
       expires_at: DateTimeStringSchema,
       token: Schema.String,
     }),
+    telemetry: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          expires_at: DateTimeStringSchema,
+          token: Schema.String,
+        }),
+      ),
+    ),
   }))();
 export type AccessGrant = typeof AccessGrantSchema.Type;
 
@@ -1325,7 +1333,9 @@ export type SyncToken = typeof SyncTokenSchema.Type;
 
 export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
-    client_session_id: UUIDSchema,
+    batch_id: Schema.optional(UUIDSchema),
+    client_session_id: Schema.optional(UUIDSchema),
+    end: Schema.optional(Schema.Literals(["closed", "abandoned"])),
     events: Schema.Array(
       Schema.Struct({
         action: Schema.optional(Schema.Literals(["mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"])),
@@ -1364,12 +1374,22 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
           ]),
         ),
         device_kind: Schema.optional(Schema.Literals(["microphone", "camera", "speaker", "screen"])),
+        drop_reason: Schema.optional(Schema.Literals(["queue_full", "credential_expired", "refused"])),
         dropped: Schema.optional(Schema.NullOr(Schema.Number)),
+        dropped_seqs: Schema.optional(
+          Schema.Array(
+            Schema.Struct({
+              from: Schema.Number,
+              to: Schema.Number,
+            }),
+          ).check(Schema.isMaxLength(64)),
+        ),
         duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         elapsed_ms: Schema.Number,
         element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
         end_reason: Schema.optional(Schema.Literals(["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"])),
         error_name: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"])),
+        event_id: Schema.optional(UUIDSchema),
         granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -1482,15 +1502,32 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
         ]),
         upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
       }),
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
-    version: Schema.Literal(1),
+    ).check(Schema.isMinLength(0), Schema.isMaxLength(100)),
+    next_seq: Schema.optional(Schema.NullOr(Schema.Number)),
+    source_id: Schema.optional(UUIDSchema),
+    version: Schema.Literals([1, 2]),
   }))();
 export type TelemetryRequest = typeof TelemetryRequestSchema.Type;
 
 export const TelemetryResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     accepted: Schema.Number,
+    acks: Schema.Array(
+      Schema.Struct({
+        from: Schema.Number,
+        to: Schema.Number,
+      }),
+    ),
+    duplicates: Schema.Number,
+    end_rejection: Schema.optional(Schema.String),
     rejected: Schema.Number,
+    rejections: Schema.Array(
+      Schema.Struct({
+        reason: Schema.String,
+        seq: Schema.Number,
+      }),
+    ),
+    server_ms: Schema.optional(Schema.Number),
   }))();
 export type TelemetryResponse = typeof TelemetryResponseSchema.Type;
 
@@ -3278,6 +3315,7 @@ export const ListSpacesQueryParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     archived: Schema.optional(Schema.Boolean),
     cursor: Schema.optional(Schema.String),
+    order: Schema.optional(Schema.Literals(["created", "active"])),
     page_size: Schema.optional(Schema.NumberFromString),
   }))();
 export type ListSpacesQueryParams = typeof ListSpacesQueryParamsSchema.Type;
@@ -5414,6 +5452,25 @@ export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWire
   }),
 );
 
+export class SpaceInvalidOrderError extends Schema.TaggedErrorClass<SpaceInvalidOrderError>()("SpaceInvalidOrderError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_order"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidOrderErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_order"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidOrderErrorSchema = SpaceInvalidOrderErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidOrderError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidOrderError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceNotFoundError extends Schema.TaggedErrorClass<SpaceNotFoundError>()("SpaceNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("space.not_found"),
@@ -5505,6 +5562,25 @@ export const StorageInvalidProviderErrorWireSchema = Schema.Struct({
 export const StorageInvalidProviderErrorSchema = StorageInvalidProviderErrorWireSchema.pipe(
   Schema.decodeTo(StorageInvalidProviderError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "StorageInvalidProviderError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TelemetryRefusedError extends Schema.TaggedErrorClass<TelemetryRefusedError>()("TelemetryRefusedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("telemetry.refused"),
+    message: Schema.String,
+  }),
+}) {}
+export const TelemetryRefusedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("telemetry.refused"),
+    message: Schema.String,
+  }),
+});
+export const TelemetryRefusedErrorSchema = TelemetryRefusedErrorWireSchema.pipe(
+  Schema.decodeTo(TelemetryRefusedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TelemetryRefusedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6955,6 +7031,7 @@ export const ListSpacesErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidArchiveFilterErrorSchema,
+  SpaceInvalidOrderErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;
@@ -7400,7 +7477,16 @@ export const UpdateWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
 
-export const UploadTelemetryErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const UploadTelemetryErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TelemetryRefusedErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
 
 export const ChalkOperationPolicies = {

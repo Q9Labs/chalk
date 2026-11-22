@@ -6,17 +6,18 @@ const CLIENT_SIGNAL = "client_audio_stuck:chalk_sfu";
 const MIN_PARTICIPANTS = 2;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+const evidenceField = (field) => `coalesce(tostring(evidence.${field}), tostring(column_ifexists('attributes.${field}', '')))`;
 // An SDK from before client telemetry replays its earlier events in every report, so a row from the old route counts only
-// when its report was sent for this type. A current SDK sends each event once. Both fields sit behind column_ifexists
-// because Axiom refuses to compile a query naming a field the dataset has never received, and legacy rows may never have
-// arrived or may already be trimmed.
-const typeClause = (type) => ` and ['attributes.type'] == ${literal(type)} and (isempty(column_ifexists('attributes.legacy_route', '')) or tostring(column_ifexists('attributes.trigger', '')) == ${literal(type)})`;
+// when its report was sent for this type. A current SDK sends each event once.
+const typeClause = (type) => ` and report_type == ${literal(type)} and (isempty(legacy_route) or trigger == ${literal(type)})`;
 export function query(dataset) {
   return `[${literal(dataset)}]
-| where ['service.name'] == 'chalk-api' and ['attributes.event'] == 'sdk.telemetry'${typeClause("audio_receive_stuck")}
-| where tostring(['attributes.provider']) == 'chalk_sfu'
+| where ['service.name'] == 'chalk-api' and ['attributes.event'] == 'sdk.telemetry'
+| extend evidence=parse_json(iff(body startswith 'chalk-evidence-v2:', substring(body, 18), '{}'))
+| extend report_type=${evidenceField("type")}, legacy_route=${evidenceField("legacy_route")}, trigger=${evidenceField("trigger")}, provider_hint=${evidenceField("provider")}, participant=${evidenceField("participant_id_hash")}
+| where ['attributes.event'] == 'sdk.telemetry'${typeClause("audio_receive_stuck")}
+| where provider_hint == 'chalk_sfu'
 | extend signal=${literal(CLIENT_SIGNAL)}
-| extend participant=tostring(['attributes.participant_id_hash'])
 | summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant
 | summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal
 | project episode_id, signal, events, participants`;

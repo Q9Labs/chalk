@@ -167,7 +167,7 @@ defmodule ChalkSync.ProtocolV1 do
             "command_id" => decision.command_id,
             "delivery" => delivery,
             "outcome" => Atom.to_string(result),
-            "reason" => Atom.to_string(decision.reason)
+            "reason" => ChalkSync.WireReason.to_wire(decision.reason)
           }
       end
 
@@ -382,7 +382,7 @@ defmodule ChalkSync.ProtocolV1 do
       "command_id" => decision.request_key,
       "delivery" => operation_delivery(decision),
       "outcome" => "rejected",
-      "reason" => Atom.to_string(reason)
+      "reason" => ChalkSync.WireReason.to_wire(reason)
     })
   end
 

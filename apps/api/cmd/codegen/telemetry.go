@@ -9,10 +9,13 @@ func applyTelemetryConstraints(schema map[string]any, schemaName string, fieldNa
 	}
 	switch fieldName {
 	case "version":
-		schema["enum"] = []int{sdktelemetry.Version}
+		schema["enum"] = []int{sdktelemetry.Version, sdktelemetry.LedgerVersion}
 	case "events":
-		schema["minItems"] = 1
+		schema["minItems"] = 0
 		schema["maxItems"] = sdktelemetry.EventLimit
+		schema["description"] = "Version 1 requires 1 to 100 events. Version 2 allows 0 to 100, and an empty list only when end is set."
+	case "dropped_seqs":
+		schema["maxItems"] = sdktelemetry.MaxDropRanges
 	case "tracks":
 		schema["maxItems"] = sdktelemetry.MaxTracks
 	case "mid":

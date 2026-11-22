@@ -4,7 +4,6 @@ import {
   ArrowLeft01Icon as ArrowLeft01IconSvg,
   ArrowRight01Icon as ArrowRight01IconSvg,
   CallEnd01Icon as CallEnd01IconSvg,
-  CancelCircleIcon as CancelCircleIconSvg,
   CheckmarkCircle02Icon as CheckmarkCircle02IconSvg,
   CircleIcon as CircleIconSvg,
   FileIcon as FileTextIconSvg,
@@ -31,8 +30,8 @@ import type { HugeiconsProps, IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon as StaticCancel01Icon,
-  Clock01Icon as StaticClock01Icon,
   Copy01Icon as StaticCopy01Icon,
+  Delete02Icon as StaticDelete02Icon,
   CrownIcon as StaticCrown01Icon,
   Download01Icon as StaticDownload01Icon,
   Edit02Icon as StaticEdit02Icon,
@@ -79,13 +78,12 @@ export const ArrowLeft01Icon = createIcon(ArrowLeft01IconSvg);
 export const ArrowRight01Icon = createIcon(ArrowRight01IconSvg);
 export const CallEnd01Icon = createIcon(CallEnd01IconSvg);
 export const Cancel01Icon = createIcon(StaticCancel01Icon);
-export const CancelCircleIcon = createIcon(CancelCircleIconSvg);
 export const CheckmarkCircle02Icon = createIcon(CheckmarkCircle02IconSvg);
 export const CircleIcon = createIcon(CircleIconSvg);
-export const Clock01Icon = createIcon(StaticClock01Icon);
 export const ColumnIcon = createIcon(LayoutTwoColumnIconSvg);
 export const Copy01Icon = createIcon(StaticCopy01Icon);
 export const Crown01Icon = createIcon(StaticCrown01Icon);
+export const Delete02Icon = createIcon(StaticDelete02Icon);
 export const Download01Icon = createIcon(StaticDownload01Icon);
 export const Edit02Icon = createIcon(StaticEdit02Icon);
 export const FileTextIcon = createIcon(FileTextIconSvg);

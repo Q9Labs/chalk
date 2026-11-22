@@ -1,5 +1,5 @@
 import { canExtendCall, reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
-import { Chalk } from "@q9labsai/chalk-react";
+import { Chalk, reportDiagnostics } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
 import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
@@ -11,7 +11,7 @@ import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
 
 // The call UI and media stack, which SpacePage loads only once the participant asks to join.
-export { ReportProblemDialog, StatusSurface } from "@q9labsai/chalk-react";
+export { ReportProblemDialog, reportDiagnostics, StatusSurface } from "@q9labsai/chalk-react";
 
 export function LocalSpace({
   admission,
@@ -133,7 +133,7 @@ export function LocalSpace({
           client={client}
           onReportProblem={reportsAvailable ? reportProblem : undefined}
           reportUnavailableReason={reportUnavailableReason}
-          onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
+          onOpenReportProblem={() => onOpenReportProblem(reportProblem, reportDiagnostics(spaceName ?? "Call", connection))}
           displayName={displayName}
           defaults={defaults}
           spaceName={spaceName}

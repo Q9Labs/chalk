@@ -106,11 +106,9 @@ export function pageChecks(options) {
     add("viewport-overflow", describe(el), `${describe(el)} spans ${Math.round(rect.left)}..${Math.round(rect.right)} x ${Math.round(rect.top)}..${Math.round(rect.bottom)} in a ${vw}x${vh} viewport`);
   }
 
-  // child-clipped and text-clipped: content that a parent cuts off.
-  for (const el of everything) {
-    if (inertOrHidden(el)) continue;
-    const own = style(el);
-    const hasText = [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "");
+  // Text shrunk to a 1px box that is clipped away is screen-reader-only text (the sr-only pattern): it is cut off on purpose.
+  const screenReaderOnly = (el, own) => el.clientWidth <= 1 && el.clientHeight <= 1 && own.overflowX === "hidden" && own.overflowY === "hidden" && (own.position === "absolute" || own.clip !== "auto");
+  const checkTextClipped = (el, own, hasText) => {
     const clipsX = own.overflowX === "hidden" || own.overflowX === "clip";
     if (hasText && clipsX && el.scrollWidth > el.clientWidth + 1 && own.textOverflow !== "ellipsis" && own.display !== "inline") {
       add("text-clipped", describe(el), `${describe(el)} text is ${el.scrollWidth}px in a ${el.clientWidth}px box and is cut off`);
@@ -119,6 +117,13 @@ export function pageChecks(options) {
     if (hasText && (own.overflowY === "hidden" || own.overflowY === "clip") && (!lines || lines === "none") && el.scrollHeight > el.clientHeight + 2 && own.display !== "inline" && el.clientHeight > 0) {
       add("text-clipped", describe(el), `${describe(el)} text is ${el.scrollHeight}px tall in a ${el.clientHeight}px box and is cut off`);
     }
+  };
+  // child-clipped and text-clipped: content that a parent cuts off.
+  for (const el of everything) {
+    if (inertOrHidden(el)) continue;
+    const own = style(el);
+    const hasText = [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "");
+    if (!screenReaderOnly(el, own)) checkTextClipped(el, own, hasText);
     const parent = el.parentElement;
     if (!parent || parent === document.body || (!hasText && !el.matches(controlSelector))) continue;
     const parentStyle = style(parent);
@@ -167,12 +172,19 @@ export function pageChecks(options) {
     add("frame-unfilled", `${describe(named)} face`, `${describe(frame)} is ${Math.round(box.width)}x${Math.round(box.height)} but its content is ${Math.round(child.width)}x${Math.round(child.height)}, flush on one side and short on the other`);
   }
 
-  // control-overlap: two controls share screen area and neither sits inside the other.
+  // control-overlap: two controls share screen area and neither sits inside the other. A menu floats over the page on
+  // purpose, so a control inside one may overlap what is behind it; control-covered still catches a layer that blocks a control.
+  const floatingSelector = "[role=menu], [role=listbox], [popover]";
+  const floatsOver = (a, b) => {
+    const layerA = a.closest(floatingSelector);
+    const layerB = b.closest(floatingSelector);
+    return layerA !== layerB && (layerA !== null || layerB !== null);
+  };
   for (let i = 0; i < shownControls.length; i += 1) {
     for (let j = i + 1; j < shownControls.length; j += 1) {
       const a = shownControls[i];
       const b = shownControls[j];
-      if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      if (a.el.contains(b.el) || b.el.contains(a.el) || floatsOver(a.el, b.el)) continue;
       const width = Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left);
       const height = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
       if (width <= 2 || height <= 2) continue;

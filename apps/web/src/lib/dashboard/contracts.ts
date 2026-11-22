@@ -224,7 +224,7 @@ export type DashboardErrorDTO = { error: { code: string; retryable?: true; retry
 export type OwnerAccessDTO = { access: AccessGrant; ownerSeat?: string; deadlineCeiling?: string };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
-/** `first` is the first page, sent when a call Home doesn't list is among the five newest. */
+/** `first` is the first page, sent when a call Home doesn't list is among the five most recently used. */
 export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };

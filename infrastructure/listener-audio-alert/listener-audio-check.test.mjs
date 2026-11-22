@@ -194,16 +194,19 @@ test("HTTP, JSON, malformed and network failures fail safely", async () => {
 
 test("the query reads only Chalk SFU stuck-audio reports", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("['attributes.event'] == 'sdk.telemetry' and ['attributes.type'] == 'audio_receive_stuck'"));
-  assert.ok(apl.includes("column_ifexists('attributes.legacy_route', '')"));
-  assert.ok(apl.includes("tostring(['attributes.provider']) == 'chalk_sfu'"));
+  assert.ok(apl.includes("['attributes.event'] == 'sdk.telemetry' and report_type == 'audio_receive_stuck' and (isempty(legacy_route) or trigger == 'audio_receive_stuck')"));
+  assert.match(apl, /parse_json\(iff\(body startswith 'chalk-evidence-v2:', substring\(body, 18\), '\{\}'\)\)/);
+  for (const field of ["type", "legacy_route", "trigger", "provider", "participant_id_hash"]) {
+    assert.ok(apl.includes(`coalesce(tostring(evidence.${field}), tostring(column_ifexists('attributes.${field}', '')))`), field);
+  }
+  assert.ok(apl.includes("provider_hint == 'chalk_sfu'"));
   assert.doesNotMatch(apl, /cloudflare|listener_publication_unpulled/);
   assert.match(apl, /project episode_id, signal, events, participants$/);
 });
 
 test("the query counts distinct non-empty participant hashes and never projects them", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("extend participant=tostring(['attributes.participant_id_hash'])"));
+  assert.ok(apl.includes("participant=coalesce(tostring(evidence.participant_id_hash)"));
   assert.ok(apl.includes("summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant"));
   assert.ok(apl.includes("summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal"));
   assert.doesNotMatch(apl.split("| project")[1], /participant_id_hash|participant\b/);

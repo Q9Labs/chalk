@@ -13,7 +13,7 @@ import { chalkSfuPlane } from "./config.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
-import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
+import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings, dashboardOAuthBindings } from "./dashboard-seed.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
   const config = {
@@ -143,6 +143,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_REQUEST_LOGS: "all",
         // The API builds public invite links from the first origin, so it is the one a browser uses (the public origin when there is one).
         CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.public, config.urls.web])].join(","),
+        ...dashboardOAuthBindings(config),
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         ...chalkSfuAPIEnvironment(config),

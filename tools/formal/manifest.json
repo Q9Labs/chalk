@@ -165,6 +165,25 @@
         "apps/sync/test/chalk_sync/rolling_entry_postgres_test.exs",
         "apps/sync/test/chalk_sync/sync_entry_leave_replay_test.exs"
       ]
+    },
+    {
+      "id": "telemetry-delivery",
+      "title": "Telemetry delivery model",
+      "run": "tools/formal/telemetry-delivery/run.sh",
+      "timeoutMinutes": 30,
+      "ci": "matrix",
+      "paths": [
+        "apps/api/db/queries/telemetry_outbox.sql",
+        "apps/api/db/queries/telemetry_sources.sql",
+        "apps/api/internal/adapters/postgres/telemetry_ledger.go",
+        "apps/api/internal/adapters/postgres/telemetry_relay.go",
+        "apps/api/internal/httpapi/telemetry.go",
+        "apps/api/internal/sdktelemetry/**",
+        "apps/api/internal/telemetrydelivery/**",
+        "sdks/typescript/client/src/access/grant.ts",
+        "sdks/typescript/client/src/connection/telemetry.ts",
+        "sdks/typescript/client/src/telemetry/**"
+      ]
     }
   ]
 }

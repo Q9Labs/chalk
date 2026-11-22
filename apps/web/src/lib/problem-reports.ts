@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Schema } from "effect";
-import { currentSessionId, lastFailedRequest, withRequestContext, type AppTelemetry, type SpaceClient } from "@q9labsai/chalk-client";
+import { currentSessionId, formatFailureReference, lastFailedRequest, withRequestContext, type AppTelemetry, type SpaceClient } from "@q9labsai/chalk-client";
 import { apiUrls } from "@q9labsai/chalk-client/effect";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 import { backoffMs } from "./backoff";
@@ -94,6 +94,7 @@ export function problemReporter({
   return async ({ description, diagnostics }) => {
     const credential = mediaProof();
     const snapshot = connection();
+    const reference = formatFailureReference(snapshot.lastError);
     if (!credential || !tenantId) throw new Error("Join the call before sending a report.");
     const response = await apiFetch(apiUrls.problemReports(baseURL, tenantId), {
       method: "POST",
@@ -101,18 +102,18 @@ export function problemReporter({
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` },
       body: JSON.stringify({
         description,
-        ...(diagnostics === undefined
+        // The error line holds no personal data and the call screens no longer print it, so every report carries it; the rest follows the "Include diagnostics" choice.
+        ...(diagnostics === undefined && !reference
           ? {}
           : {
               diagnostics: [
-                `Connection: ${snapshot.status}`,
-                `Last error: ${snapshot.lastError?.code ?? "none"}`,
-                `App version: ${__APP_VERSION__}`,
-                `Session: ${currentSessionId() ?? "none"}`,
-                `Client session: ${telemetry?.sessionId || "none"}`,
-                `Last failed request: ${failedRequestLine()}`,
-                `Browser: ${navigator.userAgent.slice(0, 400)}`,
-              ].join("\n"),
+                reference,
+                ...(diagnostics === undefined
+                  ? []
+                  : [`Connection: ${snapshot.status}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Client session: ${telemetry?.sessionId || "none"}`, `Last failed request: ${failedRequestLine()}`, `Browser: ${navigator.userAgent.slice(0, 400)}`]),
+              ]
+                .filter(Boolean)
+                .join("\n"),
             }),
       }),
     });

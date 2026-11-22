@@ -369,21 +369,6 @@ type PublicSpaceArrival struct {
 	GuestCredential string
 }
 
-type PublicAccessGrant struct {
-	SyncToken             string
-	MediaToken            string
-	ExpiresAt             time.Time
-	TenantID              utilities.ID
-	SpaceID               utilities.ID
-	EpisodeID             utilities.ID
-	StartedAt             *time.Time
-	ParticipantID         utilities.ID
-	ParticipantGeneration int64
-	Provider              string
-	ProviderSubject       string
-	ClientPayload         PublicAccessClientPayload
-}
-
 type PublicAccessClientPayload struct {
 	ConnectionID string
 	EpisodeRef   string

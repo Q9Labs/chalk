@@ -12,6 +12,7 @@ import { reportCredentialExpiredReason, useProblemReports, useReportCredentialEx
 import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
+import { FailedEntry } from "./FailedEntry";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
@@ -348,9 +349,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           />
         );
       case "failed":
-        return (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={current.failure.message} glyph={current.failure.reason} action={current.failure.retryable ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start(), disabled: current.restarting } : undefined} />
-        );
+        return <FailedEntry failure={current.failure} spaceName={callName} colorScheme={mode} restarting={current.restarting} onAskAgain={() => start()} />;
       case "idle":
       case "arriving":
       case "admitted":
@@ -380,7 +379,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {sendReport && callSurface ? (
         <callSurface.ReportProblemDialog
           unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
-          diagnostics={ended ? `Connection: ${ended.phase}\nLast error: ${ended.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
+          diagnostics={ended ? callSurface.reportDiagnostics(ended.callName ?? "Call", { status: ended.phase, lastError: ended.failure }) : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}
           onClose={() => setReportOpen(false)}
