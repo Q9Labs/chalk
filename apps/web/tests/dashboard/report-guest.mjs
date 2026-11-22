@@ -69,7 +69,7 @@ export async function guestReports(c) {
     await checkGuestRegression(c, "failed report retains captured terminal diagnostics", async () => {
       const content = (await received(c)).at(-1).content.replaceAll("\\", "");
       assert(content.includes("Connection: failed"), "Failed-call reports must retain the failed phase after client teardown");
-      assert(content.includes("Last error: connection.sync_hello_timeout"), "Failed-call reports must retain the captured Sync failure");
+      assert(content.includes("Error: connection.sync_hello_timeout"), "Failed-call reports must retain the captured Sync failure code");
     });
 
     await checkGuestRegression(c, "expired live guest hides the action and keeps an open draft", async () => {

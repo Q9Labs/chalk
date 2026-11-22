@@ -1,15 +1,17 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { CopyAction, usePhone, useToast } from "./kit";
 import { Menu, MenuItem, RenameArchiveItems } from "./menu";
 import { inviteLink } from "./home-rows";
+import { useJoinCall, usePendingJoin } from "./join-call";
 
 export function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
-  const navigate = useNavigate();
-  const join = () => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } });
+  const joinCall = useJoinCall();
+  const joining = usePendingJoin() === call.id;
+  const join = () => joinCall(call);
   const status = live ? (
     <span className="live">
       <span className="dot" />
@@ -35,7 +37,8 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
-          <button type="button" className="btn sec sm" onClick={join}>
+          <button type="button" className="btn sec sm" aria-busy={joining || undefined} onClick={join}>
+            {joining ? <span className="spin" aria-hidden="true" /> : null}
             Join
           </button>
         ) : null}

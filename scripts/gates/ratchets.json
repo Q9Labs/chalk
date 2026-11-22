@@ -201,7 +201,6 @@
     "sdks/typescript/react/src/components/composite/MessageBubble.tsx": 402,
     "sdks/typescript/react/src/components/control-bar/ShellStyles.tsx": 739,
     "sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts": 378,
-    "sdks/typescript/react/src/components/participants-panel/ParticipantsPanel.tsx": 310,
     "sdks/typescript/react/src/components/recording-history/RecordingHistoryPanel.tsx": 507,
     "sdks/typescript/react/src/components/space-view/SpaceView.tsx": 502,
     "sdks/typescript/react/src/components/stage/Stage.tsx": 427,

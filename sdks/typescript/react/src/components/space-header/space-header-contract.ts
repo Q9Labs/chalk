@@ -1,12 +1,20 @@
 import type { ReactNode } from "react";
 import type { CallNetwork } from "./call-network";
 
+/** The call-wide controls a host sees in the call menu. A control that is missing here is not shown. */
+export interface CallHostControls {
+  /** How many other people are unmuted, and the way to mute them all. */
+  readonly muteEveryone?: { readonly unmutedCount: number; readonly onMute: () => Promise<void> };
+}
+
 export interface SpaceHeaderProps {
   spaceName: string;
   people?: readonly { readonly participantId: string; readonly displayName: string }[];
   onTogglePeople?: () => void;
   knockCount?: number;
   shareUrl?: string;
+  /** Mute everyone, for a host. Without it the call menu has no host row. */
+  hostControls?: CallHostControls;
   callLinkOpen?: boolean;
   onCallLinkToggle?: () => void;
   diagnostics?: readonly { readonly label: string; readonly value: string }[];
@@ -46,4 +54,9 @@ export interface SpaceHeaderProps {
 
 export function formatDuration(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/** A host alone at call start sees the menu titled for what to do next. */
+export function detailsTitle(spaceName: string, inviteOpen: boolean | undefined): string {
+  return inviteOpen ? "Your call is ready" : spaceName;
 }

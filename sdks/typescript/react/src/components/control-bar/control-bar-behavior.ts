@@ -2,7 +2,7 @@ import { mergeDevices, withSelectedDeviceFallback, type MediaDevice } from "./co
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
+import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
@@ -19,9 +19,6 @@ export type { MediaDevice } from "./control-bar-devices";
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  shareUrl?: string;
-  callLinkOpen?: boolean;
-  onCallLinkToggle?: () => void;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -42,7 +39,6 @@ export interface ControlBarSurfaceProps {
   onMirrorChange?: (mirrored: boolean) => void;
   onTestSpeaker?: () => void;
   onStartScreenShare?: (options: ScreenShareOptions) => void;
-  onCopyError?: () => void;
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
@@ -99,9 +95,6 @@ export interface ControlBarProps {
   /** Local self-view only. Omit to use the persisted mirror preference. */
   readonly mirrored?: boolean;
   readonly onMirrorChange?: (mirrored: boolean) => void;
-  readonly shareUrl?: string;
-  readonly callLinkOpen?: boolean;
-  readonly onCallLinkToggle?: () => void;
   readonly layout?: "focus" | "grid";
   readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
@@ -110,6 +103,7 @@ export interface ControlBarProps {
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
+  readonly isWhiteboardOpen?: boolean;
   readonly onOpenReactions?: () => void;
   readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;
@@ -307,7 +301,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         "screen",
         "start",
       ),
-    shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     onCancelMicrophonePending: toggleMicrophone,
@@ -337,23 +330,37 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
-    onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
+    onToggleRecording: () => void run(() => toggleRecording(client.recording, recordingStatus === "recording")),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
     onToggleWhiteboard: props.onToggleWhiteboard,
+    isWhiteboardOpen: props.isWhiteboardOpen,
     onOpenReactions: props.onOpenReactions,
     onLeft: leave,
     onEndForEveryone: props.onEndForEveryone,
   };
 
   const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNoticeMessage(media.local, deviceAccess) };
 }
 
-/** A device with an access card already says what is wrong, so it gets no second notice. */
-function failedMediaNotice(media: ReturnType<typeof useMedia>["local"], deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>>): string | undefined {
-  if (media.microphone.state === "failed" && !deviceAccess.microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
-  if (media.camera.state === "failed" && !deviceAccess.camera) return "Camera didn’t reach the call. Turn it on to try again.";
+/** A device with an access card already says what is wrong, so it gets no second notice. The notice names what failed in one line; turning the devices back on is its retry. */
+export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local"], "microphone" | "camera">, cards: Partial<Record<DeviceKind, unknown>>): { readonly message: string; readonly devices: readonly ("microphone" | "camera")[] } | undefined {
+  const devices = (["microphone", "camera"] as const).filter((device) => media[device].state === "failed" && !cards[device]);
+  if (devices.length === 2) return { message: "Your microphone and camera didn’t reach the call.", devices };
+  if (devices[0]) return { message: `Your ${devices[0]} didn’t reach the call.`, devices };
   return undefined;
+}
+
+function failedMediaNoticeMessage(media: Parameters<typeof failedMediaNotice>[0], cards: Parameters<typeof failedMediaNotice>[1]): string | undefined {
+  return failedMediaNotice(media, cards)?.message;
+}
+
+/** A failed start or stop is named for the recording, so it never reads as a device problem. */
+function toggleRecording(recording: ReturnType<typeof useSpaceClient>["recording"], isRecording: boolean): Promise<unknown> {
+  const action = isRecording ? "stop" : "start";
+  return (isRecording ? recording.stop() : recording.start()).catch((cause: unknown) => {
+    throw recordingFailure(cause, action);
+  });
 }

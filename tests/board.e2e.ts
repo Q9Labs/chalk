@@ -4,6 +4,7 @@ import { withProofCall } from "../scripts/web-proof/guest.mjs";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { mkdir } from "node:fs/promises";
 import ports from "../scripts/dev/ports.json";
+import { chooseTileOption } from "./tile-options";
 
 const boardBox = () => {
   const box = document.querySelector(".chalk-board")?.getBoundingClientRect();
@@ -88,7 +89,7 @@ async function joinBoardParticipants(contexts: BrowserContext[]) {
   expect((await created).status()).toBe(201);
   await a.getByRole("button", { name: "Video tile for BoardA", exact: true }).waitFor();
   await expect.poll(() => a.getByRole("button", { name: /^Video tile for / }).count()).toBe(1);
-  await a.getByRole("button", { name: "Close call link", exact: true }).click();
+  await a.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await b.goto(a.url());
   await b.getByLabel("Your name", { exact: true }).fill("BoardB");
   await b.getByRole("button", { name: "Join call", exact: true }).click();
@@ -297,10 +298,8 @@ async function followEdgeStrokes(a: Page, b: Page, directory: string) {
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await b.evaluate(trackProofZoom);
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Stop following", exact: true }).click();
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
+  await chooseTileOption(b, "BoardA", "Stop following");
+  await chooseTileOption(b, "BoardA", "Follow");
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   // Each new stroke must arrive visibly in the middle of the phone canvas.
   for (const [index, point] of [
@@ -352,8 +351,7 @@ async function checkManualZoom(a: Page, b: Page) {
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await zoomIn(b);
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
+  await chooseTileOption(b, "BoardA", "Follow");
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await drawStroke(a, { x: 0.7, y: 0.3 }, { x: 0.72, y: 0.32 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("5");

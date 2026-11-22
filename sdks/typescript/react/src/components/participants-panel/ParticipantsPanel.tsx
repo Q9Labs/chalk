@@ -1,7 +1,5 @@
 import { deviceHint } from "../../selectors/device-hint";
-import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
 import React, { useMemo, useState } from "react";
-import { ChalkButton, ChalkPopover } from "../chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
@@ -77,7 +75,6 @@ interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly canManageParticipants?: boolean;
   readonly canManageAdmission?: boolean;
   readonly admissionCount?: number;
-  readonly onMuteEveryone?: () => Promise<void>;
 }
 
 function PeopleLabel({ text, count }: { readonly text: string; readonly count: number }) {
@@ -95,7 +92,6 @@ export const ParticipantsPanelSurface = React.memo(
     canManageAdmission = false,
     admissionCount = 0,
     admissionEnabled = true,
-    onMuteEveryone,
     searchable = true,
     className,
     variant = "default",
@@ -116,27 +112,12 @@ export const ParticipantsPanelSurface = React.memo(
   }: ParticipantsPanelSurfaceProps) => {
     const [query, setQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const [muting, setMuting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const searching = query.trim().length > 0;
     const found = matchParticipants(participants, query);
     const groups = orderParticipants(participants);
     const numbered = handNumbers(participants);
     const waitingBlock = canManageAdmission && admissionEnabled && admissionCount > 0;
     const labelled = participants.length > 8 || waitingBlock;
-    const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
-    const muteEveryone = async () => {
-      if (!onMuteEveryone || muting) return;
-      setMuting(true);
-      setError(null);
-      try {
-        await onMuteEveryone();
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Couldn’t mute everyone.");
-      } finally {
-        setMuting(false);
-      }
-    };
     const row = (participant: ParticipantListParticipant) => (
       <ParticipantRow
         key={participant.id}
@@ -168,7 +149,6 @@ export const ParticipantsPanelSurface = React.memo(
       <section className={cn("call-people", className)} aria-label="People">
         <CallCardStyles />
         <div className="call-people-list">
-          {error ? <p role="alert">{error}</p> : null}
           {searchable && (participants.length > 8 || query.length > 0) ? (
             <label className="call-people-search" data-active={searching || undefined}>
               <Search01Icon aria-hidden="true" />
@@ -202,45 +182,12 @@ export const ParticipantsPanelSurface = React.memo(
             </>
           )}
         </div>
-        {onMuteEveryone ? (
-          <div className="call-host-controls">
-            <ChalkPopover
-              label="Mute everyone"
-              trigger={
-                <ChalkButton className="w-full" disabled={muting || unmutedCount === 0}>
-                  Mute everyone
-                </ChalkButton>
-              }
-            >
-              <div className="call-mute-confirm">
-                <b>Mute everyone?</b>
-                <p>
-                  {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
-                </p>
-                <div className="call-mute-actions">
-                  <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
-                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : "Mute everyone"}</Popover.Close>
-                </div>
-              </div>
-            </ChalkPopover>
-          </div>
-        ) : null}
       </section>
     );
   },
 );
 
-export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
-  const client = useSpaceClient();
-  const self = useSelf();
-  const participantsSlice = useParticipants();
-  const canAssignRoles = useCan("assignRoles");
-  const canStopScreenOthers = useCan("stopScreenOthers");
-  const canMuteOthers = useCan("muteOthers");
-  const canStopVideoOthers = useCan("stopVideoOthers");
-  const canRequestMedia = useCan("requestMediaOthers");
-  const canRemoveParticipants = useCan("removeParticipant");
-  const canManageAdmission = useCan("manageAdmission");
+function useParticipantVolumes(props: ParticipantsPanelProps) {
   const contextVolumeState = useParticipantVolumeContext();
   const [localVolumes, setLocalVolumes] = useState<ReadonlyMap<string, number>>(new Map());
   const isControlled = props.participantVolumes !== undefined && props.onParticipantVolumeChange !== undefined;
@@ -255,6 +202,21 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
           else next.set(participantId, volume);
           return next;
         })));
+  return { participantVolumes, onParticipantVolumeChange };
+}
+
+export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): React.JSX.Element => {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participantsSlice = useParticipants();
+  const canAssignRoles = useCan("assignRoles");
+  const canStopScreenOthers = useCan("stopScreenOthers");
+  const canMuteOthers = useCan("muteOthers");
+  const canStopVideoOthers = useCan("stopVideoOthers");
+  const canRequestMedia = useCan("requestMediaOthers");
+  const canRemoveParticipants = useCan("removeParticipant");
+  const canManageAdmission = useCan("manageAdmission");
+  const { participantVolumes, onParticipantVolumeChange } = useParticipantVolumes(props);
   const ownHandOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId), [participantsSlice.roster]));
   const handOrders = props.handOrders ?? ownHandOrders;
   const participants = useMemo(
@@ -289,13 +251,6 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       onStopParticipantScreenShare={canStopScreenOthers ? (id) => client.participants.stopScreenShare(id) : undefined}
       canManageAdmission={canManageAdmission}
       admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length : 0}
-      onMuteEveryone={
-        canMuteOthers
-          ? async () => {
-              await Promise.all(participants.filter((person) => !person.isLocal && !person.isMuted).map((person) => client.participants.mute(person.id)));
-            }
-          : undefined
-      }
       onMuteParticipant={canMuteOthers ? (id) => client.participants.mute(id) : undefined}
       onRequestUnmute={canRequestMedia ? (props.onRequestUnmute ?? ((id) => client.participants.requestMedia(id, "microphone"))) : undefined}
       onStopParticipantCamera={canStopVideoOthers ? (id) => client.participants.stopVideo(id) : undefined}

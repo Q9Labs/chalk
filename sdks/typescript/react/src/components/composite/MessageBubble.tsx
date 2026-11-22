@@ -6,6 +6,7 @@ import { formatClockTime } from "../../utils/formatClockTime";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
 import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
+import { UnavailableAttachment } from "./UnavailableAttachment";
 
 export interface MessageBubbleProps {
   content: string;
@@ -241,21 +242,14 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                   const url = resolvedUrls.get(file.attachmentId);
                   if (failedAttachmentIds.has(file.attachmentId))
                     return (
-                      <div className="call-file" key={file.attachmentId}>
-                        <span>
-                          <b dir="auto">{file.fileName}</b>
-                          <small>Attachment unavailable</small>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            retry(file.attachmentId);
-                            if (!image) void openFile(file);
-                          }}
-                        >
-                          Retry
-                        </button>
-                      </div>
+                      <UnavailableAttachment
+                        key={file.attachmentId}
+                        fileName={file.fileName}
+                        onTryAgain={() => {
+                          retry(file.attachmentId);
+                          if (!image) void openFile(file);
+                        }}
+                      />
                     );
                   if (image && url)
                     return (

@@ -11,6 +11,6 @@ export { postTelemetry } from "./telemetry/send";
 export type { DeliveryStep, PlatformChange, TelemetryJournal, TelemetryPlatform } from "./telemetry/types";
 export { currentSessionId, lastFailedRequest, newSessionId, requestContextHeaders, SESSION_ID_KEY, sessionBaggage, setSessionSource, withRequestContext, type FailedRequest, type SessionSource } from "./session";
 
-export { formatSyncConnectDiagnostic } from "./sync/connect-diagnostics";
+export { formatFailureReference, formatSyncConnectDiagnostic } from "./sync/connect-diagnostics";
 export { getConnectionFailureDetail, getRecordingFailureDetail } from "./space-client/failure-detail";
 export { mediaBootstrap } from "./access/media-bootstrap";

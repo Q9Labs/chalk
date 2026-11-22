@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 export async function provePublicAdmission({ browser, page, origin, tenantId, spaceId, inviteUrl, repository }) {
   const out = resolve(repository, "artifacts/fix-admit");
   await mkdir(out, { recursive: true });
-  await page.getByRole("button", { name: "Close call link", exact: true }).click();
+  await page.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   const invite = new URL(inviteUrl);
   const guestUrl = `${origin}${invite.pathname}${invite.search}${invite.hash}`;
   const journeys = [];
@@ -48,7 +48,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   const denied = await knock(c, "Deny guest");
   try {
     await page.getByRole("button", { name: "Decline Deny guest", exact: true }).click();
-    await denied.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
+    await denied.guest.getByText("The host didn’t let you in", { exact: true }).waitFor({ timeout: 15000 });
     await terminalProjection(c, "Deny guest", "denied");
     await denied.guest.screenshot({ path: resolve(out, "after-guest-denied.png") });
   } finally {
@@ -65,7 +65,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
     await terminalProjection(c, "Expired guest", "expired");
     await expired.guest.screenshot({ path: resolve(out, "after-guest-expired.png") });
-    assert.equal(await expired.guest.getByText(/Chalk could not connect/).count(), 0);
+    assert.equal(await expired.guest.getByText(/Couldn’t reach Chalk|Chalk is having trouble/).count(), 0);
   } finally {
     await expired.context.close();
   }
@@ -100,7 +100,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         await pending.guest.getByRole("button", { name: "Leave call", exact: true }).click();
         await pending.guest.getByRole("heading", { name: /You left/ }).waitFor();
       } else {
-        await pending.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
+        await pending.guest.getByText("The host didn’t let you in", { exact: true }).waitFor({ timeout: 15000 });
       }
     } finally {
       await pending.context.close();

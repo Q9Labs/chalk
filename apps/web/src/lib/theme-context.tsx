@@ -2,7 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import type React from "react";
 
-import { applyTheme, persistThemePreference, readThemePreference, resolveTheme, type ResolvedTheme, type ThemePreference } from "./theme";
+import { applyTheme, clearCallBoot, persistThemePreference, readThemePreference, resolveTheme, type ResolvedTheme, type ThemePreference } from "./theme";
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -19,6 +19,7 @@ export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const mode = resolveTheme({ preference, pathname });
 
   useEffect(() => applyTheme(document.documentElement, mode), [mode]);
+  useEffect(() => clearCallBoot(document.documentElement, pathname), [pathname]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     storePreference(next);

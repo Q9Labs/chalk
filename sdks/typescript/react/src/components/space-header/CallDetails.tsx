@@ -6,8 +6,9 @@ import { ShellIcon } from "../control-bar/ShellIcon";
 import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
+import { HostControlRows } from "./HostControlRows";
 import { RowIcon } from "./RowIcon";
-import type { SpaceHeaderProps } from "./space-header-contract";
+import { detailsTitle, type SpaceHeaderProps } from "./space-header-contract";
 
 // The charts load when the connection section first opens, so a call that never looks at them never downloads them.
 const CallChartsView = lazy(() => import("./CallCharts").then((module) => ({ default: module.CallChartsView })));
@@ -28,7 +29,9 @@ export function CallDetails({
   onReportProblem,
   revealConnection = false,
   hideShortcuts = false,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+  revealQr,
+  hostControls,
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "hostControls" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
   readonly hideShortcuts?: boolean;
   readonly onClose: () => void;
@@ -37,10 +40,12 @@ export function CallDetails({
   readonly onDialog: (kind: "shortcuts" | "report") => void;
   /** Opened from the connection chip: the Connection row starts expanded and ringed so the person sees where the chip led. */
   readonly revealConnection?: boolean;
+  /** Opened at call start for a host who is alone: the menu is titled "Your call is ready" and the QR code starts expanded so the invite is one glance away. */
+  readonly revealQr?: boolean;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
-  const [qrOpen, setQrOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(revealQr === true);
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
@@ -50,7 +55,7 @@ export function CallDetails({
       <CallMenuStyles />
       <div className="chalk-shell-details-heading">
         <div>
-          <h2>{spaceName}</h2>
+          <h2>{detailsTitle(spaceName, revealQr)}</h2>
           {summary ? (
             <p className="chalk-shell-details-sub">
               {isRecording ? <i aria-hidden="true" /> : null}
@@ -64,7 +69,7 @@ export function CallDetails({
           </svg>
         </ChalkIconButton>
       </div>
-      <InviteLinkButton link={link} variant="menu" />
+      <InviteLinkButton link={link} />
       {qr ? (
         <>
           <button type="button" className="chalk-shell-detail-action" aria-expanded={qrOpen} aria-controls="chalk-details-qr" onClick={() => setQrOpen(!qrOpen)}>
@@ -80,7 +85,10 @@ export function CallDetails({
             {qrOpen ? <InviteQR value={link} /> : null}
           </div>
         </>
-      ) : null}
+      ) : (
+        <p className="chalk-shell-detail-helper">This link is too long for a QR code. Copy the link to share it.</p>
+      )}
+      <HostControlRows controls={hostControls} />
       {network && quality ? (
         <>
           <div className="chalk-shell-sep" />

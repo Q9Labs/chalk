@@ -21,8 +21,8 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
         </>
       ) : (
         <>
-          <path d="M3 20V7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10z" />
-          <path d="M3 11h18" />
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 9h18M10 4v5" />
         </>
       )}
     </svg>
@@ -117,22 +117,21 @@ export function ShareControl({
                 </span>
               </Menu.Item>
             ))}
-            {surface === "browser" ? (
-              <>
-                <Menu.Separator className="chalk-shell-menu-separator" />
-                <Menu.CheckboxItem className="chalk-menu-item" checked={audio} onCheckedChange={setAudio} closeOnClick={false}>
-                  <span className="chalk-shell-device-label">
-                    <span>Share tab audio</span>
-                    <small>Works when you share a browser tab</small>
+            {/* The switch always follows the sources, so tab audio can be set before a tab is picked. */}
+            <>
+              <Menu.Separator className="chalk-shell-menu-separator" />
+              <Menu.CheckboxItem className="chalk-menu-item" checked={audio} onCheckedChange={setAudio} closeOnClick={false}>
+                <span className="chalk-shell-device-label">
+                  <span>Share tab audio</span>
+                  <small>Works when you share a browser tab</small>
+                </span>
+                <span className="chalk-shell-menu-switch" aria-hidden="true">
+                  <span className="chalk-switch" aria-checked={audio}>
+                    <span />
                   </span>
-                  <span className="chalk-shell-menu-switch" aria-hidden="true">
-                    <span className="chalk-switch" aria-checked={audio}>
-                      <span />
-                    </span>
-                  </span>
-                </Menu.CheckboxItem>
-              </>
-            ) : null}
+                </span>
+              </Menu.CheckboxItem>
+            </>
           </>
         )}
       </ChalkMenu>

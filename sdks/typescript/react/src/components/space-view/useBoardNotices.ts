@@ -17,7 +17,8 @@ export function useBoardNotices(boardOpen: boolean | undefined) {
     }
     boardToastCount.current += 1;
     const id = `board-${boardToastCount.current}`;
-    setBoardToasts((current) => [...current.slice(-2), { ...toast, id }]);
+    // The same board message again replaces its notice instead of stacking a copy under it.
+    setBoardToasts((current) => [...current.filter((shown) => shown.message !== toast.message).slice(-2), { ...toast, id }]);
   }, []);
   const dismissBoardToast = (id: string) => setBoardToasts((current) => current.filter((toast) => toast.id !== id));
   return { boardToasts, showBoardToast, dismissBoardToast };
