@@ -107,18 +107,12 @@ pub async fn receive_with_commands(
         .map_err(|_| "sync_unavailable")?;
 
     let mut accepted = false;
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(2));
-    heartbeat.tick().await;
     loop {
         let frame = tokio::select! {
             frame = socket.next() => frame,
             command = commands.recv(), if accepted && !commands.is_closed() => {
                 let Some(command) = command else { break; };
                 socket.send(Message::Text(command.to_string().into())).await.map_err(|_| "sync_unavailable")?;
-                continue;
-            }
-            _ = heartbeat.tick(), if accepted => {
-                socket.send(Message::Text(crate::helper_scene::request().to_string().into())).await.map_err(|_| "sync_unavailable")?;
                 continue;
             }
         };

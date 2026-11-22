@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     geometry::Rect,
-    helper_scene::{self, Scene},
+    helper_scene::Scene,
     live,
 };
 use crate::{pairing_consent as consent, window_follow};
@@ -697,7 +697,6 @@ impl Pairing {
                             .is_none()
                         {
                             session.capture.suspend_scene();
-                            let _ = commands.try_send(helper_scene::request());
                         }
                     }
                     Some("annotation_presence")
