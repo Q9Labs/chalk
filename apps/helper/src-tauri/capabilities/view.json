@@ -1,0 +1,6 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chalk-helper-local",
+  "windows": ["settings", "hud", "ink-*", "draw-bar"],
+  "permissions": ["allow-view", "allow-act"]
+}

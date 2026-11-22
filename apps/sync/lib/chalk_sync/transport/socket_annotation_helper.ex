@@ -9,6 +9,7 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
   alias ChalkSync.Transport.Socket.Annotation
 
   @attach_timeout_ms 5_000
+  @snapshot_interval_ms 3_000
 
   @impl true
   def init(observability: observability, client_ip: ip) do
@@ -35,7 +36,17 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
 
   def handle_info(:attachment_timeout, %{phase: :awaiting_attachment} = state), do: stop(state)
   def handle_info(:attachment_expired, state), do: stop(state)
-  def handle_info(:annotation_tick, state), do: Annotation.tick(state)
+
+  def handle_info(:annotation_tick, %{phase: :live, next_snapshot: next_snapshot} = state) do
+    now = System.monotonic_time(:millisecond)
+
+    if now >= next_snapshot do
+      Annotation.tick(%{state | next_snapshot: now + @snapshot_interval_ms}, true)
+    else
+      Annotation.tick(state)
+    end
+  end
+
   def handle_info(:annotation_changed, state), do: Annotation.changed(state)
   def handle_info(:annotation_presence_ready, state), do: Annotation.drain_presence(state)
   def handle_info(_message, state), do: {:ok, state}
@@ -58,7 +69,8 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
           identity: attachment.identity,
           attachment: attachment,
           annotation: nil,
-          annotation_commands: []
+          annotation_commands: [],
+          next_snapshot: System.monotonic_time(:millisecond) + @snapshot_interval_ms
         })
 
       Annotation.initial_snapshot(Annotation.enter(next))

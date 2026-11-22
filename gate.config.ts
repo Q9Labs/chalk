@@ -57,7 +57,7 @@ const chalkLanes = taskIds.map((id) =>
       if (!task?.command) return { status: "skipped" };
       const [command, ...args] = task.command;
       const env = laneEnvironment(id, task.env, context.allChangedFiles, explicitFiles);
-      return laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env }));
+      return laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env, input: task.input }));
     },
   }),
 );

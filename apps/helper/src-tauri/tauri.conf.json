@@ -1,0 +1,25 @@
+{
+  "productName": "Chalk Helper",
+  "version": "0.1.0",
+  "identifier": "com.chalk.helper",
+  "build": {
+    "frontendDist": "../ui",
+    "beforeBuildCommand": "node bundle-renderer.mjs"
+  },
+  "app": {
+    "windows": [],
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'self'; font-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis"],
+    "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    }
+  }
+}
