@@ -66,7 +66,8 @@ tasks.register("checkModuleApiCompatibility", JavaExec) {
         tasks.named("compileDebugUnitTestKotlin").get().destinationDirectory.get().asFile,
         tasks.named("compileDebugKotlin").get().destinationDirectory.get().asFile,
         compileJava.destinationDirectory.get().asFile]
-    paths.addAll(compileJava.classpath.files)
+    // The probe substitutes an older platform at runtime; javac's platform stubs must not be a fallback.
+    paths.addAll(compileJava.classpath.files - android.bootClasspath)
     manifest.text = paths.collect { it.absolutePath }.join("\n")
     def platforms = [android.defaultConfig.minSdkVersion.apiLevel, 30].unique().collect {
       new File(android.sdkDirectory, "platforms/android-${it}/android.jar")
