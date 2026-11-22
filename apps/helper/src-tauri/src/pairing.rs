@@ -71,6 +71,7 @@ struct Outstanding {
 pub struct ApprovalPrompt {
     fingerprint: String,
     confirmation_code: Option<String>,
+    approved: bool,
 }
 
 struct Approval {
@@ -82,6 +83,7 @@ struct Approval {
 }
 
 struct Session {
+    approved_prompt: Option<ApprovalPrompt>,
     secret: String,
     until: Instant,
     ticket: Ticket,
@@ -323,14 +325,20 @@ impl Pairing {
     }
 
     pub fn approval_prompt(&self) -> Option<ApprovalPrompt> {
-        self.0
-            .state
-            .lock()
-            .expect("pairing state")
+        let state = self.0.state.lock().expect("pairing state");
+        let now = Instant::now();
+        state
             .approval
             .as_ref()
-            .filter(|approval| approval.until > Instant::now() && !approval.respond.is_closed())
+            .filter(|approval| approval.until > now && !approval.respond.is_closed())
             .map(|approval| approval.prompt.clone())
+            .or_else(|| {
+                let session = state
+                    .session
+                    .as_ref()
+                    .filter(|session| session.until > now)?;
+                session.approved_prompt.clone()
+            })
     }
 
     pub fn decide(&self, fingerprint: &str, allowed: bool) {
@@ -341,7 +349,17 @@ impl Pairing {
             if let Some(approval) = state.approval.take() {
                 let secret = allowed.then(random_secret).and_then(Result::ok);
                 if approval.respond.send(secret.clone()).is_ok() {
+                    let approved_prompt =
+                        approval
+                            .prompt
+                            .confirmation_code
+                            .is_some()
+                            .then_some(ApprovalPrompt {
+                                approved: true,
+                                ..approval.prompt
+                            });
                     state.session = secret.map(|secret| Session {
+                        approved_prompt,
                         secret,
                         until: approval.until,
                         ticket: approval.ticket,
@@ -985,6 +1003,7 @@ async fn attach(
             consent::confirmation_code().map_err(|()| StatusCode::INTERNAL_SERVER_ERROR)?
         };
         let prompt = ApprovalPrompt {
+            approved: false,
             fingerprint: consent::fingerprint(&transcript),
             confirmation_code: (!code.is_empty()).then(|| {
                 code.as_bytes()
@@ -1106,6 +1125,7 @@ async fn exchange(
                 .verify_attachment(&attachment_ticket, &session.ticket)
                 .ok_or(StatusCode::UNAUTHORIZED)?;
             session.attachment_hash = None;
+            session.approved_prompt = None;
             pairing.connect_attachment(
                 session,
                 attachment_ticket,
@@ -1436,6 +1456,7 @@ mod tests {
         pairing.decide("0000-0000", true);
         assert!(pairing.approval_prompt().is_some());
         pairing.decide(&approval.fingerprint, true);
+        assert!(pairing.approval_prompt().is_none());
         let reply = body(pending.await.unwrap()).await;
         let signed: Value = serde_json::from_str(&signed).unwrap();
         let transcript = consent::transcript(
@@ -1517,6 +1538,14 @@ mod tests {
             .unwrap();
         assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
         pairing.decide(&approval.fingerprint, true);
+        assert_eq!(
+            pairing
+                .approval_prompt()
+                .filter(|prompt| prompt.approved)
+                .and_then(|prompt| prompt.confirmation_code),
+            approval.confirmation_code,
+            "the approved code must stay visible while Chalk waits for it"
+        );
         let session = body(pending.await.unwrap()).await;
         let secret = session["sessionSecret"].as_str().unwrap();
         let expiration = session["leaseExpiresAtMs"].as_u64().unwrap();

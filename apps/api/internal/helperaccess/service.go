@@ -17,7 +17,7 @@ import (
 
 var (
 	ErrInvalid         = errors.New("invalid Helper ticket request")
-	ErrShareNotCurrent = errors.New("Helper attachment does not match the current share")
+	ErrShareNotCurrent = errors.New("helper attachment does not match the current share")
 )
 
 const (

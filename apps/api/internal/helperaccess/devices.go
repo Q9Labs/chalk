@@ -14,7 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-var ErrDeviceUnavailable = errors.New("Helper device request unavailable")
+var ErrDeviceUnavailable = errors.New("helper device request unavailable")
 
 type DeviceRepository interface {
 	StartDeviceRequest(context.Context, DeviceEnrollment) error

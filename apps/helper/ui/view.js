@@ -99,7 +99,7 @@ if (isOverlay) {
     <p id="connection">Not connected</p>
     <p id="connection-help">Start sharing in Chalk to connect.</p>
     <div class="approval" hidden>
-      <p>Compare this code with the code in Chalk.</p>
+      <p id="approval-instruction"></p>
       <p id="fingerprint"></p>
       <p id="confirmation-code"></p>
       <button type="button" id="deny">Deny</button>
@@ -186,9 +186,17 @@ async function paintView() {
           return button;
         }));
       }
-      root.querySelector(".approval").hidden = !view.approval;
-      root.querySelector("#fingerprint").textContent = view.approval?.fingerprint ?? "";
-      root.querySelector("#confirmation-code").textContent = view.approval?.confirmationCode ? `Confirmation code: ${view.approval.confirmationCode}` : "";
+      const approval = view.approval;
+      root.querySelector(".approval").hidden = !approval;
+      root.querySelector("#approval-instruction").textContent = approval?.approved
+        ? "Enter this confirmation code in Chalk."
+        : "Compare this fingerprint with the fingerprint in Chalk.";
+      const fingerprint = root.querySelector("#fingerprint");
+      fingerprint.textContent = approval?.fingerprint ?? "";
+      fingerprint.hidden = Boolean(approval?.approved);
+      root.querySelector("#confirmation-code").textContent = approval?.approved ? approval.confirmationCode : "";
+      root.querySelector("#allow").hidden = Boolean(approval?.approved);
+      root.querySelector("#deny").hidden = Boolean(approval?.approved);
       root.querySelector("#device-code").hidden = !view.device?.available;
       const deviceStatus = root.querySelector("#device-status");
       if (deviceStatus.textContent !== (view.device?.status ?? "")) deviceStatus.textContent = view.device?.status ?? "";
