@@ -63,7 +63,8 @@ if grep -Eq '__[A-Z0-9_]+__' "${api_env}"; then
 fi
 
 duplicate_flag="$(awk -F= '
-  NF > 1 && $1 ~ /^CHALK_SFU_(ENABLED|CAPTURE_ENABLED|COLOCATED_CAPTURE)$/ && ++seen[$1] == 2 { print $1; exit }
+  { key = $1; sub(/^[[:space:]]+/, "", key); sub(/[[:space:]]+$/, "", key) }
+  NF > 1 && key ~ /^CHALK_SFU_(ENABLED|CAPTURE_ENABLED|COLOCATED_CAPTURE|NEW_EPISODES|NODES)$/ && ++seen[key] == 2 { print key; exit }
 ' "${api_env}")"
 [[ -z "${duplicate_flag}" ]] || fail "${duplicate_flag} must occur at most once"
 
@@ -71,6 +72,12 @@ env_enabled CHALK_SFU_ENABLED || fail "CHALK_SFU_ENABLED must be true (true, yes
 for name in CHALK_SFU_APPLICATION_ID CHALK_SFU_NODES CHALK_SFU_SERVER_NAME CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
   require_env "$name"
 done
+nodes="$(env_value "${api_env}" CHALK_SFU_NODES | tr ',' '\n' | awk '{gsub(/[[:space:]]/, ""); if (length($0) > 0) n++} END {print n + 0}')"
+((nodes > 0)) || fail "CHALK_SFU_NODES must name at least one node"
+# New Episodes have no other media plane to fall back to, so a paused floor would refuse every new call.
+if env_value "${api_env}" CHALK_SFU_NEW_EPISODES >/dev/null 2>&1 && ! env_enabled CHALK_SFU_NEW_EPISODES; then
+  fail "CHALK_SFU_NEW_EPISODES must be unset or on: off refuses every new Episode"
+fi
 if env_enabled CHALK_SFU_COLOCATED_CAPTURE && ! env_enabled CHALK_SFU_CAPTURE_ENABLED; then
   fail "CHALK_SFU_COLOCATED_CAPTURE needs CHALK_SFU_CAPTURE_ENABLED=true"
 fi

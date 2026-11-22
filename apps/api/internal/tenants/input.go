@@ -31,7 +31,10 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.JSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.NullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.NullableString(input.Website)
-	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr, checkMediaConfig(input.MediaPlaneProviderConfig))
+	if mediaErr == nil {
+		input.MediaPlaneProviderConfig, mediaErr = normalizeMediaConfig(input.MediaPlaneProviderConfig)
+	}
+	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
 }
 
 func prepareUpdateTenantInput(input *UpdateTenantInput) error {
@@ -81,7 +84,10 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	input.StorageProviderConfig, storageErr = utilities.OptionalNullableJSON(input.StorageProviderConfig)
 	input.LogoKey, logoErr = utilities.OptionalNullableString(input.LogoKey)
 	input.Website, websiteErr = utilities.OptionalNullableString(input.Website)
-	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr, checkMediaConfig(input.MediaPlaneProviderConfig.Value))
+	if mediaErr == nil {
+		input.MediaPlaneProviderConfig.Value, mediaErr = normalizeMediaConfig(input.MediaPlaneProviderConfig.Value)
+	}
+	return firstTenantFieldError(planeErr, mediaErr, storageErr, logoErr, websiteErr)
 }
 
 func firstTenantFieldError(errs ...error) error {
@@ -108,14 +114,22 @@ func validStoredText(value string, maxCharacters int) bool {
 	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
 }
 
-func checkMediaConfig(raw json.RawMessage) error {
+// normalizeMediaConfig validates a stored media plane document and fills the
+// provider and mode, so the previous release's resolver, which requires mode, still reads it after a rollback.
+func normalizeMediaConfig(raw json.RawMessage) (json.RawMessage, error) {
 	config, err := mediaplane.ParseTenantConfig(raw)
 	if errors.Is(err, mediaplane.ErrMissingTenantConfig) {
-		return nil
+		return raw, nil
 	}
 	if err != nil || (config.Provider != "" && config.Provider != string(mediaplane.ProviderChalkSFU)) ||
 		(config.Mode != "" && config.Mode != mediaplane.ModeChalkManaged) {
-		return ErrInvalidTenantField
+		return raw, ErrInvalidTenantField
 	}
-	return nil
+	config.Provider = mediaplane.ProviderChalkSFU.SettingName()
+	config.Mode = mediaplane.ModeChalkManaged
+	normalized, err := json.Marshal(config)
+	if err != nil {
+		return raw, ErrInvalidTenantField
+	}
+	return normalized, nil
 }

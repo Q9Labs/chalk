@@ -61,4 +61,6 @@ The node accepts offers up to 256 KiB (`protocol.MaxSDPBytes`) and its request l
 
 Follow the [incident runbook](../operators/incident.md) to restore the previous compatible release and its saved environment. A runtime-only Release re-fetches configuration but keeps the current images; it does not undo a deploy. Keep web and SFU node versions compatible when rolling back.
 
+Before the Cloudflare retirement cut, keep the legacy Realtime credentials and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` in the API environment, and note the baseline's `CHALK_DEFAULT_MEDIA_PLANE` (a baseline that predates Chalk-default support needs `cf_sfu` restored). A workflow rollback reuses the old images but fetches the current SSM inputs, so removing those settings first leaves the previous API unable to boot. Also check, before dispatching Promote or Hotfix, that no Cloudflare Episode is active or ending and that no legacy Episode has unfinished capture work: the migration refuses the cut after the controller has already stopped the API and Sync, and Hotfix skips Promote's live-call check.
+
 A rollback does not send migrated Spaces back to Cloudflare. The migration preserves stored Episode history, and its Down restores the old audit trigger without reverting Space settings or later operator changes.
