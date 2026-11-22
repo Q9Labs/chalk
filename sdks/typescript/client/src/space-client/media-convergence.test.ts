@@ -4,12 +4,13 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { stream, track } from "./capture.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
-it("publishes a consented screen capture after a short reconnect during the system picker", async () => {
+it.each([false, true])("publishes a consented screen capture after a short reconnect (system stopped capture: %s)", async (stopped) => {
   const platform = createCoreTestPlatform();
   const screen = track("video");
   const pickerOpened = Promise.withResolvers<void>();
   const pickerResult = Promise.withResolvers<MediaStream>();
   const screenCommands: boolean[] = [];
+  const released = new Set<MediaStreamTrack>();
   const setScreenShareEnabled: ConnectionSyncClient["setScreenShareEnabled"] = async (enabled) => {
     screenCommands.push(enabled);
     return { operationId: "screen", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
@@ -25,6 +26,10 @@ it("publishes a consented screen capture after a short reconnect during the syst
           getDisplayMedia: () => {
             pickerOpened.resolve();
             return pickerResult.promise;
+          },
+          releaseTrack: (track) => {
+            released.add(track);
+            track.stop();
           },
         },
         createSyncClient: () => ({
@@ -47,10 +52,12 @@ it("publishes a consented screen capture after a short reconnect during the syst
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(screen.readyState).toBe("live");
     expect(screenCommands).toEqual([]);
+    if (stopped) screen.stop();
     platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-    await sharing;
-    expect(screenCommands).toEqual([true]);
-    expect(screen.readyState).toBe("live");
+    if (stopped) await expect(sharing).rejects.toMatchObject({ code: "connection.invalid_state" });
+    else await sharing;
+    expect(screenCommands).toEqual(stopped ? [] : [true]);
+    expect(released.has(screen)).toBe(stopped);
   } finally {
     pickerResult.resolve(stream([screen]));
     client.dispose();
