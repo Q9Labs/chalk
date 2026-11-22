@@ -113,33 +113,44 @@ export class FakePeerConnection extends EventTarget {
   async setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void> {
     this.descriptionLog.push(`setLocal:${description?.type}`);
     this.localDescription = description ?? null;
-    if (description?.type === "rollback") {
-      this.rollbackCalls++;
-      this.signalingState = "stable";
-    } else if (description?.type === "offer") {
-      this.signalingState = "have-local-offer";
-      this.#bundleTag ??= this.#sectionMids[0];
-      const tag = this.getTransceivers().find((transceiver) => transceiver.mid === this.#bundleTag);
-      if (this.dropsTransportWhenTagRejected && (tag?.direction as string | undefined) === "stopped") {
-        this.transportDropped = true;
-        this.setStates("new", "new");
-      }
-    } else if (description?.type === "answer") {
-      this.signalingState = "stable";
+    switch (description?.type) {
+      case "rollback":
+        this.rollbackCalls++;
+        this.signalingState = "stable";
+        break;
+      case "offer":
+        this.#acceptLocalOffer();
+        break;
+      case "answer":
+        this.signalingState = "stable";
+        break;
+    }
+  }
+  #acceptLocalOffer(): void {
+    this.signalingState = "have-local-offer";
+    this.#bundleTag ??= this.#sectionMids[0];
+    const tag = this.getTransceivers().find((transceiver) => transceiver.mid === this.#bundleTag);
+    if (this.dropsTransportWhenTagRejected && (tag?.direction as string | undefined) === "stopped") {
+      this.transportDropped = true;
+      this.setStates("new", "new");
     }
   }
   async setRemoteDescription(description?: RTCSessionDescriptionInit): Promise<void> {
     this.descriptionLog.push(`setRemote:${description?.type}`);
-    if (description?.type === "offer" && this.signalingState === "have-local-offer") throw new DOMException("Called in wrong state: have-local-offer", "InvalidStateError");
-    this.signalingState = description?.type === "offer" ? "have-remote-offer" : "stable";
-    if (description?.type === "offer") this.#lastOffer = description.sdp ?? "";
-    if (this.#nextRemoteDescriptionStates) {
-      const next = this.#nextRemoteDescriptionStates;
-      this.#nextRemoteDescriptionStates = null;
-      this.setStates(next.connection, next.ice);
-    } else if (this.#autoConnect && this.connectionState === "new") {
-      this.setStates("connected", "connected");
+    if (description?.type === "offer") {
+      if (this.signalingState === "have-local-offer") throw new DOMException("Called in wrong state: have-local-offer", "InvalidStateError");
+      this.signalingState = "have-remote-offer";
+      this.#lastOffer = description.sdp ?? "";
+    } else {
+      this.signalingState = "stable";
     }
+    this.#advanceConnection();
+  }
+  #advanceConnection(): void {
+    const next = this.#nextRemoteDescriptionStates;
+    this.#nextRemoteDescriptionStates = null;
+    if (next) this.setStates(next.connection, next.ice);
+    else if (this.#autoConnect && this.connectionState === "new") this.setStates("connected", "connected");
   }
   getSenders(): RTCRtpSender[] {
     return this.#transceivers.map((transceiver) => transceiver.sender);
