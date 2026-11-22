@@ -67,10 +67,10 @@ index 681eec369c573b08a9981001e2199421e0eec429..25bcc1960583171cd6defd5de9656fd6
          return getUserMediaImpl.createVideoTrack(videoCaptureController);
      }
 diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
-index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9fb9ab379 100644
+index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..532e9945848098656321273a584c1bb950fa20e3 100644
 --- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
 +++ b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
-@@ -2,17 +2,24 @@ package com.cloudflare.realtimekit.WebRTCModule;
+@@ -2,17 +2,25 @@ package com.cloudflare.realtimekit.WebRTCModule;
  
  import android.annotation.SuppressLint;
  import android.content.Context;
@@ -89,13 +89,14 @@ index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9
 +import com.facebook.react.bridge.WritableMap;
 +import com.facebook.react.uimanager.UIManagerHelper;
 +import com.facebook.react.uimanager.events.Event;
++import com.facebook.react.uimanager.events.EventDispatcher;
  
  import realtimekit.org.webrtc.EglBase;
 +import realtimekit.org.webrtc.EglRenderer;
  import realtimekit.org.webrtc.Logging;
  import realtimekit.org.webrtc.MediaStream;
  import realtimekit.org.webrtc.RendererCommon;
-@@ -138,6 +145,91 @@ public class WebRTCView extends ViewGroup {
+@@ -138,6 +146,91 @@ public class WebRTCView extends ViewGroup {
       * actually renders {@link #videoTrack} on behalf of this instance.
       */
      private final SurfaceViewRenderer surfaceViewRenderer;
@@ -129,7 +130,7 @@ index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9
 +                    annotationListener = null;
 +                    if (data != null) {
 +                        ReactContext context = (ReactContext) getContext();
-+                        var dispatcher = UIManagerHelper.getEventDispatcherForReactTag(context, getId());
++                        EventDispatcher dispatcher = UIManagerHelper.getEventDispatcherForReactTag(context, getId());
 +                        if (dispatcher != null) {
 +                            dispatcher.dispatchEvent(new AnnotationFrameEvent(
 +                                    UIManagerHelper.getSurfaceId(WebRTCView.this), getId(), data));
@@ -187,7 +188,7 @@ index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9
  
      /**
       * The {@code VideoTrack}, if any, rendered by this {@code WebRTCView}.
-@@ -257,6 +349,7 @@ public class WebRTCView extends ViewGroup {
+@@ -257,6 +350,7 @@ public class WebRTCView extends ViewGroup {
              // The onFrameResolutionChanged method call executes on the
              // surfaceViewRenderer's render Thread.
              post(requestSurfaceViewRendererLayoutRunnable);
@@ -195,7 +196,7 @@ index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9
          }
      }
  
-@@ -322,6 +415,7 @@ public class WebRTCView extends ViewGroup {
+@@ -322,6 +416,7 @@ public class WebRTCView extends ViewGroup {
       */
      private void removeRendererFromVideoTrack() {
          if (rendererAttached) {
