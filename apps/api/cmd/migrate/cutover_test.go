@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,16 +107,17 @@ func TestCheckCutover(t *testing.T) {
 }
 
 func TestCutoverCheckTakesOnlyTheDatabaseFile(t *testing.T) {
-	got, err := parseCutoverArgs([]string{"--check-cutover=true", "--database-url-file", "/run/url"})
-	if err != nil || got != "/run/url" {
+	file := filepath.Join(t.TempDir(), "url")
+	got, err := parseCutoverArgs([]string{"--check-cutover=true", "--database-url-file", file})
+	if err != nil || got != file {
 		t.Fatalf("parseCutoverArgs = %q, %v", got, err)
 	}
 	for _, args := range [][]string{
 		{"--check-cutover"},
 		{"--check-cutover", "--database-url-file", "relative"},
-		{"--check-cutover", "--database-url-file", "/run/url", "--target", "1"},
-		{"--check-cutover", "--database-url-file", "/run/url", "--down-to", "1"},
-		{"--check-cutover", "--database-url-file", "/run/url", "extra"},
+		{"--check-cutover", "--database-url-file", file, "--target", "1"},
+		{"--check-cutover", "--database-url-file", file, "--down-to", "1"},
+		{"--check-cutover", "--database-url-file", file, "extra"},
 	} {
 		if _, err := parseCutoverArgs(args); err == nil {
 			t.Fatalf("parseCutoverArgs(%v) accepted the arguments", args)
