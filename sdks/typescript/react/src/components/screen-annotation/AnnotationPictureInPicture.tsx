@@ -1,4 +1,4 @@
-import { PictureInPictureOnIcon } from "@hugeicons/core-free-icons";
+import PictureInPictureOnIcon from "@hugeicons/core-free-icons/PictureInPictureOnIcon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

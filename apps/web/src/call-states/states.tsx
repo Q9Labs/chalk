@@ -1,3 +1,4 @@
+import { ScreenAnnotationFixture } from "./screen-annotation";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -12,7 +13,6 @@ import { CONNECTION_STATES } from "./connection";
 import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
-import { SCREEN_ANNOTATION_STATE } from "./screen-annotation-state";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
@@ -42,7 +42,7 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
-  SCREEN_ANNOTATION_STATE,
+  { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
   { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
   { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
   { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },

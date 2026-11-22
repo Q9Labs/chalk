@@ -35,13 +35,16 @@ function hitsGeometry(point: AnnotationPoint, geometry: AnnotationMarkGeometry, 
     case "box":
     case "circle":
       return hitsOutline(point, geometry, radius);
-    case "text": {
-      const text = layoutAnnotationText(geometry, measureText);
-      return containsPoint(expand(geometry.note ? text.noteBounds : text.bounds, tolerance), point);
-    }
+    case "text":
+      return hitsText(point, geometry, tolerance, measureText);
     case "stamp":
       return Math.hypot(point.x - geometry.at.x, point.y - geometry.at.y) <= geometry.radius + radius;
   }
+}
+
+function hitsText(point: AnnotationPoint, geometry: Extract<AnnotationMarkGeometry, { kind: "text" }>, tolerance: number, measureText: AnnotationTextMeasure): boolean {
+  const text = layoutAnnotationText(geometry, measureText);
+  return containsPoint(expand(geometry.note ? text.noteBounds : text.bounds, tolerance), point);
 }
 
 function hitsArrow(point: AnnotationPoint, geometry: Extract<AnnotationMarkGeometry, { kind: "arrow" }>, maxSquared: number, tolerance: number): boolean {

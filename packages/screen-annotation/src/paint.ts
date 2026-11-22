@@ -128,13 +128,7 @@ function paintMark(ctx: AnnotationCanvasContext, geometry: AnnotationMarkGeometr
       paintText(ctx, geometry, opacity);
       break;
     case "stamp":
-      ctx.globalAlpha *= NOTE_OPACITY;
-      ctx.fillStyle = NOTE_COLOR;
-      dot(ctx, geometry.at, geometry.radius);
-      ctx.globalAlpha = opacity;
-      ctx.stroke();
-      ctx.fillStyle = color;
-      for (const path of geometry.paths) strokePath(ctx, path);
+      paintStamp(ctx, geometry, opacity);
       break;
   }
 }
@@ -160,6 +154,17 @@ function paintText(ctx: AnnotationCanvasContext, geometry: Extract<AnnotationMar
     ctx.globalAlpha = opacity;
   }
   text.lines.forEach((line, index) => ctx.fillText(line, geometry.at.x, geometry.at.y + text.lineHeight * index));
+}
+
+function paintStamp(ctx: AnnotationCanvasContext, geometry: Extract<AnnotationMarkGeometry, { kind: "stamp" }>, opacity: number): void {
+  const { color } = geometry;
+  ctx.globalAlpha *= NOTE_OPACITY;
+  ctx.fillStyle = NOTE_COLOR;
+  dot(ctx, geometry.at, geometry.radius);
+  ctx.globalAlpha = opacity;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  for (const path of geometry.paths) strokePath(ctx, path);
 }
 
 function paintShape(ctx: AnnotationCanvasContext, kind: "box" | "circle", bounds: AnnotationRect, strokeWidth: number): void {

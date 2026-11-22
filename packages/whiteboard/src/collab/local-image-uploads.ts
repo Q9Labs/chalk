@@ -32,12 +32,16 @@ export class LocalImageUploads {
       if (element.type !== "image" || !element.fileId) continue;
       const { fileId } = element;
       const file = files[fileId];
-      if (!file || this.stored.has(fileId) || this.pending.has(fileId) || this.failed.has(fileId)) continue;
+      if (!file || this.hasHandled(fileId)) continue;
 
       const transfer = new AbortController();
       this.pending.set(fileId, transfer);
       void this.uploadImage(uploadFile, sceneId, sceneGeneration, fileId, file.dataURL, transfer);
     }
+  }
+
+  private hasHandled(fileId: string): boolean {
+    return this.stored.has(fileId) || this.pending.has(fileId) || this.failed.has(fileId);
   }
 
   private async uploadImage(uploadFile: NonNullable<WhiteboardFileTransferOptions["uploadFile"]>, sceneId: string, sceneGeneration: string | null, fileId: string, dataURL: string, transfer: AbortController): Promise<void> {

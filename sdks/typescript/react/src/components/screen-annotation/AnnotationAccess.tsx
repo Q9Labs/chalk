@@ -1,5 +1,5 @@
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationState, WhiteboardSlice } from "@q9labsai/chalk-client";
-import { UserGroupIcon } from "@hugeicons/core-free-icons";
+import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 import { ChalkPopover } from "../chalk-ui";

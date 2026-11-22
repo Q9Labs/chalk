@@ -39,6 +39,13 @@ function collaborationEvent(message: ChalkEmbeddedWhiteboardHostEnvelope): White
       const payload = message.payload as Extract<ChalkEmbeddedWhiteboardHostEnvelope, { readonly type: "apply_update" }>["payload"];
       return { type: "update", ...payload };
     }
+    default:
+      return collaborationSignal(message);
+  }
+}
+
+function collaborationSignal(message: ChalkEmbeddedWhiteboardHostEnvelope): WhiteboardCollaborationEvent | null {
+  switch (message.type) {
     case "apply_view":
       return { type: "view", ...message.payload };
     case "apply_cursor": {

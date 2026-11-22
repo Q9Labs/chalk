@@ -1,6 +1,6 @@
 import type { ScreenAnnotationLayer, ScreenAnnotationMark } from "@q9labsai/chalk-client";
 import { MAXIMUM_RECORDING_DURATION_MS } from "../generated/render-contract.js";
-import { exactKeys, field, objectValue } from "../validation.js";
+import { exactKeys, field, objectValue, stringField } from "../validation.js";
 import { parseMark } from "./annotation-mark.js";
 import { LABEL, record, list, literal, integer, uuid, booleanField, invalid } from "./annotation-archive-fields.js";
 
