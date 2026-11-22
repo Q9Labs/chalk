@@ -111,7 +111,7 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
     people={people}
     source={source}
     viewport={viewport}
-    video={(rect) => <RtcVideoView objectFit="contain" streamURL={streamURL} style={[styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]} />}
+    video={(rect, onPresented) => <RtcVideoView annotationFrames={onPresented ? true : undefined} onAnnotationFrame={onPresented && ((event) => onPresented(event.nativeEvent))} objectFit="contain" streamURL={streamURL} style={[styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]} />}
     controls={(tray: ReactNode) => tray ? <AnnotationDock>{tray}</AnnotationDock> : null}
     reportError={(message) => toasts.show({ kind: "error", dismissible: true, message })}
   />;

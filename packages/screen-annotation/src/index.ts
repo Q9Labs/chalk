@@ -12,3 +12,5 @@ export { freezeAnnotationFrame } from "./frame";
 export type { FreezeAnnotationFrameInput, ScreenAnnotationActions, ScreenAnnotationFrame } from "./frame";
 export { captureAnnotationVideoFrame, encodeAnnotationCanvasPng, encodeAnnotationPng, renderAnnotationPng } from "./png";
 export type { AnnotationPngSurface } from "./png";
+
+export { NATIVE_INK_PROOF_TIMEOUT_MS, frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster, type StrokeProof } from "./baked-stroke-proof";

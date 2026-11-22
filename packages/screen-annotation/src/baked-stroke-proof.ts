@@ -1,3 +1,6 @@
+// Escape hatch for ambiguous or unreadable native frames, not evidence that ink arrived.
+export const NATIVE_INK_PROOF_TIMEOUT_MS = 1800;
+
 export interface InkRaster {
   readonly width: number;
   readonly height: number;
@@ -82,12 +85,12 @@ export function inkHandoff({
   readonly revision: number;
   readonly nowMs: number;
   readonly mark: { readonly expires_at_ms: number | null } | undefined;
-  readonly preview: { readonly startedBaked: boolean; readonly expiresAt: number; readonly revision?: number };
+  readonly preview: { readonly startedBaked: boolean; readonly expiresAt: number; readonly revision?: number; readonly proofTimeoutAt?: number };
   readonly proved: boolean;
 }): "local" | "video" | "data" | "removed" {
   if ((!mark && preview.revision !== undefined && revision >= preview.revision) || (mark?.expires_at_ms != null && mark.expires_at_ms <= nowMs)) return "removed";
   if (baked && proved) return "video";
   if (!baked && mark) return "data";
-  if (!preview.startedBaked && preview.expiresAt <= nowMs) return "removed";
+  if ((preview.proofTimeoutAt ?? Infinity) <= nowMs || (!preview.startedBaked && preview.expiresAt <= nowMs)) return "removed";
   return "local";
 }

@@ -6,9 +6,10 @@ import type {
   ScreenAnnotationState,
   ScreenAnnotationTarget,
 } from "@q9labsai/chalk-client";
-import { LASER_TRAIL_MS } from "@q9labsai/chalk-screen-annotation";
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { LASER_TRAIL_MS, NATIVE_INK_PROOF_TIMEOUT_MS } from "@q9labsai/chalk-screen-annotation";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
+import type { PresentedAnnotationFrame } from "../components/rtc-video-view-availability";
 import type { Frame } from "../motion/MovingFrame";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
@@ -32,7 +33,7 @@ export type ScreenAnnotationLayerProps = ScreenAnnotationOptions & {
   readonly source: ScreenAnnotationSource | null;
   readonly viewport: Frame;
   /** Render the video in exactly this native view rectangle, without another transform. */
-  readonly video: (frame: Frame) => ReactNode;
+  readonly video: (frame: Frame, onPresented?: (frame: PresentedAnnotationFrame) => void) => ReactNode;
   readonly controls?: (tray: ReactNode) => ReactNode;
   readonly reportError?: (message: string) => void;
 };
@@ -74,6 +75,11 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const erase = useRef<{ readonly id: number; readonly target: ScreenAnnotationTarget } | null>(null);
   const eraseCounter = useRef(0);
   const canvas = useRef<AnnotationCanvasHandle>(null);
+  const [finishingInk, setFinishingInk] = useState(false);
+  const finishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Cancel the post-gesture observation window on layer teardown.
+  useEffect(() => () => clearTimeout(finishTimer.current), []);
+  const onPresented = useCallback((frame: PresentedAnnotationFrame) => canvas.current?.presented(frame), []);
 
   const ink: Ink = { ...style, color: style.color ?? state.access.default_color };
   const rect = visibleFrame(source.size, viewport, pan);
@@ -99,6 +105,23 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   function commit(draft: ScreenAnnotationDraft, frozen: ScreenAnnotationTarget) {
     const live = matchLayer(client, publicationId);
     if (!hasTarget(live, frozen) || !canCapture(live, person.id)) return;
+    if (live.layer.burned_in) {
+      const now = client.serverNowMs();
+      const id = draft.mark_id;
+      canvas.current?.holdInk({
+        type: "annotation_presence", layer_id: frozen.layerId, fence: frozen.fence,
+        author: { participant_id: person.id, display_name: person.name, color: live.access.default_color },
+        server_at_ms: now, expires_at_ms: now + NATIVE_INK_PROOF_TIMEOUT_MS, cursor: null, draft,
+      });
+      setFinishingInk(true);
+      clearTimeout(finishTimer.current);
+      finishTimer.current = setTimeout(() => setFinishingInk(false), NATIVE_INK_PROOF_TIMEOUT_MS);
+      void dispatch(frozen, { kind: "commit", draft }).then((result) => {
+        if (result?.kind === "accepted") canvas.current?.settleInk(id, result.revision);
+        else if (result?.kind !== "delivery_unknown") canvas.current?.settleInk(id, null);
+      });
+      return;
+    }
     setCommitting({ draft, target: frozen });
     void dispatch(frozen, { kind: "commit", draft }).then((result) => {
       setCommitting((current) => current?.draft.mark_id !== draft.mark_id
@@ -185,8 +208,8 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   const scene = useMemo(() => ({
     rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     clip: { x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height },
-    marks: state.marks, burnedIn: state.layer.burned_in, paused: state.paused, sharerId: state.layer.sharer_id,
-  }), [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.layer.burned_in, state.paused, state.layer.sharer_id]);
+    marks: state.marks, revision: state.revision, burnedIn: state.layer.burned_in, paused: state.paused, sharerId: state.layer.sharer_id,
+  }), [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.revision, state.layer.burned_in, state.paused, state.layer.sharer_id]);
   const tray = ready
     ? open ? <ScreenAnnotationToolbar
         state={state}
@@ -213,7 +236,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   };
 
   return <>
-    {video(rect)}
+    {video(rect, state.layer.burned_in && (open || finishingInk) ? onPresented : undefined)}
     <AnnotationCanvas
       ref={canvas}
       rendererUrl={rendererUrl}

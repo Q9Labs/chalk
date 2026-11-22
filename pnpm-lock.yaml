@@ -236,7 +236,7 @@ overrides:
   zod@>=4.0.0 <4.6.6: 4.6.7
 
 patchedDependencies:
-  '@cloudflare/react-native-webrtc@125.0.3': da4c7c51e4a383bb86714ede51b720aece2dfe84bf2d4a6a1d8b14a7cd251834
+  '@cloudflare/react-native-webrtc@125.0.3': cb0e32d7053565f472cb85c8cf6448a1437b0998a90462d05e12acb6508bb565
   '@redocly/openapi-core@1.34.17': 2ce4959e1555cddcaa3ace4fa90cf5c75c71412b92b632497c2344ea137ebef1
   metro@0.83.3: 3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760
   metro@0.83.5: 67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623
@@ -335,7 +335,7 @@ importers:
         version: 7.29.7
       '@cloudflare/react-native-webrtc':
         specifier: ~125.0.3
-        version: 125.0.3(patch_hash=da4c7c51e4a383bb86714ede51b720aece2dfe84bf2d4a6a1d8b14a7cd251834)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)
+        version: 125.0.3(patch_hash=cb0e32d7053565f472cb85c8cf6448a1437b0998a90462d05e12acb6508bb565)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)
       '@expo/vector-icons':
         specifier: ^15.0.2
         version: 15.1.1(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)
@@ -910,7 +910,7 @@ importers:
     dependencies:
       '@cloudflare/react-native-webrtc':
         specifier: ~125.0.1 || ~125.0.3
-        version: 125.0.3(patch_hash=da4c7c51e4a383bb86714ede51b720aece2dfe84bf2d4a6a1d8b14a7cd251834)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)
+        version: 125.0.3(patch_hash=cb0e32d7053565f472cb85c8cf6448a1437b0998a90462d05e12acb6508bb565)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)
       '@q9labsai/chalk-client':
         specifier: workspace:^
         version: link:../client
@@ -11232,7 +11232,7 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/react-native-webrtc@125.0.3(patch_hash=da4c7c51e4a383bb86714ede51b720aece2dfe84bf2d4a6a1d8b14a7cd251834)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)':
+  '@cloudflare/react-native-webrtc@125.0.3(patch_hash=cb0e32d7053565f472cb85c8cf6448a1437b0998a90462d05e12acb6508bb565)(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       base64-js: 1.5.1
       debug: 4.3.4(supports-color@10.2.2)

@@ -4,6 +4,7 @@ import { File } from "expo-file-system";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import type { PresentedAnnotationFrame } from "../components/rtc-video-view-availability";
 import type { Frame } from "../motion/MovingFrame";
 import type { ScreenAnnotationFrame } from "./model";
 
@@ -14,8 +15,12 @@ export type AnnotationScene = {
   readonly paused: boolean;
   readonly burnedIn?: true;
   readonly marks: readonly ScreenAnnotationMark[];
+  readonly revision: number;
 };
 export type AnnotationCanvasHandle = {
+  readonly presented: (frame: PresentedAnnotationFrame) => void;
+  readonly holdInk: (sample: ScreenAnnotationPresence) => void;
+  readonly settleInk: (id: string, revision: number | null) => void;
   readonly hit: (request: number, point: ScreenAnnotationPoint, actor: string | null) => void;
   readonly measure: (frame: ScreenAnnotationFrame) => Promise<AnnotationTextMeasure>;
   readonly png: (frame: ScreenAnnotationFrame<string>) => Promise<string>;
@@ -73,6 +78,9 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
   }
 
   useImperativeHandle(ref, () => ({
+    presented: (frame) => view.current?.injectJavaScript(`window.chalkAnnotationPresented?.(${JSON.stringify(frame)});true;`),
+    holdInk: (sample) => view.current?.injectJavaScript(`window.chalkAnnotationHoldInk?.(${JSON.stringify(sample)});true;`),
+    settleInk: (id, revision) => view.current?.injectJavaScript(`window.chalkAnnotationSettleInk?.(${JSON.stringify(id)},${JSON.stringify(revision)});true;`),
     hit: (request, point, actor) => view.current?.injectJavaScript(`window.chalkAnnotationHit?.(${request},${JSON.stringify(point)},${JSON.stringify(actor)});true;`),
     async measure({ size, marks }) {
       const rect = { x: 0, y: 0, ...size };

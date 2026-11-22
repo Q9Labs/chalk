@@ -18,6 +18,36 @@ index f3d6dfb2f7e647d6614afbf645333977da114c89..4e1c8115eb406ce2e0813d0d11723ed9
      void setVideoEffect(String trackId, String name) {
          TrackPrivate track = tracks.get(trackId);
  
+diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/RTCVideoViewManager.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/RTCVideoViewManager.java
+index 744ff5ebb85419ca6dd1dfa22a63f5e90fe8fdb3..6128e7e5674c573d0b95e66124766e2ce37f91f5 100644
+--- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/RTCVideoViewManager.java
++++ b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/RTCVideoViewManager.java
+@@ -1,12 +1,25 @@
+ package com.cloudflare.realtimekit.WebRTCModule;
+ 
++import com.facebook.react.common.MapBuilder;
+ import com.facebook.react.uimanager.SimpleViewManager;
+ import com.facebook.react.uimanager.ThemedReactContext;
+ import com.facebook.react.uimanager.annotations.ReactProp;
+ 
++import java.util.Map;
++
+ public class RTCVideoViewManager extends SimpleViewManager<WebRTCView> {
+     private static final String REACT_CLASS = "RTKRTCVideoView";
+ 
++    @ReactProp(name = "annotationFrames")
++    public void setAnnotationFrames(WebRTCView view, boolean enabled) {
++        view.setAnnotationFrames(enabled);
++    }
++
++    @Override
++    public Map<String, Object> getExportedCustomDirectEventTypeConstants() {
++        return MapBuilder.of("topAnnotationFrame", MapBuilder.of("registrationName", "onAnnotationFrame"));
++    }
++
+     @Override
+     public String getName() {
+         return REACT_CLASS;
 diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java
 index 681eec369c573b08a9981001e2199421e0eec429..25bcc1960583171cd6defd5de9656fd65b74fc75 100644
 --- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCModule.java
@@ -36,3 +66,249 @@ index 681eec369c573b08a9981001e2199421e0eec429..25bcc1960583171cd6defd5de9656fd6
      public VideoTrack createVideoTrack(AbstractVideoCaptureController videoCaptureController) {
          return getUserMediaImpl.createVideoTrack(videoCaptureController);
      }
+diff --git a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
+index 5eb1426051f8b26501bdc651a9d637b725ae1ef5..c2d935e7e745ae8705b358f1a854bef9fb9ab379 100644
+--- a/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
++++ b/android/src/main/java/com/cloudflare/realtimekit/WebRTCModule/WebRTCView.java
+@@ -2,17 +2,24 @@ package com.cloudflare.realtimekit.WebRTCModule;
+ 
+ import android.annotation.SuppressLint;
+ import android.content.Context;
++import android.graphics.Bitmap;
+ import android.graphics.Color;
+ import android.graphics.Point;
++import android.util.Base64;
+ import android.util.Log;
+ import android.view.View;
+ import android.view.ViewGroup;
+ 
+ import androidx.core.view.ViewCompat;
+ 
++import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.ReactContext;
++import com.facebook.react.bridge.WritableMap;
++import com.facebook.react.uimanager.UIManagerHelper;
++import com.facebook.react.uimanager.events.Event;
+ 
+ import realtimekit.org.webrtc.EglBase;
++import realtimekit.org.webrtc.EglRenderer;
+ import realtimekit.org.webrtc.Logging;
+ import realtimekit.org.webrtc.MediaStream;
+ import realtimekit.org.webrtc.RendererCommon;
+@@ -138,6 +145,91 @@ public class WebRTCView extends ViewGroup {
+      * actually renders {@link #videoTrack} on behalf of this instance.
+      */
+     private final SurfaceViewRenderer surfaceViewRenderer;
++    private boolean annotationFrames;
++    private EglRenderer.FrameListener annotationListener;
++
++    public void setAnnotationFrames(boolean value) {
++        annotationFrames = value;
++        updateAnnotationListener();
++    }
++
++    private void updateAnnotationListener() {
++        if (!annotationFrames) {
++            removeAnnotationListener();
++            return;
++        }
++        if (!rendererAttached || annotationListener != null) return;
++
++        int longest;
++        synchronized (layoutSyncRoot) {
++            longest = Math.max(frameWidth, frameHeight);
++        }
++        if (longest <= 0) return;
++        final float scale = Math.min(1f, 256f / longest);
++        annotationListener = new EglRenderer.FrameListener() {
++            @Override
++            public void onFrame(Bitmap bitmap) {
++                WritableMap data = bitmap == null ? null : annotationSample(bitmap);
++                post(() -> {
++                    if (annotationListener != this || !rendererAttached) return;
++                    annotationListener = null;
++                    if (data != null) {
++                        ReactContext context = (ReactContext) getContext();
++                        var dispatcher = UIManagerHelper.getEventDispatcherForReactTag(context, getId());
++                        if (dispatcher != null) {
++                            dispatcher.dispatchEvent(new AnnotationFrameEvent(
++                                    UIManagerHelper.getSurfaceId(WebRTCView.this), getId(), data));
++                        }
++                    }
++                    updateAnnotationListener();
++                });
++            }
++        };
++        // The listener is one-shot. Rearm after dispatch, so there is at most one queued readback.
++        surfaceViewRenderer.addFrameListener(annotationListener, scale);
++    }
++
++    private static WritableMap annotationSample(Bitmap bitmap) {
++        try {
++            int width = bitmap.getWidth();
++            int height = bitmap.getHeight();
++            if (Math.max(width, height) > 272) return null; // A resize can race a queued readback.
++            int[] pixels = new int[width * height];
++            bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
++            byte[] rgb = new byte[pixels.length * 3];
++            for (int i = 0; i < pixels.length; i++) {
++                rgb[3 * i] = (byte) (pixels[i] >> 16);
++                rgb[3 * i + 1] = (byte) (pixels[i] >> 8);
++                rgb[3 * i + 2] = (byte) pixels[i];
++            }
++            WritableMap data = Arguments.createMap();
++            data.putInt("width", width);
++            data.putInt("height", height);
++            data.putString("rgb", Base64.encodeToString(rgb, Base64.NO_WRAP));
++            return data;
++        } finally {
++            bitmap.recycle();
++        }
++    }
++
++    private void removeAnnotationListener() {
++        if (annotationListener == null) return;
++        surfaceViewRenderer.removeFrameListener(annotationListener);
++        annotationListener = null;
++    }
++
++    private static final class AnnotationFrameEvent extends Event<AnnotationFrameEvent> {
++        private final WritableMap data;
++
++        AnnotationFrameEvent(int surfaceId, int viewId, WritableMap data) {
++            super(surfaceId, viewId);
++            this.data = data;
++        }
++
++        @Override public String getEventName() { return "topAnnotationFrame"; }
++        @Override protected WritableMap getEventData() { return data; }
++    }
++
+ 
+     /**
+      * The {@code VideoTrack}, if any, rendered by this {@code WebRTCView}.
+@@ -257,6 +349,7 @@ public class WebRTCView extends ViewGroup {
+             // The onFrameResolutionChanged method call executes on the
+             // surfaceViewRenderer's render Thread.
+             post(requestSurfaceViewRendererLayoutRunnable);
++            post(this::updateAnnotationListener);
+         }
+     }
+ 
+@@ -322,6 +415,7 @@ public class WebRTCView extends ViewGroup {
+      */
+     private void removeRendererFromVideoTrack() {
+         if (rendererAttached) {
++            removeAnnotationListener();
+             if (videoTrack != null) {
+                 ThreadUtils.runOnExecutor(() -> {
+                     try {
+diff --git a/ios/RCTWebRTC/RTCVideoViewManager.m b/ios/RCTWebRTC/RTCVideoViewManager.m
+index e3c796e9378710f29c884ff9b0c3f5506efcbaa2..f879007dd8b418793eafc0dede39338a45422489 100644
+--- a/ios/RCTWebRTC/RTCVideoViewManager.m
++++ b/ios/RCTWebRTC/RTCVideoViewManager.m
+@@ -1,6 +1,7 @@
+ #import <AVFoundation/AVFoundation.h>
+ #import <objc/runtime.h>
+ 
++#import <React/RCTComponent.h>
+ #import <React/RCTLog.h>
+ #import <RTKWebRTC/RTCMediaStream.h>
+ #if !TARGET_OS_OSX
+@@ -9,12 +10,76 @@
+ #import <RTKWebRTC/RTCMTLNSVideoView.h>
+ #endif
+ #import <RTKWebRTC/RTCCVPixelBuffer.h>
++#import <RTKWebRTC/RTCI420Buffer.h>
+ #import <RTKWebRTC/RTCVideoFrame.h>
+ #import <RTKWebRTC/RTCVideoTrack.h>
+ 
+ #import "RTCVideoViewManager.h"
+ #import "WebRTCModule.h"
+ 
++#if !TARGET_OS_OSX
++static uint8_t annotationChannel(int value) {
++    return (uint8_t)MAX(0, MIN(255, (value + 128) >> 8));
++}
++
++static NSDictionary *annotationFrameSample(RTKRTCVideoFrame *frame) {
++    id<RTKRTCI420Buffer> buffer = [frame.buffer toI420];
++    int w = buffer.width, h = buffer.height;
++    if (w < 4 || h < 4) return nil;
++    NSInteger rotation = frame.rotation;
++    BOOL turns = rotation == 90 || rotation == 270;
++    double scale = MIN(1.0, 256.0 / MAX(w, h));
++    int width = MAX(1, lround((turns ? h : w) * scale));
++    int height = MAX(1, lround((turns ? w : h) * scale));
++    NSMutableData *rgb = [NSMutableData dataWithLength:width * height * 3];
++    uint8_t *out = rgb.mutableBytes;
++    for (int y = 0; y < height; y++) {
++        int v = MIN((turns ? w : h) - 1, (int)((y + 0.5) / scale));
++        for (int x = 0; x < width; x++) {
++            int u = MIN((turns ? h : w) - 1, (int)((x + 0.5) / scale));
++            int col = u, row = v;
++            switch (rotation) {
++                case 90: col = v; row = h - 1 - u; break;
++                case 180: col = w - 1 - u; row = h - 1 - v; break;
++                case 270: col = w - 1 - v; row = u; break;
++            }
++            int luma = MAX(0, buffer.dataY[row * buffer.strideY + col] - 16) * 298;
++            int cb = buffer.dataU[(row / 2) * buffer.strideU + col / 2] - 128;
++            int cr = buffer.dataV[(row / 2) * buffer.strideV + col / 2] - 128;
++            *out++ = annotationChannel(luma + 409 * cr);
++            *out++ = annotationChannel(luma - 100 * cb - 208 * cr);
++            *out++ = annotationChannel(luma + 516 * cb);
++        }
++    }
++    return @{@"width": @(width), @"height": @(height), @"rgb": [rgb base64EncodedStringWithOptions:0]};
++}
++
++@interface RTKAnnotationMTLVideoView : RTKRTCMTLVideoView
++@property(atomic) BOOL annotationFrames;
++@property(atomic, copy) RCTDirectEventBlock onAnnotationFrame;
++@end
++
++@implementation RTKAnnotationMTLVideoView {
++    BOOL _annotationSampleQueued;
++}
++- (void)renderFrame:(RTKRTCVideoFrame *)frame {
++    [super renderFrame:frame];
++    RCTDirectEventBlock callback = self.onAnnotationFrame;
++    if (!self.annotationFrames || !frame || !callback) return;
++    @synchronized (self) {
++        if (_annotationSampleQueued) return;
++        _annotationSampleQueued = YES;
++    }
++    // Use the video view's RTCVideoRenderer callback, not a second track sink.
++    NSDictionary *sample = annotationFrameSample(frame);
++    dispatch_async(dispatch_get_main_queue(), ^{
++        @synchronized (self) { self->_annotationSampleQueued = NO; }
++        if (sample && self.window && self.annotationFrames && self.onAnnotationFrame == callback) callback(sample);
++    });
++}
++@end
++#endif
++
+ /**
+  * In the fashion of
+  * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+@@ -137,7 +202,7 @@ typedef NS_ENUM(NSInteger, RTKRTCVideoViewObjectFit) {
+ - (instancetype)initWithFrame:(CGRect)frame {
+     if (self = [super initWithFrame:frame]) {
+ #if !TARGET_OS_OSX
+-        RTKRTCMTLVideoView *subview = [[RTKRTCMTLVideoView alloc] initWithFrame:CGRectZero];
++        RTKRTCMTLVideoView *subview = [[RTKAnnotationMTLVideoView alloc] initWithFrame:CGRectZero];
+         subview.delegate = self;
+         _videoView = subview;
+ #else
+@@ -381,6 +446,10 @@ RCT_EXPORT_MODULE()
+ }
+ 
+ RCT_EXPORT_VIEW_PROPERTY(mirror, BOOL)
++#if !TARGET_OS_OSX
++RCT_REMAP_VIEW_PROPERTY(annotationFrames, videoView.annotationFrames, BOOL)
++RCT_REMAP_VIEW_PROPERTY(onAnnotationFrame, videoView.onAnnotationFrame, RCTDirectEventBlock)
++#endif
+ 
+ /**
+  * In the fashion of

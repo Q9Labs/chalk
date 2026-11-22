@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "./baked-stroke-proof";
+import { NATIVE_INK_PROOF_TIMEOUT_MS, frameProvesStroke, inkHandoff, makeStrokeProof, type InkRaster } from "../src/baked-stroke-proof";
 
 // A narrow stroke and its unchanged surroundings; values are straight-alpha pixels.
 function raster(background: number, stroke?: { dark: number; bright: number; alpha: number }): InkRaster {
@@ -80,6 +80,14 @@ describe("own ink paint source", () => {
   it("does not resurrect erased, undone or expired ink when a late frame still contains it", () => {
     expect(inkHandoff({ ...input, mark: undefined, revision: 6, proved: true })).toBe("removed");
     expect(inkHandoff({ ...input, mark: { expires_at_ms: 3999 }, proved: true })).toBe("removed");
+  });
+
+  it("bounds native ink when pixels never supply proof without using a receipt as proof", () => {
+    const deadline = input.nowMs + NATIVE_INK_PROOF_TIMEOUT_MS;
+    const preview = { ...input.preview, proofTimeoutAt: deadline };
+    expect(inkHandoff({ ...input, preview, nowMs: deadline - 1 })).toBe("local");
+    expect(inkHandoff({ ...input, preview, nowMs: deadline })).toBe("removed");
+    expect(inkHandoff({ ...input, preview, nowMs: deadline - 1, proved: true })).toBe("video");
   });
 
   it("uses data when baked presentation is no longer active", () => {

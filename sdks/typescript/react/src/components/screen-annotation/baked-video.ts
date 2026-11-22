@@ -1,6 +1,5 @@
-import { paintAnnotation } from "@q9labsai/chalk-screen-annotation";
+import { makeStrokeProof, paintAnnotation, type InkRaster } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationDraft } from "@q9labsai/chalk-client";
-import { makeStrokeProof, type InkRaster } from "./baked-stroke-proof";
 
 /** Keeps the exact sampled video frame until the next presentation callback. */
 export function createBakedVideoSurface(document: Document) {
