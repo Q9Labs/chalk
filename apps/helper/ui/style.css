@@ -76,7 +76,23 @@ p { color: #b8bbc5; margin: 0 0 14px; }
 .drawbar button.red { background: #ff737d; }
 .drawbar button.done { margin-inline-start: auto; width: auto; padding: 0 12px; background: #f2f3f5; color: #111; font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.settings:has(.approval:not([hidden])) > :is(.setting, #update, #connection-help) { display: none; }
+.settings:has(:is(.approval, .permission):not([hidden])) > :is(.setting, #update, #connection-help) { display: none; }
 .approval { margin-block-start: 16px; }
 .approval #fingerprint { color: #f2f3f5; font: 600 22px ui-monospace, monospace; letter-spacing: .12em; }
 .approval #allow { background: #f2f3f5; color: #111; margin-inline-start: 6px; }
+
+/* Permission panel: Chalk call tokens (surface #060606, raised #0C0C0C, text #ECECEE, muted #9A9CA3). */
+@font-face { font-family: Figtree; font-weight: 600; src: url("renderer/Figtree-SemiBold.ttf") format("truetype"); }
+.settings { background: #060606; color: #ececee; }
+.permission { margin-block-start: 14px; padding: 16px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px; background: #0c0c0c; }
+.permission h2 { margin: 0 0 6px; font: 600 15px/1.4 Figtree, system-ui, sans-serif; color: #ececee; }
+.permission p { margin: 0 0 12px; line-height: 1.4; }
+.permission #permission-wait { color: #9a9ca3; font-size: 12px; }
+.permission .actions { display: flex; gap: 8px; }
+.settings .permission button { min-height: 36px; padding: 0 16px; border-radius: 999px; font: 600 13px Figtree, system-ui, sans-serif; }
+.settings .permission .primary { background: #ececee; color: #000; }
+.settings .permission .primary:hover { background: #fff; }
+.settings .permission .quiet { color: #c4c6cc; }
+.settings .permission .quiet:hover { background: rgba(255, 255, 255, .08); }
+.settings .permission .link { margin-block-start: 8px; min-height: 0; padding: 4px 0; border-radius: 4px; color: #9a9ca3; font-weight: 500; text-decoration: underline; }
+.settings .permission .link:hover { color: #ececee; }

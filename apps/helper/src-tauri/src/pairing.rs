@@ -37,6 +37,11 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 
 const PORT: u16 = 47361;
 const HOST: &str = "127.0.0.1:47361";
+
+// Loopback only, so Windows Firewall never asks to allow Helper on the network.
+fn listen_address() -> SocketAddrV4 {
+    SocketAddrV4::new(Ipv4Addr::LOCALHOST, PORT)
+}
 const VERSION: u8 = 1;
 const LIFETIME: Duration = Duration::from_secs(60);
 const ISSUER_CLOCK_TOLERANCE: Duration = Duration::from_secs(1);
@@ -275,8 +280,7 @@ impl Pairing {
     }
 
     pub async fn serve(self) {
-        let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, PORT);
-        match tokio::net::TcpListener::bind(address).await {
+        match tokio::net::TcpListener::bind(listen_address()).await {
             Ok(listener) => {
                 if axum::serve(listener, self.router()).await.is_err() {
                     eprintln!("chalk-helper: pairing_listener_failed");
@@ -1148,6 +1152,12 @@ mod tests {
     use tower::ServiceExt;
 
     const ORIGIN: &str = "https://chalk.example";
+
+    #[test]
+    fn listens_on_loopback_only() {
+        assert!(listen_address().ip().is_loopback());
+        assert_eq!(listen_address().to_string(), HOST);
+    }
 
     fn issuer() -> (Pairing, Ed25519KeyPair) {
         let rng = SystemRandom::new();

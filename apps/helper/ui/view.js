@@ -98,6 +98,16 @@ if (isOverlay) {
     <h1>Chalk Helper</h1>
     <p id="connection">Not connected</p>
     <p id="connection-help">Start sharing in Chalk to connect.</p>
+    <div class="permission" hidden>
+      <h2 id="permission-title"></h2>
+      <p id="permission-body"></p>
+      <p id="permission-wait" role="status" hidden>Waiting for you. This updates on its own.</p>
+      <div class="actions">
+        <button type="button" class="primary" id="permission-primary"></button>
+        <button type="button" class="quiet" id="permission-later">Not now</button>
+      </div>
+      <button type="button" class="link" id="permission-finder">Show Chalk Helper in Finder</button>
+    </div>
     <div class="approval" hidden>
       <p>Compare this code with the code in Chalk.</p>
       <p id="fingerprint"></p>
@@ -125,6 +135,12 @@ if (isOverlay) {
   control("check_for_update", "#update");
   control("toggle_live_draw", "#live-draw");
   control("follow_window", "#follow-window");
+  control("later_screen_recording", "#permission-later");
+  control("show_app_in_finder", "#permission-finder");
+  listen("#permission-primary", "click", event => {
+    const kind = event.currentTarget.dataset.action;
+    if (kind) void run(kind).catch(showError);
+  });
   listen("#new-device-code", "click", () => void run("start_device_code", {
     tenant_id: root.querySelector("#device-account").value
   }).catch(showError));
@@ -135,6 +151,51 @@ if (isOverlay) {
       allowed
     }).catch(showError));
   }
+}
+
+// Words for each onboarding step. Marks always work in the call preview, so the panel says so.
+const permissionCopy = {
+  needed: {
+    title: "Allow Screen Recording",
+    body: "Chalk Helper needs it to keep marks on the window you share. Without it, marks still show in the call preview.",
+    primary: ["Open System Settings", "open_screen_recording_settings"],
+    later: true
+  },
+  settings_open: {
+    title: "Add Chalk Helper",
+    body: "Drag the Chalk Helper tile into the Screen Recording list, or switch it on if it’s already there.",
+    primary: ["Open System Settings", "open_screen_recording_settings"],
+    later: true,
+    waiting: true,
+    finder: true
+  },
+  restarting: { title: "Screen Recording is on", body: "Restarting Chalk Helper…" },
+  later: {
+    title: "Window follow is off",
+    body: "Marks still show in the call preview.",
+    primary: ["Turn on window follow", "follow_window"]
+  },
+  resumed: {
+    title: "Screen Recording is on",
+    body: "Chalk Helper restarted. Reconnect from your Chalk call to follow your window."
+  }
+};
+
+function renderPermission(view) {
+  const { phase, resumed } = view.permission;
+  const copy = view.approval ? undefined : permissionCopy[phase === "idle" && resumed ? "resumed" : phase];
+  root.querySelector(".permission").hidden = !copy;
+  root.querySelector("#follow-window").hidden = !view.canFollowWindow || Boolean(copy);
+  if (!copy) return;
+  root.querySelector("#permission-title").textContent = copy.title;
+  root.querySelector("#permission-body").textContent = copy.body;
+  root.querySelector("#permission-wait").hidden = !copy.waiting;
+  const primary = root.querySelector("#permission-primary");
+  primary.hidden = !copy.primary;
+  primary.textContent = copy.primary?.[0] ?? "";
+  primary.dataset.action = copy.primary?.[1] ?? "";
+  root.querySelector("#permission-later").hidden = !copy.later;
+  root.querySelector("#permission-finder").hidden = !copy.finder;
 }
 
 let renderedProbe;
@@ -171,7 +232,7 @@ async function refresh() {
       root.querySelector("#connection-help").textContent = view.connected
         ? "Use the preview in Chalk while this capture is unverified."
         : "Start sharing in Chalk to connect.";
-      root.querySelector("#follow-window").hidden = !view.canFollowWindow;
+      renderPermission(view);
       root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
       const displays = root.querySelector("#displays");
       const options = root.querySelector("#display-options");

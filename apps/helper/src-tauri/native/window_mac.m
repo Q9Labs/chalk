@@ -109,12 +109,7 @@ bool chalk_window_bounds(uint32_t id, ChalkWindowBounds *out) {
     }
 }
 
-// Only the native Settings action may prompt. Background sampling always
-// preflights without prompting.
-bool chalk_window_request_capture_access(void) {
-    return CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess();
-}
-
+// Sampling only preflights. It never prompts; Helper's onboarding owns the ask.
 bool chalk_window_sample(uint32_t id, uint8_t *output, size_t size) {
     if (!CGPreflightScreenCaptureAccess()) return false;
     @autoreleasepool {

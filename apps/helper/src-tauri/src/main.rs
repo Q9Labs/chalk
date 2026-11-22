@@ -10,6 +10,7 @@ mod helper_scene;
 mod live;
 mod pairing;
 mod pairing_consent;
+mod permission;
 mod window_follow;
 #[cfg(target_os = "windows")]
 mod windows_key;
@@ -19,6 +20,10 @@ use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_updater::UpdaterExt;
 
 fn main() {
+    // A new process answers whether it can capture the screen, so Helper can see a grant without restarting.
+    if std::env::args().any(|arg| arg == permission::PROBE_FLAG) {
+        std::process::exit(permission::probe_exit_code());
+    }
     tauri::Builder::default()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
