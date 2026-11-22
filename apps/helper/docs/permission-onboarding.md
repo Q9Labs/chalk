@@ -10,9 +10,9 @@ Helper asks for one permission, and only when the sharer chooses **Follow captur
 
 ## No restart
 
-Helper never relaunches itself for a grant, so the pairing and the Sync attachment survive it. A running process keeps its old answer about Screen Recording, so window pixels come from a long-lived child (`chalk-helper --window-sampler`, in `src/sampler.rs`) that starts after the grant and therefore has it. Helper writes `window <id>` lines to the child's stdin and reads back one status byte and, on success, one 72 by 72 RGBA frame, the same buffer the landmark match always read. Window bounds and identity stay in Helper: they need no permission and depend on Helper's own overlay window.
+Helper never relaunches itself for a grant, so the pairing and the Sync attachment survive it. A running process keeps its old answer about Screen Recording, so window pixels come from a long-lived child (`chalk-helper --window-sampler`, in `src/sampler.rs`) that starts after the grant and therefore has it. Helper writes `window <id> <title-bar crop fraction>` lines to the child's stdin and reads back one status byte and, on success, one 72 by 72 RGBA frame, the same buffer the landmark match always read. Window bounds and identity stay in Helper: they need no permission and depend on Helper's own overlay window.
 
-- The child starts when follow is enabled without in-process access and stops when the window share ends. It also exits when Helper's pipe closes, so a crashed Helper leaves no orphan.
+- The child starts when follow is enabled and stops when the window share ends. It also exits when Helper's pipe closes, so a crashed Helper leaves no orphan.
 - A dead or silent child is killed and replaced once per request. If the replacement fails too, the next attempt waits a second.
 - When the grant arrives, macOS may offer to quit Helper. The panel tells the sharer to choose **Later**, because Helper doesn't need it. If they choose **Quit & Reopen**, choose **Reconnect Chalk Helper** in the same call. A remembered device needs only one new native **Allow** for that exact share.
 
