@@ -17,12 +17,15 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.module.annotations.ReactModule;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import realtimekit.org.webrtc.VideoProcessor;
 import realtimekit.org.webrtc.VideoTrack;
 
+@ReactModule(name = ChalkScreenCaptureModule.NAME)
 public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
+  static final String NAME = "ChalkScreenCapture";
   private static final int PERMISSION_REQUEST = 14683;
 
   private final ReactApplicationContext context;
@@ -63,7 +66,7 @@ public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
 
   @Override
   public String getName() {
-    return "ChalkScreenCapture";
+    return NAME;
   }
 
   @ReactMethod
