@@ -1,3 +1,4 @@
+import { useBoardViewport } from "./board-viewport";
 import type { WhiteboardView as ChalkWhiteboardView } from "../../collab/view";
 import { useEngineHistory } from "./board-history";
 import { ChalkWhiteboardViewVersions as ViewVersions } from "@q9labsai/chalk-client";
@@ -309,9 +310,7 @@ export function Board({
 }: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
   const offline = connectionStatus === "reconnecting";
-  const smallViewport = useMediaQuery("(max-width: 640px)");
-  const phone = phoneOverride ?? smallViewport;
-  const touch = useMediaQuery("(pointer: coarse)") || phone || presentation === "mobile";
+  const { phone, touch } = useBoardViewport(phoneOverride, presentation);
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
   const toast = useBoardToast(engine);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));

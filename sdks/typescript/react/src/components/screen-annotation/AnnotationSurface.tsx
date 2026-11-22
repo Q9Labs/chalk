@@ -1,5 +1,5 @@
-import { captureAnnotationVideoFrame, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
-import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
+import type { AnnotationFit } from "@q9labsai/chalk-screen-annotation";
+import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChalkTooltip } from "../chalk-ui";
@@ -15,7 +15,8 @@ import { ScreenAnnotationToolbar } from "./ScreenAnnotationToolbar";
 import { downloadAnnotationPng } from "./download-png";
 import { saveAnnotationToBoard } from "./save-to-board";
 import { readSharerLayout } from "./sharer-layout";
-import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationBoard, type ScreenAnnotationFrame, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
+import { useAnnotationActions } from "./use-annotation-actions";
+import { canDraw, defaultBrush, type AnnotationBrush, type ScreenAnnotationActions, type ScreenAnnotationBoard, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
 
 export interface AnnotationPresentationContext {
   readonly actorId: string;
@@ -86,126 +87,149 @@ function ActiveAnnotationSurface({
 }): React.JSX.Element {
   const [brush, setBrush] = useState(defaultBrush);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [layout, setLayout] = useState(readSharerLayout);
-  const dockRef = useRef<HTMLDivElement>(null);
-  const saving = useRef(false);
-  const boardRetry = useRef<{ frame: ScreenAnnotationFrame; target: ScreenAnnotationTarget; action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]> } | null>(null);
-  const target = targetOf(state);
-  const { saveToWhiteboard, downloadPng } = actions ?? {};
   const editable = canDraw(state, actorId);
   // A window share may be this browser window. Only an excluded call tab can host ink in-tab.
   const safePreview = !isLocal || capture?.surface === "browser";
-  const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
   const showToolbar = toolsOpen && editable && safePreview;
-  const showOwnClear = state.marks.some((mark) => mark.author.participant_id === actorId);
-  const onError = (message: string) => setFeedback({ message, error: true });
-
-  const command = async (command: ScreenAnnotationCommand) => {
-    setFeedback(null);
-    try {
-      const result = await client.dispatch(target, command);
-      if (result.kind !== "accepted" && matchesTarget(client, target)) onError("The annotation action could not be applied.");
-    } catch {
-      if (matchesTarget(client, target)) onError("The annotation action could not be applied.");
-    }
-  };
-  const exportFrame = async (action: NonNullable<ScreenAnnotationActions["saveToWhiteboard"]>, toBoard: boolean) => {
-    if (saving.current) return;
-    const live = matchesTarget(client, target);
-    const video = videoRef.current;
-    if (!live || !video || !videoMatchesTrack(video, track) || !canDraw(live, actorId)) return;
-    saving.current = true;
-    setBusy(true);
-    setFeedback(null);
-    try {
-      const retry = toBoard && boardRetry.current?.action === action && boardRetry.current.target.fence === target.fence ? boardRetry.current : null;
-      const frame =
-        retry?.frame ??
-        captureAnnotationVideoFrame(video, {
-          publicationId: live.layer.publication_id,
-          marks: live.marks,
-          paused: live.paused,
-          sharerId: live.layer.sharer_id,
-          nowMs: client.serverNowMs(),
-        });
-      if (toBoard) boardRetry.current = { frame, action, target };
-      await action(frame);
-      if (toBoard) boardRetry.current = null;
-      setFeedback({ message: toBoard ? "Frame saved to the board." : "PNG downloaded.", error: false });
-    } catch {
-      onError("The annotated frame could not be saved.");
-    } finally {
-      saving.current = false;
-      setBusy(false);
-    }
-  };
+  const exportActions = useAnnotationActions({ client, state, actions, videoRef, track, actorId, allowExport: editable && safePreview });
 
   const annotationProps = { client, state, presence, fontUrl };
-  const annotateLabel = showToolbar ? "Hide tools" : "Annotate";
-  const annotateButton =
-    editable && safePreview ? (
-      <button type="button" className="chalk-ann-btn" data-tone={showToolbar ? undefined : "primary"} aria-expanded={showToolbar} onClick={() => setToolsOpen(!toolsOpen)}>
-        <StageIcon name="pen" size={15} />
-        <span className="chalk-ann-label">{annotateLabel}</span>
-      </button>
-    ) : null;
-  const annotate = annotateButton && isLocal ? <ChalkTooltip trigger={annotateButton}>{annotateLabel}</ChalkTooltip> : annotateButton;
+  const annotate = editable && safePreview ? <AnnotateButton expanded={showToolbar} hints={isLocal} onClick={() => setToolsOpen(!toolsOpen)} /> : null;
   return (
     <>
       {safePreview && canvasHost
         ? createPortal(
-            <ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: onError } : undefined} />,
+            <ScreenAnnotationLayer {...annotationProps} videoRef={videoRef} track={track} fit={fit} input={primary && showToolbar ? { actor: { participant_id: actorId, display_name: actorName, color: state.access.default_color }, brush, onCommandError: exportActions.onError } : undefined} />,
             canvasHost,
           )
         : null}
       {primary ? (
-        <div ref={dockRef} data-part="screen-annotation-controls" className="chalk-ann-dock" data-local={isLocal ? "" : undefined} data-stack={isLocal && layout.edge === "bottom" ? "top" : undefined}>
-          <AnnotationStyles />
-          {isLocal && !canPopOut ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
-          {feedback ? (
-            <p role={feedback.error ? "alert" : "status"} className="chalk-ann-chip" data-tone={feedback.error ? "error" : undefined}>
-              {feedback.message}
-            </p>
-          ) : null}
-          {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
-          {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
-          {showToolbar || showOwnClear || state.access.can_moderate ? (
-            <div
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && showToolbar) setToolsOpen(false);
-              }}
-            >
-              <ScreenAnnotationToolbar
-                brush={brush}
-                defaultColor={state.access.default_color}
-                enabled={showToolbar}
-                canEdit={showToolbar}
-                canModerate={state.access.can_moderate}
-                busy={busy}
-                onBrushChange={setBrush}
-                onCommand={(action) => void command(action)}
-                onSave={editable && safePreview && saveToWhiteboard ? () => void exportFrame(saveToWhiteboard, true) : undefined}
-                onDownload={editable && safePreview && downloadPng ? () => void exportFrame(downloadPng, false) : undefined}
-              />
-            </div>
-          ) : null}
-          {isLocal ? (
-            <AnnotationSharerControl dockRef={dockRef} layout={layout} onLayout={setLayout}>
-              {annotate}
-              <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} side={layout.edge === "bottom" ? "top" : "bottom"} hints />
-              {canPopOut ? <AnnotationPictureInPicture {...annotationProps} track={track} inTab={safePreview} hints /> : null}
-            </AnnotationSharerControl>
-          ) : (
-            <div className="chalk-ann-bar">
-              {annotate}
-              {annotate ? <span aria-hidden="true" className="chalk-ann-sep" /> : null}
-              <AnnotationAccess client={client} state={state} actorId={actorId} people={people} grants={grants} command={(action) => void command(action)} />
-            </div>
-          )}
-        </div>
+        <AnnotationDock
+          presentation={annotationProps}
+          actorId={actorId}
+          people={people}
+          grants={grants}
+          track={track}
+          isLocal={isLocal}
+          safePreview={safePreview}
+          helper={helper}
+          capture={capture}
+          annotate={annotate}
+          toolbar={{ brush, showToolbar, onBrush: setBrush, close: () => setToolsOpen(false) }}
+          exportActions={exportActions}
+        />
       ) : null}
     </>
   );
+}
+
+function AnnotationDock({
+  presentation,
+  actorId,
+  people,
+  grants,
+  track,
+  isLocal,
+  safePreview,
+  helper,
+  capture,
+  annotate,
+  toolbar,
+  exportActions,
+}: {
+  readonly presentation: Pick<React.ComponentProps<typeof ScreenAnnotationLayer>, "client" | "state" | "presence" | "fontUrl">;
+  readonly actorId: string;
+  readonly people: readonly AnnotationPerson[];
+  readonly grants?: AnnotationPresentationContext["grants"];
+  readonly track: MediaStreamTrack;
+  readonly isLocal: boolean;
+  readonly safePreview: boolean;
+  readonly helper?: ScreenAnnotationHelper;
+  readonly capture?: ScreenShareCapture;
+  readonly annotate: React.ReactNode;
+  readonly toolbar: Pick<React.ComponentProps<typeof AnnotationTools>, "brush" | "showToolbar" | "onBrush" | "close">;
+  readonly exportActions: ReturnType<typeof useAnnotationActions>;
+}) {
+  const [layout, setLayout] = useState(readSharerLayout);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const { client, state } = presentation;
+  const { feedback, busy, command, saveFrame, downloadFrame } = exportActions;
+  const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
+  const showOwnClear = state.marks.some((mark) => mark.author.participant_id === actorId);
+  const access = { client, state, actorId, people, grants, command: (action: ScreenAnnotationCommand) => void command(action) };
+  return (
+    <div ref={dockRef} data-part="screen-annotation-controls" className="chalk-ann-dock" data-local={isLocal ? "" : undefined} data-stack={isLocal && layout.edge === "bottom" ? "top" : undefined}>
+      <AnnotationStyles />
+      {isLocal && !canPopOut ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
+      <AnnotationFeedback feedback={feedback} />
+      {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
+      {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
+      {toolbar.showToolbar || showOwnClear || state.access.can_moderate ? <AnnotationTools {...toolbar} state={state} busy={busy} onCommand={command} onSave={saveFrame} onDownload={downloadFrame} /> : null}
+      {isLocal ? (
+        <AnnotationSharerControl dockRef={dockRef} layout={layout} onLayout={setLayout}>
+          {annotate}
+          <AnnotationAccess {...access} side={layout.edge === "bottom" ? "top" : "bottom"} hints />
+          {canPopOut ? <AnnotationPictureInPicture {...presentation} track={track} inTab={safePreview} hints /> : null}
+        </AnnotationSharerControl>
+      ) : (
+        <div className="chalk-ann-bar">
+          {annotate}
+          {annotate ? <span aria-hidden="true" className="chalk-ann-sep" /> : null}
+          <AnnotationAccess {...access} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnnotationFeedback({ feedback }: { readonly feedback: ReturnType<typeof useAnnotationActions>["feedback"] }) {
+  if (!feedback) return null;
+  return (
+    <p role={feedback.error ? "alert" : "status"} className="chalk-ann-chip" data-tone={feedback.error ? "error" : undefined}>
+      {feedback.message}
+    </p>
+  );
+}
+
+function AnnotationTools({
+  brush,
+  state,
+  showToolbar,
+  busy,
+  onBrush,
+  onCommand,
+  close,
+  onSave,
+  onDownload,
+}: {
+  readonly brush: AnnotationBrush;
+  readonly state: ScreenAnnotationState;
+  readonly showToolbar: boolean;
+  readonly busy: boolean;
+  readonly onBrush: (brush: AnnotationBrush) => void;
+  readonly onCommand: (command: ScreenAnnotationCommand) => void;
+  readonly close: () => void;
+  readonly onSave?: () => void;
+  readonly onDownload?: () => void;
+}) {
+  return (
+    <div
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && showToolbar) close();
+      }}
+    >
+      <ScreenAnnotationToolbar brush={brush} defaultColor={state.access.default_color} enabled={showToolbar} canEdit={showToolbar} canModerate={state.access.can_moderate} busy={busy} onBrushChange={onBrush} onCommand={(action) => void onCommand(action)} onSave={onSave} onDownload={onDownload} />
+    </div>
+  );
+}
+
+function AnnotateButton({ expanded, hints, onClick }: { readonly expanded: boolean; readonly hints: boolean; readonly onClick: () => void }) {
+  const annotateLabel = expanded ? "Hide tools" : "Annotate";
+  const button = (
+    <button type="button" className="chalk-ann-btn" data-tone={expanded ? undefined : "primary"} aria-expanded={expanded} onClick={onClick}>
+      <StageIcon name="pen" size={15} />
+      <span className="chalk-ann-label">{annotateLabel}</span>
+    </button>
+  );
+  return hints ? <ChalkTooltip trigger={button}>{annotateLabel}</ChalkTooltip> : button;
 }

@@ -132,7 +132,15 @@ function validateWhiteboardContract(contract) {
   if (contract.persistence?.fullSyncDeletesAbsentElements !== false || contract.persistence?.clearStartsNewSceneEpoch !== true || contract.persistence?.operationReceipts !== true) {
     throw new Error("Invalid whiteboard contract: merge, clear, and receipt persistence semantics are required");
   }
-  const files = contract.fileTransport;
+  validateFileTransport(contract.fileTransport);
+
+  const frameEntries = Object.values(contract.frames ?? {});
+  if (frameEntries.length !== 21 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
+    throw new Error("Invalid whiteboard contract: all strict frame definitions are required");
+  }
+}
+
+function validateFileTransport(files) {
   if (
     files?.download !== "participant-bound-short-lived-url" ||
     files.upload !== "scene-and-draw-authorized-create-only-short-lived-url" ||
@@ -144,11 +152,6 @@ function validateWhiteboardContract(contract) {
     files.uploadMimeTypes.some((type) => !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type))
   ) {
     throw new Error("Invalid whiteboard contract: expected participant-bound downloads and scene-authorized raster image uploads");
-  }
-
-  const frameEntries = Object.values(contract.frames ?? {});
-  if (frameEntries.length !== 21 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
-    throw new Error("Invalid whiteboard contract: all strict frame definitions are required");
   }
 }
 

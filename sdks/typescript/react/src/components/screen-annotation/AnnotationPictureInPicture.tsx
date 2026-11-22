@@ -18,7 +18,7 @@ function hasDocumentPiP(window: Window): window is Window & { documentPictureInP
 type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "fontUrl"> & { readonly track: MediaStreamTrack };
 
 // The window has no app CSS, so it borrows the call's own token values.
-const hostTokens = ["--chalk-stage", "--chalk-overlay-strong", "--chalk-overlay-warning", "--chalk-on-overlay", "--chalk-positive", "--chalk-shadow", "--type-caption"] as const;
+const hostTokens = ["--chalk-stage", "--chalk-overlay-strong", "--chalk-overlay-warning", "--chalk-on-overlay", "--chalk-positive", "--chalk-shadow", "--type-caption", "--space-0-5", "--space-1-5", "--space-2-5", "--space-3", "--corner-pill"] as const;
 
 function styleWindow(view: Window): void {
   const host = getComputedStyle(document.querySelector("[data-chalk]") ?? document.documentElement);

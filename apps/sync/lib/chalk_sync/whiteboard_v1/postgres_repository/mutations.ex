@@ -4,6 +4,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
   """
 
   alias ChalkSync.WhiteboardV1.PostgresRepository.Store
+  alias ChalkSync.WhiteboardV1.FileSQL
   alias ChalkSync.WhiteboardV1.SQL
 
   # Policy changes allowed in one Episode; far above what a real call needs.
@@ -65,7 +66,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
       ids ->
         params = Store.context(identity) ++ [Store.uuid(scene_id), ids]
 
-        case Postgrex.query(connection, SQL.reference_files(), params) do
+        case Postgrex.query(connection, FileSQL.reference_files(), params) do
           {:ok, %Postgrex.Result{rows: [[count]]}} when count == length(ids) -> :ok
           {:ok, _result} -> {:error, :invalid_payload}
           {:error, _error} -> {:retryable, :storage_unavailable}

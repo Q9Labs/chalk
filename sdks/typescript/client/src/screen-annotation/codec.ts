@@ -62,27 +62,42 @@ function matches(value: unknown, schema: Definition): boolean {
     case "boolean":
       return typeof value === "boolean";
     case "object":
-      return (
-        isRecord(value) &&
-        Object.keys(value).length === schema.required?.length &&
-        schema.required.every((key) => {
-          const property = schema.properties?.[key];
-          return !!property && Object.hasOwn(value, key) && matches(value[key], property);
-        })
-      );
+      return matchesObject(value, schema);
     case "array":
-      return Array.isArray(value) && value.length >= (schema.minItems ?? 0) && value.length <= (schema.maxItems ?? 0) && value.every((item: unknown) => !!schema.items && matches(item, schema.items));
+      return matchesArray(value, schema);
     case "integer":
-      return typeof value === "number" && Number.isSafeInteger(value) && value >= (schema.minimum ?? 0) && value <= (schema.maximum ?? Number.MAX_SAFE_INTEGER);
-    case "string": {
-      if (typeof value !== "string") return false;
-      if (schema.format === "uuid") return uuid.test(value);
-      const length = bytes.encode(value).byteLength;
-      return length >= (schema.minLength ?? 0) && length <= (schema.maxLength ?? 0) && (!schema.pattern || patterns.get(schema.pattern)?.test(value) === true);
-    }
+      return matchesInteger(value, schema);
+    case "string":
+      return matchesString(value, schema);
     default:
       return false;
   }
+}
+
+function matchesObject(value: unknown, schema: Definition): boolean {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === schema.required?.length &&
+    schema.required.every((key) => {
+      const property = schema.properties?.[key];
+      return !!property && Object.hasOwn(value, key) && matches(value[key], property);
+    })
+  );
+}
+
+function matchesArray(value: unknown, schema: Definition): boolean {
+  return Array.isArray(value) && value.length >= (schema.minItems ?? 0) && value.length <= (schema.maxItems ?? 0) && value.every((item: unknown) => !!schema.items && matches(item, schema.items));
+}
+
+function matchesInteger(value: unknown, schema: Definition): boolean {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= (schema.minimum ?? 0) && value <= (schema.maximum ?? Number.MAX_SAFE_INTEGER);
+}
+
+function matchesString(value: unknown, schema: Definition): boolean {
+  if (typeof value !== "string") return false;
+  if (schema.format === "uuid") return uuid.test(value);
+  const length = bytes.encode(value).byteLength;
+  return length >= (schema.minLength ?? 0) && length <= (schema.maxLength ?? 0) && (!schema.pattern || patterns.get(schema.pattern)?.test(value) === true);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,17 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { GlobalFonts, loadImage, type Image } from "@napi-rs/canvas";
-import { ANNOTATION_FONT_FAMILY } from "@q9labsai/chalk-screen-annotation";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { annotationGeometryArgs, denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
 import { COMPOSE_RESULT_VERSION, VIDEO_ENCODERS, type VideoEncoder } from "./generated/render-contract.js";
+import { paintOverlays } from "./compose/overlay-files.js";
 import { createAnnotationTimeline, type AnnotationGeometry } from "./compose/annotation-timeline.js";
-import { createFontRegistry } from "./compose/fonts.js";
-import { createPainter } from "./compose/paint.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
-import { createWhiteboardRenderer } from "./compose/whiteboard.js";
 import { loadVerifiedRenderInputs, type AnnotationInputFile, type VerifiedRenderInputs } from "./node/inputs.js";
 import { isMainModule } from "./node/main-module.js";
 import { readComposeRequest, validateResultPath } from "./node/request.js";
@@ -74,6 +70,7 @@ async function main(): Promise<void> {
       inputs,
       output,
       workDirectory,
+      FONTS_DIRECTORY,
     );
     const segmentPaths: string[] = [];
     for (const [index, { segment, annotated }] of composedSegments.entries()) {
@@ -107,46 +104,6 @@ async function main(): Promise<void> {
   } finally {
     await rm(workDirectory, { recursive: true, force: true });
   }
-}
-
-async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: VerifiedRenderInputs, output: ComposeOutput, workDirectory: string): Promise<ReadonlyMap<string, string>> {
-  if (inputs.annotation.length > 0 && GlobalFonts.registerFromPath(join(FONTS_DIRECTORY, "Figtree-SemiBold.ttf"), ANNOTATION_FONT_FAMILY) === null) {
-    throw new Error("recording annotation font could not be registered");
-  }
-  const fonts = await createFontRegistry(join(FONTS_DIRECTORY, "excalidraw", "Liberation"));
-  const fontFamilies = await fonts.registerSubsetFamily("Figtree", join(FONTS_DIRECTORY, "Figtree"));
-  const images = new Map<string, Promise<Image>>();
-  const assetPath = (assetId: string): string => {
-    const asset = inputs.assets.get(assetId);
-    if (asset === undefined) throw new TypeError(`recording asset ${assetId} is not verified`);
-    return asset.path;
-  };
-  const painter = createPainter({
-    width: output.width,
-    height: output.height,
-    fontFamilies,
-    loadAsset: (assetId) => {
-      let image = images.get(assetId);
-      if (image === undefined) {
-        image = readFile(assetPath(assetId)).then((bytes) => loadImage(bytes));
-        images.set(assetId, image);
-      }
-      return image;
-    },
-    renderWhiteboard: createWhiteboardRenderer({
-      fonts,
-      fontsDirectory: join(FONTS_DIRECTORY, "excalidraw"),
-      loadAsset: async (assetId) => ({ bytes: await readFile(assetPath(assetId)), contentType: inputs.assets.get(assetId)!.contentType }),
-    }),
-  });
-  const overlays = new Map<string, string>();
-  for (const span of spans) {
-    if (overlays.has(span.sceneKey)) continue;
-    const path = join(workDirectory, `overlay-${overlays.size}.png`);
-    await writeFile(path, await painter.paint(span.scene), { mode: 0o600 });
-    overlays.set(span.sceneKey, path);
-  }
-  return overlays;
 }
 
 /**

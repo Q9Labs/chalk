@@ -1,5 +1,7 @@
+import { annotationServerFrame } from "../screen-annotation/codec";
+import { V1ReplicaError } from "./v1-reducer";
 import { Schema } from "effect";
-import { SyncV1ClientFrameSchema, SyncV1ServerFrameSchema, encodeSyncFrame, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
+import { SyncProtocolLimits, SyncV1ClientFrameSchema, SyncV1ServerFrameSchema, encodeSyncFrame, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 
 export function encodeV1ClientFrame(frame: unknown): string {
   return encodeSyncFrame(Schema.decodeUnknownSync(SyncV1ClientFrameSchema)(frame));
@@ -15,4 +17,15 @@ export function decodeV1ServerValue(value: unknown): SyncV1ServerFrame {
 
 export function decodeV1ClientFrame(value: unknown): SyncV1ClientFrame {
   return Schema.decodeUnknownSync(SyncV1ClientFrameSchema)(value);
+}
+
+const encoder = new TextEncoder();
+
+export function decodeInboundV1Frame(data: unknown) {
+  if (typeof data !== "string") throw new V1ReplicaError("invalid inbound frame size");
+  const size = encoder.encode(data).byteLength;
+  if (size > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
+  const value: unknown = JSON.parse(data);
+  const annotation = annotationServerFrame(value, size);
+  return annotation ? { kind: "annotation" as const, value: annotation } : { kind: "base" as const, value: decodeV1ServerValue(value) };
 }

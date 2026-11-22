@@ -1,4 +1,4 @@
-import { SYNC_PATH } from "../urls";
+import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
@@ -8,20 +8,19 @@ import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } fr
 import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
-import { annotationServerFrame } from "../screen-annotation/codec";
 import { AnnotationReplica } from "../screen-annotation/replica";
-import { encodeV1ClientFrame, decodeV1ServerValue } from "./v1-codec";
+import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
 import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
-import { frameSignature } from "./v1-frame-signature";
+import { frameSignature, rememberBoundedEvidence } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { reportLiveTarget } from "./v1-live-target-telemetry";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { V1TimerMap } from "./v1-timer-map";
 import { copyProjection, copyPublication, mediaItem, mediaKey, presenceItem, updateProjection, validMediaPublication } from "./v1-projection-items";
-import { syncEntryUrl } from "./entry-url";
+import { assertV1Url, syncEntryUrl } from "./entry-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
   V1AdmissionTarget,
@@ -60,11 +59,6 @@ const FAST_RECONNECT_ATTEMPTS = 8;
 const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
 type RequestDeferred = Deferred<V1DirectedRequestResult> & {
   readonly frame: SyncV1ClientFrame;
-};
-type Head = {
-  readonly revision: number;
-  readonly state_schema_version: number;
-  readonly state_digest: string;
 };
 type Recovery = {
   readonly id: string;
@@ -546,16 +540,12 @@ export class V1SyncClient implements V1CollaborationClient {
   async #receive(socket: V1Socket, data: unknown): Promise<void> {
     if (socket !== this.#socket) return;
     try {
-      if (typeof data !== "string") throw new V1ReplicaError("invalid inbound frame size");
-      const size = encoder.encode(data).byteLength;
-      if (size > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
-      const value: unknown = JSON.parse(data);
-      const annotation = annotationServerFrame(value, size);
-      if (annotation) {
-        if (this.#annotationNegotiated && this.#phase.phase === "live") this.annotation.receive(annotation);
+      const frame = decodeInboundV1Frame(data);
+      if (frame.kind === "annotation") {
+        if (this.#annotationNegotiated && this.#phase.phase === "live") this.annotation.receive(frame.value);
         return;
       }
-      await this.#handleFrame(decodeV1ServerValue(value));
+      await this.#handleFrame(frame.value);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
@@ -1090,20 +1080,4 @@ export class V1SyncClient implements V1CollaborationClient {
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }
-}
-function sameHead(control: V1ControlState | null, head: Head): boolean {
-  return control !== null && control.revision === head.revision && control.stateSchemaVersion === head.state_schema_version && control.stateDigest === head.state_digest;
-}
-function sameRawHead(left: Head, right: Head): boolean {
-  return left.revision === right.revision && left.state_schema_version === right.state_schema_version && left.state_digest === right.state_digest;
-}
-function rememberBoundedEvidence(evidence: Map<number, string>, sequence: number, signature: string, capacity: number): void {
-  evidence.set(sequence, signature);
-  if (evidence.size <= capacity) return;
-  const oldest = evidence.keys().next().value;
-  if (oldest !== undefined) evidence.delete(oldest);
-}
-function assertV1Url(value: string): void {
-  const url = new URL(value);
-  if (url.pathname !== SYNC_PATH) throw new V1SyncError("SyncEngine v1 websocket URL must use /v1/sync", "invalid_url");
 }

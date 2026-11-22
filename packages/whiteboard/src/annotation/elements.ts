@@ -74,92 +74,108 @@ export function annotationBoardElements(frame: ScreenAnnotationFrame, placement:
     const opacity = Math.max(1, Math.round(alpha * 100));
     const geometry = projectAnnotationMark(rect, mark.draft);
     const style = { opacity, strokeColor: geometry.color, strokeWidth: geometry.width };
-    switch (geometry.kind) {
-      case "pen":
-      case "highlighter": {
-        const inkStyle = { ...style, opacity: geometry.kind === "highlighter" ? Math.max(1, Math.round(opacity * HIGHLIGHTER_OPACITY)) : opacity };
-        const path = shapePath(geometry.points);
-        if (!path) break;
-        if (path.bounds.width === 0 && path.bounds.height === 0) {
-          elements.push(dot(base(dotBounds(path.bounds, style.strokeWidth / 2), inkStyle)));
-        } else {
-          elements.push({
-            ...base(path.bounds, { ...inkStyle, strokeWidth: engineStrokeWidth(style.strokeWidth, true) }),
-            type: "freedraw",
-            points: path.points,
-            pressures: path.points.map(() => 0.5),
-            simulatePressure: false,
-            lastCommittedPoint: null,
-          });
-        }
-        break;
-      }
-      case "line":
-      case "arrow": {
-        const path = shapePath([geometry.from, geometry.to]);
-        if (!path) break;
-        if (path.bounds.width === 0 && path.bounds.height === 0) {
-          elements.push(dot(base(dotBounds(geometry.from, style.strokeWidth / 2), style)));
-        } else {
-          const line = linear(base(path.bounds, style), path.points);
-          elements.push(geometry.kind === "arrow" ? { ...line, type: "arrow", endArrowhead: "triangle", elbowed: false } : line);
-        }
-        break;
-      }
-      case "box":
-      case "circle": {
-        const { bounds } = geometry;
-        if (bounds.width === 0 || bounds.height === 0) {
-          const path = shapePath([bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }]);
-          if (bounds.width === 0 && bounds.height === 0) elements.push(dot(base(dotBounds(bounds, style.strokeWidth / 2), style)));
-          else if (path) elements.push(linear(base(path.bounds, style), path.points));
-        } else {
-          const type = geometry.kind === "box" ? "rectangle" : "ellipse";
-          elements.push({ ...base(bounds, style), type, roundness: geometry.kind === "box" ? { type: 3, value: style.strokeWidth * 2 } : null });
-        }
-        break;
-      }
-      case "text": {
-        const text = layoutAnnotationText(geometry, measureText);
-        const group = geometry.note ? `${importId}-${mark.draft.mark_id}` : undefined;
-        if (geometry.note) {
-          elements.push({
-            ...base(text.noteBounds, { ...style, opacity: Math.round(opacity * NOTE_OPACITY), strokeColor: TRANSPARENT, strokeWidth: 0 }, group),
-            type: "rectangle",
-            backgroundColor: NOTE_COLOR,
-            roundness: { type: 3, value: text.radius },
-          });
-        }
-        elements.push({
-          ...base(text.bounds, style, group),
-          type: "text",
-          fontFamily: NUNITO_FONT,
-          fontSize: geometry.fontSize,
-          lineHeight: (text.lineHeight / geometry.fontSize) as ExcalidrawTextElement["lineHeight"],
-          text: text.lines.join("\n"),
-          originalText: text.lines.join("\n"),
-          textAlign: "left",
-          verticalAlign: "top",
-          containerId: null,
-          autoResize: true,
-        });
-        break;
-      }
-      case "stamp": {
-        const group = `${importId}-${mark.draft.mark_id}`;
-        const bounds = dotBounds(geometry.at, geometry.radius);
-        elements.push({ ...base(bounds, style, group), type: "ellipse", backgroundColor: NOTE_COLOR });
-        for (const path of geometry.paths) {
-          const shape = shapePath(path);
-          if (!shape) continue;
-          if (path.length === 1) elements.push(dot(base(dotBounds(shape.bounds, style.strokeWidth / 2), style, group)));
-          else elements.push(linear(base(shape.bounds, style, group), shape.points));
-        }
-        break;
-      }
+    const group = `${importId}-${mark.draft.mark_id}`;
+    if (geometry.kind === "text") {
+      appendText(elements, base, geometry, style, measureText, group);
+    } else if (geometry.kind === "stamp") {
+      appendStamp(elements, base, geometry, style, group);
+    } else {
+      appendShape(elements, base, geometry, style);
     }
   }
   return elements;
+}
+
+type Geometry = ReturnType<typeof projectAnnotationMark>;
+type ElementFactory = (bounds: AnnotationRect, style: Style, groupId?: string) => ElementBase;
+
+function appendShape(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Exclude<Geometry, { kind: "text" | "stamp" }>, style: Style): void {
+  switch (geometry.kind) {
+    case "pen":
+    case "highlighter":
+      appendInk(elements, base, geometry, style);
+      break;
+    case "line":
+    case "arrow": {
+      const path = shapePath([geometry.from, geometry.to]);
+      if (!path) break;
+      if (path.bounds.width === 0 && path.bounds.height === 0) {
+        elements.push(dot(base(dotBounds(geometry.from, style.strokeWidth / 2), style)));
+      } else {
+        const line = linear(base(path.bounds, style), path.points);
+        elements.push(geometry.kind === "arrow" ? { ...line, type: "arrow", endArrowhead: "triangle", elbowed: false } : line);
+      }
+      break;
+    }
+    case "box":
+    case "circle": {
+      const { bounds } = geometry;
+      if (bounds.width === 0 || bounds.height === 0) {
+        const path = shapePath([bounds, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }]);
+        if (bounds.width === 0 && bounds.height === 0) elements.push(dot(base(dotBounds(bounds, style.strokeWidth / 2), style)));
+        else if (path) elements.push(linear(base(path.bounds, style), path.points));
+      } else {
+        const type = geometry.kind === "box" ? "rectangle" : "ellipse";
+        elements.push({ ...base(bounds, style), type, roundness: geometry.kind === "box" ? { type: 3, value: style.strokeWidth * 2 } : null });
+      }
+      break;
+    }
+  }
+}
+
+function appendInk(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Extract<Geometry, { kind: "pen" | "highlighter" }>, style: Style): void {
+  const inkStyle = { ...style, opacity: geometry.kind === "highlighter" ? Math.max(1, Math.round(style.opacity * HIGHLIGHTER_OPACITY)) : style.opacity };
+  const path = shapePath(geometry.points);
+  if (!path) return;
+  if (path.bounds.width === 0 && path.bounds.height === 0) {
+    elements.push(dot(base(dotBounds(path.bounds, style.strokeWidth / 2), inkStyle)));
+  } else {
+    elements.push({
+      ...base(path.bounds, { ...inkStyle, strokeWidth: engineStrokeWidth(style.strokeWidth, true) }),
+      type: "freedraw",
+      points: path.points,
+      pressures: path.points.map(() => 0.5),
+      simulatePressure: false,
+      lastCommittedPoint: null,
+    });
+  }
+}
+
+function appendText(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Extract<Geometry, { kind: "text" }>, style: Style, measureText: AnnotationTextMeasure, markGroup: string): void {
+  const text = layoutAnnotationText(geometry, measureText);
+  const group = geometry.note ? markGroup : undefined;
+  if (geometry.note) {
+    elements.push({
+      ...base(text.noteBounds, { ...style, opacity: Math.round(style.opacity * NOTE_OPACITY), strokeColor: TRANSPARENT, strokeWidth: 0 }, group),
+      type: "rectangle",
+      backgroundColor: NOTE_COLOR,
+      roundness: { type: 3, value: text.radius },
+    });
+  }
+  elements.push({
+    ...base(text.bounds, style, group),
+    type: "text",
+    fontFamily: NUNITO_FONT,
+    fontSize: geometry.fontSize,
+    lineHeight: (text.lineHeight / geometry.fontSize) as ExcalidrawTextElement["lineHeight"],
+    text: text.lines.join("\n"),
+    originalText: text.lines.join("\n"),
+    textAlign: "left",
+    verticalAlign: "top",
+    containerId: null,
+    autoResize: true,
+  });
+}
+
+function appendStamp(elements: OrderedExcalidrawElement[], base: ElementFactory, geometry: Extract<Geometry, { kind: "stamp" }>, style: Style, group: string): void {
+  const bounds = dotBounds(geometry.at, geometry.radius);
+  elements.push({ ...base(bounds, style, group), type: "ellipse", backgroundColor: NOTE_COLOR });
+  for (const path of geometry.paths) {
+    const shape = shapePath(path);
+    if (!shape) continue;
+    if (path.length === 1) elements.push(dot(base(dotBounds(shape.bounds, style.strokeWidth / 2), style, group)));
+    else elements.push(linear(base(shape.bounds, style, group), shape.points));
+  }
 }
 
 function dotBounds(point: AnnotationPoint, radius: number): AnnotationRect {

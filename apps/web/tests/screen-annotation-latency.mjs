@@ -177,34 +177,9 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
       await Promise.all(surfaces.map(({ page }) => page.waitForFunction(() => window.annotationPaint?.commit !== null, undefined, { timeout: 600 }).catch(() => {})));
       const [input, ...paints] = await Promise.all([drawer.page.evaluate(() => window.annotationInput), ...surfaces.map(({ page }) => page.evaluate(() => window.annotationPaint))]);
       const id = String(i + 1);
-      const pointerMs = input.find(({ type }) => type === "pointerdown")?.at ?? null;
-      const releaseMs = input.find(({ type }) => type === "pointerup")?.at ?? null;
       const outgoing = sent.slice(sendStart);
-      const mark = outgoing.find(({ type }) => type === "annotation_command")?.mark ?? outgoing.find(({ type }) => type === "annotation_presence")?.mark;
-      trace.push({
-        id,
-        input,
-        observation: paints,
-        sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length,
-        firstPreviewSentAt: outgoing.find(({ type }) => type === "annotation_presence")?.at ?? null,
-        sentCommit: outgoing.some(({ type }) => type === "annotation_command"),
-        received: surfaces.map(({ wire }) => ({
-          preview: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_presence").length,
-          commit: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_changed").length,
-          firstPreviewAt: wire.find(({ type, mark: id }) => id === mark && type === "annotation_presence")?.at ?? null,
-        })),
-      });
-      for (const [index, endpoint] of surfaces.entries()) {
-        const { preview, commit, occupied } = paints[index];
-        const offset = endpoint.clock.receiverMinusSenderMs;
-        endpoint.samples.push({
-          id,
-          pointerMs,
-          releaseMs,
-          previewPresentedMs: !occupied && pointerMs !== null && releaseMs !== null && preview !== null && preview - offset < releaseMs ? preview : null,
-          committedPresentedMs: !occupied && releaseMs !== null && commit !== null && commit - offset >= releaseMs - endpoint.clock.uncertaintyMs ? commit : null,
-        });
-      }
+      trace.push(markTrace(id, input, paints, outgoing, surfaces));
+      recordPresentations(id, input, paints, surfaces);
     }
     await writeFile(join(out, "trace.json"), JSON.stringify(trace, null, 2));
   });
@@ -224,3 +199,36 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     }
   });
 });
+
+function markTrace(id, input, paints, outgoing, surfaces) {
+  const mark = outgoing.find(({ type }) => type === "annotation_command")?.mark ?? outgoing.find(({ type }) => type === "annotation_presence")?.mark;
+  return {
+    id,
+    input,
+    observation: paints,
+    sentPreview: outgoing.filter((frame) => frame.type === "annotation_presence").length,
+    firstPreviewSentAt: outgoing.find(({ type }) => type === "annotation_presence")?.at ?? null,
+    sentCommit: outgoing.some(({ type }) => type === "annotation_command"),
+    received: surfaces.map(({ wire }) => ({
+      preview: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_presence").length,
+      commit: wire.filter(({ type, mark: id }) => id === mark && type === "annotation_changed").length,
+      firstPreviewAt: wire.find(({ type, mark: id }) => id === mark && type === "annotation_presence")?.at ?? null,
+    })),
+  };
+}
+
+function recordPresentations(id, input, paints, surfaces) {
+  const pointerMs = input.find(({ type }) => type === "pointerdown")?.at ?? null;
+  const releaseMs = input.find(({ type }) => type === "pointerup")?.at ?? null;
+  for (const [index, endpoint] of surfaces.entries()) {
+    const { preview, commit, occupied } = paints[index];
+    const offset = endpoint.clock.receiverMinusSenderMs;
+    endpoint.samples.push({
+      id,
+      pointerMs,
+      releaseMs,
+      previewPresentedMs: !occupied && pointerMs !== null && releaseMs !== null && preview !== null && preview - offset < releaseMs ? preview : null,
+      committedPresentedMs: !occupied && releaseMs !== null && commit !== null && commit - offset >= releaseMs - endpoint.clock.uncertaintyMs ? commit : null,
+    });
+  }
+}

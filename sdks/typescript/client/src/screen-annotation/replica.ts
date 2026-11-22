@@ -1,3 +1,4 @@
+import { applyChange } from "./change";
 import { screenAnnotationV1, type components } from "../generated/screen-annotation-v1";
 import { encodeAnnotationFrame } from "./codec";
 import type { ScreenAnnotationClient, ScreenAnnotationResult, ScreenAnnotationSnapshot, ScreenAnnotationTarget } from "./index";
@@ -281,21 +282,6 @@ export class AnnotationReplica implements ScreenAnnotationClient {
       );
     }
     return { ...state, marks, access: { ...state.access, requests } };
-  }
-}
-
-function applyChange(state: Wire["State"], frame: Wire["ServerChange"]): Wire["State"] {
-  const { change, fence, revision } = frame;
-  const next = { ...state, fence, revision };
-  switch (change.kind) {
-    case "upsert":
-      return { ...next, marks: [...state.marks.filter((mark) => mark.draft.mark_id !== change.mark.draft.mark_id), change.mark].sort((a, b) => a.created_revision - b.created_revision) };
-    case "remove":
-      return { ...next, marks: state.marks.filter((mark) => mark.draft.mark_id !== change.mark_id) };
-    case "clear":
-      return { ...next, marks: change.participant_id === null ? [] : state.marks.filter((mark) => mark.author.participant_id !== change.participant_id) };
-    case "control":
-      return { ...next, paused: change.paused, access: change.access };
   }
 }
 

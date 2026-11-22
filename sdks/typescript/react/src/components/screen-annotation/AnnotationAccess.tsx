@@ -55,25 +55,11 @@ export function AnnotationAccess({
   const ownRequest = requests.some((request) => request.participant_id === actorId);
   const otherRequests = requests.filter((request) => request.participant_id !== actorId);
   const policy = access.draw_policy;
-  const isSharer = actorId === state.layer.sharer_id;
-  const cannotDraw = !canDraw(state, actorId);
-  const blockedLabel = paused && !isSharer ? "Marks are paused" : policy === "hosts" ? "Only hosts can draw" : "Drawing isn’t available";
   const requested = access.can_manage_policy ? otherRequests.length : 0;
   const whoLabel = `Who can draw${requested ? ` · ${requested} requested` : ""}`;
   return (
     <>
-      {cannotDraw ? (
-        !access.can_draw && policy !== "hosts" && (!paused || isSharer) ? (
-          <button type="button" className="chalk-ann-btn" data-tone={ownRequest ? undefined : "primary"} disabled={ownRequest} onClick={() => command({ kind: "request_draw" })}>
-            <StageIcon name="hand" size={15} />
-            <span className="chalk-ann-label">{ownRequest ? "Request sent" : "Raise hand to draw"}</span>
-          </button>
-        ) : (
-          <span role="status" className="chalk-ann-status">
-            {blockedLabel}
-          </span>
-        )
-      ) : null}
+      <DrawAccessPrompt state={state} actorId={actorId} ownRequest={ownRequest} command={command} />
       {access.can_moderate ? (
         <button type="button" className="chalk-ann-btn" onClick={() => command({ kind: "pause", paused: !paused })}>
           <StageIcon name="pause" size={15} />
@@ -139,6 +125,25 @@ export function AnnotationAccess({
         </div>
       </ChalkPopover>
     </>
+  );
+}
+
+function DrawAccessPrompt({ state, actorId, ownRequest, command }: { readonly state: ScreenAnnotationState; readonly actorId: string; readonly ownRequest: boolean; readonly command: (command: ScreenAnnotationCommand) => void }) {
+  const { access, paused } = state;
+  const policy = access.draw_policy;
+  const isSharer = actorId === state.layer.sharer_id;
+  const cannotDraw = !canDraw(state, actorId);
+  const blockedLabel = paused && !isSharer ? "Marks are paused" : policy === "hosts" ? "Only hosts can draw" : "Drawing isn’t available";
+  if (!cannotDraw) return null;
+  return !access.can_draw && policy !== "hosts" && (!paused || isSharer) ? (
+    <button type="button" className="chalk-ann-btn" data-tone={ownRequest ? undefined : "primary"} disabled={ownRequest} onClick={() => command({ kind: "request_draw" })}>
+      <StageIcon name="hand" size={15} />
+      <span className="chalk-ann-label">{ownRequest ? "Request sent" : "Raise hand to draw"}</span>
+    </button>
+  ) : (
+    <span role="status" className="chalk-ann-status">
+      {blockedLabel}
+    </span>
   );
 }
 
