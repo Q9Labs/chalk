@@ -279,6 +279,24 @@ case "${1:-} ${2:-}" in
     [[ "${3:-}" == AWS && "${4:-}" == --password-stdin && "${5:-}" =~ ^[0-9]{12}\.dkr\.ecr\.ap-southeast-1\.amazonaws\.com$ ]]
     [[ "$(cat)" == test-only-registry-password ]]
     ;;
+  "run --rm")
+    # The cutover check: it can only run while its credential is registered.
+    grep -Fxq chalk-managed-migrator-database-url "$state"
+    [[ "$*" == *'--check-cutover' ]]
+    if [[ -n "${FAKE_CUTOVER_REFUSAL:-}" ]]; then
+      printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL" >&2
+      exit 1
+    fi
+    if [[ "${FAKE_CUTOVER_NO_FLAG:-false}" == true ]]; then
+      printf 'flag provided but not defined: -check-cutover\n' >&2
+      exit 2
+    fi
+    if [[ -n "${FAKE_CUTOVER_REFUSAL_AFTER_STOP:-}" ]] && grep -q '^systemctl .*stop ' "${FAKE_COMMAND_LOG:?}"; then
+      printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL_AFTER_STOP" >&2
+      exit 1
+    fi
+    ;;
+  "network exists") [[ "${FAKE_NO_NETWORK:-false}" != true ]] ;;
   "secret inspect") grep -Fxq -- "${3:?}" "$state" ;;
   "secret rm")
     temporary="${state}.tmp"
@@ -444,7 +462,8 @@ make_manifest() {
     --argjson architectures "$test_architectures" \
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
-    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260819130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+    --argjson minimum_migration "${FAKE_MANIFEST_MIGRATION:-20260819130000}" \
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:$minimum_migration,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
 }
 
 make_runtime_only_manifest() {
@@ -1121,6 +1140,7 @@ jq -e -R -s '
 ' "${fixture_root}/aws.log" >/dev/null || fail "runtime inputs were not fetched in SSM batches of at most 10 names"
 jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
 grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
+! grep -Fq -- '--check-cutover' "${fixture_root}/commands.log" || fail "a release that predates the Cloudflare retirement ran the cutover check"
 # The restart policy reaches the host: the installed units never hit a start limit, and systemd reloads them before anything starts.
 for unit in chalk-api chalk-sync; do
   grep -Fxq 'StartLimitIntervalSec=0' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with a start limit"
@@ -1242,6 +1262,76 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+# A release that retires Cloudflare asks the database before it stops the runtime, and a refusal leaves the stable release serving.
+FAKE_MANIFEST_MIGRATION=20261121120000 make_manifest cutover >"${fixture_root}/cutover-manifest.json"
+make_request cutover "${fixture_root}/cutover-request.json"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_CUTOVER_REFUSAL='2 active or ending Cloudflare Episodes: end them before retiring Cloudflare media' run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-refused.log" 2>&1; then
+  fail "a live Cloudflare Episode did not stop the cutover"
+fi
+grep -Fq 'active or ending Cloudflare Episodes' "${fixture_root}/cutover-refused.log" || fail "the cutover refusal did not name its reason"
+grep -Fq 'database is not ready for the Cloudflare retirement' "${fixture_root}/cutover-refused.log" || fail "the cutover refusal was not reported"
+! grep -q '^systemctl' "${fixture_root}/commands.log" || fail "the runtime was touched before the cutover check refused"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "the cutover check left the migration credential registered"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "a refused cutover changed the active release"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+# A host that has never run a release has nothing live to protect, so it deploys without the check.
+fresh_state="${fixture_root}/cutover-fresh-state"
+mkdir -p "$fresh_state"
+run_controller "$fresh_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >/dev/null || fail "a first deploy was blocked by the cutover check"
+! grep -Fq -- '--check-cutover' "${fixture_root}/commands.log" || fail "a first deploy ran the cutover check"
+# A host with a running release must be able to ask: a missing network is a failure, not a skip.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_NO_NETWORK=true run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-no-network.log" 2>&1; then
+  fail "a missing runtime network skipped the cutover check"
+fi
+grep -Fq 'cutover check needs the chalk-runtime network' "${fixture_root}/cutover-no-network.log" || fail "the missing network was not reported"
+! grep -q '^systemctl' "${fixture_root}/commands.log" || fail "the runtime was touched before the cutover check could run"
+# An Episode that starts between the first check and the stop is caught by the second check, and the stable release comes back.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_CUTOVER_REFUSAL_AFTER_STOP='1 active or ending Cloudflare Episodes: end them before retiring Cloudflare media' run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-raced.log" 2>&1; then
+  fail "a Cloudflare Episode started after the first check did not stop the cutover"
+fi
+grep -Fq 'database is not ready for the Cloudflare retirement' "${fixture_root}/cutover-raced.log" || fail "the second cutover refusal was not reported"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "the second cutover check left the migration credential registered"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "a raced cutover changed the active release"
+[[ "$(grep -c -- '--check-cutover' "${fixture_root}/commands.log")" == 2 ]] || fail "the automatic rollback ran the cutover check again"
+grep -Eq '^systemctl .*start chalk-runtime.target' "${fixture_root}/commands.log" || fail "the stable release was not started again after the raced cutover"
+# With a running release, a ready database passes both checks: one before the runtime stops and one after.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+cutover_state="${fixture_root}/cutover-state"
+mkdir -p "$cutover_state"
+make_request base "${fixture_root}/base-request.json"
+make_manifest base >"${fixture_root}/base-manifest.json"
+run_controller "$cutover_state" "${fixture_root}/base-request.json" "${fixture_root}/base-manifest.json" ok >/dev/null || fail "the base release did not deploy"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+run_controller "$cutover_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >/dev/null || fail "a ready database blocked the cutover"
+check_line="$(grep -n -- '--check-cutover' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+stop_line="$(grep -n '^systemctl .*stop ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+[[ -n "$check_line" && "$check_line" -lt "$stop_line" ]] || fail "the cutover check did not run before the runtime stopped"
+[[ "$(grep -c -- '--check-cutover' "${fixture_root}/commands.log")" == 2 ]] || fail "the cutover check did not run again once the runtime stopped"
+jq -e '.release_id == "cutover"' "${cutover_state}/active-release.json" >/dev/null || fail "a ready cutover did not become active"
+noflag_state="${fixture_root}/noflag-state"
+mkdir -p "$noflag_state"
+run_controller "$noflag_state" "${fixture_root}/base-request.json" "${fixture_root}/base-manifest.json" ok >/dev/null || fail "the base release did not deploy"
+# An API image from before the check existed cannot be asked; the migration still guards live Episodes.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+FAKE_CUTOVER_NO_FLAG=true run_controller "$noflag_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-no-flag.log" 2>&1 || fail "an API image without --check-cutover blocked the deploy"
+grep -Fq 'predates --check-cutover' "${fixture_root}/cutover-no-flag.log" || fail "the skipped cutover check was not reported"
 # A job re-run repeats a deploy this host already promoted: it passes on health alone and changes nothing.
 retry_state="${fixture_root}/retry-state"
 mkdir -p "$retry_state"

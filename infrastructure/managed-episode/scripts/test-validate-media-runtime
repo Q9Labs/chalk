@@ -27,13 +27,37 @@ check_refusal 'CHALK_SFU_ENABLED must be true'
 printf 'CHALK_SFU_ENABLED=true\n' >> "$fixture_api"
 check_refusal 'CHALK_SFU_APPLICATION_ID must occur'
 
+# Recording without a capture flag stops every new Recording, so history-only has to be chosen.
 sed 's/^CHALK_RECORDING_ENABLED=false$/CHALK_RECORDING_ENABLED=true/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'stops every new Recording'
 printf 'CHALK_SFU_CAPTURE_ENABLED=false\n' >> "$fixture_api"
+check_refusal 'stops every new Recording'
+printf 'CHALK_RECORDING_HISTORY_ONLY=true\n' >> "$fixture_api"
 check_refusal 'sync.env'
 printf 'CHALK_SFU_COLOCATED_CAPTURE=ON\n' >> "$fixture_api"
 check_refusal 'CHALK_SFU_COLOCATED_CAPTURE needs CHALK_SFU_CAPTURE_ENABLED=true'
 sed 's/^CHALK_SFU_CAPTURE_ENABLED=false$/CHALK_SFU_CAPTURE_ENABLED=1/' "$fixture_api" > "$fixture/colocated.env"
-mv "$fixture/colocated.env" "$fixture_api"
+cp "$fixture/colocated.env" "$fixture_api"
+check_refusal 'CHALK_RECORDING_HISTORY_ONLY conflicts with CHALK_SFU_CAPTURE_ENABLED=true'
+grep -v '^CHALK_RECORDING_HISTORY_ONLY=' "$fixture_api" > "$fixture/capture.env"
+cp "$fixture/capture.env" "$fixture_api"
+check_refusal 'sync.env'
+
+# The previous release still reads these, and a workflow rollback runs it against the current inputs.
+for legacy in CHALK_DEFAULT_MEDIA_PLANE CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE CHALK_CLOUDFLARE_REALTIME_APP_ID CHALK_CLOUDFLARE_REALTIME_APP_SECRET; do
+  grep -v "^$legacy=" "$fixture/full.env" > "$fixture_api"
+  check_refusal "$legacy"
+done
+sed 's/^CHALK_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_DEFAULT_MEDIA_PLANE=other/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
+sed 's/^CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=other/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
+sed 's/^CHALK_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu/' "$fixture/full.env" | grep -v '^CHALK_SFU_CAPTURE_ENABLED=' > "$fixture_api"
+check_refusal 'CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu needs CHALK_SFU_CAPTURE_ENABLED=true'
+grep -v '^CHALK_CLOUDFLARE_TURN_KEY_ID=' "$fixture/full.env" > "$fixture_api"
+check_refusal 'CHALK_CLOUDFLARE_TURN_KEY_ID'
+# Only production keeps a rollback target: nightly may drop the legacy settings.
+grep -v -e '^CHALK_DEFAULT_MEDIA_PLANE=' -e '^CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=' -e '^CHALK_CLOUDFLARE_' "$fixture/full.env" | sed 's/^CHALK_API_ENV=production$/CHALK_API_ENV=nightly/' > "$fixture_api"
 check_refusal 'sync.env'
 
 for value in true yes on 1 ' YES '; do
@@ -43,7 +67,7 @@ done
 sed 's/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=false/' "$fixture/full.env" > "$fixture_api"
 check_refusal 'CHALK_SFU_ENABLED must be true'
 
-for flag in CHALK_SFU_COLOCATED_CAPTURE CHALK_SFU_CAPTURE_ENABLED CHALK_SFU_ENABLED; do
+for flag in CHALK_SFU_COLOCATED_CAPTURE CHALK_SFU_CAPTURE_ENABLED CHALK_SFU_ENABLED CHALK_RECORDING_HISTORY_ONLY; do
   grep -v "^$flag=" "$fixture/full.env" > "$fixture_api"
   printf '%s=true\n%s=true\n' "$flag" "$flag" >> "$fixture_api"
   check_refusal "$flag must occur at most once"

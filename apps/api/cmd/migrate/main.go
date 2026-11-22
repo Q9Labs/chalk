@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ type options struct {
 }
 
 func main() {
+	if slices.ContainsFunc(os.Args[1:], isCutoverFlag) {
+		runCutoverCheck(os.Args[1:])
+		return
+	}
 	options, err := parseOptions(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "migration configuration failed: %v\n", err)
@@ -124,22 +129,30 @@ func parseMigrationVersion(value string) (int64, error) {
 	return version, nil
 }
 
+func openDatabase(ctx context.Context, databaseURLFile string) (database *sql.DB, databaseURL string, err error) {
+	databaseURL, err = readDatabaseURL(databaseURLFile)
+	if err != nil {
+		return nil, "", err
+	}
+	database, err = sql.Open("pgx", databaseURL)
+	if err != nil {
+		return nil, "", errors.New("open migration database")
+	}
+	database.SetMaxOpenConns(1)
+	database.SetMaxIdleConns(1)
+	if err := database.PingContext(ctx); err != nil {
+		database.Close()
+		return nil, "", errors.New("ping migration database")
+	}
+	return database, databaseURL, nil
+}
+
 func migrate(ctx context.Context, options options) error {
-	databaseURL, err := readDatabaseURL(options.databaseURLFile)
+	database, databaseURL, err := openDatabase(ctx, options.databaseURLFile)
 	if err != nil {
 		return err
 	}
-	database, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		return errors.New("open migration database")
-	}
 	defer database.Close()
-	database.SetMaxOpenConns(1)
-	database.SetMaxIdleConns(1)
-
-	if err := database.PingContext(ctx); err != nil {
-		return errors.New("ping migration database")
-	}
 	provider, err := newMigrationProvider(database, migrations.Files, goose.DialectPostgres)
 	if err != nil {
 		return errors.New("configure migration provider")
