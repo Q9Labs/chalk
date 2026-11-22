@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { centroid, decodeRgb, inkPixel, nearestRank, TARGETS, targetPixel } from "./pixels.mjs";
+import { percentile } from "../../../features/scorecard/stats.mjs";
+import { centroid, decodeRgb, inkPixel, TARGETS, targetPixel } from "./pixels.mjs";
 
 const SURFACES = new Set(["remote", "sharer_overlay", "export"]);
 const ALIGNMENT_COVERAGE = ["portrait", "landscape", "contain", "cover", "resize", "scroll", "tab", "window", "monitor", "mixed_dpi_negative_origin", "android_rotation_insets"];
@@ -11,7 +12,7 @@ const PRESENTATION_METHODS = new Set(["synchronized_video", "frame_callback"]);
 const SAMPLING = ["macos", "windows", "android"];
 
 function measureAlignment(scenarios, evidenceFile) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   const results = [];
   for (const scenario of scenarios) {
     assert.ok(SURFACES.has(scenario.surface), "invalid alignment surface");
@@ -42,7 +43,7 @@ function measureAlignment(scenarios, evidenceFile) {
       }
       errors.push(Math.hypot(target.x - mark.x, target.y - mark.y) / sample.displayedFrameWidthPx);
     }
-    const p95 = nearestRank(errors, 0.95);
+    const p95 = percentile(errors, 0.95);
     const verdict = missingMarks > 0 || (p95 !== null && p95 >= 0.005) ? "fail" : p95 === null ? "unmapped" : "pass";
     results.push({ id: scenario.id, surface: scenario.surface, tags: scenario.tags, samples: errors.length, unmapped, missingMarks, p95FrameWidthFraction: p95, verdict });
   }
@@ -50,7 +51,7 @@ function measureAlignment(scenarios, evidenceFile) {
 }
 
 function measureLatency(scenarios) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   return scenarios.map((scenario) => {
     const targetMs = LATENCY_TARGET_MS[scenario.surface];
     assert.ok(targetMs && NETWORKS.includes(scenario.environment), "invalid latency surface or environment");
@@ -82,7 +83,8 @@ function measureLatency(scenarios) {
     const attempts = scenario.samples.length;
     const preview = summarizeLatency(previews, attempts, uncertaintyMs);
     const commit = summarizeLatency(commits, attempts, uncertaintyMs);
-    const verdict = attempts < 100 || preview.samples === 0 || commit.samples === 0 ? "incomplete" : preview.p95UpperMs >= targetMs ? "fail" : "pass";
+    const excessiveLoss = Math.max(preview.missing, commit.missing) > attempts / 100;
+    const verdict = attempts < 100 ? "incomplete" : excessiveLoss || preview.p95UpperMs >= targetMs ? "fail" : "pass";
     return {
       id: scenario.id,
       surface: scenario.surface,
@@ -109,12 +111,12 @@ function addLatency(values, presentedMs, fromMs, offsetMs, uncertaintyMs) {
 }
 
 function summarizeLatency(values, attempts, uncertaintyMs) {
-  const p95 = nearestRank(values, 0.95);
-  return { samples: values.length, missing: attempts - values.length, p50Ms: nearestRank(values, 0.5), p95Ms: p95, p95UpperMs: p95 === null ? null : p95 + uncertaintyMs };
+  const p95 = percentile(values, 0.95);
+  return { samples: values.length, missing: attempts - values.length, p50Ms: percentile(values, 0.5), p95Ms: p95, p95UpperMs: p95 === null ? null : p95 + uncertaintyMs };
 }
 
 function measureExclusion(scenarios, evidenceFile) {
-  assert.ok(Array.isArray(scenarios) && scenarios.length);
+  assert.ok(Array.isArray(scenarios));
   return scenarios.map((scenario) => {
     assert.ok(SAMPLING.includes(scenario.platform), "invalid exclusion platform");
     const overlay = evidenceFile(scenario.overlay.frame);

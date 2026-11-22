@@ -107,10 +107,10 @@ func cleanupUUID(value utilities.ID) pgtype.UUID {
 
 func newAllocationCleanupFixture(t *testing.T, expiredLease bool, jobKind string) (pgx.Tx, transcriptionAllocationCleanupFixture) {
 	t.Helper()
-	return newAllocationCleanupFixtureWithMode(t, expiredLease, jobKind, "on_demand")
+	return newAllocationCleanupFixtureWithMode(t, expiredLease, jobKind, "on_demand", true)
 }
 
-func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKind, mode string) (pgx.Tx, transcriptionAllocationCleanupFixture) {
+func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKind, mode string, freezePresentation bool) (pgx.Tx, transcriptionAllocationCleanupFixture) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("postgres integration")
@@ -212,6 +212,13 @@ func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKin
 			'{"version":"profile.v1"}'::jsonb, 'transcription allocation cleanup', 0,
 			'{}'::jsonb, '[]'::jsonb, 0, now())`,
 		presentationID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), recordingID.Bytes())
+	fixture := transcriptionAllocationCleanupFixture{
+		recordingID: recordingID, jobID: jobID, captureEpoch: 1, digest: digest[:], leaseToken: leaseToken, leaseOwner: leaseOwner,
+	}
+	if !freezePresentation {
+		completed = true
+		return transaction, fixture
+	}
 	execCleanupFixture(t, transaction, `
 		insert into recording_presentation_sources (
 			presentation_handle, tenant_id, space_id, episode_id, recording_id, capture_epoch,
@@ -270,10 +277,9 @@ func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKin
 		jobID.Bytes(), tenantID.Bytes(), recordingID.Bytes(), inputID.Bytes(), digest[:])
 
 	completed = true
-	return transaction, transcriptionAllocationCleanupFixture{
-		recordingID: recordingID, jobID: jobID, captureEpoch: 1, digest: digest[:], leaseToken: leaseToken, leaseOwner: leaseOwner,
-		orphanKeys: []string{orphanAllocated, orphanCommitted}, sourceKey: sourceKey,
-	}
+	fixture.orphanKeys = []string{orphanAllocated, orphanCommitted}
+	fixture.sourceKey = sourceKey
+	return transaction, fixture
 }
 
 func insertTranscriptionAllocation(t *testing.T, transaction pgx.Tx, allocationID, reservationID utilities.ID, version int64, tenantID, episodeID, recordingID, jobID, inputID, objectHandle utilities.ID, digest []byte, purpose, state, objectKey string) {

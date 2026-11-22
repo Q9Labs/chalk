@@ -302,7 +302,7 @@ where (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_
     and file.cleanup_claim_token is null
     and (
         file.status = 'ready'
-        or (file.status = 'pending' and file.expires_at > now()
+        or (file.status = 'pending'
             and file.participant_id = writer.participant_id
             and file.participant_generation = writer.participant_generation)
     )
@@ -362,8 +362,13 @@ select $1, writer.tenant_id, writer.space_id, writer.episode_id,
 from sync_whiteboard_file_writers writer
 where (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_id, writer.participant_generation, writer.scene_id) =
     ($8, $9, $10, $11, $12::bigint, $13)
+    and can_reserve_whiteboard_file(writer.tenant_id, writer.space_id, writer.scene_id, writer.participant_id, $2)
 on conflict (tenant_id, space_id, scene_id, file_id) do update
-set updated_at = now()
+set updated_at = now(),
+    expires_at = case
+        when file.status = 'pending' and file.expires_at <= now() then excluded.expires_at
+        else file.expires_at
+    end
 where file.episode_id = excluded.episode_id
     and file.cleanup_claim_token is null
     and file.sha256 = excluded.sha256
@@ -371,7 +376,7 @@ where file.episode_id = excluded.episode_id
     and file.byte_length = excluded.byte_length
     and (
         file.status = 'ready'
-        or (file.status = 'pending' and file.expires_at > now()
+        or (file.status = 'pending'
             and file.participant_id = excluded.participant_id
             and file.participant_generation = excluded.participant_generation)
     )

@@ -2359,6 +2359,12 @@ export const WebhookEndpointWithSecretSchema = /* @__PURE__ */ (() =>
   }))();
 export type WebhookEndpointWithSecret = typeof WebhookEndpointWithSecretSchema.Type;
 
+export const WhiteboardFileAvailabilitySchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    available: Schema.Boolean,
+  }))();
+export type WhiteboardFileAvailability = typeof WhiteboardFileAvailabilitySchema.Type;
+
 export const WhiteboardFileDownloadSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     downloadUrl: Schema.String,
@@ -3157,6 +3163,9 @@ export const GetWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetWebhookEndpoint429ResponseHeaders = typeof GetWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const GetWhiteboardFileAvailabilityResponseSchema = /* @__PURE__ */ (() => WhiteboardFileAvailabilitySchema)();
+export type GetWhiteboardFileAvailabilityResponse = typeof GetWhiteboardFileAvailabilityResponseSchema.Type;
 
 export const GetWhiteboardFileDownloadPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({

@@ -18,7 +18,7 @@ type AnnotationFrames = {
 export function useNativeAnnotationSource(streamUrl: string | null): ScreenAnnotationSource | null {
   const [bound, setBound] = useState<{ readonly streamUrl: string; readonly source: ScreenAnnotationSource } | null>(null);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Tie the native decoded-frame sink to this stream and remove it before attaching the next one.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Tie the native decoded-frame sink to this stream and remove it before attaching the next one.
   useEffect(() => {
     const frames = NativeModules.ChalkAnnotationFrames as AnnotationFrames | undefined;
     if (!frames || !streamUrl) return;
@@ -67,10 +67,12 @@ export function useNativeAnnotationSource(streamUrl: string | null): ScreenAnnot
       size = { width: event.width, height: event.height };
       publish();
     });
-    void annotationRendererUrl().then((url) => {
-      rendererUrl = url;
-      publish();
-    }).catch(() => undefined);
+    void annotationRendererUrl()
+      .then((url) => {
+        rendererUrl = url;
+        publish();
+      })
+      .catch(() => undefined);
     attach(1);
 
     return () => {
@@ -78,7 +80,7 @@ export function useNativeAnnotationSource(streamUrl: string | null): ScreenAnnot
       if (retry !== undefined) clearTimeout(retry);
       listener.remove();
       sink.stop(key);
-      setBound((current) => current?.streamUrl === stream ? null : current);
+      setBound((current) => (current?.streamUrl === stream ? null : current));
     };
   }, [streamUrl]);
 

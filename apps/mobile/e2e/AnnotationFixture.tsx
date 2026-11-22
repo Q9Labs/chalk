@@ -50,13 +50,16 @@ function createFixture() {
           redo = [];
         }
         update({
-          marks: [...state.marks, {
-            draft: command.draft,
-            author: { participant_id: viewer.id, display_name: viewer.name, color: initial.access.default_color },
-            created_revision: state.revision + 1,
-            committed_at_ms: now,
-            expires_at_ms: command.draft.lifetime === "fade" ? now + 2000 : null,
-          }],
+          marks: [
+            ...state.marks,
+            {
+              draft: command.draft,
+              author: { participant_id: viewer.id, display_name: viewer.name, color: initial.access.default_color },
+              created_revision: state.revision + 1,
+              committed_at_ms: now,
+              expires_at_ms: command.draft.lifetime === "fade" ? now + 2000 : null,
+            },
+          ],
         });
       }
       if (command.kind === "erase") update({ marks: state.marks.filter(({ draft }) => draft.mark_id !== command.mark_id) });
@@ -74,9 +77,10 @@ function createFixture() {
         update({ fence: state.fence + 1, marks: [] });
       }
       if (command.kind === "pause") update({ paused: command.paused, fence: state.fence + 1 });
-      if (command.kind === "request_draw") update({
-        access: { ...state.access, requests: [{ request_id: "test-request", participant_id: viewer.id, expires_at_ms: Date.now() + 30_000 }] },
-      });
+      if (command.kind === "request_draw")
+        update({
+          access: { ...state.access, requests: [{ request_id: "test-request", participant_id: viewer.id, expires_at_ms: Date.now() + 30_000 }] },
+        });
       return { kind: "accepted", revision: state.revision, layer_id: state.layer.layer_id };
     },
   };
@@ -102,45 +106,80 @@ function AnnotationFixture(): React.JSX.Element {
     void annotationRendererUrl().then((value) => {
       if (active) setRendererUrl(value);
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
-  return <View style={styles.screen}>
-    <Text style={styles.title}>Maya’s screen</Text>
-    <Text testID="fixture.committed" style={styles.caption}>{count} committed marks</Text>
-    {presenting ? (
-      <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} />
-    ) : <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
-      <ScreenAnnotationLayer
-        client={fixture.client}
-        person={viewer}
-        publicationId={publicationId}
-        source={rendererUrl ? { rendererUrl, size } : null}
-        viewport={frame}
-        video={(rect) => <View style={[styles.video, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]}>
-          <View style={styles.leftStripe} />
-          <View style={styles.corner} />
-          <View style={styles.center} />
-          <Text style={styles.videoTitle}>Layout review</Text>
-        </View>}
-        controls={(tray) => <Portal layer="annotation"><View pointerEvents="box-none" style={styles.tray}>{tray}</View></Portal>}
-      />
-    </View>}
-    <View style={styles.controls}>
-      <Pressable accessibilityRole="button" onPress={fixture.pause}><Text style={styles.caption}>Toggle presenter pause</Text></Pressable>
-      <Pressable accessibilityRole="button" onPress={fixture.access}><Text style={styles.caption}>Toggle viewer access</Text></Pressable>
+  return (
+    <View style={styles.screen}>
+      <Text style={styles.title}>Maya’s screen</Text>
+      <Text testID="fixture.committed" style={styles.caption}>
+        {count} committed marks
+      </Text>
+      {presenting ? (
+        <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} />
+      ) : (
+        <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
+          <ScreenAnnotationLayer
+            client={fixture.client}
+            person={viewer}
+            publicationId={publicationId}
+            source={rendererUrl ? { rendererUrl, size } : null}
+            viewport={frame}
+            video={(rect) => (
+              <View style={[styles.video, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]}>
+                <View style={styles.leftStripe} />
+                <View style={styles.corner} />
+                <View style={styles.center} />
+                <Text style={styles.videoTitle}>Layout review</Text>
+              </View>
+            )}
+            controls={(tray) => (
+              <Portal layer="annotation">
+                <View pointerEvents="box-none" style={styles.tray}>
+                  {tray}
+                </View>
+              </Portal>
+            )}
+          />
+        </View>
+      )}
+      <View style={styles.controls}>
+        <Pressable accessibilityRole="button" onPress={fixture.pause}>
+          <Text style={styles.caption}>Toggle presenter pause</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={fixture.access}>
+          <Text style={styles.caption}>Toggle viewer access</Text>
+        </Pressable>
+      </View>
+      {Platform.OS === "android" ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            fixture.present(!presenting);
+            setPresenting(!presenting);
+          }}
+        >
+          <Text style={styles.caption}>{presenting ? "Switch to viewer" : "Switch to sharer"}</Text>
+        </Pressable>
+      ) : null}
+      <PortalHost layer="annotation" />
     </View>
-    {Platform.OS === "android" ? <Pressable accessibilityRole="button" onPress={() => {
-      fixture.present(!presenting);
-      setPresenting(!presenting);
-    }}><Text style={styles.caption}>{presenting ? "Switch to viewer" : "Switch to sharer"}</Text></Pressable> : null}
-    <PortalHost layer="annotation" />
-  </View>;
+  );
 }
 
 export function AnnotationFixtureApp() {
-  return <SafeAreaProvider><DeviceLayoutProvider><PortalProvider><ToastProvider>
-    <AnnotationFixture />
-  </ToastProvider></PortalProvider></DeviceLayoutProvider></SafeAreaProvider>;
+  return (
+    <SafeAreaProvider>
+      <DeviceLayoutProvider>
+        <PortalProvider>
+          <ToastProvider>
+            <AnnotationFixture />
+          </ToastProvider>
+        </PortalProvider>
+      </DeviceLayoutProvider>
+    </SafeAreaProvider>
+  );
 }
 
 const styles = StyleSheet.create({

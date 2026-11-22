@@ -5329,6 +5329,149 @@ create table recording_screen_annotation_changes (
         references recording_screen_annotation_layers(tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id)
         on delete cascade
 );
+
+create function can_reserve_whiteboard_file(
+    scope_tenant uuid, scope_space uuid, scope_scene uuid, caller uuid, requested_file_id text
+) returns boolean language plpgsql volatile as $$
+declare
+    allowed boolean;
+begin
+    -- Reservation requests serialize before taking a fresh count. Cleanup and
+    -- attaching images can only reduce that count and never take this lock.
+    perform pg_advisory_xact_lock(hashtextextended('whiteboard-file-admission', 0));
+    if exists (
+        select 1 from sync_whiteboard_files
+        where (tenant_id, space_id, scene_id, file_id) = (scope_tenant, scope_space, scope_scene, requested_file_id)
+    ) then
+        return true;
+    end if;
+
+    -- Count pending, expired, claimed and ready orphans alike. At 20 MiB per
+    -- object this caps orphan exposure at 160 MiB per drawer, 640 MiB per
+    -- tenant and 3.125 GiB overall (160 rows vs. 200 per cleanup pass).
+    select count(*) < 160
+        and count(*) filter (where tenant_id = scope_tenant) < 32
+        and count(*) filter (where tenant_id = scope_tenant and participant_id = caller) < 8
+    into allowed
+    from sync_whiteboard_files where referenced_at is null;
+
+    return allowed;
+end;
+$$;
+
+create function reference_committed_whiteboard_image() returns trigger language plpgsql as $$
+declare
+    file sync_whiteboard_files%rowtype;
+begin
+    -- Take the file lock even if our snapshot still shows a pending upload.
+    -- Once finalize or cleanup commits, the locked row (or its absence)
+    -- decides whether this reference can commit, including on older Sync.
+    select uploads.* into file
+    from sync_whiteboard_files uploads
+    where (uploads.tenant_id, uploads.space_id, uploads.episode_id, uploads.scene_id, uploads.file_id) =
+        (new.tenant_id, new.space_id, new.episode_id, new.scene_id, new.payload->>'fileId')
+    for no key update;
+
+    if not found or file.status <> 'ready' or file.cleanup_claim_token is not null then
+        raise check_violation using message = 'whiteboard image requires a ready, unclaimed file';
+    end if;
+
+    if file.referenced_at is null then
+        update sync_whiteboard_files set referenced_at = now() where upload_id = file.upload_id;
+    end if;
+    return null;
+end;
+$$;
+
+-- Current Sync validates files itself after writing elements. Do not replace
+-- its invalid-payload result with a database error from the element write.
+create constraint trigger reference_committed_whiteboard_image
+    after insert or update of payload, is_deleted on sync_whiteboard_elements
+    deferrable initially deferred
+    for each row when (new.element_type = 'image' and not new.is_deleted
+        and new.payload->>'status' = 'saved' and new.payload->>'fileId' is not null)
+    execute function reference_committed_whiteboard_image();
+
+-- Sync writes elements before referencing files. Install the trigger before
+-- taking a files-table lock for the index or the reference backfill.
+create index sync_whiteboard_files_unreferenced_idx
+    on sync_whiteboard_files (tenant_id, participant_id)
+    where referenced_at is null;
+
+create table recording_screen_annotation_budgets (
+    recording_id uuid primary key references recordings(id) on delete cascade,
+    retained_bytes bigint not null,
+    layer_count bigint not null,
+    exhausted boolean not null default false
+);
+
+create function bound_recording_annotation() returns trigger language plpgsql as $$
+declare
+    layer_delta bigint;
+    byte_delta bigint;
+    cut_ms bigint;
+    is_exhausted boolean;
+    -- Leave room below the completion limit and bound changes even at their
+    -- minimum size (80 bytes of envelope per change).
+    byte_budget constant bigint := 16777216;
+    layer_budget constant bigint := 4096;
+begin
+    if tg_table_name = 'recording_screen_annotation_layers' then
+        -- Multiple plans in one capture epoch can seed the same layer.
+        if exists (
+            select 1 from recording_screen_annotation_layers
+            where (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id) =
+                (new.tenant_id, new.space_id, new.episode_id, new.recording_id, new.capture_epoch, new.layer_id)
+        ) then
+            return null;
+        end if;
+        layer_delta := 1;
+        byte_delta := octet_length(new.layer::text) + octet_length(new.initial_marks::text) + 256;
+        cut_ms := new.initial_at_ms;
+    else
+        layer_delta := 0;
+        byte_delta := octet_length(new.change::text) + 80;
+        cut_ms := new.at_ms;
+    end if;
+
+    insert into recording_screen_annotation_budgets as budget (recording_id, retained_bytes, layer_count)
+    values (new.recording_id, byte_delta, layer_delta)
+    on conflict (recording_id) do update
+    set exhausted = budget.retained_bytes + byte_delta > byte_budget
+                 or budget.layer_count + layer_delta > layer_budget,
+        retained_bytes = case
+            when budget.retained_bytes + byte_delta <= byte_budget and budget.layer_count + layer_delta <= layer_budget
+                then budget.retained_bytes + byte_delta else budget.retained_bytes end,
+        layer_count = case
+            when budget.retained_bytes + byte_delta <= byte_budget and budget.layer_count + layer_delta <= layer_budget
+                then budget.layer_count + layer_delta else budget.layer_count end
+    where not budget.exhausted
+    returning exhausted into is_exhausted;
+
+    if not found then
+        return null;
+    end if;
+    if is_exhausted then
+        -- Keep a coherent prefix across all epochs. Do not allow a later small
+        -- change through after an earlier change has been dropped.
+        update recording_screen_annotation_layers
+        set closed_at_ms = greatest(initial_at_ms, cut_ms)
+        where (tenant_id, space_id, episode_id, recording_id) =
+            (new.tenant_id, new.space_id, new.episode_id, new.recording_id)
+          and closed_at_ms is null;
+        return null;
+    end if;
+    return new;
+end;
+$$;
+
+create trigger bound_recording_annotation_layers
+    before insert on recording_screen_annotation_layers
+    for each row execute function bound_recording_annotation();
+
+create trigger bound_recording_annotation_changes
+    before insert on recording_screen_annotation_changes
+    for each row execute function bound_recording_annotation();
 create table helper_devices (
     id uuid primary key,
     tenant_id uuid not null references tenants(id) on delete cascade,

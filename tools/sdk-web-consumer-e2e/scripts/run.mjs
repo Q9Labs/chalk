@@ -25,7 +25,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), "chalk-sdk-web-consumer-
 const archiveDirectory = join(temporaryDirectory, "archives");
 const consumerDirectory = join(temporaryDirectory, "consumer");
 const tenantAPIKey = `chalk_sk_fixture.${randomBytes(32).toString("base64url")}`;
-const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "sdks/typescript/client", "packages/whiteboard", "sdks/typescript/react", "sdks/typescript/react-native"];
+const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "sdks/typescript/client", "packages/screen-annotation", "packages/whiteboard", "sdks/typescript/react", "sdks/typescript/react-native"];
 let serverProcess;
 
 try {
@@ -36,21 +36,16 @@ try {
   }
   for (const packageDirectory of packedPackages) await run("pnpm", ["pack", "--pack-destination", archiveDirectory], join(repositoryDirectory, packageDirectory));
   const archives = (await readdir(archiveDirectory)).filter((file) => file.endsWith(".tgz"));
-  const clientArchive = requiredArchive(archives, "chalk-client");
-  const reactArchive = requiredArchive(archives, "chalk-react");
-
-  const supportingArchives = [requiredArchive(archives, "chalk-assets"), requiredArchive(archives, "facehash"), requiredArchive(archives, "recording-presentation"), requiredArchive(archives, "chalk-ui"), requiredArchive(archives, "chalk-whiteboard")];
+  const webArchives = Object.fromEntries(["chalk-client", "chalk-react", "chalk-assets", "facehash", "recording-presentation", "chalk-ui", "chalk-screen-annotation", "chalk-whiteboard"].map((name) => [`@q9labsai/${name}`, requiredArchive(archives, name)]));
 
   await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: `pnpm@${pnpmVersion}` }, null, 2)}\n`);
-  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, supportingArchives }));
+  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, webArchives));
   await run(
     "pnpm",
     [
       "add",
       "--save-exact",
-      join(archiveDirectory, clientArchive),
-      join(archiveDirectory, reactArchive),
-      ...supportingArchives.map((archive) => join(archiveDirectory, archive)),
+      ...Object.values(webArchives).map((archive) => join(archiveDirectory, archive)),
       "react@19.2.7",
       "react-dom@19.2.7",
       "@types/react@19.2.14",
@@ -69,7 +64,7 @@ try {
     ],
     consumerDirectory,
   );
-  await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, supportingArchives });
+  await assertPackedInstall(consumerDirectory, webArchives);
   const nativeDirectory = join(consumerDirectory, "node_modules/@q9labsai/chalk-react-native");
   await mkdir(nativeDirectory, { recursive: true });
   await run("tar", ["-xzf", join(archiveDirectory, requiredArchive(archives, "chalk-react-native")), "--strip-components=1", "-C", nativeDirectory], consumerDirectory);
@@ -383,19 +378,9 @@ async function post(url, signal) {
   if (!response.ok) throw new TypeError(`Fixture control request failed with HTTP ${response.status}: ${url}`);
 }
 
-async function assertPackedInstall(directory, archiveDirectory_, archives) {
+async function assertPackedInstall(directory, archives) {
   const packageJSON = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
-
-  const packages = [
-    ["@q9labsai/chalk-client", archives.clientArchive],
-    ["@q9labsai/chalk-react", archives.reactArchive],
-    ["@q9labsai/chalk-assets", archives.supportingArchives[0]],
-    ["@q9labsai/facehash", archives.supportingArchives[1]],
-    ["@q9labsai/recording-presentation", archives.supportingArchives[2]],
-    ["@q9labsai/chalk-ui", archives.supportingArchives[3]],
-    ["@q9labsai/chalk-whiteboard", archives.supportingArchives[4]],
-  ];
-  for (const [packageName, archive] of packages) assertArchiveDependency(packageJSON, packageName, archive);
+  for (const [packageName, archive] of Object.entries(archives)) assertArchiveDependency(packageJSON, packageName, archive);
 
   await run(
     process.execPath,
@@ -420,16 +405,7 @@ function requiredArchive(archives, name) {
 }
 
 function workspacePolicy(archiveDirectory_, archives) {
-  const byPackage = {
-    "@q9labsai/chalk-assets": archives.supportingArchives.find((archive) => archive.includes("chalk-assets")),
-    "@q9labsai/facehash": archives.supportingArchives.find((archive) => archive.includes("facehash")),
-    "@q9labsai/recording-presentation": archives.supportingArchives.find((archive) => archive.includes("recording-presentation")),
-    "@q9labsai/chalk-ui": archives.supportingArchives.find((archive) => archive.includes("chalk-ui")),
-    "@q9labsai/chalk-whiteboard": archives.supportingArchives.find((archive) => archive.includes("chalk-whiteboard")),
-    "@q9labsai/chalk-client": archives.clientArchive,
-    "@q9labsai/chalk-react": archives.reactArchive,
-  };
-  const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive).replaceAll("\\", "/")}"`);
+  const overrides = Object.entries(archives).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive).replaceAll("\\", "/")}"`);
   return [
     "packages:",
     '  - "."',

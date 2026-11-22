@@ -167,11 +167,37 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     baseUrl: apiBaseURL,
     token: input.token,
   });
-  return createChalkWhiteboardV1Client({
+  let uploadsEnabled = false;
+  const board = createChalkWhiteboardV1Client({
     url,
     token: input.token,
-    files,
+    files: {
+      getDownloadUrl: files.getDownloadUrl,
+      get uploadFile() {
+        return uploadsEnabled ? files.uploadFile : undefined;
+      },
+    },
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: input.onSummary,
   });
+  void whiteboardUploadsEnabled(apiBaseURL).then((enabled) => {
+    uploadsEnabled = enabled;
+    input.onFilesChanged?.();
+  });
+  return board;
+}
+
+async function whiteboardUploadsEnabled(apiBaseURL: string): Promise<boolean> {
+  try {
+    const response = await fetch(apiUrls.whiteboardFileAvailability(apiBaseURL), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!response.ok) return false;
+    const value: unknown = await response.json();
+    return typeof value === "object" && value !== null && "available" in value && value.available === true;
+  } catch {
+    // An older API or a failed capability check leaves downloads available.
+    return false;
+  }
 }

@@ -1,6 +1,5 @@
 import type { ScreenAnnotationClient, ScreenAnnotationState, ScreenShareCapture } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState } from "react";
-import { annotationControl } from "./AnnotationAccess";
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./model";
 
 type HelperScreen =
@@ -121,14 +120,14 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
   };
 
   return (
-    <div data-part="annotation-helper-offer" className="pointer-events-auto grid w-80 max-w-full gap-2 rounded-xl bg-[var(--chalk-overlay-strong)] p-3 text-sm text-[var(--chalk-on-overlay)]">
+    <div data-part="annotation-helper-offer" className="chalk-ann-card">
       {screen.kind === "idle" ? (
         <>
           <p>
             <bdi>{drawing}</bdi> is drawing on your share. Connect Chalk Helper to see marks on your screen.
           </p>
           {helper.challenge || helper.lookupCode ? (
-            <button type="button" className="text-left underline" onClick={() => void connect()}>
+            <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
               Connect Chalk Helper
             </button>
           ) : null}
@@ -138,10 +137,10 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       {screen.kind === "fingerprint" ? (
         <>
           <p>Chalk Helper will ask you to match this fingerprint.</p>
-          <code className="break-all" dir="ltr">
+          <code className="chalk-ann-code" dir="ltr">
             {screen.value}
           </code>
-          <button type="button" className={annotationControl} onClick={() => void screen.approve()}>
+          <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void screen.approve()}>
             Open approval in Chalk Helper
           </button>
         </>
@@ -149,7 +148,9 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
       {screen.kind === "attaching" && screen.fingerprint ? (
         <>
           <p role="status">Approve in Chalk Helper only if its fingerprint matches.</p>
-          <code dir="ltr">{screen.fingerprint}</code>
+          <code className="chalk-ann-code" dir="ltr">
+            {screen.fingerprint}
+          </code>
         </>
       ) : null}
       {screen.kind === "code" ? (
@@ -164,16 +165,16 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
               }}
             >
               {helper.deviceAccount ? (
-                <label className="grid gap-1">
+                <label className="chalk-ann-field">
                   Paste this account ID into Chalk Helper
-                  <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
+                  <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
                 </label>
               ) : null}
-              <label className="grid gap-1">
+              <label className="chalk-ann-field">
                 Device code from Chalk Helper
-                <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
+                <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
               </label>
-              <button type="submit" className={annotationControl} disabled={code.trim().length < 6}>
+              <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
                 Find device
               </button>
             </form>
@@ -205,22 +206,22 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
               Confirm this fingerprint in Chalk Helper: <code dir="ltr">{screen.fingerprint}</code>
             </p>
           ) : null}
-          <button type="button" className={annotationControl} onClick={() => void screen.approve()}>
+          <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void screen.approve()}>
             Allow this device
           </button>
         </>
       ) : null}
       {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
-      <div className="flex flex-wrap gap-3">
+      <div className="chalk-ann-card-actions">
         {helper.installUrl && (screen.kind === "idle" || screen.kind === "code" || (screen.kind === "status" && screen.status === "update_required")) ? (
-          <a className="underline" href={helper.installUrl} target="_blank" rel="noopener noreferrer">
+          <a className="chalk-ann-textbtn" href={helper.installUrl} target="_blank" rel="noopener noreferrer">
             Get Chalk Helper
           </a>
         ) : null}
         {helper.lookupCode && screen.kind !== "idle" && screen.kind !== "code" && screen.kind !== "device" && (screen.kind !== "status" || screen.status !== "ready") ? (
           <button
             type="button"
-            className="underline"
+            className="chalk-ann-textbtn"
             onClick={() => {
               start();
               setScreen({ kind: "code" });
@@ -229,7 +230,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
             Use a device code
           </button>
         ) : null}
-        <button type="button" className="underline" onClick={dismiss}>
+        <button type="button" className="chalk-ann-textbtn" onClick={dismiss}>
           {screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved") ? "Disconnect" : "Not now"}
         </button>
       </div>

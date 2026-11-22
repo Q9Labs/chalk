@@ -245,6 +245,7 @@ export type RecordingSlice = {
   readonly current: Recording | null;
 };
 export type WhiteboardSlice = {
+  readonly uploadsAvailable?: boolean;
   readonly open: boolean;
   readonly engine: {
     readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";

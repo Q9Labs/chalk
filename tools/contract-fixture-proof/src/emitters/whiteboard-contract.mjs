@@ -133,12 +133,16 @@ function validateWhiteboardContract(contract) {
     throw new Error("Invalid whiteboard contract: merge, clear, and receipt persistence semantics are required");
   }
   const files = contract.fileTransport;
-  if (files?.download !== "participant-bound-short-lived-url" ||
+  if (
+    files?.download !== "participant-bound-short-lived-url" ||
     files.upload !== "scene-and-draw-authorized-create-only-short-lived-url" ||
     files.finalize !== "scene-file-id-and-digest-idempotent" ||
-    !Number.isSafeInteger(files.maxUploadBytes) || files.maxUploadBytes <= 0 ||
-    !Array.isArray(files.uploadMimeTypes) || files.uploadMimeTypes.length === 0 ||
-    files.uploadMimeTypes.some((type) => !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type))) {
+    !Number.isSafeInteger(files.maxUploadBytes) ||
+    files.maxUploadBytes <= 0 ||
+    !Array.isArray(files.uploadMimeTypes) ||
+    files.uploadMimeTypes.length === 0 ||
+    files.uploadMimeTypes.some((type) => !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type))
+  ) {
     throw new Error("Invalid whiteboard contract: expected participant-bound downloads and scene-authorized raster image uploads");
   }
 
