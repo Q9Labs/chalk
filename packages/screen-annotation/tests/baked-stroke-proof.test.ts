@@ -17,6 +17,12 @@ function raster(background: number, stroke?: { dark: number; bright: number; alp
   return { width, height, data };
 }
 
+function shiftRows(image: InkRaster, rows: number): InkRaster {
+  const data = new Uint8ClampedArray(image.data.length);
+  data.set(image.data.subarray(0, image.data.length - rows * image.width * 4), rows * image.width * 4);
+  return { ...image, data };
+}
+
 function stencil(alpha: number): InkRaster {
   const image = raster(0, { dark: 30, bright: 250, alpha });
   for (let i = 3; i < image.data.length; i += 4) if (image.data[i] === 255) image.data[i] = 0;
@@ -48,6 +54,16 @@ describe("baked stroke frame evidence", () => {
     const strongInk = raster(173, { dark: 37, bright: 208, alpha: 255 });
     expect(frameProvesStroke(strongInk, proof)).toBe(false);
     expect(frameProvesStroke({ ...strongInk, width: 11 }, proof)).toBe(false);
+  });
+
+  it("hands off on a one-pixel raster shift, but not on pre-existing nearby ink", () => {
+    const frame = shiftRows(raster(50, { dark: 35, bright: 203, alpha: 255 }), 1);
+    expect(frameProvesStroke(frame, proofFor())).toBe(true);
+    expect(frameProvesStroke(shiftRows(frame, 1), proofFor())).toBe(false);
+
+    const proof = makeStrokeProof(frame, stencil(254));
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(frameProvesStroke(frame, proof)).toBe(false);
   });
 
   it("keeps the local copy if matching background supplies no new evidence", () => {
