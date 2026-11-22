@@ -1,6 +1,6 @@
 import type { CallEndReason, ClientFailure, PublicSpaceArrival, SessionExit } from "@q9labsai/chalk-client";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
-import type { ReportProblem } from "../../lib/send-problem-report";
+import type { ReportProblem } from "../../lib/problem-reports";
 import type { EntryFailure } from "./entry-failure";
 
 /** A visitor the host has not let in yet. */

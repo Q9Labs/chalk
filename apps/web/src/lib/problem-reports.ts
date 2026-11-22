@@ -4,6 +4,8 @@ import { withRequestContext } from "@q9labsai/chalk-client";
 import { apiUrls } from "@q9labsai/chalk-client/effect";
 import { backoffMs } from "./backoff";
 
+export type { ReportProblem } from "./send-problem-report";
+
 const apiFetch = withRequestContext();
 export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
 const parseAvailability = Schema.decodeUnknownSync(Schema.Struct({ available: Schema.Boolean }));
