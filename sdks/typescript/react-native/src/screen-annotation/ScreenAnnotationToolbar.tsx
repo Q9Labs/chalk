@@ -1,18 +1,51 @@
 import type { ScreenAnnotationCommand, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { Icon, type IconName } from "../icons/Icon";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
 import { visibleCommittedMarks, type Ink, type Tool } from "./model";
 
-const toolRows: ReadonlyArray<ReadonlyArray<{ readonly tool: Tool; readonly label: string; readonly glyph?: string; readonly icon?: IconName }>> = [
-  [{ tool: "laser", label: "Laser", glyph: "•" }, { tool: "pen", label: "Pen", icon: "pen" }, { tool: "highlighter", label: "Highlight", glyph: "▰" }, { tool: "line", label: "Line", glyph: "╱" }, { tool: "arrow", label: "Arrow", glyph: "↗" }],
-  [{ tool: "box", label: "Box", glyph: "□" }, { tool: "circle", label: "Circle", glyph: "○" }, { tool: "text", label: "Text", glyph: "T" }, { tool: "stamp", label: "Stamp", glyph: "☆" }, { tool: "eraser", label: "Erase", icon: "trash" }],
+type ToolVisual = { readonly label: string; readonly icon?: IconName; readonly path?: string; readonly circle?: true };
+// The icon set has no highlighter, line, arrow, circle or star, so these draw in the same 24-unit line style.
+const toolRows: ReadonlyArray<ReadonlyArray<ToolVisual & { readonly tool: Tool }>> = [
+  [
+    { tool: "laser", label: "Laser", icon: "pointer" },
+    { tool: "pen", label: "Pen", icon: "pen" },
+    { tool: "highlighter", label: "Highlight", path: "M4 20h6l9-9-6-6-9 9zM13 5l6 6M3 22h18" },
+    { tool: "line", label: "Line", path: "M5 19L19 5" },
+    { tool: "arrow", label: "Arrow", path: "M5 19L19 5M9 5h10v10" },
+  ],
+  [
+    { tool: "box", label: "Box", icon: "square" },
+    { tool: "circle", label: "Circle", circle: true },
+    { tool: "text", label: "Text", icon: "type" },
+    { tool: "stamp", label: "Stamp", path: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" },
+    { tool: "eraser", label: "Erase", icon: "eraser" },
+  ],
 ];
-const stamps = [["check", "✓"], ["cross", "✗"], ["star", "★"], ["question", "?"], ["heart", "♥"]] as const;
-const widths = [[193, "Fine"], [360, "Medium"], [720, "Wide"]] as const;
-const colors = [["#ff6b74", "Red"], ["#ffb15c", "Orange"], ["#fde05a", "Yellow"], ["#67ddaa", "Green"], ["#56b5ff", "Blue"], ["#b48aff", "Purple"], ["#ffffff", "White"]] as const;
+const stamps = [
+  ["check", "✓"],
+  ["cross", "✗"],
+  ["star", "★"],
+  ["question", "?"],
+  ["heart", "♥"],
+] as const;
+const widths = [
+  [193, "Fine"],
+  [360, "Medium"],
+  [720, "Wide"],
+] as const;
+const colors = [
+  ["#ff6b74", "Red"],
+  ["#ffb15c", "Orange"],
+  ["#fde05a", "Yellow"],
+  ["#67ddaa", "Green"],
+  ["#56b5ff", "Blue"],
+  ["#b48aff", "Purple"],
+  ["#ffffff", "White"],
+] as const;
 
 type Person = { readonly id: string; readonly name: string; readonly canDraw: boolean; readonly manages: boolean };
 export type ScreenAnnotationToolbarProps = {
@@ -40,17 +73,27 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
   const paused = state.paused && participantId !== layer.sharer_id;
   const canModerate = access.can_moderate;
   const canManagePolicy = access.can_manage_policy;
-  const authors = menu === "authors"
-    ? [...new Map(visibleCommittedMarks(state, nowMs).map(({ author }) => [author.participant_id, author])).values()]
-    : [];
+  const authors = menu === "authors" ? [...new Map(visibleCommittedMarks(state, nowMs).map(({ author }) => [author.participant_id, author])).values()] : [];
 
   return (
     <View testID="annotation.tray" style={[styles.tray, { backgroundColor: theme.popover, borderColor: theme.lineStrong }]}>
       <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         {drawingAllowed ? (
           <>
-            {ink.tool === "stamp" ? <View style={styles.row}>{stamps.map(([stamp, glyph]) => <ToolButton key={stamp} label={stamp} glyph={glyph} selected={ink.stamp === stamp} onPress={() => onInk({ ...ink, stamp })} />)}</View> : null}
-            {toolRows.map((row, index) => <View style={styles.row} key={index}>{row.map(({ tool, ...visual }) => <ToolButton key={tool} {...visual} selected={ink.tool === tool} onPress={() => onInk({ ...ink, tool })} />)}</View>)}
+            {ink.tool === "stamp" ? (
+              <View style={styles.row}>
+                {stamps.map(([stamp, glyph]) => (
+                  <ToolButton key={stamp} label={stamp} glyph={glyph} selected={ink.stamp === stamp} onPress={() => onInk({ ...ink, stamp })} />
+                ))}
+              </View>
+            ) : null}
+            {toolRows.map((row, index) => (
+              <View style={styles.row} key={index}>
+                {row.map(({ tool, ...visual }) => (
+                  <ToolButton key={tool} {...visual} selected={ink.tool === tool} onPress={() => onInk({ ...ink, tool })} />
+                ))}
+              </View>
+            ))}
             <View style={styles.row}>
               <ToolButton label="Ink style" color={ink.color} selected={menu === "format"} onPress={() => open("format")} />
               <ToolButton label={ink.lifetime === "keep" ? "Kept" : "Fade"} selected={ink.lifetime === "keep"} onPress={() => onInk({ ...ink, lifetime: ink.lifetime === "keep" ? "fade" : "keep" })} />
@@ -59,8 +102,12 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
             </View>
             {menu === "format" ? (
               <>
-                <View style={styles.row}>{[[access.default_color, "Assigned color"], ...colors].map(([color, label]) => color && label ? <ToolButton key={label} label={label} color={color} iconOnly selected={ink.color === color} onPress={() => onInk({ ...ink, color })} /> : null)}</View>
-                <View style={styles.row}>{widths.map(([width, label]) => <ToolButton key={width} label={label} selected={width === ink.width} onPress={() => onInk({ ...ink, width })} />)}</View>
+                <View style={styles.row}>{[[access.default_color, "Assigned color"], ...colors].map(([color, label]) => (color && label ? <ToolButton key={label} label={label} color={color} iconOnly selected={ink.color === color} onPress={() => onInk({ ...ink, color })} /> : null))}</View>
+                <View style={styles.row}>
+                  {widths.map(([width, label]) => (
+                    <ToolButton key={width} label={label} selected={width === ink.width} onPress={() => onInk({ ...ink, width })} />
+                  ))}
+                </View>
               </>
             ) : null}
           </>
@@ -70,6 +117,7 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
             {canRequestDraw && !paused && !pending ? <ToolButton label="Request to draw" onPress={() => onCommand({ kind: "request_draw" })} /> : null}
           </View>
         )}
+        <View style={[styles.rule, { backgroundColor: theme.line }]} />
         <View style={styles.row}>
           <ToolButton label="Clear mine" onPress={() => onCommand({ kind: "clear", scope: { kind: "mine" } })} />
           {state.marks.length || menu === "authors" ? <ToolButton label="Mark authors" selected={menu === "authors"} onPress={() => open("authors")} /> : null}
@@ -79,28 +127,50 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
           <ToolButton label="Done" selected onPress={onClose} />
         </View>
         {menu === "authors" ? (
-          authors.length ? authors.map((author) => <View key={author.participant_id} style={styles.person}>
-            <View style={[styles.swatch, { backgroundColor: author.color }]} />
-            <ChalkText>{author.display_name}</ChalkText>
-          </View>) : <ChalkText>No visible marks</ChalkText>
+          authors.length ? (
+            authors.map((author) => (
+              <View key={author.participant_id} style={styles.person}>
+                <View style={[styles.swatch, { backgroundColor: author.color }]} />
+                <ChalkText>{author.display_name}</ChalkText>
+              </View>
+            ))
+          ) : (
+            <ChalkText>No visible marks</ChalkText>
+          )
         ) : null}
         {menu === "manage" ? (
           <>
-            {canModerate ? <View style={styles.row}>
-              <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => onCommand({ kind: "pause", paused: !state.paused })} />
-              <ToolButton label="Clear all" onPress={() => onCommand({ kind: "clear", scope: { kind: "all" } })} />
-            </View> : null}
-            {canManagePolicy ? <View style={styles.row}>{(["everyone", "hosts", "picked"] as const).map((policy) => <ToolButton key={policy} label={{ everyone: "Everyone", hosts: "Hosts only", picked: "Picked people" }[policy]} selected={access.draw_policy === policy} onPress={() => onCommand({ kind: "set_policy", policy })} />)}</View> : null}
+            {canModerate ? (
+              <View style={styles.row}>
+                <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => onCommand({ kind: "pause", paused: !state.paused })} />
+                <ToolButton label="Clear all" onPress={() => onCommand({ kind: "clear", scope: { kind: "all" } })} />
+              </View>
+            ) : null}
+            {canManagePolicy ? (
+              <View style={styles.row}>
+                {(["everyone", "hosts", "picked"] as const).map((policy) => (
+                  <ToolButton key={policy} label={{ everyone: "Everyone", hosts: "Hosts only", picked: "Picked people" }[policy]} selected={access.draw_policy === policy} onPress={() => onCommand({ kind: "set_policy", policy })} />
+                ))}
+              </View>
+            ) : null}
             {people.map((person) => {
               const request = access.requests.find((value) => value.participant_id === person.id && value.expires_at_ms > nowMs);
-              return <View key={person.id} style={styles.person}>
-                <ChalkText numberOfLines={1} style={styles.personName}>{person.name}</ChalkText>
-                {canManagePolicy && request ? <>
-                  <ToolButton label="Allow" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: true })} />
-                  <ToolButton label="Decline" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: false })} />
-                </> : canManagePolicy && !person.manages && access.draw_policy !== "hosts" ? <ToolButton label={person.canDraw ? "Block" : "Allow"} onPress={() => onCommand({ kind: "set_draw_permission", participant_id: person.id, allow: !person.canDraw })} /> : null}
-                {canModerate ? <ToolButton label="Clear" onPress={() => onCommand({ kind: "clear", scope: { kind: "participant", participant_id: person.id } })} /> : null}
-              </View>;
+              return (
+                <View key={person.id} style={styles.person}>
+                  <ChalkText numberOfLines={1} style={styles.personName}>
+                    {person.name}
+                  </ChalkText>
+                  {canManagePolicy && request ? (
+                    <>
+                      <ToolButton label="Allow" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: true })} />
+                      <ToolButton label="Decline" onPress={() => onCommand({ kind: "decide_draw", request_id: request.request_id, allow: false })} />
+                    </>
+                  ) : canManagePolicy && !person.manages && access.draw_policy !== "hosts" ? (
+                    <ToolButton label={person.canDraw ? "Block" : "Allow"} onPress={() => onCommand({ kind: "set_draw_permission", participant_id: person.id, allow: !person.canDraw })} />
+                  ) : null}
+                  {canModerate ? <ToolButton label="Clear" onPress={() => onCommand({ kind: "clear", scope: { kind: "participant", participant_id: person.id } })} /> : null}
+                </View>
+              );
             })}
           </>
         ) : null}
@@ -109,31 +179,67 @@ export function ScreenAnnotationToolbar({ state, participantId, ink, drawingAllo
   );
 }
 
-export function ToolButton({ label, icon, glyph, color, iconOnly, selected, onPress }: { readonly label: string; readonly icon?: IconName; readonly glyph?: string; readonly color?: string; readonly iconOnly?: boolean; readonly selected?: boolean; readonly onPress: () => void }): React.JSX.Element {
+export function ToolButton({
+  label,
+  icon,
+  path,
+  circle,
+  glyph,
+  color,
+  iconOnly,
+  selected,
+  onPress,
+}: {
+  readonly label: string;
+  readonly icon?: IconName;
+  readonly path?: string;
+  readonly circle?: true;
+  readonly glyph?: string;
+  readonly color?: string;
+  readonly iconOnly?: boolean;
+  readonly selected?: boolean;
+  readonly onPress: () => void;
+}): React.JSX.Element {
   const { colors: theme } = useTheme();
-  return <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={label}
-    accessibilityState={selected === undefined ? undefined : { selected }}
-    onPress={onPress}
-    style={[styles.button, { backgroundColor: selected ? theme.focus : theme.raised, borderColor: theme.lineStrong }]}
-    testID={`annotation.${label.toLowerCase().replaceAll(" ", "-")}`}
-  >
-    {icon ? <Icon name={icon} color={selected ? theme.canvas : theme.text} size={17} /> : null}
-    {glyph ? <ChalkText style={styles.glyph} color={selected ? theme.canvas : theme.text}>{glyph}</ChalkText> : null}
-    {color ? <View style={[styles.swatch, { backgroundColor: color }]} /> : null}
-    {!iconOnly ? <ChalkText style={styles.label} numberOfLines={1} adjustsFontSizeToFit color={selected ? theme.canvas : theme.text}>{label}</ChalkText> : null}
-  </Pressable>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={selected === undefined ? undefined : { selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.button, { backgroundColor: selected ? theme.focus : pressed ? theme.pressed : theme.hover }]}
+      testID={`annotation.${label.toLowerCase().replaceAll(" ", "-")}`}
+    >
+      {icon ? <Icon name={icon} color={selected ? theme.canvas : theme.text} size={19} /> : null}
+      {path || circle ? (
+        <Svg accessibilityElementsHidden importantForAccessibility="no-hide-descendants" fill="none" height={19} width={19} viewBox="0 0 24 24" stroke={selected ? theme.canvas : theme.text} strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}>
+          {circle ? <Circle cx={12} cy={12} r={8} /> : <Path d={path} />}
+        </Svg>
+      ) : null}
+      {glyph ? (
+        <ChalkText style={styles.glyph} color={selected ? theme.canvas : theme.text}>
+          {glyph}
+        </ChalkText>
+      ) : null}
+      {color ? <View style={[styles.swatch, { backgroundColor: color }]} /> : null}
+      {!iconOnly ? (
+        <ChalkText style={styles.label} numberOfLines={1} adjustsFontSizeToFit color={selected ? theme.canvas : theme.text}>
+          {label}
+        </ChalkText>
+      ) : null}
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
-  tray: { alignSelf: "center", width: "100%", maxWidth: 540, maxHeight: "100%", borderWidth: 1, borderRadius: 24, overflow: "hidden" },
-  body: { padding: 8, gap: 5 },
-  row: { flexDirection: "row", alignItems: "stretch", gap: 4 },
-  button: { alignItems: "center", justifyContent: "center", minHeight: 44, flexGrow: 1, flexBasis: 0, paddingHorizontal: 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, gap: 2 },
+  tray: { alignSelf: "center", width: "100%", maxWidth: 540, maxHeight: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: 28, overflow: "hidden" },
+  body: { padding: 10, gap: 6 },
+  row: { flexDirection: "row", alignItems: "stretch", gap: 6 },
+  button: { alignItems: "center", justifyContent: "center", minHeight: 48, flexGrow: 1, flexBasis: 0, paddingHorizontal: 4, borderRadius: 16, gap: 3 },
   glyph: { fontSize: 21, lineHeight: 23 },
-  label: { fontSize: 11, lineHeight: 15 },
-  swatch: { width: 14, height: 14, borderRadius: 7 },
+  label: { fontSize: 12, lineHeight: 15 },
+  swatch: { width: 18, height: 18, borderRadius: 9 },
+  rule: { height: StyleSheet.hairlineWidth, marginHorizontal: 4 },
   notice: { alignItems: "center", flexDirection: "row", gap: 8 },
   person: { flexDirection: "row", alignItems: "center", gap: 6 },
   personName: { flex: 2 },

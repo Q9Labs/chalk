@@ -47,12 +47,9 @@ export const ContentTile = memo(function ContentTile({ annotation, content, inne
 
 function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: { readonly annotation?: StageAnnotation; readonly sharerId: string; readonly inner: Frame; readonly mini: boolean; readonly onShowInSpotlight: () => void }): React.JSX.Element {
   const { colors } = useTheme();
-  const selectScreen = useMemo(() => (snapshot: SpaceSnapshot) =>
-    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null, [sharerId]);
-  const selectPublication = useMemo(() => (snapshot: SpaceSnapshot) =>
-    snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.publicationId ?? null, [sharerId]);
-  const selectPlayable = useMemo(() => (snapshot: SpaceSnapshot) => !snapshot.media.remote.some((media) =>
-    media.participantId === sharerId && media.source === "screen" && media.pausedForNetwork), [sharerId]);
+  const selectScreen = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.track ?? null, [sharerId]);
+  const selectPublication = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.media.remote.find((media) => media.participantId === sharerId && media.source === "screen")?.publicationId ?? null, [sharerId]);
+  const selectPlayable = useMemo(() => (snapshot: SpaceSnapshot) => !snapshot.media.remote.some((media) => media.participantId === sharerId && media.source === "screen" && media.pausedForNetwork), [sharerId]);
   const playable = useSpaceSelector(selectPlayable);
   const track = useSpaceSelector(selectScreen);
   const publicationId = useSpaceSelector(selectPublication);
@@ -67,13 +64,12 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
   return (
     <>
       <View style={[styles.box, { left: inner.x, top: inner.y, width: inner.width, height: inner.height, backgroundColor: colors.tile }]} testID="tile.content.screen">
-        {slot ?? (streamURL ? annotate
-          ? <AnnotationScreenShare annotation={annotation} inner={inner} publicationId={publicationId} selfId={selfId} streamURL={streamURL} />
-          : <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} />
-          : null)}
+        {slot ?? (streamURL ? annotate ? <AnnotationScreenShare annotation={annotation} inner={inner} publicationId={publicationId} selfId={selfId} streamURL={streamURL} /> : <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} /> : null)}
       </View>
       {mini ? <Pressable accessibilityLabel={`Show ${name} in spotlight`} accessibilityRole="button" onPress={onShowInSpotlight} style={StyleSheet.absoluteFill} testID="tile.content.open" /> : null}
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}><NameTag icon="share" name={name} testID="tile.content.name" /></View>
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <NameTag icon="share" name={name} testID="tile.content.name" />
+      </View>
     </>
   );
 }

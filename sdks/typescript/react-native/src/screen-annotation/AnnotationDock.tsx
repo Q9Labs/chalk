@@ -11,11 +11,13 @@ import { hasTarget, matchLayer, targetFor, type StageAnnotation } from "./model"
 export function AnnotationDock({ children }: { readonly children: ReactNode }): React.JSX.Element {
   const { arrangement, width, height, insets } = useDeviceLayout();
   const dock = frameRegions(arrangement, width, height, insets).dock;
-  return <Portal layer="annotation">
-    <View pointerEvents="box-none" style={[styles.dock, { bottom: height - dock.y + 8, left: insets.left + 8, right: insets.right + 8 }]}>
-      {children}
-    </View>
-  </Portal>;
+  return (
+    <Portal layer="annotation">
+      <View pointerEvents="box-none" style={[styles.dock, { bottom: height - dock.y + 8, left: insets.left + 8, right: insets.right + 8 }]}>
+        {children}
+      </View>
+    </Portal>
+  );
 }
 
 /** Controls live in Chalk, not in the system ink window. */
@@ -30,8 +32,7 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
   const get = useCallback(() => matchLayer(client, publicationId), [client, publicationId]);
   const state = useSyncExternalStore(subscribe, get, get);
-  if (!state?.access.can_moderate || state.layer.sharer_id !== participantId ||
-      (annotation.publicationId && annotation.publicationId !== publicationId)) return null;
+  if (!state?.access.can_moderate || state.layer.sharer_id !== participantId || (annotation.publicationId && annotation.publicationId !== publicationId)) return null;
 
   const target = targetFor(state);
   const run = async (command: ScreenAnnotationCommand) => {

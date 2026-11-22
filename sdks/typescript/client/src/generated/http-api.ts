@@ -239,6 +239,11 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getWhiteboardFileAvailability", "/v1/whiteboard/files/availability", {
+      success: S.GetWhiteboardFileAvailabilityResponseSchema.pipe(HttpApiSchema.status(200)),
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getWhiteboardFileDownload", "/v1/whiteboard/files/:fileId/download", {
       params: S.GetWhiteboardFileDownloadPathParamsSchema,
       success: S.GetWhiteboardFileDownloadResponseSchema.pipe(HttpApiSchema.status(200)),

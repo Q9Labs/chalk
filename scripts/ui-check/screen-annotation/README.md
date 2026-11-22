@@ -12,7 +12,7 @@ pnpm --dir apps/recording-renderer exec vite build --config vite.node.config.ts 
 node scripts/ui-check/screen-annotation/recording.mjs .verify/screen-annotation-recording
 ```
 
-The proof runs the release compositor on generated VP8 media. It compares the no-sidecar and empty-sidecar exports, checks the annotated frame against the clean crosshairs, and verifies an exact frame before and after the late checkpoint, change, pause, resume, clear, publication replacement and sidecar close. It tests a recording-time fade, clipping at a letterboxed edge, duplicate revision delivery, and failure on a mismatched recording ID. Open `clean-frame.png`, `sample-frame.png` and `proof.json` from the output directory.
+The proof runs the release compositor on generated VP8 media. It compares the no-sidecar and empty-sidecar exports, checks the annotated frame against the clean crosshairs, and verifies an exact frame before and after the late checkpoint, change, pause, resume, clear, publication replacement and sidecar close. It tests a recording-time fade, clipping at a letterboxed edge, duplicate revision delivery, and failure on a mismatched recording ID. Open `clean-frame.png`, `sample-frame.png` and proof.json from the output directory.
 
 The test binds the sidecar by SHA-256. In an integrated run, the recording worker must stage a sidecar from the same authorized, frozen attempt input as presentation and media. The compositor accepts an absolute workspace-confined `--annotation-sidecar` and `--annotation-sha256`; the Go worker exposes these as `FrameRenderRequest.AnnotationSidecar`. The reader's v1 envelope is `{version, recordingId, episodeId, originAuthorityId, captureEpoch, layers: [{sourceIds, sidecar}]}`, where `sidecar` is the layer timeline in the [plan](../../../docs/plans/screen-annotation.md#recordings). Each source ID is an authenticated recording-presentation source ID for that publication, not a provider track name or a participant ID. Resolve publication-to-source identity at capture/freeze. A checkpoint at capture start may contain a kept mark with a negative relative commit time. Omit an absent sidecar; do not omit a sidecar that is present but fails validation.
 
@@ -51,7 +51,7 @@ The report gives nearest-rank p95 Euclidean alignment error divided by mapped fr
 
 In a new test Episode, try to bind as an unauthorized viewer, bind as the active sharer, send the same bind again, attempt a denied write, and end the Episode while the layer is live. Collect the actual response and the latest visible layer revision after each step. Set a known valid trace ID for the accepted open. Record the expected trace on closure: the producer uses the Episode-end operation's trace when available, otherwise the opening trace. Collect the parent screen publication event ID, or the Episode event ID if it has no publication journey. Exercise one accepted native bridge attach and one refused attach.
 
-Write `probe.json` with:
+Write the probe.json file with:
 
 - `version: 1`, `journeyId`, `episodeId`, `parentEventId`, `publicationId`, `layerId`, and `traceIds: {open, close}`.
 - `observations`: `bind` and `retryBind` with `{result: "accepted", layerId, revision}` from the live replies; `deniedBind: {result: "rejected", layerId: null}`; `deniedWrite: {result: "rejected", visibleRevision}` with the observed unchanged revision; and `episodeEnd: {layerId: null}` from the terminal state.

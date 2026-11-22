@@ -5,7 +5,9 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
   alias ChalkSync.ProtocolV1
   alias ChalkSync.ScreenAnnotation.{Housekeeping, Proof, Repository}
   alias ChalkSync.UUID
-  import Proof, only: [observe: 4, operation_id: 1, publication: 2]
+
+  import Proof,
+    only: [bind_frame: 1, command: 3, draft: 0, observe: 4, operation_id: 1, publication: 2]
 
   setup %{host: host, connection: connection} do
     Proof.publish_screen(host, connection, &on_exit/1)
@@ -262,33 +264,5 @@ defmodule ChalkSync.ScreenAnnotation.RepositoryTest do
              ProtocolV1.decode(
                JSON.encode!(command(UUID.generate(), 1, %{"kind" => "commit", "draft" => mark}))
              )
-  end
-
-  defp bind_frame(publication),
-    do:
-      command(nil, nil, %{
-        "kind" => "bind",
-        "publication_id" => publication,
-        "frame" => %{"width" => 1920, "height" => 1080}
-      })
-
-  defp command(layer, fence, command) do
-    %{
-      "type" => "annotation_command",
-      "layer_id" => layer,
-      "fence" => fence,
-      "command" => command,
-      "operation_id" => operation_id(System.system_time(:millisecond))
-    }
-  end
-
-  defp draft do
-    %{
-      "mark_id" => UUID.generate(),
-      "lifetime" => "keep",
-      "color" => "#e55050",
-      "width" => 128,
-      "shape" => %{"kind" => "stamp", "at" => %{"x" => 1024, "y" => 1024}, "stamp" => "check"}
-    }
   end
 end

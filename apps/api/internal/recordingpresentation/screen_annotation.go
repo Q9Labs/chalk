@@ -141,8 +141,10 @@ func addScreenAnnotationAsset(source CompletionSource, sources annotationSources
 	if err != nil {
 		return fmt.Errorf("encode recording screen annotations: %w", err)
 	}
-	if len(body) > maximumAnnotationBytes {
-		return fmt.Errorf("%w: screen annotation exceeds recording limits", ErrInvalidCompletionSource)
+	if len(body) > maximumAnnotationBytes || len(*materials) >= MaximumAssets {
+		// Annotation is optional. Never fail the media export because the
+		// encoded sidecar or asset inventory has no room left.
+		return nil
 	}
 	digest := sha256.Sum256(body)
 	digestHex := hex.EncodeToString(digest[:])

@@ -44,18 +44,10 @@ export function ScreenAnnotationLayer(props: ScreenAnnotationLayerProps): React.
   const getSnapshot = useCallback(() => client.getSnapshot(), [client]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  if (snapshot.status !== "ready" || !snapshot.state || snapshot.state.layer.publication_id !== publicationId ||
-      !source?.rendererUrl?.startsWith("file:///") || !hasSize(source.size) || !hasSize(viewport)) {
+  if (snapshot.status !== "ready" || !snapshot.state || snapshot.state.layer.publication_id !== publicationId || !source?.rendererUrl?.startsWith("file:///") || !hasSize(source.size) || !hasSize(viewport)) {
     return <>{video(viewport)}</>;
   }
-  return <MatchedLayer
-    key={snapshot.state.layer.layer_id}
-    {...props}
-    rendererUrl={source.rendererUrl}
-    source={source}
-    presence={snapshot.presence}
-    state={snapshot.state}
-  />;
+  return <MatchedLayer key={snapshot.state.layer.layer_id} {...props} rendererUrl={source.rendererUrl} source={source} presence={snapshot.presence} state={snapshot.state} />;
 }
 
 type MatchedProps = ScreenAnnotationLayerProps & {
@@ -124,9 +116,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     }
     setCommitting({ draft, target: frozen });
     void dispatch(frozen, { kind: "commit", draft }).then((result) => {
-      setCommitting((current) => current?.draft.mark_id !== draft.mark_id
-        ? current
-        : result?.kind === "accepted" ? { ...current, untilRevision: result.revision } : null);
+      setCommitting((current) => (current?.draft.mark_id !== draft.mark_id ? current : result?.kind === "accepted" ? { ...current, untilRevision: result.revision } : null));
     });
   }
 
@@ -143,8 +133,16 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   }
 
   const input = useAnnotationInput({
-    client, publicationId, participantId: person.id, displayName: person.name, color: state.access.default_color,
-    ink, rect, viewport: pan, onViewport: setPan, onText: setTextAnchor,
+    client,
+    publicationId,
+    participantId: person.id,
+    displayName: person.name,
+    color: state.access.default_color,
+    ink,
+    rect,
+    viewport: pan,
+    onViewport: setPan,
+    onText: setTextAnchor,
     onErase: (point: ScreenAnnotationPoint, frozen) => {
       const id = ++eraseCounter.current;
       erase.current = { id, target: frozen };
@@ -159,16 +157,19 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     : undefined;
   const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
   const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
-  const pending: ScreenAnnotationPresence | null = waiting && allowed ? {
-    type: "annotation_presence",
-    layer_id: target.layerId,
-    fence: target.fence,
-    author: { participant_id: person.id, display_name: person.name, color: state.access.default_color },
-    server_at_ms: nowMs,
-    expires_at_ms: nowMs + 1000,
-    cursor: null,
-    draft: committing.draft,
-  } : null;
+  const pending: ScreenAnnotationPresence | null =
+    waiting && allowed
+      ? {
+          type: "annotation_presence",
+          layer_id: target.layerId,
+          fence: target.fence,
+          author: { participant_id: person.id, display_name: person.name, color: state.access.default_color },
+          server_at_ms: nowMs,
+          expires_at_ms: nowMs + 1000,
+          cursor: null,
+          draft: committing.draft,
+        }
+      : null;
 
   const exporting = useRef(false);
   async function exportFrame(action: ExportAction) {
@@ -228,8 +229,11 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
         }}
         onSave={save ? () => void exportFrame(save) : undefined}
         onDownload={download ? () => void exportFrame(download) : undefined}
-      /> : <ToolButton label="Annotate" icon="pen" onPress={() => setOpen(true)} />
-    : null;
+      />
+    ) : (
+      <ToolButton label="Annotate" icon="pen" onPress={() => setOpen(true)} />
+    )
+  ) : null;
   const setCanvasReady = (value: boolean) => {
     if (!value) input.cancel();
     setReady(value);
@@ -274,27 +278,21 @@ function AnnotationNote({ onClose, onSave }: { readonly onClose: () => void; rea
   const [body, setBody] = useState("");
   const [note, setNote] = useState(false);
   const text = boundedNote(body);
-  return <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-    <View style={styles.modal}>
-      <View style={[styles.panel, { backgroundColor: colors.popover, borderColor: colors.lineStrong }]}>
-        <ChalkText>Add text</ChalkText>
-        <TextInput
-          autoFocus
-          multiline
-          accessibilityLabel="Annotation text"
-          maxLength={512}
-          value={body}
-          onChangeText={setBody}
-          style={[styles.field, { backgroundColor: colors.raised, color: colors.text }]}
-        />
-        <View style={styles.actions}>
-          <ToolButton label="Note background" selected={note} onPress={() => setNote(!note)} />
-          <ToolButton label="Cancel" onPress={onClose} />
-          {text ? <ToolButton label="Add text" selected onPress={() => onSave(text, note)} /> : null}
+  return (
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modal}>
+        <View style={[styles.panel, { backgroundColor: colors.popover, borderColor: colors.lineStrong }]}>
+          <ChalkText>Add text</ChalkText>
+          <TextInput autoFocus multiline accessibilityLabel="Annotation text" maxLength={512} value={body} onChangeText={setBody} style={[styles.field, { backgroundColor: colors.raised, color: colors.text }]} />
+          <View style={styles.actions}>
+            <ToolButton label="Note background" selected={note} onPress={() => setNote(!note)} />
+            <ToolButton label="Cancel" onPress={onClose} />
+            {text ? <ToolButton label="Add text" selected onPress={() => onSave(text, note)} /> : null}
+          </View>
         </View>
       </View>
-    </View>
-  </Modal>;
+    </Modal>
+  );
 }
 
 function hasSize(size: { readonly width: number; readonly height: number }): boolean {

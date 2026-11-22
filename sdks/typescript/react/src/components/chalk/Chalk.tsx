@@ -285,7 +285,8 @@ function SpaceSurface(
   const setup = props.screenAnnotation;
   const whiteboardTransport = client.whiteboard.transport();
   const annotationFontUrl = setup?.fontUrl;
-  const saveAnnotation = useMemo(() => (whiteboardTransport?.files.uploadFile ? saveAnnotationToBoard(client, whiteboardTransport, annotationFontUrl) : undefined), [client, whiteboardTransport, annotationFontUrl]);
+  const uploadsAvailable = whiteboardState.uploadsAvailable ?? Boolean(whiteboardTransport?.files.uploadFile);
+  const saveAnnotation = useMemo(() => (uploadsAvailable && whiteboardTransport ? saveAnnotationToBoard(client, whiteboardTransport, annotationFontUrl) : undefined), [client, whiteboardTransport, annotationFontUrl, uploadsAvailable]);
   const screenAnnotation = useMemo(() => {
     if (!setup || !self.participantId || connection.status !== "live") return undefined;
     const context = {

@@ -51,9 +51,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
     selfId,
     present: (hasSelf && selfId !== null ? [selfId, ...others] : others).join("\n"),
     speaker: roster.find((person) => person.presence.activeSpeaker)?.participantId ?? null,
-    ownShare: Platform.OS === "android" && snapshot.media.screenShare.state === "enabled"
-      ? roster.find((person) => person.participantId === selfId)?.media.screenSharePublicationId ?? null
-      : null,
+    ownShare: Platform.OS === "android" && snapshot.media.screenShare.state === "enabled" ? (roster.find((person) => person.participantId === selfId)?.media.screenSharePublicationId ?? null) : null,
     sharer: roster.find((person) => person.participantId !== selfId && person.media.screenShare === "active")?.participantId ?? null,
     board: snapshot.whiteboard.engine.presenting,
   };
@@ -133,7 +131,20 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
   return (
     <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {items.map((item) => (
-        <StageTile annotation={structure.ownShare ? undefined : annotation} content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={followTile} onTileOptions={openTile} following={view.following} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
+        <StageTile
+          annotation={structure.ownShare ? undefined : annotation}
+          content={content}
+          item={item}
+          key={itemKey(item)}
+          mirror={view.mirror}
+          onOpenPeople={onOpenPeople}
+          onOpenTile={followTile}
+          onTileOptions={openTile}
+          following={view.following}
+          onShowContent={view.showContent}
+          peopleCount={present.length}
+          pinned={pinned}
+        />
       ))}
       {annotation && structure.ownShare && structure.selfId ? <AndroidShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />

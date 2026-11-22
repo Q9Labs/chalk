@@ -1,13 +1,4 @@
-import type {
-  ScreenAnnotationClient,
-  ScreenAnnotationDraft,
-  ScreenAnnotationFrameSize,
-  ScreenAnnotationMark,
-  ScreenAnnotationPoint,
-  ScreenAnnotationShape,
-  ScreenAnnotationState,
-  ScreenAnnotationTarget,
-} from "@q9labsai/chalk-client";
+import type { ScreenAnnotationClient, ScreenAnnotationDraft, ScreenAnnotationFrameSize, ScreenAnnotationMark, ScreenAnnotationPoint, ScreenAnnotationShape, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import type { Frame } from "../motion/MovingFrame";
 import { contain } from "../stage/layout";
 
@@ -57,8 +48,8 @@ const clamp = (n: number, low: number, high: number): number => Math.max(low, Ma
 export function visibleFrame(frame: ScreenAnnotationFrameSize, viewport: Frame, pan: Viewport): Frame {
   const fit = contain(viewport, frame.width / frame.height);
   return {
-    x: fit.x + fit.width * (1 - pan.zoom) / 2 + pan.x,
-    y: fit.y + fit.height * (1 - pan.zoom) / 2 + pan.y,
+    x: fit.x + (fit.width * (1 - pan.zoom)) / 2 + pan.x,
+    y: fit.y + (fit.height * (1 - pan.zoom)) / 2 + pan.y,
     width: fit.width * pan.zoom,
     height: fit.height * pan.zoom,
   };
@@ -74,8 +65,8 @@ export function framePoint(rect: Frame, point: ScreenAnnotationPoint, clip: bool
 export function pinchViewport(rect: Frame, base: Viewport, from: ScreenAnnotationPoint, to: ScreenAnnotationPoint, ratio: number): Viewport {
   const zoom = clamp(base.zoom * ratio, 1, 5);
   const scale = zoom / base.zoom;
-  const dx = (rect.width / base.zoom) * (zoom - 1) / 2;
-  const dy = (rect.height / base.zoom) * (zoom - 1) / 2;
+  const dx = ((rect.width / base.zoom) * (zoom - 1)) / 2;
+  const dy = ((rect.height / base.zoom) * (zoom - 1)) / 2;
   return {
     x: clamp(base.x + to.x - from.x + (from.x - rect.x - rect.width / 2) * (1 - scale), -dx, dx),
     y: clamp(base.y + to.y - from.y + (from.y - rect.y - rect.height / 2) * (1 - scale), -dy, dy),
@@ -101,8 +92,7 @@ export function canCapture(state: ScreenAnnotationState, participantId: string):
 }
 
 export function visibleCommittedMarks(state: ScreenAnnotationState, nowMs: number): readonly ScreenAnnotationMark[] {
-  return state.marks.filter(({ author, expires_at_ms }) =>
-    (expires_at_ms === null || expires_at_ms > nowMs) && (!state.paused || author.participant_id === state.layer.sharer_id));
+  return state.marks.filter(({ author, expires_at_ms }) => (expires_at_ms === null || expires_at_ms > nowMs) && (!state.paused || author.participant_id === state.layer.sharer_id));
 }
 
 /** Does not split a UTF-8 code point to meet the wire limit. */

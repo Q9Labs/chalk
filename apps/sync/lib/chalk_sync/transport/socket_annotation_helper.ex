@@ -61,7 +61,7 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
           annotation_commands: []
         })
 
-      Annotation.handle(%{"type" => "annotation_state_request"}, Annotation.enter(next))
+      Annotation.initial_snapshot(Annotation.enter(next))
     else
       _ ->
         observe(:rejected)
@@ -88,7 +88,7 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
   defp permitted?(%{"type" => "annotation_command", "command" => command}),
     do: Attachment.allowed_command?(command)
 
-  defp permitted?(_state_request_or_presence), do: true
+  defp permitted?(_frame), do: false
 
   defp observe(outcome),
     do:

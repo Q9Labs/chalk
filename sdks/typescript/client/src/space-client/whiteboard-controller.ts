@@ -19,6 +19,7 @@ export const makeWhiteboardController = (connection: ConnectionLifecycleCapabili
         create?.({
           token: () => Effect.runPromiseWith(context)(connection.getSyncToken()),
           onSummary: (summary) => instance?.observe(summary),
+          onFilesChanged: () => instance?.filesChanged(),
         }) ?? null;
       instance = new WhiteboardControllerRuntime(connection, store, transport);
       return instance;
@@ -56,6 +57,10 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
     this.#bind(null);
   }
 
+  filesChanged(): void {
+    if (this.#unsubscribe) this.#publish();
+  }
+
   observe(summary: ChalkWhiteboardSummary): void {
     if (!this.#connected && summary.status !== "unsubscribed") return;
     this.#summary = Object.freeze({
@@ -89,6 +94,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   #publish(): void {
     const slice: WhiteboardSlice = Object.freeze({
       open: this.#summary.status !== "unsubscribed",
+      uploadsAvailable: Boolean(this.#transport?.files.uploadFile),
       engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, presenterId: this.#summary.presenterId ?? null, error: this.#summary.error }),
       access: Object.freeze({ canDraw: this.#summary.canDraw, policy: this.#summary.drawPolicy, permissions: this.#summary.drawPermissions }),
     });

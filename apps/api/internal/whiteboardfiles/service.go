@@ -59,13 +59,14 @@ type ObjectStore interface {
 }
 
 type Service struct {
-	repository Repository
-	objects    ObjectStore
-	now        func() time.Time
+	repository  Repository
+	objects     ObjectStore
+	now         func() time.Time
+	verifySlots chan struct{}
 }
 
 func NewService(repository Repository, objects ObjectStore) Service {
-	return Service{repository: repository, objects: objects, now: time.Now}
+	return Service{repository: repository, objects: objects, now: time.Now, verifySlots: make(chan struct{}, 2)}
 }
 
 func (s Service) Download(ctx context.Context, subject Subject, fileID string) (Download, error) {
@@ -75,6 +76,11 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 	file, err := s.repository.ReadyFile(ctx, subject, fileID)
 	if err != nil {
 		return Download{}, err
+	}
+	// Old rows may contain active formats such as SVG. Do not issue a
+	// browser-navigable storage URL for them; keep the original object intact.
+	if !rasterImage(file.MIMEType) {
+		return Download{}, ErrFileNotFound
 	}
 	signed, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: file.ObjectKey, ExpiresIn: 2 * time.Minute})
 	if err != nil {

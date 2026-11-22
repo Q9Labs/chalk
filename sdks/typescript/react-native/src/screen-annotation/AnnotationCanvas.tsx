@@ -145,8 +145,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     try {
       const result: unknown = JSON.parse(data);
       if (typeof result !== "object" || result === null) return;
-      if ("hit" in result && "markId" in result && typeof result.hit === "number" &&
-          (result.markId === null || typeof result.markId === "string" && result.markId.length <= 36)) {
+      if ("hit" in result && "markId" in result && typeof result.hit === "number" && (result.markId === null || (typeof result.markId === "string" && result.markId.length <= 36))) {
         onHit(result.hit, result.markId);
         return;
       }
@@ -166,10 +165,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
       }
       const current = job.current;
       if (!current || !("png" in result) || result.png !== current.id) return;
-      if ("failed" in result || !("part" in result) || !("final" in result) ||
-          typeof result.part !== "string" || typeof result.final !== "boolean" ||
-          result.part.length > chunkSize || !/^[\w+/=]+$/.test(result.part) ||
-          current.length + result.part.length > maxBase64Length) {
+      if ("failed" in result || !("part" in result) || !("final" in result) || typeof result.part !== "string" || typeof result.final !== "boolean" || result.part.length > chunkSize || !/^[\w+/=]+$/.test(result.part) || current.length + result.part.length > maxBase64Length) {
         failExport();
         return;
       }
@@ -190,37 +186,39 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     setReady(false);
     onReady(false);
   }
-  return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-    <WebView
-      ref={view}
-      source={{ uri: rendererUrl }}
-      originWhitelist={["*"]}
-      onShouldStartLoadWithRequest={(event) => event.url === rendererUrl}
-      allowFileAccess
-      allowFileAccessFromFileURLs={false}
-      allowUniversalAccessFromFileURLs={false}
-      setSupportMultipleWindows={false}
-      sharedCookiesEnabled={false}
-      thirdPartyCookiesEnabled={false}
-      mixedContentMode="never"
-      cacheEnabled={false}
-      domStorageEnabled={false}
-      scrollEnabled={false}
-      javaScriptCanOpenWindowsAutomatically={false}
-      onMessage={onMessage}
-      onLoadStart={reset}
-      onLoad={(event) => {
-        if (event.nativeEvent.url !== rendererUrl) return;
-        // Android can drop bridge messages sent by the page while loading.
-        view.current?.injectJavaScript(`if (typeof window.chalkAnnotationScene === "function") window.ReactNativeWebView?.postMessage("annotation-loaded");true;`);
-      }}
-      onError={reset}
-      onContentProcessDidTerminate={reset}
-      onRenderProcessGone={reset}
-      style={styles.clear}
-      containerStyle={styles.clear}
-    />
-  </View>;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <WebView
+        ref={view}
+        source={{ uri: rendererUrl }}
+        originWhitelist={["*"]}
+        onShouldStartLoadWithRequest={(event) => event.url === rendererUrl}
+        allowFileAccess
+        allowFileAccessFromFileURLs={false}
+        allowUniversalAccessFromFileURLs={false}
+        setSupportMultipleWindows={false}
+        sharedCookiesEnabled={false}
+        thirdPartyCookiesEnabled={false}
+        mixedContentMode="never"
+        cacheEnabled={false}
+        domStorageEnabled={false}
+        scrollEnabled={false}
+        javaScriptCanOpenWindowsAutomatically={false}
+        onMessage={onMessage}
+        onLoadStart={reset}
+        onLoad={(event) => {
+          if (event.nativeEvent.url !== rendererUrl) return;
+          // Android can drop bridge messages sent by the page while loading.
+          view.current?.injectJavaScript(`if (typeof window.chalkAnnotationScene === "function") window.ReactNativeWebView?.postMessage("annotation-loaded");true;`);
+        }}
+        onError={reset}
+        onContentProcessDidTerminate={reset}
+        onRenderProcessGone={reset}
+        style={styles.clear}
+        containerStyle={styles.clear}
+      />
+    </View>
+  );
 });
 
 const styles = StyleSheet.create({ clear: { backgroundColor: "transparent" } });

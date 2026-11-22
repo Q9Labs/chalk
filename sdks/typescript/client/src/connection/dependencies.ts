@@ -115,6 +115,7 @@ export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
+  readonly onFilesChanged?: () => void;
 };
 export type ConnectionChatFileFactoryInput = {
   readonly token: () => Promise<string>;
