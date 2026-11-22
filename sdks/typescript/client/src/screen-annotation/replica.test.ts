@@ -15,44 +15,50 @@ const state: ScreenAnnotationState = {
 const target = { layerId, fence: 1 };
 const cursor = (x: number) => ({ tool: "ink" as const, point: { x, y: 20 } });
 
+function liveReplica() {
+  const outbound: unknown[] = [];
+  const replica = new AnnotationReplica((frame) => {
+    outbound.push(JSON.parse(frame));
+    return true;
+  });
+  replica.enterLive(true);
+  replica.receive({ type: "annotation_state", state, server_at_ms: Date.now() });
+  outbound.length = 0;
+  return { replica, outbound };
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 it("sends the first preview immediately and only the latest update in the next send slot", () => {
   vi.useFakeTimers();
-  const send = vi.fn<(frame: string) => boolean>().mockReturnValue(true);
-  const replica = new AnnotationReplica(send);
-  replica.enterLive(true);
-  replica.receive({ type: "annotation_state", state, server_at_ms: Date.now() });
-  send.mockClear();
+  const { replica, outbound } = liveReplica();
 
   replica.setPresence(target, cursor(10), null);
-  expect(send).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(send.mock.calls[0]![0])).toMatchObject({ type: "annotation_presence", cursor: cursor(10) });
+  expect(outbound).toMatchObject([{ type: "annotation_presence", cursor: cursor(10) }]);
 
   vi.advanceTimersByTime(10);
   replica.setPresence(target, cursor(30), null);
   vi.advanceTimersByTime(10);
   replica.setPresence(target, cursor(50), null);
   vi.advanceTimersByTime(13);
-  expect(send).toHaveBeenCalledTimes(1);
+  expect(outbound).toHaveLength(1);
   vi.advanceTimersByTime(1);
-  expect(send).toHaveBeenCalledTimes(2);
-  expect(JSON.parse(send.mock.calls[1]![0])).toMatchObject({ type: "annotation_presence", cursor: cursor(50) });
+  expect(outbound).toMatchObject([
+    { type: "annotation_presence", cursor: cursor(10) },
+    { type: "annotation_presence", cursor: cursor(50) },
+  ]);
 });
 
 it("does not flush a queued preview once its fence has been retired", () => {
   vi.useFakeTimers();
-  const send = vi.fn<(frame: string) => boolean>().mockReturnValue(true);
-  const replica = new AnnotationReplica(send);
-  replica.enterLive(true);
-  replica.receive({ type: "annotation_state", state, server_at_ms: Date.now() });
+  const { replica, outbound } = liveReplica();
   replica.setPresence(target, cursor(10), null);
   replica.setPresence(target, cursor(20), null);
-  send.mockClear();
+  outbound.length = 0;
 
   replica.receive({ type: "annotation_changed", layer_id: layerId, fence: 2, revision: 2, server_at_ms: Date.now(), change: { kind: "clear", participant_id: null } });
   vi.runAllTimers();
-  expect(send).not.toHaveBeenCalled();
+  expect(outbound).toEqual([]);
 });

@@ -25,7 +25,7 @@ function styleWindow(view: Window): void {
   for (const token of hostTokens) view.document.documentElement.style.setProperty(token, host.getPropertyValue(token));
   const sheet = view.document.createElement("style");
   sheet.textContent = PIP_CSS;
-  view.document.head.append(sheet);
+  view.document.head.appendChild(sheet);
 }
 
 export function AnnotationPictureInPicture({ inTab, hints = false, ...props }: PictureProps & { readonly inTab: boolean; readonly hints?: boolean }): React.JSX.Element {
