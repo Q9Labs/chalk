@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { releaseContractRoots } from "./release-contract-paths.mjs";
-
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -10,13 +9,13 @@ import { loadManifest, pathPrefix } from "../../tools/formal/manifest.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { formatCommandFor } from "./format-command.mjs";
 import { ratchetArgsFor } from "./ratchet-scope.mjs";
 import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 
 export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
 const CALL_LEAK_SHARDS = 3;
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
-const MAX_LISTED_FORMAT_FILES = 100;
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
 const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
@@ -478,8 +477,7 @@ export function createGatePlan(files, options = {}) {
   const ratchetArgs = ratchetArgsFor({ scope, base, event: options.event, full: explicitFull });
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
-  // Windows caps a command line near 8,000 characters, so a very large change checks the whole tree instead of listing every file.
-  const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...(formattedFiles.length > MAX_LISTED_FORMAT_FILES ? ["."] : formattedFiles)] : null;
+  const formatCommand = formatCommandFor(formattedFiles);
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
