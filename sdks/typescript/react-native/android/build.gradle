@@ -82,5 +82,6 @@ tasks.register("checkModuleApiCompatibility", JavaExec) {
 
 // The published package leaves out src/test and its fixtures, so only the Chalk repo runs this check.
 if (file("src/test").isDirectory()) {
+  tasks.named("checkModuleApiCompatibility").configure { dependsOn "testDebugUnitTest" }
   tasks.named("check").configure { dependsOn "checkModuleApiCompatibility" }
 }

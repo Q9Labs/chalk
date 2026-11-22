@@ -199,6 +199,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
       }
     }
     function collectPreviews(decoded: InkRaster | null, nowMs: number) {
+      if (optimistic.current.size === 0) return [];
       const retained: Preview[] = [];
       const marks = new Map(state.marks.map((mark) => [mark.draft.mark_id, mark]));
       for (const [id, preview] of optimistic.current) {
