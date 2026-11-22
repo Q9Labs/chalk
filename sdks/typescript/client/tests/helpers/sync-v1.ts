@@ -1,9 +1,11 @@
+import { setImmediate } from "node:timers/promises";
 import { expect } from "vitest";
-import type { SnapshotSchema } from "../generated/sync";
-import { V1SyncClient } from "./v1-client";
-import { computeV1StateDigest } from "./v1-reducer";
-import type { SyncSocket, SyncWebSocketFactory } from "./types";
-import type { V1ControlState } from "./v1-types";
+import type { SnapshotSchema } from "../../src/generated/sync";
+import { V1SyncClient } from "../../src/sync/v1-client";
+import { computeV1StateDigest } from "../../src/sync/v1-reducer";
+import type { SyncSocket, SyncWebSocketFactory } from "../../src/sync/types";
+import type { V1ControlState } from "../../src/sync/v1-types";
+import { ManualClock } from "./manual-clock";
 type Snapshot = typeof SnapshotSchema.Type;
 export const ownerId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 export const peerId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
@@ -15,7 +17,7 @@ export function syncClient(options: ClientOptions = {}): V1SyncClient {
   return new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: { connect: () => new TestSocket() }, ...options });
 }
 export function recordingClient(options: ClientOptions = {}) {
-  const clock = new TestClock();
+  const clock = new ManualClock();
   const sockets: TestSocket[] = [];
   const client = syncClient({ clock, webSocket: collectSockets(sockets), ...options });
   return { client, clock, sockets };
@@ -83,7 +85,7 @@ export function stateWithPeer(role: "collaborator" | "observer"): V1ControlState
         admissionRevision: 2,
         role,
         eligibleRoles: [role],
-        capabilities: [...state.roleCapabilities[role]],
+        capabilities: [...(state.roleCapabilities[role] ?? [])],
       },
     ],
   };
@@ -141,42 +143,8 @@ class TestSocket implements SyncSocket {
     return this.sent.map((frame) => JSON.parse(frame));
   }
 }
-class TestClock {
-  #now = 0;
-  #nextHandle = 0;
-  readonly #timers = new Map<
-    number,
-    {
-      readonly at: number;
-      readonly callback: () => void;
-    }
-  >();
-  now(): number {
-    return this.#now;
-  }
-  setTimeout(callback: () => void, milliseconds: number): number {
-    const handle = this.#nextHandle++;
-    this.#timers.set(handle, { at: this.#now + milliseconds, callback });
-    return handle;
-  }
-  clearTimeout(handle: unknown): void {
-    if (typeof handle === "number") this.#timers.delete(handle);
-  }
-  advance(milliseconds: number): void {
-    const target = this.#now + milliseconds;
-    while (true) {
-      const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= target).sort(([leftHandle, left], [rightHandle, right]) => left.at - right.at || leftHandle - rightHandle)[0];
-      if (!due) break;
-      const [handle, timer] = due;
-      this.#timers.delete(handle);
-      this.#now = timer.at;
-      timer.callback();
-    }
-    this.#now = target;
-  }
-}
 export async function settle(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await setImmediate();
 }

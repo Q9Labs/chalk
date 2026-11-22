@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { peerId, recordingClient, recoverSocket, recoveryId, settle, stateWithPeer, wireSnapshot } from "./v1-client-test-support";
+import { peerId, recordingClient, recoverSocket, recoveryId, settle, stateWithPeer, wireSnapshot } from "../../tests/helpers/sync-v1";
 
 it("keeps annotation off for old peers and retries an immutable command after negotiated recovery", async () => {
   const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
