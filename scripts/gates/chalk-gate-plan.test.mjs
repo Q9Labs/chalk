@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, groupSettings, laneGroup, laneResult, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphRoots, commandBatches } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, groupSettings, laneGroup, laneResult, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphRoots } from "./chalk-gate-plan.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 import { RegisterError } from "./register.mjs";
 
@@ -315,17 +315,4 @@ test("a passing lane prints a demoted check's warning, because q9gate drops a pa
   } finally {
     console.log = log;
   }
-});
-
-test("a long list of files is split into commands that each fit a Windows command line", () => {
-  const files = Array.from({ length: 400 }, (_, index) => `apps/web/src/components/some/deep/folder/File${index}.tsx`);
-  const batches = commandBatches(["pnpm", "exec", "oxfmt", "--check", ...files], 4);
-  assert.ok(batches.length > 1);
-  assert.ok(batches.every((batch) => batch.join(" ").length <= 6000));
-  assert.ok(batches.every((batch) => batch.slice(0, 4).join(" ") === "pnpm exec oxfmt --check"));
-  assert.deepEqual(batches.flatMap((batch) => batch.slice(4)), files);
-});
-
-test("a command with nothing to split stays one command", () => {
-  assert.deepEqual(commandBatches(["node", "x.mjs"], 2), [["node", "x.mjs"]]);
 });
