@@ -6,9 +6,11 @@ Chalk SFU is the only media provider. The [SFU runbook](../../infrastructure/obs
 
 ## Before deploying the retirement
 
-1. Finish any live Cloudflare-backed Episodes. Check that their captures and provider cleanup have finished too. The new release can read those Episodes but cannot reconnect them or run their retired media operations.
+1. Finish any live Cloudflare-backed Episodes. Check that their captures and provider cleanup have finished too. The new release can read those Episodes but cannot reconnect them or run their retired media operations. The deploy controller asks the database before it stops anything, and again once the runtime is stopped, and refuses while a legacy Episode is active or ending or has an unfinished capture job (render-only work may continue). It also refuses while the new-Episodes switch is paused, until the retirement is applied; Promote and Hotfix both go through it. A deploy of an older release has no such check, so after a rollback to the previous release, end any Cloudflare Episode it creates before the next Promote.
 2. Update any clients that create Spaces with an explicit old provider to send `chalk_sfu` or omit the field. Joining clients must advertise `chalk_sfu` in `X-Chalk-Media-Providers`; otherwise the API returns `409 media.client_unsupported`.
-3. Save the previous release and its environment so that the [rollback](#undo) does not rely on the retired settings still being present. Keep Cloudflare TURN and storage credentials in place.
+3. Save the previous release and its environment, and keep the legacy API settings the [rollback](#undo) reads in place. Keep Cloudflare TURN and storage credentials too.
+4. If `CHALK_RECORDING_ENABLED=true`, set `CHALK_SFU_CAPTURE_ENABLED=true` so new Recordings start. Without it every new Recording fails with `recording_capture_unsupported`, so the preflight refuses the deploy unless `CHALK_RECORDING_HISTORY_ONLY=true` says that serving only existing Recordings is intended.
+5. Resume new Episodes if they are paused (`media-settings new-episodes --state on --operator <name> --reason <text>`).
 
 The API migration converts stored Cloudflare Space settings and Tenant defaults to `chalk_sfu`. It does not rewrite Episode snapshots, recordings or past audit entries.
 
@@ -16,7 +18,7 @@ The API migration converts stored Cloudflare Space settings and Tenant defaults 
 
 - Check `/readyz` and node cleanup debt. Create a Space and a public invite without specifying a media plane. Join each from a current client and verify that the new Episode binds to Chalk SFU. Run the recorded-call proof if capture is enabled.
 - When all Chalk SFU nodes are drained or full, new Episodes return a retryable `503 media.unavailable`. Once a node is undrained, let the next readiness poll reach the API before trying again.
-- `media-settings new-episodes --state off --operator <name> --reason <text>` blocks new Episodes and records an audit entry. It does not move or end a live Episode. Turn creation back on with `--state on`.
+- `media-settings new-episodes --state off --operator <name> --reason <text>` blocks new Episodes and records an audit entry. It does not move or end a live Episode. Turn creation back on with `--state on`, with the same `--operator` and `--reason`.
 
 The deploy controller re-fetches the private API environment on every deploy. The API only reads it at start; editing the host file alone does not survive a deploy. Save any settings you change privately, distinguishing unset values from empty ones.
 
@@ -61,6 +63,6 @@ The node accepts offers up to 256 KiB (`protocol.MaxSDPBytes`) and its request l
 
 Follow the [incident runbook](../operators/incident.md) to restore the previous compatible release and its saved environment. A runtime-only Release re-fetches configuration but keeps the current images; it does not undo a deploy. Keep web and SFU node versions compatible when rolling back.
 
-Before the Cloudflare retirement cut, keep the legacy Realtime credentials and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` in the API environment, and note the baseline's `CHALK_DEFAULT_MEDIA_PLANE` (a baseline that predates Chalk-default support needs `cf_sfu` restored). A workflow rollback reuses the old images but fetches the current SSM inputs, so removing those settings first leaves the previous API unable to boot. Also check, before dispatching Promote or Hotfix, that no Cloudflare Episode is active or ending and that no legacy Episode has unfinished capture work: the migration refuses the cut after the controller has already stopped the API and Sync, and Hotfix skips Promote's live-call check.
+A workflow rollback reuses the previous images but fetches the current SSM inputs, and the previous release still reads `CHALK_DEFAULT_MEDIA_PLANE`, `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` and the legacy Realtime credentials. The production API runtime preflight refuses a deploy without them, so keep them in the API environment until the release after the retirement has been promoted, and restore the baseline's values (a baseline that predates Chalk-default support needs `cf_sfu`) if anyone edited them. If an input was changed after the cut, restore its baseline version by reading `name:version` from SSM and writing it back with `put-parameter --overwrite` before rolling back; the controller restores exact input versions itself only when it rolls back a failed deploy.
 
 A rollback does not send migrated Spaces back to Cloudflare. The migration preserves stored Episode history, and its Down restores the old audit trigger without reverting Space settings or later operator changes.
