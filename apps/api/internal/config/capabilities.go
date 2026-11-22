@@ -5,12 +5,14 @@ const (
 	RecordingBundleV2Enabled = "CHALK_RECORDING_BUNDLE_V2_ENABLED"
 	TranscriptionEnabled     = "CHALK_TRANSCRIPTION_ENABLED"
 	WhiteboardFilesEnabled   = "CHALK_WHITEBOARD_FILES_ENABLED"
+	ScreenAnnotationEnabled  = "CHALK_SCREEN_ANNOTATION_ENABLED"
 )
 
 type CapabilityConfig struct {
-	Recording       bool
-	Transcription   bool
-	WhiteboardFiles bool
+	Recording        bool
+	Transcription    bool
+	WhiteboardFiles  bool
+	ScreenAnnotation bool
 }
 
 func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
@@ -27,5 +29,21 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
-	return CapabilityConfig{Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
+	screenAnnotation, err := envStrictBool(ScreenAnnotationEnabled, defaultScreenAnnotation(environment))
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
+	return CapabilityConfig{
+		Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles,
+		ScreenAnnotation: screenAnnotation,
+	}, nil
+}
+
+func defaultScreenAnnotation(environment string) bool {
+	switch environment {
+	case DefaultEnvironment, "dev", "development", "nightly", "staging":
+		return true
+	default:
+		return false
+	}
 }

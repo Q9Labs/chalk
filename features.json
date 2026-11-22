@@ -252,6 +252,10 @@
       "summary": "Projects publication-bound marks onto a shared screen and reproduces committed marks in recording exports.",
       "paths": [
         ".github/workflows/helper-development.yml",
+        "apps/api/db/migrations/20261122120000_screen_annotation_settings.sql",
+        "apps/api/db/queries/screen_annotation_settings.sql",
+        "apps/api/internal/adapters/postgres/screen_annotation_settings.go",
+        "apps/api/internal/adapters/postgres/screen_annotation_settings_integration_test.go",
         "apps/api/internal/helperaccess",
         "apps/api/internal/httpapi/helper_access.go",
         "apps/api/internal/httpapi/helper_device_rate_limit_test.go",
@@ -264,6 +268,7 @@
         "apps/recording-renderer/src/compose/annotation-timeline.ts",
         "apps/sync/lib/chalk_sync/screen_annotation",
         "apps/sync/lib/chalk_sync/transport/socket/annotation.ex",
+        "apps/sync/lib/chalk_sync/transport/socket/annotation_projection.ex",
         "apps/sync/lib/chalk_sync/transport/socket_annotation_helper.ex",
         "apps/sync/test/chalk_sync/screen_annotation",
         "apps/sync/test/support/screen_annotation_proof.ex",

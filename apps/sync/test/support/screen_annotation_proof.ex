@@ -2,8 +2,32 @@ defmodule ChalkSync.ScreenAnnotation.Proof do
   @moduledoc false
   import ExUnit.Assertions
 
+  alias ChalkSync.ScreenAnnotation.Availability
   alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.UUID
+
+  def set_availability(connection, enabled) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into screen_annotation_settings (singleton, enabled) values (true, $1)
+      on conflict (singleton) do update set enabled = excluded.enabled
+      """,
+      [enabled]
+    )
+
+    await_availability(enabled)
+  end
+
+  def clear_availability(connection) do
+    Postgrex.query!(connection, "delete from screen_annotation_settings where singleton", [])
+  end
+
+  def await_availability(enabled) do
+    assert Enum.any?(1..150, fn _ ->
+             Availability.enabled?() == enabled or (Process.sleep(20) && false)
+           end)
+  end
 
   def publish_screen(host, connection, cleanup) do
     {:ok, _lease} =

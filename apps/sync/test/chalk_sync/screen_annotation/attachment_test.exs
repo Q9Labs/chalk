@@ -2,7 +2,7 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
   use ChalkSync.WhiteboardV1.PostgresRepositoryCase, async: false
 
   alias ChalkSync.Auth.JWTTokenVerifier
-  alias ChalkSync.ScreenAnnotation.{Attachment, Proof, Repository}
+  alias ChalkSync.ScreenAnnotation.{Attachment, Availability, Proof, Repository}
   alias ChalkSync.TestWSClient
   alias ChalkSync.UUID
 
@@ -158,6 +158,26 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
       })
 
     assert {:closed, 1008, "annotation attachment ended", _socket} = TestWSClient.recv(socket)
+  end
+
+  test "the runtime switch drops an attached Helper and refuses a new attachment", ctx do
+    start_supervised!(Availability)
+    on_exit(fn -> Proof.clear_availability(ctx.connection) end)
+    Proof.set_availability(ctx.connection, true)
+    {socket, _layer} = connect_attachment(ctx)
+
+    assert {:ok, pending} = TestWSClient.connect(ctx.port, "/v1/screen-annotation/helper")
+
+    assert {:json, %{"type" => "annotation_helper_challenge"}, pending} =
+             TestWSClient.recv(pending)
+
+    Proof.set_availability(ctx.connection, false)
+    assert {:closed, 1008, "screen_annotation_disabled", _socket} = TestWSClient.recv(socket)
+    pending = TestWSClient.send_json(pending, %{"type" => "annotation_helper_attach"})
+    assert {:closed, 1008, "screen_annotation_disabled", _pending} = TestWSClient.recv(pending)
+
+    assert {:ok, denied} = TestWSClient.connect(ctx.port, "/v1/screen-annotation/helper")
+    assert {:closed, 1008, "screen_annotation_disabled", _denied} = TestWSClient.recv(denied)
   end
 
   defp connect_attachment(ctx) do

@@ -45,11 +45,17 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 	publication := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"test-connection","m":"0","t":"screen","g":3}`))
 	binding := Binding{LayerID: id("100000000005"), PublicationID: publication, DeviceKey: base64.RawURLEncoding.EncodeToString(public)}
 	repository := &recordingRepository{subject: subject, publication: publication, layer: binding.LayerID, current: true}
-	service := NewService(repository, "test-issuer", "test-key", private)
+	annotationEnabled := false
+	service := NewService(repository, "test-issuer", "test-key", private).
+		WithAnnotationAvailability(func(context.Context) bool { return annotationEnabled })
 	now := time.Date(2026, 11, 21, 15, 0, 0, 750_000_000, time.UTC)
 	service.now = func() time.Time { return now }
 	challenge := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 
+	if _, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false); !errors.Is(err, ErrAnnotationDisabled) {
+		t.Fatalf("disabled annotation issued a Helper ticket: %v", err)
+	}
+	annotationEnabled = true
 	tickets, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false)
 	if err != nil {
 		t.Fatal(err)

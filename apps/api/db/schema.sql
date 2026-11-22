@@ -5472,6 +5472,7 @@ create trigger bound_recording_annotation_layers
 create trigger bound_recording_annotation_changes
     before insert on recording_screen_annotation_changes
     for each row execute function bound_recording_annotation();
+
 create table helper_devices (
     id uuid primary key,
     tenant_id uuid not null references tenants(id) on delete cascade,
@@ -5501,3 +5502,8 @@ create table helper_device_requests (
     check ((approved_share is null) = (approval_expires_at is null))
 );
 create index helper_device_requests_expiry_idx on helper_device_requests (expires_at);
+
+create table screen_annotation_settings (
+    singleton boolean primary key default true check (singleton),
+    enabled boolean not null
+);

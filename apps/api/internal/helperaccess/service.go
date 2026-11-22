@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrInvalid         = errors.New("invalid Helper ticket request")
-	ErrShareNotCurrent = errors.New("helper attachment does not match the current share")
+	ErrInvalid            = errors.New("invalid Helper ticket request")
+	ErrShareNotCurrent    = errors.New("helper attachment does not match the current share")
+	ErrAnnotationDisabled = errors.New("screen annotation is disabled")
 )
 
 const (
@@ -31,12 +32,18 @@ type Repository interface {
 }
 
 type Service struct {
-	devices    DeviceRepository
-	repository Repository
-	issuer     string
-	keyID      string
-	key        ed25519.PrivateKey
-	now        func() time.Time
+	annotationEnabled func(context.Context) bool
+	devices           DeviceRepository
+	repository        Repository
+	issuer            string
+	keyID             string
+	key               ed25519.PrivateKey
+	now               func() time.Time
+}
+
+func (s *Service) WithAnnotationAvailability(enabled func(context.Context) bool) *Service {
+	s.annotationEnabled = enabled
+	return s
 }
 
 func (s *Service) WithDevices(repository DeviceRepository) *Service {
@@ -131,6 +138,9 @@ func (s *Service) authorize(ctx context.Context, subject accessgrants.Subject, b
 }
 
 func (s *Service) authorizeShare(ctx context.Context, subject accessgrants.Subject, binding Binding) error {
+	if s.annotationEnabled != nil && !s.annotationEnabled(ctx) {
+		return ErrAnnotationDisabled
+	}
 	if binding.LayerID.IsZero() || len(binding.PublicationID) > 512 {
 		return ErrInvalid
 	}
