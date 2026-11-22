@@ -180,8 +180,7 @@ function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly 
       alert
       icon="trash"
       title="Delete this transcript?"
-      description="Only the transcript goes. The recording and the session stay."
-      hint="You can’t undo this."
+      description="The transcript is deleted for good. The recording and the session stay."
       onClose={onClose}
       actions={
         <>

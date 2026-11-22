@@ -1097,6 +1097,16 @@
   font-size: var(--type-body-sm);
 }
 
+/* The language picker fills the dialog and matches the link field above it. */
+.site .dash .dlg.titled .lp-field {
+  max-width: none;
+}
+
+.site .dash .dlg.titled .lp-trigger {
+  height: 44px;
+  padding-left: var(--space-4);
+}
+
 .site .dash .dlg.titled .secbox {
   margin-top: 0;
   height: 44px;
