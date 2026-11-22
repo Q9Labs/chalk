@@ -24,7 +24,7 @@ final class ChalkScreenCaptureController extends AbstractVideoCaptureController 
     super(width, height, FPS);
     this.permission = permission;
     this.serviceToken = serviceToken;
-    legacyOrientation = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+    legacyOrientation = Build.VERSION.SDK_INT <= Build.VERSION_CODES.TIRAMISU
         ? new OrientationEventListener(context) {
           private boolean landscape = width > height;
 
@@ -53,8 +53,11 @@ final class ChalkScreenCaptureController extends AbstractVideoCaptureController 
       public void onStop() {
         ChalkWebRTCExecutor.execute(() -> {
           if (closed) return;
-          stopCapture();
-          if (capturerEventsListener != null) capturerEventsListener.onCapturerEnded();
+          try {
+            stopCapture();
+          } finally {
+            if (capturerEventsListener != null) capturerEventsListener.onCapturerEnded();
+          }
         });
       }
     });
