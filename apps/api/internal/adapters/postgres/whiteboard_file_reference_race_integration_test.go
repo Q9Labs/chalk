@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
@@ -55,8 +56,8 @@ func TestLegacyWhiteboardReferenceRacesWithFileLifecycle(t *testing.T) {
 	seed := begin(t)
 	defer seed.Rollback(context.Background())
 	exec(t, seed, `insert into tenants(id, name) values ($1, 'Whiteboard file reference race')`, tenant.Bytes())
-	exec(t, seed, `insert into spaces(id, name, tenant_id, slug, media_plane) values ($1, 'Board race', $2, $3, 'chalk_sfu')`,
-		space.Bytes(), tenant.Bytes(), "board-race-"+space.String())
+	exec(t, seed, `insert into spaces(id, name, tenant_id, slug, media_plane) values ($1, 'Board race', $2, $3, $4)`,
+		space.Bytes(), tenant.Bytes(), "board-race-"+space.String(), mediaplane.ProviderChalkSFU)
 	exec(t, seed, `insert into episodes(id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{}')`,
 		episode.Bytes(), space.Bytes(), tenant.Bytes())
 	exec(t, seed, `insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role)

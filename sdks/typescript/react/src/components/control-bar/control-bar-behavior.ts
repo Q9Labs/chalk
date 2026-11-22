@@ -19,7 +19,6 @@ export type { MediaDevice } from "./control-bar-devices";
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  readonly helperInstallUrl?: string;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -91,7 +90,6 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
-  readonly helperInstallUrl?: string;
   /** Control the existing microphone picker from elsewhere in the call. */
   readonly microphonePicker?: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void };
   /** Local self-view only. Omit to use the persisted mirror preference. */
@@ -295,7 +293,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
             setNoiseSuppression(enabled);
           }, "microphone")
       : undefined,
-    helperInstallUrl: props.helperInstallUrl,
     onStartScreenShare: (options) =>
       void run(
         async () => {

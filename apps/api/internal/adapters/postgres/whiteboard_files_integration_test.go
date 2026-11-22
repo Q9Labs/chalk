@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
@@ -54,7 +55,7 @@ func TestWhiteboardFileUploadRetryAuthorizationAndCleanup(t *testing.T) {
 		}
 	}
 	exec(`insert into tenants(id, name) values($1, 'Whiteboard uploads')`, tenant.Bytes())
-	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Whiteboard uploads', $2, $3, 'chalk_sfu')`, space.Bytes(), tenant.Bytes(), "wb-"+space.String())
+	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Whiteboard uploads', $2, $3, $4)`, space.Bytes(), tenant.Bytes(), "wb-"+space.String(), mediaplane.ProviderChalkSFU)
 	exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{}')`, episode.Bytes(), space.Bytes(), tenant.Bytes())
 	exec(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role)
 		values($1, $2, $3, $4, '{drawWhiteboard}', 1, 'active', 'collaborator')`,

@@ -3,9 +3,9 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
-import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
+import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
@@ -34,6 +34,7 @@ import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useMediaNotice } from "./useMediaNotice";
 import { useMicrophoneNotice } from "./useMicrophoneNotice";
 import { useBoardNotices } from "./useBoardNotices";
+import { useCallCountdown } from "./useCallCountdown";
 import { useAnnotationHelperInstall } from "../screen-annotation/use-annotation-helper-install";
 import { useHostControls } from "./useHostControls";
 import { useCallToasts } from "../toast-stack/useCallToasts";
@@ -178,27 +179,7 @@ export function SpaceView({
   const callLink = useCallLink(participantsSlice.roster.length <= 1, live, canManageAdmission);
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
-  const deadline = connection.episode?.deadline;
-  const [now, setNow] = useState(Date.now);
-  const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
-  const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: CallLimitWarning } | null>(null);
-  const countdown = callCountdown(deadline, now);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh the call-limit clock each second; clear the interval when the deadline changes.
-  useEffect(() => {
-    if (!deadline) return;
-    const tick = () => setNow(Date.now());
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [deadline]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Emit warnings only when the committed countdown crosses a threshold; preserve a dismissed warning between ticks.
-  useEffect(() => {
-    const previous = previousCountdown.current;
-    const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous?.seconds : undefined);
-    previousCountdown.current = { deadline, seconds: next.seconds };
-    if (previous?.deadline !== deadline) setLimitWarning(null);
-    if (next.warning !== null) setLimitWarning({ id: `time-limit-${deadline}-${next.warning}`, minutes: next.warning });
-  }, [deadline, now]);
+  const { countdown, limitWarning, dismissLimitWarning } = useCallCountdown(connection.episode?.deadline);
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
@@ -319,7 +300,7 @@ export function SpaceView({
     ...microphoneNotice.toasts,
   ];
   const dismissToast = (id: string) => {
-    if (id.startsWith("time-limit-")) setLimitWarning(null);
+    if (id.startsWith("time-limit-")) dismissLimitWarning();
     else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
     else if (id === microphoneNotice.id) microphoneNotice.dismiss();
