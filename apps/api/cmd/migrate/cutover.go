@@ -4,7 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 type rowQuerier interface {
@@ -13,14 +18,46 @@ type rowQuerier interface {
 
 const retireVersion = 20261121120000
 
-// legacyEpisode matches an Episode created before Chalk SFU: no binding key, or a Cloudflare provider.
-// Keep it in step with the guard in 20261121120000_retire_cloudflare_media_plane.sql.
+// legacyEpisode matches an Episode created before Chalk SFU: no binding key, or a Cloudflare provider
+// ($1 is the Cloudflare SFU setting name). Keep it in step with the guard in
+// 20261121120000_retire_cloudflare_media_plane.sql.
 const legacyEpisode = `(not (e.config_snapshot ? 'media_plane_binding')
-	or e.config_snapshot #>> '{media_plane_binding,provider}' in ('cf_sfu', 'cf_rtk'))`
+	or e.config_snapshot #>> '{media_plane_binding,provider}' in ($1, 'cf_rtk'))`
 
-// verifyCutover refuses a Cloudflare retirement the database is not ready for. It only reads, so the
-// deploy controller runs it before it stops the runtime and again once the runtime is stopped; the
-// migration keeps its own transactional guard for live Episodes.
+// runCutoverCheck is `chalk-migrate --check-cutover --database-url-file FILE`. It only reads, and exits 1 with
+// the reason when the database is not ready for the release.
+func runCutoverCheck(args []string) {
+	if err := cutoverCheck(args); err != nil {
+		fmt.Fprintf(os.Stderr, "cutover check failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("cutover check passed")
+}
+
+func cutoverCheck(args []string) error {
+	flags := flag.NewFlagSet("chalk-migrate", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	flags.Bool("check-cutover", false, "read-only: refuse when the database is not ready to retire Cloudflare media")
+	databaseURLFile := flags.String("database-url-file", "", "file containing the dedicated migration database URL")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 || *databaseURLFile == "" || !filepath.IsAbs(*databaseURLFile) {
+		return errors.New("--check-cutover takes only an absolute --database-url-file")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), migrationTimeout)
+	defer cancel()
+	database, _, err := openDatabase(ctx, *databaseURLFile)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	return verifyCutover(ctx, database)
+}
+
+// verifyCutover refuses a Cloudflare retirement the database is not ready for. The deploy controller runs it
+// before it stops the runtime and again once the runtime is stopped; the migration keeps its own
+// transactional guard for live Episodes.
 //
 // Legacy Episodes and their capture jobs are refused on every deploy: the release has no Cloudflare
 // adapter, even when a rollback has put the old API back after the migration was applied. A paused
@@ -29,7 +66,7 @@ const legacyEpisode = `(not (e.config_snapshot ? 'media_plane_binding')
 func verifyCutover(ctx context.Context, database rowQuerier) error {
 	var live int
 	if err := database.QueryRowContext(ctx, `select count(*) from episodes e
-		where e.status in ('active', 'ending') and `+legacyEpisode).Scan(&live); err != nil {
+		where e.status in ('active', 'ending') and `+legacyEpisode, mediaplane.PlaneCloudflare).Scan(&live); err != nil {
 		return errors.New("inspect live Cloudflare Episodes")
 	}
 	if live > 0 {
@@ -39,7 +76,7 @@ func verifyCutover(ctx context.Context, database rowQuerier) error {
 	var unfinished int
 	if err := database.QueryRowContext(ctx, `select count(*) from recording_jobs j
 		join episodes e on e.id = j.episode_id
-		where j.kind = 'capture' and j.state in ('pending', 'leased', 'retryable_failure') and `+legacyEpisode).Scan(&unfinished); err != nil {
+		where j.kind = 'capture' and j.state in ('pending', 'leased', 'retryable_failure') and `+legacyEpisode, mediaplane.PlaneCloudflare).Scan(&unfinished); err != nil {
 		return errors.New("inspect Cloudflare capture jobs")
 	}
 	if unfinished > 0 {

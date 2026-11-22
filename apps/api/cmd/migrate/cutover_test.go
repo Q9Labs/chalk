@@ -5,7 +5,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
+
+func binding(provider string) string {
+	return `{"media_plane_binding":{"provider":"` + provider + `"}}`
+}
 
 // The rows live in a transaction that always rolls back, so fixed ids cannot collide.
 const (
@@ -46,7 +52,7 @@ func execute(t *testing.T, tx *sql.Tx, statement string, arguments ...any) {
 }
 
 func TestCheckCutover(t *testing.T) {
-	const legacy = `{"media_plane_binding":{"provider":"cf_sfu"}}`
+	legacy := binding(mediaplane.PlaneCloudflare)
 	for _, test := range []struct {
 		name, status, snapshot, jobKind, jobState string
 		paused, applied, noSwitch                 bool
@@ -59,7 +65,7 @@ func TestCheckCutover(t *testing.T) {
 		{name: "database that predates the switch", status: "ended", snapshot: legacy, noSwitch: true},
 		{name: "live Cloudflare Episode", status: "active", snapshot: legacy, refusal: "active or ending Cloudflare Episodes"},
 		{name: "ending Episode predating the binding", status: "ending", snapshot: `{}`, refusal: "active or ending Cloudflare Episodes"},
-		{name: "live Chalk SFU Episode", status: "active", snapshot: `{"media_plane_binding":{"provider":"chalk_sfu"}}`},
+		{name: "live Chalk SFU Episode", status: "active", snapshot: binding(mediaplane.PlaneChalk)},
 		{name: "unfinished capture", status: "ended", snapshot: legacy, jobKind: "capture", jobState: "leased", refusal: "unfinished capture jobs"},
 		{name: "capture waiting to retry", status: "ended", snapshot: legacy, jobKind: "capture", jobState: "retryable_failure", refusal: "unfinished capture jobs"},
 		{name: "finished capture", status: "ended", snapshot: legacy, jobKind: "capture", jobState: "succeeded"},
@@ -69,7 +75,7 @@ func TestCheckCutover(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tx := cutoverTx(t)
 			execute(t, tx, `insert into tenants (id, name) values ($1, 'Cutover check')`, tenantID)
-			execute(t, tx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, 'Cutover check', 'cutover-check', 'chalk_sfu')`, spaceID, tenantID)
+			execute(t, tx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, 'Cutover check', 'cutover-check', $3)`, spaceID, tenantID, mediaplane.PlaneChalk)
 			execute(t, tx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, $2, $3, $4, $5::jsonb)`, episodeID, test.status, spaceID, tenantID, test.snapshot)
 			if test.jobKind != "" {
 				execute(t, tx, `insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider) values ($1, $2, $3, $4, 'recording', 'r2')`, recordingID, tenantID, spaceID, episodeID)
@@ -99,18 +105,16 @@ func TestCheckCutover(t *testing.T) {
 	}
 }
 
-func TestParseCheckCutover(t *testing.T) {
-	got, err := parseOptions([]string{"--database-url-file", "/run/url", "--check-cutover"})
-	if err != nil || !got.checkCutover || got.target != 0 {
-		t.Fatalf("parseOptions = %+v, %v", got, err)
-	}
+func TestCutoverCheckTakesOnlyTheDatabaseFile(t *testing.T) {
 	for _, args := range [][]string{
-		{"--database-url-file", "/run/url", "--check-cutover", "--target", "1"},
-		{"--database-url-file", "/run/url", "--check-cutover", "--down-to", "1"},
-		{"--database-url-file", "/run/url", "--check-cutover", "--entry-writer-protocol", "1"},
+		{"--check-cutover"},
+		{"--check-cutover", "--database-url-file", "relative"},
+		{"--check-cutover", "--database-url-file", "/run/url", "--target", "1"},
+		{"--check-cutover", "--database-url-file", "/run/url", "--down-to", "1"},
+		{"--check-cutover", "--database-url-file", "/run/url", "extra"},
 	} {
-		if _, err := parseOptions(args); err == nil {
-			t.Fatalf("parseOptions(%v) accepted extra flags", args)
+		if err := cutoverCheck(args); err == nil {
+			t.Fatalf("cutoverCheck(%v) accepted the arguments", args)
 		}
 	}
 }

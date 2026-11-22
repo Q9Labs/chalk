@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,10 +29,13 @@ type options struct {
 	entryWriterProtocol         int
 	rollbackEntryWriterProtocol int
 	enforceEntryOwnership       string
-	checkCutover                bool
 }
 
 func main() {
+	if slices.Contains(os.Args[1:], "--check-cutover") {
+		runCutoverCheck(os.Args[1:])
+		return
+	}
 	options, err := parseOptions(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "migration configuration failed: %v\n", err)
@@ -58,7 +62,6 @@ func parseOptions(args []string) (options, error) {
 	entryWriterProtocol := flags.Int("entry-writer-protocol", 0, "target Sync entry writer protocol (0 or 1)")
 	rollbackEntryWriterProtocol := flags.Int("rollback-entry-writer-protocol", 0, "retained rollback Sync entry writer protocol")
 	enforceEntryOwnership := flags.String("enforce-entry-ownership", "", "record entry enforcement for this release; requires an expanded rollback baseline")
-	checkCutover := flags.Bool("check-cutover", false, "read-only: refuse when the database is not ready to retire Cloudflare media")
 	targetText := flags.String("target", "", "migration version to apply")
 	downToText := flags.String("down-to", "", "emergency rollback: revert migrations newer than this version, which stays applied")
 	allowMissing := []int64{}
@@ -86,12 +89,6 @@ func parseOptions(args []string) (options, error) {
 	}
 	if !filepath.IsAbs(*databaseURLFile) {
 		return options{}, errors.New("--database-url-file must be absolute")
-	}
-	if *checkCutover {
-		if *targetText != "" || *downToText != "" || len(allowMissing) > 0 || *entryWriterProtocol != 0 || *rollbackEntryWriterProtocol != 0 || *enforceEntryOwnership != "" {
-			return options{}, errors.New("--check-cutover takes only --database-url-file")
-		}
-		return options{databaseURLFile: *databaseURLFile, checkCutover: true}, nil
 	}
 	if (*targetText == "") == (*downToText == "") {
 		return options{}, errors.New("exactly one of --target and --down-to is required")
@@ -132,25 +129,30 @@ func parseMigrationVersion(value string) (int64, error) {
 	return version, nil
 }
 
+func openDatabase(ctx context.Context, databaseURLFile string) (database *sql.DB, databaseURL string, err error) {
+	databaseURL, err = readDatabaseURL(databaseURLFile)
+	if err != nil {
+		return nil, "", err
+	}
+	database, err = sql.Open("pgx", databaseURL)
+	if err != nil {
+		return nil, "", errors.New("open migration database")
+	}
+	database.SetMaxOpenConns(1)
+	database.SetMaxIdleConns(1)
+	if err := database.PingContext(ctx); err != nil {
+		database.Close()
+		return nil, "", errors.New("ping migration database")
+	}
+	return database, databaseURL, nil
+}
+
 func migrate(ctx context.Context, options options) error {
-	databaseURL, err := readDatabaseURL(options.databaseURLFile)
+	database, databaseURL, err := openDatabase(ctx, options.databaseURLFile)
 	if err != nil {
 		return err
 	}
-	database, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		return errors.New("open migration database")
-	}
 	defer database.Close()
-	database.SetMaxOpenConns(1)
-	database.SetMaxIdleConns(1)
-
-	if err := database.PingContext(ctx); err != nil {
-		return errors.New("ping migration database")
-	}
-	if options.checkCutover {
-		return verifyCutover(ctx, database)
-	}
 	provider, err := newMigrationProvider(database, migrations.Files, goose.DialectPostgres)
 	if err != nil {
 		return errors.New("configure migration provider")
