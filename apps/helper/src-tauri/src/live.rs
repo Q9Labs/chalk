@@ -41,6 +41,15 @@ struct FollowWindow {
     projection: Option<Projection>,
 }
 
+impl FollowWindow {
+    fn projection_on_screen(&self) -> Option<(Rect, Rect)> {
+        let projection = self.projection?;
+        let observed = window_follow::observe(self.id)
+            .filter(|current| Some(current.identity) == self.identity)?;
+        Some((observed.bounds, projection.at(observed.bounds)?))
+    }
+}
+
 struct WindowMatch {
     observed: Observation,
     projection: Projection,
@@ -229,19 +238,17 @@ impl Capture {
     }
 
     pub fn reconcile_window(&mut self, app: &AppHandle) -> bool {
-        let Some((id, identity)) = self.window_id() else {
+        let Some(window) = self
+            .window
+            .as_ref()
+            .filter(|window| window.identity.is_some())
+        else {
             return false;
         };
         let Some(old) = self.selected else {
             return true;
         };
-        let projected = window_follow::observe(id)
-            .filter(|current| current.identity == identity)
-            .and_then(|observed| {
-                let next = self.window.as_ref()?.projection?.at(observed.bounds)?;
-                Some((observed.bounds, next))
-            });
-        if let Some((outer, next)) = projected {
+        if let Some((outer, next)) = window.projection_on_screen() {
             if next == old && self.allows_window() {
                 self.disable_stale_input(app);
                 return true;
@@ -556,10 +563,10 @@ impl Capture {
     }
 
     pub fn projection_is_current(&self) -> bool {
-        if let Some((id, identity)) = self.window_id() {
-            return window_follow::observe(id).is_some_and(|current| {
-                current.identity == identity && Some(current.bounds) == self.selected
-            });
+        if let Some(window) = &self.window {
+            return window
+                .projection_on_screen()
+                .is_some_and(|(_, content)| Some(content) == self.selected);
         }
         self.display.as_ref().is_some_and(|selected| {
             Display::at(selected.bounds).is_some_and(|current| selected.is_same(&current))
