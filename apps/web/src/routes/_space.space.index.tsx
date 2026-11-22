@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { startCall } from "../components/dashboard/language-choice";
 import { DashboardRequestError, intentKey, loadSession } from "../lib/dashboard/client";
 import { hasSignedInHint } from "../lib/signed-in-hint";
 
@@ -14,6 +13,7 @@ export const Route = createFileRoute("/_space/space/")({
       if (error instanceof DashboardRequestError && error.status === 401) return;
       throw error;
     }
+    const { startCall } = await import("../components/dashboard/language-choice");
     const { call } = await startCall(intentKey());
     throw redirect({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id }, replace: true });
   },
