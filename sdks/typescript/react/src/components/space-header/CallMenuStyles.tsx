@@ -27,7 +27,7 @@ const CALL_MENU_CSS = `.chalk-shell-sep {height:1px;background:var(--chalk-line-
 .chalk-shell-options {padding-inline-end:0;}
 .chalk-shell-options[hidden],.chalk-shell-confirm[hidden] {display:none;}
 .chalk-shell-options {display:grid;gap:var(--space-0-5);}
-.chalk-shell-option {display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;padding:var(--space-1-5) var(--space-3) var(--space-1-5) var(--space-2);margin-inline-start:calc(var(--space-2) * -1);border-radius:var(--corner-xl);font-size:var(--type-body);text-align:start;}
+.chalk-shell-option {display:flex;align-items:center;gap:var(--space-3);min-height:44px;padding:var(--space-1-5) var(--space-3) var(--space-1-5) var(--space-2);margin-inline-start:calc(var(--space-2) * -1);border-radius:var(--corner-xl);font-size:var(--type-body);text-align:start;}
 .chalk-shell-option:hover:not(:disabled) {background:var(--chalk-hover);}
 .chalk-shell-option:disabled {opacity:0.5;}
 .chalk-shell-option-text {flex:1;min-width:0;display:grid;}

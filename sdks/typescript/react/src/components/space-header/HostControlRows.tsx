@@ -20,19 +20,24 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
   const [confirming, setConfirming] = useState(false);
   const [muting, setMuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const joinRow = useRef<HTMLButtonElement>(null);
   const muteRow = useRef<HTMLButtonElement>(null);
   const current = whoCanJoin ? WHO_CAN_JOIN.find((option) => option.value === whoCanJoin.policy) : undefined;
   const unmuted = muteEveryone?.unmutedCount ?? 0;
   const confirmOpen = confirming && unmuted > 0;
 
+  const closeJoin = () => {
+    setJoinOpen(false);
+    joinRow.current?.focus();
+  };
   const changePolicy = async (policy: AdmissionPolicyTarget) => {
     if (!whoCanJoin || joinPending) return;
-    if (policy === whoCanJoin.policy) return setJoinOpen(false);
+    if (policy === whoCanJoin.policy) return closeJoin();
     setJoinPending(true);
     setError(null);
     try {
       await whoCanJoin.onChange(policy);
-      setJoinOpen(false);
+      closeJoin();
     } catch {
       setError("Couldn’t change who can join. Try again.");
     } finally {
@@ -42,6 +47,10 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
   const closeConfirm = () => {
     setConfirming(false);
     muteRow.current?.focus();
+  };
+  const toggleConfirm = () => {
+    setError(null);
+    setConfirming(!confirming);
   };
   const muteAll = async () => {
     if (!muteEveryone || muting) return;
@@ -61,7 +70,18 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
     <>
       {whoCanJoin && current ? (
         <>
-          <button type="button" className="chalk-shell-detail-action" aria-expanded={joinOpen} aria-controls="chalk-details-join" disabled={joinPending} onClick={() => setJoinOpen(!joinOpen)}>
+          <button
+            ref={joinRow}
+            type="button"
+            className="chalk-shell-detail-action"
+            aria-expanded={joinOpen}
+            aria-controls="chalk-details-join"
+            disabled={joinPending}
+            onClick={() => {
+              setError(null);
+              setJoinOpen(!joinOpen);
+            }}
+          >
             <span className="chalk-shell-detail-lead">
               <RowIcon name="join" />
             </span>
@@ -86,7 +106,7 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
       ) : null}
       {muteEveryone ? (
         <>
-          <button ref={muteRow} type="button" className="chalk-shell-detail-action" aria-expanded={confirmOpen} aria-controls="chalk-details-mute" disabled={muting || unmuted === 0} onClick={() => setConfirming(!confirming)}>
+          <button ref={muteRow} type="button" className="chalk-shell-detail-action" aria-expanded={confirmOpen} aria-controls="chalk-details-mute" disabled={muting || unmuted === 0} onClick={toggleConfirm}>
             <span className="chalk-shell-detail-lead">
               <RowIcon name="micOff" />
             </span>
@@ -99,7 +119,13 @@ export function HostControlRows({ whoCanJoin, muteEveryone }: CallHostControls) 
             <b>Mute everyone?</b>
             <p>{people(unmuted)} will be muted. They can unmute themselves.</p>
             <div className="chalk-shell-confirm-actions">
-              <ChalkButton disabled={muting} onClick={closeConfirm}>
+              <ChalkButton
+                disabled={muting}
+                onClick={() => {
+                  setError(null);
+                  closeConfirm();
+                }}
+              >
                 Cancel
               </ChalkButton>
               <ChalkButton variant="solid" disabled={muting} onClick={() => void muteAll()}>

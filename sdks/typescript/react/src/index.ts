@@ -71,6 +71,7 @@ export { ControlBar } from "./components/control-bar/ControlBar";
 export type { ControlBarProps, ControlBarButtonName } from "./components/control-bar/ControlBar";
 export { SpaceHeader } from "./components/space-header/SpaceHeader";
 export type { SpaceHeaderProps } from "./components/space-header/SpaceHeader";
+export type { CallHostControls } from "./components/space-header/space-header-contract";
 export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";
 
 export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";
