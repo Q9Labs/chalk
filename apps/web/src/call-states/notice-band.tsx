@@ -45,7 +45,7 @@ export function NoticeBandFixture() {
           stageBackground
           header={{ spaceName: "Team", notices: <NoticeButton toasts={toasts.filter((toast) => folded.includes(toast.id))} onDismiss={dismiss} /> }}
           stage={<SpaceStage tiles={[]} layout="focus" whiteboard={{ isOpen: true, props: { canDraw: true, theme: "dark" } }} />}
-          controls={<button type="button">Call controls</button>}
+          controls={<button type="button" aria-label="Call controls" />}
           toasts={<ToastStack toasts={toasts} maxVisible={long ? 3 : 10} onDismiss={dismiss} onFold={setFolded} />}
         />
       </div>

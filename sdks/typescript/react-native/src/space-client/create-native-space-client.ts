@@ -19,9 +19,11 @@ import {
 import { apiUrls, createSpaceClientForPlatform, DEFAULT_API_BASE_URL, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
+import { captureAndroidScreen } from "../media/android-screen-capture";
 import { toNativeCaptureError } from "../media/native-capture-error";
 import { releaseNativeTrack } from "../media/native-release-track";
+import { createAndroidCallSyncLifecycle } from "./android-call-sync-lifecycle";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
 import { ensureRandomUUID } from "./random-uuid";
@@ -61,6 +63,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const syncURL = options.syncUrl ?? defaultSyncUrl(apiBaseURL);
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
+  const callLifecycle = Platform.OS === "android" ? createAndroidCallSyncLifecycle(AppState, () => client) : lifecycle;
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
   const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
   const telemetry = new TelemetryOutbox({ platform: createNativeTelemetryPlatform({ appState: AppState, fetch }), endpoint: (tenantId) => apiUrls.telemetry(apiBaseURL, tenantId) });
@@ -79,11 +82,11 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
           throw toNativeCaptureError(cause);
         }
       },
-      getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
+      getDisplayMedia: Platform.OS === "android" ? captureAndroidScreen : async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
       releaseTrack: releaseNativeTrack,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
-    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),
+    createSyncClient: (input) => createSyncClient(syncURL, input, callLifecycle, syncWebSocket, storage, syncDialTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncDialTimeoutMs),
     subscribeForeground: (listener) => {
@@ -93,7 +96,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       return () => subscription.remove();
     },
   };
-  const client = createSpaceClientForPlatform(
+  const client: SpaceClient = createSpaceClientForPlatform(
     { space: options.space, getAccess: options.getAccess, baseUrl: apiBaseURL },
     {
       apiBaseUrl: apiBaseURL,

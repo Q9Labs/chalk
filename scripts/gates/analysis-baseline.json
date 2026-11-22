@@ -287,7 +287,6 @@
     "apps/web/src/components/space/entrance-machine.ts": [36],
     "sdks/typescript/react/src/selectors/space-selectors.ts": [30],
     "apps/web/src/components/space/pre-join/PreJoin.tsx": [24],
-    "scripts/gates/zod-exception.mjs": [41],
     "packages/whiteboard/src/react/board/BoardCursors.tsx": [28],
     "scripts/gates/feature-map.mjs": [33],
     "packages/whiteboard/src/react/board/Board.tsx": [49, 28, 21],
