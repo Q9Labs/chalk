@@ -117,8 +117,6 @@ sidecar.layers.push({
     closedAtMs: 9000,
   },
 });
-const bound = { path: join(output, "sidecar.json") };
-bound.sha = write(bound.path, sidecar);
 
 function compose(name, annotation, requestPath = fixture.requestPath) {
   const result = join(output, `${name}.json`);
@@ -138,15 +136,20 @@ const clean = render("clean");
 const emptyPath = join(output, "empty-sidecar.json");
 const empty = render("empty", { path: emptyPath, sha: write(emptyPath, { ...sidecar, layers: [] }) });
 assert.equal(hash(readFileSync(empty)), hash(readFileSync(clean)), "an empty sidecar must not change a legacy export");
-// Exercise the production path: the compositor finds the checksum-bound
-// sidecar in the frozen presentation and reads it from the staged assets.
-const markedTimeline = join(output, "presentation-annotated.json");
-const frozenAsset = { id: "screen_annotation", kind: "screen_annotation", objectKey: "fixture/screen-annotation.json", contentType: "application/json", byteSize: readFileSync(bound.path).byteLength, sha256: bound.sha };
-copyFileSync(bound.path, join(request.asset_directory, bound.sha));
-const presentationSHA = write(markedTimeline, { ...timeline, assets: [...timeline.assets, frozenAsset] });
-const markedRequest = join(output, "request-annotated.json");
-write(markedRequest, { ...request, presentation_path: markedTimeline, presentation_sha256: presentationSHA });
-const rendered = render("annotated", undefined, markedRequest);
+// The production compositor finds the checksum-bound sidecar in the frozen presentation.
+function freezeAnnotation(name, annotation, input = request) {
+  const path = join(output, `${name}-sidecar.json`);
+  const sha = write(path, annotation);
+  const asset = { id: "screen_annotation", kind: "screen_annotation", objectKey: "fixture/screen-annotation.json", contentType: "application/json", byteSize: readFileSync(path).byteLength, sha256: sha };
+  copyFileSync(path, join(request.asset_directory, sha));
+  const presentation = join(output, `${name}-presentation.json`);
+  const presentationSHA = write(presentation, { ...timeline, assets: [...timeline.assets, asset] });
+  const pathWithAnnotation = join(output, `${name}-request.json`);
+  write(pathWithAnnotation, { ...input, presentation_path: presentation, presentation_sha256: presentationSHA });
+  return pathWithAnnotation;
+}
+
+const rendered = render("annotated", undefined, freezeAnnotation("annotated", sidecar));
 
 const invalidPath = join(output, "invalid-sidecar.json");
 const invalidSHA = write(invalidPath, { ...sidecar, recordingId: "wrong-recording" });
@@ -195,6 +198,34 @@ const below = centroid(sample, regionAround({ x: edge.x, y: edge.y + 4 }, 2, sam
 const above = centroid(sample, regionAround({ x: edge.x, y: edge.y - 4 }, 2, sample), inkPixel);
 assert.ok(below, "the mark reaching the decoded screen edge must paint inside it");
 assert.equal(above, null, "ink must be clipped out of the letterbox");
+const bakedTrack = join(output, "media", "baked-ink.webm");
+const bakedPoint = { x: 0.26, y: 0.52 };
+const bakedX = Math.round(bakedPoint.x * width);
+const bakedY = Math.round(bakedPoint.y * height);
+ffmpeg("-i", track, "-vf", `drawbox=x=${bakedX - 12}:y=${bakedY - 4}:w=24:h=8:color=magenta:t=fill`, "-c:v", "libvpx", "-deadline", "realtime", "-crf", "10", "-b:v", "1M", bakedTrack);
+const bakedBytes = readFileSync(bakedTrack);
+const bakedMedia = join(output, "baked-media.json");
+const bakedMediaSHA = write(bakedMedia, {
+  ...media,
+  sources: media.sources.map((item) => (item.source_id === source.source_id ? { ...item, path: "baked-ink.webm", sha256: hash(bakedBytes), byte_size: bakedBytes.length } : item)),
+});
+const bakedInput = { ...request, decoded_media_path: bakedMedia, decoded_media_sha256: bakedMediaSHA };
+const bakedCleanRequest = join(output, "baked-clean-request.json");
+write(bakedCleanRequest, bakedInput);
+const mixedSidecar = structuredClone(sidecar);
+mixedSidecar.layers[0].sidecar.layer.burned_in = true;
+const mixed = render("mixed", undefined, freezeAnnotation("mixed", mixedSidecar, bakedInput));
+const bakedClean = render("baked-clean", undefined, bakedCleanRequest);
+const bakedSourceFrame = decodeRgb(bakedClean, 138);
+const bakedTilePoint = {
+  x: targets[0].x + frameWidth * (bakedPoint.x - TARGETS[0].x),
+  y: targets[0].y + frameHeight * (bakedPoint.y - TARGETS[0].y),
+};
+assert.ok(centroid(bakedSourceFrame, regionAround(bakedTilePoint, 12, bakedSourceFrame), inkPixel), "the encoded screen source must already contain ink");
+assert.ok(decodeRgb(mixed, 138).bytes.equals(bakedSourceFrame.bytes), "burned-in playback must match the unannotated render of the same encoded source");
+const mixedReplacement = decodeRgb(mixed, 264);
+assert.ok(centroid(mixedReplacement, regionAround(targets[1], 14, mixedReplacement), inkPixel), "the replacement's data-layer mark must still render");
+
 const p95 = percentile(errors, 0.95);
 assert.ok(p95 < 0.005, `recorded alignment p95 ${p95} exceeds 0.5%`);
 
@@ -202,7 +233,7 @@ const frame = join(output, "sample-frame.png");
 ffmpeg("-i", rendered, "-vf", "select=eq(n\\,138)", "-frames:v", "1", "-update", "1", frame);
 const before = join(output, "clean-frame.png");
 ffmpeg("-i", clean, "-vf", "select=eq(n\\,138)", "-frames:v", "1", "-update", "1", before);
-const report = { verdict: "pass", frame, before, video: rendered, measuredMarks: errors.length, p95AlignmentFrameWidth: p95, fade: { firstFade, lastFade }, testedFrames: configs };
+const report = { verdict: "pass", frame, before, video: rendered, mixedVideo: mixed, measuredMarks: errors.length, p95AlignmentFrameWidth: p95, fade: { firstFade, lastFade }, testedFrames: configs };
 write(join(output, "proof.json"), report);
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 

@@ -47,6 +47,10 @@ function androidIntentFilters(hosts: readonly string[]) {
 
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development";
 const nightly = buildProfile === "nightly";
+const orbURL = buildProfile === "orb" ? process.env.CHALK_MOBILE_ORB_URL : undefined;
+if (buildProfile === "orb" && !/^https:\/\/3070-[a-z0-9]+\.instabox\.tech$/u.test(orbURL ?? "")) {
+  throw new Error("Orb builds require CHALK_MOBILE_ORB_URL to be the HTTPS web origin printed by orb up.");
+}
 
 export default {
   expo: {
@@ -92,6 +96,6 @@ export default {
       blockedPermissions: ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
       permissions: ANDROID_PERMISSIONS,
     },
-    extra: { buildProfile, ...(nightly ? { apiBaseURL: origins.nightlyApiBaseURL } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } },
+    extra: { buildProfile, ...(orbURL ? { apiBaseURL: orbURL } : nightly ? { apiBaseURL: origins.nightlyApiBaseURL } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } },
   },
 };
