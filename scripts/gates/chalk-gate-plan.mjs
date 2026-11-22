@@ -10,7 +10,6 @@ import { loadManifest, pathPrefix } from "../../tools/formal/manifest.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
-import { formatCommandFor } from "./format-command.mjs";
 import { ratchetArgsFor } from "./ratchet-scope.mjs";
 import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 
@@ -478,7 +477,7 @@ export function createGatePlan(files, options = {}) {
   const ratchetArgs = ratchetArgsFor({ scope, base, event: options.event, full: explicitFull });
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
-  const formatCommand = formatCommandFor(formattedFiles);
+  const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
