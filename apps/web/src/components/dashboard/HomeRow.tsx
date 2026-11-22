@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
-import { displayLink, lastActive } from "../../lib/dashboard/format";
+import { lastActive, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
-import { CopyAction, usePhone, useToast } from "./kit";
+import { CopyAction, LinkText, usePhone, useToast } from "./kit";
 import { Menu, MenuItem, RenameArchiveItems } from "./menu";
 import { inviteLink } from "./home-rows";
 import { useJoinCall, usePendingJoin } from "./join-call";
@@ -27,7 +27,7 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
       <Link className="ra" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} aria-label={label} />
       <span className="rt np">
         <b>{call.name}</b>
-        {phone ? <span>{status}</span> : call.inviteUrl ? <span className="mono">{displayLink(call.inviteUrl)}</span> : null}
+        {phone ? <span>{status}</span> : call.inviteUrl ? <LinkText link={shareableLink(call.inviteUrl)} className="mono" /> : null}
       </span>
       {faces.length ? (
         <span className="fcol np">

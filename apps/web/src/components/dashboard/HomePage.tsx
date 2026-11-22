@@ -1,34 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
-import { startCall as startOwnedCall } from "./language-choice";
-import { inviteLink, type Row, type Home, merge, capped, shown, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { newCallIntent, startCall as startOwnedCall } from "./language-choice";
+import { inviteLink, type Row, type Home, merge, capped, listed, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
-import { useJoinCall } from "./join-call";
+import { rememberCallLinkShown, useJoinCall, usePendingJoin } from "./join-call";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
 type HomeDialog = null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO };
 type UpdateHome = Update<Home>;
 
-function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) {
+/** `opening` is true from the press until the call page has taken over, so a second press in that time starts nothing. */
+function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void, joining: boolean) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
-  const startKey = useRef(intentKey());
+  const startKey = useRef(newCallIntent());
 
   async function startCall() {
-    if (starting) return;
+    if (starting || joining) return;
     setStarting(true);
     try {
       const { call } = await startOwnedCall(startKey.current);
-      startKey.current = intentKey();
+      startKey.current = newCallIntent();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
+      rememberCallLinkShown(call.id);
       show({ kind: "ready", call, link });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
@@ -42,17 +44,19 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
       await act("home", { action: "archive-call", spaceId: call.id });
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, archived: true } : item)) }));
       toast(`Archived ${call.name}`, {
-        icon: "trash",
-        undo: () => {
-          act("home", { action: "restore-call", spaceId: call.id }).then(
-            ({ call: restored }) =>
-              update((home) => {
-                // New calls may have pushed the archived row out of the 300, so put it back in its place.
-                const row = home.rows.find((item) => item.id === call.id) ?? call;
-                return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
-              }),
-            (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-          );
+        action: {
+          label: "Undo",
+          onClick: () => {
+            act("home", { action: "restore-call", spaceId: call.id }).then(
+              ({ call: restored }) =>
+                update((home) => {
+                  // New calls may have pushed the archived row out of the 300, so put it back in its place.
+                  const row = home.rows.find((item) => item.id === call.id) ?? call;
+                  return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
+                }),
+              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+            );
+          },
         },
       });
     } catch (error) {
@@ -72,20 +76,17 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
         <HomeLoadFailed detail={errorMessage(state.error)} onRetry={reload} />
-      ) : shown(state.data).length === 0 ? (
+      ) : listed(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
-            <span className="empty-icon" aria-hidden="true">
-              <Icon name="cam" />
-            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
           </div>
         </div>
       ) : (
         <>
-          <div className="list">
-            {shown(state.data).map((call) => (
+          <div className="list calls">
+            {listed(state.data).map((call) => (
               <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
             ))}
           </div>
@@ -95,7 +96,13 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
             <MoreButton
               label="Show more calls"
               cursor={state.data.nextCursor}
-              load={(cursor) => readPage("home", { cursor })}
+              load={(cursor) =>
+                readPage("home", { cursor }).catch((error: unknown) => {
+                  // A cursor from before the list was ordered by last use belongs to another order, so start again from the top.
+                  if (error instanceof DashboardRequestError && error.code === "invalid_cursor") reload();
+                  throw error;
+                })
+              }
               onLoaded={(page) => {
                 // A call made elsewhere may already be on top, so skip calls the list already holds.
                 update(
@@ -127,16 +134,19 @@ export function HomePage() {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
   const [dialog, setDialog] = useState<HomeDialog>(null);
-  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? shown(state.data)[0]?.id : undefined);
-  const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next));
+  const joinCall = useJoinCall();
+  // The button keeps working until the call page has taken over, so Start a call never looks idle between the two.
+  const joining = usePendingJoin() !== null;
+  const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next), joining);
+  const opening = starting || joining;
 
   return (
     <div className="wrap">
       <div className="secth hhead">
         <h1>Recent calls</h1>
         <div className="hact">
-          <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-            <Icon name="plus" />
+          <button type="button" className="btn pri" aria-busy={opening || undefined} aria-disabled={opening || undefined} onClick={() => void startCall()}>
+            {opening ? <span className="spin" aria-hidden="true" /> : <Icon name="plus" />}
             Start a call
           </button>
           <JoinLinkField />
@@ -144,7 +154,7 @@ export function HomePage() {
       </div>
       <HomeBody state={state} reload={reload} update={update} onRename={(call) => setDialog({ kind: "rename", call })} onArchive={(call) => void archive(call)} />
       {dialog?.kind === "ready" ? (
-        <CallReadyDialog call={dialog.call} link={dialog.link} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
+        <CallReadyDialog call={dialog.call} link={dialog.link} joining={joining} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>

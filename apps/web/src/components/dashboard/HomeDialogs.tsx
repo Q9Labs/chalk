@@ -1,3 +1,4 @@
+import { CheckmarkCircle02Icon, Copy01Icon, Tick01Icon, Video01Icon } from "@q9labsai/chalk-react/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contracts";
@@ -5,20 +6,21 @@ import { act, errorMessage } from "../../lib/dashboard/client";
 import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { Dialog } from "./Dialog";
-import { CopyAction, useToast } from "./kit";
-import { usePendingJoin } from "./join-call";
+import { LinkText, useCopy, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
-import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
+import { rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
 
-export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
-  const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());
-  const joining = usePendingJoin() === call.id;
+/** The new call as the dashboard hands it over: the link to share, who gets in, the transcript language, and the way in. */
+export function CallReadyDialog({ call, link, joining, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly joining: boolean; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
+  const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? null);
   const [saving, setSaving] = useState(false);
+  const { copied, copy } = useCopy();
   const toast = useToast();
   // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
   async function chooseLanguage(next: NewCallLanguage) {
     const before = language;
+    if (next === before) return;
     setLanguage(next);
     setSaving(true);
     try {
@@ -37,27 +39,32 @@ export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { r
     <Dialog
       title="Your call is ready"
       description="Share this link with the people you want in the call. It keeps working after the call ends."
+      icon={<CheckmarkCircle02Icon size={20} />}
+      tone="ok"
       onClose={onClose}
       actions={
-        <button type="button" className="btn pri" aria-busy={joining || undefined} onClick={onJoin}>
-          {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
+        <button type="button" className="btn pri" aria-busy={joining || undefined} aria-disabled={joining || undefined} onClick={joining ? undefined : onJoin}>
+          <Video01Icon size={16} />
           Join call
         </button>
       }
     >
-      <div className="linkrow" style={{ marginTop: "var(--space-4)" }}>
-        <div className="linkbox">
-          <span>{displayLink(link)}</span>
+      <div>
+        <div className="linkfield">
+          <LinkText link={link} />
+          <button type="button" className={copied ? "btn sec sm copied" : "btn sec sm"} onClick={() => void copy(link)}>
+            {copied ? <Tick01Icon size={16} /> : <Copy01Icon size={16} />}
+            {copied ? "Copied" : "Copy link"}
+          </button>
         </div>
-        <CopyAction text={link} pill />
+        <p className="help">
+          People ask to join, and you let them in.{" "}
+          <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
+            Change who can join
+          </Link>
+        </p>
       </div>
-      <p className="help" style={{ marginTop: "var(--space-3)" }}>
-        People ask to join, and you let them in.{" "}
-        <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
-          Change who can join
-        </Link>
-      </p>
-      <div className="field" style={{ marginTop: "var(--space-5)" }}>
+      <div className="field">
         <span className="lbl" id="ready-language-label">
           Transcript language
         </span>
@@ -206,5 +213,3 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
     </Dialog>
   );
 }
-
-/** The Home list could not load: a card that shows a call tile cut off from the network, with one way to retry. */

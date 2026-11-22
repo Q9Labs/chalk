@@ -1,0 +1,249 @@
+/* The dashboard's opening frame (lib/dashboard-boot.ts): plain HTML in the dashboard's geometry, on screen from the
+   first paint until the app has drawn. Every page loads this file, so it holds nothing but the frame. Sizes follow
+   dashboard.css: the 56px top bar, the page column and Home's 64px rows. */
+#chalk-dashboard-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  background: var(--chalk-canvas);
+  transition: opacity 160ms ease-out;
+}
+
+#chalk-dashboard-boot[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#chalk-dashboard-boot i {
+  display: block;
+  flex: none;
+  height: 14px;
+  border-radius: var(--corner-lg);
+  background: var(--chalk-hover);
+  animation: chalk-boot-shim 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes chalk-boot-shim {
+  to {
+    opacity: 0.45;
+  }
+}
+
+#chalk-dashboard-boot .bo-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: 56px;
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--chalk-line);
+}
+
+#chalk-dashboard-boot .bo-lk {
+  width: 84px;
+  height: 24px;
+}
+
+#chalk-dashboard-boot .bo-tabs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+#chalk-dashboard-boot .bo-tabs i {
+  width: 80px;
+  height: 36px;
+  border-radius: var(--corner-pill);
+  opacity: 0.6;
+}
+
+#chalk-dashboard-boot .bo-tabs i.on {
+  width: 86px;
+  opacity: 1;
+}
+
+#chalk-dashboard-boot .bo-docs {
+  width: 72px;
+  height: 32px;
+  margin-left: auto;
+  border-radius: var(--corner-pill);
+}
+
+#chalk-dashboard-boot .bo-av {
+  width: 32px;
+  height: 32px;
+  margin: 0 var(--space-1);
+  border-radius: 50%;
+}
+
+#chalk-dashboard-boot .bo-main {
+  padding: var(--space-8) var(--space-14);
+}
+
+#chalk-dashboard-boot .bo-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+#chalk-dashboard-boot .bo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 36px;
+  margin-bottom: var(--space-6);
+}
+
+#chalk-dashboard-boot .bo-h1 {
+  width: 196px;
+  height: 28px;
+}
+
+#chalk-dashboard-boot .bo-acts {
+  display: flex;
+  gap: var(--space-2-5);
+}
+
+#chalk-dashboard-boot .bo-btn {
+  width: 124px;
+  height: 36px;
+  border-radius: var(--corner-pill);
+}
+
+#chalk-dashboard-boot .bo-field {
+  width: 280px;
+  height: 36px;
+  border-radius: var(--corner-pill);
+}
+
+/* Every page but Home: the back link, the title over its line, then rows. */
+#chalk-dashboard-boot .bo-back {
+  width: 64px;
+  height: 16px;
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+#chalk-dashboard-boot .bo-page {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+#chalk-dashboard-boot .bo-intro {
+  width: 320px;
+  max-width: 80%;
+}
+
+#chalk-dashboard-boot .bo-list {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0 calc(var(--space-2) * -1);
+}
+
+#chalk-dashboard-boot .bo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 64px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+}
+
+#chalk-dashboard-boot .bo-fc {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+  width: 68px;
+}
+
+#chalk-dashboard-boot .bo-face {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+#chalk-dashboard-boot .bo-tx {
+  flex: 1;
+  min-width: 0;
+}
+
+#chalk-dashboard-boot .bo-m {
+  width: 88px;
+  height: 12px;
+}
+
+@media (max-width: 1365px) {
+  #chalk-dashboard-boot .bo-main {
+    padding: var(--space-6) var(--space-10);
+  }
+}
+
+@media (max-width: 640px) {
+  #chalk-dashboard-boot .bo-top {
+    gap: var(--space-2-5);
+    padding: 0 var(--space-1-5) 0 var(--space-4);
+  }
+
+  #chalk-dashboard-boot .bo-lk {
+    width: 72px;
+    height: 20px;
+  }
+
+  #chalk-dashboard-boot .bo-tabs {
+    gap: 0;
+  }
+
+  #chalk-dashboard-boot .bo-tabs i {
+    width: 44px;
+    height: 44px;
+  }
+
+  #chalk-dashboard-boot .bo-tabs i.on {
+    width: 96px;
+  }
+
+  #chalk-dashboard-boot .bo-docs {
+    display: none;
+  }
+
+  #chalk-dashboard-boot .bo-av {
+    margin: 0 var(--space-1-5) 0 auto;
+  }
+
+  #chalk-dashboard-boot .bo-main {
+    padding: var(--space-4);
+  }
+
+  #chalk-dashboard-boot .bo-head:not(.bo-page) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  #chalk-dashboard-boot .bo-h1 {
+    width: 156px;
+    height: 24px;
+  }
+
+  #chalk-dashboard-boot .bo-btn,
+  #chalk-dashboard-boot .bo-field {
+    height: 44px;
+  }
+
+  #chalk-dashboard-boot .bo-field {
+    flex: 1;
+    width: auto;
+  }
+
+  #chalk-dashboard-boot .bo-fc {
+    width: 48px;
+  }
+
+  #chalk-dashboard-boot .bo-m {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #chalk-dashboard-boot i {
+    animation: none;
+  }
+}

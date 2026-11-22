@@ -1068,6 +1068,12 @@ type Space struct {
 	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
 }
 
+type SpaceActivity struct {
+	TenantID pgtype.UUID        `json:"tenant_id"`
+	SpaceID  pgtype.UUID        `json:"space_id"`
+	ActiveAt pgtype.Timestamptz `json:"active_at"`
+}
+
 type SpaceCreateRequest struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	RequestKey         string             `json:"request_key"`

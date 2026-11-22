@@ -3,12 +3,12 @@ import { CallLimbo, Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
-import { startCall } from "./language-choice";
-import { joiningCallName } from "./join-call";
+import { newCallIntent, startCall } from "./language-choice";
+import { callLinkShown, joiningCallName } from "./join-call";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
@@ -25,11 +25,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const apiBaseURL = publicAPIBaseURL();
   const owner = useMemo(() => ownerAccess(spaceId, profile?.id ?? ""), [spaceId, profile?.id]);
   const [client, setClient] = useState<SpaceClient | null>(null);
-  const startKey = useRef(intentKey());
+  const startKey = useRef(newCallIntent());
   const startingCall = useRef(false);
   const [startError, setStartError] = useState<string | null>(null);
   useEffect(() => {
-    startKey.current = intentKey();
+    startKey.current = newCallIntent();
     startingCall.current = false;
     setStartError(null);
   }, [spaceId]);
@@ -95,6 +95,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
             });
         }}
         inviteLink={state.data.inviteUrl}
+        {...(callLinkShown(spaceId) ? { callLinkOpen: false } : {})}
         spaceName={state.data.call.name}
         displayName={profile.name}
         theme={{ colorScheme: theme }}

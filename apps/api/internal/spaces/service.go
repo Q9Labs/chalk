@@ -131,9 +131,9 @@ type IdempotentRepository interface {
 }
 
 // FilteredRepository optionally supports the dashboard's archived-state
-// filter without changing the original list method used by older callers.
+// filter and activity order without changing the original list method used by older callers.
 type FilteredRepository interface {
-	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error)
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options ListOptions) (SpaceList, error)
 }
 
 type Service struct {
@@ -390,25 +390,6 @@ func (s Service) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID ut
 	}
 
 	return s.repository.GetSpace(ctx, tenantID, spaceID)
-}
-
-func (s Service) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (SpaceList, error) {
-	if tenantID.IsZero() {
-		return SpaceList{}, ErrInvalidTenantID
-	}
-
-	return s.repository.ListSpaces(ctx, tenantID, page)
-}
-
-func (s Service) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error) {
-	if tenantID.IsZero() {
-		return SpaceList{}, ErrInvalidTenantID
-	}
-	filtered, ok := s.repository.(FilteredRepository)
-	if !ok || archived == nil {
-		return s.repository.ListSpaces(ctx, tenantID, page)
-	}
-	return filtered.ListSpacesFiltered(ctx, tenantID, page, archived)
 }
 
 func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input UpdateSpaceInput) (Space, error) {
