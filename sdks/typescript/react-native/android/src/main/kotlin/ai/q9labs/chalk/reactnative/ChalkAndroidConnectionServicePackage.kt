@@ -11,6 +11,7 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
       ChalkAndroidConnectionServiceModule(reactContext),
       ChalkAudioRouteModule(reactContext),
       ChalkCallServiceModule(reactContext),
+      ChalkScreenCaptureModule(reactContext),
     )
   }
 

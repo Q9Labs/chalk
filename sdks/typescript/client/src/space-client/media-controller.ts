@@ -718,7 +718,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.ensuring(
         Effect.sync(() => {
           if (this.#track("screen") === track) this.#deleteTrack("screen");
-          track?.stop();
+          if (track) this.#selection.releaseTrack(track);
           this.#publish();
         }),
       ),
@@ -751,7 +751,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 yield* this.#clearScreenAudio(ports.media);
                 yield* foreign(() => ports.media.clearPreparedLocalTrack("screen"));
                 this.#deleteTrack("screen");
-                previous.stop();
+                this.#selection.releaseTrack(previous);
               }
               this.#assertActivePorts(ports, "startScreenShare");
               this.#assertCurrentIntent("screen", intent.revision);

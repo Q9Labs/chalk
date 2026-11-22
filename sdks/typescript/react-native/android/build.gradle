@@ -40,6 +40,8 @@ repositories {
 dependencies {
   implementation("com.facebook.react:react-android")
   implementation("androidx.core:core:1.16.0")
+  implementation(project(":cloudflare_react-native-webrtc"))
+  implementation("com.cloudflare.realtimekit:webrtc-android:125.6422.07")
 }
 
 def compatibilityClasses = layout.buildDirectory.dir("compatibility/classes")
