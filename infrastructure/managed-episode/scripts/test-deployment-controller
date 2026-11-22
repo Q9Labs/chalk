@@ -279,6 +279,15 @@ case "${1:-} ${2:-}" in
     [[ "${3:-}" == AWS && "${4:-}" == --password-stdin && "${5:-}" =~ ^[0-9]{12}\.dkr\.ecr\.ap-southeast-1\.amazonaws\.com$ ]]
     [[ "$(cat)" == test-only-registry-password ]]
     ;;
+  "run --rm")
+    # The cutover check: it can only run while its credential is registered.
+    grep -Fxq chalk-managed-migrator-database-url "$state"
+    [[ "$*" == *'--check-cutover' ]]
+    if [[ -n "${FAKE_CUTOVER_REFUSAL:-}" ]]; then
+      printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL" >&2
+      exit 1
+    fi
+    ;;
   "secret inspect") grep -Fxq -- "${3:?}" "$state" ;;
   "secret rm")
     temporary="${state}.tmp"
@@ -444,7 +453,8 @@ make_manifest() {
     --argjson architectures "$test_architectures" \
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
-    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260819130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+    --argjson minimum_migration "${FAKE_MANIFEST_MIGRATION:-20260819130000}" \
+    '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:$minimum_migration,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
 }
 
 make_runtime_only_manifest() {
@@ -1121,6 +1131,7 @@ jq -e -R -s '
 ' "${fixture_root}/aws.log" >/dev/null || fail "runtime inputs were not fetched in SSM batches of at most 10 names"
 jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
 grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
+! grep -Fq -- '--check-cutover' "${fixture_root}/commands.log" || fail "a release that predates the Cloudflare retirement ran the cutover check"
 # The restart policy reaches the host: the installed units never hit a start limit, and systemd reloads them before anything starts.
 for unit in chalk-api chalk-sync; do
   grep -Fxq 'StartLimitIntervalSec=0' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with a start limit"
@@ -1242,6 +1253,30 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+# A release that retires Cloudflare asks the database before it stops the runtime, and a refusal leaves the stable release serving.
+FAKE_MANIFEST_MIGRATION=20261121120000 make_manifest cutover >"${fixture_root}/cutover-manifest.json"
+make_request cutover "${fixture_root}/cutover-request.json"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_CUTOVER_REFUSAL='2 active or ending Cloudflare Episodes: end them before retiring Cloudflare media' run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-refused.log" 2>&1; then
+  fail "a live Cloudflare Episode did not stop the cutover"
+fi
+grep -Fq 'active or ending Cloudflare Episodes' "${fixture_root}/cutover-refused.log" || fail "the cutover refusal did not name its reason"
+grep -Fq 'database is not ready for the Cloudflare retirement' "${fixture_root}/cutover-refused.log" || fail "the cutover refusal was not reported"
+! grep -q '^systemctl' "${fixture_root}/commands.log" || fail "the runtime was touched before the cutover check refused"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "the cutover check left the migration credential registered"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "a refused cutover changed the active release"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+cutover_state="${fixture_root}/cutover-state"
+mkdir -p "$cutover_state"
+run_controller "$cutover_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >/dev/null || fail "a ready database blocked the cutover"
+check_line="$(grep -n -- '--check-cutover' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+stop_line="$(grep -n '^systemctl .*stop ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+[[ -n "$check_line" && "$check_line" -lt "$stop_line" ]] || fail "the cutover check did not run before the runtime stopped"
+jq -e '.release_id == "cutover"' "${cutover_state}/active-release.json" >/dev/null || fail "a ready cutover did not become active"
 # A job re-run repeats a deploy this host already promoted: it passes on health alone and changes nothing.
 retry_state="${fixture_root}/retry-state"
 mkdir -p "$retry_state"

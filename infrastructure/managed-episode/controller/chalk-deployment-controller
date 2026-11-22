@@ -893,6 +893,44 @@ remove_migrator_secret() {
   fi
 }
 
+# The Cloudflare retirement migration refuses live legacy Episodes, but only after the runtime has been stopped.
+# Ask the candidate's own migration binary first, while the stable release is still serving, and refuse here.
+CLOUDFLARE_RETIREMENT_MIGRATION=20261121120000
+
+check_cutover() {
+  local runtime_source="$1"
+  [[ -f "${runtime_source}/quadlet/chalk-api-migrate.container" ]] || return 0
+  has_migrator_input || return 0
+  local target
+  target="$(jq -er '.database_compatibility.minimum_migration | numbers' "$manifest_path")" || fail "release migration target is invalid"
+  ((target >= CLOUDFLARE_RETIREMENT_MIGRATION)) || return 0
+
+  # A host that never ran a release has no private network, and nothing live to protect.
+  if ! run_user_podman network exists chalk-runtime >/dev/null 2>&1; then
+    printf 'WARN cutover check skipped: no chalk-runtime network, so no release is running here\n' >&2
+    return 0
+  fi
+
+  local destination image
+  destination="$(jq -er --arg id "$MIGRATOR_INPUT_ID" 'first(.[] | select(.id == $id and .missing == false) | .destination)' <<<"${input_records_json}")" || fail "release migration credential is missing"
+  image="$(jq -er '.images.api' "$manifest_path")" || fail "release API image is missing"
+  local -a replace_option=()
+  if run_user_podman secret inspect "$MIGRATOR_SECRET_NAME" >/dev/null 2>"${stage_root}/cutover-secret-inspect.log"; then
+    replace_option=(--replace)
+  fi
+  cat "${stage_root}/${destination}" | run_user_podman secret create "${replace_option[@]}" "$MIGRATOR_SECRET_NAME" - >/dev/null 2>"${stage_root}/cutover-secret-create.log" || fail "cutover check credential could not be registered"
+  local status=0
+  run_user_podman run --rm --pull=never --network chalk-runtime --user 65532:65532 --read-only --cap-drop=all --security-opt no-new-privileges \
+    --secret "${MIGRATOR_SECRET_NAME},type=mount,target=/run/chalk/migrate/database-url,uid=65532,gid=65532,mode=0400" \
+    --entrypoint /usr/local/bin/chalk-migrate "$image" --database-url-file /run/chalk/migrate/database-url --check-cutover \
+    >"${stage_root}/cutover-check.log" 2>&1 || status=$?
+  remove_migrator_secret
+  if ((status != 0)); then
+    tail -n 5 "${stage_root}/cutover-check.log" >&2 || true
+    fail "database is not ready for the Cloudflare retirement; the stable release is still running"
+  fi
+}
+
 cleanup_unused_images() {
   local protected_refs="${stage_root}/protected-images" protected_ids="${stage_root}/protected-image-ids"
   local manifests=("$manifest_path")
@@ -1580,6 +1618,7 @@ deploy() {
     cp "$active_pointer" "$stable_pointer_copy"
     chmod 600 "$stable_pointer_copy"
   fi
+  check_cutover "$rendered_root"
   local candidate_status
   local promotion_status=0
   local installed_runtime_status=0

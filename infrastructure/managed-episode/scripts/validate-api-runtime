@@ -64,7 +64,7 @@ fi
 
 duplicate_flag="$(awk -F= '
   { key = $1; sub(/^[[:space:]]+/, "", key); sub(/[[:space:]]+$/, "", key) }
-  NF > 1 && key ~ /^CHALK_SFU_(ENABLED|CAPTURE_ENABLED|COLOCATED_CAPTURE|NEW_EPISODES|NODES)$/ && ++seen[key] == 2 { print key; exit }
+  NF > 1 && key ~ /^CHALK_SFU_(ENABLED|CAPTURE_ENABLED|COLOCATED_CAPTURE|NEW_EPISODES|NODES)$|^CHALK_RECORDING_HISTORY_ONLY$/ && ++seen[key] == 2 { print key; exit }
 ' "${api_env}")"
 [[ -z "${duplicate_flag}" ]] || fail "${duplicate_flag} must occur at most once"
 
@@ -81,6 +81,28 @@ fi
 if env_enabled CHALK_SFU_COLOCATED_CAPTURE && ! env_enabled CHALK_SFU_CAPTURE_ENABLED; then
   fail "CHALK_SFU_COLOCATED_CAPTURE needs CHALK_SFU_CAPTURE_ENABLED=true"
 fi
+# Without a capture flag a Chalk SFU Episode cannot be recorded, so new Recordings fail with
+# recording_capture_unsupported. Keeping only the history of old Recordings has to be said out loud.
+if env_enabled CHALK_RECORDING_ENABLED; then
+  if env_enabled CHALK_SFU_CAPTURE_ENABLED; then
+    ! env_enabled CHALK_RECORDING_HISTORY_ONLY || fail "CHALK_RECORDING_HISTORY_ONLY conflicts with CHALK_SFU_CAPTURE_ENABLED=true"
+  else
+    env_enabled CHALK_RECORDING_HISTORY_ONLY || fail "CHALK_RECORDING_ENABLED=true without CHALK_SFU_CAPTURE_ENABLED=true stops every new Recording: set CHALK_SFU_CAPTURE_ENABLED=true, or CHALK_RECORDING_HISTORY_ONLY=true to keep only the history of existing Recordings"
+  fi
+fi
+
+# A workflow rollback runs the previous release's images against the current inputs, and that release
+# still reads the Cloudflare settings. Keep them until the release after this one has been promoted.
+case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" in
+  cf_sfu) ;;
+  chalk_sfu)
+    env_enabled CHALK_SFU_CAPTURE_ENABLED || fail "CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu needs CHALK_SFU_CAPTURE_ENABLED=true so the previous release still boots on rollback"
+    ;;
+  *) fail "CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu: a rollback to the previous release reads it" ;;
+esac
+require_env CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE
+require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
+require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
 
 # TURN can serve Chalk SFU peers on networks that cannot reach its public media port.
 turn_key_set=false
@@ -88,5 +110,11 @@ turn_token_set=false
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
 [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
+case "$(env_value "${api_env}" CHALK_API_ENV || true)" in
+  nightly | production)
+    require_env CHALK_CLOUDFLARE_TURN_KEY_ID
+    require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
+    ;;
+esac
 
 echo "PASS API runtime contract"

@@ -28,6 +28,7 @@ type options struct {
 	entryWriterProtocol         int
 	rollbackEntryWriterProtocol int
 	enforceEntryOwnership       string
+	checkCutover                bool
 }
 
 func main() {
@@ -57,6 +58,7 @@ func parseOptions(args []string) (options, error) {
 	entryWriterProtocol := flags.Int("entry-writer-protocol", 0, "target Sync entry writer protocol (0 or 1)")
 	rollbackEntryWriterProtocol := flags.Int("rollback-entry-writer-protocol", 0, "retained rollback Sync entry writer protocol")
 	enforceEntryOwnership := flags.String("enforce-entry-ownership", "", "record entry enforcement for this release; requires an expanded rollback baseline")
+	checkCutover := flags.Bool("check-cutover", false, "read-only: refuse when the database is not ready to retire Cloudflare media")
 	targetText := flags.String("target", "", "migration version to apply")
 	downToText := flags.String("down-to", "", "emergency rollback: revert migrations newer than this version, which stays applied")
 	allowMissing := []int64{}
@@ -84,6 +86,12 @@ func parseOptions(args []string) (options, error) {
 	}
 	if !filepath.IsAbs(*databaseURLFile) {
 		return options{}, errors.New("--database-url-file must be absolute")
+	}
+	if *checkCutover {
+		if *targetText != "" || *downToText != "" || len(allowMissing) > 0 || *entryWriterProtocol != 0 || *rollbackEntryWriterProtocol != 0 || *enforceEntryOwnership != "" {
+			return options{}, errors.New("--check-cutover takes only --database-url-file")
+		}
+		return options{databaseURLFile: *databaseURLFile, checkCutover: true}, nil
 	}
 	if (*targetText == "") == (*downToText == "") {
 		return options{}, errors.New("exactly one of --target and --down-to is required")
@@ -139,6 +147,9 @@ func migrate(ctx context.Context, options options) error {
 
 	if err := database.PingContext(ctx); err != nil {
 		return errors.New("ping migration database")
+	}
+	if options.checkCutover {
+		return verifyCutover(ctx, database)
 	}
 	provider, err := newMigrationProvider(database, migrations.Files, goose.DialectPostgres)
 	if err != nil {
