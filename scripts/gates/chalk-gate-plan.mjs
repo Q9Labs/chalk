@@ -16,6 +16,7 @@ import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
 const CALL_LEAK_SHARDS = 3;
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
+const MAX_LISTED_FORMAT_FILES = 100;
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
 const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
@@ -477,7 +478,8 @@ export function createGatePlan(files, options = {}) {
   const ratchetArgs = ratchetArgsFor({ scope, base, event: options.event, full: explicitFull });
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
-  const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
+  // Windows caps a command line near 8,000 characters, so a very large change checks the whole tree instead of listing every file.
+  const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...(formattedFiles.length > MAX_LISTED_FORMAT_FILES ? ["."] : formattedFiles)] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));

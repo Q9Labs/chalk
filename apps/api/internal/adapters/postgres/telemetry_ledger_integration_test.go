@@ -53,10 +53,11 @@ func seedTelemetryTenant(t *testing.T, db sqlc.DBTX) telemetryTenant {
 	t.Helper()
 	seed := telemetryTenant{db: db, tenant: accountTenantIntegrationID(t), spaces: [2]utilities.ID{accountTenantIntegrationID(t), accountTenantIntegrationID(t)}, episodes: [2]utilities.ID{accountTenantIntegrationID(t), accountTenantIntegrationID(t)}}
 	mustExec(t, db, `insert into tenants(id, name) values($1, 'Telemetry ledger')`, uuid(seed.tenant))
+	const plane = "cf_sfu"
 	for index, episode := range seed.episodes {
 		space := seed.spaces[index]
-		mustExec(t, db, `insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Telemetry ledger', $2, $3, 'cf_sfu')`, uuid(space), uuid(seed.tenant), "telemetry-ledger-"+space.String())
-		mustExec(t, db, `insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{"media_plane_binding":{"provider":"cf_sfu"}}'::jsonb)`, uuid(episode), uuid(space), uuid(seed.tenant))
+		mustExec(t, db, `insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Telemetry ledger', $2, $3, $4)`, uuid(space), uuid(seed.tenant), "telemetry-ledger-"+space.String(), plane)
+		mustExec(t, db, `insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, jsonb_build_object('media_plane_binding', jsonb_build_object('provider', $4::text)))`, uuid(episode), uuid(space), uuid(seed.tenant), plane)
 	}
 	return seed
 }
