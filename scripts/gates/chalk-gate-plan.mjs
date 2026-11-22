@@ -496,7 +496,7 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "scripts/test/no-network.test.mjs",
       "scripts/lib/platform.test.mjs",
-      ...["chalk-gate-plan", "chalk-gate-plan-release", "feature-map", "references", "ratchets", "analysis", "ast-grep", "mock-calls", "select-leak-shards"].map((name) => `scripts/gates/${name}.test.mjs`),
+      ...["chalk-gate-plan", "chalk-gate-plan-release", "lane-commands", "feature-map", "references", "ratchets", "analysis", "ast-grep", "mock-calls", "select-leak-shards"].map((name) => `scripts/gates/${name}.test.mjs`),
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),

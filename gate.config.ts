@@ -1,6 +1,7 @@
 import { defineGate, lanes } from "@q9labsai/gates";
 import { gateTaskIds } from "./scripts/gates/register.mjs";
 import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
+import { laneCommands } from "./scripts/gates/lane-commands.mjs";
 
 // The checks register lists the lanes in run order; a lane without an entry cannot be planned.
 const taskIds = gateTaskIds();
@@ -55,9 +56,12 @@ const chalkLanes = taskIds.map((id) =>
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
       if (!task?.command) return { status: "skipped" };
-      const [command, ...args] = task.command;
       const env = laneEnvironment(id, task.env, context.allChangedFiles, explicitFiles);
-      return laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env }));
+      for (const [command, ...args] of laneCommands(task)) {
+        const result = laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env }));
+        if (result.status !== "passed") return result;
+      }
+      return { status: "passed" };
     },
   }),
 );
