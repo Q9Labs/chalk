@@ -37,9 +37,15 @@ export function makeStrokeProof(baseline: InkRaster, stencil: InkRaster): Stroke
   const background = new Map<number, Background>();
   const stride = width * 4;
   for (let offset = 0; offset < stencil.data.length; offset += 4) {
+    const alpha = stencil.data[offset + 3] ?? 0;
+    if (alpha < 0.18 * 255) continue;
+    const column = offset % stride;
+    // Rasterization can move, split or drop a faint edge. Sample the body of
+    // the stroke by coverage relative to its neighbors, even for highlighter.
+    const nearbyAlpha = Math.max(stencil.data[offset + 3 - stride] ?? 0, stencil.data[offset + 3 + stride] ?? 0, column > 0 ? (stencil.data[offset - 1] ?? 0) : 0, column + 4 < stride ? (stencil.data[offset + 7] ?? 0) : 0);
+    if (alpha < nearbyAlpha * 0.75) continue;
     // A tappable Android overlay is capped at 80% window opacity.
-    const opacity = ((stencil.data[offset + 3] ?? 0) / 255) * 0.8;
-    if (opacity < 0.18 * 0.8) continue;
+    const opacity = (alpha / 255) * 0.8;
     const before = pixel(baseline.data, offset);
     const color = pixel(stencil.data, offset);
     const painted = mix(before, color, opacity);

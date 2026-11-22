@@ -66,6 +66,26 @@ describe("baked stroke frame evidence", () => {
     expect(frameProvesStroke(frame, proof)).toBe(false);
   });
 
+  it("proves the decoded body of an antialiased pen even when its faint edge disappears", () => {
+    // The RGBA rows are the local stencil and WebRTC-decoded samples of the
+    // same thin pen stroke over black; the decoder shifted its strongest row.
+    const baseline = raster(0, { dark: 0, bright: 0, alpha: 255 });
+    const ink = stencil(254);
+    const frame = { ...baseline, data: baseline.data.slice() };
+    for (let x = 2; x <= 9; x++) {
+      ink.data.set([215, 64, 135, 64], (5 * ink.width + x) * 4);
+      ink.data.set([215, 66, 134, 255], (6 * ink.width + x) * 4);
+      ink.data.set([215, 66, 133, 128], (7 * ink.width + x) * 4);
+      frame.data.set([0, 0, 2, 255], (5 * frame.width + x) * 4);
+      frame.data.set([86, 36, 52, 255], (6 * frame.width + x) * 4);
+      frame.data.set([166, 55, 99, 255], (7 * frame.width + x) * 4);
+    }
+    const proof = makeStrokeProof(baseline, ink);
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(frameProvesStroke(baseline, proof)).toBe(false);
+    expect(frameProvesStroke(frame, proof)).toBe(true);
+  });
+
   it("keeps the local copy if matching background supplies no new evidence", () => {
     const sameColor = raster(50, { dark: 30, bright: 250, alpha: 255 });
     expect(makeStrokeProof(sameColor, stencil(254))).toBeNull();
