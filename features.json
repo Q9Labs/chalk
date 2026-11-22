@@ -259,7 +259,6 @@
         "apps/sync/test/chalk_sync/screen_annotation",
         "apps/sync/test/support/screen_annotation_proof.ex",
         "apps/web/e2e.annotation.config.ts",
-        "apps/web/src/lib/screen-annotation-helper.ts",
         "apps/web/src/lib/screen-annotation.ts",
         "apps/web/tests/screen-annotation-board.mjs",
         "apps/web/tests/screen-annotation-latency.mjs",

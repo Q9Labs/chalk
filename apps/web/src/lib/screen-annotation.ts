@@ -1,4 +1,3 @@
-import { encodeAnnotationPng } from "@q9labsai/chalk-screen-annotation";
 import annotationFont from "@q9labsai/chalk-screen-annotation/fonts/Figtree-SemiBold.ttf?url";
 import type { ScreenAnnotationSetup } from "@q9labsai/chalk-react";
 
@@ -18,19 +17,5 @@ const installUrl = helperInstaller();
 export const webAnnotation: ScreenAnnotationSetup = {
   fontUrl: annotationFont,
   helper: installUrl ? { installUrl } : undefined,
-  actions: {
-    downloadPng: async (frame) => {
-      const document = frame.image.ownerDocument;
-      const png = await encodeAnnotationPng(frame, document);
-      const url = URL.createObjectURL(png);
-      try {
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "chalk-annotated-screen.png";
-        link.click();
-      } finally {
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
-    },
-  },
+  offerPngDownload: true,
 };

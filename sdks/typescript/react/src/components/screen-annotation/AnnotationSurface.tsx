@@ -1,6 +1,6 @@
 import { captureAnnotationVideoFrame, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
-import { useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChalkTooltip } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
@@ -12,14 +12,17 @@ import { AnnotationSharerControl } from "./AnnotationSharerControl";
 import { AnnotationStyles } from "./AnnotationStyles";
 import { ScreenAnnotationLayer } from "./ScreenAnnotationLayer";
 import { ScreenAnnotationToolbar } from "./ScreenAnnotationToolbar";
+import { downloadAnnotationPng } from "./download-png";
+import { saveAnnotationToBoard } from "./save-to-board";
 import { readSharerLayout } from "./sharer-layout";
-import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationFrame, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
+import { canDraw, defaultBrush, matchesTarget, targetOf, videoMatchesTrack, type ScreenAnnotationActions, type ScreenAnnotationBoard, type ScreenAnnotationFrame, type ScreenAnnotationOptions, type ScreenAnnotationHelper } from "./model";
 
 export interface AnnotationPresentationContext {
   readonly actorId: string;
   readonly actorName: string;
   readonly people?: readonly AnnotationPerson[];
   readonly grants?: WhiteboardSlice["access"]["permissions"];
+  readonly board?: ScreenAnnotationBoard;
 }
 
 type SurfaceProps = AnnotationPresentationContext & {
@@ -36,8 +39,11 @@ type SurfaceProps = AnnotationPresentationContext & {
 
 const noPeople: readonly AnnotationPerson[] = [];
 
-export function AnnotationSurface({ annotation, ...props }: SurfaceProps): React.JSX.Element | null {
-  const { client, publicationId, actions, fontUrl, helper } = annotation;
+export default function AnnotationSurface({ annotation, board, ...props }: SurfaceProps): React.JSX.Element | null {
+  const { client, publicationId, actions, fontUrl, helper, offerPngDownload } = annotation;
+  const boardClient = board?.client;
+  const boardTransport = board?.transport;
+  const save = useMemo(() => (boardClient && boardTransport ? saveAnnotationToBoard(boardClient, boardTransport, fontUrl) : undefined), [boardClient, boardTransport, fontUrl]);
   const snapshot = useSyncExternalStore(
     (listener) => client.subscribe(listener),
     () => client.getSnapshot(),
@@ -45,7 +51,11 @@ export function AnnotationSurface({ annotation, ...props }: SurfaceProps): React
   );
   const state = snapshot.status === "ready" ? snapshot.state : null;
   if (snapshot.status !== "ready" || !state || state.layer.publication_id !== publicationId || !props.live) return null;
-  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={actions} state={state} presence={snapshot.presence} />;
+  const activeActions = {
+    saveToWhiteboard: actions?.saveToWhiteboard ?? (board?.allowSave ? save : undefined),
+    downloadPng: actions?.downloadPng ?? (offerPngDownload ? downloadAnnotationPng : undefined),
+  };
+  return <ActiveAnnotationSurface key={state.layer.layer_id} {...props} client={client} fontUrl={fontUrl} helper={helper} actions={activeActions} state={state} presence={snapshot.presence} />;
 }
 
 function ActiveAnnotationSurface({

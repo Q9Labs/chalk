@@ -1,6 +1,7 @@
+import { ShareControl } from "./ShareControl";
 import { commandFailure, commandFailureMessage, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { StageIcon } from "../stage/StageIcon";
@@ -9,8 +10,10 @@ import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { SignalBars } from "../participant-tile/ParticipantTile";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
-import { AnnotationSurface, type AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
+import type { AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
 import type { ScreenAnnotationOptions } from "../screen-annotation/model";
+
+const AnnotationSurface = lazy(() => import("../screen-annotation/AnnotationSurface"));
 
 export type ScreenShareState = "live" | "connecting" | "paused" | "low-quality";
 export interface ScreenShareViewProps {
@@ -151,7 +154,11 @@ export function ScreenSharePresentation({
             {annotation && annotationMedia ? <div ref={setCanvasHost} className="pointer-events-none absolute inset-0" /> : null}
           </div>
         </div>
-        {annotation && annotationMedia && !hidden ? <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} /> : null}
+        {annotation && annotationMedia && !hidden ? (
+          <Suspense fallback={null}>
+            <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} />
+          </Suspense>
+        ) : null}
         {poppedOut ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
             <StageIcon name="pip" size={32} />
@@ -239,19 +246,6 @@ export function ScreenSharePresentation({
         ) : null}
       </div>
     </TileShell>
-  );
-}
-function ShareControl({ label, pressed, onClick, children }: { readonly label: string; readonly pressed?: boolean; readonly onClick: () => void; readonly children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      onClick={onClick}
-      className="relative grid h-8 w-8 place-items-center rounded-[50%] bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] aria-pressed:bg-[var(--chalk-on-overlay)] aria-pressed:text-[var(--chalk-overlay)] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out] active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
-    >
-      {children}
-    </button>
   );
 }
 export function ScreenShareViewSurface({ screenShareTrack, annotationContext, ...props }: ScreenShareViewSurfaceProps): React.JSX.Element {

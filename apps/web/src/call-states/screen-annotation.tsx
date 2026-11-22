@@ -156,7 +156,7 @@ export function ScreenAnnotationFixture() {
   const [saved, setSaved] = useState(0);
   const [hostView, setHostView] = useState(false);
   const track = useFixtureTrack();
-  const actions: ScreenAnnotationActions = { ...webAnnotation.actions, saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
+  const actions: ScreenAnnotationActions = { saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
   const people = [viewer, sharer].map((person) => ({ id: person.participant_id, name: person.display_name, roleCanDraw: true, managesPolicy: person === sharer }));
   const actor = hostView ? sharer : viewer;
   return (
@@ -190,6 +190,7 @@ export function ScreenAnnotationFixture() {
               publicationId: layer.publication_id,
               actions,
               fontUrl: webAnnotation.fontUrl,
+              offerPngDownload: webAnnotation.offerPngDownload,
               helper: {
                 challenge: async () => {
                   throw new DOMException("Local access denied", "NotAllowedError");
