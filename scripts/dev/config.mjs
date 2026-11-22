@@ -137,9 +137,9 @@ function userStateRoot({ env, platform, home }) {
   return join(env.XDG_STATE_HOME || join(home, ".local", "state"), "chalk");
 }
 
-function devRequiredTools(profile, env, orb) {
+function devRequiredTools(profile, env, localOrbSfu) {
   const hasCloudflareCredentials = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
-  return orb || hasCloudflareCredentials ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile];
+  return localOrbSfu || hasCloudflareCredentials ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile];
 }
 
 export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
@@ -160,6 +160,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   const publicOrigin = publicOriginFromEnv(env);
   // The Orb launcher writes its metadata before starting the stack; a tunnel URL is not an Orb.
   const orb = existsSync(join(home, ".orb.json"));
+  // The public preview proxies HTTPS, not the local SFU's native ICE sockets.
+  const localOrbSfu = orb && env.CHALK_DEV_ORB_LOCAL_SFU === "1";
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
   return {
@@ -199,7 +201,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     ports,
     publicOrigin,
     orb,
-    mediaPlane: orb ? chalkSfuPlane : cloudflareSfuPlane,
+    localOrbSfu,
+    mediaPlane: localOrbSfu ? chalkSfuPlane : cloudflareSfuPlane,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
@@ -208,7 +211,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || devRequiredTools(profile, env, orb),
+    requiredTools: requiredTools || devRequiredTools(profile, env, localOrbSfu),
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),
