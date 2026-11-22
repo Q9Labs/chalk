@@ -76,6 +76,27 @@ describe("baked stroke frame evidence", () => {
     expect(frameProvesStroke(raster(50), proof)).toBe(false);
   });
 
+  it("hands off a thin highlighter when the decoded blend is a few RGB levels stronger than the raster estimate", () => {
+    const baseline = raster(0, { dark: 0, bright: 0, alpha: 255 });
+    for (let offset = 0; offset < baseline.data.length; offset += 4) {
+      baseline.data.set([25, 27, 31, 255], offset);
+    }
+    const ink = stencil(254);
+    const baked = { ...baseline, data: baseline.data.slice() };
+    const tooStrong = { ...baseline, data: baseline.data.slice() };
+    for (let x = 2; x <= 9; x++) {
+      const offset = (6 * ink.width + x) * 4;
+      ink.data.set([38, 150, 93, 68], offset);
+      baked.data.set([29, 64, 50, 255], offset);
+      tooStrong.data.set([30, 75, 55, 255], offset);
+    }
+    const proof = makeStrokeProof(baseline, ink);
+    if (!proof) throw new Error("Fixture has no readable stroke");
+    expect(frameProvesStroke(baseline, proof)).toBe(false);
+    expect(frameProvesStroke(baked, proof)).toBe(true);
+    expect(frameProvesStroke(tooStrong, proof)).toBe(false);
+  });
+
   it("does not qualify unrelated background changes or an incompatible replacement frame", () => {
     const proof = proofFor();
     const strongInk = raster(173, { dark: 37, bright: 208, alpha: 255 });

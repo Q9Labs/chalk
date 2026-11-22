@@ -34,9 +34,9 @@ function matchesInk(observed: Color, { before, painted }: Sample): boolean {
   const green = painted[1] - before[1];
   const blue = painted[2] - before[2];
   const strength = ((observed[0] - before[0]) * red + (observed[1] - before[1]) * green + (observed[2] - before[2]) * blue) / (red * red + green * green + blue * blue);
-  // A thin stroke can land between two decoded pixels. That changes its
-  // coverage, not its direction in RGB away from the pre-stroke background.
-  if (strength < 0.65 || strength > 1.4) return false;
+  // Resampling changes coverage, and codec rounding can add a few RGB levels
+  // to the blend. Keep that allowance in RGB units, not relative to opacity.
+  if (strength < 0.65 || (strength - 1.4) * distance(before, painted) > 2) return false;
   return distance(observed, mix(before, painted, strength)) <= Math.min(18, distance(observed, before) * 0.3);
 }
 
