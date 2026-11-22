@@ -12751,6 +12751,25 @@
         }
       }
     },
+    "/v1/whiteboard/files/availability": {
+      "get": {
+        "operationId": "getWhiteboardFileAvailability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardFileAvailability"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "summary": "Get whiteboard file availability"
+      }
+    },
     "/v1/whiteboard/files/{fileId}/download": {
       "get": {
         "operationId": "getWhiteboardFileDownload",
@@ -18048,6 +18067,16 @@
           }
         },
         "required": ["api_version", "created_at", "enabled", "event_types", "id", "name", "revision", "secret", "tenant_id", "updated_at", "url_redacted"],
+        "type": "object"
+      },
+      "WhiteboardFileAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": ["available"],
         "type": "object"
       },
       "WhiteboardFileDownload": {

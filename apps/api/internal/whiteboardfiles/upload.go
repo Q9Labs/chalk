@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,12 +13,12 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"golang.org/x/image/webp"
 )
 
 const (
@@ -130,6 +129,14 @@ func (s Service) Finalize(ctx context.Context, request FileRequest, sha256Hex st
 }
 
 func (s Service) verifyObject(ctx context.Context, file Upload) (string, error) {
+	// Bound concurrent allocations from raster decoders, not just the size of
+	// each image. Already-ready retries never enter the decoder.
+	select {
+	case s.verifySlots <- struct{}{}:
+		defer func() { <-s.verifySlots }()
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 	object, err := s.objects.GetObject(ctx, file.ObjectKey)
 	if err != nil {
 		return "", fmt.Errorf("read whiteboard upload: %w", err)
@@ -138,74 +145,55 @@ func (s Service) verifyObject(ctx context.Context, file Upload) (string, error) 
 	if object.Size != file.ByteLength || object.ContentType != file.MIMEType || strings.TrimSpace(object.ETag) == "" {
 		return "", ErrFileTransferFailed
 	}
-	stream := &io.LimitedReader{R: object.Body, N: file.ByteLength + 1}
-	hash := sha256.New()
-	body := io.TeeReader(stream, hash)
-	if err := validateImageDimensions(body, file.MIMEType); err != nil {
-		return "", err
+	body, err := io.ReadAll(io.LimitReader(object.Body, file.ByteLength+1))
+	if err != nil {
+		return "", fmt.Errorf("read whiteboard upload body: %w", err)
 	}
-	if _, err := io.Copy(io.Discard, body); err != nil {
-		return "", fmt.Errorf("hash whiteboard upload: %w", err)
-	}
-	if stream.N != 1 || !bytes.Equal(hash.Sum(nil), file.SHA256[:]) {
+	if int64(len(body)) != file.ByteLength || sha256.Sum256(body) != file.SHA256 {
 		return "", ErrFileTransferFailed
+	}
+	if err := validateImage(body, file.MIMEType); err != nil {
+		return "", err
 	}
 	return object.ETag, nil
 }
 
-func validateImageDimensions(body io.Reader, mimeType string) error {
-	var dimensions image.Config
-	var err error
+func validateImage(body []byte, mimeType string) error {
+	var config func(io.Reader) (image.Config, error)
+	var decode func(io.Reader) (image.Image, error)
 	switch mimeType {
 	case "image/png":
-		dimensions, err = png.DecodeConfig(body)
+		config, decode = png.DecodeConfig, png.Decode
 	case "image/jpeg":
-		dimensions, err = jpeg.DecodeConfig(body)
+		config, decode = jpeg.DecodeConfig, jpeg.Decode
 	case "image/gif":
-		dimensions, err = gif.DecodeConfig(body)
+		config, decode = gif.DecodeConfig, gif.Decode
 	case "image/webp":
-		dimensions, err = webpConfig(body)
+		config, decode = webp.DecodeConfig, webp.Decode
 	default:
 		return ErrFileTransferFailed
 	}
-	const maxDimension, maxPixels = 16_384, 16_777_216
-	if err != nil || dimensions.Width <= 0 || dimensions.Height <= 0 ||
-		dimensions.Width > maxDimension || dimensions.Height > maxDimension ||
-		dimensions.Width*dimensions.Height > maxPixels {
+	dimensions, err := config(bytes.NewReader(body))
+	if err != nil || !boundedImageDimensions(dimensions.Width, dimensions.Height) {
+		return ErrFileTransferFailed
+	}
+	if mimeType == "image/webp" {
+		// The raster decoder reads still pictures, so validate an animation's
+		// first displayable frame as a still WebP without altering the upload.
+		body, err = firstWebPFrame(body, dimensions)
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := decode(bytes.NewReader(body)); err != nil {
 		return ErrFileTransferFailed
 	}
 	return nil
 }
 
-func webpConfig(body io.Reader) (image.Config, error) {
-	var header [30]byte
-	n, err := io.ReadFull(body, header[:])
-	// VP8L headers are five bytes rather than ten.
-	if (err != nil && !errors.Is(err, io.ErrUnexpectedEOF)) || n < 25 || http.DetectContentType(header[:n]) != "image/webp" {
-		return image.Config{}, ErrFileTransferFailed
-	}
-	switch string(header[12:16]) {
-	case "VP8X":
-		if n == len(header) {
-			return image.Config{
-				Width:  1 + int(binary.LittleEndian.Uint32(header[23:27])>>8),
-				Height: 1 + int(binary.LittleEndian.Uint32(header[26:30])>>8),
-			}, nil
-		}
-	case "VP8L":
-		if header[20] == 0x2f {
-			bits := binary.LittleEndian.Uint32(header[21:25])
-			return image.Config{Width: 1 + int(bits&0x3fff), Height: 1 + int((bits>>14)&0x3fff)}, nil
-		}
-	case "VP8 ":
-		if n == len(header) && bytes.Equal(header[23:26], []byte{0x9d, 0x01, 0x2a}) {
-			return image.Config{
-				Width:  int(binary.LittleEndian.Uint16(header[26:28]) & 0x3fff),
-				Height: int(binary.LittleEndian.Uint16(header[28:30]) & 0x3fff),
-			}, nil
-		}
-	}
-	return image.Config{}, ErrFileTransferFailed
+func boundedImageDimensions(width, height int) bool {
+	const maxDimension, maxPixels = 16_384, 16_777_216
+	return width > 0 && height > 0 && width <= maxDimension && height <= maxDimension && width*height <= maxPixels
 }
 
 func (r FileRequest) valid() bool {
