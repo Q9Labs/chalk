@@ -287,7 +287,12 @@ case "${1:-} ${2:-}" in
       printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL" >&2
       exit 1
     fi
+    if [[ -n "${FAKE_CUTOVER_REFUSAL_AFTER_STOP:-}" ]] && grep -q '^systemctl .*stop ' "${FAKE_COMMAND_LOG:?}"; then
+      printf 'database migration failed: %s\n' "$FAKE_CUTOVER_REFUSAL_AFTER_STOP" >&2
+      exit 1
+    fi
     ;;
+  "network exists") [[ "${FAKE_NO_NETWORK:-false}" != true ]] ;;
   "secret inspect") grep -Fxq -- "${3:?}" "$state" ;;
   "secret rm")
     temporary="${state}.tmp"
@@ -1270,12 +1275,47 @@ jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null
 : >"${fixture_root}/commands.log"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
+# A host that has never run a release has nothing live to protect, so it deploys without the check.
+fresh_state="${fixture_root}/cutover-fresh-state"
+mkdir -p "$fresh_state"
+run_controller "$fresh_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >/dev/null || fail "a first deploy was blocked by the cutover check"
+! grep -Fq -- '--check-cutover' "${fixture_root}/commands.log" || fail "a first deploy ran the cutover check"
+# A host with a running release must be able to ask: a missing network is a failure, not a skip.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_NO_NETWORK=true run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-no-network.log" 2>&1; then
+  fail "a missing runtime network skipped the cutover check"
+fi
+grep -Fq 'cutover check needs the chalk-runtime network' "${fixture_root}/cutover-no-network.log" || fail "the missing network was not reported"
+! grep -q '^systemctl' "${fixture_root}/commands.log" || fail "the runtime was touched before the cutover check could run"
+# An Episode that starts between the first check and the stop is caught by the second check, and the stable release comes back.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_CUTOVER_REFUSAL_AFTER_STOP='1 active or ending Cloudflare Episodes: end them before retiring Cloudflare media' run_controller "$stable_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >"${fixture_root}/cutover-raced.log" 2>&1; then
+  fail "a Cloudflare Episode started after the first check did not stop the cutover"
+fi
+grep -Fq 'database is not ready for the Cloudflare retirement' "${fixture_root}/cutover-raced.log" || fail "the second cutover refusal was not reported"
+! grep -Fxq 'chalk-managed-migrator-database-url' "${fixture_root}/secret-state" || fail "the second cutover check left the migration credential registered"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "a raced cutover changed the active release"
+# With a running release, a ready database passes both checks: one before the runtime stops and one after.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
 cutover_state="${fixture_root}/cutover-state"
 mkdir -p "$cutover_state"
+make_request base "${fixture_root}/base-request.json"
+make_manifest base >"${fixture_root}/base-manifest.json"
+run_controller "$cutover_state" "${fixture_root}/base-request.json" "${fixture_root}/base-manifest.json" ok >/dev/null || fail "the base release did not deploy"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
 run_controller "$cutover_state" "${fixture_root}/cutover-request.json" "${fixture_root}/cutover-manifest.json" ok >/dev/null || fail "a ready database blocked the cutover"
 check_line="$(grep -n -- '--check-cutover' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
 stop_line="$(grep -n '^systemctl .*stop ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
 [[ -n "$check_line" && "$check_line" -lt "$stop_line" ]] || fail "the cutover check did not run before the runtime stopped"
+[[ "$(grep -c -- '--check-cutover' "${fixture_root}/commands.log")" == 2 ]] || fail "the cutover check did not run again once the runtime stopped"
 jq -e '.release_id == "cutover"' "${cutover_state}/active-release.json" >/dev/null || fail "a ready cutover did not become active"
 # A job re-run repeats a deploy this host already promoted: it passes on health alone and changes nothing.
 retry_state="${fixture_root}/retry-state"

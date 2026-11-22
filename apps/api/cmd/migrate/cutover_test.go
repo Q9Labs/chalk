@@ -49,10 +49,14 @@ func TestCheckCutover(t *testing.T) {
 	const legacy = `{"media_plane_binding":{"provider":"cf_sfu"}}`
 	for _, test := range []struct {
 		name, status, snapshot, jobKind, jobState string
-		paused                                    bool
+		paused, applied, noSwitch                 bool
 		refusal                                   string
 	}{
 		{name: "ready", status: "ended", snapshot: legacy},
+		{name: "live Cloudflare Episode after the retirement", status: "active", snapshot: legacy, applied: true, refusal: "active or ending Cloudflare Episodes"},
+		{name: "unfinished capture after the retirement", status: "ended", snapshot: legacy, jobKind: "capture", jobState: "pending", applied: true, refusal: "unfinished capture jobs"},
+		{name: "pause after the retirement", status: "ended", snapshot: legacy, paused: true, applied: true},
+		{name: "database that predates the switch", status: "ended", snapshot: legacy, noSwitch: true},
 		{name: "live Cloudflare Episode", status: "active", snapshot: legacy, refusal: "active or ending Cloudflare Episodes"},
 		{name: "ending Episode predating the binding", status: "ending", snapshot: `{}`, refusal: "active or ending Cloudflare Episodes"},
 		{name: "live Chalk SFU Episode", status: "active", snapshot: `{"media_plane_binding":{"provider":"chalk_sfu"}}`},
@@ -74,33 +78,24 @@ func TestCheckCutover(t *testing.T) {
 						case when $6 = 'leased' then 'token' end, case when $6 = 'leased' then 'owner' end, case when $6 = 'leased' then now() end)`,
 					jobID, tenantID, episodeID, recordingID, test.jobKind, test.jobState)
 			}
+			execute(t, tx, `delete from goose_db_version where version_id = $1`, retireVersion)
+			if test.applied {
+				execute(t, tx, `insert into goose_db_version (version_id, is_applied) values ($1, true)`, retireVersion)
+			}
 			if test.paused {
 				execute(t, tx, `update media_plane_kill_switch set paused = true where singleton`)
 			}
-			err := checkCutover(t.Context(), tx)
+			if test.noSwitch {
+				execute(t, tx, `drop table media_plane_kill_switch`)
+			}
+			err := verifyCutover(t.Context(), tx)
 			switch {
 			case test.refusal == "" && err != nil:
-				t.Fatalf("checkCutover = %v, want ready", err)
+				t.Fatalf("verifyCutover = %v, want ready", err)
 			case test.refusal != "" && (err == nil || !strings.Contains(err.Error(), test.refusal)):
-				t.Fatalf("checkCutover = %v, want %q", err, test.refusal)
+				t.Fatalf("verifyCutover = %v, want %q", err, test.refusal)
 			}
 		})
-	}
-}
-
-func TestVerifyCutoverSkipsAfterTheRetirementMigration(t *testing.T) {
-	tx := cutoverTx(t)
-	execute(t, tx, `insert into tenants (id, name) values ($1, 'Cutover check')`, tenantID)
-	execute(t, tx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, 'Cutover check', 'cutover-check', 'chalk_sfu')`, spaceID, tenantID)
-	execute(t, tx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{}'::jsonb)`, episodeID, spaceID, tenantID)
-
-	execute(t, tx, `delete from goose_db_version where version_id = $1`, retireVersion)
-	if err := verifyCutover(t.Context(), tx); err == nil || !strings.Contains(err.Error(), "active or ending Cloudflare Episodes") {
-		t.Fatalf("before the migration: verifyCutover = %v, want a refusal", err)
-	}
-	execute(t, tx, `insert into goose_db_version (version_id, is_applied) values ($1, true)`, retireVersion)
-	if err := verifyCutover(t.Context(), tx); err != nil {
-		t.Fatalf("after the migration: verifyCutover = %v, want nil", err)
 	}
 }
 

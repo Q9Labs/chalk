@@ -92,17 +92,23 @@ if env_enabled CHALK_RECORDING_ENABLED; then
 fi
 
 # A workflow rollback runs the previous release's images against the current inputs, and that release
-# still reads the Cloudflare settings. Keep them until the release after this one has been promoted.
-case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" in
-  cf_sfu) ;;
-  chalk_sfu)
-    env_enabled CHALK_SFU_CAPTURE_ENABLED || fail "CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu needs CHALK_SFU_CAPTURE_ENABLED=true so the previous release still boots on rollback"
-    ;;
-  *) fail "CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu: a rollback to the previous release reads it" ;;
+# still reads the Cloudflare settings. Production keeps them until the release after this one is promoted.
+legacy_required=false
+case "$(env_value "${api_env}" CHALK_API_ENV || true)" in
+  production) legacy_required=true ;;
 esac
-require_env CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE
-require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
-require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
+if [[ "${legacy_required}" == true ]]; then
+  case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" in
+    cf_sfu | chalk_sfu) ;;
+    *) fail "CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu: a rollback to the previous release reads it" ;;
+  esac
+  case "$(env_value "${api_env}" CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE || true)" in
+    cf_sfu | chalk_sfu) ;;
+    *) fail "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu: a rollback to the previous release reads it" ;;
+  esac
+  require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
+  require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
+fi
 
 # TURN can serve Chalk SFU peers on networks that cannot reach its public media port.
 turn_key_set=false
@@ -110,11 +116,9 @@ turn_token_set=false
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
 env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
 [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
-case "$(env_value "${api_env}" CHALK_API_ENV || true)" in
-  nightly | production)
-    require_env CHALK_CLOUDFLARE_TURN_KEY_ID
-    require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
-    ;;
-esac
+if [[ "${legacy_required}" == true ]]; then
+  require_env CHALK_CLOUDFLARE_TURN_KEY_ID
+  require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
+fi
 
 echo "PASS API runtime contract"

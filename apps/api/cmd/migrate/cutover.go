@@ -11,36 +11,22 @@ type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+const retireVersion = 20261121120000
+
 // legacyEpisode matches an Episode created before Chalk SFU: no binding key, or a Cloudflare provider.
 // Keep it in step with the guard in 20261121120000_retire_cloudflare_media_plane.sql.
 const legacyEpisode = `(not (e.config_snapshot ? 'media_plane_binding')
 	or e.config_snapshot #>> '{media_plane_binding,provider}' in ('cf_sfu', 'cf_rtk'))`
 
-const retireVersion = 20261121120000
-
-// verifyCutover runs checkCutover only while the retirement migration is still to be applied, so a
-// later deploy is never refused over a state the cutover no longer depends on.
+// verifyCutover refuses a Cloudflare retirement the database is not ready for. It only reads, so the
+// deploy controller runs it before it stops the runtime and again once the runtime is stopped; the
+// migration keeps its own transactional guard for live Episodes.
+//
+// Legacy Episodes and their capture jobs are refused on every deploy: the release has no Cloudflare
+// adapter, even when a rollback has put the old API back after the migration was applied. A paused
+// new-Episodes switch is refused only until the retirement is applied, so an operator pause during an
+// incident never blocks a later hotfix.
 func verifyCutover(ctx context.Context, database rowQuerier) error {
-	var tracked bool
-	if err := database.QueryRowContext(ctx, `select to_regclass('goose_db_version') is not null`).Scan(&tracked); err != nil {
-		return errors.New("inspect migration history")
-	}
-	if !tracked {
-		return nil
-	}
-	var applied bool
-	if err := database.QueryRowContext(ctx, `select exists (select 1 from goose_db_version where version_id = $1 and is_applied)`, retireVersion).Scan(&applied); err != nil {
-		return errors.New("inspect migration history")
-	}
-	if applied {
-		return nil
-	}
-	return checkCutover(ctx, database)
-}
-
-// checkCutover refuses a Cloudflare retirement the database is not ready for. It only reads, so the
-// deploy controller runs it before it stops the runtime; the migration keeps its own transactional guard.
-func checkCutover(ctx context.Context, database rowQuerier) error {
 	var live int
 	if err := database.QueryRowContext(ctx, `select count(*) from episodes e
 		where e.status in ('active', 'ending') and `+legacyEpisode).Scan(&live); err != nil {
@@ -60,13 +46,48 @@ func checkCutover(ctx context.Context, database rowQuerier) error {
 		return fmt.Errorf("%d unfinished capture jobs for Cloudflare Episodes: let them finish or cancel them first", unfinished)
 	}
 
+	pending, err := retirementPending(ctx, database)
+	if err != nil || !pending {
+		return err
+	}
+	return checkNewEpisodesResumed(ctx, database)
+}
+
+func retirementPending(ctx context.Context, database rowQuerier) (bool, error) {
+	var tracked bool
+	if err := database.QueryRowContext(ctx, `select to_regclass('goose_db_version') is not null`).Scan(&tracked); err != nil || !tracked {
+		return false, wrapInspect(err, "migration history")
+	}
+	var applied bool
+	if err := database.QueryRowContext(ctx, `select exists (select 1 from goose_db_version where version_id = $1 and is_applied)`, retireVersion).Scan(&applied); err != nil {
+		return false, wrapInspect(err, "migration history")
+	}
+	return !applied, nil
+}
+
+// checkNewEpisodesResumed reads the switch in its own query: Postgres resolves a relation name before
+// it evaluates to_regclass, so one statement would fail on a database that predates the table.
+func checkNewEpisodesResumed(ctx context.Context, database rowQuerier) error {
+	var exists bool
+	if err := database.QueryRowContext(ctx, `select to_regclass('media_plane_kill_switch') is not null`).Scan(&exists); err != nil {
+		return wrapInspect(err, "the new-Episodes switch")
+	}
+	if !exists {
+		return nil
+	}
 	var paused bool
-	if err := database.QueryRowContext(ctx, `select to_regclass('media_plane_kill_switch') is not null
-		and coalesce((select paused from media_plane_kill_switch where singleton), false)`).Scan(&paused); err != nil {
-		return errors.New("inspect the new-Episodes switch")
+	if err := database.QueryRowContext(ctx, `select coalesce((select paused from media_plane_kill_switch where singleton), false)`).Scan(&paused); err != nil {
+		return wrapInspect(err, "the new-Episodes switch")
 	}
 	if paused {
 		return errors.New("new Episodes are paused: resume them before the cutover so the release starts in a known state")
 	}
 	return nil
+}
+
+func wrapInspect(err error, what string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("inspect %s", what)
 }

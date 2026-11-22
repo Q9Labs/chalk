@@ -50,8 +50,13 @@ for legacy in CHALK_DEFAULT_MEDIA_PLANE CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE 
 done
 sed 's/^CHALK_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_DEFAULT_MEDIA_PLANE=other/' "$fixture/full.env" > "$fixture_api"
 check_refusal 'CHALK_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
+sed 's/^CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu$/CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=other/' "$fixture/full.env" > "$fixture_api"
+check_refusal 'CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE must stay cf_sfu or chalk_sfu'
 grep -v '^CHALK_CLOUDFLARE_TURN_KEY_ID=' "$fixture/full.env" > "$fixture_api"
-check_refusal 'CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together'
+check_refusal 'CHALK_CLOUDFLARE_TURN_KEY_ID'
+# Only production keeps a rollback target: nightly may drop the legacy settings.
+grep -v -e '^CHALK_DEFAULT_MEDIA_PLANE=' -e '^CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=' -e '^CHALK_CLOUDFLARE_' "$fixture/full.env" | sed 's/^CHALK_API_ENV=production$/CHALK_API_ENV=nightly/' > "$fixture_api"
+check_refusal 'sync.env'
 
 for value in true yes on 1 ' YES '; do
   sed "s/^CHALK_SFU_ENABLED=true$/CHALK_SFU_ENABLED=$value/" "$fixture/full.env" > "$fixture_api"
