@@ -125,12 +125,27 @@ export async function calibrateWindow(options: {
     probing = true;
     const probe = await options.start(deadline);
     await options.painted(probe.nonce, deadline);
+    // Capture time on the local clone uses the same clock as the browser's
+    // receipt of the ACK. Leave 1 ms for timestamp rounding; presentation
+    // time and callback arrival can both be late for a pre-paint frame.
+    let lastCapture = performance.now() + 1;
     const sample = probeReader(video);
     let frames = 0;
     while (frames < 4) {
-      await nextFrame(video, deadline);
-      if (video.videoWidth !== width || video.videoHeight !== height) return;
-      frames = sample(probe).every((mark) => mark.matches === 0) ? frames + 1 : 0;
+      await nextFrame(video, deadline, (_, { captureTime }) => {
+        if (
+          video.videoWidth !== width || video.videoHeight !== height || captureTime === undefined ||
+          !Number.isFinite(captureTime) || captureTime > performance.now()
+        ) {
+          throw new Error("Chalk could not verify the window frame's capture time or size.");
+        }
+        if (captureTime <= lastCapture) {
+          frames = 0;
+          return;
+        }
+        lastCapture = captureTime;
+        frames = sample(probe).every((mark) => mark.matches === 0) ? frames + 1 : 0;
+      });
     }
     await options.complete(probe.nonce, deadline);
     completed = true;
@@ -231,16 +246,21 @@ function cancelled(signal: AbortSignal): Promise<never> {
   });
 }
 
-async function nextFrame(video: HTMLVideoElement, signal: AbortSignal): Promise<void> {
+async function nextFrame(video: HTMLVideoElement, signal: AbortSignal, inspect?: VideoFrameRequestCallback): Promise<void> {
   signal.throwIfAborted();
   await new Promise<void>((resolve, reject) => {
     function abort() {
       video.cancelVideoFrameCallback(frame);
       reject(signal.reason);
     }
-    const frame = video.requestVideoFrameCallback(() => {
+    const frame = video.requestVideoFrameCallback((now, metadata) => {
       signal.removeEventListener("abort", abort);
-      resolve();
+      try {
+        inspect?.(now, metadata);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     });
     signal.addEventListener("abort", abort, { once: true });
   });

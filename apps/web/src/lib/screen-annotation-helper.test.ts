@@ -41,7 +41,9 @@ test("a loopback listener without native confirmation never receives a capture d
   expect(statuses).not.toContain("ready");
 });
 
-test("window exclusion does not complete before the renderer acknowledges the probe", async () => {
+function windowCalibration(captureTime?: (now: number) => number | undefined) {
+  const controller = new AbortController();
+  let callbacks = 0;
   const video = {
     style: {},
     videoWidth: 640,
@@ -49,7 +51,23 @@ test("window exclusion does not complete before the renderer acknowledges the pr
     setAttribute() {},
     remove() {},
     play: async () => {},
-    requestVideoFrameCallback: (callback: () => void) => setTimeout(callback, 0),
+    requestVideoFrameCallback: (callback: VideoFrameRequestCallback) => setTimeout(() => {
+      callbacks++;
+      if (callbacks > 5) {
+        controller.abort();
+        return;
+      }
+      const now = performance.now();
+      callback(now, {
+        captureTime: captureTime?.(now),
+        presentationTime: now,
+        expectedDisplayTime: now,
+        presentedFrames: callbacks,
+        mediaTime: callbacks / 60,
+        width: 640,
+        height: 360,
+      });
+    }, 5),
     cancelVideoFrameCallback: clearTimeout,
   };
   const context = { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(72 * 72 * 4) }) };
@@ -59,21 +77,56 @@ test("window exclusion does not complete before the renderer acknowledges the pr
     createElement: (name: string) => (name === "video" ? video : { getContext: () => context }),
   });
   const track = { enabled: true, readyState: "live", clone: () => ({ enabled: true, stop() {} }) } as MediaStreamTrack;
-  const complete = vi.fn(async () => {});
-  const paint = vi.fn(async () => { throw new Error("no renderer acknowledgement"); });
   const point = { x: 0.5, y: 0.5, rgb: [255, 0, 255] as [number, number, number] };
   const probe = { nonce: "A".repeat(22), points: [point, point, point] as [typeof point, typeof point, typeof point] };
-  const options: Parameters<typeof calibrateWindow>[0] = {
+  return {
     track,
-    signal: new AbortController().signal,
+    signal: controller.signal,
     verify: async () => true,
     start: async () => probe,
-    painted: paint,
-    complete,
-    abort: async () => {},
+    painted: vi.fn(async (_nonce: string, _signal: AbortSignal) => {
+      expect(track.enabled).toBe(false);
+    }),
+    complete: vi.fn(async () => {}),
+    abort: vi.fn(async () => {}),
   };
+}
+
+test("window exclusion does not complete before the renderer acknowledges the probe", async () => {
+  const options = windowCalibration(now => now);
+  options.painted.mockRejectedValueOnce(new Error("no renderer acknowledgement"));
   await calibrateWindow(options);
-  expect(complete).not.toHaveBeenCalled();
-  expect(track.enabled).toBe(true);
-  expect(paint).toHaveBeenCalledWith(probe.nonce, expect.any(AbortSignal));
+  expect(options.complete).not.toHaveBeenCalled();
+  expect(options.abort).toHaveBeenCalledOnce();
+  expect(options.track.enabled).toBe(true);
+  expect(options.painted).toHaveBeenCalledWith("A".repeat(22), expect.any(AbortSignal));
+});
+
+test("delayed pre-paint frames cannot prove window exclusion after acknowledgement", async () => {
+  let capturedBeforePaint = 0;
+  const options = windowCalibration(() => capturedBeforePaint);
+  options.painted.mockImplementationOnce(async () => {
+    capturedBeforePaint = performance.now() - 100;
+    expect(options.track.enabled).toBe(false);
+  });
+  await calibrateWindow(options);
+  expect(options.complete).not.toHaveBeenCalled();
+  expect(options.abort).toHaveBeenCalledOnce();
+  expect(options.track.enabled).toBe(true);
+});
+
+test("window exclusion fails closed without capture timestamps", async () => {
+  const options = windowCalibration();
+  await calibrateWindow(options);
+  expect(options.complete).not.toHaveBeenCalled();
+  expect(options.abort).toHaveBeenCalledOnce();
+  expect(options.track.enabled).toBe(true);
+});
+
+test("window exclusion can complete with four distinct post-paint captures", async () => {
+  const options = windowCalibration(now => now);
+  await calibrateWindow(options);
+  expect(options.complete).toHaveBeenCalledOnce();
+  expect(options.abort).not.toHaveBeenCalled();
+  expect(options.track.enabled).toBe(true);
 });

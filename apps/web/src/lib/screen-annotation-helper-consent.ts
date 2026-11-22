@@ -32,6 +32,8 @@ export async function startConsent() {
         attachmentHash,
       ].join("\n");
       const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(transcript))).slice(0, 4), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+      // The browser cannot verify a loopback responder's code signature.
+      // An explicitly approved same-user impostor is outside this boundary.
       const helperKey = await crypto.subtle.importKey("raw", decode(challenge.helperPublicKey), "Ed25519", false, ["verify"]);
       let lastSequence = 0;
       return {
