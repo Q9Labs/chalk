@@ -29,14 +29,19 @@ export function createNativeAnnotationCapture() {
         if (!permission && askAgain) {
           askAgain = false;
           permission = await new Promise((resolve) => {
-            Alert.alert("See marks over your screen?", "Allow Chalk to show marks while you’re in another app, or share without the overlay.", [
-              { text: "Share without overlay", style: "cancel", onPress: () => resolve(false) },
-              { text: "Open Android settings", onPress: () => resolve(overlay.requestPermission().catch(() => false)) },
-            ], { cancelable: true, onDismiss: () => resolve(false) });
+            Alert.alert(
+              "See marks over your screen?",
+              "Allow Chalk to show marks while you’re in another app, or share without the overlay.",
+              [
+                { text: "Share without overlay", style: "cancel", onPress: () => resolve(false) },
+                { text: "Open Android settings", onPress: () => resolve(overlay.requestPermission().catch(() => false)) },
+              ],
+              { cancelable: true, onDismiss: () => resolve(false) },
+            );
           });
         }
       }
-      const stream = Platform.OS === "android" ? await captureAndroidScreen() : (await mediaDevices.getDisplayMedia()) as unknown as MediaStream;
+      const stream = Platform.OS === "android" ? await captureAndroidScreen() : ((await mediaDevices.getDisplayMedia()) as unknown as MediaStream);
       const track = stream.getVideoTracks()[0];
       if (!track || !overlay) return stream;
 
@@ -73,9 +78,7 @@ export function createNativeAnnotationCapture() {
         const snapshot = annotation.getSnapshot();
         const local = client.getSnapshot();
         const state = snapshot.status === "ready" ? snapshot.state : null;
-        const active = state?.layer.burned_in === true &&
-          state.layer.publication_id === local.media.screenShare.publicationId &&
-          state.layer.sharer_id === local.self.participantId;
+        const active = state?.layer.burned_in === true && state.layer.publication_id === local.media.screenShare.publicationId && state.layer.sharer_id === local.self.participantId;
         overlay.render(
           track.id,
           JSON.stringify({ sharerId: local.self.participantId, paused: active ? state.paused : true, marks: active ? state.marks : [] }),

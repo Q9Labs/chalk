@@ -21,11 +21,7 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
 }
 
 /** Controls live in Chalk, not in the system ink window. */
-export function AndroidShareAnnotationControls({ annotation, publicationId, participantId }: {
-  readonly annotation: StageAnnotation;
-  readonly publicationId: string;
-  readonly participantId: string;
-}): React.JSX.Element | null {
+export function AndroidShareAnnotationControls({ annotation, publicationId, participantId }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string }): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
   const [showPolicy, setShowPolicy] = useState(false);
@@ -46,20 +42,36 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
     toasts.show({ kind: "error", dismissible: true, message: "Couldn’t confirm the mark action." });
   };
 
-  return <AnnotationDock>
-    <View style={styles.controls}>
-      <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
-      <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
-      {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
-    </View>
-    {showPolicy && state.access.can_manage_policy ? <View style={styles.controls}>
-      {([["Everyone", "everyone"], ["Only hosts", "hosts"], ["Picked people", "picked"]] as const).map(([label, policy]) =>
-        <ToolButton key={policy} label={label} selected={state.access.draw_policy === policy} onPress={() => {
-          setShowPolicy(false);
-          void run({ kind: "set_policy", policy });
-        }} />)}
-    </View> : null}
-  </AnnotationDock>;
+  return (
+    <AnnotationDock>
+      <View style={styles.controls}>
+        <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
+        <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
+        {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
+      </View>
+      {showPolicy && state.access.can_manage_policy ? (
+        <View style={styles.controls}>
+          {(
+            [
+              ["Everyone", "everyone"],
+              ["Only hosts", "hosts"],
+              ["Picked people", "picked"],
+            ] as const
+          ).map(([label, policy]) => (
+            <ToolButton
+              key={policy}
+              label={label}
+              selected={state.access.draw_policy === policy}
+              onPress={() => {
+                setShowPolicy(false);
+                void run({ kind: "set_policy", policy });
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </AnnotationDock>
+  );
 }
 
 const styles = StyleSheet.create({

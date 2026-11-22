@@ -17,6 +17,10 @@ final class ChalkProjectionWitness {
     this.cell = cell;
   }
 
+  ChalkProjectionWitness reversed() {
+    return new ChalkProjectionWitness(~challenge, width, height, cell);
+  }
+
   int x(int anchor) { return (anchor == 0 ? width / 8 : 7 * width / 8) - CELLS * cell / 2; }
   int y(int anchor) { return anchor == 0 ? height / 8 : 7 * height / 8; }
   boolean white(int anchor, int column) { return (challenge & (1 << (anchor * CELLS + column))) != 0; }
@@ -45,7 +49,9 @@ final class ChalkProjectionWitness {
           default -> y;
         };
         int value = Byte.toUnsignedInt(luma.get(rawY * stride + rawX));
-        if (white(anchor, column) ? value < 190 : value > 65) return false;
+        // The touch-through system window is composited at 80% opacity before I420
+        // conversion. Leave room for the background and limited-range luminance.
+        if (white(anchor, column) ? value < 160 : value > 95) return false;
       }
     }
     return true;

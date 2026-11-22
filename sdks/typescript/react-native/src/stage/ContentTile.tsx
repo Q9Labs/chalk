@@ -13,6 +13,7 @@ import type { Frame } from "../motion/MovingFrame";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { NameTag } from "../primitives/NameTag";
 import { ScreenAnnotationLayer } from "../screen-annotation/ScreenAnnotationLayer";
+import { AnnotationVideoView } from "../screen-annotation/AnnotationVideoView";
 import { AnnotationDock } from "../screen-annotation/AnnotationDock";
 import { matchLayer, type StageAnnotation } from "../screen-annotation/model";
 import { useNativeAnnotationSource } from "../screen-annotation/use-native-annotation-source";
@@ -64,7 +65,7 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
   return (
     <>
       <View style={[styles.box, { left: inner.x, top: inner.y, width: inner.width, height: inner.height, backgroundColor: colors.tile }]} testID="tile.content.screen">
-        {slot ?? (streamURL ? annotate ? <AnnotationScreenShare annotation={annotation} inner={inner} publicationId={publicationId} selfId={selfId} streamURL={streamURL} /> : <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} /> : null)}
+        {slot ?? (streamURL ? annotate && track ? <AnnotationScreenShare annotation={annotation} inner={inner} publicationId={publicationId} selfId={selfId} streamURL={streamURL} track={track} /> : <RtcVideoView objectFit="contain" streamURL={streamURL} style={StyleSheet.absoluteFill} /> : null)}
       </View>
       {mini ? <Pressable accessibilityLabel={`Show ${name} in spotlight`} accessibilityRole="button" onPress={onShowInSpotlight} style={StyleSheet.absoluteFill} testID="tile.content.open" /> : null}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -74,7 +75,7 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
   );
 }
 
-function AnnotationScreenShare({ annotation, inner, publicationId, selfId, streamURL }: { readonly annotation: StageAnnotation; readonly inner: Frame; readonly publicationId: string; readonly selfId: string; readonly streamURL: string }): React.JSX.Element {
+function AnnotationScreenShare({ annotation, inner, publicationId, selfId, streamURL, track }: { readonly annotation: StageAnnotation; readonly inner: Frame; readonly publicationId: string; readonly selfId: string; readonly streamURL: string; readonly track: MediaStreamTrack }): React.JSX.Element {
   const { client, actions, boardSaveEnabled } = annotation;
   const space = useSpaceClient();
   const selectBoardTransport = useCallback(() => space.whiteboard.transport(), [space]);
@@ -90,27 +91,33 @@ function AnnotationScreenShare({ annotation, inner, publicationId, selfId, strea
   const source = useNativeAnnotationSource(matched ? streamURL : null);
   const viewport = { x: 0, y: 0, width: inner.width, height: inner.height };
   const ownName = roster.find((person) => person.participantId === selfId)?.displayName ?? "";
-  const people = roster.filter((person) => person.participantId !== selfId).map((person) => ({
-    id: person.participantId,
-    name: person.displayName,
-    manages: person.capabilities.includes("manageWhiteboard"),
-    canDraw: access.permissions.find((permission) => permission.participantId === person.participantId)?.canDraw ??
-      (access.policy === "everyone" && person.capabilities.includes("drawWhiteboard")),
-  }));
-  return <ScreenAnnotationLayer
-    client={client}
-    actions={actions}
-    canSave={canSave}
-    boardSave={boardSaveEnabled && transport?.files.uploadFile ? { space, transport } : undefined}
-    publicationId={publicationId}
-    person={{ id: selfId, name: ownName }}
-    people={people}
-    source={source}
-    viewport={viewport}
-    video={(rect, onPresented) => <RtcVideoView annotationFrames={onPresented ? true : undefined} onAnnotationFrame={onPresented && ((event) => onPresented(event.nativeEvent))} objectFit="contain" streamURL={streamURL} style={[styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]} />}
-    controls={(tray: ReactNode) => tray ? <AnnotationDock>{tray}</AnnotationDock> : null}
-    reportError={(message) => toasts.show({ kind: "error", dismissible: true, message })}
-  />;
+  const people = roster
+    .filter((person) => person.participantId !== selfId)
+    .map((person) => ({
+      id: person.participantId,
+      name: person.displayName,
+      manages: person.capabilities.includes("manageWhiteboard"),
+      canDraw: access.permissions.find((permission) => permission.participantId === person.participantId)?.canDraw ?? (access.policy === "everyone" && person.capabilities.includes("drawWhiteboard")),
+    }));
+  return (
+    <ScreenAnnotationLayer
+      client={client}
+      actions={actions}
+      canSave={canSave}
+      boardSave={boardSaveEnabled && transport?.files.uploadFile ? { space, transport } : undefined}
+      publicationId={publicationId}
+      person={{ id: selfId, name: ownName }}
+      people={people}
+      source={source}
+      viewport={viewport}
+      video={(rect, onPresented, burnedIn) => {
+        const style = [styles.box, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }];
+        return burnedIn ? <AnnotationVideoView track={track} streamURL={streamURL} style={style} onPresented={onPresented} /> : <RtcVideoView objectFit="contain" streamURL={streamURL} style={style} />;
+      }}
+      controls={(tray: ReactNode) => (tray ? <AnnotationDock>{tray}</AnnotationDock> : null)}
+      reportError={(message) => toasts.show({ kind: "error", dismissible: true, message })}
+    />
+  );
 }
 
 const selectBoard = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.status;

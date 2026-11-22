@@ -1,11 +1,4 @@
-import type {
-  ScreenAnnotationCommand,
-  ScreenAnnotationDraft,
-  ScreenAnnotationPoint,
-  ScreenAnnotationPresence,
-  ScreenAnnotationState,
-  ScreenAnnotationTarget,
-} from "@q9labsai/chalk-client";
+import type { ScreenAnnotationCommand, ScreenAnnotationDraft, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import { LASER_TRAIL_MS, NATIVE_INK_PROOF_TIMEOUT_MS } from "@q9labsai/chalk-screen-annotation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, StyleSheet, TextInput, View } from "react-native";
@@ -15,10 +8,7 @@ import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
 import { AnnotationCanvas, type AnnotationCanvasHandle } from "./AnnotationCanvas";
 import { ScreenAnnotationToolbar, ToolButton, type ScreenAnnotationToolbarProps } from "./ScreenAnnotationToolbar";
-import {
-  boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame,
-  type Ink, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationSource,
-} from "./model";
+import { boundedNote, canCapture, hasTarget, initialViewport, matchLayer, targetFor, visibleCommittedMarks, visibleFrame, type Ink, type ScreenAnnotationActions, type ScreenAnnotationOptions, type ScreenAnnotationSource } from "./model";
 import { saveNativeAnnotationToBoard, type NativeAnnotationBoard } from "./save-to-board";
 import { shareAnnotationPng } from "./export-native-png";
 import { useAnnotationInput, type TextAnchor } from "./use-annotation-input";
@@ -33,7 +23,7 @@ export type ScreenAnnotationLayerProps = ScreenAnnotationOptions & {
   readonly source: ScreenAnnotationSource | null;
   readonly viewport: Frame;
   /** Render the video in exactly this native view rectangle, without another transform. */
-  readonly video: (frame: Frame, onPresented?: (frame: PresentedAnnotationFrame) => void) => ReactNode;
+  readonly video: (frame: Frame, onPresented?: (frame: PresentedAnnotationFrame) => void, burnedIn?: boolean) => ReactNode;
   readonly controls?: (tray: ReactNode) => ReactNode;
   readonly reportError?: (message: string) => void;
 };
@@ -101,9 +91,14 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
       const now = client.serverNowMs();
       const id = draft.mark_id;
       canvas.current?.holdInk({
-        type: "annotation_presence", layer_id: frozen.layerId, fence: frozen.fence,
+        type: "annotation_presence",
+        layer_id: frozen.layerId,
+        fence: frozen.fence,
         author: { participant_id: person.id, display_name: person.name, color: live.access.default_color },
-        server_at_ms: now, expires_at_ms: now + NATIVE_INK_PROOF_TIMEOUT_MS, cursor: null, draft,
+        server_at_ms: now,
+        expires_at_ms: now + NATIVE_INK_PROOF_TIMEOUT_MS,
+        cursor: null,
+        draft,
       });
       setFinishingInk(true);
       clearTimeout(finishTimer.current);
@@ -152,9 +147,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   });
 
   const local = input.local?.fence === target.fence && allowed && open ? input.local : null;
-  const localTouch = state.layer.burned_in && local?.cursor
-    ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS }
-    : undefined;
+  const localTouch = state.layer.burned_in && local?.cursor ? { point: local.cursor.point, untilMs: local.server_at_ms + LASER_TRAIL_MS } : undefined;
   const localPreview = local && (state.layer.burned_in ? { ...local, cursor: null } : local);
   const waiting = committing && hasTarget(state, committing.target) && (committing.untilRevision === undefined || state.revision < committing.untilRevision);
   const pending: ScreenAnnotationPresence | null =
@@ -197,22 +190,39 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     }
   }
 
-  const save: ExportAction | null = canSave && source.captureFrame ? actions?.saveToWhiteboard ?? (boardSave ? async ({ image, ...frame }) => {
-    if (typeof image !== "string" || !canvas.current) throw new Error("No native frame");
-    const measureText = await canvas.current.measure({ ...frame, image });
-    await saveNativeAnnotationToBoard(boardSave, { ...frame, image }, measureText, () => hasTarget(matchLayer(client, publicationId), target));
-  } : null) : null;
-  const download: ExportAction | null = source.captureFrame ? actions?.downloadPng ?? (async ({ image, ...frame }) => {
-    if (!canvas.current || typeof image !== "string") throw new Error("No native frame");
-    await shareAnnotationPng(await canvas.current.png({ ...frame, image }));
-  }) : null;
-  const scene = useMemo(() => ({
-    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-    clip: { x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height },
-    marks: state.marks, revision: state.revision, burnedIn: state.layer.burned_in, paused: state.paused, sharerId: state.layer.sharer_id,
-  }), [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.revision, state.layer.burned_in, state.paused, state.layer.sharer_id]);
-  const tray = ready
-    ? open ? <ScreenAnnotationToolbar
+  const save: ExportAction | null =
+    canSave && source.captureFrame
+      ? (actions?.saveToWhiteboard ??
+        (boardSave
+          ? async ({ image, ...frame }) => {
+              if (typeof image !== "string" || !canvas.current) throw new Error("No native frame");
+              const measureText = await canvas.current.measure({ ...frame, image });
+              await saveNativeAnnotationToBoard(boardSave, { ...frame, image }, measureText, () => hasTarget(matchLayer(client, publicationId), target));
+            }
+          : null))
+      : null;
+  const download: ExportAction | null = source.captureFrame
+    ? (actions?.downloadPng ??
+      (async ({ image, ...frame }) => {
+        if (!canvas.current || typeof image !== "string") throw new Error("No native frame");
+        await shareAnnotationPng(await canvas.current.png({ ...frame, image }));
+      }))
+    : null;
+  const scene = useMemo(
+    () => ({
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      clip: { x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height },
+      marks: state.marks,
+      revision: state.revision,
+      burnedIn: state.layer.burned_in,
+      paused: state.paused,
+      sharerId: state.layer.sharer_id,
+    }),
+    [rect.x, rect.y, rect.width, rect.height, viewport.x, viewport.y, viewport.width, viewport.height, state.marks, state.revision, state.layer.burned_in, state.paused, state.layer.sharer_id],
+  );
+  const tray = ready ? (
+    open ? (
+      <ScreenAnnotationToolbar
         state={state}
         participantId={person.id}
         people={people}
@@ -239,38 +249,39 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
     setReady(value);
   };
 
-  return <>
-    {video(rect, state.layer.burned_in && (open || finishingInk) ? onPresented : undefined)}
-    <AnnotationCanvas
-      ref={canvas}
-      rendererUrl={rendererUrl}
-      onReady={setCanvasReady}
-      onHit={onHit}
-      scene={scene}
-      nowMs={nowMs}
-      localTouch={localTouch}
-      presence={[...(state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id)), ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])]}
-    />
-    {open && allowed ? <View
-      accessible={false}
-      style={StyleSheet.absoluteFill}
-      testID="annotation.surface"
-      onStartShouldSetResponder={() => true}
-      onResponderStart={input.onStart}
-      onResponderMove={input.onMove}
-      onResponderEnd={input.onEnd}
-      onResponderTerminate={input.cancel}
-    /> : null}
-    {controls ? controls(tray) : <View pointerEvents="box-none" style={styles.defaultTray}>{tray}</View>}
-    {textAnchor && hasTarget(state, textAnchor.target) && allowed ? <AnnotationNote
-      onClose={() => setTextAnchor(null)}
-      onSave={(text, note) => {
-        const { at, draft, target: frozen } = textAnchor;
-        setTextAnchor(null);
-        commit({ ...draft, shape: { kind: "text", at, text, note } }, frozen);
-      }}
-    /> : null}
-  </>;
+  return (
+    <>
+      {video(rect, state.layer.burned_in && (open || finishingInk) ? onPresented : undefined, state.layer.burned_in)}
+      <AnnotationCanvas
+        ref={canvas}
+        rendererUrl={rendererUrl}
+        onReady={setCanvasReady}
+        onHit={onHit}
+        scene={scene}
+        nowMs={nowMs}
+        localTouch={localTouch}
+        presence={[...(state.layer.burned_in ? [] : presence.filter(({ author }) => author.participant_id !== person.id)), ...(pending ? [pending] : []), ...(localPreview ? [localPreview] : [])]}
+      />
+      {open && allowed ? <View accessible={false} style={StyleSheet.absoluteFill} testID="annotation.surface" onStartShouldSetResponder={() => true} onResponderStart={input.onStart} onResponderMove={input.onMove} onResponderEnd={input.onEnd} onResponderTerminate={input.cancel} /> : null}
+      {controls ? (
+        controls(tray)
+      ) : (
+        <View pointerEvents="box-none" style={styles.defaultTray}>
+          {tray}
+        </View>
+      )}
+      {textAnchor && hasTarget(state, textAnchor.target) && allowed ? (
+        <AnnotationNote
+          onClose={() => setTextAnchor(null)}
+          onSave={(text, note) => {
+            const { at, draft, target: frozen } = textAnchor;
+            setTextAnchor(null);
+            commit({ ...draft, shape: { kind: "text", at, text, note } }, frozen);
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function AnnotationNote({ onClose, onSave }: { readonly onClose: () => void; readonly onSave: (text: string, note: boolean) => void }): React.JSX.Element {

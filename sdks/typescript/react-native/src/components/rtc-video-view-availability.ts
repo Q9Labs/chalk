@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { NativeSyntheticEvent, StyleProp, ViewProps, ViewStyle } from "react-native";
+import type { StyleProp, ViewProps, ViewStyle } from "react-native";
 
 export type PresentedAnnotationFrame = {
   readonly width: number;
@@ -13,8 +13,6 @@ export interface RtcVideoViewProps extends ViewProps {
   objectFit?: "cover" | "contain";
   zOrder?: number;
   style?: StyleProp<ViewStyle>;
-  annotationFrames?: boolean;
-  onAnnotationFrame?: (event: NativeSyntheticEvent<PresentedAnnotationFrame>) => void;
 }
 
 type RtcVideoViewComponent = ComponentType<RtcVideoViewProps>;

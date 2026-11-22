@@ -7,7 +7,11 @@ import android.os.Build;
 import android.view.OrientationEventListener;
 import com.cloudflare.realtimekit.WebRTCModule.AbstractVideoCaptureController;
 import com.cloudflare.realtimekit.WebRTCModule.ChalkWebRTCExecutor;
+import realtimekit.org.webrtc.CapturerObserver;
 import realtimekit.org.webrtc.ScreenCapturerAndroid;
+import realtimekit.org.webrtc.SurfaceTextureHelper;
+import realtimekit.org.webrtc.VideoFrame;
+import realtimekit.org.webrtc.VideoProcessor;
 import realtimekit.org.webrtc.VideoCapturer;
 
 final class ChalkScreenCaptureController extends AbstractVideoCaptureController {
@@ -19,6 +23,8 @@ final class ChalkScreenCaptureController extends AbstractVideoCaptureController 
   private boolean attempted;
   private boolean closed;
   private RuntimeException startFailure;
+  private volatile VideoProcessor processor;
+  private CapturerObserver upstream;
 
   ChalkScreenCaptureController(Context context, int width, int height, Intent permission, int serviceToken) {
     super(width, height, FPS);
@@ -53,11 +59,39 @@ final class ChalkScreenCaptureController extends AbstractVideoCaptureController 
       public void onStop() {
         ChalkWebRTCExecutor.execute(() -> {
           if (closed) return;
-          stopCapture();
-          if (capturerEventsListener != null) capturerEventsListener.onCapturerEnded();
+          try {
+            stopCapture();
+          } finally {
+            if (capturerEventsListener != null) capturerEventsListener.onCapturerEnded();
+          }
         });
       }
-    });
+    }) {
+      @Override
+      public void initialize(SurfaceTextureHelper helper, Context context, CapturerObserver observer) {
+        upstream = observer;
+        super.initialize(helper, context, new CapturerObserver() {
+          @Override public void onCapturerStarted(boolean success) { observer.onCapturerStarted(success); }
+          @Override public void onCapturerStopped() {
+            observer.onCapturerStopped();
+            VideoProcessor current = processor;
+            if (current != null) current.onCapturerStopped();
+          }
+          @Override public void onFrameCaptured(VideoFrame frame) {
+            VideoProcessor current = processor;
+            if (current == null) observer.onFrameCaptured(frame);
+            else current.onFrameCaptured(frame);
+          }
+        });
+      }
+    };
+  }
+
+  boolean installProcessor(VideoProcessor next) {
+    if (closed || upstream == null) return false;
+    next.setSink(upstream::onFrameCaptured);
+    processor = next;
+    return true;
   }
 
   @Override

@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
@@ -21,7 +22,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
-import com.cloudflare.realtimekit.WebRTCModule.WebRTCModule;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.BaseActivityEventListener;
 import com.facebook.react.bridge.Promise;
@@ -30,9 +30,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
-import java.lang.reflect.Method;
 import java.security.SecureRandom;
-import java.util.function.Consumer;
 
 import realtimekit.org.webrtc.VideoFrame;
 import realtimekit.org.webrtc.VideoProcessor;
@@ -42,7 +40,7 @@ import realtimekit.org.webrtc.VideoSink;
 public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModule {
   private static final String ASSET = "file:///android_asset/chalk-annotation/index.html";
   private static final int SETTINGS_REQUEST = 5921;
-  private static final int PROBE_MS = 1800;
+  private static final int PROBE_MS = 2400;
   private final ReactApplicationContext context;
   private final Handler main = new Handler(Looper.getMainLooper());
   private final SecureRandom random = new SecureRandom();
@@ -133,12 +131,31 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
       Session next = new Session(trackId, promise);
       session = next;
       try {
-        createOverlay(next);
-        installProcessor(next, (installed) -> main.post(() -> {
-          if (!installed && session == next) remove(next, false);
+        ChalkScreenCaptureModule capture = context.getNativeModule(ChalkScreenCaptureModule.class);
+        if (capture == null) {
+          remove(next, false);
+          return;
+        }
+        capture.installProcessor(next.trackId, next, installed -> main.post(() -> {
+          if (session != next) return;
+          if (!installed) {
+            remove(next, false);
+            return;
+          }
+          try {
+            createOverlay(next);
+          } catch (RuntimeException failure) {
+            remove(next, false);
+          }
         }));
         main.postDelayed(() -> {
-          if (session == next && !next.verified) remove(next, false);
+          if (session == next && !next.verified) {
+            Log.d("ChalkAnnotation", "Projection proof expired: frames=" + next.frames
+                + ", firstPattern=" + (next.firstMatch != null) + ", secondPattern=" + next.revealed
+                + ", renderer=" + next.rendererReady + ", capture=" + next.observedSize
+                + ", overlay=" + (overlay == null ? "none" : overlay.getWidth() + "x" + overlay.getHeight()));
+            remove(next, false);
+          }
         }, PROBE_MS);
       } catch (RuntimeException error) {
         remove(next, false);
@@ -266,18 +283,6 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     watching = true;
   }
 
-  // An unpatched SDK host can still use the normal data layer.
-  private void installProcessor(Session target, Consumer<Boolean> completion) {
-    WebRTCModule rtc = context.getNativeModule(WebRTCModule.class);
-    if (rtc == null) { completion.accept(false); return; }
-    try {
-      Method install = rtc.getClass().getMethod("setChalkScreenVideoProcessor", String.class, VideoProcessor.class, Consumer.class);
-      install.invoke(rtc, target.trackId, target, completion);
-    } catch (ReflectiveOperationException error) {
-      completion.accept(false);
-    }
-  }
-
   private void remove(Session target, boolean lost) {
     session = null;
     target.finished = true;
@@ -314,8 +319,11 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
     boolean activated;
     long resumeId;
     View marker;
-    private ChalkProjectionWitness firstMatch;
-    private boolean revealed;
+    private volatile ChalkProjectionWitness firstMatch;
+    private volatile boolean revealed;
+    private volatile boolean markerHidden;
+    private volatile int frames;
+    private volatile String observedSize = "none";
 
     Session(String trackId, Promise result) { this.trackId = trackId; this.result = result; }
     @Override public void setSink(VideoSink sink) { this.sink = sink; }
@@ -335,6 +343,7 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
         if (target != null && !hold && !(finished && verified)) target.onFrame(frame);
         return;
       }
+      if (++frames == 1) observedSize = frame.getRotatedWidth() + "x" + frame.getRotatedHeight();
       ChalkProjectionWitness expected = witness;
       if (expected == null) return;
       VideoFrame.I420Buffer buffer = frame.getBuffer().toI420();
@@ -349,17 +358,22 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
         firstMatch = expected;
         main.post(() -> {
           if (session != this) return;
-          witness = new ChalkProjectionWitness(random.nextInt(), overlay.getWidth(), overlay.getHeight(), Math.max(8, overlay.getWidth() / 100));
+          if (witness != expected) return;
+          witness = expected.reversed();
           marker.invalidate();
         });
         return;
       }
       if (firstMatch != null && firstMatch != expected && containsMarker && !revealed) {
         revealed = true;
-        main.post(() -> { if (session == this) marker.setVisibility(View.INVISIBLE); });
+        main.post(() -> {
+          if (session != this) return;
+          marker.setVisibility(View.INVISIBLE);
+          markerHidden = true;
+        });
         return;
       }
-      if (revealed && !containsMarker && rendererReady) {
+      if (markerHidden && !containsMarker && rendererReady) {
         int frameWidth = frame.getRotatedWidth();
         int frameHeight = frame.getRotatedHeight();
         main.post(() -> {
@@ -367,6 +381,7 @@ public final class ChalkAnnotationOverlayModule extends ReactContextBaseJavaModu
           width = frameWidth;
           height = frameHeight;
           verified = true;
+          Log.d("ChalkAnnotation", "Projection proof confirmed at " + width + "x" + height);
           var size = Arguments.createMap();
           size.putInt("width", width);
           size.putInt("height", height);

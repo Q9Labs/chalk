@@ -18,6 +18,8 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.WritableMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import realtimekit.org.webrtc.VideoProcessor;
 import realtimekit.org.webrtc.VideoTrack;
 
 public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
@@ -28,6 +30,7 @@ public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
   // The prompt and its promise are owned by the UI thread; WebRTC owns the capture thread.
   private Promise pending;
   private String activeTrackId;
+  private ChalkScreenCaptureController activeCapture;
   private final BaseActivityEventListener listener = new BaseActivityEventListener() {
     @Override
     public void onActivityResult(Activity activity, int request, int result, Intent permission) {
@@ -92,8 +95,14 @@ public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
       WebRTCModule rtc = context.getNativeModule(WebRTCModule.class);
       if (rtc != null && activeTrackId != null) rtc.mediaStreamTrackRelease(activeTrackId);
       activeTrackId = null;
+      activeCapture = null;
     });
     super.invalidate();
+  }
+
+  void installProcessor(String trackId, VideoProcessor processor, Consumer<Boolean> completion) {
+    ChalkWebRTCExecutor.execute(() -> completion.accept(trackId.equals(activeTrackId) &&
+        activeCapture != null && activeCapture.installProcessor(processor)));
   }
 
   private void startTrack(Promise result, Point size, Intent permission, int token) {
@@ -109,6 +118,7 @@ public final class ChalkScreenCaptureModule extends ReactContextBaseJavaModule {
       }
 
       activeTrackId = track.id();
+      activeCapture = controller;
       WritableMap info = Arguments.createMap();
       info.putString("id", activeTrackId);
       info.putString("kind", "video");
