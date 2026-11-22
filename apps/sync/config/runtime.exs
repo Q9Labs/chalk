@@ -1,5 +1,19 @@
 import Config
 
+environment = System.get_env("CHALK_API_ENV", "local")
+
+screen_annotation_default =
+  case System.get_env("CHALK_SCREEN_ANNOTATION_ENABLED", "")
+       |> String.trim()
+       |> String.downcase() do
+    "" -> environment in ["", "local", "dev", "development", "nightly", "staging"]
+    "true" -> true
+    "false" -> false
+    _ -> raise "CHALK_SCREEN_ANNOTATION_ENABLED must be true or false"
+  end
+
+config :chalk_sync, screen_annotation_default: screen_annotation_default
+
 if config_env() != :test do
   if port = System.get_env("CHALK_SYNC_PORT") do
     config :chalk_sync, port: String.to_integer(port)

@@ -1080,6 +1080,11 @@ type RecordingTranscriptionSourceChunk struct {
 	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
+type ScreenAnnotationSetting struct {
+	Singleton bool `json:"singleton"`
+	Enabled   bool `json:"enabled"`
+}
+
 type Space struct {
 	ID                            pgtype.UUID        `json:"id"`
 	Name                          string             `json:"name"`

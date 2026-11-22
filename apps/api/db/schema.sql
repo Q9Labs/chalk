@@ -5472,3 +5472,8 @@ create trigger bound_recording_annotation_layers
 create trigger bound_recording_annotation_changes
     before insert on recording_screen_annotation_changes
     for each row execute function bound_recording_annotation();
+
+create table screen_annotation_settings (
+    singleton boolean primary key default true check (singleton),
+    enabled boolean not null
+);

@@ -4,7 +4,7 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
   @behaviour WebSock
 
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.ScreenAnnotation.{Attachment, Presence, Repository}
+  alias ChalkSync.ScreenAnnotation.{Attachment, Availability, Presence, Repository}
   alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.Socket.Annotation
 
@@ -14,9 +14,13 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
   def init(observability: observability, client_ip: ip) do
     state = %{phase: :awaiting_attachment, observability: observability}
 
-    case DirectLimits.register(ip) do
-      :ok -> challenge(state)
-      {:error, _denial} -> stop(state)
+    if Availability.enabled?() do
+      case DirectLimits.register(ip) do
+        :ok -> challenge(state)
+        {:error, _denial} -> stop(state)
+      end
+    else
+      Annotation.stop_disabled_attachment(state)
     end
   end
 
@@ -43,7 +47,8 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
   @impl true
   def handle_in({wire, [opcode: :text]}, %{phase: :awaiting_attachment, nonce: nonce} = state)
       when byte_size(wire) <= 4_500 do
-    with {:ok, frame} <- JSON.decode(wire),
+    with :ok <- require_availability(),
+         {:ok, frame} <- JSON.decode(wire),
          {:ok, attachment} <- Attachment.verify(frame, nonce),
          {:ok, _actor, layer, now, _share} <- Repository.read(attachment.identity),
          true <- Attachment.matches?(layer, attachment, now),
@@ -63,6 +68,10 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
 
       Annotation.initial_snapshot(Annotation.enter(next))
     else
+      {:error, :screen_annotation_disabled} ->
+        observe(:rejected)
+        Annotation.stop_disabled_attachment(state)
+
       _ ->
         observe(:rejected)
         stop(state)
@@ -84,6 +93,10 @@ defmodule ChalkSync.Transport.SocketAnnotationHelper do
 
   @impl true
   def terminate(_reason, _state), do: Presence.leave()
+
+  defp require_availability do
+    if Availability.enabled?(), do: :ok, else: {:error, :screen_annotation_disabled}
+  end
 
   defp permitted?(%{"type" => "annotation_command", "command" => command}),
     do: Attachment.allowed_command?(command)

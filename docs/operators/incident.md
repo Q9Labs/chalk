@@ -63,6 +63,19 @@ The first row is an emergency stop for new Episodes, not the normal failover: a 
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../plans/sfu-production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 
+### Turn off screen annotation
+
+`CHALK_SCREEN_ANNOTATION_ENABLED` is the startup default for both API and Sync: off in production, on in local development, staging, nightly and Orbs. For a rollback without a restart, use the application's direct database connection with the operator role:
+
+```sql
+insert into screen_annotation_settings (singleton, enabled) values (true, false)
+on conflict (singleton) do update set enabled = excluded.enabled;
+```
+
+API `/readyz` shows `capabilities.screen_annotation: disabled` on the next request. Sync checks the override once a second per node. In a healthy call, allow about two seconds for Sync to stop accepting annotation commands and withdraw the ink and controls on every connected client. Helper attachments close with `screen_annotation_disabled`. The main Sync socket, screen share and saved recordings stay in place.
+
+Use the same statement with `true` to turn annotation back on, or `delete from screen_annotation_settings where singleton;` to use the startup default again. A client that connected while annotation was off must reconnect to negotiate it. Clients already using annotation before the flip get the current layer back without reconnecting.
+
 ## Never stop the production node
 
 Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does block termination through the console, CLI or API.
