@@ -22,9 +22,9 @@ const generatedExclusions = [":!scripts/gates/ratchets.*", ":!**/generated/**", 
 // Each entry counts the lines that match `regex` in the files that `paths` select. Lower is better.
 const copies = {
   "copy.provider_names": { regex: `"(cf_sfu|cloudflare_sfu|chalk_sfu)"|'(cf_sfu|cloudflare_sfu|chalk_sfu)'`, paths: ["*.go", "*.ex", "*.ts", "*.tsx", "*.mjs", "*.sql"] },
-  "copy.port_8443": { regex: "8443", paths: [":!*.md"] },
+  "copy.port_8443": { regex: "8443", paths: [":!*.md", ":!**/Cargo.lock"] },
   "copy.pnpm_version": { regex: "12\\.8\\.1", paths: [".github/**", "scripts/**", "infrastructure/**"] },
-  "copy.excalidraw_pin": { regex: "0\\.18\\.1", paths: [":!*.md", ":!CHANGELOG*"] },
+  "copy.excalidraw_pin": { regex: "0\\.18\\.1", paths: [":!*.md", ":!CHANGELOG*", ":!**/Cargo.lock"] },
   "copy.mathjax_pin": { regex: "4\\.1\\.3", paths: [":!*.md", ":!CHANGELOG*"] },
   "copy.percentile_impls": { regex: "(function|const) +(percentile|nearestRank)", paths: ["*.mjs", "*.ts"] },
   "copy.entrypoint_checks": { regex: "import\\.meta\\.url *=== *.*pathToFileURL|process\\.argv\\[1\\] *===", paths: ["*.mjs", "*.ts"] },

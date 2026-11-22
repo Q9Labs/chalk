@@ -131,6 +131,14 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
     assert {:ok, %{draw_policy: "everyone"}, _, _, _} = Repository.read(ctx.host)
   end
 
+  test "an idle helper receives a fresh snapshot without asking for state", ctx do
+    {socket, layer} = connect_attachment(ctx)
+
+    assert {:json,
+            %{"type" => "annotation_state", "state" => %{"layer" => %{"layer_id" => ^layer}}},
+            _socket} = TestWSClient.recv(socket, 5_000)
+  end
+
   test "an attachment already receives state and cannot request another snapshot", ctx do
     {socket, _layer} = connect_attachment(ctx)
     socket = TestWSClient.send_json(socket, %{"type" => "annotation_state_request"})

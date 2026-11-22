@@ -37,17 +37,19 @@ defmodule ChalkSync.Transport.Socket.Annotation do
     end
   end
 
-  def tick(%{phase: :live, screen_annotation: true} = state) do
+  def tick(state, refresh_snapshot? \\ false)
+
+  def tick(%{phase: :live, screen_annotation: true} = state, refresh_snapshot?) do
     Process.send_after(self(), :annotation_tick, @poll_ms)
     now = System.monotonic_time(:millisecond)
 
     case Map.get(state, :annotation_snapshot_request) do
       {due, true} when now >= due -> send_requested_snapshot(state, now)
-      _ -> refresh(state, false)
+      _ -> refresh(state, refresh_snapshot?)
     end
   end
 
-  def tick(state), do: {:ok, state}
+  def tick(state, _refresh_snapshot?), do: {:ok, state}
 
   def changed(%{phase: :live, screen_annotation: true} = state), do: refresh(state, false)
   def changed(state), do: {:ok, state}

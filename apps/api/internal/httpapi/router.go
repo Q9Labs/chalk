@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/helperaccess"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -71,13 +72,12 @@ type Options struct {
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
 
-	APIKeys              APIKeyService
-	APIKeyAuthentication APIKeyAuthenticator
-
+	APIKeys                APIKeyService
+	APIKeyAuthentication   APIKeyAuthenticator
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer
-
+	HelperAccess           *helperaccess.Service
 	ParticipantMediaVerify ParticipantMediaVerifier
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
