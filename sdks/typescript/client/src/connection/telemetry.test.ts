@@ -113,6 +113,26 @@ describe("a call tells the server how it ended", () => {
   });
 });
 
+describe("a call reports how its media transport moved", () => {
+  it("reports every state the transport reaches during the join, not only the first", async () => {
+    const platform = createCoreTestPlatform();
+    const telemetry = createTestOutbox({ bound: false });
+    const layer = makeConnectionLifecycleLayer({
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+      dependencies: { ...platform.dependencies, telemetry: telemetry.outbox },
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* (yield* lifecycleOf()).join();
+        yield* Effect.promise(() => telemetry.outbox.flush());
+      }).pipe(Effect.provide(layer), Effect.scoped),
+    );
+    expect(telemetry.accepted.filter((event) => event.type === "media_state").map((event) => event.phase)).toEqual(["idle", "live"]);
+  });
+});
+
 function lifecycleOf() {
   return Effect.service(ConnectionLifecycleService);
 }

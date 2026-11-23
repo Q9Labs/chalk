@@ -793,9 +793,15 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         const mediaMinimum = [1000, 2000, 4000][attempt - 1] ?? 6000;
         return plan.kind === "media" ? Math.min(6000, Math.max(mediaMinimum, finiteDelay)) : finiteDelay;
       };
+      // Every place that records the media snapshot goes through here, so a state reached while the join or a recovery holds the queue is still reported once.
+      const rememberMedia = (snapshot: ConnectionMediaSnapshot | null) => {
+        const phase = mediaDiagnosticPhase(snapshot);
+        if (phase !== undefined && phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
+        model.mediaSnapshot = snapshot;
+      };
       const readSnapshots = () => {
         model.syncSnapshot = model.sync?.getSnapshot() ?? null;
-        model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+        rememberMedia(model.media?.getSnapshot() ?? null);
       };
       const waitForRecoveredSync = (sync: ConnectionSyncClient) => waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
       const finishRecovery = (attempt: number, epoch: number, kind: RecoveryKind): Effect.Effect<void> =>
@@ -1017,7 +1023,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       };
       const stopRejectedMedia = () => {
         model.mediaBindingCleanup?.();
-        model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+        rememberMedia(model.media?.getSnapshot() ?? null);
       };
       const waitForPendingEpisodeEnd = Effect.suspend(() => (pendingEpisodeEnd ? Deferred.await(pendingEpisodeEnd) : Effect.void));
       const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> => {
@@ -1116,9 +1122,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
-          const phase = mediaDiagnosticPhase(snapshot);
-          if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
-          model.mediaSnapshot = snapshot;
+          rememberMedia(snapshot);
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
@@ -1164,7 +1168,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                       yield* recover("media");
                       return;
                     }
-                    model.mediaSnapshot = media.getSnapshot();
+                    rememberMedia(media.getSnapshot());
                     yield* publish();
                   }),
                 ),
