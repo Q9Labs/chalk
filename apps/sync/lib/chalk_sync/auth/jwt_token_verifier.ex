@@ -10,7 +10,17 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
   @maximum_lifetime_seconds 300
 
   @impl true
-  def verify(token) when is_binary(token) do
+  def verify(token) do
+    with {:ok, claims} <- verify_signed_claims(token),
+         {:ok, verified} <- verified_claims(claims) do
+      {:ok, verified}
+    else
+      _ -> {:error, :invalid_token}
+    end
+  end
+
+  @doc false
+  def verify_signed_claims(token) when is_binary(token) and byte_size(token) <= 16_384 do
     with [encoded_header, encoded_claims, encoded_signature] <- String.split(token, "."),
          {:ok, header_json} <- decode_segment(encoded_header),
          :ok <- unique_header_fields(header_json),
@@ -26,15 +36,14 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
              [public_key, :ed25519]
            ),
          {:ok, claims_json} <- decode_segment(encoded_claims),
-         {:ok, claims} <- JSON.decode(claims_json),
-         {:ok, verified} <- verified_claims(claims) do
-      {:ok, verified}
+         {:ok, %{} = claims} <- JSON.decode(claims_json) do
+      {:ok, claims}
     else
       _ -> {:error, :invalid_token}
     end
   end
 
-  def verify(_token), do: {:error, :invalid_token}
+  def verify_signed_claims(_token), do: {:error, :invalid_token}
 
   defp decode_segment(segment), do: Base.url_decode64(segment, padding: false)
 

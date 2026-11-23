@@ -10,6 +10,11 @@ export function getApiBaseURL(): string {
     allowDeviceLocal: typeof __DEV__ !== "undefined" && __DEV__,
   });
 }
+export function configuredOrbHost(): string | undefined {
+  if (Constants.expoConfig?.extra?.buildProfile !== "orb") return undefined;
+  return new URL(getApiBaseURL()).hostname;
+}
+
 function supportedApiBaseURL(value: unknown): value is string {
   if (typeof value !== "string" || !value.trim()) return false;
   try {

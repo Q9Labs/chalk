@@ -34,6 +34,12 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.EpisodeTalkTime = newEpisodeTalkTime(w.cfg.Capabilities.Transcription, w.episodeService, postgres.NewEpisodeTalkTimeRepository(w.queries), w.recordingStorage)
 
 	applyCapabilityProfile(&w.options, w.cfg.Capabilities)
+	w.options.Capabilities.ScreenAnnotation = postgres.ScreenAnnotationSettings{
+		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.ScreenAnnotation,
+	}.Enabled
+	if w.options.HelperAccess != nil {
+		w.options.HelperAccess.WithAnnotationAvailability(w.options.Capabilities.ScreenAnnotation)
+	}
 	w.options.ApplyDiagnostics(w.diagnostics)
 	if err := w.wireProviderBridge(); err != nil {
 		return nil, err

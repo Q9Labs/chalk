@@ -105,6 +105,7 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    def orbBuild = System.getenv('CHALK_APP_VARIANT') == 'orb'
     namespace 'ai.q9labs.chalk.mobile'
     defaultConfig {
         applicationId releaseManifest.android.package_name
@@ -137,7 +138,10 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            if (keystorePropertiesFile.exists()) {
+            if (orbBuild) {
+                applicationIdSuffix ".orb"
+                signingConfig signingConfigs.debug
+            } else if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'

@@ -139,6 +139,32 @@ type EpisodePresenceLease struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+type HelperDevice struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Name           string             `json:"name"`
+	PublicKey      string             `json:"public_key"`
+	CredentialHash []byte             `json:"credential_hash"`
+	RegisteredAt   pgtype.Timestamptz `json:"registered_at"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	Loopback       bool               `json:"loopback"`
+}
+
+type HelperDeviceRequest struct {
+	ID                pgtype.UUID        `json:"id"`
+	CodeHash          []byte             `json:"code_hash"`
+	PollHash          []byte             `json:"poll_hash"`
+	Name              string             `json:"name"`
+	PublicKey         string             `json:"public_key"`
+	CredentialHash    []byte             `json:"credential_hash"`
+	DeviceID          pgtype.UUID        `json:"device_id"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	NextPollAt        pgtype.Timestamptz `json:"next_poll_at"`
+	ApprovedShare     []byte             `json:"approved_share"`
+	ApprovalExpiresAt pgtype.Timestamptz `json:"approval_expires_at"`
+	IntendedTenantID  pgtype.UUID        `json:"intended_tenant_id"`
+}
+
 type Identity struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -978,6 +1004,42 @@ type RecordingReservation struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingScreenAnnotationBudget struct {
+	RecordingID   pgtype.UUID `json:"recording_id"`
+	RetainedBytes int64       `json:"retained_bytes"`
+	LayerCount    int64       `json:"layer_count"`
+	Exhausted     bool        `json:"exhausted"`
+}
+
+type RecordingScreenAnnotationChange struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+	RecordingID  pgtype.UUID `json:"recording_id"`
+	CaptureEpoch int64       `json:"capture_epoch"`
+	LayerID      pgtype.UUID `json:"layer_id"`
+	Revision     int64       `json:"revision"`
+	AtMs         int64       `json:"at_ms"`
+	Change       []byte      `json:"change"`
+}
+
+type RecordingScreenAnnotationLayer struct {
+	TenantID         pgtype.UUID `json:"tenant_id"`
+	SpaceID          pgtype.UUID `json:"space_id"`
+	EpisodeID        pgtype.UUID `json:"episode_id"`
+	RecordingID      pgtype.UUID `json:"recording_id"`
+	CaptureEpoch     int64       `json:"capture_epoch"`
+	LayerID          pgtype.UUID `json:"layer_id"`
+	PublicationID    string      `json:"publication_id"`
+	SharerGeneration int64       `json:"sharer_generation"`
+	Layer            []byte      `json:"layer"`
+	InitialAtMs      int64       `json:"initial_at_ms"`
+	InitialRevision  int64       `json:"initial_revision"`
+	InitialPaused    bool        `json:"initial_paused"`
+	InitialMarks     []byte      `json:"initial_marks"`
+	ClosedAtMs       pgtype.Int8 `json:"closed_at_ms"`
+}
+
 type RecordingTranscriptionPreparationCommit struct {
 	TranscriptionJobID    pgtype.UUID        `json:"transcription_job_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
@@ -1042,6 +1104,11 @@ type RecordingTranscriptionSourceChunk struct {
 	AllocationID          pgtype.UUID `json:"allocation_id"`
 	ObjectVersion         pgtype.Text `json:"object_version"`
 	ObjectEtag            pgtype.Text `json:"object_etag"`
+}
+
+type ScreenAnnotationSetting struct {
+	Singleton bool `json:"singleton"`
+	Enabled   bool `json:"enabled"`
 }
 
 type Space struct {
@@ -1546,11 +1613,21 @@ type SyncWhiteboardFile struct {
 	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
 	FinalizedAt             pgtype.Timestamptz `json:"finalized_at"`
+	ReferencedAt            pgtype.Timestamptz `json:"referenced_at"`
 	CleanupClaimToken       pgtype.UUID        `json:"cleanup_claim_token"`
 	CleanupClaimedUntil     pgtype.Timestamptz `json:"cleanup_claimed_until"`
 	CleanupAttempts         int32              `json:"cleanup_attempts"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardFileWriter struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	SceneID               pgtype.UUID `json:"scene_id"`
 }
 
 type SyncWhiteboardOperationReceipt struct {

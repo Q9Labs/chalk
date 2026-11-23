@@ -19,12 +19,12 @@ defmodule ChalkSync.ProtocolV1 do
   def decode(text)
       when is_binary(text) and byte_size(text) <= @inbound_frame_bytes do
     with {:ok, %{} = frame} <- JSON.decode(text),
-         frame = drop_invalid_baggage(frame),
-         {:ok, decoded} <- GeneratedV1.decode_client_frame(frame),
+         :base <- ChalkSync.ScreenAnnotation.Protocol.decode(frame, byte_size(text)),
+         {:ok, decoded} <- GeneratedV1.decode_client_frame(drop_invalid_baggage(frame)),
          {:ok, normalized} <- normalize(decoded) do
       {:ok, normalized}
     else
-      {:ok, _other} -> {:error, :invalid_frame}
+      {:extension, normalized} -> {:ok, normalized}
       {:error, %JSON.DecodeError{}} -> {:error, :invalid_json}
       {:error, reason} when is_atom(reason) -> {:error, reason}
       _ -> {:error, :invalid_frame}
@@ -43,7 +43,7 @@ defmodule ChalkSync.ProtocolV1 do
   defp drop_invalid_baggage(frame), do: frame
 
   # Each negotiated extension shows up in the welcome as `<name>: true`.
-  @welcome_flags [:entry_confirmation, :media_off_reason, :connection_quality]
+  @welcome_flags ~w(entry_confirmation media_off_reason connection_quality screen_annotation screen_annotation_burn_in)a
 
   def recovery_id, do: UUID.generate()
 

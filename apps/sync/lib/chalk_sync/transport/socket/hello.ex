@@ -7,6 +7,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.ProviderCall
+  alias ChalkSync.ScreenAnnotation.Availability, as: AnnotationAvailability
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -149,6 +150,11 @@ defmodule ChalkSync.Transport.Socket.Hello do
       protocol_options
       |> Map.put(:entry_confirmation, state.entry_confirmation)
       |> Map.put(:media_off_reason, state.media_off_reason)
+      |> Map.put(:screen_annotation, state.screen_annotation)
+      |> Map.put(
+        :screen_annotation_burn_in,
+        state.screen_annotation && state.screen_annotation_burn_in
+      )
       |> Map.put(:connection_quality, state.connection_quality)
       |> Map.put(
         :entry_generation,
@@ -172,6 +178,10 @@ defmodule ChalkSync.Transport.Socket.Hello do
          {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_entry(state, identity, recovery, hello),
+         state = %{
+           state
+           | screen_annotation: state.screen_annotation && AnnotationAvailability.enabled?()
+         },
          {:ok, coordinator} <- begin_entry_recovery(state, identity, protocol_options) do
       start_registered_recovery(
         state,

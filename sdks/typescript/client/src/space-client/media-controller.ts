@@ -7,12 +7,12 @@ import { cameraEffectFailure } from "../media/camera-effects";
 import { describeMediaCaptureError, failCapture } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
-import { displayMediaConstraints, releaseTracks, screenShareCapture, requireDisplayVideoTrack, streamFromTracks } from "../connection/media-devices";
+import { displayMediaConstraints, releaseTracks, requireDisplayVideoTrack, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
-import { MEDIA_SOURCES, confirmedLocalMediaState, livePublication, pausedPublicationIds, sameMediaSlice, screenLocalMedia } from "./media-snapshot";
+import { MEDIA_SOURCES, confirmedLocalMediaState, livePublication, pausedPublicationIds, sameMediaSlice, screenLocalMedia, screenShareMedia } from "./media-snapshot";
 import { makeScopedFork, type ScopedFork } from "./scoped-fork";
 import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -1733,11 +1733,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
       local,
       remote,
-      screenShare: {
-        ...local.screen,
-        hasAudio: this.#screenShareHasAudio(snapshot),
-        ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}),
-      },
+      screenShare: screenShareMedia(local.screen, snapshot, this.#screenShareHasAudio(snapshot), this.#syncLive ? this.#ports?.sync : undefined),
       incomingRequests: this.#requests,
       callStats: snapshot?.callStats,
       link,

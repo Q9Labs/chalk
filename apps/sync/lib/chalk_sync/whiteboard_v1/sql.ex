@@ -3,49 +3,6 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
 
-  # The one effective drawing rule. A host is a participant whose role has
-  # manageWhiteboard. A per-person row is the host's choice for that person:
-  # under everyone it overrides the role default, under picked a true row is
-  # the pick, and under hosts it is kept but ignored. Unpicking under picked
-  # deletes the row, so it can't turn into a hidden block under everyone.
-  def lock_authority do
-    """
-    select
-      participant.role,
-      participant.capabilities,
-      case coalesce(policy.policy, 'everyone')
-        when 'hosts' then 'manageWhiteboard' = any(participant.capabilities)
-        when 'picked' then 'manageWhiteboard' = any(participant.capabilities)
-          or coalesce(permission.can_draw, false)
-        else coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities))
-      end as can_draw,
-      coalesce(policy.policy, 'everyone') as draw_policy
-    from participants participant
-    join episodes episode
-      on episode.tenant_id = participant.tenant_id
-      and episode.space_id = participant.space_id
-      and episode.id = participant.episode_id
-    left join sync_whiteboard_permissions permission
-      on permission.tenant_id = participant.tenant_id
-      and permission.episode_id = participant.episode_id
-      and permission.participant_id = participant.id
-    left join sync_whiteboard_draw_policies policy
-      on policy.tenant_id = participant.tenant_id
-      and policy.space_id = participant.space_id
-      and policy.episode_id = participant.episode_id
-    where participant.tenant_id = $1
-      and participant.space_id = $2
-      and participant.episode_id = $3
-      and participant.id = $4
-      and participant.generation = $5
-      and participant.status = 'active'
-      and episode.status = 'active'
-    for update of participant
-    """
-  end
-
-  # The lifecycle state of every current Participant in one Episode, read without a row lock.
-  # Left rows are history and count as missing, so the read stays within the Episode's capacity.
   def episode_access do
     """
     select episode.status, participant.id, participant.generation, participant.status

@@ -1,3 +1,4 @@
+import { whiteboardUiOptions } from "./board/ui-options";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -269,20 +270,6 @@ function useWhiteboardInitialData(theme: "light" | "dark", headless: boolean, lo
   );
 }
 
-const UI_OPTIONS = {
-  canvasActions: {
-    changeViewBackgroundColor: false,
-    clearCanvas: false,
-    export: false as const,
-    loadScene: false,
-    saveAsImage: false,
-    saveToActiveFile: false,
-    toggleTheme: false,
-  },
-  tools: { image: false },
-  welcomeScreen: false,
-};
-
 function useWhiteboardCollaboration(options: {
   canDraw: boolean;
   headless: boolean;
@@ -345,6 +332,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
           requestSnapshot: collab.requestSnapshot,
           clear: collab.clear,
           fileTransfer: collab.fileTransfer,
+          uploadFile: collab.uploadFile,
           presignDownload: collab.presignDownload,
           subscribe: collab.subscribe,
           onFileSyncStateChange: collab.onFileSyncStateChange,
@@ -517,7 +505,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
     isReady,
     math,
     resolvedLoadError,
-    uiOptions: UI_OPTIONS,
+    uiOptions: whiteboardUiOptions(Boolean(props.collab?.uploadFile)),
     ...engine,
   };
 }

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "../../../client/src/space-client/core.test.helpers";
 
-vi.mock("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
+vi.mock("react-native", () => ({ NativeModules: {}, Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({
   RTCPeerConnection: class {
     constructor() {

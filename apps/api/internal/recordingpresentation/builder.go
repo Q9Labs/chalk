@@ -91,6 +91,7 @@ type whiteboardStateWire struct {
 type activeTrack struct {
 	key          string
 	captureEpoch int64
+	publication  captureplan.PublicationReference
 	binding      captureplane.CaptureTrack
 	source       MediaSource
 }
@@ -118,21 +119,18 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 	if err != nil {
 		return builtPresentation{}, err
 	}
-	if err := addWhiteboardFileAssets(source, &materials, assetByID); err != nil {
-		return builtPresentation{}, err
+	whiteboardFiles := make(map[string]ObjectFact, len(source.WhiteboardFiles))
+	for _, file := range source.WhiteboardFiles {
+		whiteboardFiles[file.SceneID+":"+file.ID] = file.Object
 	}
 
 	whiteboard, err := whiteboardAtOrigin(source)
 	if err != nil {
 		return builtPresentation{}, err
 	}
-	shared := screenSharedContent(active)
-	if whiteboard != nil && whiteboard.Presenting {
-		assetID, addErr := addWhiteboardStateAsset(*whiteboard, source, &materials, assetByID)
-		if addErr != nil {
-			return builtPresentation{}, addErr
-		}
-		shared = SharedContent{Kind: "whiteboard", SceneID: whiteboard.SceneID, Revision: whiteboard.Revision, StateAssetID: assetID}
+	shared, err := initialSharedContent(whiteboard, screenSharedContent(active), source, whiteboardFiles, &materials, assetByID)
+	if err != nil {
+		return builtPresentation{}, err
 	}
 
 	participants := make([]Participant, 0, len(controlParticipants))
@@ -158,7 +156,9 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 	if err != nil {
 		return builtPresentation{}, err
 	}
-	active, planEnd, err = schedulePlanTail(source, active, planEnd, appendScheduled)
+	annotationSources := make(annotationSources)
+	annotationSources.collect(active)
+	planEnd, err = schedulePlanTail(source, active, planEnd, annotationSources, appendScheduled)
 	if err != nil {
 		return builtPresentation{}, err
 	}
@@ -166,7 +166,7 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 	if err != nil {
 		return builtPresentation{}, err
 	}
-	whiteboardEnd, err := scheduleWhiteboardTail(source, whiteboard, active, &materials, assetByID, appendScheduled)
+	whiteboardEnd, err := scheduleWhiteboardTail(source, whiteboard, whiteboardFiles, &materials, assetByID, appendScheduled)
 	if err != nil {
 		return builtPresentation{}, err
 	}
@@ -192,6 +192,9 @@ func buildPresentation(source CompletionSource) (builtPresentation, error) {
 		events[index] = scheduled[index].event
 	}
 
+	if err := addScreenAnnotationAsset(source, annotationSources, &materials, assetByID); err != nil {
+		return builtPresentation{}, err
+	}
 	assets := make([]Asset, len(materials))
 	for index := range materials {
 		assets[index] = materials[index].Asset
@@ -586,7 +589,7 @@ func tracksForPlan(source CompletionSource, fact CapturePlanFact, previous map[s
 		if err != nil {
 			return nil, fmt.Errorf("%w: derive media source identity", ErrInvalidCompletionSource)
 		}
-		desired[key] = activeTrack{key: key, captureEpoch: captureEpoch, binding: binding, source: MediaSource{
+		desired[key] = activeTrack{key: key, captureEpoch: captureEpoch, publication: track.PublicationReference, binding: binding, source: MediaSource{
 			SourceID: sourceID, ParticipantID: identity.ParticipantID,
 			ParticipantGeneration: identity.ParticipantGeneration, Kind: identity.Kind,
 			TrackID: identity.TrackID, Epoch: identity.Epoch,
@@ -646,12 +649,12 @@ func screenSharedContent(active map[string]activeTrack) SharedContent {
 	return SharedContent{Kind: "screen_share", ParticipantID: screen.ParticipantID, SourceID: screen.SourceID}
 }
 
-func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, appendEvent func(int64, int, Event)) (map[string]activeTrack, int64, error) {
+func schedulePlanTail(source CompletionSource, active map[string]activeTrack, originRevision int64, annotationSources annotationSources, appendEvent func(int64, int, Event)) (int64, error) {
 	previousRevision := int64(0)
 	endRevision := originRevision
 	for _, fact := range source.CapturePlans {
 		if fact.Revision != previousRevision+1 {
-			return nil, 0, fmt.Errorf("%w: capture plan gap", ErrInvalidCompletionSource)
+			return 0, fmt.Errorf("%w: capture plan gap", ErrInvalidCompletionSource)
 		}
 		previousRevision = fact.Revision
 		if fact.Revision <= source.CapturePlanStartRevision {
@@ -668,11 +671,11 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		}
 		at, err := elapsedMillis(source, createdAt)
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 		desired, err := tracksForPlan(source, fact, active)
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 		priorShared := screenSharedContent(active)
 		nextShared := screenSharedContent(desired)
@@ -711,10 +714,11 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		if sharedChanged && (!clearedShared || nextShared.Kind != "none") {
 			appendEvent(at, 22, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: nextShared})
 		}
+		annotationSources.collect(desired)
 		active = desired
 		endRevision = fact.Revision
 	}
-	return active, endRevision, nil
+	return endRevision, nil
 }
 
 func unionTrackKeys(left, right map[string]activeTrack) []string {
@@ -998,7 +1002,7 @@ func whiteboardElementWins(candidate, existing whiteboardElementWire) bool {
 	return candidate.Version > existing.Version || (candidate.Version == existing.Version && candidate.VersionNonce < existing.VersionNonce)
 }
 
-func addWhiteboardStateAsset(state whiteboardState, source CompletionSource, materials *[]assetMaterial, assetByID map[string]int) (string, error) {
+func addWhiteboardStateAsset(state whiteboardState, source CompletionSource, whiteboardFiles map[string]ObjectFact, materials *[]assetMaterial, assetByID map[string]int) (string, error) {
 	elements := make([]whiteboardElementWire, 0, len(state.Elements))
 	for _, element := range state.Elements {
 		elements = append(elements, element)
@@ -1009,7 +1013,7 @@ func addWhiteboardStateAsset(state whiteboardState, source CompletionSource, mat
 		}
 		return elements[i].ID < elements[j].ID
 	})
-	if err := validateWhiteboardFileReferences(elements, assetByID); err != nil {
+	if err := addReferencedWhiteboardFiles(state.SceneID, elements, source, whiteboardFiles, materials, assetByID); err != nil {
 		return "", err
 	}
 	body, err := json.Marshal(whiteboardStateWire{
@@ -1033,47 +1037,6 @@ func addWhiteboardStateAsset(state whiteboardState, source CompletionSource, mat
 	return assetID, nil
 }
 
-func addWhiteboardFileAssets(source CompletionSource, materials *[]assetMaterial, assetByID map[string]int) error {
-	for _, file := range source.WhiteboardFiles {
-		assetID := "whiteboard_file:" + file.ID
-		digest := hex.EncodeToString(file.Object.SHA256)
-		asset := Asset{
-			ID: assetID, Kind: "whiteboard_file",
-			ObjectKey:   existingAssetObjectKey(source, assetID, "whiteboard_file", digest),
-			ContentType: file.Object.ContentType, ByteSize: file.Object.ByteSize,
-			SHA256: digest,
-		}
-		if err := addAssetMaterial(assetMaterial{Asset: asset, Existing: cloneObjectFactPointer(file.Object)}, materials, assetByID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateWhiteboardFileReferences(elements []whiteboardElementWire, assetByID map[string]int) error {
-	for _, element := range elements {
-		if element.Deleted {
-			continue
-		}
-		var payload map[string]json.RawMessage
-		if err := json.Unmarshal(element.Payload, &payload); err != nil {
-			return fmt.Errorf("%w: invalid whiteboard element payload", ErrInvalidCompletionSource)
-		}
-		raw, exists := payload["fileId"]
-		if !exists || bytes.Equal(raw, []byte("null")) {
-			continue
-		}
-		var fileID string
-		if err := json.Unmarshal(raw, &fileID); err != nil || fileID == "" {
-			return fmt.Errorf("%w: invalid whiteboard file identity", ErrInvalidCompletionSource)
-		}
-		if _, exists := assetByID["whiteboard_file:"+fileID]; !exists {
-			return fmt.Errorf("%w: missing whiteboard file asset", ErrInvalidCompletionSource)
-		}
-	}
-	return nil
-}
-
 type whiteboardUpdateWire struct {
 	Revision int64                   `json:"revision"`
 	Elements []whiteboardElementWire `json:"elements"`
@@ -1085,7 +1048,7 @@ type whiteboardHistoryWire struct {
 	Updates       []whiteboardUpdateWire `json:"updates"`
 }
 
-func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, _ map[string]activeTrack, materials *[]assetMaterial, assetByID map[string]int, appendEvent func(int64, int, Event)) (int64, error) {
+func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, whiteboardFiles map[string]ObjectFact, materials *[]assetMaterial, assetByID map[string]int, appendEvent func(int64, int, Event)) (int64, error) {
 	cursor := source.WhiteboardOriginRevision
 	if len(source.WhiteboardTailEvents) == 0 {
 		return cursor, nil
@@ -1149,14 +1112,14 @@ func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, _ m
 		}
 		assetID := assetIDs[state.SceneID]
 		if assetID != "" && len(changes) > 0 {
-			if err := validateWhiteboardFileReferences(changes, assetByID); err != nil {
+			if err := addReferencedWhiteboardFiles(state.SceneID, changes, source, whiteboardFiles, materials, assetByID); err != nil {
 				return 0, err
 			}
 			histories[assetID].Updates = append(histories[assetID].Updates, whiteboardUpdateWire{Revision: state.Revision, Elements: changes})
 		}
 		if state.Presenting {
 			if assetID == "" {
-				assetID, err = addWhiteboardStateAsset(*state, source, materials, assetByID)
+				assetID, err = addWhiteboardStateAsset(*state, source, whiteboardFiles, materials, assetByID)
 				if err != nil {
 					return 0, err
 				}

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { durations } from "../theme/tokens";
 
 /** A visible board stays interactive instead of acquiring the tap-to-reveal overlay. */
-export function useLandscapeChrome({ fades, boardVisible }: { readonly fades: boolean; readonly boardVisible: boolean }) {
-  const canHide = fades && !boardVisible;
+export function useLandscapeChrome({ fades, boardVisible, annotationControls = 0 }: { readonly fades: boolean; readonly boardVisible: boolean; readonly annotationControls?: number }) {
+  const canHide = fades && !boardVisible && annotationControls === 0;
   const [hidden, setHidden] = useState(false);
   const [shownAt, setShownAt] = useState(0);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [timer] Hide eligible landscape chrome after inactivity; cancel and reset the timeout when eligibility or activity changes.

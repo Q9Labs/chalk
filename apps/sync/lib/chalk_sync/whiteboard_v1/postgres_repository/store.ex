@@ -6,6 +6,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
   alias ChalkSync.Database
   alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.DrawingSQL
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.SQL
 
@@ -50,8 +51,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
       context(identity) ++
         [uuid(identity.participant_id), identity.participant_generation]
 
-    case Postgrex.query(connection, SQL.lock_authority(), params) do
-      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw, draw_policy]]}} ->
+    case Postgrex.query(connection, DrawingSQL.lock_authority(), params) do
+      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw, draw_policy, _name, _grant]]}} ->
         role_capabilities =
           Enum.filter(capabilities, &(&1 in ["drawWhiteboard", "manageWhiteboard"]))
 

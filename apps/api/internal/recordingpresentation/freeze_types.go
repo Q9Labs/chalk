@@ -77,6 +77,7 @@ type CompletionSource struct {
 	CapturePlanStartRevision int64
 	CapturePlans             []CapturePlanFact
 	Reactions                []ReactionFact
+	ScreenAnnotation         []ScreenAnnotationFact
 
 	BaselineControlState json.RawMessage
 }
@@ -139,8 +140,9 @@ type WhiteboardEventFact struct {
 }
 
 type WhiteboardFileFact struct {
-	ID     string
-	Object ObjectFact
+	SceneID string
+	ID      string
+	Object  ObjectFact
 }
 
 type ReactionFact struct {

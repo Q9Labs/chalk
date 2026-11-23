@@ -1000,12 +1000,6 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     base = ["type", "protocol", "participant_id", "participant_generation", "recovery_id",
         "head", "mode"]
     base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base
-    base = if Map.has_key?(frame, "entry_confirmation"), do: base ++ ["entry_confirmation"],
-        else: base
-    base = if Map.has_key?(frame, "media_off_reason"), do: base ++ ["media_off_reason"],
-        else: base
-    base = if Map.has_key?(frame, "connection_quality"), do: base ++ ["connection_quality"],
-        else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
     base = if Map.has_key?(frame, "participant_identity_id"),
@@ -1017,15 +1011,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
-    valid_entry = not Map.has_key?(frame, "entry_confirmation") or
-        frame["entry_confirmation"] == true
-    valid_off_reason = not Map.has_key?(frame, "media_off_reason") or
-        frame["media_off_reason"] == true
-    valid_quality = not Map.has_key?(frame, "connection_quality") or
-        frame["connection_quality"] == true
+    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
+        &Map.has_key?(frame, &1))
+    base = base ++ flags
+    valid_flags = Enum.all?(flags, &(frame[&1] == true))
+    valid_burn_in = frame["screen_annotation_burn_in"] != true or
+        frame["screen_annotation"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
-        valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_off_reason and valid_quality and valid_generation and valid_identity
+        valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_flags and
+        valid_burn_in and valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,
@@ -1585,9 +1579,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_positive_integer?(value), do: is_integer(value) and value >= 1
   defp valid_revision_pair?(base, revision), do: valid_non_negative_integer?(base) and
       revision == base + 1
-  defp valid_correlation_fields?(frame) when is_map(frame),
-      do: Enum.all?(@correlation_field_keys, fn key -> not Map.has_key?(frame, key) or
-      valid_correlation_field?(key, frame[key]) end)
+  def valid_correlation_fields?(frame) when is_map(frame), do: Enum.all?(@correlation_field_keys,
+      fn key -> not Map.has_key?(frame, key) or valid_correlation_field?(key, frame[key]) end)
   defp valid_correlation_field?("journey_id", value), do: valid_uuid?(value) and not (value =~ ~r/\A0{8}-0{4}-0{4}-0{4}-0{12}\z/)
   defp valid_correlation_field?("traceparent", value), do: bounded_string?(value, 55, 55) and value =~ @traceparent and not (value =~ ~r/\A00-0{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/) and not (value =~ ~r/\A00-[0-9a-f]{32}-0{16}-[0-9a-f]{2}\z/)
   defp valid_correlation_field?("tracestate", value), do: bounded_string?(value, 1, 512) and

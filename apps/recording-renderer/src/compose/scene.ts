@@ -1,6 +1,7 @@
 import { choosePrimary, DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, screenShareItemId, WHITEBOARD_ITEM_ID, type Participant, type StageBox, type StageItem } from "@q9labsai/chalk-react/headless";
 import { createRecordingPresentationCursor, type RecordingPresentationParticipantV1, type RecordingPresentationSnapshotV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import type { DecodedMediaIndexV1, DecodedVisualSourceV1 } from "../decoded-media.js";
+import type { AnnotationOverlay } from "./annotation-timeline.js";
 
 export interface Rect {
   readonly x: number;
@@ -27,7 +28,7 @@ export interface SceneVideo {
 
 export type SceneTile =
   | { readonly kind: "participant"; readonly rect: Rect; readonly participant: SceneParticipant; readonly video?: SceneVideo }
-  | { readonly kind: "screen_share"; readonly rect: Rect; readonly participant: SceneParticipant; readonly video?: SceneVideo }
+  | { readonly kind: "screen_share"; readonly rect: Rect; readonly participant: SceneParticipant; readonly video?: SceneVideo; readonly annotation?: AnnotationOverlay }
   | { readonly kind: "whiteboard"; readonly rect: Rect; readonly stateAssetId: string; readonly revision: number };
 
 export interface SceneReaction {

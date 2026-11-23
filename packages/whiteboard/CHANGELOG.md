@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.1.0
+
+- Add to board can save a clean screen frame with editable marks, or one marked image if the video already includes its ink. It requires the Whiteboard files capability.
+
 ## 5.2.0
 
 ### follow-view-owner

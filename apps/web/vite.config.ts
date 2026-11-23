@@ -68,6 +68,15 @@ const config = defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      "^/v1/screen-annotation/helper(\\?.*)?$": {
+        target: localSyncOrigin,
+        ws: true,
+        changeOrigin: true,
+      },
+      "/v1/screen-annotation/helper/pair-ticket": {
+        target: localAPIOrigin,
+        changeOrigin: true,
+      },
       // The whiteboard socket is Sync's too; without this it falls through to the API, which never upgrades it, so the board never opens.
       // Only the socket itself: the API serves the file downloads under /v1/whiteboard/files.
       "^/v1/whiteboard(\\?.*)?$": {

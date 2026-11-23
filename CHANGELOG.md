@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.1.0
+
+### Screen annotation
+
+- `@q9labsai/chalk-client` negotiates annotation with Sync for the active screen share. Turning annotation off during a call withdraws ink and disables drawing without interrupting the share.
+- `@q9labsai/chalk-react` and `@q9labsai/chalk-react-native` let viewers draw temporary ink or keep marks. Web sharers can manage marks in Picture-in-Picture or pair Chalk Helper. Supported Android full-screen shares can include ink directly in the video; single-app shares keep ink separate.
+- The new `@q9labsai/chalk-screen-annotation` package provides shared frame geometry and rendering. `@q9labsai/chalk-whiteboard` can save a screen frame with editable marks, or save a single marked image when the source video already contains the ink. Add to board requires the separate Whiteboard files capability.
+- Recording exports include kept marks once. Deploy the compatible recording renderer before API and Sync writers or before enabling Android burn-in. Annotation is off by default in production. The [operator runbook](docs/operators/incident.md#turn-off-screen-annotation) explains how to turn it off live without stopping screen sharing or affecting saved recordings.
+- `@q9labsai/recording-presentation` advances independently to 0.1.2 so the published validator accepts screen annotation assets in Recording timelines.
+
 ## 6.0.0
 
 This is a major release because it removes public API: Chalk SFU is the only media provider, and the call surface drops several exports. Deploy the API and Sync before apps that use these SDKs, because the SDKs rely on the new server contracts named below.

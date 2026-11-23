@@ -46,6 +46,8 @@ func v1RouteGroups(options Options) []routeGroup {
 			endpoints:  append([]RouteEndpoint{publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, origin)}, publicInvitePublicEndpoints(options.PublicInvites, origin)...),
 		},
 		{middleware: tenantScoped, endpoints: tenantEndpointsList},
+		{middleware: []func(http.Handler) http.Handler{noStoreResponses, requireHelperDashboard}, endpoints: helperDashboardEndpoints(options.HelperAccess, options.ParticipantMediaVerify, options.TenantAuthz)},
+		{endpoints: helperNativeEndpoints(options.HelperAccess)},
 		{
 			endpoints: append([]RouteEndpoint{
 				participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify),
@@ -55,7 +57,7 @@ func v1RouteGroups(options Options) []routeGroup {
 		},
 		{
 			middleware: []func(http.Handler) http.Handler{requireParticipantMedia(options.ParticipantMediaVerify, options.ParticipantMediaActive)},
-			endpoints:  []RouteEndpoint{sfuSignalEndpoint(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications)},
+			endpoints:  []RouteEndpoint{helperPairTicketEndpoint(options.HelperAccess, options.CORS.AllowedOrigins), sfuSignalEndpoint(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications)},
 		},
 		{endpoints: append(chatAttachmentEndpoints(options.ChatAttachments, options.ChatParticipants), whiteboardFileEndpoints(options.WhiteboardFiles, options.WhiteboardParticipants)...)},
 	}

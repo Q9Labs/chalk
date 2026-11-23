@@ -23,6 +23,8 @@ export type ConnectionMediaDevices = {
   /** The signal cancels post-capture preparation; native permission prompts may still resolve late. */
   readonly getUserMedia: (constraints: MediaStreamConstraints, signal?: AbortSignal) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
+  /** Intrinsic frame size witnessed on this exact native capture before publishing. */
+  readonly verifiedAnnotationCapture?: (track: MediaStreamTrack) => import("../screen-annotation").ScreenAnnotationFrameSize | undefined;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**
    * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls
@@ -37,6 +39,7 @@ export type ConnectionMediaDevices = {
   readonly selectSpeaker?: (deviceId: string) => Promise<void>;
 };
 export type ConnectionSyncClient = V1CollaborationClient & {
+  readonly annotation?: import("../screen-annotation/replica").AnnotationReplica;
   readonly start: () => Promise<void>;
   /** Confirms entry after Sync is live and media has started. Without it, Sync confirms the entry at hello. */
   readonly confirmEntered?: () => Promise<void>;
@@ -112,6 +115,7 @@ export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
+  readonly onFilesChanged?: () => void;
 };
 export type ConnectionChatFileFactoryInput = {
   readonly token: () => Promise<string>;

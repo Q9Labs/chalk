@@ -688,6 +688,96 @@ export const ErrorResponseSchema = /* @__PURE__ */ (() =>
   }))();
 export type ErrorResponse = typeof ErrorResponseSchema.Type;
 
+export const FinalizeWhiteboardFileUploadRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    sha256: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type FinalizeWhiteboardFileUploadRequest = typeof FinalizeWhiteboardFileUploadRequestSchema.Type;
+
+export const HelperDeviceCodeSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    code: Schema.String,
+    intervalSeconds: Schema.Number,
+  }))();
+export type HelperDeviceCode = typeof HelperDeviceCodeSchema.Type;
+
+export const HelperDeviceCodeApprovalSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    layerId: Schema.String.check(Schema.isMinLength(1)),
+    mediaProof: Schema.String.check(Schema.isMinLength(1)),
+    publicationId: Schema.String.check(Schema.isMinLength(1)),
+    refresh: Schema.Boolean,
+    requestId: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceCodeApproval = typeof HelperDeviceCodeApprovalSchema.Type;
+
+export const HelperDeviceCodeLookupSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    code: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceCodeLookup = typeof HelperDeviceCodeLookupSchema.Type;
+
+export const HelperDeviceCodePollSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    pollSecret: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceCodePoll = typeof HelperDeviceCodePollSchema.Type;
+
+export const HelperDeviceCodeStartSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    credential: Schema.String.check(Schema.isMinLength(1)),
+    name: Schema.String.check(Schema.isMinLength(1)),
+    pollSecret: Schema.String.check(Schema.isMinLength(1)),
+    publicKey: Schema.String.check(Schema.isMinLength(1)),
+    registered: Schema.Boolean,
+    tenantId: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceCodeStart = typeof HelperDeviceCodeStartSchema.Type;
+
+export const HelperDeviceListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    devices: Schema.Array(
+      Schema.Struct({
+        deviceId: Schema.String,
+        name: Schema.String,
+      }),
+    ),
+  }))();
+export type HelperDeviceList = typeof HelperDeviceListSchema.Type;
+
+export const HelperDeviceOfferSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fingerprint: Schema.String,
+    name: Schema.String,
+    requestId: Schema.String,
+  }))();
+export type HelperDeviceOffer = typeof HelperDeviceOfferSchema.Type;
+
+export const HelperDevicePollSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachment: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          expiresAtMs: Schema.Number,
+          ticket: Schema.String,
+        }),
+      ),
+    ),
+  }))();
+export type HelperDevicePoll = typeof HelperDevicePollSchema.Type;
+
+export const HelperDeviceRememberSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    publicKey: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceRemember = typeof HelperDeviceRememberSchema.Type;
+
+export const HelperDeviceRevokeSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    deviceId: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type HelperDeviceRevoke = typeof HelperDeviceRevokeSchema.Type;
+
 export const InitiateChatAttachmentUploadRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     byteLength: Schema.Number,
@@ -697,6 +787,14 @@ export const InitiateChatAttachmentUploadRequestSchema = /* @__PURE__ */ (() =>
     sha256: Schema.String.check(Schema.isMinLength(1)),
   }))();
 export type InitiateChatAttachmentUploadRequest = typeof InitiateChatAttachmentUploadRequestSchema.Type;
+
+export const InitiateWhiteboardFileUploadRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    byteLength: Schema.Number,
+    mimeType: Schema.String.check(Schema.isMinLength(1)),
+    sha256: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type InitiateWhiteboardFileUploadRequest = typeof InitiateWhiteboardFileUploadRequestSchema.Type;
 
 export const IntegrationActionIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId")))();
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
@@ -1090,6 +1188,31 @@ export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
     secret: Schema.String,
   }))();
 export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
+
+export const ScreenAnnotationHelperPairRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    challenge: Schema.String.check(Schema.isMinLength(1)),
+    helperPublicKey: Schema.String.check(Schema.isMinLength(1)),
+    layerId: Schema.String.check(Schema.isMinLength(1)),
+    publicationId: Schema.String.check(Schema.isMinLength(1)),
+    remembered: Schema.optional(Schema.Boolean),
+    version: Schema.Number,
+  }))();
+export type ScreenAnnotationHelperPairRequest = typeof ScreenAnnotationHelperPairRequestSchema.Type;
+
+export const ScreenAnnotationHelperPairResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachment: Schema.Struct({
+      expiresAtMs: Schema.Number,
+      ticket: Schema.String,
+    }),
+    pair: Schema.Struct({
+      expiresAtMs: Schema.Number,
+      ticket: Schema.String,
+    }),
+    remembered: Schema.optional(Schema.Boolean),
+  }))();
+export type ScreenAnnotationHelperPairResponse = typeof ScreenAnnotationHelperPairResponseSchema.Type;
 
 export const SetEpisodeDeadlineRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2281,12 +2404,27 @@ export const WebhookEndpointWithSecretSchema = /* @__PURE__ */ (() =>
   }))();
 export type WebhookEndpointWithSecret = typeof WebhookEndpointWithSecretSchema.Type;
 
+export const WhiteboardFileAvailabilitySchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    available: Schema.Boolean,
+  }))();
+export type WhiteboardFileAvailability = typeof WhiteboardFileAvailabilitySchema.Type;
+
 export const WhiteboardFileDownloadSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     downloadUrl: Schema.String,
     expiresAt: Schema.String,
   }))();
 export type WhiteboardFileDownload = typeof WhiteboardFileDownloadSchema.Type;
+
+export const WhiteboardFileUploadSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expiresAt: Schema.optional(Schema.String),
+    headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    ready: Schema.Boolean,
+    uploadUrl: Schema.optional(Schema.String),
+  }))();
+export type WhiteboardFileUpload = typeof WhiteboardFileUploadSchema.Type;
 
 export const RateLimitLimitHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)))();
 export type RateLimitLimitHeader = typeof RateLimitLimitHeaderSchema.Type;
@@ -2339,6 +2477,23 @@ export const ApproveMCPConsentRequest429ResponseHeadersSchema = /* @__PURE__ */ 
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type ApproveMCPConsentRequest429ResponseHeaders = typeof ApproveMCPConsentRequest429ResponseHeadersSchema.Type;
+
+export const ApproveScreenAnnotationHelperDeviceCodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ApproveScreenAnnotationHelperDeviceCodePathParams = typeof ApproveScreenAnnotationHelperDeviceCodePathParamsSchema.Type;
+
+export const ApproveScreenAnnotationHelperDeviceCodeRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceCodeApprovalSchema)();
+export type ApproveScreenAnnotationHelperDeviceCodeRequestBody = typeof ApproveScreenAnnotationHelperDeviceCodeRequestBodySchema.Type;
+
+export const ApproveScreenAnnotationHelperDeviceCode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ApproveScreenAnnotationHelperDeviceCode429ResponseHeaders = typeof ApproveScreenAnnotationHelperDeviceCode429ResponseHeadersSchema.Type;
 
 export const ApproveSpacePublicAdmissionRequestPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2759,6 +2914,24 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__
   }))();
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
 
+export const FinalizeWhiteboardFileUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+    sceneId: Schema.String,
+  }))();
+export type FinalizeWhiteboardFileUploadPathParams = typeof FinalizeWhiteboardFileUploadPathParamsSchema.Type;
+
+export const FinalizeWhiteboardFileUploadRequestBodySchema = /* @__PURE__ */ (() => FinalizeWhiteboardFileUploadRequestSchema)();
+export type FinalizeWhiteboardFileUploadRequestBody = typeof FinalizeWhiteboardFileUploadRequestBodySchema.Type;
+
+export const FinalizeWhiteboardFileUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type FinalizeWhiteboardFileUpload429ResponseHeaders = typeof FinalizeWhiteboardFileUpload429ResponseHeadersSchema.Type;
+
 export const FindTenantByExternalIDQueryParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
@@ -3036,6 +3209,9 @@ export const GetWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
   }))();
 export type GetWebhookEndpoint429ResponseHeaders = typeof GetWebhookEndpoint429ResponseHeadersSchema.Type;
 
+export const GetWhiteboardFileAvailabilityResponseSchema = /* @__PURE__ */ (() => WhiteboardFileAvailabilitySchema)();
+export type GetWhiteboardFileAvailabilityResponse = typeof GetWhiteboardFileAvailabilityResponseSchema.Type;
+
 export const GetWhiteboardFileDownloadPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
@@ -3066,6 +3242,27 @@ export const InitiateChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
+
+export const InitiateWhiteboardFileUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+    sceneId: Schema.String,
+  }))();
+export type InitiateWhiteboardFileUploadPathParams = typeof InitiateWhiteboardFileUploadPathParamsSchema.Type;
+
+export const InitiateWhiteboardFileUploadRequestBodySchema = /* @__PURE__ */ (() => InitiateWhiteboardFileUploadRequestSchema)();
+export type InitiateWhiteboardFileUploadRequestBody = typeof InitiateWhiteboardFileUploadRequestBodySchema.Type;
+
+export const InitiateWhiteboardFileUploadResponseSchema = /* @__PURE__ */ (() => WhiteboardFileUploadSchema)();
+export type InitiateWhiteboardFileUploadResponse = typeof InitiateWhiteboardFileUploadResponseSchema.Type;
+
+export const InitiateWhiteboardFileUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type InitiateWhiteboardFileUpload429ResponseHeaders = typeof InitiateWhiteboardFileUpload429ResponseHeadersSchema.Type;
 
 export const InspectMCPConsentRequestRequestBodySchema = /* @__PURE__ */ (() => MCPConsentLookupSchema)();
 export type InspectMCPConsentRequestRequestBody = typeof InspectMCPConsentRequestRequestBodySchema.Type;
@@ -3129,6 +3326,20 @@ export const IssueEpisodeParticipantSyncToken429ResponseHeadersSchema = /* @__PU
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type IssueEpisodeParticipantSyncToken429ResponseHeaders = typeof IssueEpisodeParticipantSyncToken429ResponseHeadersSchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicketRequestBodySchema = /* @__PURE__ */ (() => ScreenAnnotationHelperPairRequestSchema)();
+export type IssueScreenAnnotationHelperPairTicketRequestBody = typeof IssueScreenAnnotationHelperPairTicketRequestBodySchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicketResponseSchema = /* @__PURE__ */ (() => ScreenAnnotationHelperPairResponseSchema)();
+export type IssueScreenAnnotationHelperPairTicketResponse = typeof IssueScreenAnnotationHelperPairTicketResponseSchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicket429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type IssueScreenAnnotationHelperPairTicket429ResponseHeaders = typeof IssueScreenAnnotationHelperPairTicket429ResponseHeadersSchema.Type;
 
 export const LeaveSpacePublicInviteArrivalRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3234,6 +3445,23 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 
 export const ListRecordingsResponseSchema = /* @__PURE__ */ (() => RecordingListSchema)();
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
+
+export const ListScreenAnnotationHelperDevicesPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListScreenAnnotationHelperDevicesPathParams = typeof ListScreenAnnotationHelperDevicesPathParamsSchema.Type;
+
+export const ListScreenAnnotationHelperDevicesResponseSchema = /* @__PURE__ */ (() => HelperDeviceListSchema)();
+export type ListScreenAnnotationHelperDevicesResponse = typeof ListScreenAnnotationHelperDevicesResponseSchema.Type;
+
+export const ListScreenAnnotationHelperDevices429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListScreenAnnotationHelperDevices429ResponseHeaders = typeof ListScreenAnnotationHelperDevices429ResponseHeadersSchema.Type;
 
 export const ListSpaceActivityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3429,6 +3657,40 @@ export const ListWebhookEndpoints429ResponseHeadersSchema = /* @__PURE__ */ (() 
   }))();
 export type ListWebhookEndpoints429ResponseHeaders = typeof ListWebhookEndpoints429ResponseHeadersSchema.Type;
 
+export const LookupScreenAnnotationHelperDeviceCodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type LookupScreenAnnotationHelperDeviceCodePathParams = typeof LookupScreenAnnotationHelperDeviceCodePathParamsSchema.Type;
+
+export const LookupScreenAnnotationHelperDeviceCodeRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceCodeLookupSchema)();
+export type LookupScreenAnnotationHelperDeviceCodeRequestBody = typeof LookupScreenAnnotationHelperDeviceCodeRequestBodySchema.Type;
+
+export const LookupScreenAnnotationHelperDeviceCodeResponseSchema = /* @__PURE__ */ (() => HelperDeviceOfferSchema)();
+export type LookupScreenAnnotationHelperDeviceCodeResponse = typeof LookupScreenAnnotationHelperDeviceCodeResponseSchema.Type;
+
+export const LookupScreenAnnotationHelperDeviceCode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type LookupScreenAnnotationHelperDeviceCode429ResponseHeaders = typeof LookupScreenAnnotationHelperDeviceCode429ResponseHeadersSchema.Type;
+
+export const PollScreenAnnotationHelperDeviceCodeRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceCodePollSchema)();
+export type PollScreenAnnotationHelperDeviceCodeRequestBody = typeof PollScreenAnnotationHelperDeviceCodeRequestBodySchema.Type;
+
+export const PollScreenAnnotationHelperDeviceCodeResponseSchema = /* @__PURE__ */ (() => HelperDevicePollSchema)();
+export type PollScreenAnnotationHelperDeviceCodeResponse = typeof PollScreenAnnotationHelperDeviceCodeResponseSchema.Type;
+
+export const PollScreenAnnotationHelperDeviceCode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type PollScreenAnnotationHelperDeviceCode429ResponseHeaders = typeof PollScreenAnnotationHelperDeviceCode429ResponseHeadersSchema.Type;
+
 export const PreparePublicSpaceEntranceRequestBodySchema = /* @__PURE__ */ (() => EntranceInviteSchema)();
 export type PreparePublicSpaceEntranceRequestBody = typeof PreparePublicSpaceEntranceRequestBodySchema.Type;
 
@@ -3527,6 +3789,23 @@ export const RefreshSpacePublicInviteAccess429ResponseHeadersSchema = /* @__PURE
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type RefreshSpacePublicInviteAccess429ResponseHeaders = typeof RefreshSpacePublicInviteAccess429ResponseHeadersSchema.Type;
+
+export const RememberScreenAnnotationHelperDevicePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type RememberScreenAnnotationHelperDevicePathParams = typeof RememberScreenAnnotationHelperDevicePathParamsSchema.Type;
+
+export const RememberScreenAnnotationHelperDeviceRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceRememberSchema)();
+export type RememberScreenAnnotationHelperDeviceRequestBody = typeof RememberScreenAnnotationHelperDeviceRequestBodySchema.Type;
+
+export const RememberScreenAnnotationHelperDevice429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type RememberScreenAnnotationHelperDevice429ResponseHeaders = typeof RememberScreenAnnotationHelperDevice429ResponseHeadersSchema.Type;
 
 export const RemoveEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3646,6 +3925,23 @@ export const RevokeMCPConnection429ResponseHeadersSchema = /* @__PURE__ */ (() =
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type RevokeMCPConnection429ResponseHeaders = typeof RevokeMCPConnection429ResponseHeadersSchema.Type;
+
+export const RevokeScreenAnnotationHelperDevicePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type RevokeScreenAnnotationHelperDevicePathParams = typeof RevokeScreenAnnotationHelperDevicePathParamsSchema.Type;
+
+export const RevokeScreenAnnotationHelperDeviceRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceRevokeSchema)();
+export type RevokeScreenAnnotationHelperDeviceRequestBody = typeof RevokeScreenAnnotationHelperDeviceRequestBodySchema.Type;
+
+export const RevokeScreenAnnotationHelperDevice429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type RevokeScreenAnnotationHelperDevice429ResponseHeaders = typeof RevokeScreenAnnotationHelperDevice429ResponseHeadersSchema.Type;
 
 export const RotateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3795,6 +4091,20 @@ export const SignalChalkSFU429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type SignalChalkSFU429ResponseHeaders = typeof SignalChalkSFU429ResponseHeadersSchema.Type;
+
+export const StartScreenAnnotationHelperDeviceCodeRequestBodySchema = /* @__PURE__ */ (() => HelperDeviceCodeStartSchema)();
+export type StartScreenAnnotationHelperDeviceCodeRequestBody = typeof StartScreenAnnotationHelperDeviceCodeRequestBodySchema.Type;
+
+export const StartScreenAnnotationHelperDeviceCodeResponseSchema = /* @__PURE__ */ (() => HelperDeviceCodeSchema)();
+export type StartScreenAnnotationHelperDeviceCodeResponse = typeof StartScreenAnnotationHelperDeviceCodeResponseSchema.Type;
+
+export const StartScreenAnnotationHelperDeviceCode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type StartScreenAnnotationHelperDeviceCode429ResponseHeaders = typeof StartScreenAnnotationHelperDeviceCode429ResponseHeadersSchema.Type;
 
 export const TestWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6212,6 +6522,25 @@ export const WebhookUnsafeUrlErrorSchema = WebhookUnsafeUrlErrorWireSchema.pipe(
   }),
 );
 
+export class WhiteboardFileConflictError extends Schema.TaggedErrorClass<WhiteboardFileConflictError>()("WhiteboardFileConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("whiteboard.file_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const WhiteboardFileConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("whiteboard.file_conflict"),
+    message: Schema.String,
+  }),
+});
+export const WhiteboardFileConflictErrorSchema = WhiteboardFileConflictErrorWireSchema.pipe(
+  Schema.decodeTo(WhiteboardFileConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardFileConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class WhiteboardFileNotFoundError extends Schema.TaggedErrorClass<WhiteboardFileNotFoundError>()("WhiteboardFileNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("whiteboard.file_not_found"),
@@ -6323,6 +6652,9 @@ export const ApproveMCPConsentRequestErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ApproveMCPConsentRequestError = typeof ApproveMCPConsentRequestErrorSchema.Type;
+
+export const ApproveScreenAnnotationHelperDeviceCodeErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type ApproveScreenAnnotationHelperDeviceCodeError = typeof ApproveScreenAnnotationHelperDeviceCodeErrorSchema.Type;
 
 export const ApproveSpacePublicAdmissionRequestErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6649,6 +6981,20 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
 
+export const FinalizeWhiteboardFileUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  WhiteboardFileConflictErrorSchema,
+  WhiteboardFileNotFoundErrorSchema,
+  WhiteboardFileTransferFailedErrorSchema,
+  WhiteboardInvalidFileErrorSchema,
+  WhiteboardStorageUnavailableErrorSchema,
+]);
+export type FinalizeWhiteboardFileUploadError = typeof FinalizeWhiteboardFileUploadErrorSchema.Type;
+
 export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
 export type FindTenantByExternalIDError = typeof FindTenantByExternalIDErrorSchema.Type;
 
@@ -6877,6 +7223,20 @@ export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type InitiateChatAttachmentUploadError = typeof InitiateChatAttachmentUploadErrorSchema.Type;
 
+export const InitiateWhiteboardFileUploadErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  WhiteboardFileConflictErrorSchema,
+  WhiteboardFileNotFoundErrorSchema,
+  WhiteboardFileTransferFailedErrorSchema,
+  WhiteboardInvalidFileErrorSchema,
+  WhiteboardStorageUnavailableErrorSchema,
+]);
+export type InitiateWhiteboardFileUploadError = typeof InitiateWhiteboardFileUploadErrorSchema.Type;
+
 export const InspectMCPConsentRequestErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthRequestNotFoundErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type InspectMCPConsentRequestError = typeof InspectMCPConsentRequestErrorSchema.Type;
 
@@ -6927,6 +7287,9 @@ export const IssueEpisodeParticipantSyncTokenErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type IssueEpisodeParticipantSyncTokenError = typeof IssueEpisodeParticipantSyncTokenErrorSchema.Type;
+
+export const IssueScreenAnnotationHelperPairTicketErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
+export type IssueScreenAnnotationHelperPairTicketError = typeof IssueScreenAnnotationHelperPairTicketErrorSchema.Type;
 
 export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ArrivalInvalidHandleErrorSchema,
@@ -6991,6 +7354,9 @@ export const ListRecordingsErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
+
+export const ListScreenAnnotationHelperDevicesErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type ListScreenAnnotationHelperDevicesError = typeof ListScreenAnnotationHelperDevicesErrorSchema.Type;
 
 export const ListSpaceActivityErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListSpaceActivityError = typeof ListSpaceActivityErrorSchema.Type;
@@ -7085,6 +7451,12 @@ export const ListWebhookEndpointsErrorSchema = Schema.Union([
 ]);
 export type ListWebhookEndpointsError = typeof ListWebhookEndpointsErrorSchema.Type;
 
+export const LookupScreenAnnotationHelperDeviceCodeErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type LookupScreenAnnotationHelperDeviceCodeError = typeof LookupScreenAnnotationHelperDeviceCodeErrorSchema.Type;
+
+export const PollScreenAnnotationHelperDeviceCodeErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type PollScreenAnnotationHelperDeviceCodeError = typeof PollScreenAnnotationHelperDeviceCodeErrorSchema.Type;
+
 export const PreparePublicSpaceEntranceErrorSchema = Schema.Union([RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, SpacePublicInviteUnavailableErrorSchema]);
 export type PreparePublicSpaceEntranceError = typeof PreparePublicSpaceEntranceErrorSchema.Type;
 
@@ -7157,6 +7529,9 @@ export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
   TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type RefreshSpacePublicInviteAccessError = typeof RefreshSpacePublicInviteAccessErrorSchema.Type;
+
+export const RememberScreenAnnotationHelperDeviceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type RememberScreenAnnotationHelperDeviceError = typeof RememberScreenAnnotationHelperDeviceErrorSchema.Type;
 
 export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7233,6 +7608,9 @@ export type RevokeAPIKeyError = typeof RevokeAPIKeyErrorSchema.Type;
 
 export const RevokeMCPConnectionErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthConnectionNotFoundErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type RevokeMCPConnectionError = typeof RevokeMCPConnectionErrorSchema.Type;
+
+export const RevokeScreenAnnotationHelperDeviceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type RevokeScreenAnnotationHelperDeviceError = typeof RevokeScreenAnnotationHelperDeviceErrorSchema.Type;
 
 export const RotateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7348,6 +7726,9 @@ export const SignalChalkSFUErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type SignalChalkSFUError = typeof SignalChalkSFUErrorSchema.Type;
+
+export const StartScreenAnnotationHelperDeviceCodeErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type StartScreenAnnotationHelperDeviceCodeError = typeof StartScreenAnnotationHelperDeviceCodeErrorSchema.Type;
 
 export const TestWebhookEndpointErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7492,6 +7873,7 @@ export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
 export const ChalkOperationPolicies = {
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  approveScreenAnnotationHelperDeviceCode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7512,6 +7894,7 @@ export const ChalkOperationPolicies = {
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  finalizeWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
@@ -7523,35 +7906,43 @@ export const ChalkOperationPolicies = {
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   inspectMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  issueScreenAnnotationHelperPairTicket: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listMCPConnections: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  listScreenAnnotationHelperDevices: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceActivity: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceLiveEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listTenants: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
+  lookupScreenAnnotationHelperDeviceCode: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "helper_device_lookup", windowSeconds: 60 } },
+  pollScreenAnnotationHelperDeviceCode: { maxBodyBytes: 1048576, rateLimit: { limit: 30, policy: "helper_device_poll", windowSeconds: 60 } },
   preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceEntrance: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  rememberScreenAnnotationHelperDevice: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeMCPConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  revokeScreenAnnotationHelperDevice: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   sendProblemReport: { maxBodyBytes: 37024, rateLimit: { limit: 3, policy: "problem_reports.participant", windowSeconds: 3600 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   signalChalkSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  startScreenAnnotationHelperDeviceCode: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "helper_device_enrollment", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

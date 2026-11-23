@@ -1,0 +1,17 @@
+# Cargo.lock contains packages for optional features and other platforms.
+# The Helper development workflow checks that none of these packages enter
+# either supported target graph before building the native artifact.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-02-22
+reason = "glib 0.18 is required by Tauri's Linux GTK3 stack, which is not built for macOS or Windows."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-02-22
+reason = "This unmaintained proc macro is only used by the Linux GTK3 dependency chain."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-22
+reason = "chrono is an optional serde_with dependency. Neither supported target enables that feature."

@@ -1,12 +1,13 @@
 import { canExtendCall, reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk, reportDiagnostics } from "@q9labsai/chalk-react";
+import { webAnnotation } from "../../lib/screen-annotation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
 import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { onPageFailure } from "../../lib/chunkReload";
 import { CallErrorBoundary } from "./CallErrorBoundary";
-import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
+import { problemReporter, type ReportProblem } from "../../lib/send-problem-report";
 import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
 
@@ -123,6 +124,7 @@ export function LocalSpace({
       >
         {homeError ? <p role="alert">{homeError}</p> : null}
         <Chalk
+          screenAnnotation={webAnnotation}
           timeLimit={{
             message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",
             action: offerSignUp ? signUp : undefined,

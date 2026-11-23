@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.1.0
+
+- Offer temporary and kept ink on a live screen share when Sync enables annotation. Sharers can move the controls, manage marks, open an annotated Picture-in-Picture preview, or pair Chalk Helper where supported.
+
 ## 5.2.0
 
 ### board-draw-policy

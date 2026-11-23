@@ -1,6 +1,6 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { useToasts } from "../primitives/toast/ToastStack";
@@ -11,6 +11,8 @@ import { useMeasuredRef } from "../frame/measurement";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
+import { AndroidShareAnnotationControls, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
+import type { StageAnnotation } from "../screen-annotation/model";
 import { useTheme } from "../theme/theme";
 import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
 import { ContentTile, type SharedContent } from "./ContentTile";
@@ -22,6 +24,7 @@ import { TileSheet } from "./TileSheet";
 import { useStageVideoTiles } from "./video-tile-visibility";
 
 export type StageProps = {
+  readonly annotation?: StageAnnotation;
   /** The stage box in screen points, from `frameRegions`. */
   readonly frame: Frame;
   /** The "+N" tile opens People. */
@@ -35,6 +38,7 @@ type Structure = {
   readonly speaker: string | null;
   readonly sharer: string | null;
   readonly board: boolean;
+  readonly ownShare: string | null;
 };
 
 /** Only what decides where tiles go, so a mute or a hand raise never re-renders the stage. */
@@ -47,6 +51,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
     selfId,
     present: (hasSelf && selfId !== null ? [selfId, ...others] : others).join("\n"),
     speaker: roster.find((person) => person.presence.activeSpeaker)?.participantId ?? null,
+    ownShare: Platform.OS === "android" && snapshot.media.screenShare.state === "enabled" ? (roster.find((person) => person.participantId === selfId)?.media.screenSharePublicationId ?? null) : null,
     sharer: roster.find((person) => person.participantId !== selfId && person.media.screenShare === "active")?.participantId ?? null,
     board: snapshot.whiteboard.engine.presenting,
   };
@@ -57,7 +62,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
  * board. Tiles are keyed by participant and moved with `MovingFrame`, so a video view is never
  * remounted by a move, a layout switch or a sheet; only tiles on the stage subscribe to video.
  */
-export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): React.JSX.Element {
+export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: StageProps): React.JSX.Element {
   const client = useSpaceClient();
   const toasts = useToasts();
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the native board scene session for this client; release it through ownNativeBoardSession cleanup.
@@ -87,7 +92,8 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   }, [structure.board, view.setBoardOpen, view.setFollowing]);
 
   const boardVisible = view.boardOpen ?? structure.board;
-  const content = useMemo<SharedContent | null>(() => (boardVisible ? { kind: "board" } : structure.sharer !== null ? { kind: "screen", sharerId: structure.sharer } : null), [boardVisible, structure.sharer]);
+  const { sharer } = structure;
+  const content = useMemo<SharedContent | null>(() => (boardVisible ? { kind: "board" } : sharer !== null ? { kind: "screen", sharerId: sharer } : null), [boardVisible, sharer]);
   const pinned = view.pinned !== null && present.includes(view.pinned) ? view.pinned : null;
   const items = useMemo(
     () =>
@@ -125,8 +131,22 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   return (
     <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {items.map((item) => (
-        <StageTile content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={followTile} onTileOptions={openTile} following={view.following} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
+        <StageTile
+          annotation={structure.ownShare ? undefined : annotation}
+          content={content}
+          item={item}
+          key={itemKey(item)}
+          mirror={view.mirror}
+          onOpenPeople={onOpenPeople}
+          onOpenTile={followTile}
+          onTileOptions={openTile}
+          following={view.following}
+          onShowContent={view.showContent}
+          peopleCount={present.length}
+          pinned={pinned}
+        />
       ))}
+      {annotation && structure.ownShare && structure.selfId ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
   );
@@ -137,6 +157,7 @@ function itemKey(item: StageItem): string {
 }
 
 type StageTileProps = {
+  readonly annotation?: StageAnnotation;
   readonly item: StageItem;
   readonly content: SharedContent | null;
   readonly pinned: string | null;
@@ -149,7 +170,7 @@ type StageTileProps = {
   readonly onShowContent: () => void;
 };
 
-function StageTile({ item, content, pinned, mirror, peopleCount, onOpenTile, onOpenPeople, onShowContent, following, onTileOptions }: StageTileProps): React.JSX.Element | null {
+function StageTile({ annotation, item, content, pinned, mirror, peopleCount, onOpenTile, onOpenPeople, onShowContent, following, onTileOptions }: StageTileProps): React.JSX.Element | null {
   const { scheme } = useTheme();
   const float = item.kind === "person" && item.float;
   return (
@@ -158,7 +179,7 @@ function StageTile({ item, content, pinned, mirror, peopleCount, onOpenTile, onO
         {item.kind === "person" ? (
           <ParticipantTile float={float} height={item.frame.height} id={item.id} mirror={mirror} onOpen={onOpenTile} onOptions={onTileOptions} following={following === item.id} pinned={pinned === item.id} width={item.frame.width} />
         ) : item.kind === "content" && content ? (
-          <ContentTile content={content} inner={item.inner} mini={item.mini} onShowInSpotlight={onShowContent} />
+          <ContentTile annotation={annotation} content={content} inner={item.inner} mini={item.mini} onShowInSpotlight={onShowContent} />
         ) : item.kind === "more" ? (
           <MoreTile count={item.count} onPress={onOpenPeople} peopleCount={peopleCount} />
         ) : null}
@@ -186,3 +207,8 @@ const styles = StyleSheet.create({
   more: { flex: 1, borderRadius: radii.tilePhone, alignItems: "center", justifyContent: "center" },
   moreText: { fontFamily: fontFamilies[600], fontSize: fontSizes.title, lineHeight: 22 * 1.4 },
 });
+
+function LiveShareAnnotationControls(props: Omit<React.ComponentProps<typeof AndroidShareAnnotationControls>, "people">): React.JSX.Element | null {
+  const people = useAnnotationPeople(props.participantId);
+  return <AndroidShareAnnotationControls {...props} people={people} />;
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -35,6 +36,7 @@ type Upload struct {
 	MIMEType   string
 	ByteLength int64
 	SHA256     [32]byte
+	Status     string
 	ExpiresAt  time.Time
 }
 
@@ -45,20 +47,26 @@ type Download struct {
 
 type Repository interface {
 	ReadyFile(context.Context, Subject, string) (Upload, error)
+	Reserve(context.Context, Upload) (Upload, error)
+	PendingOrReady(context.Context, FileRequest) (Upload, error)
+	Finalize(context.Context, FileRequest, utilities.ID, string, time.Time) (bool, error)
 }
 
 type ObjectStore interface {
+	CreateUploadURL(context.Context, objectstorage.CreateUploadURLInput) (objectstorage.SignedURL, error)
+	GetObject(context.Context, string) (objectstorage.ObjectReader, error)
 	CreateDownloadURL(context.Context, objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error)
 }
 
 type Service struct {
-	repository Repository
-	objects    ObjectStore
-	now        func() time.Time
+	repository  Repository
+	objects     ObjectStore
+	now         func() time.Time
+	verifySlots chan struct{}
 }
 
 func NewService(repository Repository, objects ObjectStore) Service {
-	return Service{repository: repository, objects: objects, now: time.Now}
+	return Service{repository: repository, objects: objects, now: time.Now, verifySlots: make(chan struct{}, 2)}
 }
 
 func (s Service) Download(ctx context.Context, subject Subject, fileID string) (Download, error) {
@@ -69,7 +77,8 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 	if err != nil {
 		return Download{}, err
 	}
-	// Legacy rows may contain active formats; leave those objects intact without signing them.
+	// Old rows may contain active formats such as SVG. Do not issue a
+	// browser-navigable storage URL for them; keep the original object intact.
 	if !rasterImage(file.MIMEType) {
 		return Download{}, ErrFileNotFound
 	}
@@ -80,15 +89,6 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 	return Download{URL: signed.URL, ExpiresAt: signed.ExpiresAt}, nil
 }
 
-func rasterImage(mimeType string) bool {
-	switch mimeType {
-	case "image/png", "image/jpeg", "image/gif", "image/webp":
-		return true
-	default:
-		return false
-	}
-}
-
 func validFileID(value string) bool {
-	return value != "" && utf8.ValidString(value) && len(value) <= maxFileIDBytes
+	return value != "" && !strings.ContainsRune(value, 0) && utf8.ValidString(value) && len(value) <= maxFileIDBytes
 }

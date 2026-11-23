@@ -26,6 +26,7 @@
     "@cloudflare/vite-plugin": "^1.43.0",
     "@q9labsai/chalk-client": "workspace:^",
     "@q9labsai/chalk-react": "workspace:^",
+    "@q9labsai/chalk-screen-annotation": "workspace:^",
     "@q9labsai/chalk-ui": "workspace:^",
     "@q9labsai/chalk-whiteboard": "workspace:^",
     "@tanstack/react-router": "1.170.41",

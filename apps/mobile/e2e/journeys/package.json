@@ -1,0 +1,12 @@
+{
+  "name": "chalk-mobile-journeys",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "e2e run"
+  },
+  "devDependencies": {
+    "@e2e-dev/mobile": "0.12.8",
+    "e2e": "0.24.0"
+  }
+}

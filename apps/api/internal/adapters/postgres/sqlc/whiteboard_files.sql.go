@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const canWriteWhiteboardFile = `-- name: CanWriteWhiteboardFile :one
+select exists (
+    select 1 from sync_whiteboard_file_writers
+    where (tenant_id, space_id, episode_id, participant_id, participant_generation, scene_id) =
+        ($1, $2, $3, $4, $5::bigint, $6)
+)
+`
+
+type CanWriteWhiteboardFileParams struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	SceneID               pgtype.UUID `json:"scene_id"`
+}
+
+func (q *Queries) CanWriteWhiteboardFile(ctx context.Context, arg CanWriteWhiteboardFileParams) (bool, error) {
+	row := q.db.QueryRow(ctx, canWriteWhiteboardFile,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.SceneID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const claimWhiteboardFileCleanup = `-- name: ClaimWhiteboardFileCleanup :many
 with candidates as (
     select file.upload_id
@@ -26,6 +57,10 @@ with candidates as (
         and (
             (
                 file.status in ('pending', 'finalizing', 'failed')
+                and file.expires_at <= $3 - interval '15 minutes'
+            )
+            or (
+                file.status = 'ready' and file.referenced_at is null
                 and file.expires_at <= $3
             )
             or (
@@ -112,6 +147,54 @@ func (q *Queries) CompleteWhiteboardFileCleanup(ctx context.Context, arg Complet
 	return result.RowsAffected(), nil
 }
 
+const finalizeWhiteboardFile = `-- name: FinalizeWhiteboardFile :execrows
+update sync_whiteboard_files file
+set status = 'ready',
+    immutable_object_identity = $1,
+    finalized_at = now(),
+    expires_at = $2,
+    updated_at = now()
+from sync_whiteboard_file_writers writer
+where (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_id, writer.participant_generation, writer.scene_id) =
+    ($3, $4, $5, $6, $7::bigint, $8)
+    and (file.tenant_id, file.space_id, file.episode_id, file.participant_id, file.participant_generation, file.scene_id) =
+        (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_id, writer.participant_generation, writer.scene_id)
+    and file.upload_id = $9
+    and file.status = 'pending'
+    and file.expires_at > now()
+    and file.cleanup_claim_token is null
+`
+
+type FinalizeWhiteboardFileParams struct {
+	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
+	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	SpaceID                 pgtype.UUID        `json:"space_id"`
+	EpisodeID               pgtype.UUID        `json:"episode_id"`
+	ParticipantID           pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration   int64              `json:"participant_generation"`
+	SceneID                 pgtype.UUID        `json:"scene_id"`
+	UploadID                pgtype.UUID        `json:"upload_id"`
+}
+
+func (q *Queries) FinalizeWhiteboardFile(ctx context.Context, arg FinalizeWhiteboardFileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeWhiteboardFile,
+		arg.ImmutableObjectIdentity,
+		arg.ExpiresAt,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.SceneID,
+		arg.UploadID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getReadyWhiteboardFile = `-- name: GetReadyWhiteboardFile :one
 select
     file.upload_id,
@@ -141,12 +224,14 @@ join episodes episode
 join sync_whiteboard_scenes scene
     on scene.tenant_id = file.tenant_id
     and scene.space_id = file.space_id
+    and scene.episode_id = file.episode_id
     and scene.scene_id = file.scene_id
 where file.tenant_id = $3
     and file.space_id = $4
     and file.episode_id = $5
     and file.file_id = $6
     and file.status = 'ready'
+    and file.cleanup_claim_token is null
     and participant.status = 'active'
     and episode.status = 'active'
     and scene.is_current
@@ -200,6 +285,148 @@ func (q *Queries) GetReadyWhiteboardFile(ctx context.Context, arg GetReadyWhiteb
 		&i.MimeType,
 		&i.ByteLength,
 		&i.Sha256,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getWhiteboardFileUpload = `-- name: GetWhiteboardFileUpload :one
+select file.upload_id, file.object_key, file.mime_type, file.byte_length, file.sha256,
+    file.status, file.expires_at
+from sync_whiteboard_files file
+join sync_whiteboard_file_writers writer
+    using (tenant_id, space_id, episode_id, scene_id)
+where (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_id, writer.participant_generation, writer.scene_id) =
+    ($1, $2, $3, $4, $5::bigint, $6)
+    and file.file_id = $7
+    and file.cleanup_claim_token is null
+    and (
+        file.status = 'ready'
+        or (file.status = 'pending'
+            and file.participant_id = writer.participant_id
+            and file.participant_generation = writer.participant_generation)
+    )
+`
+
+type GetWhiteboardFileUploadParams struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	SceneID               pgtype.UUID `json:"scene_id"`
+	FileID                string      `json:"file_id"`
+}
+
+type GetWhiteboardFileUploadRow struct {
+	UploadID   pgtype.UUID        `json:"upload_id"`
+	ObjectKey  string             `json:"object_key"`
+	MimeType   string             `json:"mime_type"`
+	ByteLength int64              `json:"byte_length"`
+	Sha256     []byte             `json:"sha256"`
+	Status     string             `json:"status"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetWhiteboardFileUpload(ctx context.Context, arg GetWhiteboardFileUploadParams) (GetWhiteboardFileUploadRow, error) {
+	row := q.db.QueryRow(ctx, getWhiteboardFileUpload,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.SceneID,
+		arg.FileID,
+	)
+	var i GetWhiteboardFileUploadRow
+	err := row.Scan(
+		&i.UploadID,
+		&i.ObjectKey,
+		&i.MimeType,
+		&i.ByteLength,
+		&i.Sha256,
+		&i.Status,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const reserveWhiteboardFile = `-- name: ReserveWhiteboardFile :one
+insert into sync_whiteboard_files as file (
+    upload_id, tenant_id, space_id, episode_id, participant_id, participant_generation,
+    scene_id, file_id, object_key, mime_type, byte_length, sha256, expires_at
+)
+select $1, writer.tenant_id, writer.space_id, writer.episode_id,
+    writer.participant_id, writer.participant_generation, writer.scene_id, $2,
+    $3, $4, $5, $6, $7
+from sync_whiteboard_file_writers writer
+where (writer.tenant_id, writer.space_id, writer.episode_id, writer.participant_id, writer.participant_generation, writer.scene_id) =
+    ($8, $9, $10, $11, $12::bigint, $13)
+    and can_reserve_whiteboard_file(writer.tenant_id, writer.space_id, writer.scene_id, writer.participant_id, $2)
+on conflict (tenant_id, space_id, scene_id, file_id) do update
+set updated_at = now(),
+    expires_at = case
+        when file.status = 'pending' and file.expires_at <= now() then excluded.expires_at
+        else file.expires_at
+    end
+where file.episode_id = excluded.episode_id
+    and file.cleanup_claim_token is null
+    and file.sha256 = excluded.sha256
+    and file.mime_type = excluded.mime_type
+    and file.byte_length = excluded.byte_length
+    and (
+        file.status = 'ready'
+        or (file.status = 'pending'
+            and file.participant_id = excluded.participant_id
+            and file.participant_generation = excluded.participant_generation)
+    )
+returning file.upload_id, file.object_key, file.status, file.expires_at
+`
+
+type ReserveWhiteboardFileParams struct {
+	UploadID              pgtype.UUID        `json:"upload_id"`
+	FileID                string             `json:"file_id"`
+	ObjectKey             string             `json:"object_key"`
+	MimeType              string             `json:"mime_type"`
+	ByteLength            int64              `json:"byte_length"`
+	Sha256                []byte             `json:"sha256"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	SceneID               pgtype.UUID        `json:"scene_id"`
+}
+
+type ReserveWhiteboardFileRow struct {
+	UploadID  pgtype.UUID        `json:"upload_id"`
+	ObjectKey string             `json:"object_key"`
+	Status    string             `json:"status"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) ReserveWhiteboardFile(ctx context.Context, arg ReserveWhiteboardFileParams) (ReserveWhiteboardFileRow, error) {
+	row := q.db.QueryRow(ctx, reserveWhiteboardFile,
+		arg.UploadID,
+		arg.FileID,
+		arg.ObjectKey,
+		arg.MimeType,
+		arg.ByteLength,
+		arg.Sha256,
+		arg.ExpiresAt,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.SceneID,
+	)
+	var i ReserveWhiteboardFileRow
+	err := row.Scan(
+		&i.UploadID,
+		&i.ObjectKey,
+		&i.Status,
 		&i.ExpiresAt,
 	)
 	return i, err

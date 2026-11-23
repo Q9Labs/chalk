@@ -66,8 +66,7 @@ export async function readPageTimed<P extends DashboardPage>(page: P, query: Das
 }
 
 export async function act<P extends DashboardPage, A extends DashboardPages[P]["action"]>(page: P, action: A): Promise<ActionResults[A["action"]]> {
-  if (!csrfToken) await loadSession();
-  return send(() => post(`/dashboard-api/${page}`, action));
+  return send(() => dashboardPost(`/dashboard-api/${page}`, action));
 }
 
 async function send<T>(request: () => Promise<Response>): Promise<T> {
@@ -77,12 +76,18 @@ async function send<T>(request: () => Promise<Response>): Promise<T> {
   return response.json();
 }
 
-function post(path: string, body: object): Promise<Response> {
+export async function dashboardPost(path: string, body: object, signal?: AbortSignal): Promise<Response> {
+  if (!csrfToken) await loadSession();
+  return post(path, body, signal);
+}
+
+function post(path: string, body: object, signal?: AbortSignal): Promise<Response> {
   return fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrfToken ?? "" },
     body: JSON.stringify(body),
     cache: "no-store",
+    signal,
   });
 }
 

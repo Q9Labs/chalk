@@ -9,6 +9,7 @@ import { releaseSounds } from "../sounds/sounds";
 import { ThemeProvider } from "../theme/theme";
 import type { ColorScheme } from "../theme/tokens";
 import type { Permission } from "../toasts/CallEventToasts";
+import type { ScreenAnnotationActions } from "../screen-annotation/model";
 import { StageViewProvider } from "../stage/stage-view";
 import { CallFrame } from "./CallFrame";
 import { DeviceLayoutProvider } from "./device-layout";
@@ -24,6 +25,9 @@ export type ChalkProps = {
   readonly callName?: string;
   /** The call's link, which More and the call details offer to copy, share and show as a QR code. */
   readonly inviteLink?: string;
+  /** Enable the built-in Save to board action when the backing API supports whiteboard uploads. */
+  readonly annotationBoardSaveEnabled?: boolean;
+  readonly annotationActions?: ScreenAnnotationActions;
   /** Dark by default. Set it with `onColorSchemeChange` to keep the person's choice. */
   readonly colorScheme?: ColorScheme;
   readonly onColorSchemeChange?: (colorScheme: ColorScheme) => void;

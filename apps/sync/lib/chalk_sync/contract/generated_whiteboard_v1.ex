@@ -285,7 +285,13 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "transientEnvelopeBytes" => 1024,
       "durablePayloadContainsContent" => false
     },
-    "fileTransport" => %{"download" => "participant-bound-short-lived-url"},
+    "fileTransport" => %{
+      "download" => "participant-bound-short-lived-url",
+      "upload" => "scene-and-draw-authorized-create-only-short-lived-url",
+      "finalize" => "scene-file-id-and-digest-idempotent",
+      "maxUploadBytes" => 20_971_520,
+      "uploadMimeTypes" => ["image/png", "image/jpeg", "image/gif", "image/webp"]
+    },
     "persistence" => %{
       "fullSyncDeletesAbsentElements" => false,
       "clearStartsNewSceneEpoch" => true,

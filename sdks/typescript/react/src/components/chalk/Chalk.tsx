@@ -1,20 +1,17 @@
 "use client";
-import { commandFailure, type MediaCommandAction, type MediaCommandSource } from "../control-bar/command-failure";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
-import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
+import { createSpaceClient, type ChatUploadFile, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useConnection, useRecording, useSpaceClient } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
-import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
-import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
-import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
-import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+import type { SpaceViewProps } from "../space-view/SpaceView";
+import { SpaceSurface } from "./SpaceSurface";
 import { StatusSurface } from "./StatusSurface";
 import { reportDiagnostics } from "./report-diagnostics";
 import type { SpaceEventCallbacks } from "./space-event-callbacks";
 import { CallDialog } from "../space-header/CallDialog";
+import type { ScreenAnnotationSetup } from "../screen-annotation/model";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
@@ -45,6 +42,8 @@ export type ChalkProps = SpaceIntegration &
     readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
+    /** Enables annotation UI only on an exactly matched, negotiated screen publication. */
+    readonly screenAnnotation?: ScreenAnnotationSetup;
     readonly theme?: ChalkTheme;
     readonly shareUrl?: string;
     readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
@@ -253,110 +252,6 @@ function SpaceExperience(
       <CallLimbo overlay active={false} initiallyCovered message="" />
     </div>
   );
-}
-function SpaceSurface(
-  props: ChalkProps & {
-    readonly resolvedColorScheme: ChalkColorScheme;
-    readonly spaceName: string;
-    readonly onOpenReport?: () => void;
-    readonly onRetry: () => void;
-  },
-): JSX.Element {
-  const client = useSpaceClient();
-  const connection = useConnection();
-  const media = useMedia();
-  const whiteboardState = useWhiteboard();
-  const canEndEpisode = useCan("endEpisode");
-  const canDrawWhiteboard = useCanDrawWhiteboard();
-  const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
-  const [commandSource, setCommandSource] = useState<MediaCommandSource>();
-  const [commandAction, setCommandAction] = useState<MediaCommandAction>();
-  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
-    try {
-      await command();
-      setCommandError(null);
-      setCommandSource(undefined);
-      setCommandAction(undefined);
-    } catch (cause) {
-      setCommandError(commandFailure(cause));
-      setCommandSource(source);
-      setCommandAction(action);
-    }
-  }, []);
-  const whiteboardTransport = client.whiteboard.transport();
-  const whiteboardAvailable = props.features?.whiteboard !== false;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Preload the whiteboard stylesheet only when the committed call supports a board.
-  useEffect(() => {
-    if (whiteboardAvailable) preloadWhiteboardStylesheet();
-  }, [whiteboardAvailable]);
-  const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
-  const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Reconcile whiteboard loading/failure into command-error state without overriding a later command error on unrelated renders.
-  useEffect(() => {
-    if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
-    else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
-  }, [whiteboardSubscription]);
-  const whiteboard =
-    whiteboardAvailable && whiteboardState.engine.presenting && whiteboardSubscription.status === "ready"
-      ? {
-          isOpen: true,
-          presenterId: whiteboardState.engine.presenterId,
-          props: {
-            canDraw: canDrawWhiteboard,
-            collab: {
-              canDraw: canDrawWhiteboard,
-              subscribe: (listener: NonNullable<WhiteboardViewProps["collab"]>["subscribe"] extends (listener: infer T) => unknown ? T : never) => whiteboardSubscription.transport.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
-              submitUpdate: async (input: NonNullable<WhiteboardViewProps["collab"]>["submitUpdate"] extends (input: infer T) => unknown ? T : never) =>
-                whiteboardSubscription.transport.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
-              sendCursor: (input: NonNullable<WhiteboardViewProps["collab"]>["sendCursor"] extends (input: infer T) => unknown ? T : never) => whiteboardSubscription.transport.sendCursor(input),
-              requestSnapshot: () => whiteboardSubscription.transport.requestSnapshot(),
-              onSubmissionError: (cause: unknown) => setCommandError(cause instanceof Error ? cause.message : "Whiteboard could not sync."),
-              clear: () => whiteboardSubscription.transport.clear(),
-              presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
-            },
-          },
-          sendView: (whiteboardSubscription.transport.supportsViews ?? Boolean(whiteboardSubscription.transport.sendView)) ? (view: ChalkWhiteboardView) => whiteboardSubscription.transport.sendView?.(view) ?? false : undefined,
-        }
-      : undefined;
-  return (
-    <SpaceView
-      timeLimit={props.timeLimit}
-      colorScheme={props.resolvedColorScheme}
-      shareUrl={props.shareUrl}
-      onReportProblem={props.onReportProblem}
-      onOpenReportProblem={props.onOpenReport}
-      reportUnavailableReason={props.reportUnavailableReason}
-      onColorSchemeChange={props.onColorSchemeChange}
-      spaceName={props.spaceName}
-      inviteLink={props.inviteLink}
-      callLinkOpen={props.callLinkOpen}
-      pickChatFiles={props.pickChatFiles}
-      commandError={commandError ?? undefined}
-      commandSource={commandSource}
-      commandAction={commandAction}
-      onDismissCommandError={() => setCommandError(null)}
-      layout={props.layout}
-      onLayoutChange={props.onLayoutChange}
-      features={props.features}
-      whiteboard={whiteboard}
-      onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
-      onLeft={() => runCommand(() => client.leave())}
-      onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
-      onRejoin={props.onRejoin ?? props.onRetry}
-      overlay={
-        media.microphoneMutedByOtherDevice ? (
-          <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">
-            <p className="chalk-toast text-center text-sm">Mic off: your other device is using it.</p>
-          </div>
-        ) : undefined
-      }
-    />
-  );
-}
-function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((presenting: boolean) => Promise<void>) | undefined {
-  const setPresentation = transport.setPresentation;
-  if (!setPresentation) return undefined;
-  return (presenting) => setPresentation.call(transport, presenting);
 }
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();

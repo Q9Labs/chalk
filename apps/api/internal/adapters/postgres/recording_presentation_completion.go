@@ -3,7 +3,6 @@ package postgres
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -97,25 +95,6 @@ type completionWhiteboardSnapshotWire struct {
 	Elements   []json.RawMessage `json:"elements"`
 }
 
-type completionWhiteboardEventWire struct {
-	Name        string            `json:"operation_name"`
-	OperationID string            `json:"operation_id"`
-	SceneID     string            `json:"scene_id"`
-	Revision    int64             `json:"revision"`
-	Elements    []json.RawMessage `json:"elements"`
-	Presenting  *bool             `json:"presenting"`
-	CompletedAt time.Time         `json:"completed_at"`
-}
-
-type completionWhiteboardFileWire struct {
-	ID         string `json:"file_id"`
-	ObjectKey  string `json:"object_key"`
-	ObjectETag string `json:"object_etag"`
-	MIMEType   string `json:"mime_type"`
-	ByteLength int64  `json:"byte_length"`
-	SHA256     string `json:"sha256"`
-}
-
 type completionReactionWire struct {
 	ID                    string    `json:"reaction_id"`
 	ParticipantID         string    `json:"participant_id"`
@@ -163,6 +142,14 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 	if err := strictCompletionJSON([]byte(row.CapturePlansJson), &plans); err != nil {
 		return recordingpresentation.CompletionSource{}, completionSourceError("capture plans", err)
 	}
+	// Captures that started before the retention budget can already exceed it.
+	// Export the media rather than retrying an optional sidecar that cannot fit.
+	var annotation []recordingpresentation.ScreenAnnotationFact
+	if !row.ScreenAnnotationOverflow.Bool {
+		if err := strictCompletionJSON([]byte(row.ScreenAnnotationJson), &annotation); err != nil {
+			return recordingpresentation.CompletionSource{}, completionSourceError("screen annotation", err)
+		}
+	}
 	var reactions []completionReactionWire
 	if err := strictCompletionJSON([]byte(row.ReactionsJson), &reactions); err != nil {
 		return recordingpresentation.CompletionSource{}, completionSourceError("reactions", err)
@@ -173,7 +160,7 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 		TenantID:           utilities.IDFromBytes(row.TenantID.Bytes), SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes),
 		EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), RecordingID: utilities.IDFromBytes(row.RecordingID.Bytes),
 		CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: timestamp(row.CaptureReadyAt), DurationMillis: row.DurationMillis,
-		Profile: profile, SpaceName: row.SpaceName,
+		Profile: profile, SpaceName: row.SpaceName, ScreenAnnotation: annotation,
 		EpisodeControlStartRevision:  row.EpisodeControlStartRevision,
 		EpisodeControlOriginRevision: row.EpisodeControlEndRevision,
 		ChatStartSequence:            row.ChatStartSequence,
@@ -222,20 +209,9 @@ func mapRecordingPresentationCompletionSource(row sqlc.GetRecordingPresentationC
 	if err != nil {
 		return recordingpresentation.CompletionSource{}, err
 	}
-	for _, value := range plans {
-		planBytes, decodeErr := base64.StdEncoding.Strict().DecodeString(value.PlanBytes)
-		if decodeErr != nil {
-			return recordingpresentation.CompletionSource{}, completionSourceError("capture plan", decodeErr)
-		}
-		plan, decodeErr := captureplan.Decode(planBytes, value.PlanFingerprint)
-		if decodeErr != nil {
-			return recordingpresentation.CompletionSource{}, completionSourceError("capture plan", decodeErr)
-		}
-		authority := plan.Authority()
-		if int64(authority.CaptureEpoch) != value.CaptureEpoch || int64(plan.Revision()) != value.SourceRevision || value.CaptureEpoch > row.CaptureEpoch {
-			return recordingpresentation.CompletionSource{}, recordingpresentation.ErrInvalidCompletionSource
-		}
-		source.CapturePlans = append(source.CapturePlans, recordingpresentation.CapturePlanFact{Revision: value.Revision, Plan: plan, CreatedAt: value.CreatedAt})
+	source.CapturePlans, err = mapCapturePlanFacts(plans, row.CaptureEpoch)
+	if err != nil {
+		return recordingpresentation.CompletionSource{}, err
 	}
 	for _, value := range reactions {
 		source.Reactions = append(source.Reactions, recordingpresentation.ReactionFact{
@@ -275,30 +251,6 @@ func mapChatMessageFacts(values []completionChatMessageWire) ([]recordingpresent
 	return result, nil
 }
 
-func mapWhiteboardEventFacts(values []completionWhiteboardEventWire) []recordingpresentation.WhiteboardEventFact {
-	result := make([]recordingpresentation.WhiteboardEventFact, 0, len(values))
-	for _, value := range values {
-		result = append(result, recordingpresentation.WhiteboardEventFact{
-			OperationID: value.OperationID, Name: value.Name, SceneID: value.SceneID,
-			Revision: value.Revision, Elements: cloneRawMessages(value.Elements),
-			Presenting: cloneBool(value.Presenting), CompletedAt: value.CompletedAt,
-		})
-	}
-	return result
-}
-
-func mapWhiteboardFileFacts(values []completionWhiteboardFileWire) ([]recordingpresentation.WhiteboardFileFact, error) {
-	result := make([]recordingpresentation.WhiteboardFileFact, 0, len(values))
-	for _, value := range values {
-		object, err := completionObjectFact(value.ObjectKey, value.ObjectETag, value.MIMEType, value.ByteLength, value.SHA256)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, recordingpresentation.WhiteboardFileFact{ID: value.ID, Object: object})
-	}
-	return result, nil
-}
-
 func completionObjectFact(key, etag, contentType string, byteSize int64, digestHex string) (recordingpresentation.ObjectFact, error) {
 	digest, err := hex.DecodeString(digestHex)
 	if err != nil || len(digest) != 32 {
@@ -328,14 +280,6 @@ func cloneRawMessages(values []json.RawMessage) []json.RawMessage {
 		result[index] = append(json.RawMessage(nil), values[index]...)
 	}
 	return result
-}
-
-func cloneBool(value *bool) *bool {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
 }
 
 func completionSourceError(field string, err error) error {

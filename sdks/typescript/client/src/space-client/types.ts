@@ -1,5 +1,5 @@
-import type { MediaSource, ScreenShareCapture } from "../media/plane";
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
+import type { MediaSlice } from "./media-types";
+import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
 import type { V1Capability } from "../sync/v1-types";
@@ -115,46 +115,7 @@ export type SelfSlice = {
   readonly handRaised: boolean;
   readonly can: (capability: Capability) => boolean;
 };
-export type MediaDevice = {
-  readonly deviceId: string;
-  readonly label: string;
-};
-export type LocalMedia = {
-  readonly source: MediaSource;
-  readonly state: "unavailable" | "requesting" | "enabled" | "disabled" | "failed";
-  readonly track: MediaStreamTrack | null;
-};
-export type RemoteMedia = {
-  readonly participantId: string;
-  readonly source: MediaSource | "screen_audio";
-  readonly publicationId: string;
-  readonly track: MediaStreamTrack;
-  /** The SFU stopped this video because the link cannot carry its lowest layer. Audio continues, and the video returns on its own. */
-  readonly pausedForNetwork?: true;
-};
-export type IncomingMediaRequest = ChalkIncomingMediaRequest;
-export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
-export type MediaSlice = {
-  readonly microphoneMutedByOtherDevice?: boolean;
-  readonly devices: {
-    readonly microphones: readonly MediaDevice[];
-    readonly cameras: readonly MediaDevice[];
-    readonly speakers: readonly MediaDevice[];
-  };
-  readonly selection: {
-    readonly microphone: string | null;
-    readonly camera: string | null;
-    readonly speaker: string | null;
-  };
-  readonly local: Readonly<Record<MediaSource, LocalMedia>>;
-  readonly remote: readonly RemoteMedia[];
-  readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
-  readonly incomingRequests: readonly IncomingMediaRequest[];
-  /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
-  readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];
-  /** How well this person's own link carries the call, steadied over several windows. Omitted before the first window closes. */
-  readonly link?: import("../media/link-quality").LinkQuality;
-};
+export type { IncomingMediaRequest, LocalMedia, MediaDevice, MediaSlice, RemoteMedia, ScreenShareCapture, ScreenShareOptions, ScreenShareSurface } from "./media-types";
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
 export type ChatReactionInput = import("../collaboration/types").ChalkChatReactionInput;
@@ -210,6 +171,7 @@ export type RecordingSlice = {
   readonly current: Recording | null;
 };
 export type WhiteboardSlice = {
+  readonly uploadsAvailable?: boolean;
   readonly open: boolean;
   readonly engine: {
     readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";

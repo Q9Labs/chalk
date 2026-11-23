@@ -47,6 +47,19 @@ defmodule ChalkSync.Transport.Router do
     end
   end
 
+  get("/v1/screen-annotation/helper") do
+    cond do
+      not Operations.accepting_connections?() ->
+        send_json(conn, 503, %{"error" => "server_draining"})
+
+      WebSockAdapter.UpgradeValidation.validate_upgrade(conn) != :ok ->
+        send_upgrade_error(conn)
+
+      true ->
+        upgrade_annotation_helper(conn)
+    end
+  end
+
   get("/v1/whiteboard") do
     if Operations.accepting_connections?() do
       observability = ChalkSync.Observability.context(conn.req_headers)
@@ -74,6 +87,25 @@ defmodule ChalkSync.Transport.Router do
     send_json(conn, 404, %{"error" => "not_found"})
   end
 
+  defp upgrade_annotation_helper(conn) do
+    ip = SocketContext.request(conn).client_ip
+
+    case DirectLimits.admit_upgrade(ip) do
+      :ok ->
+        conn
+        |> WebSockAdapter.upgrade(
+          ChalkSync.Transport.SocketAnnotationHelper,
+          [observability: ChalkSync.Observability.context(conn.req_headers), client_ip: ip],
+          timeout: 65_000,
+          max_frame_size: 16_384
+        )
+        |> halt()
+
+      {:error, denial} ->
+        send_direct_denied(conn, denial)
+    end
+  end
+
   defp upgrade_sync(conn) do
     connection_attributes = SocketContext.request(conn)
 
@@ -94,6 +126,10 @@ defmodule ChalkSync.Transport.Router do
             participant_device_admissions:
               conn.query_params["participant_device_admissions"] in ["1", "2"],
             media_off_reason: conn.query_params["media_off_reason"] == "1",
+            screen_annotation: conn.query_params["screen_annotation"] == "1",
+            screen_annotation_burn_in:
+              conn.query_params["screen_annotation"] == "1" and
+                conn.query_params["screen_annotation_burn_in"] == "1",
             connection_quality: conn.query_params["connection_quality"] == "1",
             participant_self_identity: conn.query_params["participant_device_admissions"] == "2",
             entry_generation: entry_generation(conn.query_params["entry_generation"]),

@@ -1,9 +1,10 @@
+import { useBoardViewport } from "./board-viewport";
 import type { WhiteboardView as ChalkWhiteboardView } from "../../collab/view";
 import { useEngineHistory } from "./board-history";
 import { ChalkWhiteboardViewVersions as ViewVersions } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "../WhiteboardCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
-import { useMediaQuery, usePrefersReducedMotion } from "./useMediaQuery";
+import { usePrefersReducedMotion } from "./useMediaQuery";
 import type { WhiteboardCanvasProps } from "../WhiteboardCanvas";
 import type { WhiteboardViewBounds } from "../../collab/view";
 import type { ReactNode } from "react";
@@ -255,13 +256,12 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
   }, [root]);
 }
 
-/** Images need a board file upload that the service does not offer yet, so the board refuses them plainly. */
-function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (toast: BoardToast) => void) {
+function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, acceptsImages: boolean, toast: (toast: BoardToast) => void) {
   const latest = useRef(toast);
   latest.current = toast;
   useEffect(() => {
     const element = root.current;
-    if (!element) return;
+    if (!element || acceptsImages) return;
     const refuse = (files: FileList | undefined | null, event: Event) => {
       if (!files || ![...files].some((file) => file.type.startsWith("image/"))) return;
       event.preventDefault();
@@ -276,7 +276,7 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
       element.removeEventListener("paste", paste, true);
       element.removeEventListener("drop", drop, true);
     };
-  }, [root]);
+  }, [root, acceptsImages]);
 }
 
 /**
@@ -310,9 +310,7 @@ export function Board({
 }: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
   const offline = connectionStatus === "reconnecting";
-  const smallViewport = useMediaQuery("(max-width: 640px)");
-  const phone = phoneOverride ?? smallViewport;
-  const touch = useMediaQuery("(pointer: coarse)") || phone || presentation === "mobile";
+  const { phone, touch } = useBoardViewport(phoneOverride, presentation);
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
   const toast = useBoardToast(engine);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));
@@ -571,7 +569,7 @@ export function Board({
     [camera, stopFollowing],
   );
   useBoardKeys(root, { onTool: chooseTool, onZoom: zoomBy, canDraw });
-  useImageRefusal(root, toast);
+  useImageRefusal(root, Boolean(board.collab?.uploadFile), toast);
 
   const restyle = (next: { readonly color?: PenColor; readonly width?: PenWidth }) => {
     if (next.color) setColor(next.color);

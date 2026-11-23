@@ -176,7 +176,7 @@ with baseline as (
         'operation_id', receipts.operation_id,
         'scene_id', receipts.scene_id,
         'revision', receipts.revision,
-        'elements', receipts.event_elements,
+        'elements', coalesce(receipts.event_elements, '[]'::jsonb),
         'presenting', receipts.event_presenting,
         'completed_at', receipts.completed_at
     ) order by receipts.completed_at, receipts.operation_id)
@@ -286,12 +286,111 @@ with authority as (
       on bundles.tenant_id = authority.tenant_id
      and bundles.recording_id = authority.recording_id
      and bundles.capture_job_id = sqlc.arg(job_id)
+), annotation_epochs as (
+    select allocation.capture_epoch, max(allocation.media_end_millis)::bigint as end_millis
+    from authority
+    join recording_bundle_allocations allocation
+      on allocation.tenant_id = authority.tenant_id
+     and allocation.recording_id = authority.recording_id
+     and allocation.job_id = sqlc.arg(job_id)
+     and allocation.state = 'committed'
+     and allocation.capture_epoch <= authority.capture_epoch
+    group by allocation.capture_epoch
 ), boundary as (
     select source.*, duration.duration_millis,
         cast(source.capture_ready_at + duration.duration_millis * interval '1 millisecond' as timestamptz) as ended_at
     from source cross join duration
+), whiteboard_tail as materialized (
+    select receipts.*
+    from boundary
+    join sync_whiteboard_operation_receipts receipts using (tenant_id, space_id, episode_id)
+    where receipts.completed_at > boundary.capture_ready_at
+      and receipts.completed_at <= boundary.ended_at
+    order by receipts.completed_at, receipts.operation_id
+    limit 100001
+), whiteboard_elements as (
+    select boundary.whiteboard_snapshot->>'scene_id' as scene_id, element
+    from boundary
+    cross join lateral jsonb_array_elements(boundary.whiteboard_snapshot->'elements') as element
+    union all
+    select event->>'scene_id', element
+    from boundary
+    cross join lateral jsonb_array_elements(boundary.whiteboard_events) as event
+    -- Older capture sources froze non-drawing receipts with JSON null elements.
+    cross join lateral jsonb_array_elements(nullif(event->'elements', 'null'::jsonb)) as element
+    union all
+    select receipt.scene_id::text, element
+    from whiteboard_tail receipt
+    cross join lateral jsonb_array_elements(receipt.event_elements) as element
+), whiteboard_references as (
+    select distinct scene_id, element->'payload'->>'fileId' as file_id
+    from whiteboard_elements where element->'payload'->>'fileId' is not null
+), annotation_budget as (
+    -- The migration counted older, potentially oversized captures without
+    -- deleting them. Do not materialize those rows during media completion.
+    select exists (
+        select 1 from boundary
+        join recording_screen_annotation_budgets budget using (recording_id)
+        where budget.retained_bytes > 33554432 or budget.layer_count > 4096
+    ) as overflowing
+), annotation_layers as materialized (
+    select layer.*, least(
+        layer.closed_at_ms,
+        floor(extract(epoch from boundary.capture_ready_at) * 1000)::bigint + epoch.end_millis
+    ) as cut_at_ms
+    from boundary
+    join recording_screen_annotation_layers layer using (tenant_id, space_id, episode_id, recording_id)
+    join annotation_epochs epoch on epoch.capture_epoch = layer.capture_epoch
+    where not (select overflowing from annotation_budget)
+      and layer.initial_at_ms < least(
+        layer.closed_at_ms,
+        floor(extract(epoch from boundary.capture_ready_at) * 1000)::bigint + epoch.end_millis
+    )
+    order by layer.capture_epoch, layer.initial_at_ms, layer.layer_id
+    limit 4097
+), annotation_changes as materialized (
+    select change.capture_epoch, change.layer_id, change.revision, change.at_ms, change.change
+    from annotation_layers layer
+    join recording_screen_annotation_changes change
+      using (tenant_id, space_id, episode_id, recording_id, capture_epoch, layer_id)
+    where change.at_ms < layer.cut_at_ms
+    order by change.capture_epoch, change.layer_id, change.revision
+    limit 262145
+), annotation_size as (
+    select
+        (select overflowing from annotation_budget)
+        or (select count(*) from annotation_layers) > 4096
+        or (select count(*) from annotation_changes) > 262144
+        or coalesce((select sum(octet_length(layer.layer::text) + octet_length(layer.initial_marks::text) + 256)
+                     from annotation_layers layer), 0)
+         + coalesce((select sum(octet_length(change.change::text) + 80) from annotation_changes change), 0)
+         > 33554432 as overflowing
 )
 select boundary.*,
+    annotation_size.overflowing as screen_annotation_overflow,
+    case when annotation_size.overflowing then '[]' else coalesce((
+        select jsonb_agg(jsonb_build_object(
+            'capture_epoch', layer.capture_epoch,
+            'publication_id', layer.publication_id,
+            'sharer_generation', layer.sharer_generation,
+            'layer', layer.layer,
+            'initial_at_ms', layer.initial_at_ms,
+            'initial_revision', layer.initial_revision,
+            'initial_paused', layer.initial_paused,
+            'initial_marks', layer.initial_marks,
+            'closed_at_ms', layer.cut_at_ms,
+            'changes', coalesce(changes.items, '[]'::jsonb)
+        ) order by layer.capture_epoch, layer.initial_at_ms, layer.layer_id)
+        from annotation_layers layer
+        left join (
+            select capture_epoch, layer_id, jsonb_agg(jsonb_build_object(
+                'revision', revision, 'atMs', at_ms, 'change', change
+            ) order by revision) as items
+            from annotation_changes
+            where not annotation_size.overflowing
+            group by capture_epoch, layer_id
+        ) changes using (capture_epoch, layer_id)
+    ), '[]'::jsonb)::text end as screen_annotation_json,
     coalesce((
         select jsonb_agg(jsonb_build_object(
             'revision', plans.revision,
@@ -386,24 +485,15 @@ select boundary.*,
             'operation_id', receipts.operation_id,
             'scene_id', receipts.scene_id,
             'revision', receipts.revision,
-            'elements', receipts.event_elements,
+            'elements', coalesce(receipts.event_elements, '[]'::jsonb),
             'presenting', receipts.event_presenting,
             'completed_at', receipts.completed_at
         ) order by receipts.completed_at, receipts.operation_id)
-        from (
-            select receipts.*
-            from sync_whiteboard_operation_receipts receipts
-            where receipts.tenant_id = boundary.tenant_id
-              and receipts.space_id = boundary.space_id
-              and receipts.episode_id = boundary.episode_id
-              and receipts.completed_at > boundary.capture_ready_at
-              and receipts.completed_at <= boundary.ended_at
-            order by receipts.completed_at, receipts.operation_id
-            limit 100001
-        ) receipts
+        from whiteboard_tail receipts
     ), '[]'::jsonb)::text as whiteboard_tail_events_json,
     coalesce((
         select jsonb_agg(jsonb_build_object(
+            'scene_id', files.scene_id,
             'file_id', files.file_id,
             'object_key', files.object_key,
             'object_etag', files.immutable_object_identity,
@@ -413,14 +503,14 @@ select boundary.*,
         ) order by files.scene_id, files.file_id)
         from (
             select files.*
-            from sync_whiteboard_files files
+            from whiteboard_references ref
+            join sync_whiteboard_files files on (files.scene_id::text, files.file_id) = (ref.scene_id, ref.file_id)
             where files.tenant_id = boundary.tenant_id
               and files.space_id = boundary.space_id
               and files.episode_id = boundary.episode_id
               and files.status = 'ready'
               and files.finalized_at <= boundary.ended_at
-            order by files.scene_id, files.file_id
-            limit 257
+            and files.cleanup_claim_token is null
         ) files
     ), '[]'::jsonb)::text as whiteboard_files_json,
     coalesce((
@@ -444,7 +534,7 @@ select boundary.*,
             limit 100001
         ) reactions
     ), '[]'::jsonb)::text as reactions_json
-from boundary;
+from boundary cross join annotation_size;
 
 -- name: InsertRecordingPresentation :one
 insert into recording_presentations (

@@ -1,0 +1,977 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chalk screen annotation, Sync v1 extension",
+  "$comment": "Sync v1 sends these frames only in the live phase on a negotiated connection. See docs/plans/screen-annotation.md for the state machine and contextual checks.",
+  "x-chalk": {
+    "negotiation": {
+      "query": "screen_annotation",
+      "version": 1,
+      "welcome": "screen_annotation"
+    },
+    "helperAttachment": {
+      "path": "/v1/screen-annotation/helper",
+      "audience": "screen_annotation_helper_v1",
+      "version": 1,
+      "leaseMs": 60000,
+      "proofDomain": "chalk.screen_annotation.helper.v1",
+      "proof": "Ed25519 over UTF-8 proofDomain + LF + nonce + LF + ticket hash",
+      "ticketHash": "base64url(SHA-256(ticket)) without padding",
+      "proofEncoding": "base64url without padding",
+      "confirmationKey": "cnf.jwk (OKP Ed25519)",
+      "commands": ["commit", "erase", "undo", "redo", "clear", "pause"]
+    },
+    "limits": {
+      "commandBytes": 16384,
+      "presenceBytes": 8192,
+      "stateBytes": 524288,
+      "ephemeralTtlMs": 1000,
+      "previewPerSecond": 30,
+      "committedFadeTtlMs": 2000,
+      "fadeOutMs": 600,
+      "drawRequestTtlMs": 30000,
+      "retainedUndoPerPerson": 32,
+      "markPoints": 384,
+      "markTextBytes": 512,
+      "activeMarks": 512,
+      "pendingDrawRequests": 64,
+      "operationReceiptTtlMs": 300000,
+      "operationFutureSkewMs": 30000,
+      "operationReceiptsPerLayer": 16384,
+      "moderationReceiptReserve": 256
+    }
+  },
+  "$defs": {
+    "Point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "FrameSize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        }
+      }
+    },
+    "Color": {
+      "type": "string",
+      "minLength": 7,
+      "maxLength": 7,
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "Stamp": {
+      "enum": ["check", "cross", "star", "question", "heart"]
+    },
+    "Lifetime": {
+      "enum": ["fade", "keep"]
+    },
+    "DrawPolicy": {
+      "enum": ["everyone", "hosts", "picked"]
+    },
+    "Layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer_id", "publication_id", "sharer_id", "frame"],
+      "properties": {
+        "layer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "publication_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sharer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "burned_in": {
+          "const": true
+        },
+        "frame": {
+          "$ref": "#/$defs/FrameSize"
+        }
+      }
+    },
+    "Cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["point", "tool"],
+      "properties": {
+        "point": {
+          "$ref": "#/$defs/Point"
+        },
+        "tool": {
+          "enum": ["pointer", "ink"]
+        }
+      }
+    },
+    "Contributor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participant_id", "display_name", "color"],
+      "properties": {
+        "participant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "color": {
+          "$ref": "#/$defs/Color"
+        }
+      }
+    },
+    "Shape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "points"],
+          "properties": {
+            "kind": {
+              "enum": ["pen", "highlighter"]
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Point"
+              },
+              "minItems": 1,
+              "maxItems": 384
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "from_point", "to_point"],
+          "properties": {
+            "kind": {
+              "enum": ["line", "arrow", "box", "circle"]
+            },
+            "from_point": {
+              "$ref": "#/$defs/Point"
+            },
+            "to_point": {
+              "$ref": "#/$defs/Point"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "at", "text", "note"],
+          "properties": {
+            "kind": {
+              "enum": ["text"]
+            },
+            "at": {
+              "$ref": "#/$defs/Point"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "note": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "at", "stamp"],
+          "properties": {
+            "kind": {
+              "enum": ["stamp"]
+            },
+            "at": {
+              "$ref": "#/$defs/Point"
+            },
+            "stamp": {
+              "$ref": "#/$defs/Stamp"
+            }
+          }
+        }
+      ]
+    },
+    "Draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mark_id", "lifetime", "color", "width", "shape"],
+      "properties": {
+        "mark_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "lifetime": {
+          "$ref": "#/$defs/Lifetime"
+        },
+        "color": {
+          "$ref": "#/$defs/Color"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 3277
+        },
+        "shape": {
+          "$ref": "#/$defs/Shape"
+        }
+      }
+    },
+    "Mark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draft", "author", "created_revision", "committed_at_ms", "expires_at_ms"],
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/Draft"
+        },
+        "author": {
+          "$ref": "#/$defs/Contributor"
+        },
+        "created_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "committed_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expires_at_ms": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "DrawRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "participant_id", "expires_at_ms"],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "participant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "Access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draw_policy", "default_color", "can_draw", "can_moderate", "can_manage_policy", "requests"],
+      "properties": {
+        "draw_policy": {
+          "$ref": "#/$defs/DrawPolicy"
+        },
+        "default_color": {
+          "$ref": "#/$defs/Color"
+        },
+        "can_draw": {
+          "type": "boolean"
+        },
+        "can_moderate": {
+          "type": "boolean"
+        },
+        "can_manage_policy": {
+          "type": "boolean"
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DrawRequest"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        }
+      }
+    },
+    "ClearScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["mine"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["all"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "participant_id"],
+          "properties": {
+            "kind": {
+              "enum": ["participant"]
+            },
+            "participant_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      ]
+    },
+    "Bind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "publication_id", "frame"],
+      "properties": {
+        "kind": {
+          "enum": ["bind"]
+        },
+        "publication_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "burned_in": {
+          "const": true
+        },
+        "frame": {
+          "$ref": "#/$defs/FrameSize"
+        }
+      }
+    },
+    "Command": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "draft"],
+          "properties": {
+            "kind": {
+              "enum": ["commit"]
+            },
+            "draft": {
+              "$ref": "#/$defs/Draft"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "mark_id"],
+          "properties": {
+            "kind": {
+              "enum": ["erase"]
+            },
+            "mark_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["undo"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["redo"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "scope"],
+          "properties": {
+            "kind": {
+              "enum": ["clear"]
+            },
+            "scope": {
+              "$ref": "#/$defs/ClearScope"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paused"],
+          "properties": {
+            "kind": {
+              "enum": ["pause"]
+            },
+            "paused": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["request_draw"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "request_id", "allow"],
+          "properties": {
+            "kind": {
+              "enum": ["decide_draw"]
+            },
+            "request_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "allow": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "policy"],
+          "properties": {
+            "kind": {
+              "enum": ["set_policy"]
+            },
+            "policy": {
+              "$ref": "#/$defs/DrawPolicy"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "participant_id", "allow"],
+          "properties": {
+            "kind": {
+              "enum": ["set_draw_permission"]
+            },
+            "participant_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "allow": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "Rejection": {
+      "enum": ["not_active", "stale_layer", "stale_fence", "forbidden", "paused", "invalid_target", "invalid_state", "capacity", "rate_limited", "operation_id_conflict"]
+    },
+    "State": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "revision", "fence", "paused", "access", "marks"],
+      "properties": {
+        "layer": {
+          "$ref": "#/$defs/Layer"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "fence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "access": {
+          "$ref": "#/$defs/Access"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mark"
+          },
+          "minItems": 0,
+          "maxItems": 512
+        }
+      }
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "mark"],
+          "properties": {
+            "kind": {
+              "enum": ["upsert"]
+            },
+            "mark": {
+              "$ref": "#/$defs/Mark"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "mark_id"],
+          "properties": {
+            "kind": {
+              "enum": ["remove"]
+            },
+            "mark_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "participant_id"],
+          "properties": {
+            "kind": {
+              "enum": ["clear"]
+            },
+            "participant_id": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paused", "access"],
+          "properties": {
+            "kind": {
+              "enum": ["control"]
+            },
+            "paused": {
+              "type": "boolean"
+            },
+            "access": {
+              "$ref": "#/$defs/Access"
+            }
+          }
+        }
+      ]
+    },
+    "ClientRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_state_request"]
+        }
+      }
+    },
+    "ClientCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "operation_id", "layer_id", "fence", "command"],
+          "properties": {
+            "type": {
+              "enum": ["annotation_command"]
+            },
+            "operation_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "layer_id": {
+              "type": "null"
+            },
+            "fence": {
+              "type": "null"
+            },
+            "command": {
+              "$ref": "#/$defs/Bind"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "operation_id", "layer_id", "fence", "command"],
+          "properties": {
+            "type": {
+              "enum": ["annotation_command"]
+            },
+            "operation_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "layer_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "fence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "command": {
+              "$ref": "#/$defs/Command"
+            }
+          }
+        }
+      ]
+    },
+    "ClientPresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "layer_id", "fence", "cursor", "draft"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_presence"]
+        },
+        "layer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "cursor": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "draft": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Draft"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ServerState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "server_at_ms", "state"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_state"]
+        },
+        "server_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "enabled": {
+          "enum": [false]
+        },
+        "state": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ServerChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "layer_id", "revision", "fence", "server_at_ms", "change"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_changed"]
+        },
+        "layer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "fence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "server_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "change": {
+          "$ref": "#/$defs/Change"
+        }
+      }
+    },
+    "ServerClosed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "layer_id", "reason"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_closed"]
+        },
+        "layer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "enum": ["share_ended", "share_replaced", "episode_ended"]
+        }
+      }
+    },
+    "ServerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operation_id", "result"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_receipt"]
+        },
+        "operation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "layer_id", "revision"],
+              "properties": {
+                "kind": {
+                  "enum": ["accepted"]
+                },
+                "layer_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "reason"],
+              "properties": {
+                "kind": {
+                  "enum": ["rejected"]
+                },
+                "reason": {
+                  "$ref": "#/$defs/Rejection"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ServerPresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "layer_id", "fence", "author", "server_at_ms", "expires_at_ms", "cursor", "draft"],
+      "properties": {
+        "type": {
+          "enum": ["annotation_presence"]
+        },
+        "layer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "author": {
+          "$ref": "#/$defs/Contributor"
+        },
+        "server_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "cursor": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "draft": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Draft"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "HelperChallenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "nonce"],
+      "properties": {
+        "type": { "enum": ["annotation_helper_challenge"] },
+        "version": { "enum": [1] },
+        "nonce": { "type": "string", "minLength": 43, "maxLength": 43 }
+      }
+    },
+    "HelperAttach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "ticket", "proof"],
+      "properties": {
+        "type": { "enum": ["annotation_helper_attach"] },
+        "version": { "enum": [1] },
+        "ticket": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "proof": { "type": "string", "minLength": 86, "maxLength": 86 }
+      }
+    },
+    "ClientFrame": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ClientRequest"
+        },
+        {
+          "$ref": "#/$defs/ClientCommand"
+        },
+        {
+          "$ref": "#/$defs/ClientPresence"
+        }
+      ]
+    },
+    "ServerFrame": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ServerState"
+        },
+        {
+          "$ref": "#/$defs/ServerChange"
+        },
+        {
+          "$ref": "#/$defs/ServerClosed"
+        },
+        {
+          "$ref": "#/$defs/ServerReceipt"
+        },
+        {
+          "$ref": "#/$defs/ServerPresence"
+        }
+      ]
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ClientFrame"
+    },
+    {
+      "$ref": "#/$defs/ServerFrame"
+    }
+  ]
+}

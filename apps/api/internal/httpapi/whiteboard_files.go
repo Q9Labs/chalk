@@ -3,15 +3,18 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
 
 var (
+	apiErrorWhiteboardFileConflict       = APIError{Status: http.StatusConflict, Code: "whiteboard.file_conflict", Message: "Whiteboard file could not be reserved or finalized"}
 	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
 	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
 	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
@@ -19,6 +22,8 @@ var (
 )
 
 type WhiteboardFileService interface {
+	Initiate(context.Context, whiteboardfiles.InitiateInput) (whiteboardfiles.UploadInstructions, error)
+	Finalize(context.Context, whiteboardfiles.FileRequest, string) error
 	Download(context.Context, whiteboardfiles.Subject, string) (whiteboardfiles.Download, error)
 }
 
@@ -35,12 +40,24 @@ type whiteboardFileDownloadResponse struct {
 	ExpiresAt   string `json:"expiresAt"`
 }
 
+type whiteboardFileAvailability struct {
+	Available bool `json:"available"`
+}
+
 type whiteboardSubjectContextKey struct{}
 
 func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) []RouteEndpoint {
 	auth := requireWhiteboardParticipant(verifier)
 	return []RouteEndpoint{
+		Get("/v1/whiteboard/files/availability", "getWhiteboardFileAvailability",
+			func(*http.Request) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, struct{}) (whiteboardFileAvailability, error) {
+				return whiteboardFileAvailability{Available: service != nil && verifier != nil}, nil
+			},
+		).Responds(http.StatusOK, "WhiteboardFileAvailability", whiteboardFileAvailability{}),
 		downloadWhiteboardFileEndpoint(service).Middleware(auth),
+		initiateWhiteboardFileEndpoint(service).Middleware(auth),
+		finalizeWhiteboardFileEndpoint(service).Middleware(auth),
 	}
 }
 
@@ -78,6 +95,13 @@ func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(h
 
 func decodeDownloadWhiteboardFileRequest(request *http.Request) (downloadWhiteboardFileRequest, error) {
 	fileID := chi.URLParam(request, "fileId")
+	if request.URL.RawPath != "" {
+		var err error
+		fileID, err = url.PathUnescape(fileID)
+		if err != nil {
+			return downloadWhiteboardFileRequest{}, apiErrorWhiteboardInvalidFile
+		}
+	}
 	if strings.TrimSpace(fileID) == "" || len(fileID) > 128 {
 		return downloadWhiteboardFileRequest{}, apiErrorWhiteboardInvalidFile
 	}
@@ -105,7 +129,105 @@ func whiteboardFileErrors() []APIError {
 var whiteboardFileRules = errorRules{
 	ruleFor(apiErrorWhiteboardInvalidFile, whiteboardfiles.ErrInvalidInput),
 	ruleFor(apiErrorForbidden, whiteboardfiles.ErrPermissionDenied),
+	ruleFor(apiErrorWhiteboardFileConflict, whiteboardfiles.ErrFileConflict),
 	ruleFor(apiErrorWhiteboardFileNotFound, whiteboardfiles.ErrFileNotFound),
 	ruleFor(apiErrorWhiteboardFileTransfer, whiteboardfiles.ErrFileTransferFailed, objectstorage.ErrObjectNotFound, objectstorage.ErrObjectAlreadyExists),
 	ruleFor(apiErrorWhiteboardStorageUnavailable, objectstorage.ErrStoreUnavailable, objectstorage.ErrProviderFailed),
+}
+
+type whiteboardFileUploadBody struct {
+	MIMEType   string `json:"mimeType"`
+	ByteLength int64  `json:"byteLength"`
+	SHA256     string `json:"sha256"`
+}
+
+type whiteboardFileFinalizeBody struct {
+	SHA256 string `json:"sha256"`
+}
+
+type whiteboardFileWriteRequest[Body any] struct {
+	File whiteboardfiles.FileRequest
+	Body Body
+}
+
+type whiteboardFileUploadResponse struct {
+	Ready     bool              `json:"ready"`
+	UploadURL string            `json:"uploadUrl,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	ExpiresAt string            `json:"expiresAt,omitempty"`
+}
+
+func initiateWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[whiteboardFileWriteRequest[whiteboardFileUploadBody], whiteboardFileUploadResponse] {
+	return Post(
+		"/v1/whiteboard/scenes/{sceneId}/files/{fileId}/upload",
+		"initiateWhiteboardFileUpload",
+		decodeWhiteboardFileWrite[whiteboardFileUploadBody],
+		func(ctx context.Context, request whiteboardFileWriteRequest[whiteboardFileUploadBody]) (whiteboardFileUploadResponse, error) {
+			result, err := service.Initiate(ctx, whiteboardfiles.InitiateInput{
+				FileRequest: request.File, MIMEType: request.Body.MIMEType,
+				ByteLength: request.Body.ByteLength, SHA256: request.Body.SHA256,
+			})
+			if err != nil {
+				return whiteboardFileUploadResponse{}, err
+			}
+			if result.Ready {
+				return whiteboardFileUploadResponse{Ready: true}, nil
+			}
+			return whiteboardFileUploadResponse{
+				UploadURL: result.URL, Headers: result.Headers,
+				ExpiresAt: result.ExpiresAt.UTC().Format(time.RFC3339),
+			}, nil
+		},
+	).
+		Needs(service).
+		Auth(APIAuthParticipantSync).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(whiteboardSceneIDParameter(), whiteboardFileIDParameter()).
+		RequestBody("InitiateWhiteboardFileUploadRequest", whiteboardFileUploadBody{}).
+		Responds(http.StatusOK, "WhiteboardFileUpload", whiteboardFileUploadResponse{}).
+		Errors(append(whiteboardFileErrors(), apiErrorWhiteboardFileConflict)...).
+		ErrorRules(whiteboardFileRules)
+}
+
+func finalizeWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[whiteboardFileWriteRequest[whiteboardFileFinalizeBody], struct{}] {
+	return Post(
+		"/v1/whiteboard/scenes/{sceneId}/files/{fileId}/finalize",
+		"finalizeWhiteboardFileUpload",
+		decodeWhiteboardFileWrite[whiteboardFileFinalizeBody],
+		func(ctx context.Context, request whiteboardFileWriteRequest[whiteboardFileFinalizeBody]) (struct{}, error) {
+			return struct{}{}, service.Finalize(ctx, request.File, request.Body.SHA256)
+		},
+	).
+		Needs(service).
+		Auth(APIAuthParticipantSync).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(whiteboardSceneIDParameter(), whiteboardFileIDParameter()).
+		RequestBody("FinalizeWhiteboardFileUploadRequest", whiteboardFileFinalizeBody{}).
+		RespondsNoBody(http.StatusNoContent).
+		Errors(append(whiteboardFileErrors(), apiErrorWhiteboardFileConflict)...).
+		ErrorRules(whiteboardFileRules)
+}
+
+func decodeWhiteboardFileWrite[Body any](request *http.Request) (whiteboardFileWriteRequest[Body], error) {
+	subject, ok := whiteboardSubject(request.Context())
+	if !ok {
+		return whiteboardFileWriteRequest[Body]{}, apiErrorUnauthenticated
+	}
+	sceneID, err := utilities.ParseID(chi.URLParam(request, "sceneId"))
+	if err != nil {
+		return whiteboardFileWriteRequest[Body]{}, apiErrorWhiteboardInvalidFile
+	}
+	file, err := decodeDownloadWhiteboardFileRequest(request)
+	if err != nil {
+		return whiteboardFileWriteRequest[Body]{}, err
+	}
+	body, err := decodeJSONBody[Body](request)
+	return whiteboardFileWriteRequest[Body]{
+		File: whiteboardfiles.FileRequest{Subject: subject, SceneID: sceneID, FileID: file.FileID},
+		Body: body,
+	}, err
+}
+
+func whiteboardSceneIDParameter() APIParameterContract {
+	return APIParameterContract{Name: "sceneId", In: "path", Type: "string", Required: true}
 }

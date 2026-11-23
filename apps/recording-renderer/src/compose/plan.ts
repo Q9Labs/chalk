@@ -108,14 +108,29 @@ export function denseKeyframeArgs(inputPath: string, outputPath: string, output:
 }
 
 /** An ffconcat list that shows each UI image for its span; the concat demuxer ignores the last duration unless the last file repeats. */
-export function overlayListFor(segment: VideoSegment, overlayPath: (sceneKey: string) => string, fps: number): string {
+export function overlayListFor(segment: VideoSegment, overlayPath: (sceneKey: string) => string, fps: number, frameAccurate = false): string {
   const lines = ["ffconcat version 1.0"];
+  const duration = overlayDuration(segment.startFrame, fps, frameAccurate);
+  const fileLines = (sceneKey: string) => overlayFileLines(overlayPath(sceneKey), frameAccurate);
   for (const span of segment.spans) {
-    lines.push(`file '${escapeConcatPath(overlayPath(span.sceneKey))}'`, `duration ${seconds((span.endFrame - span.startFrame) / fps)}`);
+    lines.push(...fileLines(span.sceneKey), `duration ${seconds(duration(span.startFrame, span.endFrame))}`);
   }
   const last = segment.spans.at(-1);
-  if (last !== undefined) lines.push(`file '${escapeConcatPath(overlayPath(last.sceneKey))}'`);
+  if (last !== undefined) lines.push(...fileLines(last.sceneKey));
   return `${lines.join("\n")}\n`;
+}
+
+function overlayFileLines(path: string, frameAccurate: boolean): readonly string[] {
+  const file = `file '${escapeConcatPath(path)}'`;
+  return frameAccurate ? [file, "option framerate 1000000"] : [file];
+}
+
+function overlayDuration(segmentStart: number, fps: number, frameAccurate: boolean): (start: number, end: number) => number {
+  // The default PNG timebase is 25 Hz. On an annotated segment each ink
+  // frame must land by its target timestamp rather than rounding to 40 ms.
+  if (!frameAccurate) return (start, end) => (end - start) / fps;
+  const microsecondsAt = (frame: number) => Math.floor(((frame - segmentStart) * 1_000_000) / fps);
+  return (start, end) => (microsecondsAt(end) - microsecondsAt(start)) / 1_000_000;
 }
 
 export function segmentListFor(paths: readonly string[]): string {
@@ -129,15 +144,11 @@ function escapeConcatPath(path: string): string {
 export function segmentArgs(segment: VideoSegment, sources: ReadonlyMap<string, PlannedSource>, overlayListPath: string, outputPath: string, output: ComposeOutput): readonly string[] {
   const frames = segment.endFrame - segment.startFrame;
   const startSeconds = segment.startFrame / output.fps;
-  // One extra frame of input keeps the last output frame from racing the source's end.
-  const inputSeconds = (frames + 1) / output.fps;
   const args: string[] = [...COMMON_ARGS];
   for (const placement of segment.placements) {
     const source = sources.get(placement.sourceId);
     if (source === undefined) throw new TypeError(`composed video source ${placement.sourceId} has no decoded media`);
-    const offset = Math.max(0, startSeconds - source.startMs / 1_000);
-    const seek = source.decodeFromStartSeconds === undefined ? ["-ss", seconds(offset)] : [];
-    args.push(...inputThreadArgs(output), "-reinit_filter", "0", ...seek, "-t", seconds(inputSeconds + (source.decodeFromStartSeconds === undefined ? 0 : offset)), "-i", source.path);
+    args.push(...segmentInputArgs(source, segment, output));
   }
   args.push("-f", "concat", "-safe", "0", "-i", overlayListPath);
   const firstFrameHolds = new Map(segment.placements.map((placement) => [placement.sourceId, Math.max(0, sources.get(placement.sourceId)!.startMs / 1_000 - startSeconds)]));
@@ -165,9 +176,41 @@ export function segmentArgs(segment: VideoSegment, sources: ReadonlyMap<string, 
   return args;
 }
 
+function segmentInputArgs(source: PlannedSource, segment: VideoSegment, output: ComposeOutput): readonly string[] {
+  const offset = Math.max(0, segment.startFrame / output.fps - source.startMs / 1_000);
+  // One extra frame of input keeps the last output frame from racing the source's end.
+  const inputSeconds = (segment.endFrame - segment.startFrame + 1) / output.fps;
+  const seek = source.decodeFromStartSeconds === undefined ? ["-ss", seconds(offset)] : [];
+  return [...inputThreadArgs(output), "-reinit_filter", "0", ...seek, "-t", seconds(inputSeconds + (source.decodeFromStartSeconds === undefined ? 0 : offset)), "-i", source.path];
+}
+
+function videoCadence(fps: number, holdSeconds: number, hold?: { readonly duration: number; readonly trim: number }): string {
+  // Shift real frames to their recording time, then let fps fill backward.
+  // tpad would round a delay to input frames (a sparse share can be 1 fps).
+  const offset = holdSeconds > 0 ? `+${seconds(holdSeconds)}/TB` : "";
+  const cadence = holdSeconds > 0 ? `fps=${fps}:start_time=0` : `fps=${fps}`;
+  const start = `setpts=PTS-STARTPTS${offset}`;
+  if (hold === undefined) return `${start},${cadence}`;
+  return `${start},tpad=stop_mode=clone:stop_duration=${seconds(hold.duration)},${cadence},trim=start=${seconds(hold.trim)},setpts=PTS-STARTPTS`;
+}
+
+function scaleContained(placement: VideoPlacement): string {
+  const { width, height } = placement.rect;
+  return `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame`;
+}
+
+/** Inspect the screen after the export's seek, holds, cadence and scaling, before padding. */
+export function annotationGeometryArgs(source: PlannedSource, segment: VideoSegment, placement: VideoPlacement, output: ComposeOutput): readonly string[] {
+  const start = segment.startFrame / output.fps - source.startMs / 1_000;
+  const hold = source.decodeFromStartSeconds === undefined ? undefined : { duration: source.decodeFromStartSeconds, trim: Math.max(0, start) };
+  const cadence = videoCadence(output.fps, Math.max(0, -start), hold);
+  const frames = source.changingSize ? segment.endFrame - segment.startFrame : 1;
+  return ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", ...segmentInputArgs(source, segment, output), "-an", "-sn", "-vf", `${cadence},${scaleContained(placement)},showinfo=checksum=0`, "-frames:v", String(frames), "-f", "null", "-"];
+}
+
 function placementFit(placement: VideoPlacement, dynamicCover: boolean): string {
   const { width, height } = placement.rect;
-  if (placement.fit !== "cover") return `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black:eval=frame`;
+  if (placement.fit !== "cover") return `${scaleContained(placement)},pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black:eval=frame`;
   const scale = `scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame`;
   return dynamicCover ? scale : `${scale},crop=${width}:${height}`;
 }
@@ -185,18 +228,9 @@ function segmentFilter(
     const { x, y, width: tileWidth, height: tileHeight } = placement.rect;
     const dynamicCover = placement.fit === "cover" && changingSizes.has(placement.sourceId);
     const fit = placementFit(placement, dynamicCover);
-    const holdSeconds = firstFrameHolds.get(placement.sourceId) ?? 0;
-    // Shift real frames to their recording time, then let fps fill backward.
-    // tpad would round a delay to input frames (a sparse share can be 1 fps).
-    const offset = holdSeconds > 0 ? `+${seconds(holdSeconds)}/TB` : "";
-    const cadence = holdSeconds > 0 ? `fps=${fps}:start_time=0` : `fps=${fps}`;
-    const hold = holdsBeforeTrim.get(placement.sourceId);
-    const tail = hold === undefined ? "" : `,tpad=stop_mode=clone:stop_duration=${seconds(hold.duration)}`;
-    const trim = hold === undefined ? "" : `,trim=start=${seconds(hold.trim)},setpts=PTS-STARTPTS`;
-    // fps and clone-mode tpad retain frames without assuming their dimensions.
-    // Resize at output cadence, without resetting the timeline on a layer switch.
+    const cadence = videoCadence(fps, firstFrameHolds.get(placement.sourceId) ?? 0, holdsBeforeTrim.get(placement.sourceId));
     const label = dynamicCover ? `sized${index}` : `video${index}`;
-    chains.push(`[${index}:v]setpts=PTS-STARTPTS${offset}${tail},${cadence}${trim},${fit},setsar=1,format=yuv420p[${label}]`);
+    chains.push(`[${index}:v]${cadence},${fit},setsar=1,format=yuv420p[${label}]`);
     if (dynamicCover) {
       // crop caches its initial input size. Overlay evaluates the current frame
       // size instead, centering and clipping a rotating camera to a fixed tile.

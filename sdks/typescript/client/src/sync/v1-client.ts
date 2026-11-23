@@ -1,4 +1,5 @@
-import { SYNC_PATH } from "../urls";
+import { v1NegotiatedExtensions } from "./v1-negotiated-extensions";
+import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
@@ -8,18 +9,19 @@ import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } fr
 import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
-import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
+import { AnnotationReplica } from "../screen-annotation/replica";
+import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
 import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
-import { frameSignature } from "./v1-frame-signature";
+import { frameSignature, rememberBoundedEvidence } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { reportLiveTarget } from "./v1-live-target-telemetry";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { V1TimerMap } from "./v1-timer-map";
 import { copyProjection, copyPublication, mediaItem, mediaKey, presenceItem, updateProjection, validMediaPublication } from "./v1-projection-items";
-import { syncEntryUrl } from "./entry-url";
+import { assertV1Url, syncEntryUrl } from "./v1-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
   V1AdmissionTarget,
@@ -59,11 +61,6 @@ const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
 type RequestDeferred = Deferred<V1DirectedRequestResult> & {
   readonly frame: SyncV1ClientFrame;
 };
-type Head = {
-  readonly revision: number;
-  readonly state_schema_version: number;
-  readonly state_digest: string;
-};
 type Recovery = {
   readonly id: string;
   readonly head: Head;
@@ -91,7 +88,6 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #liveTargets: V1LiveTargetCoordinator;
   #entryPending = false;
   // Older Sync rejects new hello fields, so entry confirmation is requested on the URL and granted in welcome.
-  #entryNegotiated = false;
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -117,10 +113,16 @@ export class V1SyncClient implements V1CollaborationClient {
   #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
-  /** Whether this connection's welcome advertised `media_off_reason`; reset for each connection. */
-  #offReasonNegotiated = false;
-  /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
-  #connectionQualityNegotiated = false;
+  #extensions = v1NegotiatedExtensions();
+  readonly annotation = new AnnotationReplica((wire) => {
+    if (!this.#socket || this.#phase.phase !== "live" || !this.#extensions.annotation) return false;
+    try {
+      this.#socket.send(wire);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -236,6 +238,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket?.close(1000, "client stopped");
     this.#socket = null;
     this.#phase = { phase: "stopped" };
+    this.annotation.disconnected(true);
     this.#options.mediaPlane?.remotePublicationsChanged?.([], "unavailable");
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
@@ -251,16 +254,16 @@ export class V1SyncClient implements V1CollaborationClient {
     // connection may negotiate confirmation for the first time.
     this.#entryPending = true;
     // Without negotiation, Sync confirmed the entry at hello.
-    if (!this.#entryNegotiated) return;
+    if (!this.#extensions.entryConfirmation) return;
     this.#send({ type: "entered" });
   }
   /** True when the connected Sync advertised `media_off_reason` in its welcome, so media items may carry `off_reason`. */
   offReasonNegotiated(): boolean {
-    return this.#offReasonNegotiated;
+    return this.#extensions.mediaOffReason;
   }
   /** Tells the other guests how well this link carries the call. A Sync without the extension is never sent the frame. */
   setConnectionQuality(quality: "good" | "weak" | "poor"): void {
-    if (!this.#connectionQualityNegotiated || this.#phase.phase !== "live") return;
+    if (!this.#extensions.connectionQuality || this.#phase.phase !== "live") return;
     this.#send({ type: "connection_quality_set", quality });
   }
   getSnapshot(): V1EpisodeSnapshot {
@@ -433,9 +436,7 @@ export class V1SyncClient implements V1CollaborationClient {
     // no longer the failing stage once its replacement is trying to open.
     if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
-    this.#entryNegotiated = false;
-    this.#offReasonNegotiated = false;
-    this.#connectionQualityNegotiated = false;
+    this.#extensions = v1NegotiatedExtensions();
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -532,9 +533,12 @@ export class V1SyncClient implements V1CollaborationClient {
   async #receive(socket: V1Socket, data: unknown): Promise<void> {
     if (socket !== this.#socket) return;
     try {
-      if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
-      const frame = decodeV1ServerFrame(data);
-      await this.#handleFrame(frame);
+      const frame = decodeInboundV1Frame(data);
+      if (frame.kind === "annotation") {
+        if (this.#extensions.annotation && this.#phase.phase === "live") this.annotation.receive(frame.value);
+        return;
+      }
+      await this.#handleFrame(frame.value);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
@@ -674,9 +678,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
-    this.#entryNegotiated = frame.entry_confirmation === true;
-    this.#offReasonNegotiated = frame.media_off_reason === true;
-    this.#connectionQualityNegotiated = frame.connection_quality === true;
+    this.#extensions = v1NegotiatedExtensions(frame);
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -805,7 +807,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
-    if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
+    if (this.#entryPending && this.#extensions.entryConfirmation) this.#send({ type: "entered" });
+    this.annotation.enterLive(this.#extensions.annotation, this.#extensions.annotationBurnIn);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -850,6 +853,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#options.mediaPlane?.remotePublicationsChanged?.([], this.#mediaEnded() ? "available" : "unavailable");
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
+    this.annotation.disconnected(this.#phase.phase === "terminal");
     if (!this.#started || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -1062,23 +1066,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#timers.cancel("noticeProbe");
   }
   #emit(): void {
+    if (this.#phase.phase === "terminal") this.annotation.disconnected(true);
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }
-}
-function sameHead(control: V1ControlState | null, head: Head): boolean {
-  return control !== null && control.revision === head.revision && control.stateSchemaVersion === head.state_schema_version && control.stateDigest === head.state_digest;
-}
-function sameRawHead(left: Head, right: Head): boolean {
-  return left.revision === right.revision && left.state_schema_version === right.state_schema_version && left.state_digest === right.state_digest;
-}
-function rememberBoundedEvidence(evidence: Map<number, string>, sequence: number, signature: string, capacity: number): void {
-  evidence.set(sequence, signature);
-  if (evidence.size <= capacity) return;
-  const oldest = evidence.keys().next().value;
-  if (oldest !== undefined) evidence.delete(oldest);
-}
-function assertV1Url(value: string): void {
-  const url = new URL(value);
-  if (url.pathname !== SYNC_PATH) throw new V1SyncError("SyncEngine v1 websocket URL must use /v1/sync", "invalid_url");
 }

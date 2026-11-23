@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/helperaccess"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -31,9 +32,10 @@ type TenantAuthorizer interface {
 }
 
 type CapabilityStatus struct {
-	Recording       bool
-	Transcription   bool
-	WhiteboardFiles bool
+	Recording        bool
+	Transcription    bool
+	WhiteboardFiles  bool
+	ScreenAnnotation func(context.Context) bool
 }
 
 type Options struct {
@@ -68,13 +70,12 @@ type Options struct {
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
 
-	APIKeys              APIKeyService
-	APIKeyAuthentication APIKeyAuthenticator
-
+	APIKeys                APIKeyService
+	APIKeyAuthentication   APIKeyAuthenticator
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer
-
+	HelperAccess           *helperaccess.Service
 	ParticipantMediaVerify ParticipantMediaVerifier
 	// TelemetryVerify verifies the telemetry token; the telemetry route falls back to ParticipantMediaVerify.
 	TelemetryVerify TelemetryVerifier
@@ -204,12 +205,13 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
+		annotationEnabled := capabilities.ScreenAnnotation != nil && capabilities.ScreenAnnotation(ctx)
 		body := map[string]any{
 			"status": "ok",
 			"dependencies": map[string]string{
 				"postgres": "ok",
 			},
-			"capabilities": capabilityReadiness(capabilities),
+			"capabilities": capabilityReadiness(capabilities, annotationEnabled),
 		}
 		if backlog != nil {
 			if count, oldest, observed := backlog(); observed {
@@ -240,15 +242,16 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus, d
 		"dependencies": map[string]string{
 			dependency: "unavailable",
 		},
-		"capabilities": capabilityReadiness(capabilities),
+		"capabilities": capabilityReadiness(capabilities, false),
 	})
 }
 
-func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
+func capabilityReadiness(capabilities CapabilityStatus, annotationEnabled bool) map[string]string {
 	return map[string]string{
-		"recording":        enabledStatus(capabilities.Recording),
-		"transcription":    enabledStatus(capabilities.Transcription),
-		"whiteboard_files": enabledStatus(capabilities.WhiteboardFiles),
+		"recording":         enabledStatus(capabilities.Recording),
+		"transcription":     enabledStatus(capabilities.Transcription),
+		"whiteboard_files":  enabledStatus(capabilities.WhiteboardFiles),
+		"screen_annotation": enabledStatus(annotationEnabled),
 	}
 }
 

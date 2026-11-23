@@ -16,7 +16,16 @@ export interface WhiteboardFileTransfer {
   readonly download: (fileId: string) => Promise<{ readonly mimeType: string; readonly dataURL: string }>;
 }
 
+export interface WhiteboardFileUpload {
+  readonly sceneId: string;
+  readonly sceneGeneration?: string;
+  readonly fileId: string;
+  readonly blob: Blob;
+  readonly signal: AbortSignal;
+}
+
 export interface WhiteboardFileTransferOptions {
+  uploadFile?: (input: WhiteboardFileUpload) => Promise<void>;
   fileTransfer?: WhiteboardFileTransfer;
   presignDownload?: (fileId: string) => Promise<{ downloadUrl: string }>;
 }
@@ -27,7 +36,7 @@ interface WhiteboardFilesSyncOptions extends WhiteboardFileTransferOptions {
   onStateChange?: (state: WhiteboardFileSyncState) => void;
 }
 
-const blobToDataURL = (blob: Blob) =>
+export const blobToDataURL = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("failed to read blob"));
@@ -55,7 +64,7 @@ const normalizeMimeType = (value: string): BinaryFileData["mimeType"] => {
   return MIME_TYPES.binary;
 };
 
-const updateImageStatus = (excalidrawAPI: ExcalidrawImperativeAPI, fileId: string, nextStatus: "saved" | "error") => {
+export const updateImageStatus = (excalidrawAPI: ExcalidrawImperativeAPI, fileId: string, nextStatus: "saved" | "error") => {
   const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
   let changed = false;
 

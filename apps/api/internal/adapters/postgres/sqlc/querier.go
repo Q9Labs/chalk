@@ -21,6 +21,7 @@ type Querier interface {
 	AdoptSpaceMediaPlaneSetting(ctx context.Context, arg AdoptSpaceMediaPlaneSettingParams) (int64, error)
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
+	ApproveHelperDeviceRequest(ctx context.Context, arg ApproveHelperDeviceRequestParams) error
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
 	AuthenticateMCPOAuthAccessToken(ctx context.Context, arg AuthenticateMCPOAuthAccessTokenParams) (AuthenticateMCPOAuthAccessTokenRow, error)
 	AuthorizeRecordingArtifactReplay(ctx context.Context, arg AuthorizeRecordingArtifactReplayParams) (bool, error)
@@ -30,6 +31,7 @@ type Querier interface {
 	AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error)
 	AuthorizeRecordingJobLease(ctx context.Context, arg AuthorizeRecordingJobLeaseParams) (pgtype.UUID, error)
 	AuthorizeRecordingRenderInput(ctx context.Context, arg AuthorizeRecordingRenderInputParams) (AuthorizeRecordingRenderInputRow, error)
+	CanWriteWhiteboardFile(ctx context.Context, arg CanWriteWhiteboardFileParams) (bool, error)
 	CancelArtifactJob(ctx context.Context, arg CancelArtifactJobParams) (ArtifactJob, error)
 	CancelRecordingPreparation(ctx context.Context, arg CancelRecordingPreparationParams) (CancelRecordingPreparationRow, error)
 	CancelWebhookDeliveriesForOldTarget(ctx context.Context, arg CancelWebhookDeliveriesForOldTargetParams) (int64, error)
@@ -136,6 +138,7 @@ type Querier interface {
 	// admission use that same lock, so an earlier reconnect cancels the old window.
 	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	ExpireHelperDeviceRequests(ctx context.Context) error
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
 	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
@@ -146,6 +149,8 @@ type Querier interface {
 	FinalizeRecordingBundleAllocation(ctx context.Context, arg FinalizeRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	FinalizeRecordingRenderObject(ctx context.Context, arg FinalizeRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	FinalizeTranscription(ctx context.Context, arg FinalizeTranscriptionParams) (Transcription, error)
+	FinalizeWhiteboardFile(ctx context.Context, arg FinalizeWhiteboardFileParams) (int64, error)
+	FindHelperDeviceByCredential(ctx context.Context, credentialHash []byte) (HelperDevice, error)
 	FindMCPOAuthGrantByToken(ctx context.Context, tokenHash string) (FindMCPOAuthGrantByTokenRow, error)
 	FindServiceTenantID(ctx context.Context, arg FindServiceTenantIDParams) (pgtype.UUID, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
@@ -249,6 +254,7 @@ type Querier interface {
 	GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID) (TranscriptionCleanupJob, error)
 	GetWebhookDelivery(ctx context.Context, arg GetWebhookDeliveryParams) (GetWebhookDeliveryRow, error)
 	GetWebhookEndpoint(ctx context.Context, arg GetWebhookEndpointParams) (GetWebhookEndpointRow, error)
+	GetWhiteboardFileUpload(ctx context.Context, arg GetWhiteboardFileUploadParams) (GetWhiteboardFileUploadRow, error)
 	HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifactJobParams) (ArtifactJob, error)
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
@@ -327,6 +333,8 @@ type Querier interface {
 	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]ListWebhookDeliveriesRow, error)
 	ListWebhookDeliveryAttempts(ctx context.Context, arg ListWebhookDeliveryAttemptsParams) ([]WebhookDeliveryAttempt, error)
 	ListWebhookEndpoints(ctx context.Context, arg ListWebhookEndpointsParams) ([]ListWebhookEndpointsRow, error)
+	LockActiveHelperDevice(ctx context.Context, id pgtype.UUID) (HelperDevice, error)
+	LockActiveHelperLoopbackDevice(ctx context.Context, arg LockActiveHelperLoopbackDeviceParams) (pgtype.UUID, error)
 	LockActiveParticipantsForTenantEnd(ctx context.Context, arg LockActiveParticipantsForTenantEndParams) ([]LockActiveParticipantsForTenantEndRow, error)
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
@@ -339,6 +347,7 @@ type Querier interface {
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
 	LockEpisodeAdmissionRequest(ctx context.Context, arg LockEpisodeAdmissionRequestParams) (SyncAdmissionRequest, error)
 	LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error)
+	LockHelperDeviceRequest(ctx context.Context, arg LockHelperDeviceRequestParams) (HelperDeviceRequest, error)
 	LockLifecycleEpisodeForUpdate(ctx context.Context, arg LockLifecycleEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)
@@ -390,6 +399,7 @@ type Querier interface {
 	LockTenantTranscriptionForUpdate(ctx context.Context, arg LockTenantTranscriptionForUpdateParams) (Transcription, error)
 	LockWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	LockWebhookTenantStateForShare(ctx context.Context, tenantID pgtype.UUID) error
+	LookupHelperDeviceRequest(ctx context.Context, arg LookupHelperDeviceRequestParams) (LookupHelperDeviceRequestRow, error)
 	MarkAutoSpaceLifecycleArchived(ctx context.Context, arg MarkAutoSpaceLifecycleArchivedParams) (AutoSpaceLifecycle, error)
 	MarkAutoSpaceLifecycleArchiving(ctx context.Context, arg MarkAutoSpaceLifecycleArchivingParams) (AutoSpaceLifecycle, error)
 	MarkDueRecordingTranscriptionSourcesForCleanup(ctx context.Context, now pgtype.Timestamptz) ([]MarkDueRecordingTranscriptionSourcesForCleanupRow, error)
@@ -405,8 +415,10 @@ type Querier interface {
 	// Count by the fenced journal worker, not by a fleet-row join: a lost row
 	// must not hide live work. Refuse any conflicting provider or worker binding.
 	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
+	PollHelperDeviceRequest(ctx context.Context, pollHash []byte) (HelperDeviceRequest, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
+	ReadHelperDevices(ctx context.Context, tenantID pgtype.UUID) ([]ReadHelperDevicesRow, error)
 	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
@@ -415,6 +427,8 @@ type Querier interface {
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)
 	RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg RecoverExpiredTranscriptionCleanupJobsParams) ([]TranscriptionCleanupJob, error)
+	RegisterHelperDevice(ctx context.Context, arg RegisterHelperDeviceParams) error
+	RegisterHelperLoopbackDevice(ctx context.Context, arg RegisterHelperLoopbackDeviceParams) error
 	// Hands back a lease the worker never used. The claim's attempt is refunded
 	// because no work ran. The job waits 30 seconds so a chunk the API can never
 	// hand out is retried at a bounded rate instead of on every claim.
@@ -446,6 +460,7 @@ type Querier interface {
 	ReserveRecordingFleetBootstrap(ctx context.Context, arg ReserveRecordingFleetBootstrapParams) (RecordingFleetNode, error)
 	ReserveRecordingRenderObject(ctx context.Context, arg ReserveRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	ReserveSpaceCreateRequest(ctx context.Context, arg ReserveSpaceCreateRequestParams) (SpaceCreateRequest, error)
+	ReserveWhiteboardFile(ctx context.Context, arg ReserveWhiteboardFileParams) (ReserveWhiteboardFileRow, error)
 	ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (pgtype.UUID, error)
 	RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (Space, error)
 	RetireRecordingCapturePublication(ctx context.Context, arg RetireRecordingCapturePublicationParams) (int64, error)
@@ -453,6 +468,7 @@ type Querier interface {
 	RetryAutoSpaceLifecycle(ctx context.Context, arg RetryAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	RetryTranscriptionCleanupJob(ctx context.Context, arg RetryTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	RevokeActiveAPIKey(ctx context.Context, arg RevokeActiveAPIKeyParams) (pgtype.UUID, error)
+	RevokeHelperDevice(ctx context.Context, arg RevokeHelperDeviceParams) error
 	RevokeMCPOAuthGrant(ctx context.Context, arg RevokeMCPOAuthGrantParams) (int64, error)
 	// A lost row still needs a durable fence against bootstrap replay. Metadata
 	// unavailable after row loss uses explicit tombstone placeholders; it can never
@@ -462,11 +478,13 @@ type Querier interface {
 	RotateActiveAPIKey(ctx context.Context, arg RotateActiveAPIKeyParams) (RotateActiveAPIKeyRow, error)
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
 	RotateWebhookEndpointSecret(ctx context.Context, arg RotateWebhookEndpointSecretParams) (RotateWebhookEndpointSecretRow, error)
+	ScreenAnnotationEnabled(ctx context.Context, defaultEnabled bool) (bool, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
 	SetMediaPlaneKillSwitch(ctx context.Context, paused bool) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
+	StartHelperDeviceRequest(ctx context.Context, arg StartHelperDeviceRequestParams) error
 	// The participant row implies a live tenant (participants.tenant_id references tenants). The key
 	// share lock keeps the row from being deleted until the admission commits.
 	TelemetryParticipantLive(ctx context.Context, arg TelemetryParticipantLiveParams) ([]pgtype.UUID, error)

@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execCommand } from "../../../../scripts/lib/platform.mjs";
 import { codegenPath, loadSyncContract, pascalCase, stableJson } from "./sync-contract.mjs";
+import { renderWelcomeSchemas, welcomeFlagsFor } from "./sync-welcome.mjs";
 
 const execute = execCommand;
 const outputPath = codegenPath("CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH", "sdks/typescript/client/src/generated/sync.ts");
@@ -193,10 +194,10 @@ function renderTypeScript(contract) {
     "  const base = ['type', 'protocol', 'participant_id', 'participant_generation', 'recovery_id', 'head', 'mode'];",
     "  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;",
     "  const extensionValid = isObject(extension) && ['collaboration_v1', 'collaboration_v2'].includes(String(extension.name)) && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']) && Array.isArray(extension.read_receipts);",
-    "  if (Object.hasOwn(value, 'entry_confirmation') && value.entry_confirmation !== true) return false;",
-    "  if (Object.hasOwn(value, 'media_off_reason') && value.media_off_reason !== true) return false;",
-    "  if (Object.hasOwn(value, 'connection_quality') && value.connection_quality !== true) return false;",
-    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'media_off_reason') ? ['media_off_reason'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
+    `  const flags = ${JSON.stringify(welcomeFlagsFor(contract))}.filter((key) => Object.hasOwn(value, key));`,
+    "  if (flags.some((key) => value[key] !== true)) return false;",
+    "  if (value.screen_annotation_burn_in === true && value.screen_annotation !== true) return false;",
+    "  const fields = [...base, ...flags, ...(extensionValid ? ['extensions'] : []), ...['entry_generation', 'participant_identity_id'].filter((key) => Object.hasOwn(value, key))];",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObjectWithCorrelation(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
     "  if (value.mode === 'terminal') return exactObjectWithCorrelation(value, [...fields, 'reason']);",
@@ -388,21 +389,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
-  lines.push(
-    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), media_off_reason: Schema.optionalKey(Schema.Literal(true)), connection_quality: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
-  );
-  lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
-  lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
-  lines.push("export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('replay'), ...ServerCorrelationFields });");
-  lines.push("export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('up_to_date'), ...ServerCorrelationFields });");
-  lines.push("export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema, ...ServerCorrelationFields });");
-  lines.push("export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
-  lines.push("export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('replay'), ...ServerCorrelationFields });");
-  lines.push("export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('up_to_date'), ...ServerCorrelationFields });");
-  lines.push("export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema, ...ServerCorrelationFields });");
-  lines.push(
-    "export const WelcomeFrameSchema = Schema.Union([ExtendedWelcomeSnapshotFrameSchema, ExtendedWelcomeReplayFrameSchema, ExtendedWelcomeUpToDateFrameSchema, ExtendedWelcomeTerminalFrameSchema, WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, WelcomeUpToDateFrameSchema, WelcomeTerminalFrameSchema]);",
-  );
+  lines.push(...renderWelcomeSchemas(contract));
   lines.push(
     "export const ReplayPageFrameSchema = Schema.Struct({ type: Schema.Literal('replay_page'), recovery_id: UuidSchema, first_revision: PositiveIntegerSchema, last_revision: PositiveIntegerSchema, events: Schema.Array(EventFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.replayPageMaxEvents)), ...ServerCorrelationFields }).check(Schema.makeFilter((frame) => { const first = frame.events[0]; const last = frame.events.at(-1); const budget = completeSyncCorrelation(frame) ? SyncProtocolLimits.replayPageEncodedBytes : SyncProtocolLimits.replayPageEncodedBytes - SyncProtocolLimits.correlationReservedBytes; return encodedSyncFrameBytes(frame) <= budget && first !== undefined && last !== undefined && first.revision === frame.first_revision && last.revision === frame.last_revision && frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision) ? undefined : { path: [], issue: 'must declare one bounded contiguous replay page' }; }));",
   );

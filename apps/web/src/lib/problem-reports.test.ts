@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { problemReporter } from "./problem-reports";
+import { problemReporter } from "./send-problem-report";
 
 afterEach(() => vi.unstubAllGlobals());
 

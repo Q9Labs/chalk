@@ -11,11 +11,13 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
       ChalkAndroidConnectionServiceModule(reactContext),
       ChalkAudioRouteModule(reactContext),
       ChalkCallServiceModule(reactContext),
+      ChalkAnnotationFramesModule(reactContext),
+      ChalkAnnotationOverlayModule(reactContext),
       ChalkScreenCaptureModule(reactContext),
     )
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return emptyList()
+    return listOf(ChalkAnnotationVideoViewManager())
   }
 }

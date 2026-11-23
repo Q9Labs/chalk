@@ -1,4 +1,5 @@
-import type { ConnectionLifecycleCapability } from "../connection";
+import { screenShareCapture } from "../connection/media-devices";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import { structurallyEqual } from "./structural-equal";
 import type { MediaSlice } from "./types";
@@ -33,6 +34,23 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
   if (track) return "requesting";
   return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
+export function confirmedScreenPublication(screen: ConnectionMediaSnapshot["localTracks"][number] | undefined, sync: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | undefined): string | undefined {
+  if (!sync || !screen?.enabled || !screen.publicationId || screen.track.readyState !== "live") return undefined;
+  return sync.media?.items.some((item) => item.participantId === sync.participantId && item.source === "screen" && item.enabled && item.publicationId === screen.publicationId) ? screen.publicationId : undefined;
+}
+export function screenShareMedia(screen: MediaSlice["local"]["screen"], snapshot: ConnectionMediaSnapshot | undefined, hasAudio: boolean, sync: ConnectionPorts["sync"] | undefined): MediaSlice["screenShare"] {
+  const publicationId = publishedScreenId(screen, snapshot, sync);
+  return {
+    ...screen,
+    hasAudio,
+    ...(publicationId ? { publicationId } : {}),
+    ...(screen.track ? { capture: screenShareCapture(screen.track) } : {}),
+  };
+}
+function publishedScreenId(screen: MediaSlice["local"]["screen"], snapshot: ConnectionMediaSnapshot | undefined, sync: ConnectionPorts["sync"] | undefined): string | undefined {
+  const publication = snapshot?.localTracks.find((item) => item.source === "screen" && item.track === screen.track);
+  return sync && screen.state === "enabled" ? confirmedScreenPublication(publication, sync.getSnapshot()) : undefined;
+}
 export function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
@@ -42,7 +60,7 @@ function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean 
   return left?.tier === right?.tier && left?.reason === right?.reason;
 }
 function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
-  return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
+  return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.publicationId === right.publicationId && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
 }
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;

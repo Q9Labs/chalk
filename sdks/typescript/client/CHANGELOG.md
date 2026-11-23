@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.1.0
+
+- Negotiate screen annotation with Sync for the active screen publication. The client stops sending annotation commands and withdraws ink when the server disables the feature, without interrupting screen sharing.
+
 ## 5.2.6
 
 - Reuse microphone and camera senders after short browser capture interruptions, keeping capture disabled until a fresh user enable. Republish after long interruptions before trusting an expired provider track, and detach again if capture is interrupted during reattachment. Report interrupted owned capture as unavailable to other participants through the existing Sync pause command. Include a bounded replacement cause on the first SFU track request after a media connection is replaced.
