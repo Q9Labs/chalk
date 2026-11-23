@@ -23,6 +23,11 @@ export interface StatusSurfaceProps {
   readonly retryPending?: boolean;
 }
 
+/** The StatusSurface props that name why a connection failed, from the failure the client reports. */
+export function statusFailure(failure: ClientFailure | null | undefined): Pick<StatusSurfaceProps, "errorCode" | "sync" | "mediaHttpStatus"> {
+  return { errorCode: failure?.code, sync: failure?.sync, mediaHttpStatus: failure?.mediaHttpStatus };
+}
+
 /** All terminal call states share the same quiet page and host-owned navigation. */
 export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, mediaHttpStatus, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const connectionLost = phase === "failed" && errorCode === "connection.sync_recovery_exhausted";

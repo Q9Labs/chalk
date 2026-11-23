@@ -10,17 +10,17 @@ import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } 
 import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./initial-media";
-import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode } from "./lifecycle-failure";
+import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode, mediaRefusalField } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
-import { episodeNoLongerActive, mediaAccessRejected, mediaRefusalStatus, sfuAccessRejected } from "./access-rejection";
+import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
+import { createMediaStateReporter } from "./media-state-report";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
 import { deviceFailedEvent } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
-import { reportedNetworkType } from "./network-type";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
 const MEDIA_RECOVERY_TIMEOUT_MS = 60000;
@@ -361,8 +361,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           model.media = null;
           model.syncSnapshot = null;
           model.syncNoticeUnresponsive = false;
-          model.mediaSnapshot = null;
-          reportedMedia = null;
+          model.mediaSnapshot = mediaState.observe(null);
           model.recoveryQueued = null;
           model.recoveryFiber = null;
           yield* publish();
@@ -432,10 +431,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
       const bindMedia = (scope: Scope.Closeable, media: ConnectionMediaClient): Effect.Effect<void> =>
         bindResource(scope, "mediaBindingCleanup", () => {
-          const unsubscribe = media.subscribe(() => {
-            if (media === model.media) reportMediaState(media.getSnapshot());
-            enqueueBackground(handleMediaSnapshot(media, media.getSnapshot()));
-          });
+          const unsubscribe = media.subscribe(() => enqueueBackground(handleMediaSnapshot(media, mediaState.observe(media.getSnapshot()))));
           return () => {
             unsubscribe();
             media.stop();
@@ -798,22 +794,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         const mediaMinimum = [1000, 2000, 4000][attempt - 1] ?? 6000;
         return plan.kind === "media" ? Math.min(6000, Math.max(mediaMinimum, finiteDelay)) : finiteDelay;
       };
-      // Reported straight from the media subscription and from every place that records a snapshot, so a state reached while the join or a recovery holds the queue is reported once, in order.
-      let reportedMedia: { readonly phase: string; readonly ice: string | undefined } | null = null;
-      const reportMediaState = (snapshot: ConnectionMediaSnapshot | null) => {
-        const phase = mediaDiagnosticPhase(snapshot);
-        const ice = snapshot?.connection.iceConnectionState ?? undefined;
-        if (phase === undefined || (reportedMedia?.phase === phase && reportedMedia.ice === ice)) return;
-        reportedMedia = { phase, ice };
-        onTransportDiagnostic({ event: "media_state", phase, ice_state: ice, network_type: reportedNetworkType() });
-      };
-      const rememberMedia = (snapshot: ConnectionMediaSnapshot | null) => {
-        reportMediaState(snapshot);
-        model.mediaSnapshot = snapshot;
-      };
+      const mediaState = createMediaStateReporter(onTransportDiagnostic);
       const readSnapshots = () => {
         model.syncSnapshot = model.sync?.getSnapshot() ?? null;
-        rememberMedia(model.media?.getSnapshot() ?? null);
+        model.mediaSnapshot = mediaState.observe(model.media?.getSnapshot() ?? null);
       };
       const waitForRecoveredSync = (sync: ConnectionSyncClient) => waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
       const finishRecovery = (attempt: number, epoch: number, kind: RecoveryKind): Effect.Effect<void> =>
@@ -1035,7 +1019,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       };
       const stopRejectedMedia = () => {
         model.mediaBindingCleanup?.();
-        rememberMedia(model.media?.getSnapshot() ?? null);
+        model.mediaSnapshot = mediaState.observe(model.media?.getSnapshot() ?? null);
       };
       const waitForPendingEpisodeEnd = Effect.suspend(() => (pendingEpisodeEnd ? Deferred.await(pendingEpisodeEnd) : Effect.void));
       const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> => {
@@ -1134,7 +1118,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
-          rememberMedia(snapshot);
+          model.mediaSnapshot = mediaState.observe(snapshot);
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
@@ -1180,7 +1164,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                       yield* recover("media");
                       return;
                     }
-                    rememberMedia(media.getSnapshot());
+                    model.mediaSnapshot = mediaState.observe(media.getSnapshot());
                     yield* publish();
                   }),
                 ),
@@ -1382,11 +1366,7 @@ function joinCancelledFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaStatusOf(value) });
-}
-function mediaStatusOf(value: ConnectionLifecycleFailure): { readonly mediaHttpStatus?: number } {
-  const status = mediaRefusalStatus(value.cause);
-  return status === undefined ? {} : { mediaHttpStatus: status };
+  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaRefusalField(value.cause) });
 }
 function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
   return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));
@@ -1426,9 +1406,6 @@ const TRANSPORT_PHASES = new Map<string | undefined, ConnectionConnectionPhase>(
 ]);
 function transportPhase(phase: string | undefined): ConnectionConnectionPhase {
   return TRANSPORT_PHASES.get(phase) ?? "idle";
-}
-function mediaDiagnosticPhase(snapshot: ConnectionMediaSnapshot | null) {
-  return snapshot?.connection.peerConnectionState ?? snapshot?.connection.phase;
 }
 
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {

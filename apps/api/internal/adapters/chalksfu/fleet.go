@@ -32,11 +32,10 @@ const (
 	// admission at first join stays the authority.
 	inflightTTL = 30 * time.Second
 	// minNodeProtocol is the lowest SFU wire protocol this API can send to. The API puts
-	// allocationGeneration in its create, reserve, move and source-control bodies, and a node
-	// below protocol 2 refuses a body with a field it does not know (400 invalid_request). A node
-	// below protocol 3 refuses the receive-only offer of a listener (400 invalid_request). The
-	// API places no Episode on such a node, so deploying the API before the SFU degrades
-	// placement visibly and fails no call.
+	// allocationGeneration in its create, reserve, move and source-control bodies, which a node below
+	// protocol 2 refuses, and a node below protocol 3 refuses a listener's receive-only offer (both
+	// 400 invalid_request). The API places no Episode on such a node, so deploying the API before the
+	// SFU degrades placement visibly and fails no call.
 	minNodeProtocol = 3
 )
 

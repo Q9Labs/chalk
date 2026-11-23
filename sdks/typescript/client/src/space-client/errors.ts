@@ -1,8 +1,7 @@
 import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
-import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
+import { ConnectionLifecycleFailure, mediaRefusalField } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
-import { mediaRefusalStatus } from "../connection/access-rejection";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
@@ -87,14 +86,13 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
 
 function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError): SpaceClientError {
   const permissionBlock = permissionBlockOf(cause);
-  const mediaRefusal = cause instanceof ConnectionLifecycleFailure ? mediaRefusalStatus(cause.cause) : undefined;
   return new SpaceClientError({
     code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
     recoverable: cause.recoverable,
     message: cause.message,
     ...(permissionBlock ? { permissionBlock } : {}),
     ...(cause.sync ? { sync: cause.sync } : {}),
-    ...(mediaRefusal ? { mediaHttpStatus: mediaRefusal } : {}),
+    ...(cause instanceof ConnectionLifecycleFailure ? mediaRefusalField(cause.cause) : {}),
   });
 }
 

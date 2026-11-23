@@ -12,9 +12,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	otelmetric "go.opentelemetry.io/otel/metric"
 )
 
 type requestLoggerContextKey struct{}
@@ -143,18 +140,12 @@ type RequestLogConfig struct {
 	SlowThreshold time.Duration
 }
 
-// RequestMiddleware logs requests as the config says and counts every one in chalk.api.http.requests,
-// by matched route and status class. The count is the denominator for the failures the log keeps:
-// it holds whatever the log mode drops, at a cost bounded by the number of routes.
+// RequestMiddleware logs requests as the config says and counts every one (see requestCounter).
 func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	requests, _ := otel.Meter("github.com/q9labs/chalk/apps/api/internal/observability").Int64Counter(
-		"chalk.api.http.requests",
-		otelmetric.WithDescription("HTTP requests by matched route and status class, whatever the request log keeps"),
-		otelmetric.WithUnit("{request}"),
-	)
+	requests := newRequestCounter()
 	config := requestLogConfig(configs...)
 
 	return func(next http.Handler) http.Handler {
@@ -176,7 +167,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			route := requestRoute(r.Context())
 
 			tagRequestSpans(r.Context(), route)
-			requests.Add(r.Context(), 1, otelmetric.WithAttributes(attribute.String("route", route), attribute.String("status_class", statusClass(recorder.status))))
+			requests.count(r.Context(), route, recorder.status)
 
 			if !shouldLogRequest(config, recorder.status, duration) {
 				return
@@ -210,21 +201,6 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				logger.InfoContext(r.Context(), "http request", attrs...)
 			}
 		})
-	}
-}
-
-func statusClass(status int) string {
-	switch {
-	case status >= 500:
-		return "5xx"
-	case status >= 400:
-		return "4xx"
-	case status >= 300:
-		return "3xx"
-	case status >= 200:
-		return "2xx"
-	default:
-		return "1xx"
 	}
 }
 

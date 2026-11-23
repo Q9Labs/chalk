@@ -7,7 +7,7 @@ import { useConnection, useRecording, useSpaceClient } from "../../bindings/hook
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import type { SpaceViewProps } from "../space-view/SpaceView";
 import { SpaceSurface } from "./SpaceSurface";
-import { StatusSurface } from "./StatusSurface";
+import { StatusSurface, statusFailure } from "./StatusSurface";
 import { reportDiagnostics } from "./report-diagnostics";
 import type { SpaceEventCallbacks } from "./space-event-callbacks";
 import { CallDialog } from "../space-header/CallDialog";
@@ -221,10 +221,8 @@ function SpaceExperience(
       <StatusSurface
         phase="failed"
         callName={callName}
-        errorCode={connection.lastError?.code}
+        {...statusFailure(connection.lastError)}
         reason={connection.lastError?.code === "access.invalid" ? connection.lastError.message : undefined}
-        sync={connection.lastError?.sync}
-        mediaHttpStatus={connection.lastError?.mediaHttpStatus}
         theme={statusTheme}
         onHome={props.onHome}
         onReportProblem={props.onOpenReport}
