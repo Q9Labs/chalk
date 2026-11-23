@@ -60,6 +60,14 @@ on:
       pages_rollback_id:
         description: Restore this saved production Pages deployment instead of uploading web
         type: string
+      sfu_force_restart:
+        description: Restart a Chalk SFU node that is behind this release without waiting for its calls to end. Set it when the run drops calls anyway (a Hotfix, a rollback, or a Promote that allows live calls)
+        type: boolean
+        default: false
+      sfu_best_effort:
+        description: Report a Chalk SFU node that cannot be brought to this release, and deploy the API and Sync anyway. Set it on a run that restores service (a Hotfix or a rollback), where a node problem must not block the restore
+        type: boolean
+        default: false
       manifest_run_id:
         description: Exact artifact-producing run to reuse; skips planning and all builds
         type: string
@@ -147,6 +155,10 @@ on:
         default: false
       sfu_force_restart:
         description: Restart a Chalk SFU node that is behind this release without waiting for its calls to end. Set it when the run drops calls anyway (a Hotfix, a rollback, or a Promote that allows live calls)
+        type: boolean
+        default: false
+      sfu_best_effort:
+        description: Report a Chalk SFU node that cannot be brought to this release, and deploy the API and Sync anyway. Set it on a run that restores service (a Hotfix or a rollback), where a node problem must not block the restore
         type: boolean
         default: false
       gate_checked:
@@ -932,6 +944,7 @@ jobs:
 
       - name: Check out the release source for the Chalk SFU nodes
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
+        continue-on-error: ${{ inputs.sfu_best_effort }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
@@ -941,9 +954,9 @@ jobs:
 
       - name: Bring the Chalk SFU nodes to this release before the API deploys
         # Managed releases deploy the API, Sync and web, never the nodes, and a node behind the API refuses what the API sends. A node already
-        # past the release stays. A rollback must not be blocked by a node it does not need, so there a failure is reported and the rollback goes on.
+        # past the release stays. A run that restores service (sfu_best_effort) must not be blocked by a node, so there a failure is reported and the deploy goes on.
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
-        continue-on-error: ${{ inputs.pages_rollback_id != '' }}
+        continue-on-error: ${{ inputs.sfu_best_effort }}
         timeout-minutes: 50
         env:
           CHALK_SFU_DEPLOY_BUNDLE: ${{ secrets.CHALK_SFU_DEPLOY_BUNDLE }}

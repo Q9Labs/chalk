@@ -145,7 +145,8 @@ class RunTest(unittest.TestCase):
         self.node('10.0.0.3', 'dev')
         lines = self.run_command('deploy')
         self.assertEqual(self.deployed(), ['production 10.0.0.1', 'production 10.0.0.3'])
-        self.assertIn('node 10.0.0.2: current', '\n'.join(lines))
+        self.assertIn('node 2: current', '\n'.join(lines))
+        self.assertNotIn('10.0.0', '\n'.join(lines))
         self.assertEqual(sum('deploying' in line for line in lines), 2)
 
     def test_a_release_whose_nodes_are_current_deploys_nothing(self):
@@ -171,7 +172,7 @@ class RunTest(unittest.TestCase):
     def test_an_unreadable_node_fails_before_any_deploy_that_follows_it(self):
         self.nodes('10.0.0.1\n10.0.0.2\n')
         self.node('10.0.0.2', self.old)
-        with self.assertRaisesRegex(NodeError, r'node 10\.0\.0\.1: cannot read /readyz .*tunnel closed'):
+        with self.assertRaisesRegex(NodeError, r'node 1: cannot read /readyz .*tunnel closed'):
             self.run_command('deploy')
         self.assertEqual(self.deployed(), [])
 
@@ -180,7 +181,7 @@ class RunTest(unittest.TestCase):
         self.node('10.0.0.1', self.old)
         self.node('10.0.0.2', self.old)
         (self.state / 'fail-deploy').write_text('')
-        with self.assertRaisesRegex(NodeError, r'node 10\.0\.0\.1: deploy failed \(7\)'):
+        with self.assertRaisesRegex(NodeError, r'node 1: deploy failed \(7\)'):
             self.run_command('deploy')
         self.assertEqual(self.deployed(), ['production 10.0.0.1'])
 

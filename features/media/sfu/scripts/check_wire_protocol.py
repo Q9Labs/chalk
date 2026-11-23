@@ -22,22 +22,33 @@ NODE = re.compile(r'^features/media/sfu/(cmd|internal|protocol)/.+\.go$')
 CALLER = re.compile(r'^(apps/api/internal/adapters/chalksfu/.+\.go|sdks/typescript/client/src/media/.+\.tsx?)$')
 TEST = re.compile(r'(_test\.go|\.(test|spec)\.tsx?)$')
 PROTOCOL_FILE = 'features/media/sfu/protocol/protocol.go'
-RAISED = re.compile(r'^\+const WireProtocol = ', re.MULTILINE)
+PROTOCOL = re.compile(r'^const WireProtocol = (\d+)\b', re.MULTILINE)
 DECISION = re.compile(r'^Wire-Protocol: unchanged because \S', re.MULTILINE)
 
 
 def git(*args):
-    return subprocess.run(['git', *args], capture_output=True, text=True, check=True).stdout
+    """Runs from the repository root: the Gate starts in features/media/sfu, and a path is read from the root."""
+    root = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(['git', '-C', root, *args], capture_output=True, text=True, check=True).stdout
 
 
-def verdict(changed, protocol_diff, messages):
+def protocol_at(ref):
+    """The WireProtocol number in the source at ref, 0 when the file or the constant is absent."""
+    try:
+        found = PROTOCOL.search(git('show', f'{ref}:{PROTOCOL_FILE}'))
+    except subprocess.CalledProcessError:
+        return 0
+    return int(found[1]) if found else 0
+
+
+def verdict(changed, base_protocol, head_protocol, messages):
     """None when the change needs no decision or carries one, else the reason it is refused."""
     code = [path for path in changed if not TEST.search(path)]
     node = [path for path in code if NODE.match(path)]
     callers = [path for path in code if CALLER.match(path)]
     if not node or not callers:
         return None
-    if RAISED.search(protocol_diff) or DECISION.search(messages):
+    if head_protocol > base_protocol or DECISION.search(messages):
         return None
     return (
         'this change edits the SFU node and what talks to it together:\n  '
@@ -55,7 +66,7 @@ def main(argv):
         print(f'cannot compare with {base}: fetch it (git fetch origin) or pass another base ref', file=sys.stderr)
         return 1
     changed = git('diff', '--name-only', f'{merge_base}..HEAD').splitlines()
-    problem = verdict(changed, git('diff', f'{merge_base}..HEAD', '--', PROTOCOL_FILE), git('log', f'{merge_base}..HEAD', '--format=%B'))
+    problem = verdict(changed, protocol_at(merge_base), protocol_at('HEAD'), git('log', f'{merge_base}..HEAD', '--format=%B'))
     if problem:
         print(problem, file=sys.stderr)
         return 1

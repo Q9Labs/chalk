@@ -83,6 +83,38 @@ class DeployStartTest(unittest.TestCase):
         self.assertNotIn('accept-new', (self.root / 'ssh-calls').read_text())
 
 
+class ReadyzTest(unittest.TestCase):
+    """readyz prints the body of a ready node and of a draining one, which answers 503, and refuses any other status."""
+
+    def run_readyz(self, status):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            (root / 'private' / 'production').mkdir(parents=True)
+            key = root / 'key'
+            key.write_text('x')
+            fake = root / 'bin'
+            fake.mkdir()
+            # The fake ssh opens the forwarded port the way the tunnel would, and the fake curl answers as the node does.
+            (fake / 'ssh').write_text('#!/bin/sh\nfor a in "$@"; do case "$a" in *:127.0.0.1:*) port="${a%%:*}";; esac; done\n'
+                                      'exec python3 -c "import socket,sys,time\ns=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);s.bind((\'127.0.0.1\',int(sys.argv[1])));s.listen();time.sleep(30)" "$port"\n')
+            (fake / 'curl').write_text(f'#!/bin/sh\nprintf \'{{"protocol":2,"revision":"abc"}}\\n{status}\'\n')
+            for tool in ('ssh', 'curl'):
+                (fake / tool).chmod(0o755)
+            env = {**os.environ, 'PATH': f'{fake}:{os.environ["PATH"]}', 'CHALK_SFU_PRIVATE_DIR': str(root / 'private'), 'SFU_SSH_KEY': str(key), 'SFU_FROM_CI': '1'}
+            return subprocess.run([str(DEPLOY.with_name('readyz')), 'production', '192.0.2.1'], env=env, capture_output=True, text=True, timeout=30)
+
+    def test_a_ready_node_and_a_draining_node_both_print_their_state(self):
+        for status in (200, 503):
+            result = self.run_readyz(status)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['protocol'], 2)
+
+    def test_any_other_status_fails(self):
+        result = self.run_readyz(502)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('answered 502', result.stderr)
+
+
 class CaptureWorkerCertificateTest(unittest.TestCase):
     def test_worker_identity_names_the_id_the_api_derives_for_the_node(self):
         with tempfile.TemporaryDirectory() as directory:

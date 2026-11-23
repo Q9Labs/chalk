@@ -124,7 +124,11 @@ test("every production deploy brings the Chalk SFU nodes to the release before t
   assert.match(nodes.run, /scripts\/releases\/sfu_nodes\.py deploy/);
   assert.match(nodes.run, /--require-certificates/);
   assert.match(nodes.run, /SFU_SOURCE_ROOT="\$PWD\/release-source\/features\/media\/sfu"/);
-  assert.equal(nodes["continue-on-error"], "${{ inputs.pages_rollback_id != '' }}", "a rollback is never blocked by a node it does not need");
+  assert.equal(nodes["continue-on-error"], "${{ inputs.sfu_best_effort }}", "a run that restores service is never blocked by a node");
+  assert.equal(source["continue-on-error"], "${{ inputs.sfu_best_effort }}");
+  for (const trigger of ["workflow_dispatch", "workflow_call"]) {
+    for (const input of ["sfu_force_restart", "sfu_best_effort"]) assert.equal(release.on[trigger].inputs[input].default, false, `${trigger} ${input}`);
+  }
   assert.equal(release.on.workflow_call.inputs.sfu_force_restart.default, false);
 });
 
@@ -135,10 +139,15 @@ test("a Promote reads the nodes before it waits for calls, and restarts a node w
   assert.match(JSON.stringify(preflight.steps), /sfu_nodes\.py check --environment production/);
   for (const name of ["live-calls", "release"]) assert.ok(needsOf(promote.jobs[name]).includes("sfu-nodes"), `${name} waits for the node preflight`);
   assert.equal(promote.jobs.release.with.sfu_force_restart, "${{ inputs.allow_live_calls }}");
+  assert.equal(promote.jobs.release.with.sfu_best_effort, undefined, "a forward release stops when a node cannot be brought forward");
   assert.equal(promote.jobs.rollback.with.sfu_force_restart, true);
+  assert.equal(promote.jobs.rollback.with.sfu_best_effort, true);
 });
 
 test("a Hotfix and its rollback bring the nodes forward without waiting for calls", () => {
   const hotfix = load(readFileSync(resolve(root, ".github/workflows/hotfix.yml"), "utf8"));
-  for (const name of ["release", "rollback"]) assert.equal(hotfix.jobs[name].with.sfu_force_restart, true, name);
+  for (const name of ["release", "rollback"]) {
+    assert.equal(hotfix.jobs[name].with.sfu_force_restart, true, name);
+    assert.equal(hotfix.jobs[name].with.sfu_best_effort, true, name);
+  }
 });

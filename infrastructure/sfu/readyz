@@ -4,7 +4,7 @@
 #   readyz <staging|production|bench> <node address>
 #
 # The control port accepts only the API host's address, so every other caller reaches it the way
-# deploy does. Needs the same private directory and SSH key as deploy.
+# deploy does. Needs the same private directory and SSH key as deploy. A draining node answers 503; its body prints too.
 set -euo pipefail
 
 usage="usage: readyz <staging|production|bench> <node address>"
@@ -21,4 +21,11 @@ port=$((20000 + RANDOM % 20000))
 sfu_tunnel "$port" "$host"
 trap 'kill "$tunnel" 2>/dev/null || true' EXIT
 sfu_wait_port "$port" || { echo "no SSH tunnel to ${host}" >&2; exit 1; }
-sfu_curl "$dir" 127.0.0.1 "$port" --fail --max-time 10 "https://chalk-sfu:${port}/readyz"
+# A draining node answers 503 with the same body, so both statuses print what the node reports; a deploy must be able to upgrade it.
+reply="$(sfu_curl "$dir" 127.0.0.1 "$port" --max-time 10 --write-out $'\n%{http_code}' "https://chalk-sfu:${port}/readyz")" ||
+  { echo "no answer from the node's /readyz" >&2; exit 1; }
+status="${reply##*$'\n'}"
+case "$status" in
+  200 | 503) printf '%s\n' "${reply%$'\n'*}" ;;
+  *) echo "the node's /readyz answered ${status}" >&2; exit 1 ;;
+esac

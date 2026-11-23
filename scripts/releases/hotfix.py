@@ -135,7 +135,8 @@ def rollback_command(github, args):
     inputs = dict(target_sha=previous['target_sha'], release_managed='false', deploy_managed='true', managed_environment='production',
                   manifest_run_id=previous['run_id'], manifest_artifact_id=previous['manifest_artifact_id'],
                   manifest_sha256=previous['manifest_sha256'], reuse_release_id=previous['release_id'],
-                  media_sha256=previous.get('media_sha256', ''), deploy_web='true' if args.pages_id else 'false')
+                  media_sha256=previous.get('media_sha256', ''), deploy_web='true' if args.pages_id else 'false',
+                  sfu_force_restart='true', sfu_best_effort='true')
     if args.pages_id:
         inputs['pages_rollback_id'] = args.pages_id
     print(f"# production runs {running['release_id']}; this restores {previous['release_id']} (API and Sync" + (', and web)' if args.pages_id else '; add --pages-id for web)'))

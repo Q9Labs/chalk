@@ -216,6 +216,12 @@ class RollbackCommand(unittest.TestCase):
         self.assertIn('-f reuse_release_id=old', line)
         self.assertIn('-f deploy_web=false', line)
 
+    def test_a_backend_only_rollback_is_never_blocked_by_a_chalk_sfu_node(self):
+        line = self.run_command([self.record(2, 'new', ['success']), self.record(1, 'old', ['success'])])
+        self.assertNotIn('pages_rollback_id', line)
+        self.assertIn('-f sfu_best_effort=true', line)
+        self.assertIn('-f sfu_force_restart=true', line)
+
     def test_one_release_has_nothing_to_return_to(self):
         with self.assertRaisesRegex(ValueError, 'no earlier'):
             self.run_command([self.record(1, 'only', ['success'])])

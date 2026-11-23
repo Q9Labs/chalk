@@ -93,19 +93,21 @@ def read_nodes(path):
     return nodes
 
 
-def read_ready(readyz, environment, address):
+def read_ready(readyz, environment, address, label):
+    """Messages name the node by its position in the list: the run's log is public and the address is not."""
     try:
         result = subprocess.run([readyz, environment, address], capture_output=True, text=True, timeout=READYZ_SECONDS)
     except subprocess.TimeoutExpired:
-        raise NodeError(f'node {address}: /readyz did not answer in {READYZ_SECONDS}s') from None
+        raise NodeError(f'{label}: /readyz did not answer in {READYZ_SECONDS}s') from None
     if result.returncode != 0:
-        raise NodeError(f'node {address}: cannot read /readyz ({result.stderr.strip()[-300:] or f"exit {result.returncode}"})')
+        detail = result.stderr.replace(address, label).strip()[-300:] or f'exit {result.returncode}'
+        raise NodeError(f'{label}: cannot read /readyz ({detail})')
     try:
         ready = json.loads(result.stdout)
     except json.JSONDecodeError:
-        raise NodeError(f'node {address}: /readyz is not JSON') from None
+        raise NodeError(f'{label}: /readyz is not JSON') from None
     if not isinstance(ready, dict):
-        raise NodeError(f'node {address}: /readyz is not an object')
+        raise NodeError(f'{label}: /readyz is not an object')
     return ready
 
 
@@ -128,19 +130,23 @@ def run(command, environment, target_sha, repository=REPOSITORY, directory=None,
     source = source_commit(repository, target_sha)
     minimum = minimum_protocol(repository, target_sha)
     lines = [f'release {target_sha[:12]} ships SFU source {source[:12]}, wire protocol at least {minimum}']
-    for address in nodes:
-        verdict = assess(repository, source, minimum, read_ready(readyz, environment, address))
-        lines.append(f'node {address}: {"current" if verdict.current else "behind"}: {verdict.why}')
+    if os.environ.get('GITHUB_ACTIONS'):
+        for address in nodes:
+            print(f'::add-mask::{address}', flush=True)
+    for position, address in enumerate(nodes, 1):
+        label = f'node {position}'
+        verdict = assess(repository, source, minimum, read_ready(readyz, environment, address, label))
+        lines.append(f'{label}: {"current" if verdict.current else "behind"}: {verdict.why}')
         if verdict.current or command == 'check':
             continue
-        lines.append(f'node {address}: deploying {source[:12]}')
+        lines.append(f'{label}: deploying {source[:12]}')
         result = subprocess.run([deploy, environment, address, *(['--force'] if force else [])])
         if result.returncode != 0:
-            raise NodeError(f'node {address}: deploy failed ({result.returncode}); the API was not deployed')
-        verdict = assess(repository, source, minimum, read_ready(readyz, environment, address))
+            raise NodeError(f'{label}: deploy failed ({result.returncode}); the API was not deployed')
+        verdict = assess(repository, source, minimum, read_ready(readyz, environment, address, label))
         if not verdict.current:
-            raise NodeError(f'node {address}: still behind after the deploy: {verdict.why}')
-        lines.append(f'node {address}: current: {verdict.why}')
+            raise NodeError(f'{label}: still behind after the deploy: {verdict.why}')
+        lines.append(f'{label}: current: {verdict.why}')
     return lines
 
 

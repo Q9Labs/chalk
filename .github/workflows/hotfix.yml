@@ -100,6 +100,7 @@ jobs:
       deploy_web: true
       orchestrated: true
       sfu_force_restart: true
+      sfu_best_effort: true
       stable_manifest_run_id: ${{ fromJSON(needs.plan.outputs.baseline).run_id }}
       stable_manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.baseline).manifest_artifact_id }}
       # Production keeps the recorder control of its baseline.
@@ -139,6 +140,7 @@ jobs:
       deploy_web: true
       orchestrated: true
       sfu_force_restart: true
+      sfu_best_effort: true
       manifest_run_id: ${{ fromJSON(needs.plan.outputs.baseline).run_id }}
       manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.baseline).manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.plan.outputs.baseline).manifest_sha256 }}

@@ -20,7 +20,7 @@
 # The capture worker beside the SFU is installed when the directory also holds capture.conf
 # (NODE_ID, CONTROL_PLANE_URL, SERVER_NAME), capture-ca.crt (certs capture-ca) and bridge-ca.crt.
 # Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
-# Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
+# Without capture.conf the deploy removes the worker, except in a release run, which leaves it as it is. It starts after the SFU is ready.
 # The worker exports its telemetry when the directory also holds otlp-log-headers and otlp-trace-headers.
 # A release (SFU_FROM_CI=1) runs this without 1Password, doctl or a person: the private directory comes
 # complete from the GitHub environment, the operator certificate is not issued, the host firewall is not
@@ -271,6 +271,10 @@ if $capture_on; then
     -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" -e "s|^__OTLP_TRACE_HEADERS_SECRET__$|${otlp_trace_secret}|" \
     "${node_dir}/chalk-recorder-capture.container.in" |
     as_sfu sh -c "'cat > .config/containers/systemd/chalk-recorder-capture.container'"
+elif [[ -n "${SFU_FROM_CI:-}" ]]; then
+  # The bundle carries no capture CA key, so a release cannot issue the worker identity. It leaves a running worker alone
+  # rather than read the missing config as "capture off"; an operator run changes capture.
+  echo "==> release run: the capture worker stays as the last operator run left it"
 else
   echo "==> no capture.conf: the capture worker is off on this node"
   remote systemctl --user -M chalk-sfu@ stop chalk-recorder-capture >/dev/null 2>&1 || true

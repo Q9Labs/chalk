@@ -403,6 +403,7 @@ jobs:
       deploy_web: true
       orchestrated: true
       sfu_force_restart: true
+      sfu_best_effort: true
       manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).previous.run_id }}
       manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_sha256 }}

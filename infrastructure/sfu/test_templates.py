@@ -270,6 +270,14 @@ class DeployBranchesTest(unittest.TestCase):
         self.assertIn('exports no metrics', result.stderr)
         self.assertEqual(self.read('certs-calls'), '')
 
+    def test_a_release_run_leaves_the_capture_worker_as_it_is(self):
+        self.operator_files('staging')
+        result = self.run_deploy('staging', SFU_FROM_CI='1')
+        self.assert_reached_restart(result)
+        self.assertIn('the capture worker stays as the last operator run left it', result.stdout)
+        self.assertNotIn('chalk-recorder-capture', self.read('ssh-calls'))
+        self.assertNotIn('chalk-recorder-capture.container', ' '.join(self.installed()))
+
     def test_the_capture_worker_exports_telemetry_only_with_all_three_header_files(self):
         self.operator_files('staging', 'otlp-headers', 'otlp-log-headers', capture=True)
         result = self.run_deploy('staging')
