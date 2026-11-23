@@ -22,6 +22,8 @@ export type TransportDiagnostic = Pick<
   | "track_state"
   | "element_state"
   | "play_result"
+  | "ice_state"
+  | "network_type"
   | "receive_counts"
   | "receivers_stopped"
   | "bundle_tag_held"

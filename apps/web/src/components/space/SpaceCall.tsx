@@ -12,7 +12,7 @@ import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
 
 // The call UI and media stack, which SpacePage loads only once the participant asks to join.
-export { ReportProblemDialog, reportDiagnostics, StatusSurface } from "@q9labsai/chalk-react";
+export { ReportProblemDialog, reportDiagnostics, StatusSurface, statusFailure } from "@q9labsai/chalk-react";
 
 export function LocalSpace({
   admission,

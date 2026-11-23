@@ -51,7 +51,7 @@ func (s *Session) readyForNegotiation() error {
 func (s *Session) Renegotiate(_ context.Context, request protocol.RenegotiateRequest) error {
 	description := request.SessionDescription
 	if description.Type != "answer" || description.SDP == "" {
-		return fmt.Errorf("%w: renegotiate needs an answer", ErrInvalidRequest)
+		return Invalid("answer_missing", "renegotiate needs an answer")
 	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
@@ -82,19 +82,19 @@ func (s *Session) Renegotiate(_ context.Context, request protocol.RenegotiateReq
 // transceivers, and returns the answer. ReceiveOnly closes subscriptions and never a publication.
 func (s *Session) CloseTracks(ctx context.Context, request protocol.CloseTracksRequest) (protocol.CloseTracksResponse, error) {
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
-		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a request closes 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
+		return protocol.CloseTracksResponse{}, Invalid("tracks_count", "a request closes 1 to %d tracks", protocol.MaxTracksPerRequest)
 	}
 	for index, track := range request.Tracks {
 		if track.Mid == "" {
-			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: tracks[%d].mid is required", ErrInvalidRequest, index)
+			return protocol.CloseTracksResponse{}, Invalid("track_invalid", "tracks[%d].mid is required", index)
 		}
 	}
 	description := request.SessionDescription
 	switch {
 	case request.Force && description != nil:
-		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a forced close carries no SDP", ErrInvalidRequest)
+		return protocol.CloseTracksResponse{}, Invalid("sdp_unexpected", "a forced close carries no SDP")
 	case !request.Force && (description == nil || description.Type != "offer" || description.SDP == ""):
-		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a negotiated close needs the client's offer", ErrInvalidRequest)
+		return protocol.CloseTracksResponse{}, Invalid("sdp_missing", "a negotiated close needs the client's offer")
 	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
@@ -131,7 +131,7 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 	}
 	for mid := range sections {
 		if !known[mid] {
-			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a close offer cannot add a section", ErrInvalidRequest)
+			return protocol.CloseTracksResponse{}, Invalid("close_adds_section", "a close offer cannot add a section")
 		}
 	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
@@ -163,18 +163,18 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 // is not live in this session is a per-track error.
 func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksRequest) (protocol.TracksResponse, error) {
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
-		return protocol.TracksResponse{}, fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
+		return protocol.TracksResponse{}, Invalid("tracks_count", "a request updates 1 to %d tracks", protocol.MaxTracksPerRequest)
 	}
 	for index, track := range request.Tracks {
 		switch {
 		case track.Location == protocol.LocationLocal:
 			if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
-				return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
+				return protocol.TracksResponse{}, Invalid("track_invalid", "tracks[%d] needs a mid and trackName and no simulcast policy for a local update", index)
 			}
 		case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
-			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
+			return protocol.TracksResponse{}, Invalid("track_invalid", "tracks[%d] needs a remote location, mid, sessionId and trackName", index)
 		case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
-			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
+			return protocol.TracksResponse{}, Invalid("track_invalid", "tracks[%d] simulcast needs a preferredRid", index)
 		}
 	}
 	s.opMu.Lock()

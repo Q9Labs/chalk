@@ -281,7 +281,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const renderSurface = () => {
     if (entrance.phase === "ended" && callSurface) {
       const { call, rejoining, failure, attempt } = entrance;
-      const { StatusSurface } = callSurface;
+      const { StatusSurface, statusFailure } = callSurface;
       return (
         <main className="relative h-full">
           <StatusSurface
@@ -289,8 +289,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             episodeEndReason={call.endReason}
             endAction={call.offerSignUp ? { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") } : undefined}
             callName={call.callName}
-            errorCode={call.failure?.code}
-            sync={call.failure?.sync}
+            {...statusFailure(call.failure)}
             theme={{ colorScheme: mode }}
             onReportProblem={reportsAvailable && call.reportProblem && !reportExpired ? () => setReportOpen(true) : undefined}
             rejoinDisabled={rejoining}

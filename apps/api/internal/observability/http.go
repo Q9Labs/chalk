@@ -61,18 +61,26 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 
 // UpstreamAttrs returns the status and code a provider answered with. The
 // public response may carry a different status, so this is where a refusal
-// such as a 403 behind a 502 stays visible. A provider code that is not a short
-// lowercase token is replaced, because the provider controls it.
+// such as a 403 behind a 502 stays visible. A provider code or detail that is not
+// a short lowercase token is replaced, because the provider controls it. The
+// detail, when the provider gave one, is the request's `error_detail`.
 func UpstreamAttrs(err error) []any {
 	upstream, ok := mediaplane.UpstreamOf(err)
 	if !ok {
 		return nil
 	}
-	code := upstream.UpstreamCode()
-	if !upstreamCodePattern.MatchString(code) {
-		code = "unsafe"
+	attrs := []any{"upstream_status", upstream.UpstreamStatus(), "upstream_code", boundedUpstreamToken(upstream.UpstreamCode())}
+	if detail := upstream.UpstreamDetail(); detail != "" {
+		attrs = append(attrs, "error_detail", boundedUpstreamToken(detail))
 	}
-	return []any{"upstream_status", upstream.UpstreamStatus(), "upstream_code", code}
+	return attrs
+}
+
+func boundedUpstreamToken(value string) string {
+	if !upstreamCodePattern.MatchString(value) {
+		return "unsafe"
+	}
+	return value
 }
 
 var upstreamCodePattern = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
@@ -132,10 +140,12 @@ type RequestLogConfig struct {
 	SlowThreshold time.Duration
 }
 
+// RequestMiddleware logs requests as the config says and counts every one (see requestCounter).
 func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	requests := newRequestCounter()
 	config := requestLogConfig(configs...)
 
 	return func(next http.Handler) http.Handler {
@@ -157,6 +167,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			route := requestRoute(r.Context())
 
 			tagRequestSpans(r.Context(), route)
+			requests.count(r.Context(), route, recorder.status)
 
 			if !shouldLogRequest(config, recorder.status, duration) {
 				return

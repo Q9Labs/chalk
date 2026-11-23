@@ -7,7 +7,7 @@ This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert
 - **Node down** reaches Discord and Oncall through the Axiom `sfu-readiness` branch (reason `unreachable`: at least 4 unhealthy minute samples in 5 minutes, latest still unhealthy, because the API host cannot read `/readyz`). The DigitalOcean ping check `chalk-sfu-<env>-ping` (fails from every region for 2 minutes) is the second, independent signal and reaches Discord only.
 - **CPU, memory or disk high** (DigitalOcean policies `chalk-sfu-<env>: ...`: CPU or memory above 85%, disk above 80%, for 5 minutes) reaches Discord only. A busy host that still answers `/readyz` pages Oncall only once the node closes admission itself (`admission_cpu_busy` and the other admission reasons).
 - **Node refusing calls or near its packet budget** is the same `sfu-readiness` branch, from the collector's `/readyz` probe.
-- **Join failures on `chalk_sfu`** (an accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu`, one alert per Episode and failure), **recording failed or stranded** (`recording` and `recording-stop` branches) and **placement refusal** (`sfu-overflow` branch, any API-side `chalk_sfu.overflow` event in the last 2 minutes; the node's own events are `sfu.*`) all reach Discord and Oncall through Axiom.
+- **Join failures on `chalk_sfu`** (an accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu`, one alert per Episode and failure), **recording failed or stranded** (`recording` and `recording-stop` branches) **placement refusal** (`sfu-overflow` branch, any API-side `chalk_sfu.overflow` event in the last 2 minutes; the node's own events are `sfu.*`) and **node too old** (`sfu-node-too-old` branch, the API took a node out of placement for `node_protocol_too_old` in the last 5 minutes) all reach Discord and Oncall through Axiom.
 
 Why the split: DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL, so its alerts have no Oncall path. The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor and Oncall is a Slack-type notifier. A forwarder (a small Cloudflare Worker re-posting DigitalOcean's Slack-format POST to Oncall and Discord) would close the gap but is not built; until then the readiness probe is how Oncall hears of a down node. If the collector probe is ever turned off, the `sfu-readiness` branch has no data and node health reaches the team only through DigitalOcean's Discord alerts.
 
@@ -164,6 +164,14 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 **Check.** Read the reason in the alert, then `/readyz` for `host.admissionReason`, `draining`, `protocol`, `packetBudget` and `reservedPackets`. A `protocol_too_old` reason means the node runs a build older than the API sends: deploy the node.
 
 **Fix.** Fix the reason: restart or rebuild the node, deploy the matching build, or add capacity. The alert closes two minutes after the last overflow event.
+
+### Node too old
+
+**Meaning.** The API probed a node and its wire protocol is below the one the API sends, so the API stopped placing new Episodes on it (log line `chalk sfu node is out of placement`, `reason=node_protocol_too_old`, with the node, its `protocol`, the API's `minProtocol` and the node's `revision`). A node that old refuses what the new API or SDK sends: the 23 Nov listen-only failure was a node built before #1514, which answered a receive-only offer with `400 invalid_request`. The line is written once when the node's verdict changes, so the alert fires as soon as an API release (or a node restart onto an old build) meets the node, and clears after five minutes. `sfu-overflow` with `overflow_node_protocol_too_old` is the sustained signal while Episodes keep being refused.
+
+**Check.** Read the node and `protocol` on the log line, then the node's `/readyz` through the deploy tunnel for `protocol` and `revision`. An Episode already bound to that node is not protected by the placement guard and may still fail calls.
+
+**Fix.** Deploy the node from the release commit (`deploy <env> <address>` builds at the checkout's `HEAD`): nodes run the new build before the API does ([upgrade order](../../sfu/README.md#upgrade-order)). Raise `WireProtocol` in the change that makes the SFU refuse something the API or SDK sends ([protocol](../../../features/media/sfu/protocol/protocol.go)), so placement refuses the old node on its own and this alert has something to say.
 
 ## Rejoin steps
 

@@ -18,11 +18,11 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 		return true, nil
 	}
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
-		return false, fmt.Errorf("%w: a request carries 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
+		return false, Invalid("tracks_count", "a request carries 1 to %d tracks", protocol.MaxTracksPerRequest)
 	}
 	for index, track := range request.Tracks {
 		if track.TrackName == "" {
-			return false, fmt.Errorf("%w: tracks[%d].trackName is required", ErrInvalidRequest, index)
+			return false, Invalid("track_invalid", "tracks[%d].trackName is required", index)
 		}
 		if index == 0 {
 			local = track.Location == protocol.LocationLocal
@@ -32,20 +32,20 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 			want = protocol.LocationLocal
 		}
 		if track.Location != want {
-			return false, fmt.Errorf("%w: tracks[%d].location must be %q; a request is all local or all remote", ErrInvalidRequest, index, want)
+			return false, Invalid("track_invalid", "tracks[%d].location must be %q; a request is all local or all remote", index, want)
 		}
 		if local && (track.Mid == "" || !validSource(track.Source)) {
-			return false, fmt.Errorf("%w: tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
+			return false, Invalid("track_invalid", "tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", index)
 		}
 		if !local && track.SessionID == "" {
-			return false, fmt.Errorf("%w: tracks[%d].sessionId is required for a remote track", ErrInvalidRequest, index)
+			return false, Invalid("track_invalid", "tracks[%d].sessionId is required for a remote track", index)
 		}
 	}
 	switch {
 	case local && (description == nil || description.Type != "offer" || description.SDP == ""):
-		return false, fmt.Errorf("%w: a push needs an offer", ErrInvalidRequest)
+		return false, Invalid("sdp_missing", "a push needs an offer")
 	case !local && description != nil:
-		return false, fmt.Errorf("%w: a pull carries no SDP; the server offers", ErrInvalidRequest)
+		return false, Invalid("sdp_unexpected", "a pull carries no SDP; the server offers")
 	}
 	return local, nil
 }
@@ -141,7 +141,7 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 		}
 		initialListener := len(existing) == 0 && len(sections) == 1 && len(request.Tracks) == 0 && section.media == "audio" && section.receiveOnly
 		if !named[mid] && !initialListener {
-			return nil, nil, fmt.Errorf("%w: the offer has a section that no track of the request names", ErrInvalidRequest)
+			return nil, nil, Invalid("offer_section_unnamed", "the offer has a section that no track of the request names")
 		}
 		added++
 	}

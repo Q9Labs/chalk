@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
-import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
+import { ConnectionLifecycleFailure, mediaRefusalField } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
@@ -92,6 +92,7 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
     message: cause.message,
     ...(permissionBlock ? { permissionBlock } : {}),
     ...(cause.sync ? { sync: cause.sync } : {}),
+    ...(cause instanceof ConnectionLifecycleFailure ? mediaRefusalField(cause.cause) : {}),
   });
 }
 
@@ -121,7 +122,15 @@ function uploadDetail(cause: ChalkChatFileError) {
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}), ...(error.sync ? { sync: error.sync } : {}), ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}) });
+  return Object.freeze({
+    code: error.code,
+    recoverable: error.recoverable,
+    message: error.message,
+    ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}),
+    ...(error.sync ? { sync: error.sync } : {}),
+    ...(error.mediaHttpStatus === undefined ? {} : { mediaHttpStatus: error.mediaHttpStatus }),
+    ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}),
+  });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

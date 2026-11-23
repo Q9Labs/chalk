@@ -258,18 +258,18 @@ func (n *Node) validateReserve(request protocol.ReserveEpisodeRequest) (time.Dur
 		return 0, err
 	}
 	if request.AllocationGeneration != nil && *request.AllocationGeneration < 1 {
-		return 0, fmt.Errorf("%w: allocationGeneration must be at least 1", ErrInvalidRequest)
+		return 0, Invalid("reserve_invalid", "allocationGeneration must be at least 1")
 	}
 	shape := request.Shape
 	if shape.Participants < 1 || shape.CamerasPerParticipant < 0 || shape.CaptureSlots < 0 || request.PacketCeiling < 0 {
-		return 0, fmt.Errorf("%w: shape needs at least one Participant and no negative counts or packetCeiling", ErrInvalidRequest)
+		return 0, Invalid("reserve_invalid", "shape needs at least one Participant and no negative counts or packetCeiling")
 	}
 	seconds := request.TTLSeconds
 	if seconds == 0 {
 		seconds = protocol.DefaultReservationTTLSeconds
 	}
 	if seconds < 1 || seconds > protocol.MaxReservationTTLSeconds {
-		return 0, fmt.Errorf("%w: ttlSeconds must be between 1 and %d", ErrInvalidRequest, protocol.MaxReservationTTLSeconds)
+		return 0, Invalid("reserve_invalid", "ttlSeconds must be between 1 and %d", protocol.MaxReservationTTLSeconds)
 	}
 	return time.Duration(seconds) * time.Second, nil
 }

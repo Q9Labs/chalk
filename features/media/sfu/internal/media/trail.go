@@ -232,14 +232,17 @@ func (n *Node) SessionRefused(scope protocol.Scope, kind, code string, trace Tra
 
 // ControlFailed logs a control request that failed: the operation it asked for, the HTTP status and
 // the protocol code the API saw, the ids the request named once they check out, and its trace. The
-// error text stays in the journal, which keeps what the request quoted. The export has no field
-// for it and carries only the closed code.
+// error text stays in the journal, which keeps what the request quoted. The export carries the
+// closed code and, for a malformed request, the label Invalid gave it as `detail`.
 func (n *Node) ControlFailed(scope protocol.Scope, connectionID, operation string, status int, code string, trace Trace, cause error) {
 	level := slog.LevelInfo
 	if status >= 500 || code == protocol.CodeNegotiationFailed {
 		level = slog.LevelWarn
 	}
 	attrs := []any{"operation", operation, "status", status, "code", code, "error", cause}
+	if detail := ReasonOf(cause); detail != "" {
+		attrs = append(attrs, "detail", detail)
+	}
 	if connectionID != "" {
 		attrs = append(attrs, "connection_id", connectionID)
 	}

@@ -65,7 +65,7 @@ var FieldSources = map[string]FieldSource{
 	"low_layer": Number, "pli_received": Number, "fir_received": Number, "nack_received": Number, "rtt_ms": Number,
 	"queued_bytes": Number, "feedback_age_ms": Number, "sent_audio": Number, "sent_video": Number,
 	"sent_repair": Number, "sent_probe": Number, "dropped": Number, "repairs_cut": Number,
-	"step": Enum, "operation": Enum, "status": Number,
+	"step": Enum, "operation": Enum, "status": Number, "detail": Enum,
 	"last_ice_state": Enum, "last_peer_state": Enum,
 	"lifetime_ms": Number, "publications": Number, "subscriptions": Number, "state": Enum, "path": Enum, "protocol": Enum,
 	"source": Enum, "media_kind": Enum, "publisher_id": RestrictedID, "mid": ServerAssigned,
@@ -111,7 +111,7 @@ var EventFields = map[string][]string{
 	EventSourceLeaseOpened:   {"source", "revision"},
 	EventSourceLeaseLost:     {"source", "cause", "revision"},
 	EventNegotiationFailed:   {"step", "reason"},
-	EventControlFailed:       {"operation", "status", "code"},
+	EventControlFailed:       {"operation", "status", "code", "detail"},
 	EventMediaIngress: {
 		"source", "media_kind", "mid", "packets", "bytes", "lost", "repaired", "nack_requested", "keyframe_repairs",
 		"pli_sent", "jitter_ms", "bitrate_bps", "layers", "layers_active", "held", "final",

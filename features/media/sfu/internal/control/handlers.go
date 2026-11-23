@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
@@ -99,7 +98,7 @@ func profileSeconds(query url.Values) (int, error) {
 	}
 	seconds, err := strconv.Atoi(raw)
 	if err != nil || seconds < 1 || seconds > maxProfileSeconds {
-		return 0, fmt.Errorf("%w: seconds must be a whole number from 1 to %d", media.ErrInvalidRequest, maxProfileSeconds)
+		return 0, media.Invalid("query_invalid", "seconds must be a whole number from 1 to %d", maxProfileSeconds)
 	}
 	return seconds, nil
 }
@@ -291,15 +290,15 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, into any) error 
 		if errors.As(err, &tooLarge) {
 			return errTooLarge
 		}
-		return errors.Join(media.ErrInvalidRequest, err)
+		return media.Invalid("body_malformed", "%s", err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(into); err != nil {
-		return errors.Join(media.ErrInvalidRequest, err)
+		return media.Invalid("body_malformed", "%s", err)
 	}
 	if decoder.More() {
-		return errors.Join(media.ErrInvalidRequest, errors.New("trailing data after the JSON body"))
+		return media.Invalid("body_malformed", "trailing data after the JSON body")
 	}
 	return nil
 }

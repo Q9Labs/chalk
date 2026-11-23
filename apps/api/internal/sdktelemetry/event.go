@@ -86,6 +86,8 @@ type Event struct {
 	TrackState       string         `json:"track_state,omitempty"`
 	ElementState     string         `json:"element_state,omitempty"`
 	PlayResult       string         `json:"play_result,omitempty"`
+	IceState         string         `json:"ice_state,omitempty"`
+	NetworkType      string         `json:"network_type,omitempty"`
 	ReceiveCounts    *ReceiveCounts `json:"receive_counts,omitempty"`
 	ReceiversStopped *int64         `json:"receivers_stopped,omitempty"`
 	BundleTagHeld    *bool          `json:"bundle_tag_held,omitempty"`

@@ -47,7 +47,7 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest, trace Trace)
 		return protocol.RetireEpisodeResponse{}, err
 	}
 	if request.Generation < 1 {
-		return protocol.RetireEpisodeResponse{}, fmt.Errorf("%w: generation must be at least 1", ErrInvalidRequest)
+		return protocol.RetireEpisodeResponse{}, Invalid("generation_invalid", "generation must be at least 1")
 	}
 	key := episodeOf(scope)
 	n.mu.Lock()

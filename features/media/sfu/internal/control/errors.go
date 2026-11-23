@@ -75,7 +75,7 @@ func writeProblem(w http.ResponseWriter, err error) problem {
 	if found.code == protocol.CodeInternal {
 		message = "internal error"
 	}
-	writeJSON(w, found.status, protocol.ErrorResponse{Error: protocol.ErrorBody{Code: found.code, Message: message}})
+	writeJSON(w, found.status, protocol.ErrorResponse{Error: protocol.ErrorBody{Code: found.code, Message: message, Detail: media.ReasonOf(err)}})
 	return found
 }
 

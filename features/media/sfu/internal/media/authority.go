@@ -167,7 +167,7 @@ func validateSourceControls(request protocol.SourceControlRequest) error {
 		return err
 	}
 	if len(request.Controls) == 0 || len(request.Controls) > protocol.MaxSourceControls {
-		return fmt.Errorf("%w: a request carries 1 to %d controls", ErrInvalidRequest, protocol.MaxSourceControls)
+		return Invalid("controls_count", "a request carries 1 to %d controls", protocol.MaxSourceControls)
 	}
 	for index, control := range request.Controls {
 		if err := checkIdentifier(fmt.Sprintf("controls[%d].participantId", index), control.ParticipantID); err != nil {
@@ -175,11 +175,11 @@ func validateSourceControls(request protocol.SourceControlRequest) error {
 		}
 		switch {
 		case !validSource(control.Source):
-			return fmt.Errorf("%w: controls[%d].source must be microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
+			return Invalid("control_invalid", "controls[%d].source must be microphone, camera, screen or screen_audio", index)
 		case control.Action != protocol.SourceGrant && control.Action != protocol.SourceRevoke:
-			return fmt.Errorf("%w: controls[%d].action must be grant or revoke", ErrInvalidRequest, index)
+			return Invalid("control_invalid", "controls[%d].action must be grant or revoke", index)
 		case control.Revision < 1:
-			return fmt.Errorf("%w: controls[%d].revision must be at least 1", ErrInvalidRequest, index)
+			return Invalid("control_invalid", "controls[%d].revision must be at least 1", index)
 		}
 	}
 	return nil

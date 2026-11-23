@@ -19,7 +19,7 @@ var connectionFields = []string{
 	"state", "step", "outcome", "code", "phase", "mechanism", "attempt", "duration_ms", "outage_ms",
 	"heartbeat_gap_ms", "close_code", "http_status", "media_error_kind", "media_error_step",
 	"granted_audio", "granted_video", "source", "publication_state", "projection_state",
-	"receive_state", "track_state", "element_state", "play_result",
+	"receive_state", "track_state", "element_state", "play_result", "ice_state", "network_type",
 }
 
 func connection(extra ...string) spec {
@@ -91,6 +91,8 @@ var fieldEnums = map[string][]string{
 	"track_state":           {"live", "muted", "ended"},
 	"element_state":         {"paused", "playing"},
 	"play_result":           {"ok", "NotAllowedError", "AbortError", "unknown"},
+	"ice_state":             {"new", "checking", "connected", "completed", "disconnected", "failed", "closed"},
+	"network_type":          {"bluetooth", "cellular", "ethernet", "none", "other", "unknown", "wifi", "wimax"},
 	"publication_state":     {"on", "off"},
 	"projection_state":      {"on", "off"},
 	"state":                 {"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"},

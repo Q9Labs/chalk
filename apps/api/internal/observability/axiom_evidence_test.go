@@ -47,3 +47,29 @@ func TestAxiomEvidenceDoesNotAllocateColumnsForRecordFields(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAxiomEvidenceIndexesTheDiagnosisFieldsAndKeepsTheWholeRowInTheBody(t *testing.T) {
+	row := json.RawMessage(`{"service":{"name":"chalk-api"},"attributes":{"episode_id":"e","type":"media_state","phase":"connected","ice_state":"checking","network_type":"wifi","http_status":400,"media_error_kind":"SFUError","relay_protocol":"udp"}}`)
+	payload, err := axiomEvidencePayload([]json.RawMessage{row})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire []struct {
+		Body       string                     `json:"body"`
+		Attributes map[string]json.RawMessage `json:"attributes"`
+	}
+	if err := json.Unmarshal(payload, &wire); err != nil || len(wire) != 1 {
+		t.Fatalf("payload %s: %v", payload, err)
+	}
+	for key, want := range map[string]string{"type": `"media_state"`, "phase": `"connected"`, "ice_state": `"checking"`, "network_type": `"wifi"`, "http_status": `400`, "media_error_kind": `"SFUError"`} {
+		if got := string(wire[0].Attributes[key]); got != want {
+			t.Errorf("column %s = %s, want %s", key, got, want)
+		}
+	}
+	if _, indexed := wire[0].Attributes["relay_protocol"]; indexed {
+		t.Error("a field outside the diagnosis set became a column")
+	}
+	if !strings.Contains(wire[0].Body, `"relay_protocol":"udp"`) {
+		t.Error("the body no longer carries the whole row")
+	}
+}
