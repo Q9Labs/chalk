@@ -257,7 +257,7 @@ async function openParticipant(participant, options, contexts, evidence) {
   await context.route("**/telemetry", async (route) => {
     const { events } = route.request().postDataJSON();
     reports.push(...events);
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: events.length, rejected: 0 }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: events.length, rejected: 0, acks: events.map(({ seq }) => ({ from: seq, to: seq + 1 })) }) });
   });
   await context.addInitScript(installAgreementProbe);
   const page = await context.newPage();
