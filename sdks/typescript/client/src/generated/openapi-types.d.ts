@@ -2651,11 +2651,15 @@ export interface components {
         heartbeat_gap_ms?: number | null;
         http_status?: number | null;
         /** @enum {string} */
+        ice_state?: "new" | "checking" | "connected" | "completed" | "disconnected" | "failed" | "closed";
+        /** @enum {string} */
         mechanism?: "ice_restart" | "media_reconnect" | "sync_reconnect" | "sync_digest" | "access_refresh";
         /** @enum {string} */
         media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "SFUError" | "network" | "timeout" | "unknown";
         /** @enum {string} */
         media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications" | "sfu_subscriptions";
+        /** @enum {string} */
+        network_type?: "bluetooth" | "cellular" | "ethernet" | "none" | "other" | "unknown" | "wifi" | "wimax";
         op_id?: components["schemas"]["UUID"];
         outage_ms?: number | null;
         /** @enum {string} */

@@ -20,6 +20,7 @@ import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
 import { deviceFailedEvent } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
+import { reportedNetworkType } from "./network-type";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
 const MEDIA_RECOVERY_TIMEOUT_MS = 60000;
@@ -796,7 +797,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       // Every place that records the media snapshot goes through here, so a state reached while the join or a recovery holds the queue is still reported once.
       const rememberMedia = (snapshot: ConnectionMediaSnapshot | null) => {
         const phase = mediaDiagnosticPhase(snapshot);
-        if (phase !== undefined && phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
+        const ice = snapshot?.connection.iceConnectionState ?? undefined;
+        if (phase !== undefined && (phase !== mediaDiagnosticPhase(model.mediaSnapshot) || ice !== (model.mediaSnapshot?.connection.iceConnectionState ?? undefined))) {
+          onTransportDiagnostic({ event: "media_state", phase, ice_state: ice, network_type: reportedNetworkType() });
+        }
         model.mediaSnapshot = snapshot;
       };
       const readSnapshots = () => {

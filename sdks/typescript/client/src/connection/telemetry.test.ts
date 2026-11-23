@@ -1,9 +1,10 @@
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
+import { reportedNetworkType } from "./network-type";
 import { callEndReason, telemetryCredential } from "./telemetry";
 
 const facts = { removedByHost: false, episodeEndConfirmed: false, episodeEndReason: undefined, timedOut: false } as const;
@@ -130,6 +131,51 @@ describe("a call reports how its media transport moved", () => {
       }).pipe(Effect.provide(layer), Effect.scoped),
     );
     expect(telemetry.accepted.filter((event) => event.type === "media_state").map((event) => event.phase)).toEqual(["idle", "live"]);
+  });
+});
+
+describe("a call reports ICE transitions and the reported network type", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reports each ICE state change with the state it reached", async () => {
+    vi.stubGlobal("navigator", { connection: { type: "wifi" } });
+    const platform = createCoreTestPlatform();
+    const telemetry = createTestOutbox({ bound: false });
+    const layer = makeConnectionLifecycleLayer({
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+      dependencies: { ...platform.dependencies, telemetry: telemetry.outbox },
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* (yield* lifecycleOf()).join();
+        for (const ice of ["checking", "connected"] as const) {
+          platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live", peerConnectionState: "connecting", iceConnectionState: ice } });
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        }
+        yield* Effect.promise(() => telemetry.outbox.flush());
+      }).pipe(Effect.provide(layer), Effect.scoped),
+    );
+    const states = telemetry.accepted.filter((event) => event.type === "media_state");
+    expect(states.map((event) => event.ice_state)).toEqual([undefined, undefined, "checking", "connected"]);
+    expect(states.at(-1)?.network_type).toBe("wifi");
+  });
+
+  it.each([
+    ["wifi", "wifi"],
+    ["cellular", "cellular"],
+    ["a value the API does not define", undefined],
+  ])("reads %s from the Network Information API", (reported, expected) => {
+    vi.stubGlobal("navigator", { connection: { type: reported } });
+    expect(reportedNetworkType()).toBe(expected);
+  });
+
+  it("reports nothing where the platform has no Network Information API", () => {
+    vi.stubGlobal("navigator", {});
+    expect(reportedNetworkType()).toBeUndefined();
+    vi.stubGlobal("navigator", { connection: { effectiveType: "4g" } });
+    expect(reportedNetworkType()).toBeUndefined();
   });
 });
 

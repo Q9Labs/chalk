@@ -117,14 +117,17 @@ func (s AxiomEvidence) Export(ctx context.Context, rows []json.RawMessage) error
 
 // Keep a fixed set of indexes in the shared logs schema. Axiom flattens maps
 // into columns; new registry fields otherwise compete with service logs for
-// columns and may silently disappear from a successful ingest.
+// columns and may silently disappear from a successful ingest. The first six are the
+// row's identity. The rest are the few low-cardinality SDK fields that every call diagnosis
+// filters on, so they are columns without a parse of the body; every other field stays in the
+// body, which carries the whole row.
 func axiomEvidencePayload(rows []json.RawMessage) ([]byte, error) {
 	type row struct {
 		Service    json.RawMessage            `json:"service"`
 		Attributes map[string]json.RawMessage `json:"attributes"`
 		Body       string                     `json:"body"`
 	}
-	indexed := []string{"episode_id", "tenant_id", "event", "provider_session_id", "journey_id", "trace_id"}
+	indexed := []string{"episode_id", "tenant_id", "event", "provider_session_id", "journey_id", "trace_id", "type", "phase", "ice_state", "network_type", "http_status", "media_error_kind"}
 	out := make([]row, 0, len(rows))
 	for _, raw := range rows {
 		var stored struct {

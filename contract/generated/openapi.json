@@ -17710,6 +17710,10 @@
                   "minimum": 400,
                   "type": ["integer", "null"]
                 },
+                "ice_state": {
+                  "enum": ["new", "checking", "connected", "completed", "disconnected", "failed", "closed"],
+                  "type": "string"
+                },
                 "mechanism": {
                   "enum": ["ice_restart", "media_reconnect", "sync_reconnect", "sync_digest", "access_refresh"],
                   "type": "string"
@@ -17720,6 +17724,10 @@
                 },
                 "media_error_step": {
                   "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"],
+                  "type": "string"
+                },
+                "network_type": {
+                  "enum": ["bluetooth", "cellular", "ethernet", "none", "other", "unknown", "wifi", "wimax"],
                   "type": "string"
                 },
                 "op_id": {
