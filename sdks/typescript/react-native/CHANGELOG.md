@@ -3,6 +3,7 @@
 ## 6.1.0
 
 - Offer screen annotation when Sync enables it. Supported Android full-screen shares can include marks in the shared video. Single-app shares keep marks separate, and the video overlay withdraws ink when capture can no longer be verified.
+- Say "Something on our side failed" instead of "Your network may block calls" when Chalk's media signalling refuses a join with a non-retryable 4xx.
 
 ## 5.2.0
 

@@ -3,6 +3,7 @@
 ## 6.1.0
 
 - Negotiate screen annotation with Sync for the active screen publication. The client stops sending annotation commands and withdraws ink when the server disables the feature, without interrupting screen sharing.
+- Carry the HTTP status of a media signalling refusal on `connection.lastError.mediaHttpStatus`, so call screens can say the fault is Chalk's instead of the network's. Report each ICE state the media transport reaches, in order, as a `media_state` event, with the network type where the browser reports one.
 
 ## 5.2.6
 
