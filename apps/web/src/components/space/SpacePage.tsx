@@ -291,6 +291,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             callName={call.callName}
             errorCode={call.failure?.code}
             sync={call.failure?.sync}
+            mediaHttpStatus={call.failure?.mediaHttpStatus}
             theme={{ colorScheme: mode }}
             onReportProblem={reportsAvailable && call.reportProblem && !reportExpired ? () => setReportOpen(true) : undefined}
             rejoinDisabled={rejoining}

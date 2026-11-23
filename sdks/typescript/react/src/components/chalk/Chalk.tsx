@@ -224,6 +224,7 @@ function SpaceExperience(
         errorCode={connection.lastError?.code}
         reason={connection.lastError?.code === "access.invalid" ? connection.lastError.message : undefined}
         sync={connection.lastError?.sync}
+        mediaHttpStatus={connection.lastError?.mediaHttpStatus}
         theme={statusTheme}
         onHome={props.onHome}
         onReportProblem={props.onOpenReport}

@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
+import { SFUError } from "../media";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
@@ -86,13 +87,22 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
 
 function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError): SpaceClientError {
   const permissionBlock = permissionBlockOf(cause);
+  const mediaRefusal = cause instanceof ConnectionLifecycleFailure ? mediaRefusalStatus(cause.cause) : undefined;
   return new SpaceClientError({
     code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
     recoverable: cause.recoverable,
     message: cause.message,
     ...(permissionBlock ? { permissionBlock } : {}),
     ...(cause.sync ? { sync: cause.sync } : {}),
+    ...(mediaRefusal ? { mediaHttpStatus: mediaRefusal } : {}),
   });
+}
+
+/** The HTTP status of a refusal from Chalk's media signalling. A 401 or 403 is an access problem and a retryable status is recovery, so neither counts. */
+function mediaRefusalStatus(cause: unknown): number | undefined {
+  if (!(cause instanceof SFUError)) return undefined;
+  const { status, retryableConnection } = cause.options;
+  return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 403 && !retryableConnection ? status : undefined;
 }
 
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {
@@ -121,7 +131,15 @@ function uploadDetail(cause: ChalkChatFileError) {
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}), ...(error.sync ? { sync: error.sync } : {}), ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}) });
+  return Object.freeze({
+    code: error.code,
+    recoverable: error.recoverable,
+    message: error.message,
+    ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}),
+    ...(error.sync ? { sync: error.sync } : {}),
+    ...(error.mediaHttpStatus === undefined ? {} : { mediaHttpStatus: error.mediaHttpStatus }),
+    ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}),
+  });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

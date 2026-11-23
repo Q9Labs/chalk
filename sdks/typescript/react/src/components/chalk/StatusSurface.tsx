@@ -13,6 +13,7 @@ export interface StatusSurfaceProps {
   readonly endAction?: { readonly label: string; readonly onClick: () => void };
   readonly errorCode?: ErrorCode;
   readonly sync?: ClientFailure["sync"];
+  readonly mediaHttpStatus?: ClientFailure["mediaHttpStatus"];
   readonly theme?: ChalkTheme;
   readonly onRejoin?: () => void;
   readonly onHome?: () => void;
@@ -23,14 +24,14 @@ export interface StatusSurfaceProps {
 }
 
 /** All terminal call states share the same quiet page and host-owned navigation. */
-export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, mediaHttpStatus, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const connectionLost = phase === "failed" && errorCode === "connection.sync_recovery_exhausted";
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
     "timed-out": { title: `You were disconnected from ${callName}`, detail: "Your connection was lost for too long, so your seat was released. Rejoin to come back." },
     "episode-ended": callEndNotice(episodeEndReason),
-    failed: { title: connectionLost ? "Connection lost" : `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
+    failed: { title: connectionLost ? "Connection lost" : `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync, mediaHttpStatus }) },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
     elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },
