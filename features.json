@@ -867,6 +867,7 @@
         "sdks/typescript/client/src/space-client/effect.ts",
         "sdks/typescript/client/src/space-client/errors.ts",
         "sdks/typescript/client/src/space-client/failure-detail.ts",
+        "sdks/typescript/client/src/space-client/failure-detail.test.ts",
         "sdks/typescript/client/src/space-client/hand-order.ts",
         "sdks/typescript/client/src/space-client/index.ts",
         "sdks/typescript/client/src/space-client/media-types.ts",
