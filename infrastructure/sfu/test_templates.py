@@ -1,10 +1,6 @@
-"""Renders the node templates and runs every branch of `deploy` with its external commands mocked,
-so a renamed variable, a missing placeholder or an image build that cannot find a module fails here
-and not on a fresh node.
-
-The mocks (ssh, doctl, docker, git) record what they are asked and answer what the real ones would.
-The mocked ssh stops the deploy at `daemon-reload`, the last step before the restart, so everything
-that renders a file, builds an image or issues a certificate has run by then.
+"""Renders the node templates and runs every branch of `deploy` with its external commands mocked, so a renamed variable, a missing
+placeholder or an image build that cannot find a module fails here and not on a fresh node. The mocks (ssh, doctl, docker, git) record
+what they are asked; the mocked ssh stops the deploy at `daemon-reload`, after every file, image and certificate step has run.
 """
 import json
 import os
@@ -275,8 +271,7 @@ class DeployBranchesTest(unittest.TestCase):
         result = self.run_deploy('staging', SFU_FROM_CI='1')
         self.assert_reached_restart(result)
         self.assertIn('the capture worker stays as the last operator run left it', result.stdout)
-        self.assertNotIn('chalk-recorder-capture', self.read('ssh-calls'))
-        self.assertNotIn('chalk-recorder-capture.container', ' '.join(self.installed()))
+        self.assertNotIn('chalk-recorder-capture', self.read('ssh-calls') + ' '.join(self.installed()))
 
     def test_the_capture_worker_exports_telemetry_only_with_all_three_header_files(self):
         self.operator_files('staging', 'otlp-headers', 'otlp-log-headers', capture=True)
