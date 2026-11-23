@@ -13,13 +13,19 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/nack"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 )
 
-const maxMediaTracks = captureplane.MaxCaptureTracks
+const (
+	maxMediaTracks = captureplane.MaxCaptureTracks
+	// The SFU repairs on the primary SSRC. Accept unseen packets for the
+	// same sequence range that the recorder can ask it to resend.
+	recorderRepairWindow = 512
+)
 
 var (
 	ErrInvalidCaptureEpoch   = errors.New("pion capture epoch must be positive")
@@ -833,8 +839,17 @@ func newRecorderAPI() (*webrtc.API, error) {
 		}
 	}
 	registry := &interceptor.Registry{}
-	if err := webrtc.RegisterDefaultInterceptors(mediaEngine, registry); err != nil {
+	if err := webrtc.RegisterDefaultInterceptorsWithOptions(mediaEngine, registry, webrtc.WithNackGeneratorOptions(
+		nack.GeneratorSize(recorderRepairWindow),
+		nack.GeneratorMaxNacksPerPacket(3),
+	)); err != nil {
 		return nil, fmt.Errorf("register recorder RTP interceptors: %w", err)
 	}
-	return webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine), webrtc.WithInterceptorRegistry(registry)), nil
+	settings := webrtc.SettingEngine{}
+	settings.SetSRTPReplayProtectionWindow(recorderRepairWindow)
+	return webrtc.NewAPI(
+		webrtc.WithMediaEngine(mediaEngine),
+		webrtc.WithInterceptorRegistry(registry),
+		webrtc.WithSettingEngine(settings),
+	), nil
 }
