@@ -145,6 +145,10 @@ on:
       orchestrated:
         type: boolean
         default: false
+      sfu_force_restart:
+        description: Restart a Chalk SFU node that is behind this release without waiting for its calls to end. Set it when the run drops calls anyway (a Hotfix, a rollback, or a Promote that allows live calls)
+        type: boolean
+        default: false
       gate_checked:
         description: The caller already required this target's green master Gate in the same run (nightly `plan` does), so the release skips its own check. Only a caller can set it; a dispatch cannot.
         type: boolean
@@ -925,6 +929,36 @@ jobs:
       - name: Install doctl for read-only snapshot validation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-doctl
+
+      - name: Check out the release source for the Chalk SFU nodes
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.target_sha }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bring the Chalk SFU nodes to this release before the API deploys
+        # Managed releases deploy the API, Sync and web, never the nodes, and a node behind the API refuses what the API sends. A node already
+        # past the release stays. A rollback must not be blocked by a node it does not need, so there a failure is reported and the rollback goes on.
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
+        continue-on-error: ${{ inputs.pages_rollback_id != '' }}
+        timeout-minutes: 50
+        env:
+          CHALK_SFU_DEPLOY_BUNDLE: ${{ secrets.CHALK_SFU_DEPLOY_BUNDLE }}
+          FORCE_RESTART: ${{ inputs.sfu_force_restart }}
+          SFU_FROM_CI: "1"
+          SFU_DRAIN_TIMEOUT: "600"
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/chalk-sfu"
+          infrastructure/sfu/ci-secret unpack production "$private"
+          export CHALK_SFU_PRIVATE_DIR="$private" SFU_SSH_KEY="$private/production/ssh_key" SFU_SOURCE_ROOT="$PWD/release-source/features/media/sfu"
+          args=(--environment production --target-sha "$TARGET_SHA" --repository release-source --require-certificates)
+          if [[ "$FORCE_RESTART" == true ]]; then args+=(--force); fi
+          python3 scripts/releases/sfu_nodes.py deploy "${args[@]}"
+          rm -rf "$private"
 
       - name: Deploy, health-check, and prove release
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')

@@ -51,7 +51,30 @@ To replace a broken node, taint the Droplet, apply, update `CHALK_SFU_NODES` in 
 
 ## Upgrade order
 
-The SFU decodes requests strictly, so a field the API adds is refused as `400 invalid_request` by a node that predates it. Each node reports its wire protocol and build commit on `/readyz`, and the API places no new Episode on a node below the protocol it sends (the Episode starts on Cloudflare, or is refused with overflow off, with placement reason `overflow_node_protocol_too_old`). A live Episode already bound to an older node is not protected by that guard. So an environment's SFU nodes run the new build before its API does: deploy the node, check `/readyz` through the deploy tunnel for the protocol, then release the API. The managed release deploys the API and Sync only, never the SFU.
+The SFU decodes requests strictly, so a field the API adds is refused as `400 invalid_request` by a node that predates it. Each node reports its wire protocol and build commit on `/readyz`, and the API places no new Episode on a node below the protocol it sends (the Episode starts on Cloudflare, or is refused with overflow off, with placement reason `overflow_node_protocol_too_old`). A live Episode already bound to an older node is not protected by that guard. So an environment's SFU nodes must run the new build before its API does.
+
+Production does this inside the managed release, so nobody upgrades a node by hand:
+
+1. Promote's `sfu-nodes` job reads each node's `/readyz` and compares the node's `revision` with the release's SFU source (`features/media/sfu`, the last commit that touched it). A node is current when that source commit is an ancestor of, or equal to, its revision, and its protocol meets the API's `minNodeProtocol`. The job prints which nodes are behind and fails Promote, before the approval-gated work starts, when a node cannot be read or the operator certificate is close to expiry, so a broken route is found before the release rather than during it. A behind node is not a failure here, because the next step upgrades it.
+2. The `Release` run (`.github/workflows/ci.yml`, job `deploy-managed`) then runs `scripts/releases/sfu_nodes.py deploy` before the API and Sync deploy. It runs `deploy production <address>` for each behind node, in the order of `nodes`, builds the image from the release SHA's SFU source, drains the node, restarts it, and checks `/readyz`. It re-reads `/readyz` afterwards and fails the run, before the API, when a node is still behind or not ready. A node that is already current is not touched, so a release that changes no SFU source restarts nothing.
+3. Promote refuses to start with live calls on the platform (the `live-calls` job), so the drain finds the node empty. `allow_live_calls` and every rollback and Hotfix pass `--force`, which restarts without waiting for the drain, because a Hotfix or rollback is already an emergency.
+4. Hotfix and both rollbacks use the same job. Nodes only move forward: an older API places on a newer node by the protocol's backward-compatibility rule, so a rollback tries to bring the node to the rolled-back SHA's source, and a failure there does not stop the API rollback (the step is `continue-on-error` for rollbacks).
+
+**How CI reaches a node.** The node's SSH port is open to the world with key-only login, the control port stays closed except to the API's address, and GitHub runners have no fixed address. So CI does what an operator does: SSH to the node and tunnel to the control port, with the node's host keys pinned in `known_hosts` and `StrictHostKeyChecking=yes`. This needs no firewall change, no DigitalOcean write token and no new cost. A release run never reconciles the cloud or host firewall (`SFU_FROM_CI`); only an operator run does.
+
+**The secret.** Everything the deploy reads from `~/.config/chalk-sfu/production` (CA and server certificates, the server key, a 90-day operator certificate and key, `known_hosts`, `nodes`, the SSH key and the OTLP headers) is one GitHub secret, `CHALK_SFU_DEPLOY_BUNDLE`, in the `production` environment. The CA key never leaves 1Password. Publish or refresh it from the operator's machine:
+
+```sh
+infrastructure/sfu/ci-secret publish production
+```
+
+The operator certificate lives 90 days. Promote's preflight and the deploy step fail with that command when it has fewer than 3 days left (the server certificate, 14). Run it again after any change to `nodes`, a node's host key, the SSH key or the OTLP headers.
+
+**Read a node.** `infrastructure/sfu/readyz <env> <address>` prints a node's `/readyz` through the tunnel, which is the same check the release makes.
+
+**Protocol bumps.** The Gate for the SFU (`features/media/sfu/scripts/check_wire_protocol.py`) refuses a change that edits the node's Go source and the API's Chalk SFU adapter or the SDK's media client together, unless it raises `WireProtocol` or a commit message says `Wire-Protocol: unchanged because <reason>`. It catches the two sides changing together without a decision, as #1514 did. It does not catch a behavior change made on one side alone, and it cannot judge whether a stated reason is right. The release covers those cases by deploying the node before the API whenever its source changed.
+
+Staging and bench nodes are still deployed by hand with `deploy <env> <address>`, before the staging API.
 
 ## Connect the API
 

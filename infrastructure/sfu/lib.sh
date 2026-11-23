@@ -3,7 +3,9 @@
 # The ports and the node sizes come from the SFU's own table, internal/config/node.json.
 
 node_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-sfu_root="$(cd "${node_dir}/../../features/media/sfu" && pwd)"
+# SFU_SOURCE_ROOT points at another checkout's features/media/sfu, so a release can build the node
+# from the commit it ships while running this checkout's tooling.
+sfu_root="${SFU_SOURCE_ROOT:-$(cd "${node_dir}/../../features/media/sfu" && pwd)}"
 sfu_table="${sfu_root}/internal/config/node.json"
 export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
 export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
@@ -14,9 +16,21 @@ control_port="$(node_table .ports.control)"
 media_port="$(node_table .ports.media)"
 udp_buffer="$(node_table .udpBufferBytes)"
 
+# SFU_FROM_CI is set by a release, which has no 1Password, doctl or person to trust a new host key.
+# Its private directory comes complete from the GitHub environment: the operator certificate is not
+# issued, the host firewall is left as the last operator run set it, and an unknown host is refused.
+
+# sfu_operator_cert <env> issues the operator's one-day certificate, unless a release brought one.
+sfu_operator_cert() {
+  [[ -z "${SFU_FROM_CI:-}" ]] || return 0
+  "${node_dir}/certs" "$1" operator >/dev/null
+}
+
 # sfu_ssh_options <known_hosts file> [ssh option...] sets ssh_options for the operator.
 sfu_ssh_options() {
-  ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$1" "${@:2}" -i "$SFU_SSH_KEY")
+  local trust=accept-new
+  [[ -z "${SFU_FROM_CI:-}" ]] || trust=yes
+  ssh_options=(-o BatchMode=yes -o "StrictHostKeyChecking=${trust}" -o "UserKnownHostsFile=$1" "${@:2}" -i "$SFU_SSH_KEY")
 }
 
 # sfu_tunnel <local port> <host> forwards the local port to the node's control port, and sets

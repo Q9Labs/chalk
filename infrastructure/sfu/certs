@@ -4,7 +4,8 @@
 #   certs <staging|production|bench> ca        create the service CA once; its key goes to 1Password
 #   certs <staging|production> server          the SFU's server certificate (DNS chalk-sfu), 180 days
 #   certs <staging|production> api <key> <crt> the API's identity for its existing key and names, 365 days
-#   certs <staging|production> operator        a one-day client certificate with the API identity
+#   certs <staging|production> operator [days] a client certificate with the API identity, one day unless told; the release
+#                                              keeps one in the GitHub environment (see ci-secret)
 #   certs <staging|production|bench> capture-ca     the capture workers' own CA, apart from the service CA
 #   certs <staging|production|bench> capture-worker <sfu node>
 #                                              the identity of the capture worker beside that node, 30 days
@@ -171,7 +172,7 @@ case "$command" in
     "$openssl" req -new -key "${work}/operator.key" -subj "/CN=chalk-${spiffe_environment}-sfu-operator" -out "${work}/operator.csr"
     printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
       "extendedKeyUsage=clientAuth" "subjectAltName=URI:${api_identity}" >"${work}/operator.ext"
-    sign "${work}/operator.csr" "${work}/operator.ext" 1 "${work}/operator.crt"
+    sign "${work}/operator.csr" "${work}/operator.ext" "${3:-1}" "${work}/operator.crt"
     install_pair operator
     ;;
   *)

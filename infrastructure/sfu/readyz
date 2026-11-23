@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Prints one node's /readyz JSON, read through an SSH tunnel with the operator certificate.
+#
+#   readyz <staging|production|bench> <node address>
+#
+# The control port accepts only the API host's address, so every other caller reaches it the way
+# deploy does. Needs the same private directory and SSH key as deploy.
+set -euo pipefail
+
+usage="usage: readyz <staging|production|bench> <node address>"
+environment="${1:?$usage}"
+host="${2:?$usage}"
+case "$environment" in staging | production | bench) ;; *) echo "$usage" >&2; exit 2 ;; esac
+
+source "$(dirname "$0")/lib.sh"
+dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
+[[ -r "$SFU_SSH_KEY" ]] || { echo "no readable SSH key at ${SFU_SSH_KEY}" >&2; exit 1; }
+sfu_ssh_options "${dir}/known_hosts" -o ConnectTimeout=15
+sfu_operator_cert "$environment"
+port=$((20000 + RANDOM % 20000))
+sfu_tunnel "$port" "$host"
+trap 'kill "$tunnel" 2>/dev/null || true' EXIT
+sfu_wait_port "$port" || { echo "no SSH tunnel to ${host}" >&2; exit 1; }
+sfu_curl "$dir" 127.0.0.1 "$port" --fail --max-time 10 "https://chalk-sfu:${port}/readyz"
