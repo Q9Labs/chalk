@@ -67,6 +67,21 @@ class DeployStartTest(unittest.TestCase):
             time.sleep(0.1)
         self.assertIn(f'-i {key}', calls.read_text())
 
+    def test_a_release_run_reconciles_no_firewall_and_trusts_no_new_host(self):
+        key = self.root / 'operator_key'
+        key.write_text('x')
+        fake = self.root / 'bin'
+        (fake / 'ssh').write_text(f'#!/bin/sh\necho "$@" >> {self.root}/ssh-calls\nexit 0\n')
+        (fake / 'doctl').write_text(f'#!/bin/sh\ntouch {self.root}/doctl-called\nexit 1\n')
+        (fake / 'doctl').chmod(0o755)
+        result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key), 'SFU_FROM_CI': '1'}, capture_output=True, text=True, timeout=30)
+        # The fake node has no vCPU count, so the run stops there, after the step that would have called doctl and issued nothing.
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('release run: the host firewall stays', result.stdout)
+        self.assertFalse((self.root / 'doctl-called').exists())
+        self.assertIn('StrictHostKeyChecking=yes', (self.root / 'ssh-calls').read_text())
+        self.assertNotIn('accept-new', (self.root / 'ssh-calls').read_text())
+
 
 class CaptureWorkerCertificateTest(unittest.TestCase):
     def test_worker_identity_names_the_id_the_api_derives_for_the_node(self):

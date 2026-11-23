@@ -16,6 +16,10 @@ printf '\n==> Bench reaper tests (fake doctl only)\n'
 python3 scripts/bench/test_bench.py
 printf '\n==> Deploy script start tests (fake ssh only)\n'
 python3 "${repo_root}/infrastructure/sfu/test_deploy.py"
+printf '\n==> Wire protocol decision tests\n'
+python3 scripts/test_check_wire_protocol.py
+printf '\n==> Wire protocol decision (the node and its callers must not change together unannounced)\n'
+python3 scripts/check_wire_protocol.py "${GATE_BASE_REF:-origin/master}"
 printf '\n==> Template render and deploy branch tests (mocked ssh, doctl, docker)\n'
 python3 "${repo_root}/infrastructure/sfu/test_templates.py"
 printf '\n==> Contention tests\n'

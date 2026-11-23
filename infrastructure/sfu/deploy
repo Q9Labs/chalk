@@ -22,6 +22,10 @@
 # Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
 # Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
 # The worker exports its telemetry when the directory also holds otlp-log-headers and otlp-trace-headers.
+# A release (SFU_FROM_CI=1) runs this without 1Password, doctl or a person: the private directory comes
+# complete from the GitHub environment, the operator certificate is not issued, the host firewall is not
+# reconciled and an unknown host key is refused. SFU_SOURCE_ROOT builds the node from another
+# checkout's features/media/sfu, so the release builds the commit it ships with this checkout's tooling.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
@@ -72,21 +76,24 @@ for _ in $(seq 60); do
 done
 remote test -f /var/lib/chalk-sfu-bootstrapped
 
-echo "==> matching the host firewall to the cloud firewall"
-sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '
-  [.[] | select(.name == $name)] as $found
-  | if ($found | length) != 1 then error("want exactly one cloud firewall named \($name)") else $found[0] end
-  | .inbound_rules[] | select(.protocol == "tcp" and (.ports == $control or .ports == "22"))
-  | "\(.ports) \(.sources.addresses[])"')"
-for port in "$control_port" 22; do
-  grep -q "^${port} " <<<"$sources" ||
-    { echo "the cloud firewall allows no source on TCP ${port}; refusing to close it on the node" >&2; exit 1; }
-done
-# Rules compare by canonical network, the form ufw stores, so an address written
-# another way (host bits set, a /32) is not taken for a new source and its
-# existing rule removed. New rules go in before stale ones come out, so this SSH
-# session stays allowed.
-remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
+if [[ -n "${SFU_FROM_CI:-}" ]]; then
+  echo "==> release run: the host firewall stays as the last operator run set it"
+else
+  echo "==> matching the host firewall to the cloud firewall"
+  sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '
+    [.[] | select(.name == $name)] as $found
+    | if ($found | length) != 1 then error("want exactly one cloud firewall named \($name)") else $found[0] end
+    | .inbound_rules[] | select(.protocol == "tcp" and (.ports == $control or .ports == "22"))
+    | "\(.ports) \(.sources.addresses[])"')"
+  for port in "$control_port" 22; do
+    grep -q "^${port} " <<<"$sources" ||
+      { echo "the cloud firewall allows no source on TCP ${port}; refusing to close it on the node" >&2; exit 1; }
+  done
+  # Rules compare by canonical network, the form ufw stores, so an address written
+  # another way (host bits set, a /32) is not taken for a new source and its
+  # existing rule removed. New rules go in before stale ones come out, so this SSH
+  # session stays allowed.
+  remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
 set -euo pipefail
 python3 - "$1" "$2" <<'PY'
 import base64, ipaddress, re, subprocess, sys
@@ -123,6 +130,7 @@ PY
 # made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
 ufw allow "$3"/tcp > /dev/null
 RECONCILE
+fi
 [[ "$mode" == --firewall-only ]] && exit 0
 
 # A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
@@ -280,7 +288,7 @@ old_incarnation=""
 # sfu_curl calls the node's control API through the SSH tunnel with the operator certificate.
 sfu_node_curl() { sfu_curl "$dir" 127.0.0.1 "$port" --max-time 10 "$@"; }
 open_tunnel() {
-  "${node_dir}/certs" "$environment" operator >/dev/null
+  sfu_operator_cert "$environment"
   sfu_tunnel "$port" "$host"
 }
 # An aborted deploy reopens the node it drained, so it takes new Episodes again.

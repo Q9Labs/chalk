@@ -106,3 +106,39 @@ test("Promote runs the MCP production check only for a release that changes MCP,
   const check = load(readFileSync(resolve(root, ".github/workflows/mcp-production-check.yml"), "utf8"));
   assert.deepEqual(Object.keys(check.on ?? check[true]).sort(), ["workflow_call", "workflow_dispatch"]);
 });
+
+// The managed release deploys the API, Sync and web, never the Chalk SFU nodes, so a release that changes the node's source must bring
+// the nodes forward itself. Production nodes were left on an older build once, and every listen-only join was refused.
+test("every production deploy brings the Chalk SFU nodes to the release before the API deploys", () => {
+  const steps = release.jobs["deploy-managed"].steps;
+  const names = steps.map((step) => step.name);
+  const nodes = steps[names.indexOf("Bring the Chalk SFU nodes to this release before the API deploys")];
+  const source = steps[names.indexOf("Check out the release source for the Chalk SFU nodes")];
+  const api = names.indexOf("Deploy, health-check, and prove release");
+  assert.ok(names.indexOf(nodes.name) > names.indexOf(source.name) && names.indexOf(nodes.name) < api, "the nodes move after their source is out and before the API");
+  assert.equal(source.with.ref, "${{ inputs.target_sha }}", "the node is built from the release, not from the workflow revision");
+  assert.equal(source.with["fetch-depth"], 0, "the node's running build must be findable in history");
+  assert.match(nodes.if, /inputs\.managed_environment == 'production'/);
+  assert.equal(nodes.env.CHALK_SFU_DEPLOY_BUNDLE, "${{ secrets.CHALK_SFU_DEPLOY_BUNDLE }}");
+  assert.equal(nodes.env.SFU_FROM_CI, "1");
+  assert.match(nodes.run, /scripts\/releases\/sfu_nodes\.py deploy/);
+  assert.match(nodes.run, /--require-certificates/);
+  assert.match(nodes.run, /SFU_SOURCE_ROOT="\$PWD\/release-source\/features\/media\/sfu"/);
+  assert.equal(nodes["continue-on-error"], "${{ inputs.pages_rollback_id != '' }}", "a rollback is never blocked by a node it does not need");
+  assert.equal(release.on.workflow_call.inputs.sfu_force_restart.default, false);
+});
+
+test("a Promote reads the nodes before it waits for calls, and restarts a node without waiting only when it already allows live calls", () => {
+  const preflight = promote.jobs["sfu-nodes"];
+  assert.deepEqual(needsOf(preflight).sort(), ["approve", "select"]);
+  assert.equal(preflight.environment.name, "production", "the bundle is a production environment secret");
+  assert.match(JSON.stringify(preflight.steps), /sfu_nodes\.py check --environment production/);
+  for (const name of ["live-calls", "release"]) assert.ok(needsOf(promote.jobs[name]).includes("sfu-nodes"), `${name} waits for the node preflight`);
+  assert.equal(promote.jobs.release.with.sfu_force_restart, "${{ inputs.allow_live_calls }}");
+  assert.equal(promote.jobs.rollback.with.sfu_force_restart, true);
+});
+
+test("a Hotfix and its rollback bring the nodes forward without waiting for calls", () => {
+  const hotfix = load(readFileSync(resolve(root, ".github/workflows/hotfix.yml"), "utf8"));
+  for (const name of ["release", "rollback"]) assert.equal(hotfix.jobs[name].with.sfu_force_restart, true, name);
+});
