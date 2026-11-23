@@ -331,8 +331,11 @@ if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
       last=""
       until state="$(sfu_node_curl --max-time 5 "https://chalk-sfu:${port}/readyz")" && [[ "$(jq -r '.allocations == 0 and .cleanupDebt == 0' <<<"$state" 2>/dev/null)" == true ]]; do
         counts="$(jq -r '"allocations \(.allocations), cleanup debt \(.cleanupDebt)"' <<<"$state" 2>/dev/null || echo unknown)"
-        [[ "$counts" == "$last" ]] || { echo "    draining: ${counts}"; last="$counts"; }
-        ((SECONDS < deadline)) || { echo "${counts} remain after ${drain_timeout}s; restarting now would be a disruptive replacement that cuts live calls; the node is reopened. Rerun with --force to accept it" >&2; exit 1; }
+        # A release run's log is public: it says live work remains, not how many calls are on the node.
+        shown="$counts"
+        [[ -z "${SFU_FROM_CI:-}" ]] || shown="live work"
+        [[ "$counts" == "$last" ]] || { echo "    draining: ${shown}"; last="$counts"; }
+        ((SECONDS < deadline)) || { echo "${shown} remain after ${drain_timeout}s; restarting now would be a disruptive replacement that cuts live calls; the node is reopened. Rerun with --force to accept it" >&2; exit 1; }
         sleep 5
       done
       old_incarnation="$(jq -r .nodeIncarnation <<<"$state")"

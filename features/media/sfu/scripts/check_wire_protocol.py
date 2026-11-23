@@ -17,12 +17,15 @@ deploying every node whose SFU source changed before the API (scripts/releases/s
 import re
 import subprocess
 import sys
+from typing import NamedTuple
 
 NODE = re.compile(r'^features/media/sfu/(cmd|internal|protocol)/.+\.go$')
 CALLER = re.compile(r'^(apps/api/internal/adapters/chalksfu/.+\.go|sdks/typescript/client/src/media/.+\.tsx?)$')
 TEST = re.compile(r'(_test\.go|\.(test|spec)\.tsx?)$')
 PROTOCOL_FILE = 'features/media/sfu/protocol/protocol.go'
 PROTOCOL = re.compile(r'^const WireProtocol = (\d+)\b', re.MULTILINE)
+FLEET_FILE = 'apps/api/internal/adapters/chalksfu/fleet.go'
+MINIMUM = re.compile(r'^\s*minNodeProtocol\s*=\s*(\d+)\s*$', re.MULTILINE)
 DECISION = re.compile(r'^Wire-Protocol: unchanged because \S', re.MULTILINE)
 
 
@@ -32,28 +35,43 @@ def git(*args):
     return subprocess.run(['git', '-C', root, *args], capture_output=True, text=True, check=True).stdout
 
 
-def protocol_at(ref):
-    """The WireProtocol number in the source at ref, 0 when the file or the constant is absent."""
+class Versions(NamedTuple):
+    wire: int  # the node's WireProtocol
+    minimum: int  # the lowest node protocol the API places on
+
+
+def number_at(ref, path, pattern):
+    """The number the pattern captures in the file at ref, 0 when the file or the number is absent."""
     try:
-        found = PROTOCOL.search(git('show', f'{ref}:{PROTOCOL_FILE}'))
+        found = pattern.search(git('show', f'{ref}:{path}'))
     except subprocess.CalledProcessError:
         return 0
     return int(found[1]) if found else 0
 
 
-def verdict(changed, base_protocol, head_protocol, messages):
+def versions_at(ref):
+    return Versions(number_at(ref, PROTOCOL_FILE, PROTOCOL), number_at(ref, FLEET_FILE, MINIMUM))
+
+
+def raised(base, head):
+    """A raise that counts raises WireProtocol and the API's minimum together: with the minimum left alone the API still places on
+    nodes that reject what the callers now send."""
+    return head.wire > base.wire and head.minimum > base.minimum
+
+
+def verdict(changed, base, head, messages):
     """None when the change needs no decision or carries one, else the reason it is refused."""
     code = [path for path in changed if not TEST.search(path)]
     node = [path for path in code if NODE.match(path)]
     callers = [path for path in code if CALLER.match(path)]
     if not node or not callers:
         return None
-    if head_protocol > base_protocol or DECISION.search(messages):
+    if raised(base, head) or DECISION.search(messages):
         return None
     return (
         'this change edits the SFU node and what talks to it together:\n  '
         + '\n  '.join([*node[:3], *callers[:3]])
-        + f'\nRaise WireProtocol in {PROTOCOL_FILE} (and minNodeProtocol in the API fleet), or add a commit message line:\n'
+        + f'\nRaise WireProtocol in {PROTOCOL_FILE} and minNodeProtocol in {FLEET_FILE}, or add a commit message line:\n'
         '  Wire-Protocol: unchanged because <why an older node still accepts what the callers now send>'
     )
 
@@ -66,7 +84,7 @@ def main(argv):
         print(f'cannot compare with {base}: fetch it (git fetch origin) or pass another base ref', file=sys.stderr)
         return 1
     changed = git('diff', '--name-only', f'{merge_base}..HEAD').splitlines()
-    problem = verdict(changed, protocol_at(merge_base), protocol_at('HEAD'), git('log', f'{merge_base}..HEAD', '--format=%B'))
+    problem = verdict(changed, versions_at(merge_base), versions_at('HEAD'), git('log', f'{merge_base}..HEAD', '--format=%B'))
     if problem:
         print(problem, file=sys.stderr)
         return 1

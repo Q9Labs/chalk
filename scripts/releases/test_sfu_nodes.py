@@ -69,6 +69,11 @@ class AssessTest(unittest.TestCase):
             self.repo.commit(path)
         self.assertEqual(sfu_nodes.source_commit(self.repo.root, 'HEAD'), self.new_sfu)
 
+    def test_a_draining_node_is_not_current_so_a_deploy_reopens_it(self):
+        verdict = sfu_nodes.assess(self.repo.root, self.new_sfu, 2, {'revision': self.new_sfu, 'protocol': 2, 'drainState': {'draining': True}})
+        self.assertFalse(verdict.current)
+        self.assertIn('draining', verdict.why)
+
     def test_a_node_built_before_the_source_is_behind(self):
         self.assertFalse(self.current(self.old_sfu))
         self.assertFalse(self.current(self.unrelated))
@@ -214,7 +219,7 @@ class RunTest(unittest.TestCase):
 class CertificateTest(unittest.TestCase):
     def issue(self, directory, name, days):
         subprocess.run(
-            ['openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-subj', '/CN=test', '-days', str(days), '-keyout', os.devnull, '-out', str(directory / name)],
+            ['openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-subj', '/CN=test', '-days', str(days), '-keyout', str(directory / name.replace('.crt', '.key')), '-out', str(directory / name)],
             check=True,
             capture_output=True,
         )
@@ -231,6 +236,16 @@ class CertificateTest(unittest.TestCase):
             self.issue(directory, 'operator.crt', 30)
             (directory / 'server.crt').unlink()
             with self.assertRaisesRegex(NodeError, r'missing .*server\.crt'):
+                sfu_nodes.check_certificates(directory)
+
+    def test_a_certificate_that_does_not_match_its_key_refuses_before_a_node_is_touched(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            self.issue(directory, 'operator.crt', 30)
+            self.issue(directory, 'server.crt', 90)
+            sfu_nodes.check_certificates(directory)
+            (directory / 'server.key').write_text((directory / 'operator.key').read_text())
+            with self.assertRaisesRegex(NodeError, r'server\.crt does not match server\.key.*ci-secret publish'):
                 sfu_nodes.check_certificates(directory)
 
 

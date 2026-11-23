@@ -77,7 +77,7 @@ def verdict(github, args):
                           managed_environment=env('HOTFIX_ENVIRONMENT'), deploy_web=True, manifest_run_id=baseline['run_id'],
                           manifest_artifact_id=baseline['manifest_artifact_id'], manifest_sha256=baseline['manifest_sha256'],
                           reuse_release_id=baseline['release_id'], pages_rollback_id=pages_id, media_sha256=baseline['media_sha256'],
-                          rollback_media=os.environ.get('ROLLBACK_MEDIA', ''))
+                          rollback_media=os.environ.get('ROLLBACK_MEDIA', ''), sfu_force_restart=True, sfu_best_effort=True)
             summary.write('ROLLBACK NOT VERIFIED: restore by hand, see docs/operators/incident.md. Run the Release workflow from master with:\n\n```json\n'
                           + json.dumps(manual, indent=2) + '\n```\n')
     if not shipped:

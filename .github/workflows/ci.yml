@@ -957,7 +957,8 @@ jobs:
         # past the release stays. A run that restores service (sfu_best_effort) must not be blocked by a node, so there a failure is reported and the deploy goes on.
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
         continue-on-error: ${{ inputs.sfu_best_effort }}
-        timeout-minutes: 50
+        # A run that restores service stops waiting early: the backend deploy after it uses AWS credentials assumed for 60 minutes.
+        timeout-minutes: ${{ inputs.sfu_best_effort && 20 || 50 }}
         env:
           CHALK_SFU_DEPLOY_BUNDLE: ${{ secrets.CHALK_SFU_DEPLOY_BUNDLE }}
           FORCE_RESTART: ${{ inputs.sfu_force_restart }}

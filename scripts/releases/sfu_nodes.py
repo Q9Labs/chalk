@@ -72,6 +72,9 @@ def assess(repository, source, minimum, ready):
     source, so it counts as behind."""
     revision = ready.get('revision', '')
     protocol = ready.get('protocol', 0)
+    if ready.get('drainState', {}).get('draining'):
+        # The API places nothing on a draining node, so a current build is still not serving; the deploy reopens it.
+        return Verdict(False, 'the node is draining and takes no new Episodes')
     if protocol < minimum:
         return Verdict(False, f'wire protocol {protocol} is below the release minimum {minimum}')
     if not COMMIT.fullmatch(revision):
@@ -113,14 +116,25 @@ def read_ready(readyz, environment, address, label):
     return ready
 
 
+def public_key(openssl, kind, path):
+    arguments = ['x509', '-pubkey', '-noout', '-in', str(path)] if kind == 'certificate' else ['pkey', '-pubout', '-in', str(path)]
+    result = subprocess.run([openssl, *arguments], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
 def check_certificates(directory, openssl='openssl'):
-    """Fails while the node deploy would still work, so an expiring certificate is a Promote refusal and not an outage."""
+    """Fails while the node deploy would still work, so an expiring certificate is a Promote refusal and not an outage.
+    A certificate that does not match its key fails too: the deploy installs the pair and the node would not start."""
     for name, days in (('operator.crt', 3), ('server.crt', 14)):
         certificate = directory / name
         if not certificate.is_file():
             raise NodeError(f'missing {certificate}; run infrastructure/sfu/ci-secret publish production')
         if subprocess.run([openssl, 'x509', '-checkend', str(days * 86400), '-noout', '-in', str(certificate)], capture_output=True).returncode != 0:
             raise NodeError(f'{name} expires within {days} days or is unreadable; run infrastructure/sfu/ci-secret publish production')
+        key = directory / name.replace('.crt', '.key')
+        certified = public_key(openssl, 'certificate', certificate)
+        if not key.is_file() or certified is None or certified != public_key(openssl, 'key', key):
+            raise NodeError(f'{name} does not match {key.name}; run infrastructure/sfu/ci-secret publish production')
 
 
 def run(command, environment, target_sha, repository=REPOSITORY, directory=None, readyz=None, deploy=None, force=False):

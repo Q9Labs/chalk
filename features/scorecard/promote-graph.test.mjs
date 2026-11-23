@@ -126,6 +126,7 @@ test("every production deploy brings the Chalk SFU nodes to the release before t
   assert.match(nodes.run, /SFU_SOURCE_ROOT="\$PWD\/release-source\/features\/media\/sfu"/);
   assert.equal(nodes["continue-on-error"], "${{ inputs.sfu_best_effort }}", "a run that restores service is never blocked by a node");
   assert.equal(source["continue-on-error"], "${{ inputs.sfu_best_effort }}");
+  assert.equal(nodes["timeout-minutes"], "${{ inputs.sfu_best_effort && 20 || 50 }}", "a restore keeps most of its AWS credentials' hour");
   for (const trigger of ["workflow_dispatch", "workflow_call"]) {
     for (const input of ["sfu_force_restart", "sfu_best_effort"]) assert.equal(release.on[trigger].inputs[input].default, false, `${trigger} ${input}`);
   }

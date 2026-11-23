@@ -104,6 +104,7 @@ class Verdict(Files):
         rollback = dict(restored_source_release_id='managed-other', release_id='r', applied_release_id='r', pages_deployment_id='pages-1')
         self.assertIsNotNone(self.judge(SMOKE_OUTCOME='failed', ROLLBACK_RESULT='success', ROLLBACK=json.dumps(rollback)))
         self.assertIn('ROLLBACK NOT VERIFIED', self.summary.read_text())
+        self.assertIn('"sfu_best_effort": true', self.summary.read_text(), 'the manual restore is never blocked by a Chalk SFU node')
 
     def test_a_release_that_never_reached_the_host_says_so(self):
         self.assertIsNotNone(self.judge(RELEASE_RESULT='failure', SMOKE_RESULT='skipped', SMOKE_OUTCOME='', APPLIED_RELEASE=''))
