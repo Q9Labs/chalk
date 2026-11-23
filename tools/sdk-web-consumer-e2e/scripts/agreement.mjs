@@ -99,7 +99,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
             assert.ok(outcome instanceof Error, "Sync rejection must reach the caller");
           } else {
             await pages[0].waitForFunction((source) => window.__chalk.snapshot().localMedia[source].state === "failed", source, { timeout: 15_000 });
-            await pages[0].getByText(`Your ${source} didn’t reach the call.`, { exact: true }).waitFor();
+            await pages[0].locator("[data-part=toast-message]").getByText(`Your ${source} didn’t reach the call.`, { exact: true }).waitFor();
           }
           assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false, "Failed capture must be physically paused");
           await agree(pages);
@@ -256,7 +256,7 @@ async function openParticipant(participant, options, contexts, evidence) {
   await context.route("**/telemetry", async (route) => {
     const { events } = route.request().postDataJSON();
     reports.push(...events);
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: events.length, rejected: 0 }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accepted: events.length, rejected: 0, acks: events.map(({ seq }) => ({ from: seq, to: seq + 1 })) }) });
   });
   await context.addInitScript(installAgreementProbe);
   const page = await context.newPage();
