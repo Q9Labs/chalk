@@ -14,7 +14,7 @@ export function mediaDiagnosticPhase(snapshot: ConnectionMediaSnapshot | null) {
 export function createMediaStateReporter(report: (event: TransportDiagnostic) => void) {
   let last: { readonly phase: string; readonly ice: string | undefined } | null = null;
   return {
-    observe(snapshot: ConnectionMediaSnapshot | null) {
+    observe<Snapshot extends ConnectionMediaSnapshot | null>(snapshot: Snapshot): Snapshot {
       const phase = mediaDiagnosticPhase(snapshot);
       const ice = snapshot?.connection.iceConnectionState ?? undefined;
       if (phase === undefined) last = null;
