@@ -53,6 +53,10 @@ elif tool == 'docker':
         log('docker-builds', json.dumps(args))
     elif args[:1] == ['save']:
         print('image')
+    elif args[:1] == ['pull']:
+        log('docker-pulls', args[-1])
+    elif args[:2] == ['image', 'inspect']:
+        print(os.environ.get('MOCK_IMAGE_REVISION', '0123456789abcdef0123456789abcdef01234567'))
 elif tool == 'doctl':
     rule = lambda ports: {'protocol': 'tcp', 'ports': ports, 'sources': {'addresses': ['192.0.2.0/24']}}
     print(json.dumps([{'name': 'chalk-sfu-' + os.environ['MOCK_ENV'], 'inbound_rules': [rule(os.environ['MOCK_CONTROL_PORT']), rule('22')]}]))
@@ -287,6 +291,24 @@ class DeployBranchesTest(unittest.TestCase):
         result = self.run_deploy('staging', '--firewall-only')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.builds(), [])
+
+    def test_image_pulls_the_published_digest_instead_of_building_it(self):
+        digest = 'ghcr.io/q9labs/chalk-sfu@sha256:' + 'a' * 64
+        self.operator_files('staging')
+        result = self.run_deploy('staging', '--image', digest)
+        self.assert_reached_restart(result)
+        self.assertEqual(self.read('docker-pulls').split(), [digest])
+        self.assertEqual(self.builds(), [])
+
+    def test_image_must_be_a_digest_of_the_chalk_sfu_package_at_this_revision(self):
+        self.operator_files('staging')
+        for image in ('ghcr.io/q9labs/chalk-sfu:latest', 'ghcr.io/q9labs/chalk-api@sha256:' + 'a' * 64):
+            result = self.run_deploy('staging', '--image', image)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn('--image takes', result.stderr)
+        result = self.run_deploy('staging', '--image', 'ghcr.io/q9labs/chalk-sfu@sha256:' + 'a' * 64, MOCK_IMAGE_REVISION='f' * 40)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('check out that revision', result.stderr)
 
     def test_capture_conf_without_its_certificates_is_refused(self):
         self.operator_files('staging', capture=True)
