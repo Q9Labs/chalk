@@ -1269,6 +1269,16 @@
       "sample": "0 failures in the audit sample."
     },
     {
+      "id": "workflow:promote.yml#sfu-nodes",
+      "owner": "Media",
+      "catches": "A production Promote that cannot reach a Chalk SFU node or holds an operator certificate close to expiry, found before the live-call wait and any deploy.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history yet."
+    },
+    {
       "id": "workflow:promote.yml#live-calls",
       "owner": "Release chain",
       "catches": "A production deploy that would restart the API and Sync and drop participants who are in a live call.",

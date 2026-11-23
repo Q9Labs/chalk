@@ -77,7 +77,7 @@ def verdict(github, args):
                           managed_environment=env('HOTFIX_ENVIRONMENT'), deploy_web=True, manifest_run_id=baseline['run_id'],
                           manifest_artifact_id=baseline['manifest_artifact_id'], manifest_sha256=baseline['manifest_sha256'],
                           reuse_release_id=baseline['release_id'], pages_rollback_id=pages_id, media_sha256=baseline['media_sha256'],
-                          rollback_media=os.environ.get('ROLLBACK_MEDIA', ''))
+                          rollback_media=os.environ.get('ROLLBACK_MEDIA', ''), sfu_force_restart=True, sfu_best_effort=True)
             summary.write('ROLLBACK NOT VERIFIED: restore by hand, see docs/operators/incident.md. Run the Release workflow from master with:\n\n```json\n'
                           + json.dumps(manual, indent=2) + '\n```\n')
     if not shipped:
@@ -135,7 +135,8 @@ def rollback_command(github, args):
     inputs = dict(target_sha=previous['target_sha'], release_managed='false', deploy_managed='true', managed_environment='production',
                   manifest_run_id=previous['run_id'], manifest_artifact_id=previous['manifest_artifact_id'],
                   manifest_sha256=previous['manifest_sha256'], reuse_release_id=previous['release_id'],
-                  media_sha256=previous.get('media_sha256', ''), deploy_web='true' if args.pages_id else 'false')
+                  media_sha256=previous.get('media_sha256', ''), deploy_web='true' if args.pages_id else 'false',
+                  sfu_force_restart='true', sfu_best_effort='true')
     if args.pages_id:
         inputs['pages_rollback_id'] = args.pages_id
     print(f"# production runs {running['release_id']}; this restores {previous['release_id']} (API and Sync" + (', and web)' if args.pages_id else '; add --pages-id for web)'))

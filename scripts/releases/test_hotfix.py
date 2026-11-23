@@ -104,6 +104,7 @@ class Verdict(Files):
         rollback = dict(restored_source_release_id='managed-other', release_id='r', applied_release_id='r', pages_deployment_id='pages-1')
         self.assertIsNotNone(self.judge(SMOKE_OUTCOME='failed', ROLLBACK_RESULT='success', ROLLBACK=json.dumps(rollback)))
         self.assertIn('ROLLBACK NOT VERIFIED', self.summary.read_text())
+        self.assertIn('"sfu_best_effort": true', self.summary.read_text(), 'the manual restore is never blocked by a Chalk SFU node')
 
     def test_a_release_that_never_reached_the_host_says_so(self):
         self.assertIsNotNone(self.judge(RELEASE_RESULT='failure', SMOKE_RESULT='skipped', SMOKE_OUTCOME='', APPLIED_RELEASE=''))
@@ -215,6 +216,12 @@ class RollbackCommand(unittest.TestCase):
         line = self.run_command([self.record(3, 'new', ['success']), self.record(2, 'bad', ['failure']), self.record(1, 'old', ['inactive', 'success'])])
         self.assertIn('-f reuse_release_id=old', line)
         self.assertIn('-f deploy_web=false', line)
+
+    def test_a_backend_only_rollback_is_never_blocked_by_a_chalk_sfu_node(self):
+        line = self.run_command([self.record(2, 'new', ['success']), self.record(1, 'old', ['success'])])
+        self.assertNotIn('pages_rollback_id', line)
+        self.assertIn('-f sfu_best_effort=true', line)
+        self.assertIn('-f sfu_force_restart=true', line)
 
     def test_one_release_has_nothing_to_return_to(self):
         with self.assertRaisesRegex(ValueError, 'no earlier'):

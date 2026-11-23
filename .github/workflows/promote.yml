@@ -132,9 +132,36 @@ jobs:
       environment: production
       proofs: chalk-sfu-spaces
     secrets: inherit
+  sfu-nodes:
+    # Fails here, before the live-call wait and any deploy, when this run cannot reach a Chalk SFU node or a certificate it needs is close to
+    # expiry, and says which nodes the release will upgrade. The release itself deploys the nodes that are behind, before the API, and fails
+    # before the API if one is still behind (scripts/releases/sfu_nodes.py).
+    needs: [select, approve]
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      deployment: false
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read every Chalk SFU node against the release
+        env:
+          CHALK_SFU_DEPLOY_BUNDLE: ${{ secrets.CHALK_SFU_DEPLOY_BUNDLE }}
+          TARGET_SHA: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+          SFU_FROM_CI: "1"
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/chalk-sfu"
+          infrastructure/sfu/ci-secret unpack production "$private"
+          export CHALK_SFU_PRIVATE_DIR="$private" SFU_SSH_KEY="$private/production/ssh_key"
+          python3 scripts/releases/sfu_nodes.py check --environment production --target-sha "$TARGET_SHA" --require-certificates
+          rm -rf "$private"
   live-calls:
     # A deploy restarts the API and Sync and drops every live call. Wait for calls to end, then refuse; the count comes from the production API's /readyz.
-    needs: [select, approve, chalk-sfu-spaces]
+    needs: [select, approve, chalk-sfu-spaces, sfu-nodes]
     runs-on: ubuntu-24.04
     environment:
       name: production
@@ -157,7 +184,7 @@ jobs:
       id-token: write
       packages: write # Release publishes the application images to GHCR.
       attestations: write
-    needs: [select, approve, chalk-sfu-spaces, live-calls]
+    needs: [select, approve, chalk-sfu-spaces, sfu-nodes, live-calls]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
@@ -166,6 +193,7 @@ jobs:
       managed_environment: production
       deploy_web: true
       orchestrated: true
+      sfu_force_restart: ${{ inputs.allow_live_calls }}
       manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).selection.run_id }}
       manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_sha256 }}
@@ -374,6 +402,8 @@ jobs:
       managed_environment: production
       deploy_web: true
       orchestrated: true
+      sfu_force_restart: true
+      sfu_best_effort: true
       manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).previous.run_id }}
       manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_sha256 }}
