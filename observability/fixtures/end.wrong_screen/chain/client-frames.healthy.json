@@ -132,11 +132,8 @@
         "elapsed_ms": 0
       },
       {
-        "type": "space_join_span",
-        "state": "joining",
-        "step": "wait_for_sync_live",
-        "outcome": "succeeded",
-        "duration_ms": 0,
+        "phase": "live",
+        "type": "media_state",
         "seq": 14,
         "event_id": "00000000-0000-4000-8000-000000000019",
         "elapsed_ms": 0
@@ -144,7 +141,7 @@
       {
         "type": "space_join_span",
         "state": "joining",
-        "step": "start_sync",
+        "step": "wait_for_sync_live",
         "outcome": "succeeded",
         "duration_ms": 0,
         "seq": 15,
@@ -154,7 +151,7 @@
       {
         "type": "space_join_span",
         "state": "joining",
-        "step": "start_media",
+        "step": "start_sync",
         "outcome": "succeeded",
         "duration_ms": 0,
         "seq": 16,
@@ -164,8 +161,9 @@
       {
         "type": "space_join_span",
         "state": "joining",
-        "step": "confirm_entered",
-        "outcome": "started",
+        "step": "start_media",
+        "outcome": "succeeded",
+        "duration_ms": 0,
         "seq": 17,
         "event_id": "00000000-0000-4000-8000-000000000022",
         "elapsed_ms": 0
@@ -174,15 +172,17 @@
         "type": "space_join_span",
         "state": "joining",
         "step": "confirm_entered",
-        "outcome": "succeeded",
-        "duration_ms": 0,
+        "outcome": "started",
         "seq": 18,
         "event_id": "00000000-0000-4000-8000-000000000023",
         "elapsed_ms": 0
       },
       {
-        "phase": "live",
-        "type": "media_state",
+        "type": "space_join_span",
+        "state": "joining",
+        "step": "confirm_entered",
+        "outcome": "succeeded",
+        "duration_ms": 0,
         "seq": 19,
         "event_id": "00000000-0000-4000-8000-000000000024",
         "elapsed_ms": 0
