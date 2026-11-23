@@ -99,7 +99,8 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
             assert.ok(outcome instanceof Error, "Sync rejection must reach the caller");
           } else {
             await pages[0].waitForFunction((source) => window.__chalk.snapshot().localMedia[source].state === "failed", source, { timeout: 15_000 });
-            await pages[0].getByText(`Your ${source} didn’t reach the call.`, { exact: true }).waitFor();
+            // The sr-only announcer repeats every toast for screen readers, so assert on the toast the user sees.
+            await pages[0].locator("[data-part=toast-message]").getByText(`Your ${source} didn’t reach the call.`, { exact: true }).waitFor();
           }
           assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false, "Failed capture must be physically paused");
           await agree(pages);
