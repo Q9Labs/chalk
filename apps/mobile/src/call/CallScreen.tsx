@@ -90,12 +90,10 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
 
 async function whiteboardUploadsAvailable(baseUrl: string, signal: AbortSignal): Promise<boolean> {
   try {
-    const response = await fetch(new URL("/readyz", baseUrl).href, { signal });
+    const response = await fetch(new URL("/v1/whiteboard/files/availability", baseUrl).href, { signal });
     if (!response.ok) return false;
     const body: unknown = await response.json();
-    if (!body || typeof body !== "object" || !("capabilities" in body)) return false;
-    const { capabilities } = body;
-    return !!capabilities && typeof capabilities === "object" && "whiteboard_files" in capabilities && capabilities.whiteboard_files === "enabled";
+    return !!body && typeof body === "object" && "available" in body && body.available === true;
   } catch {
     return false;
   }
