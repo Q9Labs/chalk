@@ -72,7 +72,7 @@ The operator certificate lives 90 days. Promote's preflight and the deploy step 
 
 **Read a node.** `infrastructure/sfu/readyz <env> <address>` prints a node's `/readyz` through the tunnel, which is the same check the release makes.
 
-**Protocol bumps.** The Gate for the SFU (`features/media/sfu/scripts/check_wire_protocol.py`) refuses a change that edits the node's Go source and the API's Chalk SFU adapter or the SDK's media client together, unless it raises `WireProtocol` or a commit message says `Wire-Protocol: unchanged because <reason>`. It catches the two sides changing together without a decision, as #1514 did. It does not catch a behavior change made on one side alone, and it cannot judge whether a stated reason is right. The release covers those cases by deploying the node before the API whenever its source changed.
+**Protocol bumps.** The Gate for the SFU (`features/media/sfu/scripts/check_wire_protocol.py`) refuses a change that edits the node's Go source and the API's Chalk SFU adapter or the SDK's media client together, unless it raises `WireProtocol` and the API's `minNodeProtocol` together or a commit message says `Wire-Protocol: unchanged because <reason>`. It catches the two sides changing together without a decision, as #1514 did. It does not catch a behavior change made on one side alone, and it cannot judge whether a stated reason is right. The release covers those cases by deploying the node before the API whenever its source changed.
 
 Staging and bench nodes are still deployed by hand with `deploy <env> <address>`, before the staging API.
 
