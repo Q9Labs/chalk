@@ -25,6 +25,8 @@ REPOSITORY = SFU_DIRECTORY.parents[1]
 # What the API and the SDK talk to. Node templates in infrastructure/sfu change nothing the API sends, so they stay out:
 # an edit there must not restart a node.
 SFU_SOURCE = 'features/media/sfu'
+# Gate scripts, tests and notes beside it are not in the node's binary either.
+SFU_NOT_SOURCE = [f':(exclude){SFU_SOURCE}/scripts', ':(exclude,glob)**/*_test.go', ':(exclude,glob)**/*.md']
 FLEET_SOURCE = 'apps/api/internal/adapters/chalksfu/fleet.go'
 MIN_PROTOCOL = re.compile(r'^\s*minNodeProtocol\s*=\s*(\d+)\s*$', re.MULTILINE)
 COMMIT = re.compile(r'[0-9a-f]{40}')
@@ -42,7 +44,7 @@ def git(repository, *args, check=True):
 
 def source_commit(repository, target_sha):
     """The last commit at or before the target that changed the SFU source."""
-    commit = git(repository, 'log', '-1', '--format=%H', target_sha, '--', SFU_SOURCE).stdout.strip()
+    commit = git(repository, 'log', '-1', '--format=%H', target_sha, '--', SFU_SOURCE, *SFU_NOT_SOURCE).stdout.strip()
     if not commit:
         raise NodeError(f'{target_sha} has no commit that touches {SFU_SOURCE}')
     return commit

@@ -64,6 +64,11 @@ class AssessTest(unittest.TestCase):
         self.assertEqual(sfu_nodes.source_commit(self.repo.root, self.head), self.new_sfu)
         self.assertEqual(sfu_nodes.source_commit(self.repo.root, self.unrelated), self.old_sfu)
 
+    def test_gate_scripts_tests_and_notes_beside_the_source_are_not_source(self):
+        for path in ('features/media/sfu/scripts/check.py', 'features/media/sfu/internal/offer_test.go', 'features/media/sfu/README.md'):
+            self.repo.commit(path)
+        self.assertEqual(sfu_nodes.source_commit(self.repo.root, 'HEAD'), self.new_sfu)
+
     def test_a_node_built_before_the_source_is_behind(self):
         self.assertFalse(self.current(self.old_sfu))
         self.assertFalse(self.current(self.unrelated))
