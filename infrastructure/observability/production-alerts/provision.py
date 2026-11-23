@@ -59,7 +59,7 @@ RULE_BRANCHES = (
     ("turn-credentials.apl", ()),
     ("recovery-refused.apl", ()),
     ("sfu-overflow.apl", ()),
-    ("sfu-version-skew.apl", ()),
+    ("sfu-node-too-old.apl", ()),
     ("deadline-scheduler.apl", ()),
 )
 

@@ -30,19 +30,23 @@ class MonitorDefinitions(unittest.TestCase):
         self.assertIn("bin(now(), 30m)", query)
 
 
-class VersionSkewRule(unittest.TestCase):
-    query = Path(provision.__file__).with_name("sfu-version-skew.apl").read_text()
-    pattern = re.compile(re.search(r"extract\('([^']+)'", query).group(1))
+class NodeTooOldRule(unittest.TestCase):
+    query = Path(provision.__file__).with_name("sfu-node-too-old.apl").read_text()
 
     def test_the_rule_is_part_of_the_first_monitor(self):
         monitor = provision.monitor_definitions({"LOG_DATASET": "logs", "TRACE_DATASET": "traces"})[0]["aplQuery"]
-        self.assertIn("sfu-version-skew", monitor)
+        self.assertIn("sfu-node-too-old", monitor)
 
-    def test_the_commit_it_reads_is_the_one_a_managed_release_id_carries(self):
-        release = "managed-episode-20261123T031500Z-f1785f8a8c3d-0a1b2c3d"
-        self.assertEqual(self.pattern.match(release).group(1), "f1785f8a8c3d")
-        self.assertIsNone(self.pattern.match("dev"))
-        self.assertIsNone(self.pattern.match("rel-skew-old"))
+    def test_it_reads_the_line_and_reason_the_fleet_logs(self):
+        fleet = (Path(__file__).parents[3] / "apps/api/internal/adapters/chalksfu/fleet.go").read_text()
+        message = re.search(r"'(chalk sfu node is out of placement)'", self.query).group(1)
+        reason = re.search(r"== '(node_protocol_too_old)'", self.query).group(1)
+        self.assertIn(f'"{message}"', fleet)
+        self.assertIn(f'NodeProtocolTooOld = "{reason}"', fleet)
+
+    def test_the_alert_names_no_node_or_address(self):
+        message = self.query[self.query.index("alert_message"):]
+        self.assertNotIn("['attributes.node']", message)
 
 
 def live(monitors, notifier_ids):
