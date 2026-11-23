@@ -2,7 +2,7 @@ import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
-import { SFUError } from "../media";
+import { mediaRefusalStatus } from "../connection/access-rejection";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
@@ -96,13 +96,6 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
     ...(cause.sync ? { sync: cause.sync } : {}),
     ...(mediaRefusal ? { mediaHttpStatus: mediaRefusal } : {}),
   });
-}
-
-/** The HTTP status of a refusal from Chalk's media signalling. A 401 or 403 is an access problem and a retryable status is recovery, so neither counts. */
-function mediaRefusalStatus(cause: unknown): number | undefined {
-  if (!(cause instanceof SFUError)) return undefined;
-  const { status, retryableConnection } = cause.options;
-  return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 403 && !retryableConnection ? status : undefined;
 }
 
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {

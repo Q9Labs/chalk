@@ -69,6 +69,8 @@ export type ConnectionFailure = {
   readonly recoverable: boolean;
   readonly message: string;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  /** The HTTP status when Chalk's own media signalling refused the request. */
+  readonly mediaHttpStatus?: number;
 };
 
 export class ConnectionError extends Error {

@@ -13,7 +13,7 @@ import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./in
 import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
-import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
+import { episodeNoLongerActive, mediaAccessRejected, mediaRefusalStatus, sfuAccessRejected } from "./access-rejection";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
@@ -362,6 +362,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           model.syncSnapshot = null;
           model.syncNoticeUnresponsive = false;
           model.mediaSnapshot = null;
+          reportedMedia = null;
           model.recoveryQueued = null;
           model.recoveryFiber = null;
           yield* publish();
@@ -431,7 +432,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
       const bindMedia = (scope: Scope.Closeable, media: ConnectionMediaClient): Effect.Effect<void> =>
         bindResource(scope, "mediaBindingCleanup", () => {
-          const unsubscribe = media.subscribe(() => enqueueBackground(handleMediaSnapshot(media, media.getSnapshot())));
+          const unsubscribe = media.subscribe(() => {
+            if (media === model.media) reportMediaState(media.getSnapshot());
+            enqueueBackground(handleMediaSnapshot(media, media.getSnapshot()));
+          });
           return () => {
             unsubscribe();
             media.stop();
@@ -794,13 +798,17 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         const mediaMinimum = [1000, 2000, 4000][attempt - 1] ?? 6000;
         return plan.kind === "media" ? Math.min(6000, Math.max(mediaMinimum, finiteDelay)) : finiteDelay;
       };
-      // Every place that records the media snapshot goes through here, so a state reached while the join or a recovery holds the queue is still reported once.
-      const rememberMedia = (snapshot: ConnectionMediaSnapshot | null) => {
+      // Reported straight from the media subscription and from every place that records a snapshot, so a state reached while the join or a recovery holds the queue is reported once, in order.
+      let reportedMedia: { readonly phase: string; readonly ice: string | undefined } | null = null;
+      const reportMediaState = (snapshot: ConnectionMediaSnapshot | null) => {
         const phase = mediaDiagnosticPhase(snapshot);
         const ice = snapshot?.connection.iceConnectionState ?? undefined;
-        if (phase !== undefined && (phase !== mediaDiagnosticPhase(model.mediaSnapshot) || ice !== (model.mediaSnapshot?.connection.iceConnectionState ?? undefined))) {
-          onTransportDiagnostic({ event: "media_state", phase, ice_state: ice, network_type: reportedNetworkType() });
-        }
+        if (phase === undefined || (reportedMedia?.phase === phase && reportedMedia.ice === ice)) return;
+        reportedMedia = { phase, ice };
+        onTransportDiagnostic({ event: "media_state", phase, ice_state: ice, network_type: reportedNetworkType() });
+      };
+      const rememberMedia = (snapshot: ConnectionMediaSnapshot | null) => {
+        reportMediaState(snapshot);
         model.mediaSnapshot = snapshot;
       };
       const readSnapshots = () => {
@@ -1374,7 +1382,11 @@ function joinCancelledFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
+  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaStatusOf(value) });
+}
+function mediaStatusOf(value: ConnectionLifecycleFailure): { readonly mediaHttpStatus?: number } {
+  const status = mediaRefusalStatus(value.cause);
+  return status === undefined ? {} : { mediaHttpStatus: status };
 }
 function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
   return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));

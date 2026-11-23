@@ -137,7 +137,7 @@ describe("a call reports how its media transport moved", () => {
 describe("a call reports ICE transitions and the reported network type", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("reports each ICE state change with the state it reached", async () => {
+  it("reports each ICE state the transport reaches, even when several arrive before the lifecycle's queue runs", async () => {
     vi.stubGlobal("navigator", { connection: { type: "wifi" } });
     const platform = createCoreTestPlatform();
     const telemetry = createTestOutbox({ bound: false });
@@ -152,7 +152,6 @@ describe("a call reports ICE transitions and the reported network type", () => {
         yield* (yield* lifecycleOf()).join();
         for (const ice of ["checking", "connected"] as const) {
           platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live", peerConnectionState: "connecting", iceConnectionState: ice } });
-          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
         }
         yield* Effect.promise(() => telemetry.outbox.flush());
       }).pipe(Effect.provide(layer), Effect.scoped),

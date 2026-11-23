@@ -4,6 +4,7 @@ import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { SFUError } from "../media";
 import { track } from "../space-client/capture.test.helpers";
+import { getConnectionFailureDetail } from "../space-client/failure-detail";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -81,4 +82,28 @@ it.each([
     await leaving;
     client.dispose();
   }
+});
+
+it("tells the call screens that Chalk's own media signalling refused the join, through the connection snapshot", async () => {
+  const platform = createCoreTestPlatform();
+  const client = createSpaceClientForPlatform(
+    { space: "refusal-proof", getAccess: async () => opaqueAccessGrant(1) },
+    {
+      dependencies: {
+        ...platform.dependencies,
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          start: async () => {
+            throw new SFUError("Chalk SFU signaling failed with HTTP 400", "signaling_failed", { status: 400, retryableConnection: false });
+          },
+        }),
+      },
+    },
+  );
+  await client.join({ microphone: false, camera: false }).catch(() => undefined);
+  const { status, lastError } = client.getSnapshot().connection;
+  expect(status).toBe("failed");
+  expect(lastError?.code).toBe("connection.media_start_failed");
+  expect(lastError?.mediaHttpStatus).toBe(400);
+  expect(getConnectionFailureDetail({ code: lastError?.code, sync: lastError?.sync, mediaHttpStatus: lastError?.mediaHttpStatus })).toContain("Something on our side failed");
 });
