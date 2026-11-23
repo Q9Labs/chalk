@@ -33,10 +33,11 @@ const (
 	inflightTTL = 30 * time.Second
 	// minNodeProtocol is the lowest SFU wire protocol this API can send to. The API puts
 	// allocationGeneration in its create, reserve, move and source-control bodies, and a node
-	// below protocol 2 refuses a body with a field it does not know (400 invalid_request). The
+	// below protocol 2 refuses a body with a field it does not know (400 invalid_request). A node
+	// below protocol 3 refuses the receive-only offer of a listener (400 invalid_request). The
 	// API places no Episode on such a node, so deploying the API before the SFU degrades
 	// placement visibly and fails no call.
-	minNodeProtocol = 2
+	minNodeProtocol = 3
 )
 
 // ErrUnknownNode means an Episode's binding names a node this process does not

@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -27,6 +28,21 @@ class MonitorDefinitions(unittest.TestCase):
         self.assertIn("by chalk_alert_rule, probe_minute", query)
         self.assertIn("by chalk_alert_rule\n", query)
         self.assertIn("bin(now(), 30m)", query)
+
+
+class VersionSkewRule(unittest.TestCase):
+    query = Path(provision.__file__).with_name("sfu-version-skew.apl").read_text()
+    pattern = re.compile(re.search(r"extract\('([^']+)'", query).group(1))
+
+    def test_the_rule_is_part_of_the_first_monitor(self):
+        monitor = provision.monitor_definitions({"LOG_DATASET": "logs", "TRACE_DATASET": "traces"})[0]["aplQuery"]
+        self.assertIn("sfu-version-skew", monitor)
+
+    def test_the_commit_it_reads_is_the_one_a_managed_release_id_carries(self):
+        release = "managed-episode-20261123T031500Z-f1785f8a8c3d-0a1b2c3d"
+        self.assertEqual(self.pattern.match(release).group(1), "f1785f8a8c3d")
+        self.assertIsNone(self.pattern.match("dev"))
+        self.assertIsNone(self.pattern.match("rel-skew-old"))
 
 
 def live(monitors, notifier_ids):
