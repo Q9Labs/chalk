@@ -1,8 +1,7 @@
 import { INVITE_HOSTS, parseChalkInviteLink } from "@q9labsai/chalk-client/invites";
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
-import { configuredOrbHost, getApiBaseURL } from "./mobile-config";
-import origins from "./origins.json";
+import { configuredOrbHost } from "./mobile-config";
 
 export type SpaceRoute = {
   readonly kind: "space";
@@ -15,8 +14,7 @@ export type SpaceRoute = {
 
 function inviteHosts(): readonly string[] {
   const orb = configuredOrbHost();
-  if (orb) return [...INVITE_HOSTS, orb];
-  return getApiBaseURL() === origins.nightlyApiBaseURL ? [...INVITE_HOSTS, origins.nightlyWebHost] : INVITE_HOSTS;
+  return orb ? [...INVITE_HOSTS, orb] : INVITE_HOSTS;
 }
 
 export function parseSpaceLink(input: string): SpaceRoute | null {

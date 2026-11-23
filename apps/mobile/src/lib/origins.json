@@ -1,6 +1,4 @@
 {
   "webHosts": ["chalkmeet.com", "chalk.q9labs.ai"],
-  "productionApiBaseURL": "https://api.chalkmeet.com",
-  "nightlyApiBaseURL": "https://nightly-api.chalkmeet.com",
-  "nightlyWebHost": "nightly.chalkmeet.com"
+  "productionApiBaseURL": "https://api.chalkmeet.com"
 }
