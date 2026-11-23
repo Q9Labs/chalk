@@ -99,6 +99,13 @@ func clientFor(t *testing.T, clientCA, serverCA *authority, identity string) *ht
 // an error answer, the protocol error code.
 func (s *service) call(t *testing.T, path string, body, out any) (int, string) {
 	t.Helper()
+	status, problem := s.callProblem(t, path, body, out)
+	return status, problem.Code
+}
+
+// callProblem is call that returns the whole error body, so a test can read its detail.
+func (s *service) callProblem(t *testing.T, path string, body, out any) (int, protocol.ErrorBody) {
+	t.Helper()
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		t.Fatal(err)
@@ -112,14 +119,14 @@ func (s *service) call(t *testing.T, path string, body, out any) (int, string) {
 	if response.StatusCode >= 300 {
 		var problem protocol.ErrorResponse
 		_ = json.Unmarshal(raw, &problem)
-		return response.StatusCode, problem.Error.Code
+		return response.StatusCode, problem.Error
 	}
 	if out != nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, out); err != nil {
 			t.Fatalf("decode %s: %v (%s)", path, err, raw)
 		}
 	}
-	return response.StatusCode, ""
+	return response.StatusCode, protocol.ErrorBody{}
 }
 
 func (s *service) mustCall(t *testing.T, path string, body, out any) {

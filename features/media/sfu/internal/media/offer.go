@@ -40,7 +40,7 @@ func (o offerSection) supports(kind webrtc.RTPCodecType) bool {
 // wraps ErrInvalidRequest.
 func parseOffer(raw string) (map[string]offerSection, error) {
 	if len(raw) > protocol.MaxSDPBytes {
-		return nil, fmt.Errorf("%w: the offer is larger than %d bytes", ErrInvalidRequest, protocol.MaxSDPBytes)
+		return nil, Invalid("offer_too_large", "the offer is larger than %d bytes", protocol.MaxSDPBytes)
 	}
 	var description sdp.SessionDescription
 	if err := description.Unmarshal([]byte(raw)); err != nil {
@@ -50,14 +50,14 @@ func parseOffer(raw string) (map[string]offerSection, error) {
 	for _, media := range description.MediaDescriptions {
 		kind := media.MediaName.Media
 		if kind != "audio" && kind != "video" {
-			return nil, fmt.Errorf("%w: the offer has a %q section; only audio and video are supported", ErrInvalidRequest, kind)
+			return nil, Invalid("offer_section_unsupported", "the offer has a %q section; only audio and video are supported", kind)
 		}
 		mid, ok := media.Attribute(sdp.AttrKeyMID)
 		if !ok || !protocol.IdentifierPattern.MatchString(mid) {
-			return nil, fmt.Errorf("%w: every section of the offer needs a valid mid", ErrInvalidRequest)
+			return nil, Invalid("offer_mid_invalid", "every section of the offer needs a valid mid")
 		}
 		if _, repeated := sections[mid]; repeated {
-			return nil, fmt.Errorf("%w: the offer repeats mid %q", ErrInvalidRequest, mid)
+			return nil, Invalid("offer_mid_repeated", "the offer repeats mid %q", mid)
 		}
 		sections[mid] = offerSection{media: kind, sending: sendsMedia(media), receiveOnly: receivesOnly(media), codecs: encodingNames(media)}
 	}

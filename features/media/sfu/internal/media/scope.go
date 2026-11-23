@@ -1,15 +1,13 @@
 package media
 
 import (
-	"fmt"
-
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // checkIdentifier refuses a value that is not a valid identifier, naming the field it came from.
 func checkIdentifier(field, value string) error {
 	if !protocol.IdentifierPattern.MatchString(value) {
-		return fmt.Errorf("%w: %s must be %s", ErrInvalidRequest, field, protocol.IdentifierRule)
+		return Invalid("scope_invalid", "%s must be %s", field, protocol.IdentifierRule)
 	}
 	return nil
 }
@@ -22,7 +20,7 @@ func ValidateScope(scope protocol.Scope) error {
 		}
 	}
 	if scope.Generation < 1 {
-		return fmt.Errorf("%w: scope.generation must be at least 1", ErrInvalidRequest)
+		return Invalid("scope_invalid", "scope.generation must be at least 1")
 	}
 	return nil
 }

@@ -503,6 +503,9 @@ type ErrorResponse struct {
 type ErrorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Detail is a short snake_case label for why the node refused a malformed request, such as
+	// offer_mid_invalid. It is absent when the code says it all, and on a node that predates it.
+	Detail string `json:"detail,omitempty"`
 }
 
 // Request-level error codes. The HTTP status carries the class: 400 invalid,

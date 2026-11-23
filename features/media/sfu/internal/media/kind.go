@@ -1,8 +1,6 @@
 package media
 
 import (
-	"fmt"
-
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
@@ -59,7 +57,7 @@ func KindOf(wire string) (*SessionKind, error) {
 			return kind, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: unknown session kind %q", ErrInvalidRequest, wire)
+	return nil, Invalid("kind_unknown", "unknown session kind %q", wire)
 }
 
 // SessionKinds lists the non-default kinds the node creates, for readiness. A kind the node has

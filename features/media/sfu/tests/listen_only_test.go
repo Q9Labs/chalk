@@ -31,10 +31,10 @@ func TestListenOnlyBeforeAnyonePublishes(t *testing.T) {
 	description := listener.complete(t, offer)
 	sending := description
 	sending.SDP = strings.Replace(sending.SDP, "a=recvonly", "a=sendrecv", 1)
-	if status, code := svc.call(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{
+	if status, problem := svc.callProblem(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{
 		OperationID: op(), Scope: scopeB, SessionDescription: &sending,
-	}, nil); status != http.StatusBadRequest || code != protocol.CodeInvalidRequest {
-		t.Fatalf("a new sending section still needs a named track: status %d, code %q", status, code)
+	}, nil); status != http.StatusBadRequest || problem.Code != protocol.CodeInvalidRequest || problem.Detail != "offer_section_unnamed" {
+		t.Fatalf("a new sending section still needs a named track: status %d, body %+v", status, problem)
 	}
 	var response protocol.TracksResponse
 	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{

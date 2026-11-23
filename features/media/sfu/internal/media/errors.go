@@ -30,3 +30,27 @@ var (
 	// Existing Episodes keep running and admit their own Participants.
 	errAdmissionClosed = fmt.Errorf("%w: the node admits no new Episodes", ErrCapacityExceeded)
 )
+
+// invalidRequest is an ErrInvalidRequest that also names why, so the trail can say it without
+// exporting the message, which quotes what the peer sent.
+type invalidRequest struct {
+	error
+	reason string
+}
+
+func (e invalidRequest) Unwrap() error { return e.error }
+
+// Invalid refuses a request as malformed. The reason is a short snake_case label from the node's
+// own code, never built from the request: it is the one part of the failure that leaves the node.
+func Invalid(reason, format string, args ...any) error {
+	return invalidRequest{fmt.Errorf("%w: "+format, append([]any{ErrInvalidRequest}, args...)...), reason}
+}
+
+// ReasonOf is the label Invalid gave a failure, or "" when the failure has none.
+func ReasonOf(err error) string {
+	var invalid invalidRequest
+	if errors.As(err, &invalid) {
+		return invalid.reason
+	}
+	return ""
+}

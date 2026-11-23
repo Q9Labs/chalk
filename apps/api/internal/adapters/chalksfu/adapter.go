@@ -330,7 +330,7 @@ func classify(status int, payload []byte) error {
 	var envelope protocol.ErrorResponse
 	_ = json.Unmarshal(payload, &envelope)
 	code := envelope.Error.Code
-	upstream := mediaplane.UpstreamFailure{Status: status, Code: code}
+	upstream := mediaplane.UpstreamFailure{Status: status, Code: code, Detail: envelope.Error.Detail}
 	switch {
 	case status == http.StatusNotFound || code == protocol.CodeSessionGone:
 		return fmt.Errorf("%w: %w", mediaplane.ErrConnectionNotFound, upstream)

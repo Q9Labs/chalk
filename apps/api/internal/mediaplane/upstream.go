@@ -12,20 +12,24 @@ type UpstreamError interface {
 	error
 	UpstreamStatus() int
 	UpstreamCode() string
+	// UpstreamDetail is the provider's short label for why it refused, or "" when it gave none.
+	UpstreamDetail() string
 }
 
 // UpstreamFailure is the provider's HTTP status and error code for one refused call.
 type UpstreamFailure struct {
 	Status int
 	Code   string
+	Detail string
 }
 
 func (e UpstreamFailure) Error() string {
 	return "upstream status " + strconv.Itoa(e.Status) + " " + e.Code
 }
 
-func (e UpstreamFailure) UpstreamStatus() int  { return e.Status }
-func (e UpstreamFailure) UpstreamCode() string { return e.Code }
+func (e UpstreamFailure) UpstreamStatus() int    { return e.Status }
+func (e UpstreamFailure) UpstreamCode() string   { return e.Code }
+func (e UpstreamFailure) UpstreamDetail() string { return e.Detail }
 
 // UpstreamOf returns the provider status and code carried by err, if any.
 func UpstreamOf(err error) (UpstreamError, bool) {
