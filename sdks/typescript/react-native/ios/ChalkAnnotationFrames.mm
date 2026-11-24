@@ -1,50 +1,52 @@
-#import <CoreImage/CoreImage.h>
+#import "ChalkAnnotationFrameSource.h"
 #import <ImageIO/ImageIO.h>
-#import <React/RCTBridge.h>
 #import <React/RCTEventEmitter.h>
-#import <RTKWebRTC/RTKWebRTC.h>
 
 @protocol ChalkWebRTCStreams <NSObject>
 @property(nonatomic, readonly) dispatch_queue_t workerQueue;
+@property(nonatomic, readonly) NSDictionary<NSString *, RTKRTCMediaStreamTrack *> *localTracks;
 - (RTKRTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 @end
 
 static NSString *const FrameSizeEvent = @"chalkAnnotationFrameSize";
 static const int MaxAnnotationPixels = 4096 * 4096;
 
-static CGSize FrameSize(RTKRTCVideoFrame *frame) {
+CGSize ChalkAnnotationFrameSize(RTKRTCVideoFrame *frame) {
   if (!frame) return CGSizeZero;
   if (frame.rotation == 90 || frame.rotation == 270) return CGSizeMake(frame.height, frame.width);
   return CGSizeMake(frame.width, frame.height);
 }
 
-@interface ChalkAnnotationObservation : NSObject <RTKRTCVideoRenderer>
-@property(nonatomic, strong) RTKRTCVideoTrack *track;
-@property(nonatomic, strong) RTKRTCVideoFrame *frame;
-@property(nonatomic, copy) void (^onSize)(CGSize);
+@interface ChalkAnnotationObservation ()
+- (RTKRTCVideoFrame *)frameForSize:(CGSize)size;
 @end
 
 @implementation ChalkAnnotationObservation
+@synthesize frame = _frame;
+
+- (RTKRTCVideoFrame *)frame {
+  @synchronized (self) { return _frame; }
+}
 - (void)setSize:(CGSize)size {}
 
 - (void)renderFrame:(RTKRTCVideoFrame *)frame {
   if (!frame) return;
   @synchronized (self) {
-    CGSize size = FrameSize(frame);
-    BOOL changed = !CGSizeEqualToSize(FrameSize(_frame), size);
+    CGSize size = ChalkAnnotationFrameSize(frame);
+    BOOL changed = !CGSizeEqualToSize(ChalkAnnotationFrameSize(_frame), size);
     _frame = frame;
-    if (changed) self.onSize(size);
+    if (changed && self.onSize) self.onSize(size);
   }
 }
 
 - (RTKRTCVideoFrame *)frameForSize:(CGSize)size {
   @synchronized (self) {
-    return CGSizeEqualToSize(FrameSize(_frame), size) ? _frame : nil;
+    return CGSizeEqualToSize(ChalkAnnotationFrameSize(_frame), size) ? _frame : nil;
   }
 }
 @end
 
-static CIImage *AnnotationFrameImage(RTKRTCVideoFrame *frame) {
+CIImage *ChalkAnnotationFrameImage(RTKRTCVideoFrame *frame) {
   id<RTKRTCI420Buffer> yuv = [frame.buffer toI420];
   NSInteger width = yuv.width;
   NSInteger height = yuv.height;
@@ -81,7 +83,7 @@ static CIImage *AnnotationFrameImage(RTKRTCVideoFrame *frame) {
 }
 
 static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
-  CIImage *image = AnnotationFrameImage(frame);
+  CIImage *image = ChalkAnnotationFrameImage(frame);
   if (!image) return nil;
   NSURL *directory = [[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
   NSString *name = [NSString stringWithFormat:@"chalk-annotation-%@.png", NSUUID.UUID.UUIDString];
@@ -91,6 +93,25 @@ static NSURL *WriteAnnotationFrame(RTKRTCVideoFrame *frame) {
   BOOL saved = [context writePNGRepresentationOfImage:image toURL:url format:kCIFormatRGBA8 colorSpace:color options:@{} error:NULL];
   CGColorSpaceRelease(color);
   return saved ? url : nil;
+}
+
+void ChalkFindAnnotationTrack(RCTBridge *bridge, NSString *streamUrl, void (^completion)(RTKRTCVideoTrack *track)) {
+  id<ChalkWebRTCStreams> module = (id)[bridge moduleForName:@"WebRTCModule"];
+  if (!module.workerQueue) return;
+  dispatch_async(module.workerQueue, ^{
+    RTKRTCVideoTrack *track = [module streamForReactTag:streamUrl].videoTracks.firstObject;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(track); });
+  });
+}
+
+void ChalkFindLocalAnnotationTrack(RCTBridge *bridge, NSString *trackId, void (^completion)(RTKRTCVideoTrack *track)) {
+  id<ChalkWebRTCStreams> module = (id)[bridge moduleForName:@"WebRTCModule"];
+  if (!module.workerQueue) return;
+  dispatch_async(module.workerQueue, ^{
+    RTKRTCMediaStreamTrack *track = module.localTracks[trackId];
+    if (![track isKindOfClass:RTKRTCVideoTrack.class]) return;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion((RTKRTCVideoTrack *)track); });
+  });
 }
 
 @interface ChalkAnnotationFrames : RCTEventEmitter <RCTBridgeModule>
@@ -110,9 +131,6 @@ RCT_EXPORT_MODULE(ChalkAnnotationFrames)
 
 RCT_EXPORT_METHOD(observe:(NSString *)key streamUrl:(NSString *)streamUrl) {
   [self stopObserving:key];
-  id<ChalkWebRTCStreams> module = (id)[self.bridge moduleForName:@"WebRTCModule"];
-  if (!module.workerQueue) return;
-
   ChalkAnnotationObservation *observer = [ChalkAnnotationObservation new];
   if (!_observers) _observers = [NSMutableDictionary new];
   _observers[key] = observer;
@@ -127,13 +145,10 @@ RCT_EXPORT_METHOD(observe:(NSString *)key streamUrl:(NSString *)streamUrl) {
     });
   };
 
-  dispatch_async(module.workerQueue, ^{
-    RTKRTCVideoTrack *track = [module streamForReactTag:streamUrl].videoTracks.firstObject;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if (self->_observers[key] != observer || !track) return;
-      observer.track = track;
-      [track addRenderer:observer];
-    });
+  ChalkFindAnnotationTrack(self.bridge, streamUrl, ^(RTKRTCVideoTrack *track) {
+    if (self->_observers[key] != observer || !track) return;
+    observer.track = track;
+    [track addRenderer:observer];
   });
 }
 
@@ -182,7 +197,7 @@ RCT_EXPORT_METHOD(sample:(NSString *)key
   }
   _sampling = YES;
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    CIImage *image = AnnotationFrameImage(frame);
+    CIImage *image = ChalkAnnotationFrameImage(frame);
     NSData *png = nil;
     if (image) {
       CGFloat scale = MIN(1, 272 / MAX(image.extent.size.width, image.extent.size.height));

@@ -248,7 +248,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
         onDownload={download ? () => void exportFrame(download) : undefined}
       />
     ) : (
-      <ToolButton label="Annotate" icon="pen" onPress={() => setOpen(true)} />
+      <ToolButton label="Annotate screen" icon="pen" onPress={() => setOpen(true)} />
     )
   ) : null;
   const setCanvasReady = (value: boolean) => {

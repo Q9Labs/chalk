@@ -6,14 +6,24 @@ import { registerAnnotationSession } from "../../../client/src/screen-annotation
 import { AnnotationSession } from "../../../client/src/screen-annotation/session";
 import { opaqueAccessGrant } from "../../../client/src/space-client/core.test.helpers";
 import { ownerId, recordingClient, recoverSocket, recoveryId, settle, stateWithPeer, wireSnapshot } from "../../../client/tests/helpers/sync-v1";
-import { createNativeAnnotationCapture } from "./android-capture";
+import { createNativeAnnotationCapture } from "./native-annotation-capture";
 
 const nativeEvents = vi.hoisted((): string[] => []);
+const ios = vi.hoisted(() => ({
+  listener: undefined as ((event: { key: string; width: number; height: number }) => void) | undefined,
+  platform: { OS: "android" },
+}));
 const frameSize = { width: 1080, height: 2400 };
 
 vi.mock("@cloudflare/react-native-webrtc", async () => {
   const { FakeTrack } = await import("../../../client/src/media/sfu.test.helpers");
   return {
+    mediaDevices: {
+      getDisplayMedia: async () => {
+        const track = new FakeTrack("screen", "video");
+        return { getVideoTracks: () => [track], toURL: () => "replay-kit" };
+      },
+    },
     MediaStreamTrack: class extends FakeTrack {
       constructor({ id }: { readonly id: string }) {
         super(id, "video");
@@ -30,11 +40,28 @@ vi.mock("@cloudflare/react-native-webrtc", async () => {
   };
 });
 vi.mock("react-native", () => ({
-  Platform: { OS: "android" },
+  Platform: ios.platform,
+  NativeEventEmitter: class {
+    addListener(_event: string, listener: typeof ios.listener) {
+      ios.listener = listener;
+      return {
+        remove: () => {
+          ios.listener = undefined;
+        },
+      };
+    }
+  },
   AppRegistry: { registerHeadlessTask() {} },
   Alert: { alert: () => nativeEvents.push("permission prompt") },
   DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
   NativeModules: {
+    ChalkAnnotationFrames: {
+      observe(key: string, streamUrl: string) {
+        expect(streamUrl).toBe("replay-kit");
+        ios.listener?.({ key, ...frameSize });
+      },
+      stop() {},
+    },
     ChalkScreenCapture: {
       capture: async () => {
         nativeEvents.push("screen capture");
@@ -62,13 +89,18 @@ vi.mock("react-native", () => ({
 
 beforeEach(() => {
   nativeEvents.length = 0;
+  ios.platform.OS = "android";
 });
 
 it.each([
   { scenario: "availability on", negotiated: "burn-in", enabled: true },
   { scenario: "availability absent from welcome", negotiated: false, enabled: false },
   { scenario: "availability withdrawn after welcome", negotiated: "burn-in", enabled: false },
-] as const)("publishes an Android screen share with $scenario", async ({ negotiated, enabled }) => {
+  { scenario: "iOS ReplayKit geometry, with burn-in negotiated but not verified", negotiated: "burn-in", enabled: true, platform: "ios" },
+] as const)("publishes a screen share with $scenario", async (scenario) => {
+  const { negotiated, enabled } = scenario;
+  const isIOS = "platform" in scenario;
+  if (isIOS) ios.platform.OS = "ios";
   const grant = opaqueAccessGrant("screen-share");
   const client = createSpaceClient({ space: "screen-share", baseUrl: "http://127.0.0.1:1", getAccess: async () => grant });
   const { client: sync, sockets } = recordingClient();
@@ -122,9 +154,10 @@ it.each([
     const binds = socket.frames().filter((frame) => frame.type === "annotation_command" && (frame.command as { readonly kind?: string } | undefined)?.kind === "bind");
     const controls = screenAnnotationFor(client);
     if (enabled) {
-      expect(binds).toMatchObject([{ type: "annotation_command", command: { kind: "bind", publication_id: publicationId, frame: frameSize, burned_in: true } }]);
+      expect(binds).toMatchObject([{ type: "annotation_command", command: { kind: "bind", publication_id: publicationId, frame: frameSize, ...(!isIOS ? { burned_in: true } : {}) } }]);
+      if (isIOS) expect(binds[0]?.command).not.toHaveProperty("burned_in");
       const state: ScreenAnnotationState = {
-        layer: { layer_id: recoveryId, publication_id: publicationId, sharer_id: ownerId, frame: frameSize, burned_in: true },
+        layer: { layer_id: recoveryId, publication_id: publicationId, sharer_id: ownerId, frame: frameSize, ...(!isIOS ? { burned_in: true } : {}) },
         fence: 1,
         revision: 1,
         paused: false,
@@ -134,7 +167,7 @@ it.each([
       socket.receive({ type: "annotation_state", state, server_at_ms: Date.now() });
       await settle();
       expect(controls.getSnapshot()).toMatchObject({ status: "ready", state });
-      expect(capture.verifiedAnnotationCapture(track!)).toEqual(frameSize);
+      expect(capture.verifiedAnnotationCapture(track!)).toEqual(isIOS ? undefined : frameSize);
     } else {
       expect(binds).toEqual([]);
       expect(controls.getSnapshot()).toEqual({ status: "unavailable" });
@@ -143,7 +176,7 @@ it.each([
 
     capture.releaseTrack(track!);
     expect(track?.readyState).toBe("ended");
-    expect(nativeEvents).toEqual(enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
+    expect(nativeEvents).toEqual(isIOS ? [] : enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
   } finally {
     detach();
     annotation.dispose();

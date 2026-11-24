@@ -11,7 +11,8 @@ import { useMeasuredRef } from "../frame/measurement";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
-import { AndroidShareAnnotationControls, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
+import { ShareAnnotationControls, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
+import type { ShareAnnotationPiPControls } from "../screen-annotation/ShareAnnotationPiP";
 import type { StageAnnotation } from "../screen-annotation/model";
 import { useTheme } from "../theme/theme";
 import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
@@ -25,6 +26,7 @@ import { useStageVideoTiles } from "./video-tile-visibility";
 
 export type StageProps = {
   readonly annotation?: StageAnnotation;
+  readonly shareAnnotationPiP?: ShareAnnotationPiPControls | null;
   /** The stage box in screen points, from `frameRegions`. */
   readonly frame: Frame;
   /** The "+N" tile opens People. */
@@ -47,11 +49,13 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
   const { roster } = snapshot.participants;
   const others = roster.filter((person) => person.participantId !== selfId).map((person) => person.participantId);
   const hasSelf = roster.some((person) => person.participantId === selfId);
+  const localShare = snapshot.media.screenShare;
+  const ownShare = Platform.OS === "ios" ? localShare.publicationId : roster.find((person) => person.participantId === selfId)?.media.screenSharePublicationId;
   return {
     selfId,
     present: (hasSelf && selfId !== null ? [selfId, ...others] : others).join("\n"),
     speaker: roster.find((person) => person.presence.activeSpeaker)?.participantId ?? null,
-    ownShare: Platform.OS === "android" && snapshot.media.screenShare.state === "enabled" ? (roster.find((person) => person.participantId === selfId)?.media.screenSharePublicationId ?? null) : null,
+    ownShare: localShare.state === "enabled" ? (ownShare ?? null) : null,
     sharer: roster.find((person) => person.participantId !== selfId && person.media.screenShare === "active")?.participantId ?? null,
     board: snapshot.whiteboard.engine.presenting,
   };
@@ -62,7 +66,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
  * board. Tiles are keyed by participant and moved with `MovingFrame`, so a video view is never
  * remounted by a move, a layout switch or a sheet; only tiles on the stage subscribe to video.
  */
-export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: StageProps): React.JSX.Element {
+export const Stage = memo(function Stage({ annotation, frame, onOpenPeople, shareAnnotationPiP }: StageProps): React.JSX.Element {
   const client = useSpaceClient();
   const toasts = useToasts();
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the native board scene session for this client; release it through ownNativeBoardSession cleanup.
@@ -132,7 +136,7 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
     <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {items.map((item) => (
         <StageTile
-          annotation={structure.ownShare ? undefined : annotation}
+          annotation={Platform.OS === "android" && structure.ownShare ? undefined : annotation}
           content={content}
           item={item}
           key={itemKey(item)}
@@ -146,7 +150,7 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
           pinned={pinned}
         />
       ))}
-      {annotation && structure.ownShare && structure.selfId ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} /> : null}
+      {annotation && (shareAnnotationPiP || (structure.ownShare && structure.selfId)) ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} pip={shareAnnotationPiP} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
   );
@@ -208,7 +212,7 @@ const styles = StyleSheet.create({
   moreText: { fontFamily: fontFamilies[600], fontSize: fontSizes.title, lineHeight: 22 * 1.4 },
 });
 
-function LiveShareAnnotationControls(props: Omit<React.ComponentProps<typeof AndroidShareAnnotationControls>, "people">): React.JSX.Element | null {
+function LiveShareAnnotationControls(props: Omit<React.ComponentProps<typeof ShareAnnotationControls>, "people">): React.JSX.Element | null {
   const people = useAnnotationPeople(props.participantId);
-  return <AndroidShareAnnotationControls {...props} people={people} />;
+  return <ShareAnnotationControls {...props} people={people} />;
 }

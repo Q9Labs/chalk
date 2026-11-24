@@ -2,13 +2,14 @@ import { corners, fixed, fontSizes, palettes, space, type as callType } from "..
 import type { ScreenAnnotationClient, ScreenAnnotationMark, ScreenAnnotationSnapshot, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { annotationRendererUrl } from "@q9labsai/chalk-react-native/dev";
 import { ScreenAnnotationLayer } from "@q9labsai/chalk-react-native/ui";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AppState, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { DeviceLayoutProvider } from "../../../sdks/typescript/react-native/src/frame/device-layout";
 import { Portal, PortalHost, PortalProvider } from "../../../sdks/typescript/react-native/src/frame/portal";
 import { ToastProvider } from "../../../sdks/typescript/react-native/src/primitives/toast/ToastStack";
-import { AndroidShareAnnotationControls } from "../../../sdks/typescript/react-native/src/screen-annotation/AnnotationDock";
+import { ShareAnnotationControls } from "../../../sdks/typescript/react-native/src/screen-annotation/AnnotationDock";
+import { useShareAnnotationPiP } from "../../../sdks/typescript/react-native/src/screen-annotation/ShareAnnotationPiP";
 
 const publicationId = "fixture-screen";
 const sharerId = "a35a71ce-912f-4c14-a283-dd2eaa6490e8";
@@ -90,6 +91,20 @@ function createFixture() {
     count: () => state.marks.length,
     pause: () => update({ paused: !state.paused, fence: state.fence + 1 }),
     access: () => update({ access: { ...state.access, can_draw: !state.access.can_draw, requests: [] }, fence: state.fence + 1 }),
+    receiveViewerMark: () =>
+      client.dispatch(
+        { layerId: state.layer.layer_id, fence: state.fence },
+        {
+          kind: "commit",
+          draft: {
+            mark_id: "background-viewer-mark",
+            color: initial.access.default_color,
+            width: 800,
+            lifetime: "keep",
+            shape: { kind: "arrow", from_point: { x: 11000, y: 17000 }, to_point: { x: 50000, y: 40000 } },
+          },
+        },
+      ),
     present: (presenting: boolean) => update({ access: { ...state.access, can_moderate: presenting } }),
   };
 }
@@ -101,6 +116,8 @@ function AnnotationFixture(): React.JSX.Element {
   const frame = { x: 0, y: 0, width: frameWidth, height: frameWidth * 0.625 };
   const [rendererUrl, setRendererUrl] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const shareSource = useMemo(() => ({ getShare: () => (presenting ? { trackId: "fixture-broadcast", publicationId, participantId: sharerId } : null), subscribe: () => () => undefined }), [presenting]);
+  const pip = useShareAnnotationPiP(shareSource, fixture.client);
   const count = useSyncExternalStore(fixture.client.subscribe, fixture.count, fixture.count);
   useEffect(() => {
     let active = true;
@@ -111,6 +128,14 @@ function AnnotationFixture(): React.JSX.Element {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    if (Platform.OS !== "ios" || !presenting) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") void fixture.receiveViewerMark();
+    });
+    return () => subscription.remove();
+  }, [fixture, presenting]);
+
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Maya’s screen</Text>
@@ -118,7 +143,7 @@ function AnnotationFixture(): React.JSX.Element {
         {count} committed marks
       </Text>
       {presenting ? (
-        <AndroidShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} people={[{ id: viewer.id, name: viewer.name, canDraw: false, manages: false }]} />
+        <ShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} pip={pip} people={[{ id: viewer.id, name: viewer.name, canDraw: false, manages: false }]} />
       ) : (
         <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
           <ScreenAnnotationLayer
@@ -153,7 +178,7 @@ function AnnotationFixture(): React.JSX.Element {
           <Text style={styles.caption}>Toggle viewer access</Text>
         </Pressable>
       </View>
-      {Platform.OS === "android" ? (
+      {Platform.OS === "android" || Platform.OS === "ios" ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => {

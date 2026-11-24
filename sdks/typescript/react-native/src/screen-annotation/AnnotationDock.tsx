@@ -8,13 +8,14 @@ import { frameRegions } from "../frame/regions";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { useSpaceSelector } from "../stage/space-selector";
 import { useTheme } from "../theme/theme";
+import { ShareAnnotationPiP, type ShareAnnotationPiPControls } from "./ShareAnnotationPiP";
 import { ManageMarks, ToolButton } from "./ScreenAnnotationToolbar";
 import { hasTarget, matchLayer, targetFor, type StageAnnotation } from "./model";
 
 const selectRoster = (snapshot: SpaceSnapshot) => snapshot.participants.roster;
 const selectAccess = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access;
 
-export function useAnnotationPeople(participantId: string) {
+export function useAnnotationPeople(participantId: string | null) {
   const roster = useSpaceSelector(selectRoster);
   const access = useSpaceSelector(selectAccess);
   return roster
@@ -40,18 +41,32 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
 }
 
 /** Controls live in Chalk, not in the system ink window. */
-export function AndroidShareAnnotationControls({ annotation, publicationId, participantId, people }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string; readonly people: ReturnType<typeof useAnnotationPeople> }): React.JSX.Element | null {
+export function ShareAnnotationControls({
+  annotation,
+  publicationId,
+  participantId,
+  people,
+  pip,
+}: {
+  readonly annotation: StageAnnotation;
+  readonly publicationId: string | null;
+  readonly participantId: string | null;
+  readonly people: ReturnType<typeof useAnnotationPeople>;
+  readonly pip?: ShareAnnotationPiPControls | null;
+}): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
   const { colors } = useTheme();
   const [showPolicy, setShowPolicy] = useState(false);
   const subscribe = useCallback((listener: () => void) => client.subscribe(listener), [client]);
-  const get = useCallback(() => matchLayer(client, publicationId), [client, publicationId]);
-  const state = useSyncExternalStore(subscribe, get, get);
-  if (!state?.access.can_moderate || state.layer.sharer_id !== participantId || (annotation.publicationId && annotation.publicationId !== publicationId)) return null;
+  const get = useCallback(() => (publicationId ? matchLayer(client, publicationId) : null), [client, publicationId]);
+  const layer = useSyncExternalStore(subscribe, get, get);
+  const state = layer?.access.can_moderate && layer.layer.sharer_id === participantId && (!annotation.publicationId || annotation.publicationId === publicationId) ? layer : null;
+  if (!state && !pip) return null;
 
-  const target = targetFor(state);
   const run = async (command: ScreenAnnotationCommand) => {
+    if (!state) return;
+    const target = targetFor(state);
     if (!hasTarget(get(), target)) return;
     try {
       const result = await client.dispatch(target, command);
@@ -64,12 +79,15 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
 
   return (
     <AnnotationDock>
-      <View style={styles.controls}>
-        <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
-        <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
-        {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
-      </View>
-      {showPolicy && state.access.can_manage_policy ? (
+      {pip ? <ShareAnnotationPiP key={pip.state.trackId} {...pip} /> : null}
+      {state ? (
+        <View style={styles.controls}>
+          <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
+          <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />
+          {state.access.can_manage_policy ? <ToolButton label="Who can draw" selected={showPolicy} onPress={() => setShowPolicy(!showPolicy)} /> : null}
+        </View>
+      ) : null}
+      {showPolicy && state?.access.can_manage_policy ? (
         <ScrollView style={[styles.policy, { backgroundColor: colors.canvas }]} contentContainerStyle={styles.policyContent}>
           <ManageMarks state={state} people={people} nowMs={client.serverNowMs()} onCommand={(command) => void run(command)} showPauseAndClear={false} />
         </ScrollView>

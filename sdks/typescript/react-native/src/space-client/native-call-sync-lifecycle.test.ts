@@ -1,6 +1,6 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { expect, it } from "vitest";
-import { createAndroidCallSyncLifecycle } from "./android-call-sync-lifecycle";
+import { createNativeCallSyncLifecycle } from "./native-call-sync-lifecycle";
 
 function observeCall() {
   let notifyDevice: ((state: string) => void) | undefined;
@@ -28,7 +28,7 @@ function observeCall() {
     },
   };
   const events: string[] = [];
-  const stop = createAndroidCallSyncLifecycle(appState, () => client).subscribe((event) => events.push(event));
+  const stop = createNativeCallSyncLifecycle(appState, () => client).subscribe((event) => events.push(event));
   return {
     events,
     stop,
@@ -77,5 +77,17 @@ it("does not hold Sync open after leaving and detaches both subscriptions", () =
   call.stop();
   call.device("active");
   call.connection("live");
+  expect(call.events).toEqual(["active", "inactive"]);
+});
+
+it("keeps Sync active for iOS PiP until the backgrounded broadcast stops", () => {
+  const call = observeCall();
+  call.share("enabled");
+  call.device("inactive");
+  call.device("background");
+  call.connection("reconnecting");
+  expect(call.events).toEqual(["active"]);
+
+  call.share("disabled");
   expect(call.events).toEqual(["active", "inactive"]);
 });
