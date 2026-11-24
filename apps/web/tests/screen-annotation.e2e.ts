@@ -178,7 +178,7 @@ async function joinGuest(host: Page, page: Page, invite: string, name: string) {
 async function chooseShare(page: Page, source: "Window" | "Entire screen", installer?: string) {
   await showCallControls(page);
   await page.getByRole("button", { name: "Share options", exact: true }).click();
-  const download = page.getByRole("menuitem", { name: "Get Chalk Helper", exact: true });
+  const download = page.getByRole("menuitem", { name: /^Get Chalk Helper\b/ });
   if (installer) expect(await download.getAttribute("href")).toBe(installer);
   else expect(await download.count()).toBe(0);
   await page.getByRole("menuitemradio", { name: source, exact: true }).click();
