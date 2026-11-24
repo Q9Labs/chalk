@@ -71,7 +71,7 @@ sfu_check_otlp_tokens() {
   shift
   endpoint="${endpoint%/}"
   [[ -f "${dir}/otlp-headers" ]] || return 0
-  if [[ "$endpoint" != https://* ]]; then
+  if [[ "$endpoint" != [Hh][Tt][Tt][Pp][Ss]://* ]]; then
     echo "warning: not checking the OTLP tokens, because ${endpoint} is not https" >&2
     return 0
   fi
