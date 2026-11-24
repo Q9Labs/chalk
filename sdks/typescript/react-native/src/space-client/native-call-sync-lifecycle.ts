@@ -8,7 +8,7 @@ type CallState = {
   subscribe(listener: () => void): () => void;
 };
 
-export function createAndroidCallSyncLifecycle(appState: ReactNativeAppState, getClient: () => CallState): ReturnType<typeof createReactNativeSyncLifecycle> {
+export function createNativeCallSyncLifecycle(appState: ReactNativeAppState, getClient: () => CallState): ReturnType<typeof createReactNativeSyncLifecycle> {
   return {
     subscribe(listener) {
       const client = getClient();
@@ -16,8 +16,8 @@ export function createAndroidCallSyncLifecycle(appState: ReactNativeAppState, ge
       let lastEvent: "active" | "inactive" | undefined;
       const update = () => {
         const { connection, media } = client.getSnapshot();
-        // The projection chooser backgrounds Chalk before the capture promise
-        // resolves. Losing Sync then cancels the pending screen publication.
+        // Android can background during projection consent. Both platforms need
+        // Sync while sharing another app, including for remote annotation updates.
         const inCall = connection.status === "live" || connection.status === "reconnecting";
         const sharing = media.screenShare.state === "requesting" || media.screenShare.state === "enabled";
         const event = deviceState === "active" || (inCall && sharing) ? "active" : "inactive";
