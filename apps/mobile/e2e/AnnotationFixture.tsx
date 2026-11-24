@@ -2,13 +2,14 @@ import { corners, fixed, fontSizes, palettes, space, type as callType } from "..
 import type { ScreenAnnotationClient, ScreenAnnotationMark, ScreenAnnotationSnapshot, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { annotationRendererUrl } from "@q9labsai/chalk-react-native/dev";
 import { ScreenAnnotationLayer } from "@q9labsai/chalk-react-native/ui";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AppState, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { DeviceLayoutProvider } from "../../../sdks/typescript/react-native/src/frame/device-layout";
 import { Portal, PortalHost, PortalProvider } from "../../../sdks/typescript/react-native/src/frame/portal";
 import { ToastProvider } from "../../../sdks/typescript/react-native/src/primitives/toast/ToastStack";
 import { ShareAnnotationControls } from "../../../sdks/typescript/react-native/src/screen-annotation/AnnotationDock";
+import { useShareAnnotationPiP } from "../../../sdks/typescript/react-native/src/screen-annotation/ShareAnnotationPiP";
 
 const publicationId = "fixture-screen";
 const sharerId = "a35a71ce-912f-4c14-a283-dd2eaa6490e8";
@@ -115,6 +116,8 @@ function AnnotationFixture(): React.JSX.Element {
   const frame = { x: 0, y: 0, width: frameWidth, height: frameWidth * 0.625 };
   const [rendererUrl, setRendererUrl] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const shareSource = useMemo(() => ({ getShare: () => (presenting ? { trackId: "fixture-broadcast", publicationId, participantId: sharerId } : null), subscribe: () => () => undefined }), [presenting]);
+  const pip = useShareAnnotationPiP(shareSource, fixture.client);
   const count = useSyncExternalStore(fixture.client.subscribe, fixture.count, fixture.count);
   useEffect(() => {
     let active = true;
@@ -140,7 +143,7 @@ function AnnotationFixture(): React.JSX.Element {
         {count} committed marks
       </Text>
       {presenting ? (
-        <ShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} people={[{ id: viewer.id, name: viewer.name, canDraw: false, manages: false }]} />
+        <ShareAnnotationControls annotation={{ client: fixture.client }} publicationId={publicationId} participantId={sharerId} pip={pip} people={[{ id: viewer.id, name: viewer.name, canDraw: false, manages: false }]} />
       ) : (
         <View style={{ width: frame.width, height: frame.height, overflow: "hidden" }}>
           <ScreenAnnotationLayer

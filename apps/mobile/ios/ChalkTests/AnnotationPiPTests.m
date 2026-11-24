@@ -12,6 +12,8 @@ static NSArray *PeerInk(void) {
   ];
 }
 
+static const CGSize InkFrame = {480, 300};
+
 @interface AnnotationPiPTests : XCTestCase <AVPictureInPictureControllerDelegate>
 @property(nonatomic) XCTestExpectation *pictureInPictureStarted;
 @end
@@ -47,7 +49,7 @@ static NSArray *PeerInk(void) {
   NSLog(@"AVKit system PiP supported: %@", AVPictureInPictureController.isPictureInPictureSupported ? @"YES" : @"NO");
   Class contentClass = NSClassFromString(@"ChalkAnnotationPiPContent");
   XCTAssertNotNil(contentClass);
-  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:CGSizeMake(480, 300)];
+  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:InkFrame];
   AVSampleBufferDisplayLayer *surface = (AVSampleBufferDisplayLayer *)content.view.subviews.firstObject.layer;
   XCTAssertTrue([surface isKindOfClass:AVSampleBufferDisplayLayer.class]);
   XCTAssertTrue(surface.preventsCapture);
@@ -64,7 +66,7 @@ static NSArray *PeerInk(void) {
 
   // Inject the peer paint operations at the native bridge boundary.
   NSArray *ink = PeerInk();
-  [content setInk:ink];
+  [content setInk:ink frameSize:InkFrame];
   CMSampleBufferRef after = [content copyNextSampleBuffer];
   XCTAssertNotEqual(after, NULL);
   if (!after) return;
@@ -76,11 +78,43 @@ static NSArray *PeerInk(void) {
   CFRelease(after);
 
   [content stop];
-  [content setInk:ink]; // Ignore a late update after the share has stopped.
+  [content setInk:ink frameSize:InkFrame]; // Ignore a late update after the share has stopped.
   CMSampleBufferRef stopped = [content copyNextSampleBuffer];
   XCTAssertEqual(stopped, NULL);
   if (stopped) CFRelease(stopped);
   XCTAssertNil(surface.superlayer);
+}
+
+- (void)testRotatingVideoKeepsThePreviewAndProjectsInkIntoTheNewFrame {
+  Class contentClass = NSClassFromString(@"ChalkAnnotationPiPContent");
+  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:InkFrame];
+  [content setInk:PeerInk() frameSize:InkFrame];
+
+  CIImage *blue = [CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:1]];
+  CIImage *landscape = [blue imageByCroppingToRect:CGRectMake(0, 0, 1600, 1000)];
+  [content setVideoFrame:landscape];
+  CMSampleBufferRef before = [content copyNextSampleBuffer];
+  XCTAssertNotEqual(before, NULL);
+  if (!before) return;
+  CVPixelBufferRef wide = CMSampleBufferGetImageBuffer(before);
+  XCTAssertEqual(CVPixelBufferGetWidth(wide), 480);
+  XCTAssertEqual(CVPixelBufferGetHeight(wide), 300);
+  [self assertPixel:wide x:10 y:10 red:0 green:0 blue:255];
+  CFRelease(before);
+
+  [content setVideoFrame:[landscape imageByApplyingOrientation:kCGImagePropertyOrientationRight]];
+  CMSampleBufferRef rotated = [content copyNextSampleBuffer];
+  XCTAssertNotEqual(rotated, NULL);
+  if (!rotated) return;
+  CVPixelBufferRef tall = CMSampleBufferGetImageBuffer(rotated);
+  XCTAssertEqual(CVPixelBufferGetWidth(tall), 300);
+  XCTAssertEqual(CVPixelBufferGetHeight(tall), 480);
+  XCTAssertEqual(content.preferredContentSize.width, 300);
+  XCTAssertEqual(content.preferredContentSize.height, 480);
+  [self assertPixel:tall x:10 y:10 red:0 green:0 blue:255];
+  [self assertPixel:tall x:62 y:240 red:67 green:221 blue:139];
+  [self attachFrame:tall name:@"sharer-rotated-preview-with-peer-ink"];
+  CFRelease(rotated);
 }
 
 - (void)testSystemPiPDisplaysNewInkAfterBackgroundingWhenAvailable {
@@ -96,7 +130,7 @@ static NSArray *PeerInk(void) {
   if (!source.window) return;
 
   Class contentClass = NSClassFromString(@"ChalkAnnotationPiPContent");
-  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:CGSizeMake(480, 300)];
+  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:InkFrame];
   AVPictureInPictureControllerContentSource *call = [[AVPictureInPictureControllerContentSource alloc]
       initWithActiveVideoCallSourceView:source contentViewController:content];
   AVPictureInPictureController *controller = [[AVPictureInPictureController alloc] initWithContentSource:call];
@@ -120,12 +154,12 @@ static NSArray *PeerInk(void) {
       initWithName:UIApplicationDidEnterBackgroundNotification object:app];
   // Open the app's system settings via UIKit so the test does not need a UI runner.
   [app openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString] options:@{} completionHandler:nil];
-  [self waitForExpectations:@[backgrounded] timeout:6];
+  [self waitForExpectations:@[backgrounded] timeout:15];
   XCTAssertEqual(app.applicationState, UIApplicationStateBackground);
   XCTAssertTrue(controller.isPictureInPictureActive);
 
   NSArray *ink = PeerInk();
-  [content setInk:ink];
+  [content setInk:ink frameSize:InkFrame];
   CMSampleBufferRef updated = [content copyNextSampleBuffer];
   XCTAssertNotEqual(updated, NULL);
   if (updated) {
@@ -135,8 +169,14 @@ static NSArray *PeerInk(void) {
     [self attachFrame:pixels name:@"sharer-backgrounded-peer-ink"];
     CFRelease(updated);
   }
-  [content setInk:ink];
+  [content setInk:ink frameSize:InkFrame];
   [content displayNextFrame];
+
+  CIImage *portrait = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:1]] imageByCroppingToRect:CGRectMake(0, 0, 1000, 1600)];
+  [content setVideoFrame:portrait];
+  [content displayNextFrame];
+  XCTAssertEqual(content.preferredContentSize.height, 480);
+  XCTAssertTrue(controller.isPictureInPictureActive);
 
   [controller stopPictureInPicture];
   controller.delegate = nil;

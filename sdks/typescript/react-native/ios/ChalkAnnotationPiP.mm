@@ -1,22 +1,32 @@
 #import <AVKit/AVKit.h>
 #import <React/RCTEventEmitter.h>
+#import <React/RCTLog.h>
 #import <React/RCTUtils.h>
 #import "ChalkAnnotationFrameSource.h"
 #import "ChalkAnnotationPiPContent.h"
 
 static NSString *const PiPStoppedEvent = @"chalkAnnotationPiPStopped";
 
+static NSString *ChalkPiPErrorDomain(NSError *error) {
+  NSString *domain = error.domain;
+  if ([domain isEqualToString:AVKitErrorDomain] || [domain isEqualToString:AVFoundationErrorDomain] ||
+      [domain isEqualToString:NSOSStatusErrorDomain] || [domain isEqualToString:NSCocoaErrorDomain]) return domain;
+  return @"other";
+}
+
+static BOOL ChalkPiPValidFrameSize(CGFloat width, CGFloat height) {
+  return isfinite(width) && isfinite(height) && width >= 2 && height >= 2 && MAX(width, height) <= 480;
+}
+
 @interface ChalkAnnotationPiP : RCTEventEmitter <AVPictureInPictureControllerDelegate>
 @end
 
 @implementation ChalkAnnotationPiP {
-  NSString *_publication;
+  NSString *_sessionId;
   AVPictureInPictureController *_controller;
   ChalkAnnotationPiPContent *_content;
   ChalkAnnotationObservation *_observation;
   RTKRTCVideoFrame *_lastFrame;
-  CIContext *_imageContext;
-  CGSize _size;
   NSTimer *_timer;
   RCTPromiseResolveBlock _startResult;
   BOOL _launching;
@@ -35,7 +45,7 @@ RCT_EXPORT_METHOD(supported:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromise
   resolve(@([AVPictureInPictureController isPictureInPictureSupported]));
 }
 
-RCT_EXPORT_METHOD(start:(NSString *)publication
+RCT_EXPORT_METHOD(start:(NSString *)sessionId
                   trackId:(NSString *)trackId
                   width:(CGFloat)width
                   height:(CGFloat)height
@@ -43,23 +53,33 @@ RCT_EXPORT_METHOD(start:(NSString *)publication
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   UIView *source = RCTPresentedViewController().view;
-  if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive || !source.window ||
-      ![AVPictureInPictureController isPictureInPictureSupported] ||
-      !isfinite(width) || !isfinite(height) || width < 2 || height < 2 || MAX(width, height) > 480) {
+  if (![AVPictureInPictureController isPictureInPictureSupported]) {
+    RCTLogWarn(@"chalk.annotation_pip.start_failed reason=unsupported");
+    resolve(@NO);
+    return;
+  }
+  if (!ChalkPiPValidFrameSize(width, height)) {
+    RCTLogWarn(@"chalk.annotation_pip.start_failed reason=invalid_frame_size");
+    resolve(@NO);
+    return;
+  }
+  if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive || !source.window) {
+    RCTLogWarn(@"chalk.annotation_pip.start_failed reason=source_view_unavailable");
     resolve(@NO);
     return;
   }
 
   [self endSession];
-  _publication = [publication copy];
-  _size = CGSizeMake(width, height);
-  _content = [[ChalkAnnotationPiPContent alloc] initWithFrameSize:_size];
-  [_content setInk:ink];
+  _sessionId = [sessionId copy];
+  CGSize size = CGSizeMake(width, height);
+  _content = [[ChalkAnnotationPiPContent alloc] initWithFrameSize:size];
+  [_content setInk:ink frameSize:size];
 
   AVPictureInPictureControllerContentSource *contentSource =
       [[AVPictureInPictureControllerContentSource alloc] initWithActiveVideoCallSourceView:source contentViewController:_content];
   _controller = [[AVPictureInPictureController alloc] initWithContentSource:contentSource];
   if (!_controller) {
+    RCTLogWarn(@"chalk.annotation_pip.start_failed reason=controller_unavailable");
     [self endSession];
     resolve(@NO);
     return;
@@ -86,28 +106,32 @@ RCT_EXPORT_METHOD(start:(NSString *)publication
     _launching = YES;
     [controller startPictureInPicture];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-      if (self->_controller == controller && self->_startResult) [self endSession];
+      if (self->_controller == controller && self->_startResult) {
+        RCTLogWarn(@"chalk.annotation_pip.start_failed reason=start_callback_timeout");
+        [self endSession];
+      }
     });
   } else if (attempts > 0) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
       [self startWhenPossible:controller attempts:attempts - 1];
     });
   } else {
+    RCTLogWarn(@"chalk.annotation_pip.start_failed reason=video_call_source_not_possible");
     [self endSession];
   }
 }
 
-RCT_EXPORT_METHOD(update:(NSString *)publication ink:(NSArray<NSArray *> *)ink) {
-  if (![_publication isEqualToString:publication]) return;
-  [_content setInk:ink];
+RCT_EXPORT_METHOD(update:(NSString *)sessionId width:(CGFloat)width height:(CGFloat)height ink:(NSArray<NSArray *> *)ink) {
+  if (![_sessionId isEqualToString:sessionId] || !ChalkPiPValidFrameSize(width, height)) return;
+  [_content setInk:ink frameSize:CGSizeMake(width, height)];
 }
 
-RCT_EXPORT_METHOD(stop:(NSString *)publication) {
-  if ([_publication isEqualToString:publication]) [self endSession];
+RCT_EXPORT_METHOD(stop:(NSString *)sessionId) {
+  if ([_sessionId isEqualToString:sessionId]) [self endSession];
 }
 
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)controller {
-  if (_controller != controller) return;
+  if (_controller != controller || !_startResult) return;
   _launching = NO;
   _startResult(@YES);
   _startResult = nil;
@@ -117,7 +141,9 @@ RCT_EXPORT_METHOD(stop:(NSString *)publication) {
 }
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)controller failedToStartPictureInPictureWithError:(NSError *)error {
-  if (_controller == controller) [self endSession];
+  if (_controller != controller) return;
+  RCTLogWarn(@"chalk.annotation_pip.start_failed reason=avkit_error domain=%@ code=%ld", ChalkPiPErrorDomain(error), (long)error.code);
+  [self endSession];
 }
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)controller {
@@ -131,8 +157,9 @@ RCT_EXPORT_METHOD(stop:(NSString *)publication) {
 }
 
 - (void)endSession {
-  NSString *publication = _publication;
-  _publication = nil;
+  NSString *sessionId = _sessionId;
+  BOOL notifyStop = _controller && !_startResult && _listening;
+  _sessionId = nil;
   [_timer invalidate];
   _timer = nil;
   if (_startResult) _startResult(@NO);
@@ -147,7 +174,7 @@ RCT_EXPORT_METHOD(stop:(NSString *)publication) {
   [_observation.track removeRenderer:_observation];
   _observation = nil;
   _lastFrame = nil;
-  if (publication && _listening) [self sendEventWithName:PiPStoppedEvent body:publication];
+  if (sessionId && notifyStop) [self sendEventWithName:PiPStoppedEvent body:sessionId];
 }
 
 - (void)invalidate {
@@ -159,27 +186,12 @@ RCT_EXPORT_METHOD(stop:(NSString *)publication) {
   [super invalidate];
 }
 
-- (UIImage *)backgroundImageForFrame:(RTKRTCVideoFrame *)frame {
-  CGSize frameSize = ChalkAnnotationFrameSize(frame);
-  // Don't place old normalized coordinates over a rotated frame.
-  if (frameSize.height <= 0 || fabs(frameSize.width / frameSize.height - _size.width / _size.height) > 0.015) return nil;
-  CIImage *image = ChalkAnnotationFrameImage(frame);
-  if (!image) return nil;
-  if (!_imageContext) _imageContext = [CIContext contextWithOptions:@{kCIContextUseSoftwareRenderer: @YES}];
-  image = [image imageByApplyingTransform:CGAffineTransformMakeScale(_size.width / image.extent.size.width, _size.height / image.extent.size.height)];
-  CGImageRef scaled = [_imageContext createCGImage:image fromRect:image.extent];
-  if (!scaled) return nil;
-  UIImage *background = [UIImage imageWithCGImage:scaled];
-  CGImageRelease(scaled);
-  return background;
-}
-
 - (void)draw {
   if (![_content isReadyToDisplay]) return;
   RTKRTCVideoFrame *frame = _observation.frame;
   if (frame != _lastFrame) {
     _lastFrame = frame;
-    [_content setBackgroundImage:[self backgroundImageForFrame:frame]];
+    [_content setVideoFrame:ChalkAnnotationFrameImage(frame)];
   }
   [_content displayNextFrame];
 }

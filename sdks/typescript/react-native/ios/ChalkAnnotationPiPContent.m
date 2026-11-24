@@ -13,14 +13,17 @@
 @implementation ChalkAnnotationPiPContent {
   ChalkAnnotationPiPView *_surface;
   CGSize _size;
+  CGSize _inkSize;
   NSArray<NSArray *> *_ink;
   UIImage *_background;
+  CIContext *_imageContext;
   BOOL _dirty;
 }
 
 - (instancetype)initWithFrameSize:(CGSize)size {
   if ((self = [super init])) {
     _size = size;
+    _inkSize = size;
     self.preferredContentSize = size;
     _surface = [[ChalkAnnotationPiPView alloc] initWithFrame:self.view.bounds];
     _surface.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -33,13 +36,29 @@
   return self;
 }
 
-- (void)setInk:(NSArray<NSArray *> *)ink {
+- (void)setInk:(NSArray<NSArray *> *)ink frameSize:(CGSize)size {
   _ink = ink;
+  _inkSize = size;
   _dirty = YES;
 }
 
-- (void)setBackgroundImage:(UIImage *)image {
-  _background = image;
+- (void)setVideoFrame:(CIImage *)image {
+  if (!image) return;
+  CGSize size = image.extent.size;
+  if (size.width <= 0 || size.height <= 0) return;
+  CGFloat scale = 480 / MAX(size.width, size.height);
+  CGSize preview = CGSizeMake(MAX(2, round(size.width * scale)), MAX(2, round(size.height * scale)));
+  CIImage *downscaled = [image imageByApplyingTransform:CGAffineTransformMakeScale(preview.width / size.width, preview.height / size.height)];
+  if (!_imageContext) _imageContext = [CIContext contextWithOptions:@{kCIContextUseSoftwareRenderer: @YES}];
+  CGImageRef pixels = [_imageContext createCGImage:downscaled fromRect:downscaled.extent];
+  if (!pixels) return;
+  if (!CGSizeEqualToSize(_size, preview)) {
+    _size = preview;
+    self.preferredContentSize = preview;
+    [_surface.display flush];
+  }
+  _background = [UIImage imageWithCGImage:pixels];
+  CGImageRelease(pixels);
   _dirty = YES;
 }
 
@@ -96,6 +115,9 @@
   if (_background) CGContextDrawImage(context, bounds, _background.CGImage);
   CGContextTranslateCTM(context, 0, _size.height);
   CGContextScaleCTM(context, 1, -1);
+  // Sync paint coordinates follow the annotation layer while the video can
+  // rotate independently. Keep the same normalized anchors on the live frame.
+  CGContextScaleCTM(context, _size.width / _inkSize.width, _size.height / _inkSize.height);
   ChalkAnnotationPaintPiP(context, _ink);
   CGContextRelease(context);
   CVPixelBufferUnlockBaseAddress(pixels, 0);

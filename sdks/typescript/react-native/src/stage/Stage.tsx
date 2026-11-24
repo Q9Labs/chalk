@@ -12,6 +12,7 @@ import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
 import { ShareAnnotationControls, useAnnotationPeople } from "../screen-annotation/AnnotationDock";
+import type { ShareAnnotationPiPControls } from "../screen-annotation/ShareAnnotationPiP";
 import type { StageAnnotation } from "../screen-annotation/model";
 import { useTheme } from "../theme/theme";
 import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
@@ -25,6 +26,7 @@ import { useStageVideoTiles } from "./video-tile-visibility";
 
 export type StageProps = {
   readonly annotation?: StageAnnotation;
+  readonly shareAnnotationPiP?: ShareAnnotationPiPControls | null;
   /** The stage box in screen points, from `frameRegions`. */
   readonly frame: Frame;
   /** The "+N" tile opens People. */
@@ -39,7 +41,6 @@ type Structure = {
   readonly sharer: string | null;
   readonly board: boolean;
   readonly ownShare: string | null;
-  readonly ownShareTrackId: string | undefined;
 };
 
 /** Only what decides where tiles go, so a mute or a hand raise never re-renders the stage. */
@@ -55,7 +56,6 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
     present: (hasSelf && selfId !== null ? [selfId, ...others] : others).join("\n"),
     speaker: roster.find((person) => person.presence.activeSpeaker)?.participantId ?? null,
     ownShare: localShare.state === "enabled" ? (ownShare ?? null) : null,
-    ownShareTrackId: Platform.OS === "ios" && ownShare ? localShare.track?.id : undefined,
     sharer: roster.find((person) => person.participantId !== selfId && person.media.screenShare === "active")?.participantId ?? null,
     board: snapshot.whiteboard.engine.presenting,
   };
@@ -66,7 +66,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
  * board. Tiles are keyed by participant and moved with `MovingFrame`, so a video view is never
  * remounted by a move, a layout switch or a sheet; only tiles on the stage subscribe to video.
  */
-export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: StageProps): React.JSX.Element {
+export const Stage = memo(function Stage({ annotation, frame, onOpenPeople, shareAnnotationPiP }: StageProps): React.JSX.Element {
   const client = useSpaceClient();
   const toasts = useToasts();
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the native board scene session for this client; release it through ownNativeBoardSession cleanup.
@@ -150,7 +150,7 @@ export const Stage = memo(function Stage({ annotation, frame, onOpenPeople }: St
           pinned={pinned}
         />
       ))}
-      {annotation && structure.ownShare && structure.selfId ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} trackId={structure.ownShareTrackId} /> : null}
+      {annotation && (shareAnnotationPiP || (structure.ownShare && structure.selfId)) ? <LiveShareAnnotationControls annotation={annotation} publicationId={structure.ownShare} participantId={structure.selfId} pip={shareAnnotationPiP} /> : null}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
   );

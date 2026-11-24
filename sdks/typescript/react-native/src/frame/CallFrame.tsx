@@ -17,6 +17,8 @@ import { ChatNotices } from "../sheets/people-chat/ChatNotices";
 import { PeopleChatSheet } from "../sheets/people-chat/PeopleChatSheet";
 import { playSound } from "../sounds/sounds";
 import type { ScreenAnnotationActions } from "../screen-annotation/model";
+import { useShareAnnotationPiP } from "../screen-annotation/ShareAnnotationPiP";
+import { localPiPShare } from "../screen-annotation/share-annotation-pip-session";
 import { Stage } from "../stage/Stage";
 import { useStageView } from "../stage/stage-view";
 import { useLandscapeChrome } from "./use-landscape-chrome";
@@ -56,6 +58,8 @@ type OpenSheet = "more" | "people" | "chat" | "details" | null;
 export function CallFrame({ displayName, callName = "Call", inviteLink, annotationActions, annotationBoardSaveEnabled, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
   const annotation = useMemo(() => ({ client: screenAnnotationFor(client), actions: annotationActions, boardSaveEnabled: annotationBoardSaveEnabled }), [client, annotationActions, annotationBoardSaveEnabled]);
+  const shareSource = useMemo(() => ({ getShare: () => localPiPShare(client.getSnapshot()), subscribe: (listener: () => void) => client.subscribe(listener) }), [client]);
+  const shareAnnotationPiP = useShareAnnotationPiP(shareSource, annotation.client);
   const annotationControls = usePortalCount("annotation");
   const connection = useConnection();
   const media = useMedia();
@@ -150,7 +154,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, annotati
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} />
       <View accessibilityElementsHidden={layered} importantForAccessibility={layered ? "no-hide-descendants" : "auto"} style={StyleSheet.absoluteFill}>
         <LandscapeControlsContext.Provider value={layout.arrangement === "landscape" && !chrome.hidden}>
-          <Stage annotation={annotation} frame={regions.stage} onOpenPeople={() => setSheet("people")} />
+          <Stage annotation={annotation} frame={regions.stage} onOpenPeople={() => setSheet("people")} shareAnnotationPiP={shareAnnotationPiP} />
         </LandscapeControlsContext.Provider>
         <PortalHost layer="annotation" />
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
