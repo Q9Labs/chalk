@@ -134,14 +134,17 @@ public static class HelperActivation {
     $url = 'http://127.0.0.1:47361/v1/challenge'
     $headers = @{ Origin = $env:CHALK_HELPER_WEB_ORIGIN }
     $body = @{ browserPublicKey = $env:CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY } | ConvertTo-Json -Compress
-    $deadline = (Get-Date).AddSeconds(45)
+    $deadline = (Get-Date).AddSeconds(60)
     $response = $null
     do {
         Get-Process -Id $activatedId | Out-Null
         try {
-            $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 2
-        } catch [System.Net.Http.HttpRequestException] {
-            if ((Get-Date) -ge $deadline) { throw }
+            $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 2 -NoProxy
+        } catch [System.Net.Http.HttpRequestException], [System.OperationCanceledException] {
+            if ((Get-Date) -ge $deadline) {
+                Get-NetTCPConnection -LocalPort 47361 -ErrorAction SilentlyContinue | Format-Table State, OwningProcess
+                throw
+            }
             Start-Sleep -Seconds 1
         }
     } while ($null -eq $response)
