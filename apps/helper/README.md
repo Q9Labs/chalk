@@ -65,6 +65,7 @@ Each channel uses its own GitHub Environment. Set `CHALK_HELPER_PAIR_TICKET_PUBL
 | Secrets                                                                           | Purpose                                                                                                                                     |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `HELPER_APPLE_CERTIFICATE`, `HELPER_APPLE_CERTIFICATE_PASSWORD`                   | Base64 Developer ID Application PKCS#12 and its password.                                                                                   |
+| `HELPER_APPLE_SIGNING_IDENTITY`                                                   | Exact Developer ID Application identity from the signing certificate.                                                                       |
 | `HELPER_APPLE_API_KEY`, `HELPER_APPLE_API_ISSUER`, `HELPER_APPLE_API_PRIVATE_KEY` | App Store Connect key ID, issuer UUID, and raw PKCS#8 key for notarization.                                                                 |
 | `HELPER_UPDATER_PRIVATE_KEY`, `HELPER_UPDATER_PASSWORD`                           | Tauri key and password from the matching **Chalk Helper Updater Key** item in 1Password. Do not replace a pinned key for an active channel. |
 | `HELPER_R2_ACCESS_KEY_ID`, `HELPER_R2_SECRET_ACCESS_KEY`                          | Cloudflare R2 S3 credentials. Use Object Read & Write scoped to `chalk-helper-downloads` only.                                              |
@@ -79,7 +80,7 @@ xcrun stapler validate "/Volumes/Chalk Helper/Chalk Helper.app"
 codesign -dv --verbose=4 "/Volumes/Chalk Helper/Chalk Helper.app"
 ```
 
-Check that Gatekeeper reports `Notarized Developer ID` and that the signature names the CollabEZ team and includes the runtime flag. Copy the app to Applications, launch it, and use **Check for updates** in the Helper window. Do not grant capture permissions just to verify the installer.
+Check that Gatekeeper reports `Notarized Developer ID` and that the signature matches the configured signing identity and includes the runtime flag. Copy the app to Applications, launch it, and use **Check for updates** in the Helper window. Do not grant capture permissions just to verify the installer.
 
 ### Submit Windows to the Microsoft Store
 

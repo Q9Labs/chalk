@@ -90,7 +90,7 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.HELPER_APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.HELPER_APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: "Developer ID Application: CollabEZ FZE LLC (5K9635LZ6F)"
+          APPLE_SIGNING_IDENTITY: ${{ secrets.HELPER_APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.HELPER_APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.HELPER_APPLE_API_ISSUER }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.HELPER_APPLE_API_PRIVATE_KEY }}
@@ -99,6 +99,10 @@ jobs:
         run: |
           set -euo pipefail
           : "${APPLE_CERTIFICATE:?Missing Developer ID p12}" "${APPLE_CERTIFICATE_PASSWORD:?Missing p12 password}"
+          if [[ $APPLE_SIGNING_IDENTITY != 'Developer ID Application: '* ]]; then
+            echo "::error::Configure the Developer ID Application signing identity."
+            exit 1
+          fi
           : "${APPLE_API_KEY:?Missing ASC key ID}" "${APPLE_API_ISSUER:?Missing ASC issuer}"
           : "${APPLE_API_PRIVATE_KEY:?Missing ASC p8 key}"
           : "${TAURI_SIGNING_PRIVATE_KEY:?Missing updater key}" "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:?Missing updater password}"
@@ -113,9 +117,12 @@ jobs:
           app="$bundle/macos/Chalk Helper.app"
           lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/chalk-helper"
           codesign --verify --deep --strict --verbose=2 "$app"
-          codesign -dv --verbose=4 "$app" 2>&1 | tee "$RUNNER_TEMP/helper-codesign.txt"
-          grep -F "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/helper-codesign.txt"
-          grep -E 'flags=.*runtime' "$RUNNER_TEMP/helper-codesign.txt"
+          codesign -dv --verbose=4 "$app" > "$RUNNER_TEMP/helper-codesign.txt" 2>&1
+          if ! grep -Fxq "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/helper-codesign.txt" ||
+             ! grep -Eq 'flags=.*runtime' "$RUNNER_TEMP/helper-codesign.txt"; then
+            echo "::error::The signed app must use the configured Developer ID and hardened runtime."
+            exit 1
+          fi
           xcrun stapler validate "$app"
           spctl -a -vv -t execute "$app"
           dmg=("$bundle"/dmg/*.dmg)
