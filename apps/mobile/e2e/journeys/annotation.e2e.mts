@@ -3,7 +3,7 @@ import { expect } from "e2e";
 
 test("viewer draws and removes a kept mark", async ({ app, screen }) => {
   await app.open();
-  await screen.getByRole("button", "Annotate").tap();
+  await screen.getByRole("button", "Annotate screen").tap();
   await screen.getByRole("button", "Fade").tap();
   const title = await screen.getByText("Layout review").boundingBox();
   if (!title) throw new Error("The shared frame is not visible");
@@ -28,7 +28,7 @@ test("viewer draws and removes a kept mark", async ({ app, screen }) => {
 
 test("viewer cannot draw while paused or after presenter revokes access", async ({ app, screen }) => {
   await app.open();
-  await screen.getByRole("button", "Annotate").tap();
+  await screen.getByRole("button", "Annotate screen").tap();
   const title = await screen.getByText("Layout review").boundingBox();
   if (!title) throw new Error("The shared frame is not visible");
   const from = { x: title.x, y: title.y + title.height + 34 };
@@ -50,7 +50,7 @@ test("viewer cannot draw while paused or after presenter revokes access", async 
 
 test("Android sharer can pause and clear without drawing the capture back into Chalk", { platforms: ["android"] }, async ({ app, screen }) => {
   await app.open();
-  await screen.getByRole("button", "Annotate").tap();
+  await screen.getByRole("button", "Annotate screen").tap();
   await screen.getByRole("button", "Fade").tap();
   const title = await screen.getByText("Layout review").boundingBox();
   if (!title) throw new Error("The shared frame is not visible");
@@ -66,4 +66,24 @@ test("Android sharer can pause and clear without drawing the capture back into C
   await expect(screen.getByText("0 committed marks")).toBeVisible();
   await screen.getByRole("button", "Resume marks").tap();
   await expect(screen.getByRole("button", "Pause marks")).toBeVisible();
+});
+
+test("iOS sharer can open and close picture-in-picture when the device supports it", { platforms: ["ios"] }, async ({ app, screen, device }) => {
+  await app.open();
+  await screen.getByRole("button", "Switch to sharer").tap();
+  await expect(screen.getByRole("button", "Pause marks")).toBeVisible();
+
+  const start = screen.getByRole("button", "Start picture-in-picture");
+  // The fixture bypasses ReplayKit, not AVKit, which can be unavailable on a simulator.
+  if (await start.isVisible()) {
+    await start.tap();
+    await expect(screen.getByRole("button", "Close picture-in-picture")).toBeVisible();
+    await device.home();
+    await app.open();
+    await expect(screen.getByText("1 committed marks")).toBeVisible();
+  }
+
+  await screen.getByRole("button", "Switch to viewer").tap();
+  await expect(screen.getByRole("button", "Close picture-in-picture")).not.toBeVisible();
+  await expect(screen.getByRole("button", "Annotate screen")).toBeVisible();
 });

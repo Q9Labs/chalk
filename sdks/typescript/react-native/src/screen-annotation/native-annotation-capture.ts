@@ -3,6 +3,7 @@ import { mediaDevices } from "@cloudflare/react-native-webrtc";
 import { Alert, DeviceEventEmitter, NativeModules, Platform } from "react-native";
 import { captureAndroidScreen } from "../media/android-screen-capture";
 import { releaseNativeTrack } from "../media/native-release-track";
+import { observeIOSScreenDimensions } from "./ios-screen-dimensions";
 
 type AndroidAnnotationOverlay = {
   readonly hasPermission: () => Promise<boolean>;
@@ -29,6 +30,7 @@ async function askForOverlayPermission(overlay: AndroidAnnotationOverlay): Promi
 
 export function createNativeAnnotationCapture() {
   const overlay = Platform.OS === "android" ? (NativeModules.ChalkAnnotationOverlay as AndroidAnnotationOverlay | undefined) : undefined;
+  const dimensionObservers = new WeakMap<MediaStreamTrack, () => void>();
   const witnesses = new WeakMap<MediaStreamTrack, ScreenAnnotationFrameSize>();
   let share: MediaStreamTrack | undefined;
   let space: SpaceClient | undefined;
@@ -60,7 +62,14 @@ export function createNativeAnnotationCapture() {
           permission = await askForOverlayPermission(overlay);
         }
       }
-      const stream = Platform.OS === "android" ? await captureAndroidScreen() : ((await mediaDevices.getDisplayMedia()) as unknown as MediaStream);
+      if (Platform.OS === "ios") {
+        const stream = await mediaDevices.getDisplayMedia();
+        const nativeStream = stream as unknown as MediaStream;
+        const track = nativeStream.getVideoTracks()[0];
+        if (track) dimensionObservers.set(track, observeIOSScreenDimensions(track, stream.toURL()));
+        return nativeStream;
+      }
+      const stream = await captureAndroidScreen();
       const track = stream.getVideoTracks()[0];
       if (track && overlay && annotation) await prepareOverlay(overlay, annotation, track, permission);
       return stream;
@@ -71,6 +80,8 @@ export function createNativeAnnotationCapture() {
         share = undefined;
         overlay?.stop(track.id);
       }
+      dimensionObservers.get(track)?.();
+      dimensionObservers.delete(track);
       witnesses.delete(track);
       releaseNativeTrack(track);
     },

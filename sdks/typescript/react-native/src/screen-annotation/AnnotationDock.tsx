@@ -1,13 +1,14 @@
 import { space } from "../theme/tokens";
 import type { ScreenAnnotationCommand, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
 import { frameRegions } from "../frame/regions";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { useSpaceSelector } from "../stage/space-selector";
 import { useTheme } from "../theme/theme";
+import { ShareAnnotationPiP } from "./ShareAnnotationPiP";
 import { ManageMarks, ToolButton } from "./ScreenAnnotationToolbar";
 import { hasTarget, matchLayer, targetFor, type StageAnnotation } from "./model";
 
@@ -40,7 +41,19 @@ export function AnnotationDock({ children }: { readonly children: ReactNode }): 
 }
 
 /** Controls live in Chalk, not in the system ink window. */
-export function AndroidShareAnnotationControls({ annotation, publicationId, participantId, people }: { readonly annotation: StageAnnotation; readonly publicationId: string; readonly participantId: string; readonly people: ReturnType<typeof useAnnotationPeople> }): React.JSX.Element | null {
+export function ShareAnnotationControls({
+  annotation,
+  publicationId,
+  participantId,
+  people,
+  trackId,
+}: {
+  readonly annotation: StageAnnotation;
+  readonly publicationId: string;
+  readonly participantId: string;
+  readonly people: ReturnType<typeof useAnnotationPeople>;
+  readonly trackId?: string;
+}): React.JSX.Element | null {
   const { client } = annotation;
   const toasts = useToasts();
   const { colors } = useTheme();
@@ -64,6 +77,7 @@ export function AndroidShareAnnotationControls({ annotation, publicationId, part
 
   return (
     <AnnotationDock>
+      {Platform.OS === "ios" && !state.layer.burned_in ? <ShareAnnotationPiP key={state.layer.layer_id} client={client} layer={state.layer} trackId={trackId} /> : null}
       <View style={styles.controls}>
         <ToolButton label={state.paused ? "Resume marks" : "Pause marks"} onPress={() => void run({ kind: "pause", paused: !state.paused })} />
         <ToolButton label="Clear all marks" onPress={() => void run({ kind: "clear", scope: { kind: "all" } })} />

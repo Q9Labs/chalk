@@ -17,3 +17,9 @@ For iPad or Android, set `CHALK_ANNOTATION_IPAD` or
 `CHALK_ANNOTATION_ANDROID` to that device's ID and select the corresponding
 target. The runner drives the touchscreen and cannot substitute for exercising
 an Apple Pencil on physical hardware.
+
+The iOS sharer journey bypasses ReplayKit at the share-state boundary and
+injects a viewer mark when Chalk goes to the background. It starts native
+picture-in-picture only when AVKit offers it. This does not prove that
+ReplayKit excludes the PiP window from the outgoing stream; test that on a
+physical iPhone or iPad by comparing what the sharer and a second device see.

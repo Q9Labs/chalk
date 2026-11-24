@@ -21,7 +21,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState, Platform } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
-import { createNativeAnnotationCapture } from "../screen-annotation/android-capture";
+import { createNativeAnnotationCapture } from "../screen-annotation/native-annotation-capture";
 import { createAndroidCallSyncLifecycle } from "./android-call-sync-lifecycle";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
