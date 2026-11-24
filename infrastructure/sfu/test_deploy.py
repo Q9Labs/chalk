@@ -83,6 +83,7 @@ class DeployStartTest(unittest.TestCase):
         self.assertNotIn('accept-new', (self.root / 'ssh-calls').read_text())
 
 
+
 class ReadyzTest(unittest.TestCase):
     """readyz prints the body of a ready node and of a draining one, which answers 503, and refuses any other status."""
 

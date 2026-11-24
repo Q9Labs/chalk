@@ -8,6 +8,7 @@ python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_boot_chec
 pnpm --dir "$repo_root/infrastructure" check-types
 pnpm --dir "$repo_root/infrastructure" test:digitalocean
 python3 -m unittest discover -s "$repo_root/infrastructure/sfu" -p test_templates.py
+python3 -m unittest discover -s "$repo_root/infrastructure/sfu" -p test_otlp_token_check.py
 
 tofu -chdir="$tofu_dir" fmt -check -recursive
 bash "$repo_root/scripts/recorder/tofu-init.sh" "$tofu_dir"
