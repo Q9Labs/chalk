@@ -194,14 +194,15 @@ jobs:
         with:
           name: helper-macos-${{ github.run_attempt }}
           path: ${{ runner.temp }}/helper-release
-      - name: Install publisher tools
-        run: |
-          sudo apt-get install -y minisign
-          npm install --global wrangler@4.107.0
+      - name: Install the updater signature verifier
+        if: ${{ !inputs.store_link_only }}
+        run: sudo apt-get install -y minisign
       - name: Verify updater signatures and publish
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.HELPER_R2_PUBLISH_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.HELPER_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.HELPER_R2_SECRET_ACCESS_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ needs.plan.outputs.version }}
           STORE_LINK_ONLY: ${{ inputs.store_link_only }}

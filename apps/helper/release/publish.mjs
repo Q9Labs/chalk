@@ -20,6 +20,11 @@ if (
 }
 
 const bucket = "chalk-helper-downloads";
+const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+if (!/^[a-f0-9]{32}$/.test(account) || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+  throw new Error("Expected the Cloudflare account and bucket-scoped S3 credentials.");
+}
+const s3Endpoint = `https://${account}.r2.cloudflarestorage.com`;
 const channelRoot = `helper/${CHANNEL}`;
 const releaseRoot = `${channelRoot}/v${VERSION}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}`;
 const macInstaller = "Chalk-Helper-macOS.dmg";
@@ -48,9 +53,10 @@ function signedPlatform(name, temporary) {
 }
 
 async function publish(source, destination, contentType, cacheControl) {
-  run("wrangler", [
-    "r2", "object", "put", `${bucket}/${destination}`, "--remote",
-    "--file", source, "--content-type", contentType, "--cache-control", cacheControl,
+  run("aws", [
+    "s3api", "put-object", "--endpoint-url", s3Endpoint, "--region", "auto", "--no-cli-pager",
+    "--bucket", bucket, "--key", destination, "--body", source,
+    "--content-type", contentType, "--cache-control", cacheControl,
   ]);
   const response = await fetch(url(destination), { signal: AbortSignal.timeout(120_000) });
   const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");

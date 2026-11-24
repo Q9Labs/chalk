@@ -68,7 +68,7 @@ Each channel uses its own GitHub Environment. Set `CHALK_HELPER_PAIR_TICKET_PUBL
 | `HELPER_APPLE_CERTIFICATE`, `HELPER_APPLE_CERTIFICATE_PASSWORD` | Base64 Developer ID Application PKCS#12 and its password. |
 | `HELPER_APPLE_API_KEY`, `HELPER_APPLE_API_ISSUER`, `HELPER_APPLE_API_PRIVATE_KEY` | App Store Connect key ID, issuer UUID, and raw PKCS#8 key for notarization. |
 | `HELPER_UPDATER_PRIVATE_KEY`, `HELPER_UPDATER_PASSWORD` | Tauri key and password from the matching **Chalk Helper Updater Key** item in 1Password. Do not replace a pinned key for an active channel. |
-| `HELPER_R2_PUBLISH_TOKEN` | Cloudflare API token with R2 write access. |
+| `HELPER_R2_ACCESS_KEY_ID`, `HELPER_R2_SECRET_ACCESS_KEY` | Cloudflare R2 S3 credentials. Use Object Read & Write scoped to `chalk-helper-downloads` only. |
 
 The macOS release uses the hardened runtime without App Sandbox. Screen Recording and Accessibility are macOS user grants, not Developer ID entitlements. Loopback is available to the non-sandboxed app; Helper still binds only to the numeric loopback address.
 
@@ -92,8 +92,8 @@ The MSIX runs as a full-trust desktop app for the system tray, native capture, a
 
 ### Roll back a download channel
 
-1. Find the previous good release prefix under `helper/<channel>/v<version>/<run>-<attempt>/` in R2. It contains the saved `latest.json` and `index.html` for that release.
-2. Copy the previous `index.html` over the channel's `index.html`, and the previous `latest.json` over the channel's `latest.json`. Set `Cache-Control: no-store` on both copies and preserve their content types. Leave versioned binaries untouched.
+1. Find the previous good release prefix under `helper/<channel>/v<version>/<run>-<attempt>/` in R2. It contains the saved update manifest and download page for that release.
+2. Copy the previous page and manifest to the channel's stable index.html and latest.json objects. Set `Cache-Control: no-store` on both copies and preserve their content types. Leave versioned binaries untouched.
 3. Fetch both stable URLs over HTTPS. Confirm that the page links to the previous installers and the manifest names the previous version and signatures.
 
 The updater does not downgrade installed copies. To repair a bad version already installed, rebuild the last good source with a higher version and publish it with the same channel's signing key.
