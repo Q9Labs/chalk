@@ -13,6 +13,10 @@ on:
         type: choice
         options: [staging, production]
         default: staging
+      store_link_only:
+        description: Refresh the production download page without building installers
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,6 +46,9 @@ jobs:
           persist-credentials: false
       - name: Validate release source
         id: release
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          STORE_LINK_ONLY: ${{ inputs.store_link_only }}
         run: |
           set -euo pipefail
           version=$(jq -er '.version' apps/helper/src-tauri/tauri.conf.json)
@@ -51,9 +58,14 @@ jobs:
             *) echo "::error::Select master or helper-v$version."; exit 1 ;;
           esac
           git merge-base --is-ancestor HEAD origin/master
+          if [[ $STORE_LINK_ONLY == true && $CHANNEL != production ]]; then
+            echo "::error::The Store link is only available on the production page."
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build-macos:
+    if: ${{ !inputs.store_link_only }}
     needs: plan
     runs-on: macos-15
     environment: helper-${{ inputs.channel }}
@@ -125,7 +137,7 @@ jobs:
           if-no-files-found: error
 
   build-windows:
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.plan.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || (needs.plan.result == 'success' && !inputs.store_link_only)) }}
     needs: plan
     runs-on: windows-2025
     environment: ${{ github.event_name == 'workflow_dispatch' && format('helper-{0}', inputs.channel) || 'helper-ci' }}
@@ -147,6 +159,7 @@ jobs:
           PAIR_TICKET_KEY: ${{ vars.CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY }}
         run: bash release/configure-build.sh windows
       - name: Build Windows x64 executable without an NSIS installer
+        shell: bash
         run: npx --yes "$TAURI_CLI" build --ci --no-bundle -- --locked
       - name: Package and test the MSIX
         id: msix
@@ -165,6 +178,7 @@ jobs:
 
   publish:
     needs: [plan, build-macos]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (inputs.store_link_only || needs.build-macos.result == 'success') }}
     runs-on: ubuntu-24.04
     environment: helper-${{ inputs.channel }}
     steps:
@@ -176,6 +190,7 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: ${{ !inputs.store_link_only }}
         with:
           name: helper-macos-${{ github.run_attempt }}
           path: ${{ runner.temp }}/helper-release
@@ -189,5 +204,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.HELPER_R2_PUBLISH_TOKEN }}
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ needs.plan.outputs.version }}
+          STORE_LINK_ONLY: ${{ inputs.store_link_only }}
           STORE_URL: ${{ vars.CHALK_HELPER_STORE_URL }}
         run: node apps/helper/release/publish.mjs "$RUNNER_TEMP/helper-release"

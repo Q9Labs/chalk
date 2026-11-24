@@ -86,7 +86,7 @@ Check that Gatekeeper reports `Notarized Developer ID` and that the signature na
 
 1. In the `helper-production` GitHub Environment, set `CHALK_HELPER_STORE_IDENTITY`, `CHALK_HELPER_STORE_PUBLISHER`, and `CHALK_HELPER_STORE_PUBLISHER_DISPLAY_NAME` to the Product identity values in Partner Center. Before those values exist, CI tests a placeholder identity and does not retain a submission.
 2. Run the production workflow. Download its `helper-microsoft-store` artifact and upload the unsigned MSIX in Partner Center. The Store signs it. The temporary certificate used for the runner test is never distributed.
-3. When the listing is live, set `CHALK_HELPER_STORE_URL` to its `https://apps.microsoft.com/` link. The next production download page update exposes the Store button. Staging does not link to the production Store listing.
+3. When the listing is live, set `CHALK_HELPER_STORE_URL` to its `https://apps.microsoft.com/` link. Run **Release Chalk Helper** with the `production` channel and `store_link_only` checked to publish the button without rebuilding macOS. Staging does not link to the production Store listing.
 
 The MSIX runs as a full-trust desktop app for the system tray, native capture, and browser loopback. Explain `runFullTrust` in the Store submission. The Windows build has no Tauri update channel. Use the Microsoft Store to install updates.
 

@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { CHANNEL, VERSION, DOWNLOAD_ORIGIN, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, STORE_URL } = process.env;
+const { CHANNEL, VERSION, DOWNLOAD_ORIGIN, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, STORE_LINK_ONLY, STORE_URL } = process.env;
+const refreshStoreLink = STORE_LINK_ONLY === "true";
 const directory = process.argv[2];
 const versionPattern = /^\d+\.\d+\.\d+$/;
 if (
@@ -13,7 +14,7 @@ if (
   !/^\d+$/.test(GITHUB_RUN_ID) ||
   !/^\d+$/.test(GITHUB_RUN_ATTEMPT) ||
   DOWNLOAD_ORIGIN !== "https://downloads.chalkmeet.com" ||
-  !directory
+  (refreshStoreLink ? CHANNEL !== "production" : !directory)
 ) {
   throw new Error("Expected a Helper channel, version, download origin, run ID, attempt and artifact directory.");
 }
@@ -58,37 +59,23 @@ async function publish(source, destination, contentType, cacheControl) {
   }
 }
 
-const latest = await fetch(url(`${channelRoot}/latest.json`), { signal: AbortSignal.timeout(30_000) });
-if (latest.ok) {
-  const { version } = await latest.json();
-  if (!versionPattern.test(version) || new Intl.Collator("en", { numeric: true }).compare(VERSION, version) <= 0) {
-    throw new Error(`Refusing to replace channel version ${version} with ${VERSION}.`);
-  }
-} else if (latest.status !== 404) {
-  throw new Error(`Could not read the active update manifest: HTTP ${latest.status}`);
-}
-
-const temporary = mkdtempSync(join(tmpdir(), "chalk-helper-release-"));
-try {
-  if (!existsSync(join(directory, macInstaller))) throw new Error("The signed macOS DMG is required.");
-  const mac = signedPlatform(macUpdater, temporary);
-  const platforms = { "darwin-aarch64": mac, "darwin-x86_64": mac };
-
-
-  const manifest = join(temporary, "latest.json");
-  writeFileSync(manifest, JSON.stringify({ version: VERSION, platforms }, null, 2) + "\n");
-  const page = join(temporary, "index.html");
+function downloadPage(macDownload) {
   const title = CHANNEL === "staging" ? "Chalk Helper for Chalk Nightly" : "Chalk Helper";
-  let windows = "";
+  const links = [];
+  if (macDownload) {
+    links.push(`<p><a href="${macDownload}">Download for macOS 14 or later</a> (Apple silicon and Intel)</p>`);
+  }
   if (CHANNEL === "production" && STORE_URL) {
     const listing = new URL(STORE_URL);
     if (listing.origin !== "https://apps.microsoft.com" || listing.username || listing.password) {
       throw new Error("The Windows listing must be an https://apps.microsoft.com Microsoft Store URL.");
     }
     const href = listing.href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-    windows = `  <p><a href="${href}">Get it from the Microsoft Store</a></p>\n`;
+    links.push(`<p><a href="${href}">Get Chalk Helper from the Microsoft Store</a></p>`);
   }
-  writeFileSync(page, `<!doctype html>
+  if (links.length === 0) links.push("<p>Downloads are not available yet.</p>");
+
+  return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -96,19 +83,56 @@ try {
 <main>
   <h1>${title}</h1>
   <p>See other participants’ annotations while you share your screen in Chalk.</p>
-  <p><a href="${url(`${releaseRoot}/${macInstaller}`)}">Download for macOS 14 or later</a> (Apple silicon and Intel)</p>
-${windows}</main>
+  ${links.join("\n  ")}
+</main>
 </html>
-`);
+`;
+}
 
-  const immutable = "public, max-age=31536000, immutable";
-  await publish(join(directory, macInstaller), `${releaseRoot}/${macInstaller}`, "application/x-apple-diskimage", immutable);
-  await publish(join(directory, macUpdater), `${releaseRoot}/${macUpdater}`, "application/gzip", immutable);
-  await publish(manifest, `${releaseRoot}/latest.json`, "application/json", immutable);
-  await publish(page, `${releaseRoot}/index.html`, "text/html; charset=utf-8", immutable);
-  await publish(page, `${channelRoot}/index.html`, "text/html; charset=utf-8", "no-store");
-  await publish(manifest, `${channelRoot}/latest.json`, "application/json", "no-store");
-  console.log(`Published ${url(`${channelRoot}/index.html`)} from ${url(releaseRoot)}`);
+const latest = await fetch(url(`${channelRoot}/latest.json`), { signal: AbortSignal.timeout(30_000) });
+if (!latest.ok && latest.status !== 404) {
+  throw new Error(`Could not read the active update manifest: HTTP ${latest.status}`);
+}
+const current = latest.ok ? await latest.json() : undefined;
+if (current && !versionPattern.test(current.version)) throw new Error("The active update manifest has an invalid version.");
+
+const temporary = mkdtempSync(join(tmpdir(), "chalk-helper-release-"));
+try {
+  const page = join(temporary, "index.html");
+  if (refreshStoreLink) {
+    let macDownload;
+    if (current) {
+      const archive = current.platforms["darwin-aarch64"].url;
+      const release = archive.slice(0, -macUpdater.length);
+      const prefix = url(`${channelRoot}/v${current.version}/`);
+      if (!release.startsWith(prefix) || !/^\d+-\d+\/$/.test(release.slice(prefix.length)) || archive !== release + macUpdater) {
+        throw new Error("The active manifest does not point to a versioned macOS download.");
+      }
+      macDownload = release + macInstaller;
+    }
+    writeFileSync(page, downloadPage(macDownload));
+    await publish(page, `${channelRoot}/index.html`, "text/html; charset=utf-8", "no-store");
+  } else {
+    if (current && new Intl.Collator("en", { numeric: true }).compare(VERSION, current.version) <= 0) {
+      throw new Error(`Refusing to replace channel version ${current.version} with ${VERSION}.`);
+    }
+    if (!existsSync(join(directory, macInstaller))) throw new Error("The signed macOS DMG is required.");
+    const mac = signedPlatform(macUpdater, temporary);
+    const platforms = { "darwin-aarch64": mac, "darwin-x86_64": mac };
+
+    const manifest = join(temporary, "latest.json");
+    writeFileSync(manifest, JSON.stringify({ version: VERSION, platforms }, null, 2) + "\n");
+    writeFileSync(page, downloadPage(url(`${releaseRoot}/${macInstaller}`)));
+
+    const immutable = "public, max-age=31536000, immutable";
+    await publish(join(directory, macInstaller), `${releaseRoot}/${macInstaller}`, "application/x-apple-diskimage", immutable);
+    await publish(join(directory, macUpdater), `${releaseRoot}/${macUpdater}`, "application/gzip", immutable);
+    await publish(manifest, `${releaseRoot}/latest.json`, "application/json", immutable);
+    await publish(page, `${releaseRoot}/index.html`, "text/html; charset=utf-8", immutable);
+    await publish(page, `${channelRoot}/index.html`, "text/html; charset=utf-8", "no-store");
+    await publish(manifest, `${channelRoot}/latest.json`, "application/json", "no-store");
+    console.log(`Published ${url(`${channelRoot}/index.html`)} from ${url(releaseRoot)}`);
+  }
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }
