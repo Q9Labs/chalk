@@ -106,10 +106,9 @@ jobs:
           : "${APPLE_API_KEY:?Missing ASC key ID}" "${APPLE_API_ISSUER:?Missing ASC issuer}"
           : "${APPLE_API_PRIVATE_KEY:?Missing ASC p8 key}"
           : "${TAURI_SIGNING_PRIVATE_KEY:?Missing updater key}" "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:?Missing updater password}"
-          umask 077
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           trap 'rm -f "$APPLE_API_KEY_PATH"' EXIT
-          printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$APPLE_API_KEY_PATH"
+          (umask 077; printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$APPLE_API_KEY_PATH")
           unset APPLE_API_PRIVATE_KEY
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
           npx --yes "$TAURI_CLI" build --ci --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/macos.json" -- --locked
