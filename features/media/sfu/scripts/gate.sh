@@ -22,6 +22,7 @@ printf '\n==> Wire protocol decision (the node and its callers must not change t
 python3 scripts/check_wire_protocol.py "${GATE_BASE_REF:-origin/master}"
 printf '\n==> Template render and deploy branch tests (mocked ssh, doctl, docker)\n'
 python3 "${repo_root}/infrastructure/sfu/test_templates.py"
+python3 "${repo_root}/infrastructure/sfu/test_otlp_token_check.py"
 printf '\n==> Contention tests\n'
 node "${repo_root}/scripts/test/run.mjs" node --test "${repo_root}/features/scorecard/contention.test.mjs" "${repo_root}/features/scorecard/chalk-sfu.test.mjs" "${repo_root}/features/scorecard/cf-sfu-card.test.mjs" "${repo_root}/features/scorecard/nightly-graph.test.mjs" "${repo_root}/features/scorecard/staging-metrics.test.mjs" "${repo_root}/features/scorecard/diagnostics.test.mjs" "${repo_root}/features/scorecard/stats.test.mjs" "${repo_root}/features/scorecard/baseline.test.mjs" "${repo_root}/features/scorecard/regression.test.mjs" "${repo_root}/scripts/prod-proof/latency-stages.test.mjs"
 
