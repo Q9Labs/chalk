@@ -186,7 +186,7 @@ function AnnotationDock({
   return (
     <div ref={dockRef} data-part="screen-annotation-controls" className="chalk-ann-dock" data-local={isLocal ? "" : undefined} data-stack={isLocal && layout.edge === "bottom" ? "top" : undefined}>
       <AnnotationStyles />
-      {isLocal && !canPopOut ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
+      {isLocal && !canPopOut && !helper?.installUrl ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
       <AnnotationFeedback feedback={feedback} />
       {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
       {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
@@ -195,7 +195,7 @@ function AnnotationDock({
         <AnnotationSharerControl dockRef={dockRef} layout={layout} onLayout={setLayout}>
           {annotate}
           <AnnotationAccess {...access} side={layout.edge === "bottom" ? "top" : "bottom"} hints />
-          {canPopOut ? <AnnotationPictureInPicture {...presentation} track={track} inTab={safePreview} hints /> : null}
+          {canPopOut ? <AnnotationPictureInPicture {...presentation} track={track} inTab={safePreview} helperAvailable={Boolean(helper?.installUrl)} hints /> : null}
         </AnnotationSharerControl>
       ) : (
         <div className="chalk-ann-bar">

@@ -14,9 +14,21 @@ const statuses: Record<ScreenAnnotationHelperStatus, string> = {
   disconnected: "Chalk Helper disconnected.",
 };
 
+const introDismissedKey = "chalk.annotation-helper.intro-dismissed";
+
+function readIntroDismissed() {
+  try {
+    return globalThis.localStorage.getItem(introDismissedKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function AnnotationHelperOffer({ client, state, actorId, helper, capture }: { readonly client: ScreenAnnotationClient; readonly state: ScreenAnnotationState; readonly actorId: string; readonly helper: ScreenAnnotationHelper; readonly capture?: ScreenShareCapture }) {
   const [drawing, setDrawing] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [introDismissed, setIntroDismissed] = useState(readIntroDismissed);
+  const [drawingDismissed, setDrawingDismissed] = useState(false);
+  const [opened, setOpened] = useState(false);
   const [screen, setScreen] = useState<HelperScreen>({ kind: "idle" });
   const [code, setCode] = useState("");
   const attempt = useRef<AbortController | null>(null);
@@ -42,7 +54,17 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     };
   }, [client, state.layer.layer_id, actorId]);
 
-  if (actorId !== state.layer.sharer_id || !drawing || dismissed) return null;
+  if (actorId !== state.layer.sharer_id) return null;
+  const offersIntro = Boolean(helper.installUrl) && capture?.surface !== "browser";
+  if (!opened && screen.kind === "idle" && (!drawing || drawingDismissed) && (!offersIntro || introDismissed)) {
+    return offersIntro ? (
+      <div className="chalk-ann-bar">
+        <button type="button" className="chalk-ann-btn" onClick={() => setOpened(true)}>
+          Chalk Helper
+        </button>
+      </div>
+    ) : null;
+  }
   const share: ScreenAnnotationHelperShare = { client, layer: state.layer, participantId: actorId, surface: capture?.surface ?? null };
   const start = () => {
     attempt.current?.abort();
@@ -132,7 +154,17 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
   const dismiss = () => {
     attempt.current?.abort();
     setCode("");
-    setDismissed(true);
+    setScreen({ kind: "idle" });
+    setOpened(false);
+    if (drawing) setDrawingDismissed(true);
+    if (offersIntro && !introDismissed) {
+      setIntroDismissed(true);
+      try {
+        globalThis.localStorage.setItem(introDismissedKey, "1");
+      } catch {
+        // The card can still be dismissed in this share when storage is blocked.
+      }
+    }
   };
 
   return (
@@ -161,23 +193,28 @@ function HelperStep({
   lookup,
 }: {
   readonly screen: HelperScreen;
-  readonly drawing: string;
+  readonly drawing: string | null;
   readonly helper: ScreenAnnotationHelper;
   readonly code: string;
   readonly setCode: (value: string) => void;
   readonly connect: () => Promise<void>;
   readonly lookup: () => Promise<void>;
 }) {
+  const canConnect = helper.challenge || helper.lookupCode;
   return (
     <>
       {screen.kind === "idle" ? (
         <>
-          <p>
-            <bdi>{drawing}</bdi> is drawing on your share. Connect Chalk Helper to see marks on your screen.
-          </p>
-          {helper.challenge || helper.lookupCode ? (
-            <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
-              Connect Chalk Helper
+          {drawing ? (
+            <p>
+              <bdi>{drawing}</bdi> is drawing on your share. Use Chalk Helper to see their marks on your screen.
+            </p>
+          ) : (
+            <p>Viewers can draw on your share. Use Chalk Helper to see their marks on your screen.</p>
+          )}
+          {canConnect ? (
+            <button type="button" className="chalk-ann-btn" data-tone={drawing ? "primary" : "outline"} onClick={() => void connect()}>
+              {drawing ? "Connect Chalk Helper" : "Connect"}
             </button>
           ) : null}
         </>

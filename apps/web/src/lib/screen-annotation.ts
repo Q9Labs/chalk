@@ -1,5 +1,5 @@
 import annotationFont from "@q9labsai/chalk-screen-annotation/fonts/Figtree-SemiBold.ttf?url";
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import type { ScreenAnnotationSetup } from "@q9labsai/chalk-react";
 
 function helperInstaller(): string | undefined {
@@ -21,10 +21,15 @@ export const webAnnotation: ScreenAnnotationSetup = {
 };
 
 /** Wires only the Helper adapter; the rest of the annotation setup is unchanged. */
-export function callAnnotation(options: { readonly apiBaseUrl: string; readonly tenantId?: string; readonly accountId?: string; readonly mediaProof: () => string | null | undefined; readonly screenShare: () => SpaceSnapshot["media"]["screenShare"] }): ScreenAnnotationSetup {
-  if (!options.tenantId || !installUrl || typeof window === "undefined" || !window.isSecureContext || window.location.protocol !== "https:") return webAnnotation;
+export function callAnnotation(options: { readonly apiBaseUrl: string; readonly tenantId?: string; readonly accountId?: string; readonly mediaProof: () => string | null | undefined; readonly client: Pick<SpaceClient, "getSnapshot"> }): ScreenAnnotationSetup {
+  if (!installUrl || typeof window === "undefined") return webAnnotation;
+  const { userAgent, maxTouchPoints } = window.navigator;
+  // iPadOS Safari can identify itself as a Mac when requesting desktop sites.
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)) return webAnnotation;
+  const downloadOnly = { ...webAnnotation, helper: { installUrl } };
+  if (!options.tenantId || !window.isSecureContext || window.location.protocol !== "https:") return downloadOnly;
   const api = new URL(options.apiBaseUrl, window.location.origin);
-  if (api.protocol !== "https:" || api.username || api.password) return webAnnotation;
+  if (api.protocol !== "https:" || api.username || api.password) return downloadOnly;
   const tenantId = options.tenantId;
   const origin = window.location.origin;
   const loadHelper = async () => {
@@ -37,7 +42,7 @@ export function callAnnotation(options: { readonly apiBaseUrl: string; readonly 
       accountId: options.accountId,
       installUrl,
       captureTrack: (share) => {
-        const captured = options.screenShare();
+        const captured = options.client.getSnapshot().media.screenShare;
         return captured?.publicationId === share.layer.publication_id ? (captured.track ?? undefined) : undefined;
       },
     });
