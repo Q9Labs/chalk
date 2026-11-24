@@ -59,25 +59,45 @@ sfu_curl() {
     --resolve "chalk-sfu:${port}:${address}" "$@"
 }
 
-# sfu_check_otlp_tokens <private dir> fails when the OTLP endpoint rejects the token in one of the
-# directory's header files, so a dead token stops a deploy or a bundle publish before it reaches a
-# node, where it would silently switch that signal off. An empty request with a good token is
-# refused as empty (422), so only a 401 or 403 condemns the token; a network error proves nothing.
+# sfu_check_otlp_tokens <private dir> <header file...> fails when the OTLP endpoint rejects the token
+# in one of the named header files, so a dead token stops a deploy or a bundle publish before it
+# reaches a node, where it would silently switch that signal off. Name only the files the run will
+# use. Logs and traces ride on the metrics endpoint, so without otlp-headers nothing is exported and
+# nothing is checked. An empty request with a good token is refused as empty (422), so only a 401 or
+# 403 condemns a token; an unreachable or failing endpoint proves nothing and only warns.
 sfu_check_otlp_tokens() {
-  local endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}" pair file headers status
-  for pair in otlp-headers:metrics otlp-log-headers:logs otlp-trace-headers:traces; do
-    file="$1/${pair%%:*}"
+  local dir="$1" endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}" name signal file headers status pair
+  local -a pairs
+  shift
+  endpoint="${endpoint%/}"
+  [[ -f "${dir}/otlp-headers" ]] || return 0
+  if [[ "$endpoint" != https://* ]]; then
+    echo "warning: not checking the OTLP tokens, because ${endpoint} is not https" >&2
+    return 0
+  fi
+  for name in "$@"; do
+    file="${dir}/${name}"
     [[ -f "$file" ]] || continue
+    case "$name" in
+      otlp-headers) signal=metrics ;;
+      otlp-log-headers) signal=logs ;;
+      otlp-trace-headers) signal=traces ;;
+      *) echo "sfu_check_otlp_tokens: unknown header file ${name}" >&2; return 2 ;;
+    esac
     # The file holds an OTEL_EXPORTER_OTLP_*_HEADERS value: comma-separated key=value pairs with
-    # URL-encoded values. curl reads the headers from a file so the token stays out of the process list.
+    # percent-encoded values, decoded here as the exporter decodes them. curl reads the headers from
+    # a private file so the token stays out of the process list.
     headers="$(mktemp)"
-    tr ',' '\n' <"$file" | sed -e 's/=/: /' -e 's/%20/ /g' >"$headers"
+    IFS=, read -r -a pairs < <(tr -d '\n' <"$file"; echo)
+    for pair in "${pairs[@]}"; do
+      printf '%s: %b\n' "${pair%%=*}" "$(sed 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g' <<<"${pair#*=}")" >>"$headers"
+    done
     status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 -X POST -H @"$headers" \
-      -H 'Content-Type: application/x-protobuf' --data-binary '' "${endpoint}/v1/${pair#*:}")" || status=000
+      -H 'Content-Type: application/x-protobuf' --data-binary '' "${endpoint}/v1/${signal}")" || status=000
     rm -f "$headers"
     case "$status" in
       401 | 403) echo "${endpoint} rejects the token in ${file} (HTTP ${status}); replace it with a current ingest token from 1Password" >&2; return 1 ;;
-      000) echo "warning: could not reach ${endpoint} to check the token in ${file}" >&2 ;;
+      000 | 5??) echo "warning: could not check the token in ${file}: ${endpoint} answered ${status}" >&2 ;;
     esac
   done
 }

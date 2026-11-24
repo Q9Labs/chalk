@@ -51,7 +51,6 @@ identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
 for file in ca.crt server.crt server.key; do
   [[ -f "${dir}/${file}" ]] || { echo "missing ${dir}/${file}; see certs" >&2; exit 1; }
 done
-sfu_check_otlp_tokens "$dir"
 
 # An unusable key makes BatchMode ssh fail quietly, and the bootstrap wait below would retry for ten minutes.
 [[ -f "$SFU_SSH_KEY" && -r "$SFU_SSH_KEY" ]] || { echo "no readable SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY to the operator key" >&2; exit 1; }
@@ -133,6 +132,11 @@ ufw allow "$3"/tcp > /dev/null
 RECONCILE
 fi
 [[ "$mode" == --firewall-only ]] && exit 0
+
+# A release run leaves the capture worker as it is, so only an operator run with capture.conf uses the trace token.
+otlp_files=(otlp-headers otlp-log-headers)
+[[ -f "${dir}/capture.conf" && -z "${SFU_FROM_CI:-}" ]] && otlp_files+=(otlp-trace-headers)
+sfu_check_otlp_tokens "$dir" "${otlp_files[@]}"
 
 # A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
 remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"

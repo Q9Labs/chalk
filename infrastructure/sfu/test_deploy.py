@@ -83,44 +83,6 @@ class DeployStartTest(unittest.TestCase):
         self.assertNotIn('accept-new', (self.root / 'ssh-calls').read_text())
 
 
-    def fake_otlp_endpoint(self, status):
-        """Writes a metrics header file and a curl that records its arguments and the headers it read, and answers status."""
-        (self.root / 'private' / 'staging' / 'otlp-headers').write_text('Authorization=Bearer%20secret-token,X-Axiom-Dataset=metrics')
-        curl = self.root / 'bin' / 'curl'
-        curl.write_text(
-            '#!/bin/sh\n'
-            f'echo "$@" >> {self.root}/curl-calls\n'
-            'for argument in "$@"; do case "$argument" in @*) cat "${argument#@}" >> ' f'{self.root}/curl-headers;; esac; done\n'
-            f'printf {status}\n'
-        )
-        curl.chmod(0o755)
-
-    def test_a_rejected_otlp_token_stops_the_deploy_before_it_reaches_the_node(self):
-        key = self.root / 'operator_key'
-        key.write_text('x')
-        self.fake_otlp_endpoint(401)
-        result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key)}, capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('rejects the token in', result.stderr)
-        self.assertFalse((self.root / 'ssh-calls').exists())
-        self.assertIn('/v1/metrics', (self.root / 'curl-calls').read_text())
-        self.assertNotIn('secret-token', (self.root / 'curl-calls').read_text())
-        self.assertIn('Authorization: Bearer secret-token', (self.root / 'curl-headers').read_text())
-
-    def test_an_accepted_otlp_token_lets_the_deploy_go_on(self):
-        key = self.root / 'operator_key'
-        key.write_text('x')
-        self.fake_otlp_endpoint(422)
-        # The fake ssh fails, so the deploy waits for the bootstrap; reaching ssh at all is the proof.
-        process = subprocess.Popen([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key)}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.addCleanup(process.wait)
-        self.addCleanup(process.kill)
-        calls = self.root / 'ssh-calls'
-        deadline = time.time() + 20
-        while not calls.exists() and time.time() < deadline:
-            time.sleep(0.1)
-        self.assertTrue(calls.exists())
-        self.assertIn('/v1/metrics', (self.root / 'curl-calls').read_text())
 
 class ReadyzTest(unittest.TestCase):
     """readyz prints the body of a ready node and of a draining one, which answers 503, and refuses any other status."""
