@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd -- "$(dirname -- "$0")/.."
 
 if [[ $GITHUB_EVENT_NAME == pull_request ]]; then
   web=chalk-helper-smoke.invalid

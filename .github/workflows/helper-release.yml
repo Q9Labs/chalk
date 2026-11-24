@@ -31,7 +31,7 @@ defaults:
 
 env:
   DOWNLOAD_ORIGIN: https://downloads.chalkmeet.com
-  TAURI_CLI: '@tauri-apps/cli@2.12.6'
+  TAURI_CLI: "@tauri-apps/cli@2.12.6"
 
 jobs:
   plan:
@@ -68,10 +68,9 @@ jobs:
     if: ${{ !inputs.store_link_only }}
     needs: plan
     runs-on: macos-15
-    environment: helper-${{ inputs.channel }}
-    defaults:
-      run:
-        working-directory: apps/helper
+    environment:
+      name: helper-${{ inputs.channel }}
+      deployment: false
     env:
       CHANNEL: ${{ inputs.channel }}
     steps:
@@ -85,12 +84,13 @@ jobs:
       - name: Configure managed pairing and updater
         env:
           PAIR_TICKET_KEY: ${{ vars.CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY }}
-        run: bash release/configure-build.sh macos
+        run: bash apps/helper/release/configure-build.sh macos
       - name: Build and notarize universal macOS app and DMG
+        working-directory: apps/helper
         env:
           APPLE_CERTIFICATE: ${{ secrets.HELPER_APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.HELPER_APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: 'Developer ID Application: CollabEZ FZE LLC (5K9635LZ6F)'
+          APPLE_SIGNING_IDENTITY: "Developer ID Application: CollabEZ FZE LLC (5K9635LZ6F)"
           APPLE_API_KEY: ${{ secrets.HELPER_APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.HELPER_APPLE_API_ISSUER }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.HELPER_APPLE_API_PRIVATE_KEY }}
@@ -140,10 +140,9 @@ jobs:
     if: ${{ !cancelled() && (github.event_name == 'pull_request' || (needs.plan.result == 'success' && !inputs.store_link_only)) }}
     needs: plan
     runs-on: windows-2025
-    environment: ${{ github.event_name == 'workflow_dispatch' && format('helper-{0}', inputs.channel) || 'helper-ci' }}
-    defaults:
-      run:
-        working-directory: apps/helper
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && format('helper-{0}', inputs.channel) || 'helper-ci' }}
+      deployment: false
     env:
       CHANNEL: ${{ inputs.channel }}
     steps:
@@ -157,8 +156,9 @@ jobs:
       - name: Configure managed pairing without the Tauri updater
         env:
           PAIR_TICKET_KEY: ${{ vars.CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY }}
-        run: bash release/configure-build.sh windows
+        run: bash apps/helper/release/configure-build.sh windows
       - name: Build Windows x64 executable without an NSIS installer
+        working-directory: apps/helper
         shell: bash
         run: npx --yes "$TAURI_CLI" build --ci --no-bundle -- --locked
       - name: Package and test the MSIX
@@ -168,7 +168,7 @@ jobs:
           STORE_IDENTITY: ${{ vars.CHALK_HELPER_STORE_IDENTITY }}
           STORE_PUBLISHER: ${{ vars.CHALK_HELPER_STORE_PUBLISHER }}
           STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.CHALK_HELPER_STORE_PUBLISHER_DISPLAY_NAME }}
-        run: ./release/package-windows.ps1
+        run: ./apps/helper/release/package-windows.ps1
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.msix.outputs.store_submission == 'true'
         with:
@@ -180,7 +180,9 @@ jobs:
     needs: [plan, build-macos]
     if: ${{ !cancelled() && needs.plan.result == 'success' && (inputs.store_link_only || needs.build-macos.result == 'success') }}
     runs-on: ubuntu-24.04
-    environment: helper-${{ inputs.channel }}
+    environment:
+      name: helper-${{ inputs.channel }}
+      deployment: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

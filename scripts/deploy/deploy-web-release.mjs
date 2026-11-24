@@ -23,7 +23,6 @@ export const STAGING_PROJECT = "chalk-staging";
 export const PRODUCTION_PROJECT = "chalk";
 export const DEFAULT_RELEASE_LOCK_PATH = join(tmpdir(), "chalk-web-release.lock");
 export const TURBO_CACHE_DIRECTORY_ENV = "CHALK_WEB_TURBO_CACHE_DIR";
-
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 export function normalizeSHA(rawSHA) {

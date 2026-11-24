@@ -256,6 +256,7 @@
       "summary": "Projects publication-bound marks onto a shared screen and reproduces committed marks in recording exports.",
       "paths": [
         ".github/workflows/helper-development.yml",
+        ".github/workflows/helper-release.yml",
         "apps/api/db/migrations/20261122120000_screen_annotation_settings.sql",
         "apps/api/db/queries/screen_annotation_settings.sql",
         "apps/api/internal/adapters/postgres/screen_annotation_settings.go",

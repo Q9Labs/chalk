@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+Set-Location (Join-Path $PSScriptRoot '..')
 
 $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
 $production = $env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:CHANNEL -eq 'production'
@@ -131,6 +132,7 @@ public static class HelperActivation {
 }
 '@
     $activatedId = [HelperActivation]::Activate("$($installed.PackageFamilyName)!Helper")
+    Write-Host "Activated $($installed.PackageFamilyName)!Helper as PID $activatedId."
     $url = 'http://127.0.0.1:47361/v1/challenge'
     $headers = @{ Origin = $env:CHALK_HELPER_WEB_ORIGIN }
     $body = @{ browserPublicKey = $env:CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY } | ConvertTo-Json -Compress
@@ -142,7 +144,15 @@ public static class HelperActivation {
             $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 2 -NoProxy
         } catch [System.Net.Http.HttpRequestException], [System.OperationCanceledException] {
             if ((Get-Date) -ge $deadline) {
-                Get-NetTCPConnection -LocalPort 47361 -ErrorAction SilentlyContinue | Format-Table State, OwningProcess
+                $listener = Get-NetTCPConnection -LocalPort 47361 -State Listen -ErrorAction SilentlyContinue
+                if ($listener) {
+                    $listener | Format-Table State, LocalAddress, OwningProcess | Out-Host
+                } else {
+                    Write-Host 'Nothing is listening on TCP port 47361.'
+                }
+                Get-Process -Id $activatedId | Format-Table Id, SessionId, MainWindowTitle, Path | Out-Host
+                Get-CimInstance Win32_Process -Filter "ParentProcessId = $activatedId" |
+                    Format-Table ProcessId, Name | Out-Host
                 throw
             }
             Start-Sleep -Seconds 1

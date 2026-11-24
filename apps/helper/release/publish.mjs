@@ -8,14 +8,7 @@ const { CHANNEL, VERSION, DOWNLOAD_ORIGIN, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, ST
 const refreshStoreLink = STORE_LINK_ONLY === "true";
 const directory = process.argv[2];
 const versionPattern = /^\d+\.\d+\.\d+$/;
-if (
-  !["staging", "production"].includes(CHANNEL) ||
-  !versionPattern.test(VERSION) ||
-  !/^\d+$/.test(GITHUB_RUN_ID) ||
-  !/^\d+$/.test(GITHUB_RUN_ATTEMPT) ||
-  DOWNLOAD_ORIGIN !== "https://downloads.chalkmeet.com" ||
-  (refreshStoreLink ? CHANNEL !== "production" : !directory)
-) {
+if (!["staging", "production"].includes(CHANNEL) || !versionPattern.test(VERSION) || !/^\d+$/.test(GITHUB_RUN_ID) || !/^\d+$/.test(GITHUB_RUN_ATTEMPT) || DOWNLOAD_ORIGIN !== "https://downloads.chalkmeet.com" || (refreshStoreLink ? CHANNEL !== "production" : !directory)) {
   throw new Error("Expected a Helper channel, version, download origin, run ID, attempt and artifact directory.");
 }
 
@@ -53,11 +46,7 @@ function signedPlatform(name, temporary) {
 }
 
 async function publish(source, destination, contentType, cacheControl) {
-  run("aws", [
-    "s3api", "put-object", "--endpoint-url", s3Endpoint, "--region", "auto", "--no-cli-pager",
-    "--bucket", bucket, "--key", destination, "--body", source,
-    "--content-type", contentType, "--cache-control", cacheControl,
-  ]);
+  run("aws", ["s3api", "put-object", "--endpoint-url", s3Endpoint, "--region", "auto", "--no-cli-pager", "--bucket", bucket, "--key", destination, "--body", source, "--content-type", contentType, "--cache-control", cacheControl]);
   const response = await fetch(url(destination), { signal: AbortSignal.timeout(120_000) });
   const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
   if (!response.ok || sha256(Buffer.from(await response.arrayBuffer())) !== sha256(readFileSync(source))) {
@@ -65,21 +54,20 @@ async function publish(source, destination, contentType, cacheControl) {
   }
 }
 
+function storeDownload() {
+  if (CHANNEL !== "production" || !STORE_URL) return "";
+  const listing = new URL(STORE_URL);
+  if (listing.origin !== "https://apps.microsoft.com" || listing.username || listing.password) {
+    throw new Error("The Windows listing must be an https://apps.microsoft.com Microsoft Store URL.");
+  }
+  const href = listing.href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return `<p><a href="${href}">Get Chalk Helper from the Microsoft Store</a></p>`;
+}
+
 function downloadPage(macDownload) {
   const title = CHANNEL === "staging" ? "Chalk Helper for Chalk Nightly" : "Chalk Helper";
-  const links = [];
-  if (macDownload) {
-    links.push(`<p><a href="${macDownload}">Download for macOS 14 or later</a> (Apple silicon and Intel)</p>`);
-  }
-  if (CHANNEL === "production" && STORE_URL) {
-    const listing = new URL(STORE_URL);
-    if (listing.origin !== "https://apps.microsoft.com" || listing.username || listing.password) {
-      throw new Error("The Windows listing must be an https://apps.microsoft.com Microsoft Store URL.");
-    }
-    const href = listing.href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-    links.push(`<p><a href="${href}">Get Chalk Helper from the Microsoft Store</a></p>`);
-  }
-  if (links.length === 0) links.push("<p>Downloads are not available yet.</p>");
+  const macLink = macDownload ? `<p><a href="${macDownload}">Download for macOS 14 or later</a> (Apple silicon and Intel)</p>` : "";
+  const links = [macLink, storeDownload()].filter(Boolean).join("\n  ");
 
   return `<!doctype html>
 <html lang="en">
@@ -89,7 +77,7 @@ function downloadPage(macDownload) {
 <main>
   <h1>${title}</h1>
   <p>See other participants’ annotations while you share your screen in Chalk.</p>
-  ${links.join("\n  ")}
+  ${links || "<p>Downloads are not available yet.</p>"}
 </main>
 </html>
 `;

@@ -52,7 +52,6 @@ The local listener binds only `127.0.0.1:47361`. It requires the exact Origin an
 
 The updater is off unless you set both `CHALK_HELPER_UPDATE_ENDPOINT` and `CHALK_HELPER_UPDATE_PUBLIC_KEY` at build time. Use an HTTPS manifest and the Tauri artifact verification key for that release channel. The development installer workflow publishes no releases.
 
-
 ## Publish a desktop release
 
 1. Set the installer version in `src-tauri/tauri.conf.json` and the matching crate version in `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`. Merge the release commit into `master` and tag it `helper-v<version>`.
@@ -63,12 +62,12 @@ If a run fails before it publishes, rerun all jobs so the publisher sees artifac
 
 Each channel uses its own GitHub Environment. Set `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY` to the live channel's managed Sync token issuer public key. Set `CLOUDFLARE_ACCOUNT_ID` to the owner of the `chalk-helper-downloads` R2 bucket.
 
-| Secrets | Purpose |
-| --- | --- |
-| `HELPER_APPLE_CERTIFICATE`, `HELPER_APPLE_CERTIFICATE_PASSWORD` | Base64 Developer ID Application PKCS#12 and its password. |
-| `HELPER_APPLE_API_KEY`, `HELPER_APPLE_API_ISSUER`, `HELPER_APPLE_API_PRIVATE_KEY` | App Store Connect key ID, issuer UUID, and raw PKCS#8 key for notarization. |
-| `HELPER_UPDATER_PRIVATE_KEY`, `HELPER_UPDATER_PASSWORD` | Tauri key and password from the matching **Chalk Helper Updater Key** item in 1Password. Do not replace a pinned key for an active channel. |
-| `HELPER_R2_ACCESS_KEY_ID`, `HELPER_R2_SECRET_ACCESS_KEY` | Cloudflare R2 S3 credentials. Use Object Read & Write scoped to `chalk-helper-downloads` only. |
+| Secrets                                                                           | Purpose                                                                                                                                     |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HELPER_APPLE_CERTIFICATE`, `HELPER_APPLE_CERTIFICATE_PASSWORD`                   | Base64 Developer ID Application PKCS#12 and its password.                                                                                   |
+| `HELPER_APPLE_API_KEY`, `HELPER_APPLE_API_ISSUER`, `HELPER_APPLE_API_PRIVATE_KEY` | App Store Connect key ID, issuer UUID, and raw PKCS#8 key for notarization.                                                                 |
+| `HELPER_UPDATER_PRIVATE_KEY`, `HELPER_UPDATER_PASSWORD`                           | Tauri key and password from the matching **Chalk Helper Updater Key** item in 1Password. Do not replace a pinned key for an active channel. |
+| `HELPER_R2_ACCESS_KEY_ID`, `HELPER_R2_SECRET_ACCESS_KEY`                          | Cloudflare R2 S3 credentials. Use Object Read & Write scoped to `chalk-helper-downloads` only.                                              |
 
 The macOS release uses the hardened runtime without App Sandbox. Screen Recording and Accessibility are macOS user grants, not Developer ID entitlements. Loopback is available to the non-sandboxed app; Helper still binds only to the numeric loopback address.
 
