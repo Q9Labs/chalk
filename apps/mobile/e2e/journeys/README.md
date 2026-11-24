@@ -36,4 +36,6 @@ xcodebuild test -workspace ios/Chalk.xcworkspace -scheme Chalk \
 The hosted test asserts on the sample buffers sent to AVKit and attaches
 before/after PNGs to the test result. It checks the neutral canvas, a viewer's
 mark and cursor, and that the content source stops producing frames after
-share teardown.
+share teardown. On Simulator devices that can start system PiP, a second test
+starts it, opens Settings to background Chalk, and verifies a new frame and
+window teardown while Chalk is backgrounded.

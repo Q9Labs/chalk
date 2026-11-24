@@ -2,7 +2,18 @@
 #import <XCTest/XCTest.h>
 #import "ChalkAnnotationPiPContent.h"
 
-@interface AnnotationPiPTests : XCTestCase
+static NSArray *PeerInk(void) {
+  return @[
+    @[@"stroke", @"#43dd8b", @1, @[@[@"move", @44, @150], @[@"line", @240, @150]], @8, @"round"],
+    @[@"fill", @"#43dd8b", @1, @[@[@"move", @240, @138], @[@"line", @259, @150], @[@"line", @240, @162], @[@"close"]]],
+    @[@"fill", @"#e39b39", @1, @[@[@"move", @277, @154], @[@"line", @277, @177], @[@"line", @294, @171], @[@"close"]]],
+    @[@"fill", @"#e39b39", @1, @[@[@"rect", @290, @181, @60, @23]]],
+    @[@"text", @"#0b0b0d", @1, @"Omar", @299, @192, @14],
+  ];
+}
+
+@interface AnnotationPiPTests : XCTestCase <AVPictureInPictureControllerDelegate>
+@property(nonatomic) XCTestExpectation *pictureInPictureStarted;
 @end
 
 @implementation AnnotationPiPTests
@@ -52,13 +63,7 @@
   CFRelease(before);
 
   // Inject the peer paint operations at the native bridge boundary.
-  NSArray *ink = @[
-    @[@"stroke", @"#43dd8b", @1, @[@[@"move", @44, @150], @[@"line", @240, @150]], @8, @"round"],
-    @[@"fill", @"#43dd8b", @1, @[@[@"move", @240, @138], @[@"line", @259, @150], @[@"line", @240, @162], @[@"close"]]],
-    @[@"fill", @"#e39b39", @1, @[@[@"move", @277, @154], @[@"line", @277, @177], @[@"line", @294, @171], @[@"close"]]],
-    @[@"fill", @"#e39b39", @1, @[@[@"rect", @290, @181, @60, @23]]],
-    @[@"text", @"#0b0b0d", @1, @"Omar", @299, @192, @14],
-  ];
+  NSArray *ink = PeerInk();
   [content setInk:ink];
   CMSampleBufferRef after = [content copyNextSampleBuffer];
   XCTAssertNotEqual(after, NULL);
@@ -76,6 +81,83 @@
   XCTAssertEqual(stopped, NULL);
   if (stopped) CFRelease(stopped);
   XCTAssertNil(surface.superlayer);
+}
+
+- (void)testSystemPiPDisplaysNewInkAfterBackgroundingWhenAvailable {
+  if (!AVPictureInPictureController.isPictureInPictureSupported) {
+    XCTSkip(@"This Simulator does not support system picture-in-picture.");
+    return;
+  }
+
+  UIApplication *app = UIApplication.sharedApplication;
+  UIWindow *window = app.delegate.window;
+  UIView *source = window.rootViewController.view;
+  XCTAssertNotNil(source.window);
+  if (!source.window) return;
+
+  Class contentClass = NSClassFromString(@"ChalkAnnotationPiPContent");
+  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:CGSizeMake(480, 300)];
+  AVPictureInPictureControllerContentSource *call = [[AVPictureInPictureControllerContentSource alloc]
+      initWithActiveVideoCallSourceView:source contentViewController:content];
+  AVPictureInPictureController *controller = [[AVPictureInPictureController alloc] initWithContentSource:call];
+  controller.delegate = self;
+  [content displayNextFrame];
+
+  NSPredicate *isPossible = [NSPredicate predicateWithFormat:@"pictureInPicturePossible == YES"];
+  XCTestExpectation *ready = [[XCTNSPredicateExpectation alloc] initWithPredicate:isPossible object:controller];
+  if ([XCTWaiter waitForExpectations:@[ready] timeout:3] != XCTWaiterResultCompleted) {
+    XCTSkip(@"AVKit reports PiP support, but never makes this Simulator video-call source possible.");
+    return;
+  }
+
+  self.pictureInPictureStarted = [[XCTestExpectation alloc] initWithDescription:@"AVKit activated picture-in-picture"];
+  [controller startPictureInPicture];
+  [self waitForExpectations:@[self.pictureInPictureStarted] timeout:6];
+  XCTAssertTrue(controller.isPictureInPictureActive);
+  if (!controller.isPictureInPictureActive) return;
+
+  XCTNSNotificationExpectation *backgrounded = [[XCTNSNotificationExpectation alloc]
+      initWithName:UIApplicationDidEnterBackgroundNotification object:app];
+  // Open the app's system settings via UIKit so the test does not need a UI runner.
+  [app openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString] options:@{} completionHandler:nil];
+  [self waitForExpectations:@[backgrounded] timeout:6];
+  XCTAssertEqual(app.applicationState, UIApplicationStateBackground);
+  XCTAssertTrue(controller.isPictureInPictureActive);
+
+  NSArray *ink = PeerInk();
+  [content setInk:ink];
+  CMSampleBufferRef updated = [content copyNextSampleBuffer];
+  XCTAssertNotEqual(updated, NULL);
+  if (updated) {
+    CVPixelBufferRef pixels = CMSampleBufferGetImageBuffer(updated);
+    [self assertPixel:pixels x:100 y:150 red:67 green:221 blue:139];
+    [self assertPixel:pixels x:283 y:169 red:227 green:155 blue:57];
+    [self attachFrame:pixels name:@"sharer-backgrounded-peer-ink"];
+    CFRelease(updated);
+  }
+  [content setInk:ink];
+  [content displayNextFrame];
+
+  [controller stopPictureInPicture];
+  controller.delegate = nil;
+  controller.contentSource = nil;
+  [content stop];
+  NSPredicate *isStopped = [NSPredicate predicateWithFormat:@"pictureInPictureActive == NO"];
+  XCTestExpectation *stopped = [[XCTNSPredicateExpectation alloc] initWithPredicate:isStopped object:controller];
+  [self waitForExpectations:@[stopped] timeout:6];
+  CMSampleBufferRef lateFrame = [content copyNextSampleBuffer];
+  XCTAssertEqual(lateFrame, NULL);
+  if (lateFrame) CFRelease(lateFrame);
+}
+
+- (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)controller {
+  [self.pictureInPictureStarted fulfill];
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)controller
+    failedToStartPictureInPictureWithError:(NSError *)error {
+  XCTFail(@"AVKit reported the video-call source was possible, but could not start: %@", error);
+  [self.pictureInPictureStarted fulfill];
 }
 
 @end
