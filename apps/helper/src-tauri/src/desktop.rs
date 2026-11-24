@@ -96,6 +96,7 @@ pub struct View {
     monitors: Vec<String>,
     can_follow_window: bool,
     overlay: Option<live::Overlay>,
+    update_available: bool,
     update_status: Option<&'static str>,
     device: Option<DeviceView>,
     permission: Option<permission::View>,
@@ -790,6 +791,7 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
         overlay: (window.label() == live::OVERLAY)
             .then(|| local.pairing.as_ref()?.overlay())
             .flatten(),
+        update_available: crate::updater_config().is_some(),
         update_status: local.update_status,
         device: (window.label() == "settings").then(|| local.device.view()),
         permission: (window.label() == "settings").then(|| local.permission.view()),

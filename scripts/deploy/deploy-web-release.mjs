@@ -23,7 +23,6 @@ export const STAGING_PROJECT = "chalk-staging";
 export const PRODUCTION_PROJECT = "chalk";
 export const DEFAULT_RELEASE_LOCK_PATH = join(tmpdir(), "chalk-web-release.lock");
 export const TURBO_CACHE_DIRECTORY_ENV = "CHALK_WEB_TURBO_CACHE_DIR";
-
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 export function normalizeSHA(rawSHA) {
@@ -199,6 +198,7 @@ async function buildWebArtifact({ build, commandRunner, environment, expectedSHA
     CHALK_ENVIRONMENT: "production",
     VITE_API_URL: "https://api.chalkmeet.com",
     VITE_CHALK_SYNC_URL: "wss://sync.chalkmeet.com/v1/sync",
+    VITE_CHALK_HELPER_INSTALL_URL: "https://downloads.chalkmeet.com/helper/production/index.html",
   };
   await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", turboCacheDirectory], rootDirectory, { env: buildEnvironment }));
 }
