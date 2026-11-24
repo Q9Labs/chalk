@@ -18,9 +18,11 @@ test("a loopback listener without native confirmation never receives a capture d
   const expiry = Date.now() + 40_000;
   const key = "A".repeat(43);
   const sent: string[] = [];
+  const exchangeTypes: string[] = [];
   vi.stubGlobal("fetch", async (url: string, request?: RequestInit) => {
     const path = new URL(url).pathname;
     sent.push(path);
+    if (path === "/v1/exchange") exchangeTypes.push(JSON.parse(String(request?.body)).type);
     if (path === "/v1/challenge") return Response.json({ version: 2, helperPublicKey: key, challenge: key, expiresAtMs: expiry });
     if (path === "/v1/attach") {
       expect(request?.body).not.toContain("a.t.t");
@@ -42,7 +44,8 @@ test("a loopback listener without native confirmation never receives a capture d
       async () => "ABCD-EFGH-JKLM-NPQR",
     ),
   ).rejects.toThrow();
-  expect(sent).not.toContain("/v1/exchange");
+  expect(sent).toContain("/v1/cancel");
+  expect(exchangeTypes).toEqual(["disconnect"]);
   expect(statuses).not.toContain("ready");
 });
 
@@ -61,52 +64,41 @@ async function pairingFixture() {
       sign: async (message: string) => b64(await crypto.subtle.sign("Ed25519", keys.privateKey, encoder.encode(message))),
     };
   }
-  let helperKey = await keyPair();
+  const helperKey = await keyPair();
   let browserKey = "";
-  let ticketCount = 0;
-  let revoked = false;
-  let falseProof = false;
-  let legacy = false;
   let lastConfirmation = "";
   let replay = false;
-  let registrationAvailable = true;
+  let cancelCount = 0;
   const authorizedTickets: string[] = [];
-  const rememberKey = async () => {
-    if (!registrationAvailable) throw new Error("Registration is not available.");
-  };
-  const storage = new Map<string, string>();
-  vi.stubGlobal("window", {
-    isSecureContext: true,
-    location: { origin: pairOrigin },
-    localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) },
-  });
+  vi.stubGlobal("window", { isSecureContext: true, location: { origin: pairOrigin } });
   const challenge = "A".repeat(43);
-  const issueLocalTicket = async ({ remembered, share }: Parameters<HelperPairAuthority["issueLocalTicket"]>[0]) => ({
-    pair: { ticket: `p.${remembered && !revoked ? "remember" : "code"}.${share.layer.publication_id}`, expiresAtMs: expiry },
+  let ticketCount = 0;
+  const issueLocalTicket = async ({ share }: Parameters<HelperPairAuthority["issueLocalTicket"]>[0]) => ({
+    pair: { ticket: `p.code.${share.layer.publication_id}`, expiresAtMs: expiry },
     attachment: { ticket: `a.t.${++ticketCount}`, expiresAtMs: expiry },
-    remembered: remembered && !revoked,
   });
   vi.stubGlobal("fetch", async (url: string, request?: RequestInit) => {
     const body = JSON.parse(String(request?.body));
     const route = new URL(url);
     switch (route.pathname) {
       case "/v1/challenge":
-        if (legacy && route.search) throw new TypeError("Failed to fetch");
+        if (browserKey !== "") return new Response(null, { status: 409 });
         browserKey = body.browserPublicKey;
-        const keyProof = falseProof ? "A".repeat(86) : await helperKey.sign(`chalk.helper.key.v1\n${pairOrigin}\n${browserKey}\n${challenge}\n${expiry}`);
-        return Response.json({
-          version: 2,
-          helperPublicKey: helperKey.publicKey,
-          challenge,
-          expiresAtMs: expiry,
-          ...(legacy ? {} : { keyProof }),
-        });
+        return Response.json({ version: 2, helperPublicKey: helperKey.publicKey, challenge, expiresAtMs: expiry });
       case "/v1/attach": {
         const transcript = ["chalk.helper.pair.v2", challenge, browserKey, helperKey.publicKey, await hash(body.pairTicket), body.attachmentHash].join("\n");
-        const code = body.pairTicket.split(".")[1] === "remember" ? "" : pairCode;
-        const confirmation = replay ? lastConfirmation : await helperKey.sign(`chalk.helper.confirm.v2\n${transcript}\n${challenge}\n${expiry}\n${code}`);
+        const confirmation = replay ? lastConfirmation : await helperKey.sign(`chalk.helper.confirm.v2\n${transcript}\n${challenge}\n${expiry}\n${pairCode}`);
         lastConfirmation = confirmation;
         return Response.json({ sessionSecret: challenge, leaseExpiresAtMs: expiry, confirmation });
+      }
+      case "/v1/cancel": {
+        expect(body.browserPublicKey).toBe(browserKey);
+        const key = await crypto.subtle.importKey("raw", Uint8Array.from(Buffer.from(browserKey, "base64url")), "Ed25519", false, ["verify"]);
+        const message = encoder.encode(`chalk.helper.cancel.v1\n${browserKey}`);
+        expect(await crypto.subtle.verify("Ed25519", key, Uint8Array.from(Buffer.from(body.proof, "base64url")), message)).toBe(true);
+        browserKey = "";
+        cancelCount++;
+        return new Response(null, { status: 204 });
       }
       case "/v1/exchange":
         if (body.type === "authorize") authorizedTickets.push(body.attachmentTicket);
@@ -115,7 +107,7 @@ async function pairingFixture() {
         throw new Error("Unexpected Helper request");
     }
   });
-  async function pair(accountId = "alice", publication = "first") {
+  async function pair({ publication = "first", code = pairCode, cancel = false } = {}) {
     const layer = { layer_id: "layer", publication_id: publication, sharer_id: "sharer" };
     const share = {
       client: { getSnapshot: () => ({ status: "ready", state: { layer } }), subscribe: () => () => {} },
@@ -125,8 +117,7 @@ async function pairingFixture() {
     } as unknown as ScreenAnnotationHelperShare;
     const helper = createBrowserAnnotationHelper({
       origin: pairOrigin,
-      accountId,
-      authority: { issueLocalTicket, rememberKey },
+      authority: { issueLocalTicket },
     });
     const result = await helper.challenge(share, new AbortController().signal);
     if (result.kind !== "approval") throw new Error("Helper not available");
@@ -135,7 +126,8 @@ async function pairingFixture() {
       () => {},
       async () => {
         neededCode = true;
-        return pairCode;
+        if (cancel) throw new Error("Canceled.");
+        return code;
       },
     );
     await expect(attached).rejects.toThrow(); // The fixture stops at authorize.
@@ -144,74 +136,39 @@ async function pairingFixture() {
   return {
     pair,
     authorizedTickets,
-    storage,
-    stopRegistration: () => {
-      registrationAvailable = false;
-    },
-    replaceKey: async () => {
-      helperKey = await keyPair();
-    },
-    revoke: () => {
-      revoked = true;
-    },
-    forgeKeyProof: () => {
-      falseProof = true;
-    },
-    useLegacy: () => {
-      legacy = true;
-    },
+    cancellations: () => cancelCount,
     replay: () => {
       replay = true;
     },
   };
 }
 
-test("only the first pairing of a pinned Helper requires a code", async () => {
+test("each share pairing requires its own typed code", async () => {
   const helper = await pairingFixture();
-  expect((await helper.pair()).neededCode).toBe(true);
-  expect(helper.storage.size).toBe(1);
-  const later = await helper.pair();
-  expect(later.remembered).toBe(true);
-  expect(later.neededCode).toBe(false);
+  for (let i = 0; i < 2; i++) {
+    expect(await helper.pair()).toEqual({ neededCode: true, remembered: false });
+  }
   expect(helper.authorizedTickets).toEqual(["a.t.1", "a.t.2"]);
 });
 
-test("code pairing still works if the API cannot register remembered keys", async () => {
+test.each([{ code: "ZZZZ-ZZZZ-ZZZZ-ZZZZ" }, { cancel: true }])("can retry immediately after an unsuccessful code dialog: %j", async (failure) => {
   const helper = await pairingFixture();
-  helper.stopRegistration();
+  await helper.pair(failure);
+  expect(helper.authorizedTickets).toEqual([]);
+  expect(helper.cancellations()).toBe(1);
   await helper.pair();
-  const later = await helper.pair();
-  expect(later.remembered).toBe(false);
-  expect(later.neededCode).toBe(true);
-  expect(helper.authorizedTickets).toEqual(["a.t.1", "a.t.2"]);
+  expect(helper.authorizedTickets).toEqual(["a.t.2"]);
 });
 
-test.each(["changed key", "revoked device", "another account", "cleared pin", "forged key proof", "older Helper"] as const)("%s requires a new code", async (change) => {
+test.each(["same share", "different share"] as const)("a signed approval cannot authorize another tab on the %s", async (scope) => {
   const helper = await pairingFixture();
-  await helper.pair();
-  if (change === "changed key") await helper.replaceKey();
-  if (change === "revoked device") helper.revoke();
-  if (change === "cleared pin") helper.storage.clear();
-  if (change === "forged key proof") helper.forgeKeyProof();
-  if (change === "older Helper") helper.useLegacy();
-  const later = await helper.pair(change === "another account" ? "bob" : "alice");
-  expect(later.remembered).toBe(false);
-  expect(later.neededCode).toBe(true);
-  expect(helper.authorizedTickets).toEqual(["a.t.1", "a.t.2"]);
-});
-
-test.each(["same share", "different share"] as const)("a pinned response cannot authorize another tab on the %s", async (scope) => {
-  const helper = await pairingFixture();
-  await helper.pair();
   await helper.pair();
   helper.replay();
-  const later = await helper.pair("alice", scope === "different share" ? "second" : "first");
-  expect(later.remembered).toBe(true);
-  expect(later.neededCode).toBe(false);
-  expect(helper.authorizedTickets).toEqual(["a.t.1", "a.t.2"]);
+  await helper.pair({ publication: scope === "same share" ? "first" : "second" });
+  expect(helper.authorizedTickets).toEqual(["a.t.1"]);
 });
 
-test("the same tab cannot reuse remembered approval for another share", async () => {
+test("the same tab cannot reuse a signed approval for another share", async () => {
   const tab = await startConsent();
   const helper = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const encode = (value: ArrayBuffer) => Buffer.from(value).toString("base64url");
@@ -223,13 +180,13 @@ test("the same tab cannot reuse remembered approval for another share", async ()
   const challenge = { version: 2, challenge: nonce, helperPublicKey: publicKey, expiresAtMs: expiry };
   const firstPair = "p.a.first";
   const attachment = "a.t.first";
-  const message = ["chalk.helper.confirm.v2", "chalk.helper.pair.v2", nonce, tab.browserPublicKey, publicKey, await hash(firstPair), await hash(attachment), nonce, expiry, ""].join("\n");
+  const message = ["chalk.helper.confirm.v2", "chalk.helper.pair.v2", nonce, tab.browserPublicKey, publicKey, await hash(firstPair), await hash(attachment), nonce, expiry, pairCode].join("\n");
   const reply = {
     sessionSecret: nonce,
     leaseExpiresAtMs: expiry,
     confirmation: encode(await crypto.subtle.sign("Ed25519", helper.privateKey, bytes(message))),
   };
-  await expect((await tab.bind(challenge, firstPair, attachment, true)).confirm(null, reply)).resolves.toBeUndefined();
-  await expect((await tab.bind(challenge, "p.a.second", attachment, true)).confirm(null, reply)).rejects.toThrow("did not confirm this tab and share");
-  await expect((await tab.bind(challenge, firstPair, "a.t.second", true)).confirm(null, reply)).rejects.toThrow("did not confirm this tab and share");
+  await expect((await tab.bind(challenge, firstPair, attachment)).confirm(pairCode, reply)).resolves.toBeUndefined();
+  await expect((await tab.bind(challenge, "p.a.second", attachment)).confirm(pairCode, reply)).rejects.toThrow("did not confirm this tab and share");
+  await expect((await tab.bind(challenge, firstPair, "a.t.second")).confirm(pairCode, reply)).rejects.toThrow("did not confirm this tab and share");
 });

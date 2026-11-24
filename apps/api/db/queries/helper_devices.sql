@@ -13,12 +13,13 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '5 minutes');
 select request.id, request.name, request.public_key
 from helper_device_requests request
 left join helper_devices device on device.id = request.device_id
-where request.code_hash = $1 and request.expires_at > now() and request.approved_share is null
+where length(request.public_key) = 87 and request.code_hash = $1 and request.expires_at > now() and request.approved_share is null
 and request.intended_tenant_id = sqlc.arg(tenant_id)
 and (request.device_id is null or (device.tenant_id = sqlc.arg(tenant_id) and device.revoked_at is null));
 
 -- name: LockHelperDeviceRequest :one
-select * from helper_device_requests where id = $1 and intended_tenant_id = $2 and expires_at > now() for update;
+select * from helper_device_requests where id = $1 and intended_tenant_id = $2
+  and length(public_key) = 87 and expires_at > now() for update;
 
 -- name: RegisterHelperDevice :exec
 insert into helper_devices (id, tenant_id, name, public_key, credential_hash)
@@ -38,15 +39,7 @@ where poll_hash = $1 and expires_at > now() and next_poll_at <= now()
 returning *;
 
 -- name: ReadHelperDevices :many
-select id, name from helper_devices where tenant_id = $1 and revoked_at is null order by registered_at desc limit 100;
+select id, name from helper_devices where tenant_id = $1 and revoked_at is null and length(public_key) = 87 order by registered_at desc limit 100;
 
 -- name: RevokeHelperDevice :exec
 update helper_devices set revoked_at = now() where id = $1 and tenant_id = $2 and revoked_at is null;
-
--- name: RegisterHelperLoopbackDevice :exec
-insert into helper_devices (id, tenant_id, name, public_key, credential_hash, loopback)
-values ($1, $2, 'Chalk Helper (browser pairing)', $3, $4, true)
-on conflict (tenant_id, public_key) where loopback do nothing;
-
--- name: LockActiveHelperLoopbackDevice :one
-select id from helper_devices where tenant_id = $1 and public_key = $2 and loopback and revoked_at is null for update;

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -72,7 +73,14 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 		}
 		return base64.RawURLEncoding.EncodeToString(data[:])
 	}
-	key, credential, poll := secret(), secret(), secret()
+	deviceKey, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, credential, poll := base64.RawURLEncoding.EncodeToString(deviceKey.PublicKey().Bytes()), secret(), secret()
+	if _, err := service.StartDevice(ctx, tenants[0], "Old preview device", secret(), secret(), secret(), false); !errors.Is(err, helperaccess.ErrInvalid) {
+		t.Fatalf("old preview key enrolled: %v", err)
+	}
 	code, err := service.StartDevice(ctx, tenants[0], "Proof device", key, credential, poll, false)
 	if err != nil {
 		t.Fatal(err)
@@ -169,57 +177,4 @@ func TestHelperDeviceApprovalAndRevocation(t *testing.T) {
 		t.Fatalf("revoked registration began a new exchange: %v", err)
 	}
 
-	t.Run("remembered loopback keys are tenant scoped and revocable", func(t *testing.T) {
-		binding := helperaccess.Binding{DeviceKey: key, PublicationID: publication, LayerID: layer}
-		challenge := secret()
-		check := func(subject accessgrants.Subject, want bool) {
-			t.Helper()
-			tickets, err := service.IssueLocal(ctx, subject, binding, "https://chalk.test", challenge, true)
-			if err != nil || tickets.Remembered != want || tickets.Pair.Value == "" {
-				t.Fatalf("remembered = %v, want %v, issue error %v", tickets.Remembered, want, err)
-			}
-		}
-		check(subject, false)
-		for range 2 {
-			if err := service.RememberLoopbackDevice(ctx, subject.TenantID, key); err != nil {
-				t.Fatal(err)
-			}
-		}
-		check(subject, true)
-		check(otherSubject, false)
-
-		devices, err := service.ListDevices(ctx, subject.TenantID)
-		if err != nil || len(devices) != 1 {
-			t.Fatalf("expected one new revocable device: %v, error %v", len(devices), err)
-		}
-		device, err := utilities.ParseID(devices[0].ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		paused := pausedHelperShare{started: make(chan struct{}), resume: make(chan struct{})}
-		racing := helperaccess.NewService(paused, "test", "test", signer).WithDevices(store)
-		type result struct {
-			tickets helperaccess.LocalTickets
-			err     error
-		}
-		issued := make(chan result, 1)
-		go func() {
-			tickets, err := racing.IssueLocal(ctx, subject, binding, "https://chalk.test", challenge, true)
-			issued <- result{tickets, err}
-		}()
-		<-paused.started
-		err = service.RevokeDevice(ctx, subject.TenantID, device)
-		close(paused.resume)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := <-issued; got.err != nil || got.tickets.Remembered {
-			t.Fatalf("a remembered ticket was issued after revoke returned: %v", got.err)
-		}
-		if err := service.RememberLoopbackDevice(ctx, subject.TenantID, key); err != nil {
-			t.Fatal(err)
-		}
-		check(subject, false)
-	})
 }

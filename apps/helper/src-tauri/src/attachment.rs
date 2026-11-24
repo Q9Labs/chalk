@@ -34,7 +34,15 @@ impl Endpoint {
     }
 }
 
-fn prove(challenge: Challenge, ticket: &str, key: &Ed25519KeyPair) -> Result<Value, &'static str> {
+pub enum Signer {
+    Loopback(Arc<Ed25519KeyPair>),
+    #[cfg(target_os = "windows")]
+    Device(Arc<crate::windows_key::DeviceSigner>),
+    #[cfg(not(target_os = "windows"))]
+    Device(Arc<ring::signature::EcdsaKeyPair>),
+}
+
+fn prove(challenge: Challenge, ticket: &str, key: &Signer) -> Result<Value, &'static str> {
     if challenge.version != 1 {
         return Err("update_required");
     }
@@ -51,7 +59,16 @@ fn prove(challenge: Challenge, ticket: &str, key: &Ed25519KeyPair) -> Result<Val
         challenge.nonce,
         URL_SAFE_NO_PAD.encode(ticket_hash.as_ref())
     );
-    let proof = URL_SAFE_NO_PAD.encode(key.sign(message.as_bytes()).as_ref());
+    let proof = match key {
+        Signer::Loopback(key) => URL_SAFE_NO_PAD.encode(key.sign(message.as_bytes())),
+        #[cfg(target_os = "windows")]
+        Signer::Device(key) => URL_SAFE_NO_PAD.encode(key.sign(message.as_bytes())?),
+        #[cfg(not(target_os = "windows"))]
+        Signer::Device(key) => URL_SAFE_NO_PAD.encode(
+            key.sign(&ring::rand::SystemRandom::new(), message.as_bytes())
+                .map_err(|_| "could_not_sign_attachment")?,
+        ),
+    };
     Ok(json!({"type":"annotation_helper_attach","version":1,"ticket": ticket,"proof":proof}))
 }
 
@@ -78,7 +95,7 @@ async fn connect(
 
 pub async fn receive(
     ticket: String,
-    key: Arc<Ed25519KeyPair>,
+    key: Signer,
     update: impl FnMut(Value) -> bool,
 ) -> Result<(), &'static str> {
     let (_sender, receiver) = tokio::sync::mpsc::channel(1);
@@ -87,7 +104,7 @@ pub async fn receive(
 
 pub async fn receive_with_commands(
     ticket: String,
-    key: Arc<Ed25519KeyPair>,
+    key: Signer,
     mut commands: tokio::sync::mpsc::Receiver<Value>,
     mut update: impl FnMut(Value) -> bool,
 ) -> Result<(), &'static str> {
@@ -176,7 +193,7 @@ mod tests {
     fn proof_matches_the_sync_transcript_and_is_nonce_bound() {
         let random = SystemRandom::new();
         let document = Ed25519KeyPair::generate_pkcs8(&random).unwrap();
-        let key = Ed25519KeyPair::from_pkcs8(document.as_ref()).unwrap();
+        let key = Arc::new(Ed25519KeyPair::from_pkcs8(document.as_ref()).unwrap());
         let nonce = URL_SAFE_NO_PAD.encode([9; 32]);
         let ticket = "header.payload.signature";
         let signed = prove(
@@ -186,7 +203,7 @@ mod tests {
                 nonce: nonce.clone(),
             },
             ticket,
-            &key,
+            &Signer::Loopback(key.clone()),
         )
         .unwrap();
         let verifier = UnparsedPublicKey::new(&ED25519, key.public_key().as_ref());
