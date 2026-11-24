@@ -51,13 +51,16 @@ export function callAnnotation(options: { readonly apiBaseUrl: string; readonly 
     ...webAnnotation,
     helper: {
       installUrl,
-      deviceAccount: tenantId,
       async challenge(...args) {
         return (await loadHelper()).challenge(...args);
       },
-      async lookupCode(...args) {
-        return (await loadHelper()).lookupCode(...args);
-      },
+      // Device-code pairing uses the signed-in dashboard, not the public arrival.
+      ...(options.accountId && {
+        deviceAccount: tenantId,
+        async lookupCode(code, share, signal) {
+          return (await loadHelper()).lookupCode(code, share, signal);
+        },
+      }),
     },
   };
 }

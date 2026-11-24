@@ -167,10 +167,11 @@ async function fakeWindowCapture(context: BrowserContext, participant: number) {
   });
 }
 
-async function joinGuest(page: Page, invite: string, name: string) {
+async function joinGuest(host: Page, page: Page, invite: string, name: string) {
   await page.goto(invite);
   await page.getByLabel("Your name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Join call", exact: true }).click();
+  await host.getByRole("button", { name: `Let ${name} in`, exact: true }).click();
   await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).waitFor({ timeout: 30_000 });
 }
 
@@ -197,7 +198,7 @@ async function drawLiveMark(page: Page) {
 
 async function stopShare(page: Page) {
   await showCallControls(page);
-  await page.getByRole("button", { name: "Stop sharing", exact: true }).click();
+  await page.locator('[data-part="share-split"]').getByRole("button", { name: "Stop sharing", exact: true }).click();
 }
 
 test("live annotation: a dashboard host and a guest each get Helper before and after viewers draw; mobile web does not", async () => {
@@ -221,21 +222,26 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
       // The dev stack has its own local identity provider; CI passes the dashboard fixture's session instead.
       await host.goto(new URL("/dashboard/sign-in", origin).href);
       await host.getByRole("button", { name: "Continue with Google", exact: true }).click();
+      await host.getByRole("link", { name: "Ada", exact: true }).click();
       await host.getByRole("button", { name: "Start a call", exact: true }).first().waitFor();
     }
     await startAndJoinCall(host, origin);
+    const detailsButton = host.getByRole("button", { name: "Call details", exact: true });
+    if ((await detailsButton.getAttribute("aria-expanded")) !== "true") await detailsButton.click();
     const details = host.getByRole("dialog", { name: "Call details", exact: true });
     await details.getByRole("button", { name: /Copy invite link/ }).click();
     await details.getByText("Link copied", { exact: true }).waitFor();
     const invite = await host.evaluate(() => navigator.clipboard.readText());
     await details.getByRole("button", { name: "Close", exact: true }).click();
-    await Promise.all([joinGuest(guest, invite, "Desktop Guest"), joinGuest(mobile, invite, "Mobile Guest")]);
+    await joinGuest(host, guest, invite, "Desktop Guest");
+    await joinGuest(host, mobile, invite, "Mobile Guest");
 
     const helperCard = (page: Page) => page.locator('[data-part="annotation-helper-offer"]');
     const intro = "Viewers can draw on your share. Use Chalk Helper to see their marks on your screen.";
     await chooseShare(host, "Window", installer);
     await helperCard(host).getByText(intro, { exact: true }).waitFor();
     expect(await helperCard(host).getByRole("link", { name: "Get Chalk Helper" }).getAttribute("href")).toBe(installer);
+    if (origin.startsWith("https:")) await helperCard(host).getByRole("button", { name: "Connect", exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-prompt.png") });
     await helperCard(host).getByRole("button", { name: "Not now", exact: true }).click();
     await helperCard(host).waitFor({ state: "hidden" });
@@ -258,6 +264,12 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
       .getByText(/is drawing on your share/)
       .waitFor();
     if (evidence) await guest.screenshot({ path: join(evidence, "guest-window-drawing.png") });
+    if (origin.startsWith("https:")) {
+      await helperCard(guest).getByRole("button", { name: "Connect Chalk Helper", exact: true }).click();
+      await helperCard(guest).getByText("Couldn’t reach Chalk Helper on this device.", { exact: true }).waitFor();
+      expect(await helperCard(guest).getByRole("button", { name: "Find device", exact: true }).count()).toBe(0);
+      await helperCard(guest).getByRole("button", { name: "Not now", exact: true }).click();
+    }
     await stopShare(guest);
     await helperCard(guest).waitFor({ state: "detached" });
 
@@ -270,11 +282,16 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await helperCard(host).waitFor({ state: "detached" });
 
     await chooseShare(mobile, "Window");
+    await mobile.locator('[data-part="screen-annotation-controls"][data-local]').waitFor();
     await host.getByRole("button", { name: "Annotate", exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "web-viewer-annotate.png") });
     await drawLiveMark(host);
     expect(await helperCard(mobile).count()).toBe(0);
-    if (evidence) await mobile.screenshot({ path: join(evidence, "mobile-web-no-helper.png") });
+    if (evidence) {
+      await mobile.setViewportSize(devices["iPhone 15"].viewport);
+      await mobile.screenshot({ path: join(evidence, "mobile-web-no-helper.png") });
+      await mobile.setViewportSize({ width: 1440, height: 960 });
+    }
     await stopShare(mobile);
   } finally {
     await browser.close();
