@@ -169,7 +169,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
 
   return (
     <div data-part="annotation-helper-offer" className="chalk-ann-card">
-      <HelperStep screen={screen} drawing={drawing} helper={helper} code={code} setCode={setCode} connect={connect} lookup={lookup} />
+      <HelperStep screen={screen} drawing={drawing} guidance={helper.captureGuidance?.(share)} helper={helper} code={code} setCode={setCode} connect={connect} lookup={lookup} />
       <HelperOfferActions
         screen={screen}
         helper={helper}
@@ -186,6 +186,7 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
 function HelperStep({
   screen,
   drawing,
+  guidance,
   helper,
   code,
   setCode,
@@ -194,24 +195,28 @@ function HelperStep({
 }: {
   readonly screen: HelperScreen;
   readonly drawing: string | null;
+  readonly guidance?: string;
   readonly helper: ScreenAnnotationHelper;
   readonly code: string;
   readonly setCode: (value: string) => void;
   readonly connect: () => Promise<void>;
   readonly lookup: () => Promise<void>;
 }) {
-  const canConnect = helper.challenge || helper.lookupCode;
+  const canConnect = !guidance && (helper.challenge || helper.lookupCode);
   return (
     <>
       {screen.kind === "idle" ? (
         <>
-          {drawing ? (
-            <p>
-              <bdi>{drawing}</bdi> is drawing on your share. Use Chalk Helper to see their marks on your screen.
-            </p>
-          ) : (
-            <p>Viewers can draw on your share. Use Chalk Helper to see their marks on your screen.</p>
-          )}
+          <p>
+            {drawing ? (
+              <>
+                <bdi>{drawing}</bdi> is drawing on your share.
+              </>
+            ) : (
+              "Viewers can draw on your share."
+            )}{" "}
+            {guidance ?? "Use Chalk Helper to see their marks on your screen."}
+          </p>
           {canConnect ? (
             <button type="button" className="chalk-ann-btn" data-tone={drawing ? "primary" : "outline"} onClick={() => void connect()}>
               {drawing ? "Connect Chalk Helper" : "Connect"}

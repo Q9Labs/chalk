@@ -90,12 +90,6 @@ function localPreview(track: MediaStreamTrack) {
   };
 }
 
-export function chromiumWindowId(label: string): string | undefined {
-  // The classic Chromium picker exposes the platform source ID. A fourth
-  // ":s" field instead labels an opaque OS picker session, not a window.
-  return /^window:([1-9][0-9]{0,18}):-?[0-9]+$/.exec(label)?.[1];
-}
-
 export async function calibrateWindow(options: {
   readonly track: MediaStreamTrack;
   readonly signal: AbortSignal;

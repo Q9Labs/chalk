@@ -74,6 +74,7 @@ export type ScreenAnnotationHelperStatus = "waiting_for_sync" | "unbound" | "cal
 
 export interface ScreenAnnotationHelper {
   readonly installUrl?: string;
+  readonly captureGuidance?: (share: ScreenAnnotationHelperShare) => string | undefined;
   readonly challenge?: (
     share: ScreenAnnotationHelperShare,
     signal: AbortSignal,

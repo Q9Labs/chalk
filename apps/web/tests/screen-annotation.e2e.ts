@@ -150,6 +150,8 @@ async function fakeWindowCapture(context: BrowserContext, participant: number) {
       const settings = track.getSettings.bind(track);
       const requested = options?.video;
       const isMonitor = typeof requested === "object" && requested.displaySurface === "monitor";
+      const windowLabel = localStorage.getItem("fixture-opaque-window") === "1" ? "window:1:0:s" : "window:1:0";
+      if (!isMonitor) Object.defineProperty(track, "label", { value: windowLabel });
       track.getSettings = () => ({ ...settings(), displaySurface: isMonitor ? "monitor" : "window", width: canvas.width, height: canvas.height });
       let frame = 0;
       const render = () => {
@@ -252,6 +254,17 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
       .getByText(/Desktop Guest is drawing on your share/)
       .waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-drawing.png") });
+    await stopShare(host);
+    await helperCard(host).waitFor({ state: "detached" });
+
+    await host.evaluate(() => localStorage.setItem("fixture-opaque-window", "1"));
+    await chooseShare(host, "Window", installer);
+    await host.getByRole("button", { name: "Chalk Helper", exact: true }).click();
+    await helperCard(host)
+      .getByText(/Share your entire screen to use it/)
+      .waitFor();
+    expect(await helperCard(host).getByRole("button", { name: "Connect", exact: true }).count()).toBe(0);
+    if (evidence) await host.screenshot({ path: join(evidence, "opaque-window-helper-guidance.png") });
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 
