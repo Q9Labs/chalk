@@ -422,12 +422,13 @@ export function createGatePlan(files, options = {}) {
   const dashboardRefresh = narrow
     ? full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web/server", "apps/web/src/lib/dashboard", "apps/web/src/components/dashboard", "apps/web/tests/dashboard", "apps/api/internal/accessgrants", "scripts/gates/with-postgres.sh"]))
     : dashboardEngine;
-  // The board proofs open the public Space page of the web build in a browser, so a pull request runs them for web inputs, for the
-  // board test, its engine configuration and the proof helpers it imports, and for the dashboard fixture and stack script that start the local stack.
+  // The board and annotation proofs drive the web build on the local stack. Include their test and engine inputs as well as shipped web inputs.
   const boardLocal = narrow
     ? full ||
       affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") ||
-      nonDocumentationFiles.some((file) => startsWithAny(file, ["tests/board.e2e.ts", "e2e.config.ts", "scripts/web-proof", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "scripts/gates/with-postgres.sh"]))
+      nonDocumentationFiles.some((file) =>
+        startsWithAny(file, ["tests/board.e2e.ts", "e2e.config.ts", "apps/web/tests/screen-annotation.e2e.ts", "apps/web/e2e.annotation.config.ts", "scripts/web-proof", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "scripts/gates/with-postgres.sh"]),
+      )
     : dashboardEngine;
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
@@ -549,7 +550,7 @@ export function createGatePlan(files, options = {}) {
     ),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "http"]),
     task("dashboard-refresh", "Owner call across the real media-access lifetime", dashboardRefresh, dashboardRefresh ? "refresh inputs changed, or the merge queue" : "the dashboard refresh proof is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "refresh"]),
-    task("board-local", "Board proofs in a browser against the local stack", boardLocal, boardLocal ? "web or board proof inputs changed, or the merge queue" : "the board proofs are unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "board"]),
+    task("board-local", "Board and screen annotation proofs against the local stack", boardLocal, boardLocal ? "web or collaboration proof inputs changed, or the merge queue" : "the collaboration proofs are unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "board"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
     task("call-performance", "Call performance budgets", callUi, "call rendering inputs or full gate", ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--bundle-only"]),
     task("call-leaks", "Call lifecycle leak budgets", callUi, "call lifecycle inputs or full gate", [

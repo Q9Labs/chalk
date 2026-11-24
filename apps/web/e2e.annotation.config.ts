@@ -13,5 +13,5 @@ export default {
   output: ".private/annotation",
   workers: 1,
   retries: 0,
-  timeout: 30_000,
+  timeout: process.env.CHALK_ANNOTATION_WEB_URL ? 120_000 : 30_000,
 } satisfies E2EConfig;
