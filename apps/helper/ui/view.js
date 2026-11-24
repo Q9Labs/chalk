@@ -122,7 +122,7 @@ if (isOverlay) {
     </div>
     <div class="setting"><span>Sharer control</span><div class="segment">${styleButtons()}</div></div>
     <div class="setting" id="shortcut" hidden><span>Draw shortcut</span><kbd>${navigator.platform.startsWith("Mac") ? "⌘ ⇧ 9" : "Ctrl Shift 9"}</kbd></div>
-    <button type="button" id="update">Check for updates</button>
+    <button type="button" id="update" hidden>Check for updates</button>
     <p role="status" id="status"></p>
   </section>`;
   bindStyleButtons();
@@ -256,6 +256,7 @@ function paintSettings(view) {
   paintDisplays(view);
   paintApproval(view);
   paintDevice(view);
+  root.querySelector("#update").hidden = !view.updateAvailable;
   if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
   root.querySelectorAll("[data-style]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));

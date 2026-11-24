@@ -47,10 +47,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            if let (Some(endpoint), Some(key)) = (
-                option_env!("CHALK_HELPER_UPDATE_ENDPOINT"),
-                option_env!("CHALK_HELPER_UPDATE_PUBLIC_KEY"),
-            ) {
+            if let Some((endpoint, key)) = updater_config() {
                 let endpoint: tauri::Url = endpoint.parse()?;
                 if endpoint.scheme() != "https"
                     || endpoint.host_str().is_none()
@@ -72,9 +69,13 @@ fn main() {
         .expect("could not run Chalk Helper");
 }
 
+fn updater_config() -> Option<(&'static str, &'static str)> {
+    option_env!("CHALK_HELPER_UPDATE_ENDPOINT").zip(option_env!("CHALK_HELPER_UPDATE_PUBLIC_KEY"))
+}
+
 pub(crate) async fn check_for_update(app: tauri::AppHandle) -> Result<(), &'static str> {
-    let endpoint = option_env!("CHALK_HELPER_UPDATE_ENDPOINT")
-        .ok_or("No update channel is configured.")?
+    let (endpoint, _) = updater_config().ok_or("No update channel is configured.")?;
+    let endpoint = endpoint
         .parse()
         .map_err(|_| "The update channel is invalid.")?;
     let updater = app
