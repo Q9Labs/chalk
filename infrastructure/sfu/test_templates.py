@@ -53,6 +53,13 @@ elif tool == 'docker':
         log('docker-builds', json.dumps(args))
     elif args[:1] == ['save']:
         print('image')
+elif tool == 'curl':
+    # The OTLP endpoint takes the token, as Axiom does for an empty request; every other call is real curl.
+    if any(re.search(r'/v1/(metrics|logs|traces)$', a) for a in args):
+        log('otlp-checks', next(a for a in args if '/v1/' in a))
+        print('422', end='')
+    else:
+        os.execv('/usr/bin/curl', ['curl', *args])
 elif tool == 'doctl':
     rule = lambda ports: {'protocol': 'tcp', 'ports': ports, 'sources': {'addresses': ['192.0.2.0/24']}}
     print(json.dumps([{'name': 'chalk-sfu-' + os.environ['MOCK_ENV'], 'inbound_rules': [rule(os.environ['MOCK_CONTROL_PORT']), rule('22')]}]))
@@ -144,7 +151,7 @@ class DeployBranchesTest(unittest.TestCase):
         bin_dir.mkdir()
         (bin_dir / 'mock').write_text(MOCK)
         (bin_dir / 'mock').chmod(0o755)
-        for tool in ('ssh', 'doctl', 'docker', 'git'):
+        for tool in ('ssh', 'doctl', 'docker', 'git', 'curl'):
             (bin_dir / tool).symlink_to('mock')
         self.private = self.root / 'private'
         self.key = self.root / 'operator_key'

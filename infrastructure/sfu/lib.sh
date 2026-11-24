@@ -58,3 +58,26 @@ sfu_curl() {
   curl --silent --cacert "${private}/ca.crt" --cert "${private}/operator.crt" --key "${private}/operator.key" \
     --resolve "chalk-sfu:${port}:${address}" "$@"
 }
+
+# sfu_check_otlp_tokens <private dir> fails when the OTLP endpoint rejects the token in one of the
+# directory's header files, so a dead token stops a deploy or a bundle publish before it reaches a
+# node, where it would silently switch that signal off. An empty request with a good token is
+# refused as empty (422), so only a 401 or 403 condemns the token; a network error proves nothing.
+sfu_check_otlp_tokens() {
+  local endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}" pair file headers status
+  for pair in otlp-headers:metrics otlp-log-headers:logs otlp-trace-headers:traces; do
+    file="$1/${pair%%:*}"
+    [[ -f "$file" ]] || continue
+    # The file holds an OTEL_EXPORTER_OTLP_*_HEADERS value: comma-separated key=value pairs with
+    # URL-encoded values. curl reads the headers from a file so the token stays out of the process list.
+    headers="$(mktemp)"
+    tr ',' '\n' <"$file" | sed -e 's/=/: /' -e 's/%20/ /g' >"$headers"
+    status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 -X POST -H @"$headers" \
+      -H 'Content-Type: application/x-protobuf' --data-binary '' "${endpoint}/v1/${pair#*:}")" || status=000
+    rm -f "$headers"
+    case "$status" in
+      401 | 403) echo "${endpoint} rejects the token in ${file} (HTTP ${status}); replace it with a current ingest token from 1Password" >&2; return 1 ;;
+      000) echo "warning: could not reach ${endpoint} to check the token in ${file}" >&2 ;;
+    esac
+  done
+}
