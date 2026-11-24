@@ -1,7 +1,6 @@
 // @ts-check
 
-// Deterministic layout for generated Elixir. Output is readable and stable, and it does
-// not depend on `mix format`: the generated files are excluded from the formatter.
+// Deterministic layout for generated Elixir without requiring `mix format` to run codegen.
 
 const maxLineWidth = 98;
 
@@ -33,9 +32,14 @@ export function renderElixirValue(value, indent = 0, column = Number.POSITIVE_IN
     const items = value.map((item) => `${inner}${renderElixirValue(item, indent + 2, indent + 2)}`);
     return `[\n${items.join(",\n")}\n${closing}]`;
   }
-  const entries = mapEntries(value).map(([key, child]) => {
+  const entries = mapEntries(value).map(([key, child], index, pairs) => {
     const head = `${inner}${renderCompactElixirValue(key)} => `;
-    return `${head}${renderElixirValue(child, indent + 2, head.length)}`;
+    const rendered = renderElixirValue(child, indent + 2, head.length);
+    const commaWidth = index === pairs.length - 1 ? 0 : 1;
+    if (typeof child === "string" && head.length + rendered.length + commaWidth > maxLineWidth) {
+      return `${head.trimEnd()}\n${inner}  ${rendered}`;
+    }
+    return `${head}${rendered}`;
   });
   return `%{\n${entries.join(",\n")}\n${closing}}`;
 }

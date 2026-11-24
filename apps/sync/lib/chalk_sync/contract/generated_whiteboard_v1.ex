@@ -115,7 +115,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
             "minBytes" => 47,
             "maxBytes" => 47,
             "format" => "w3c-baggage-session-id",
-            "pattern" => "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            "pattern" =>
+              "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           }
         }
       },
