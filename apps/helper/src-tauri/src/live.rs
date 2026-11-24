@@ -398,8 +398,8 @@ impl Capture {
             })
             .ok_or(())?;
         let _ = probe;
-        if self.window.is_some() && !self.projection_is_current() {
-            self.await_window(app);
+        if !self.projection_is_current() || !self.overlay_aligns(app) {
+            self.invalidate_projection(app);
             return Err(());
         }
         let window = app.get_webview_window(OVERLAY).ok_or(())?;
@@ -470,6 +470,26 @@ impl Capture {
         self.commits.clear();
         self.drawing = false;
         self.probe = None;
+    }
+
+    pub fn overlay_aligns(&self, app: &AppHandle) -> bool {
+        let Some(bounds) = self.selected else {
+            return false;
+        };
+        app.get_webview_window(OVERLAY)
+            .is_some_and(|window| match window.is_visible() {
+                Ok(false) => true,
+                Ok(true) => desktop::overlay_bounds(&window).is_ok_and(|actual| actual == bounds),
+                Err(_) => false,
+            })
+    }
+
+    pub fn invalidate_projection(&mut self, app: &AppHandle) {
+        if self.window.is_some() {
+            self.await_window(app);
+        } else {
+            self.fail(app);
+        }
     }
 
     pub fn restore_visibility(&mut self, app: &AppHandle) {

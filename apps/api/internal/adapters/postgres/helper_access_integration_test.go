@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
@@ -28,6 +29,7 @@ func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
 
 	tenant, space, episode := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	actor, layer, lease := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	host := accountTenantIntegrationID(t)
 	publication := "screen-one"
 	const connection = "test-connection"
 	exec := func(sql string, args ...any) {
@@ -42,6 +44,11 @@ func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
 	exec(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role, media_connection_id, media_connection_generation)
 		values($1, $2, $3, $4, '{drawWhiteboard}', 3, 'active', 'collaborator', $5, 3)`,
 		uuid(actor), uuid(tenant), uuid(space), uuid(episode), connection)
+	// The active guest has no tenant identity. The host can administer the
+	// Episode but must not get a Helper ticket for the guest's publication.
+	exec(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role, media_connection_id, media_connection_generation)
+		values($1, $2, $3, $4, '{drawWhiteboard}', 3, 'active', 'host', 'host-connection', 3)`,
+		uuid(host), uuid(tenant), uuid(space), uuid(episode))
 	exec(`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes)
 		values($1, $2, $3, '{}', 1, decode(repeat('00', 32), 'hex'), 2)`, uuid(tenant), uuid(space), uuid(episode))
 	exec(`insert into sync_screen_share_leases(tenant_id, space_id, episode_id, lease_id, owner_participant_id, owner_generation, lease_generation, status, acquired_at, renewed_until, hard_expires_at)
@@ -65,32 +72,34 @@ func TestCurrentAnnotationShareRejectsStaleWitnesses(t *testing.T) {
 			values($1, $2, 1, $3, $4, decode(repeat('00', 32), 'hex'))`, uuid(tenant), uuid(episode), sequence, encoded)
 		exec(`update provider_operation_observation_heads set sequence = $3 where tenant_id = $1 and episode_id = $2`, uuid(tenant), uuid(episode), sequence)
 	}
-	expect := func(want bool, layerID, connectionID any) {
+	expect := func(want bool, participant utilities.ID, layerID any, publicationID, connectionID string) {
 		t.Helper()
 		var got bool
 		if err := tx.QueryRow(ctx, currentAnnotationShare, uuid(tenant), uuid(space), uuid(episode),
-			uuid(actor), int64(3), layerID, publication, connectionID).Scan(&got); err != nil || got != want {
+			uuid(participant), int64(3), layerID, publicationID, connectionID).Scan(&got); err != nil || got != want {
 			t.Fatalf("current share = %t, want %t, error = %v", got, want, err)
 		}
 	}
 
 	observe(1, publication)
-	expect(true, uuid(layer), connection)
-	expect(false, uuid(accountTenantIntegrationID(t)), connection)
-	expect(false, uuid(layer), "replaced")
+	expect(true, actor, uuid(layer), publication, connection)
+	expect(false, host, uuid(layer), publication, "host-connection")
+	expect(false, actor, uuid(layer), "another-publication", connection)
+	expect(false, actor, uuid(accountTenantIntegrationID(t)), publication, connection)
+	expect(false, actor, uuid(layer), publication, "replaced")
 	exec(`insert into sync_media_pauses(tenant_id, space_id, episode_id, participant_id, participant_generation, source, publication_id)
 		values($1, $2, $3, $4, 3, 'screen', $5)`, uuid(tenant), uuid(space), uuid(episode), uuid(actor), publication)
-	expect(false, uuid(layer), connection)
+	expect(false, actor, uuid(layer), publication, connection)
 	exec(`delete from sync_media_pauses where tenant_id = $1 and episode_id = $2 and participant_id = $3`, uuid(tenant), uuid(episode), uuid(actor))
-	expect(true, uuid(layer), connection)
+	expect(true, actor, uuid(layer), publication, connection)
 
 	observe(2, publication, "second-screen")
-	expect(false, uuid(layer), connection)
+	expect(false, actor, uuid(layer), publication, connection)
 	observe(3, "replacement-screen")
-	expect(false, uuid(layer), connection)
+	expect(false, actor, uuid(layer), publication, connection)
 	observe(4, publication)
-	expect(true, uuid(layer), connection)
+	expect(true, actor, uuid(layer), publication, connection)
 	exec(`update sync_screen_share_leases set acquired_at = now() - interval '2 minutes', renewed_until = now() - interval '1 minute'
 		where lease_id = $1`, uuid(lease))
-	expect(false, uuid(layer), connection)
+	expect(false, actor, uuid(layer), publication, connection)
 }

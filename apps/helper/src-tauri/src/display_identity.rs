@@ -3,14 +3,17 @@ use crate::geometry::Rect;
 #[derive(Debug, PartialEq)]
 pub struct Display {
     pub bounds: Rect,
-    pub identity: String,
+    identity: String,
+    scale: (u32, u32),
 }
 
 impl Display {
     pub fn at(bounds: Rect) -> Option<Self> {
+        let (identity, scale) = native_identity(bounds)?;
         Some(Self {
             bounds,
-            identity: native_identity(bounds)?,
+            identity,
+            scale,
         })
     }
 
@@ -20,7 +23,7 @@ impl Display {
 }
 
 #[cfg(target_os = "macos")]
-fn native_identity(bounds: Rect) -> Option<String> {
+fn native_identity(bounds: Rect) -> Option<(String, (u32, u32))> {
     extern "C" {
         fn chalk_display_identity(x: i32, y: i32, width: u32, height: u32, output: *mut u8)
             -> bool;
@@ -37,11 +40,11 @@ fn native_identity(bounds: Rect) -> Option<String> {
     } {
         return None;
     }
-    String::from_utf8(output[..36].to_vec()).ok()
+    Some((String::from_utf8(output[..36].to_vec()).ok()?, (0, 0)))
 }
 
 #[cfg(target_os = "windows")]
-fn native_identity(bounds: Rect) -> Option<String> {
+fn native_identity(bounds: Rect) -> Option<(String, (u32, u32))> {
     use std::mem::size_of;
     use windows_sys::Win32::{
         Foundation::RECT,
@@ -49,7 +52,10 @@ fn native_identity(bounds: Rect) -> Option<String> {
             EnumDisplayDevicesW, GetMonitorInfoW, MonitorFromRect, DISPLAY_DEVICEW,
             DISPLAY_DEVICE_ACTIVE, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
         },
-        UI::WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME,
+        UI::{
+            HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+            WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME,
+        },
     };
 
     let rect = RECT {
@@ -78,6 +84,13 @@ fn native_identity(bounds: Rect) -> Option<String> {
         {
             return None;
         }
+        let (mut dpi_x, mut dpi_y) = (0, 0);
+        if GetDpiForMonitor(handle, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) != 0
+            || dpi_x == 0
+            || dpi_y == 0
+        {
+            return None;
+        }
         let mut identity = None;
         for index in 0..16 {
             if EnumDisplayDevicesW(
@@ -87,7 +100,7 @@ fn native_identity(bounds: Rect) -> Option<String> {
                 EDD_GET_DEVICE_INTERFACE_NAME,
             ) == 0
             {
-                return identity;
+                return Some((identity?, (dpi_x, dpi_y)));
             }
             if device.StateFlags & DISPLAY_DEVICE_ACTIVE != 0 {
                 let end = device.DeviceID.iter().position(|c| *c == 0)?;
@@ -102,7 +115,7 @@ fn native_identity(bounds: Rect) -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn native_identity(_: Rect) -> Option<String> {
+fn native_identity(_: Rect) -> Option<(String, (u32, u32))> {
     None
 }
 
@@ -121,11 +134,23 @@ mod tests {
         let selected = Display {
             bounds,
             identity: "selected".into(),
+            scale: (96, 96),
         };
         let replacement = Display {
             bounds,
             identity: "different".into(),
+            scale: (96, 96),
         };
         assert!(!selected.is_same(&replacement));
+        let rescaled = Display {
+            scale: (144, 144),
+            ..selected
+        };
+        let original_scale = Display {
+            scale: (96, 96),
+            identity: rescaled.identity.clone(),
+            ..rescaled
+        };
+        assert!(!original_scale.is_same(&rescaled));
     }
 }

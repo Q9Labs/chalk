@@ -5,10 +5,11 @@ use std::{
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::{Client, StatusCode};
+#[cfg(not(target_os = "windows"))]
+use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
 use ring::{
     digest::{digest, SHA256},
     rand::{SecureRandom, SystemRandom},
-    signature::{Ed25519KeyPair, KeyPair},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -41,6 +42,7 @@ pub struct DeviceView {
 
 #[derive(Deserialize, Serialize)]
 struct Registration {
+    #[cfg(not(target_os = "windows"))]
     key: String,
     credential: String,
     registered: bool,
@@ -74,7 +76,27 @@ fn api_origin() -> Result<&'static str, &'static str> {
 }
 
 fn credential_target(origin: &str) -> String {
-    format!("Chalk Helper protected device credentials: {origin}")
+    format!("Chalk Helper device credentials v2: {origin}")
+}
+
+fn retire_legacy_credentials(origin: &str) -> Result<(), &'static str> {
+    // The server invalidates all legacy registrations, including those on
+    // installations that never upgrade. Never unwrap the old private keys.
+    for prefix in [
+        "Chalk Helper device credentials",
+        "Chalk Helper protected device credentials",
+    ] {
+        credentials::clear(&format!("{prefix}: {origin}"))?;
+    }
+    Ok(())
+}
+
+pub fn retire_configured_legacy_credentials() {
+    if let Ok(origin) = api_origin() {
+        if retire_legacy_credentials(origin).is_err() {
+            eprintln!("chalk-helper: legacy_device_credential_cleanup_failed");
+        }
+    }
 }
 
 impl DeviceConnection {
@@ -116,7 +138,11 @@ impl DeviceConnection {
         if let Some(task) = state.task.take() {
             task.abort();
         }
-        credentials::clear(&credential_target(origin))?;
+        retire_legacy_credentials(origin)?;
+        let target = credential_target(origin);
+        credentials::clear(&target)?;
+        #[cfg(target_os = "windows")]
+        crate::windows_key::DeviceSigner::clear(&target)?;
         state.view = DeviceView {
             status: Some("Device credential removed from this computer."),
             ..Default::default()
@@ -138,6 +164,7 @@ impl DeviceConnection {
         };
         let (mut registration, existed) = {
             let _state = self.0.lock().expect("device connection");
+            retire_legacy_credentials(origin)?;
             match credentials::read(&target)? {
                 Some(data) => (
                     serde_json::from_slice::<Registration>(&data)
@@ -145,9 +172,16 @@ impl DeviceConnection {
                     true,
                 ),
                 None => {
-                    let generated = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
-                        .map_err(|_| "Could not create a device key.")?;
+                    #[cfg(not(target_os = "windows"))]
+                    let generated = EcdsaKeyPair::generate_pkcs8(
+                        &ECDSA_P256_SHA256_FIXED_SIGNING,
+                        &SystemRandom::new(),
+                    )
+                    .map_err(|_| "Could not create a device key.")?;
+                    #[cfg(target_os = "windows")]
+                    crate::windows_key::DeviceSigner::open(&target, true)?;
                     let registration = Registration {
+                        #[cfg(not(target_os = "windows"))]
                         key: URL_SAFE_NO_PAD.encode(generated.as_ref()),
                         credential: secret()?,
                         registered: false,
@@ -157,13 +191,26 @@ impl DeviceConnection {
                 }
             }
         };
-        let document = URL_SAFE_NO_PAD
-            .decode(&registration.key)
+        #[cfg(not(target_os = "windows"))]
+        let (key, public_key) = {
+            let document = URL_SAFE_NO_PAD
+                .decode(&registration.key)
+                .map_err(|_| "Could not read the device key.")?;
+            let key = EcdsaKeyPair::from_pkcs8(
+                &ECDSA_P256_SHA256_FIXED_SIGNING,
+                &document,
+                &SystemRandom::new(),
+            )
             .map_err(|_| "Could not read the device key.")?;
-        let key = Arc::new(
-            Ed25519KeyPair::from_pkcs8(&document).map_err(|_| "Could not read the device key.")?,
-        );
-        let public_key = URL_SAFE_NO_PAD.encode(key.public_key().as_ref());
+            let public_key = URL_SAFE_NO_PAD.encode(key.public_key().as_ref());
+            (Arc::new(key), public_key)
+        };
+        #[cfg(target_os = "windows")]
+        let (key, public_key) = {
+            let key = crate::windows_key::DeviceSigner::open(&target, false)?;
+            let public_key = URL_SAFE_NO_PAD.encode(key.public_key()?);
+            (Arc::new(key), public_key)
+        };
         let poll_secret = secret()?;
         let start = |registered| {
             post::<DeviceCode>(
@@ -235,19 +282,23 @@ impl DeviceConnection {
             let mut received_state = false;
             let result = timeout(
                 REATTACH_INTERVAL,
-                attachment::receive(ticket.ticket, key.clone(), |frame| {
-                    if frame.get("type").and_then(Value::as_str) == Some("annotation_state") {
-                        received_state = true;
-                        accepted = true;
-                        until = Instant::now() + REQUEST_LIFETIME;
-                        let mut state = self.0.lock().expect("device connection");
-                        state.view.code = None;
-                        state.view.fingerprint = None;
-                        state.view.status =
-                            Some("Connected to the share. Use the call preview for marks.");
-                    }
-                    true
-                }),
+                attachment::receive(
+                    ticket.ticket,
+                    attachment::Signer::Device(key.clone()),
+                    |frame| {
+                        if frame.get("type").and_then(Value::as_str) == Some("annotation_state") {
+                            received_state = true;
+                            accepted = true;
+                            until = Instant::now() + REQUEST_LIFETIME;
+                            let mut state = self.0.lock().expect("device connection");
+                            state.view.code = None;
+                            state.view.fingerprint = None;
+                            state.view.status =
+                                Some("Connected to the share. Use the call preview for marks.");
+                        }
+                        true
+                    },
+                ),
             )
             .await;
             if matches!(result, Ok(Err(_))) || !received_state {

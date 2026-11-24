@@ -22,7 +22,7 @@ export const ticketsSchema = z.strictObject({ pair: ticket, attachment: ticket, 
 
 export type Challenge = z.infer<typeof challengeSchema>;
 export type Tickets = z.infer<typeof ticketsSchema>;
-type HelperPath = "/v1/challenge" | "/v1/challenge?rememberedKeyProof=true" | "/v1/attach" | "/v1/events" | "/v1/exchange";
+type HelperPath = "/v1/challenge" | "/v1/cancel" | "/v1/attach" | "/v1/events" | "/v1/exchange";
 
 export function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();

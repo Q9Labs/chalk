@@ -14,7 +14,8 @@ defmodule ChalkSync.Contract.GeneratedScreenAnnotationV1 do
       "version" => 1,
       "leaseMs" => 60_000,
       "proofDomain" => "chalk.screen_annotation.helper.v1",
-      "proof" => "Ed25519 over UTF-8 proofDomain + LF + nonce + LF + ticket hash",
+      "proof" =>
+        "Ed25519 (loopback) or ECDSA P-256 SHA-256 (device code, fixed 64-byte r || s) over UTF-8 proofDomain + LF + nonce + LF + ticket hash",
       "ticketHash" => "base64url(SHA-256(ticket)) without padding",
       "proofEncoding" => "base64url without padding",
       "confirmationKey" => "cnf.jwk (OKP Ed25519)",

@@ -134,26 +134,6 @@ func (r EpisodeLifecycleRepository) IssueDeviceTicket(ctx context.Context, devic
 	return ticket, nil
 }
 
-func (r EpisodeLifecycleRepository) RegisterHelperLoopbackDevice(ctx context.Context, device, tenant utilities.ID, key string, unusedCredentialHash [32]byte) error {
-	return r.transaction(ctx, func(q *sqlc.Queries, _ pgx.Tx) error {
-		return q.RegisterHelperLoopbackDevice(ctx, sqlc.RegisterHelperLoopbackDeviceParams{
-			ID: uuid(device), TenantID: uuid(tenant), PublicKey: key, CredentialHash: unusedCredentialHash[:],
-		})
-	})
-}
-
-func (r EpisodeLifecycleRepository) WithActiveHelperLoopbackDevice(ctx context.Context, tenant utilities.ID, key string, issue func() error) error {
-	return r.transaction(ctx, func(q *sqlc.Queries, _ pgx.Tx) error {
-		_, err := q.LockActiveHelperLoopbackDevice(ctx, sqlc.LockActiveHelperLoopbackDeviceParams{
-			TenantID: uuid(tenant), PublicKey: key,
-		})
-		if err != nil {
-			return deviceRequestError(err)
-		}
-		return issue()
-	})
-}
-
 func (r EpisodeLifecycleRepository) ListHelperDevices(ctx context.Context, tenant utilities.ID) (devices []helperaccess.Device, err error) {
 	err = r.transaction(ctx, func(q *sqlc.Queries, _ pgx.Tx) error {
 		rows, err := q.ReadHelperDevices(ctx, uuid(tenant))

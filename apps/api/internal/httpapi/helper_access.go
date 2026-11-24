@@ -52,6 +52,8 @@ func helperPairTicketEndpoint(service *helperaccess.Service, origins []string) E
 			}
 			return service.IssueLocal(ctx, subject, binding, request.origin, request.body.Challenge, request.body.Remembered)
 		}).
+		// The active publication sharer can pair, including a guest. Account
+		// ownership is neither necessary nor sufficient for this route.
 		Auth(APIAuthParticipantMedia).
 		Needs(service).
 		Middleware(noStoreResponses).
