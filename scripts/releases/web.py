@@ -39,6 +39,9 @@ def public_config(target, sha):
             **({'VITE_CHALK_SYNC_DIRECT_URL': direct} if direct else {}),
             'VITE_API_URL': 'https://nightly-api.chalkmeet.com' if nightly else 'https://api.chalkmeet.com',
             'VITE_CHALK_SYNC_URL': 'wss://nightly-sync.chalkmeet.com/v1/sync' if nightly else 'wss://sync.chalkmeet.com/v1/sync',
+            'VITE_CHALK_HELPER_INSTALL_URL': (
+                'https://downloads.chalkmeet.com/helper/staging/index.html' if nightly
+                else 'https://downloads.chalkmeet.com/helper/production/index.html'),
             'VITE_PUBLIC_APP_URL': 'https://nightly.chalkmeet.com' if nightly else 'https://chalkmeet.com'}
 
 

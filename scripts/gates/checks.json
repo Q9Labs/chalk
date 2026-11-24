@@ -986,6 +986,46 @@
       "reason": "The signed release pipeline is separate. The unsigned development artifact and capture probe run only on request on native runners."
     },
     {
+      "id": "workflow:helper-release.yml#plan",
+      "owner": "Screen annotation",
+      "catches": "A Helper release built from an unmerged commit or a tag that disagrees with the installer version.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New on-demand Helper release workflow."
+    },
+    {
+      "id": "workflow:helper-release.yml#build-macos",
+      "owner": "Screen annotation",
+      "catches": "A macOS Helper installer that fails to build, sign, notarize, or pass Gatekeeper.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New on-demand Helper release workflow."
+    },
+    {
+      "id": "workflow:helper-release.yml#build-windows",
+      "owner": "Screen annotation",
+      "catches": "A Helper MSIX that cannot install, launch, or listen on loopback on Windows.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New Windows Helper package smoke check."
+    },
+    {
+      "id": "workflow:helper-release.yml#publish",
+      "owner": "Screen annotation",
+      "catches": "A Helper channel advanced to unverified updater bytes or to files that cannot be downloaded over HTTPS.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New on-demand Helper release workflow."
+    },
+    {
       "id": "workflow:mobile-ci.yml#fingerprint",
       "owner": "Mobile",
       "catches": "A native change that the over-the-air update path cannot carry.",

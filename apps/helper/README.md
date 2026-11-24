@@ -1,4 +1,4 @@
-# Run Chalk Helper for development
+# Chalk Helper
 
 The fixture runs without a call or browser pairing. Managed desktop ink requires a verified Chromium monitor or window share. Use the annotated preview or Document Picture-in-Picture when Helper cannot verify the source or exclude its ink from the outgoing video.
 
@@ -51,3 +51,49 @@ If loopback is unavailable, open **Use a device code** in the signed-in call. Pa
 The local listener binds only `127.0.0.1:47361`. It requires the exact Origin and Host, a signed single-use pair ticket, and native consent. It renews the lease with fresh tickets while its browser and publication stay current. The remote Sync ticket has a separate audience and uses an Ed25519 proof bound to the server socket nonce.
 
 The updater is off unless you set both `CHALK_HELPER_UPDATE_ENDPOINT` and `CHALK_HELPER_UPDATE_PUBLIC_KEY` at build time. Use an HTTPS manifest and the Tauri artifact verification key for that release channel. The development installer workflow publishes no releases.
+
+
+## Publish a desktop release
+
+1. Set the installer version in `src-tauri/tauri.conf.json` and the matching crate version in `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`. Merge the release commit into `master` and tag it `helper-v<version>`.
+2. Run **Release Chalk Helper** from that tag with the `staging` channel. Verify the [Nightly download page](https://downloads.chalkmeet.com/helper/staging/index.html), macOS installation, and the signed update from the preceding staging version.
+3. Run the same workflow from the same tag with the `production` channel. Verify the [production download page](https://downloads.chalkmeet.com/helper/production/index.html). This workflow does not deploy the web app, API, or Sync.
+
+If a run fails before it publishes, rerun all jobs so the publisher sees artifacts from the same attempt.
+
+Each channel uses its own GitHub Environment. Set `CHALK_HELPER_PAIR_TICKET_PUBLIC_KEY` to the live channel's managed Sync token issuer public key. Set `CLOUDFLARE_ACCOUNT_ID` to the owner of the `chalk-helper-downloads` R2 bucket.
+
+| Secrets | Purpose |
+| --- | --- |
+| `HELPER_APPLE_CERTIFICATE`, `HELPER_APPLE_CERTIFICATE_PASSWORD` | Base64 Developer ID Application PKCS#12 and its password. |
+| `HELPER_APPLE_API_KEY`, `HELPER_APPLE_API_ISSUER`, `HELPER_APPLE_API_PRIVATE_KEY` | App Store Connect key ID, issuer UUID, and raw PKCS#8 key for notarization. |
+| `HELPER_UPDATER_PRIVATE_KEY`, `HELPER_UPDATER_PASSWORD` | Tauri key and password from the matching **Chalk Helper Updater Key** item in 1Password. Do not replace a pinned key for an active channel. |
+| `HELPER_R2_PUBLISH_TOKEN` | Cloudflare API token with R2 write access. |
+
+The macOS release uses the hardened runtime without App Sandbox. Screen Recording and Accessibility are macOS user grants, not Developer ID entitlements. Loopback is available to the non-sandboxed app; Helper still binds only to the numeric loopback address.
+
+To verify an installation on a Mac, download the DMG from the channel's public page. Run `xcrun stapler validate` on the DMG, mount it, then run these checks on the app:
+
+```sh
+spctl -a -vv -t execute "/Volumes/Chalk Helper/Chalk Helper.app"
+xcrun stapler validate "/Volumes/Chalk Helper/Chalk Helper.app"
+codesign -dv --verbose=4 "/Volumes/Chalk Helper/Chalk Helper.app"
+```
+
+Check that Gatekeeper reports `Notarized Developer ID` and that the signature names the CollabEZ team and includes the runtime flag. Copy the app to Applications, launch it, and use **Check for updates** in the Helper window. Do not grant capture permissions just to verify the installer.
+
+### Submit Windows to the Microsoft Store
+
+1. In the `helper-production` GitHub Environment, set `CHALK_HELPER_STORE_IDENTITY`, `CHALK_HELPER_STORE_PUBLISHER`, and `CHALK_HELPER_STORE_PUBLISHER_DISPLAY_NAME` to the Product identity values in Partner Center. Before those values exist, CI tests a placeholder identity and does not retain a submission.
+2. Run the production workflow. Download its `helper-microsoft-store` artifact and upload the unsigned MSIX in Partner Center. The Store signs it. The temporary certificate used for the runner test is never distributed.
+3. When the listing is live, set `CHALK_HELPER_STORE_URL` to its `https://apps.microsoft.com/` link. The next production download page update exposes the Store button. Staging does not link to the production Store listing.
+
+The MSIX runs as a full-trust desktop app for the system tray, native capture, and browser loopback. Explain `runFullTrust` in the Store submission. The Windows build has no Tauri update channel. Use the Microsoft Store to install updates.
+
+### Roll back a download channel
+
+1. Find the previous good release prefix under `helper/<channel>/v<version>/<run>-<attempt>/` in R2. It contains the saved `latest.json` and `index.html` for that release.
+2. Copy the previous `index.html` over the channel's `index.html`, and the previous `latest.json` over the channel's `latest.json`. Set `Cache-Control: no-store` on both copies and preserve their content types. Leave versioned binaries untouched.
+3. Fetch both stable URLs over HTTPS. Confirm that the page links to the previous installers and the manifest names the previous version and signatures.
+
+The updater does not downgrade installed copies. To repair a bad version already installed, rebuild the last good source with a higher version and publish it with the same channel's signing key.
