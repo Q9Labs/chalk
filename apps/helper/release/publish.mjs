@@ -57,7 +57,7 @@ async function publish(source, destination, contentType, cacheControl) {
 function storeDownload() {
   if (CHANNEL !== "production" || !STORE_URL) return "";
   const listing = new URL(STORE_URL);
-  if (listing.origin !== "https://apps.microsoft.com" || listing.username || listing.password) {
+  if (!listing.href.startsWith("https://apps.microsoft.com/")) {
     throw new Error("The Windows listing must be an https://apps.microsoft.com Microsoft Store URL.");
   }
   const href = listing.href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
