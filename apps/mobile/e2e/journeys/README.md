@@ -23,3 +23,17 @@ injects a viewer mark when Chalk goes to the background. It starts native
 picture-in-picture only when AVKit offers it. This does not prove that
 ReplayKit excludes the PiP window from the outgoing stream; test that on a
 physical iPhone or iPad by comparing what the sharer and a second device see.
+
+To check the native PiP frames without ReplayKit or the touchscreen runner,
+install the iOS Pods and run this from `apps/mobile`:
+
+```sh
+xcodebuild test -workspace ios/Chalk.xcworkspace -scheme Chalk \
+  -destination 'platform=iOS Simulator,id=<simulator-udid>' \
+  -only-testing:ChalkTests/AnnotationPiPTests
+```
+
+The hosted test asserts on the sample buffers sent to AVKit and attaches
+before/after PNGs to the test result. It checks the neutral canvas, a viewer's
+mark and cursor, and that the content source stops producing frames after
+share teardown.

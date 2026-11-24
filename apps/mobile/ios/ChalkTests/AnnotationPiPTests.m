@@ -1,0 +1,81 @@
+#import <CoreImage/CoreImage.h>
+#import <XCTest/XCTest.h>
+#import "ChalkAnnotationPiPContent.h"
+
+@interface AnnotationPiPTests : XCTestCase
+@end
+
+@implementation AnnotationPiPTests
+
+- (void)assertPixel:(CVPixelBufferRef)pixelBuffer x:(size_t)x y:(size_t)y
+                red:(uint8_t)red green:(uint8_t)green blue:(uint8_t)blue {
+  CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+  const uint8_t *base = CVPixelBufferGetBaseAddress(pixelBuffer);
+  const uint8_t *pixel = base + y * CVPixelBufferGetBytesPerRow(pixelBuffer) + 4 * x;
+  XCTAssertEqualWithAccuracy(pixel[2], red, 1);
+  XCTAssertEqualWithAccuracy(pixel[1], green, 1);
+  XCTAssertEqualWithAccuracy(pixel[0], blue, 1);
+  CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+}
+
+- (void)attachFrame:(CVPixelBufferRef)pixels name:(NSString *)name {
+  CIImage *bufferImage = [CIImage imageWithCVPixelBuffer:pixels];
+  CGImageRef image = [[CIContext context] createCGImage:bufferImage fromRect:bufferImage.extent];
+  XCTAssertNotEqual(image, NULL);
+  if (!image) return;
+  XCTAttachment *attachment = [XCTAttachment attachmentWithImage:[UIImage imageWithCGImage:image]];
+  attachment.name = name;
+  attachment.lifetime = XCTAttachmentLifetimeKeepAlways;
+  [self addAttachment:attachment];
+  CGImageRelease(image);
+}
+
+- (void)testSharerContentShowsPeerInkAndStopsWithShare {
+  // This is the same protected content controller the native module hands to
+  // AVKit. Test its actual output on Simulator even when AVKit cannot float it.
+  NSLog(@"AVKit system PiP supported: %@", AVPictureInPictureController.isPictureInPictureSupported ? @"YES" : @"NO");
+  Class contentClass = NSClassFromString(@"ChalkAnnotationPiPContent");
+  XCTAssertNotNil(contentClass);
+  ChalkAnnotationPiPContent *content = [[contentClass alloc] initWithFrameSize:CGSizeMake(480, 300)];
+  AVSampleBufferDisplayLayer *surface = (AVSampleBufferDisplayLayer *)content.view.subviews.firstObject.layer;
+  XCTAssertTrue([surface isKindOfClass:AVSampleBufferDisplayLayer.class]);
+  XCTAssertTrue(surface.preventsCapture);
+
+  CMSampleBufferRef before = [content copyNextSampleBuffer];
+  XCTAssertNotEqual(before, NULL);
+  if (!before) return;
+  CVPixelBufferRef blank = CMSampleBufferGetImageBuffer(before);
+  XCTAssertEqual(CVPixelBufferGetWidth(blank), 480);
+  XCTAssertEqual(CVPixelBufferGetHeight(blank), 300);
+  [self assertPixel:blank x:100 y:150 red:26 green:28 blue:33];
+  [self attachFrame:blank name:@"sharer-before-peer-mark"];
+  CFRelease(before);
+
+  // Inject the peer paint operations at the native bridge boundary.
+  NSArray *ink = @[
+    @[@"stroke", @"#43dd8b", @1, @[@[@"move", @44, @150], @[@"line", @240, @150]], @8, @"round"],
+    @[@"fill", @"#43dd8b", @1, @[@[@"move", @240, @138], @[@"line", @259, @150], @[@"line", @240, @162], @[@"close"]]],
+    @[@"fill", @"#e39b39", @1, @[@[@"move", @277, @154], @[@"line", @277, @177], @[@"line", @294, @171], @[@"close"]]],
+    @[@"fill", @"#e39b39", @1, @[@[@"rect", @290, @181, @60, @23]]],
+    @[@"text", @"#0b0b0d", @1, @"Omar", @299, @192, @14],
+  ];
+  [content setInk:ink];
+  CMSampleBufferRef after = [content copyNextSampleBuffer];
+  XCTAssertNotEqual(after, NULL);
+  if (!after) return;
+  CVPixelBufferRef painted = CMSampleBufferGetImageBuffer(after);
+  [self assertPixel:painted x:100 y:150 red:67 green:221 blue:139];
+  [self assertPixel:painted x:283 y:169 red:227 green:155 blue:57];
+  [self assertPixel:painted x:345 y:197 red:227 green:155 blue:57];
+  [self attachFrame:painted name:@"sharer-peer-cursor-and-mark"];
+  CFRelease(after);
+
+  [content stop];
+  [content setInk:ink]; // Ignore a late update after the share has stopped.
+  CMSampleBufferRef stopped = [content copyNextSampleBuffer];
+  XCTAssertEqual(stopped, NULL);
+  if (stopped) CFRelease(stopped);
+  XCTAssertNil(surface.superlayer);
+}
+
+@end
