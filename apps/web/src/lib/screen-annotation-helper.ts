@@ -7,102 +7,86 @@ import { startConsent } from "./screen-annotation-helper-consent";
 type BrowserHelper = ScreenAnnotationHelper & Required<Pick<ScreenAnnotationHelper, "challenge">>;
 
 export interface HelperPairAuthority {
-  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; remembered: boolean; signal: AbortSignal }) => Promise<Tickets>;
-  readonly rememberKey?: (key: string, signal: AbortSignal) => Promise<void>;
+  readonly issueLocalTicket: (input: { challenge: Challenge; origin: string; share: ScreenAnnotationHelperShare; signal: AbortSignal }) => Promise<Tickets>;
   readonly lookupCode?: ScreenAnnotationHelper["lookupCode"];
 }
 
 type CaptureTrack = (share: ScreenAnnotationHelperShare) => MediaStreamTrack | undefined;
 
-export function createBrowserAnnotationHelper({
-  origin,
-  installUrl,
-  authority,
-  captureTrack,
-  deviceAccount,
-  accountId,
-}: {
-  readonly origin: string;
-  readonly installUrl?: string;
-  readonly authority: HelperPairAuthority;
-  readonly captureTrack?: CaptureTrack;
-  readonly deviceAccount?: string;
-  readonly accountId?: string;
-}): BrowserHelper {
+export function createBrowserAnnotationHelper({ origin, installUrl, authority, captureTrack, deviceAccount }: { readonly origin: string; readonly installUrl?: string; readonly authority: HelperPairAuthority; readonly captureTrack?: CaptureTrack; readonly deviceAccount?: string }): BrowserHelper {
+  let priorCleanup: Promise<void> | undefined;
   return {
     installUrl,
     lookupCode: authority.lookupCode,
     deviceAccount,
     async challenge(share, parent) {
       if (!window.isSecureContext || window.location.origin !== origin || !origin.startsWith("https://") || !activeShare(share)) throw new Error("Helper is not available for this share.");
-      const pinSlot = accountId && `chalk.helper.key:${JSON.stringify([deviceAccount ?? "", accountId])}`;
-      let pinned: string | null = null;
-      try {
-        if (pinSlot) pinned = window.localStorage.getItem(pinSlot);
-      } catch {
-        // Private or restricted browser profiles can still use a fresh code.
-      }
+      await priorCleanup;
       const consent = await startConsent();
+      const cancellation = await consent.cancellation();
+      let cancelling: Promise<void> | undefined;
+      const cancel = () => {
+        cancelling ??= localRequest("/v1/cancel", AbortSignal.timeout(1500), cancellation)
+          .then(
+            () => undefined,
+            () => undefined,
+          )
+          .finally(() => parent.removeEventListener("abort", cancel));
+        priorCleanup = cancelling;
+        return cancelling;
+      };
+      parent.throwIfAborted();
+      parent.addEventListener("abort", cancel, { once: true });
       const challengeSignal = AbortSignal.any([parent, AbortSignal.timeout(networkTimeoutMs)]);
       const hello = { browserPublicKey: consent.browserPublicKey };
-      const challenge = await localRequest("/v1/challenge?rememberedKeyProof=true", challengeSignal, hello)
-        .catch((error: unknown) => {
-          if (!(error instanceof TypeError) || challengeSignal.aborted) throw error;
-          // Older Helpers reject query strings before adding CORS headers.
-          return localRequest("/v1/challenge", challengeSignal, hello);
-        })
-        .then((response) => readJson(response, challengeSchema));
-      if (challenge.version !== 2) return { kind: "update_required" };
-      const signal = AbortSignal.any([parent, AbortSignal.timeout(remaining(challenge.expiresAtMs))]);
-      const provenKey = await consent.provesKey(origin, challenge);
-      const issue = (remembered: boolean, signal: AbortSignal) => authority.issueLocalTicket({ challenge, origin, share, signal, remembered });
-      const requestedRemembered = provenKey && pinned === challenge.helperPublicKey;
-      const tickets = await issue(requestedRemembered, signal);
-      const remembered = tickets.remembered === true;
-      if (remembered && !requestedRemembered) throw new Error("Unexpected remembered Helper ticket.");
-      const binding = await consent.bind(challenge, tickets.pair.ticket, tickets.attachment.ticket, remembered);
-      let started = false;
-      return {
-        kind: "approval",
-        fingerprint: binding.fingerprint,
-        remembered,
-        async attach(onStatus, askConfirmation) {
-          if (started || signal.aborted || !activeShare(share)) throw new Error("The Helper challenge is no longer valid.");
-          started = true;
-          const stop = new AbortController();
-          const unsubscribe = share.client.subscribe(() => {
-            if (!activeShare(share)) stop.abort();
-          });
-          const session = AbortSignal.any([stop.signal, parent]);
-          try {
-            const attachSignal = AbortSignal.any([signal, session]);
-            const [attachment, code] = await Promise.all([
-              localRequest("/v1/attach", attachSignal, {
-                version: 2,
-                challenge: challenge.challenge,
-                browserProof: binding.browserProof,
-                pairTicket: tickets.pair.ticket,
-                attachmentHash: binding.attachmentHash,
-              }).then((response) => readJson(response, attachSchema)),
-              remembered ? null : askConfirmation(attachSignal),
-            ]);
-            await binding.confirm(code, attachment);
-            attachSignal.throwIfAborted();
-            if (!remembered && pinSlot && provenKey && authority.rememberKey) {
-              // Persist only after the Helper signed the exact native approval and typed code.
-              // Registration alone never permits this browser to skip the code.
-              void authority
-                .rememberKey(challenge.helperPublicKey, AbortSignal.timeout(networkTimeoutMs))
-                .then(() => window.localStorage.setItem(pinSlot, challenge.helperPublicKey))
-                .catch(() => {
-                  // A failed pin or registration leaves code pairing available.
-                });
-            }
-            const renewal = new AbortController();
-            const track = captureTrack?.(share);
+      try {
+        const challenge = await localRequest("/v1/challenge", challengeSignal, hello).then((response) => readJson(response, challengeSchema));
+        if (challenge.version !== 2) {
+          await cancel();
+          return { kind: "update_required" };
+        }
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(remaining(challenge.expiresAtMs))]);
+        const issue = async (signal: AbortSignal) => {
+          const tickets = await authority.issueLocalTicket({ challenge, origin, share, signal });
+          if (tickets.remembered === true) throw new Error("Helper pairing requires a confirmation code.");
+          return tickets;
+        };
+        const tickets = await issue(signal);
+        const binding = await consent.bind(challenge, tickets.pair.ticket, tickets.attachment.ticket);
+        let started = false;
+        return {
+          kind: "approval",
+          fingerprint: binding.fingerprint,
+          remembered: false,
+          async attach(onStatus, askConfirmation) {
+            if (started || signal.aborted || !activeShare(share)) throw new Error("The Helper challenge is no longer valid.");
+            started = true;
+            const stop = new AbortController();
+            const unsubscribe = share.client.subscribe(() => {
+              if (!activeShare(share)) stop.abort();
+            });
+            const live = AbortSignal.any([stop.signal, parent]);
+            let sessionSecret: string | undefined;
             try {
-              if (!activeShare(share) || session.aborted) throw new Error("The Helper attachment is no longer valid.");
-              const live = AbortSignal.any([session, renewal.signal]);
+              const attachSignal = AbortSignal.any([signal, live]);
+              const [attachment, code] = await Promise.all([
+                localRequest("/v1/attach", attachSignal, {
+                  version: 2,
+                  challenge: challenge.challenge,
+                  browserProof: binding.browserProof,
+                  pairTicket: tickets.pair.ticket,
+                  attachmentHash: binding.attachmentHash,
+                }).then(async (response) => {
+                  const attachment = await readJson(response, attachSchema);
+                  sessionSecret = attachment.sessionSecret;
+                  return attachment;
+                }),
+                askConfirmation(attachSignal),
+              ]);
+              await binding.confirm(code, attachment);
+              attachSignal.throwIfAborted();
+              const track = captureTrack?.(share);
+              if (!activeShare(share) || live.aborted) throw new Error("The Helper attachment is no longer valid.");
               await localRequest("/v1/exchange", live, { type: "authorize", attachmentTicket: tickets.attachment.ticket }, attachment.sessionSecret);
               const project = liveProjection({ track, share, currentTrack: () => captureTrack?.(share), attachmentSecret: attachment.sessionSecret, signal: live });
               let described = false;
@@ -121,24 +105,20 @@ export function createBrowserAnnotationHelper({
                   attachmentSecret: attachment.sessionSecret,
                   expiresAtMs: Math.min(attachment.leaseExpiresAtMs, tickets.attachment.expiresAtMs),
                   signal: live,
-                  issue: async (signal) => {
-                    const next = await issue(remembered, signal);
-                    if ((next.remembered === true) !== remembered) throw new Error("Chalk Helper trust changed.");
-                    return next;
-                  },
+                  issue,
                 }),
               ]);
             } finally {
-              renewal.abort();
-              // A tab closing may prevent the delivery; the Helper's lease is the authority.
-              void localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "disconnect" }, attachment.sessionSecret).catch(() => undefined);
+              stop.abort();
+              unsubscribe();
+              await Promise.all([cancel(), sessionSecret && localRequest("/v1/exchange", AbortSignal.timeout(1500), { type: "disconnect" }, sessionSecret).catch(() => undefined)]);
             }
-          } finally {
-            stop.abort();
-            unsubscribe();
-          }
-        },
-      };
+          },
+        };
+      } catch (error) {
+        await cancel();
+        throw error;
+      }
     },
   };
 }
@@ -186,10 +166,7 @@ export function createManagedAnnotationHelper(options: {
         },
       };
     },
-    async rememberKey(publicKey, signal) {
-      await manageHelperDevice({ action: "remember", publicKey, tenantId: options.tenantId }, signal);
-    },
-    async issueLocalTicket({ challenge, share, signal, remembered }) {
+    async issueLocalTicket({ challenge, share, signal }) {
       const proof = options.mediaProof();
       if (!proof || !activeShare(share)) throw new Error("The screen share is no longer authorized.");
       const response = await fetch(api, {
@@ -202,7 +179,6 @@ export function createManagedAnnotationHelper(options: {
           version: 1,
           challenge: challenge.challenge,
           helperPublicKey: challenge.helperPublicKey,
-          ...(remembered ? { remembered: true } : {}),
           layerId: share.layer.layer_id,
           publicationId: share.layer.publication_id,
         }),
@@ -218,7 +194,6 @@ export function createManagedAnnotationHelper(options: {
       installUrl: options.installUrl,
       captureTrack: options.captureTrack,
       deviceAccount: options.tenantId,
-      accountId: options.accountId,
       authority,
     }),
     lookupCode: authority.lookupCode,

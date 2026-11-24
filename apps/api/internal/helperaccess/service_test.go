@@ -56,9 +56,12 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 		t.Fatalf("disabled annotation issued a Helper ticket: %v", err)
 	}
 	annotationEnabled = true
-	tickets, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false)
+	tickets, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, true)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if tickets.Remembered {
+		t.Fatal("unverified remembered request skipped the code")
 	}
 	for _, ticket := range []struct {
 		token    Ticket
@@ -78,7 +81,7 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 		}
 		claims := map[string]any{}
 		payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
-		if err := json.Unmarshal(payload, &claims); err != nil || claims["aud"] != ticket.audience {
+		if err := json.Unmarshal(payload, &claims); err != nil || claims["aud"] != ticket.audience || claims["remembered"] != nil {
 			t.Fatalf("claims %#v, error %v", claims, err)
 		}
 	}
@@ -97,6 +100,11 @@ func TestIssueLocalRequiresCurrentShareAndSignsSeparateAudiences(t *testing.T) {
 				t.Fatalf("got %v", err)
 			}
 		})
+	}
+	otherPublication := binding
+	otherPublication.PublicationID = "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"test-connection","m":"1","t":"screen-two","g":3}`))
+	if _, err := service.IssueLocal(t.Context(), subject, otherPublication, "https://chalk.test", challenge, false); !errors.Is(err, ErrShareNotCurrent) {
+		t.Fatalf("another publication on the same connection: %v", err)
 	}
 	repository.current = false
 	if _, err := service.IssueLocal(t.Context(), subject, binding, "https://chalk.test", challenge, false); !errors.Is(err, ErrShareNotCurrent) {

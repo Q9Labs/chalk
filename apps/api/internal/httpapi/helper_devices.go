@@ -160,11 +160,8 @@ func helperDashboardEndpoints(service *helperaccess.Service, verifier Participan
 		RateLimit(authenticatedReadRateLimit).Parameters(tenantIDParameter()).
 		Responds(http.StatusOK, "HelperDeviceList", helperDeviceList{}).Errors(helperDeviceErrors...)
 	remember := Post(helperDeviceTenantBase+"/remember", "rememberScreenAnnotationHelperDevice", decodeHelperOwnerRequest[helperRemember],
-		func(ctx context.Context, req helperOwnerRequest[helperRemember]) (struct{}, error) {
-			if !service.DevicesEnabled() {
-				return struct{}{}, apiErrorServiceUnavailable
-			}
-			return struct{}{}, service.RememberLoopbackDevice(ctx, req.tenant, req.body.PublicKey)
+		func(context.Context, helperOwnerRequest[helperRemember]) (struct{}, error) {
+			return struct{}{}, apiErrorForbidden
 		}).Needs(service).Permission(authorizer, writeTenantPermission).Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter()).RequestBody("HelperDeviceRemember", helperRemember{}).
 		RespondsNoBody(http.StatusNoContent).Errors(helperDeviceErrors...).ErrorRules(helperDeviceRules)

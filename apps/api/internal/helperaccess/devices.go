@@ -2,9 +2,11 @@ package helperaccess
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"time"
@@ -22,8 +24,6 @@ type DeviceRepository interface {
 	ApproveDeviceRequest(context.Context, utilities.ID, utilities.ID, DeviceShare, bool) error
 	PollDeviceRequest(context.Context, [32]byte) (*DeviceApproval, error)
 	IssueDeviceTicket(context.Context, utilities.ID, func() (DevicePoll, error)) (DevicePoll, error)
-	RegisterHelperLoopbackDevice(ctx context.Context, id, tenant utilities.ID, key string, unusedCredentialHash [32]byte) error
-	WithActiveHelperLoopbackDevice(ctx context.Context, tenant utilities.ID, key string, issue func() error) error
 	ListHelperDevices(context.Context, utilities.ID) ([]Device, error)
 	RevokeHelperDevice(context.Context, utilities.ID, utilities.ID) error
 }
@@ -66,11 +66,27 @@ type DevicePoll struct {
 	Attachment *Ticket `json:"attachment,omitempty"`
 }
 
+// A device-code registration uses an uncompressed P-256 public key. The old
+// preview registrations used Ed25519 keys that could be exported from storage.
+func devicePublicKey(encoded string) []byte {
+	if len(encoded) != 87 {
+		return nil
+	}
+	key, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(key) != 65 {
+		return nil
+	}
+	if _, err := ecdh.P256().NewPublicKey(key); err != nil {
+		return nil
+	}
+	return key
+}
+
 var codeEncoding = base32.NewEncoding("ABCDEFGHJKLMNPQRSTUVWXYZ23456789").WithPadding(base32.NoPadding)
 
 func (s *Service) StartDevice(ctx context.Context, intendedTenant utilities.ID, name, key, credential, pollSecret string, registered bool) (DeviceCode, error) {
 	name = strings.TrimSpace(name)
-	if intendedTenant.IsZero() || !validSecret(key) || !validSecret(credential) || !validSecret(pollSecret) ||
+	if intendedTenant.IsZero() || devicePublicKey(key) == nil || !validSecret(credential) || !validSecret(pollSecret) ||
 		credential == pollSecret || name == "" || len(name) > 96 ||
 		strings.ContainsFunc(name, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
 		return DeviceCode{}, ErrInvalid
@@ -90,23 +106,6 @@ func (s *Service) StartDevice(ctx context.Context, intendedTenant utilities.ID, 
 		CredentialHash: sha256.Sum256([]byte(credential)),
 	})
 	return DeviceCode{Code: code[:4] + "-" + code[4:], IntervalSeconds: 3}, err
-}
-
-// RememberLoopbackDevice adds a revocable public identity, not a login credential.
-func (s *Service) RememberLoopbackDevice(ctx context.Context, tenant utilities.ID, key string) error {
-	if tenant.IsZero() || !validSecret(key) {
-		return ErrInvalid
-	}
-	id, err := utilities.NewID()
-	if err != nil {
-		return err
-	}
-	// No device-code credential is issued for a loopback-only registration.
-	var reserved [32]byte
-	if _, err := rand.Read(reserved[:]); err != nil {
-		return err
-	}
-	return s.devices.RegisterHelperLoopbackDevice(ctx, id, tenant, key, reserved)
 }
 
 func (s *Service) LookupDevice(ctx context.Context, tenant utilities.ID, code string) (DeviceOffer, error) {
@@ -143,7 +142,10 @@ func (s *Service) PollDevice(ctx context.Context, pollSecret string) (DevicePoll
 	if err != nil || approval == nil {
 		return DevicePoll{}, err
 	}
-	if err := s.authorize(ctx, approval.Share.Subject, approval.Share.Binding); err != nil {
+	if devicePublicKey(approval.Share.Binding.DeviceKey) == nil {
+		return DevicePoll{}, ErrDeviceUnavailable
+	}
+	if err := s.authorizeShare(ctx, approval.Share.Subject, approval.Share.Binding); err != nil {
 		return DevicePoll{}, err
 	}
 	return s.devices.IssueDeviceTicket(ctx, approval.DeviceID, func() (DevicePoll, error) {

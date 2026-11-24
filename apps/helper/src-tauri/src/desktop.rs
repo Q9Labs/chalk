@@ -202,6 +202,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     // Create both windows off the GUI thread; capture requests can only use the prepared overlay.
     let owner = handle.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::device::retire_configured_legacy_credentials();
         let settings = create_settings(&owner);
         if pairing.is_some() && create_live_overlay(&owner).is_err() {
             eprintln!("Chalk Helper could not prepare the live overlay.");
@@ -383,6 +384,17 @@ fn create_live_overlay(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+pub(crate) fn overlay_bounds(window: &WebviewWindow) -> tauri::Result<Rect> {
+    let size = window.inner_size()?;
+    let position = window.inner_position()?;
+    Ok(Rect {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    })
+}
+
 pub(crate) fn show_live_overlay(
     app: &AppHandle,
     bounds: Rect,
@@ -400,13 +412,7 @@ pub(crate) fn show_live_overlay(
     overlay.set_focusable(false)?;
 
     overlay.set_ignore_cursor_events(true)?;
-    let size = overlay.inner_size()?;
-    let position = overlay.inner_position()?;
-    if size.width != bounds.width
-        || size.height != bounds.height
-        || position.x != bounds.x
-        || position.y != bounds.y
-    {
+    if overlay_bounds(&overlay)? != bounds {
         return Err(
             std::io::Error::other("Monitor overlay does not align with the display.").into(),
         );

@@ -89,6 +89,42 @@ defmodule ChalkSync.ScreenAnnotation.AttachmentTest do
     end
   end
 
+  test "a fixed-length P-256 device signature proves possession on only its own socket", ctx do
+    nonce = Attachment.nonce()
+
+    {<<4, x::binary-size(32), y::binary-size(32)>>, private} =
+      :crypto.generate_key(:ecdh, :secp256r1)
+
+    claims =
+      put_in(ctx.claims, ["cnf", "jwk"], %{
+        "kty" => "EC",
+        "crv" => "P-256",
+        "x" => encode(x),
+        "y" => encode(y)
+      })
+
+    ticket = token(ctx.issuer, claims)
+
+    message =
+      "chalk.screen_annotation.helper.v1\n" <>
+        nonce <> "\n" <> encode(:crypto.hash(:sha256, ticket))
+
+    signature = :crypto.sign(:ecdsa, :sha256, message, [private, :secp256r1])
+    {:"ECDSA-Sig-Value", r, s} = :public_key.der_decode(:"ECDSA-Sig-Value", signature)
+
+    frame = %{
+      "type" => "annotation_helper_attach",
+      "version" => 1,
+      "ticket" => ticket,
+      "proof" => encode(<<r::256, s::256>>)
+    }
+
+    assert {:ok, _} = Attachment.verify(frame, nonce)
+    assert {:error, :invalid_attachment} = Attachment.verify(frame, Attachment.nonce())
+    wrong_proof = %{frame | "proof" => encode(<<r::256, 0::256>>)}
+    assert {:error, :invalid_attachment} = Attachment.verify(wrong_proof, nonce)
+  end
+
   test "cannot replay proof on a different actual WebSocket or enter as a participant", ctx do
     assert {:ok, first} = TestWSClient.connect(ctx.port, "/v1/screen-annotation/helper")
     assert {:ok, second} = TestWSClient.connect(ctx.port, "/v1/screen-annotation/helper")

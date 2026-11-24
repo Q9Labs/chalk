@@ -229,9 +229,9 @@ mod platform {
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
             Gdi::{
-                CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
-                GetDIBits, ReleaseDC, SelectObject, SetStretchBltMode, StretchBlt, BITMAPINFO,
-                BI_RGB, DIB_RGB_COLORS, HALFTONE, SRCCOPY,
+                CreateCompatibleBitmap, CreateCompatibleDC, CreateRectRgn, DeleteDC, DeleteObject,
+                GetDC, GetDIBits, GetWindowRgn, ReleaseDC, SelectObject, SetStretchBltMode,
+                StretchBlt, BITMAPINFO, BI_RGB, DIB_RGB_COLORS, HALFTONE, NULLREGION, SRCCOPY,
             },
         },
         System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
@@ -332,10 +332,7 @@ mod platform {
                         covered_top: 0,
                     });
                 }
-                if above as usize != LIVE_OVERLAY.load(Ordering::Relaxed)
-                    && visible(above)
-                    && !fully_transparent(above)
-                {
+                if above as usize != LIVE_OVERLAY.load(Ordering::Relaxed) && visible(above) {
                     let other = frame(above)?;
                     let w = rect
                         .right
@@ -347,7 +344,7 @@ mod platform {
                         .min(other.bottom)
                         .saturating_sub(rect.top.max(other.top))
                         .max(0);
-                    if w > 0 && h > 0 {
+                    if w > 0 && h > 0 && !fully_transparent(above) {
                         return None;
                     }
                 }
@@ -358,13 +355,25 @@ mod platform {
     }
 
     unsafe fn fully_transparent(hwnd: HWND) -> bool {
-        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED == 0 {
+        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED != 0 {
+            let (mut alpha, mut flags) = (0, 0);
+            if GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut flags) != 0
+                && flags & LWA_ALPHA != 0
+                && alpha == 0
+            {
+                return true;
+            }
+        }
+
+        // DWM may still report a frame for a window whose native region is
+        // empty. An unset region or an unknown per-pixel surface is not proof.
+        let region = CreateRectRgn(0, 0, 0, 0);
+        if region.is_null() {
             return false;
         }
-        let (mut alpha, mut flags) = (0, 0);
-        GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut flags) != 0
-            && flags & LWA_ALPHA != 0
-            && alpha == 0
+        let kind = GetWindowRgn(hwnd, region);
+        DeleteObject(region);
+        kind == NULLREGION
     }
 
     #[cfg(test)]
@@ -396,6 +405,14 @@ mod platform {
             assert!(fully_transparent(hwnd));
             assert_ne!(SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA), 0);
             assert!(!fully_transparent(hwnd));
+            let empty = CreateRectRgn(0, 0, 0, 0);
+            assert!(!empty.is_null());
+            // The window takes ownership of the region on success.
+            assert_ne!(
+                windows_sys::Win32::Graphics::Gdi::SetWindowRgn(hwnd, empty, 0),
+                0
+            );
+            assert!(fully_transparent(hwnd));
             DestroyWindow(hwnd);
         }
     }
@@ -620,5 +637,7 @@ fn only_visible_app_covers_prevent_overlay() {
     assert!(cover(20, 1., false, dock));
     assert!(cover(0, 0.1, false, app));
     assert!(!cover(0, 0., false, app));
+    assert!(cover(0, f64::NAN, false, app));
+    assert!(cover(0, -1., false, app));
     assert!(!cover(-1, 1., false, app));
 }

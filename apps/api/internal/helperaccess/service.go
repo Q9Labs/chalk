@@ -79,7 +79,7 @@ func validSecret(value string) bool {
 	return len(value) == 43 && err == nil && len(decoded) == 32
 }
 
-func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, binding Binding, origin, challenge string, remembered bool) (LocalTickets, error) {
+func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, binding Binding, origin, challenge string, _ bool) (LocalTickets, error) {
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" ||
 		origin != "https://"+parsed.Host || !validSecret(challenge) {
@@ -88,24 +88,12 @@ func (s *Service) IssueLocal(ctx context.Context, subject accessgrants.Subject, 
 	if err := s.authorize(ctx, subject, binding); err != nil {
 		return LocalTickets{}, err
 	}
-	if remembered && s.DevicesEnabled() {
-		var tickets LocalTickets
-		err := s.devices.WithActiveHelperLoopbackDevice(ctx, subject.TenantID, binding.DeviceKey, func() error {
-			var err error
-			tickets, err = s.localTickets(subject, binding, origin, challenge, true)
-			return err
-		})
-		if err == nil {
-			return tickets, nil
-		}
-		if !errors.Is(err, ErrDeviceUnavailable) {
-			return LocalTickets{}, err
-		}
-	}
-	return s.localTickets(subject, binding, origin, challenge, false)
+	// Previously a registered public key could skip the native code. A
+	// caller's claim is not evidence of a browser's prior approval.
+	return s.localTickets(subject, binding, origin, challenge)
 }
 
-func (s *Service) localTickets(subject accessgrants.Subject, binding Binding, origin, challenge string, remembered bool) (LocalTickets, error) {
+func (s *Service) localTickets(subject accessgrants.Subject, binding Binding, origin, challenge string) (LocalTickets, error) {
 	now := s.now().UTC()
 	expires := now.Add(lifetime)
 	claims := map[string]any{
@@ -116,9 +104,6 @@ func (s *Service) localTickets(subject accessgrants.Subject, binding Binding, or
 		"generation": subject.ParticipantGeneration, "publicationId": binding.PublicationID,
 		"layerId": binding.LayerID.String(), "expiresAtMs": expires.UnixMilli(),
 	}
-	if remembered {
-		claims["remembered"] = true
-	}
 	local, err := s.sign(map[string]string{"alg": "EdDSA", "typ": "chalk-helper-pair-ticket+jwt"}, claims, expires)
 	if err != nil {
 		return LocalTickets{}, err
@@ -127,7 +112,7 @@ func (s *Service) localTickets(subject accessgrants.Subject, binding Binding, or
 	if err != nil {
 		return LocalTickets{}, err
 	}
-	return LocalTickets{Pair: local, Attachment: attachment, Remembered: remembered}, nil
+	return LocalTickets{Pair: local, Attachment: attachment}, nil
 }
 
 func (s *Service) authorize(ctx context.Context, subject accessgrants.Subject, binding Binding) error {
@@ -164,6 +149,14 @@ func (s *Service) remoteTicket(subject accessgrants.Subject, binding Binding, no
 }
 
 func (s *Service) remoteTicketUntil(subject accessgrants.Subject, binding Binding, now, expires time.Time) (Ticket, error) {
+	jwk := map[string]string{"kty": "OKP", "crv": "Ed25519", "x": binding.DeviceKey}
+	if key := devicePublicKey(binding.DeviceKey); key != nil {
+		jwk = map[string]string{
+			"kty": "EC", "crv": "P-256",
+			"x": base64.RawURLEncoding.EncodeToString(key[1:33]),
+			"y": base64.RawURLEncoding.EncodeToString(key[33:65]),
+		}
+	}
 	return s.sign(map[string]string{"alg": "EdDSA", "kid": s.keyID, "typ": "JWT"}, map[string]any{
 		"iss": s.issuer, "aud": remoteAudience, "role": "sharer", "version": 1,
 		"sub": subject.ParticipantID.String(), "tenant_id": subject.TenantID.String(),
@@ -171,7 +164,7 @@ func (s *Service) remoteTicketUntil(subject accessgrants.Subject, binding Bindin
 		"participant_id": subject.ParticipantID.String(), "participant_generation": subject.ParticipantGeneration,
 		"publication_id": binding.PublicationID, "layer_id": binding.LayerID.String(),
 		"iat": now.Unix(), "nbf": now.Unix(), "exp": expires.Unix(),
-		"cnf": map[string]any{"jwk": map[string]string{"kty": "OKP", "crv": "Ed25519", "x": binding.DeviceKey}},
+		"cnf": map[string]any{"jwk": jwk},
 	}, expires)
 }
 

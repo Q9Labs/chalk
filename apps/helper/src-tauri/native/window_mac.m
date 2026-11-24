@@ -44,7 +44,7 @@ static bool compositor_surface(const char *path, int layer) {
 }
 
 static bool can_cover(int layer, int target_layer, double alpha) {
-    return layer >= target_layer && !(alpha <= 0);
+    return layer >= target_layer && alpha != 0;
 }
 
 static bool full_display_surface(CGRect frame, CGRect display, int layer) {
