@@ -404,9 +404,8 @@ defmodule ChalkSync.Episodes.Reducer do
   end
 
   defp command_target(_state, actor_id, :close_focus_allowance, payload) do
-    with :ok <- Validation.exact_keys(payload, []) do
-      {:ok, "focus_allowance_closed", %{"actor_participant_id" => actor_id}}
-    else
+    case Validation.exact_keys(payload, []) do
+      :ok -> {:ok, "focus_allowance_closed", %{"actor_participant_id" => actor_id}}
       _ -> {:error, :invalid_target}
     end
   end

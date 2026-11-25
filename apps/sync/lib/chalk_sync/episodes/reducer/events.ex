@@ -225,9 +225,8 @@ defmodule ChalkSync.Episodes.Reducer.Events do
   end
 
   def apply_payload(state, "focus_allowance_closed", payload) do
-    with :ok <- Validation.exact_keys(payload, ["actor_participant_id"]) do
-      {:ok, state}
-    else
+    case Validation.exact_keys(payload, ["actor_participant_id"]) do
+      :ok -> {:ok, state}
       _ -> {:error, :invalid_payload}
     end
   end

@@ -11,6 +11,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Postgres.Focus
   alias ChalkSync.Telemetry
   alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.Socket.Collaboration
@@ -179,7 +180,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
          {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
          {:ok, app_state_enabled} <-
            entry_stage(:focus_policy, fn ->
-             ChalkSync.Stateholder.Postgres.Focus.enabled?(identity.episode)
+             Focus.enabled?(identity.episode)
            end),
          state = %{
            state

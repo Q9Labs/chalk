@@ -9,6 +9,7 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Postgres.Focus
   alias ChalkSync.Webhooks.Producer, as: WebhookProducer
 
   @enforce_keys [
@@ -158,24 +159,26 @@ defmodule ChalkSync.Live.Episode do
         if (current && current.state == app_state) and current.windowed == windowed do
           {:ok, state, []}
         else
-          close_reported_app_state(state, socket, authority, current, now_ms)
-          report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
-          Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)
-
-          focus_webhooks =
-            if current do
-              Map.delete(state.focus_webhooks, {socket, current.started_at_ms})
-            else
-              state.focus_webhooks
-            end
-
-          Projections.presence_snapshot(%{
-            state
-            | app_states: Map.put(state.app_states, socket, report),
-              focus_webhooks: focus_webhooks
-          })
+          replace_app_state(state, socket, authority, current, app_state, windowed, now_ms)
         end
     end
+  end
+
+  defp replace_app_state(state, socket, authority, current, app_state, windowed, now_ms) do
+    close_reported_app_state(state, socket, authority, current, now_ms)
+    report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
+    Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)
+
+    focus_webhooks =
+      if current,
+        do: Map.delete(state.focus_webhooks, {socket, current.started_at_ms}),
+        else: state.focus_webhooks
+
+    Projections.presence_snapshot(%{
+      state
+      | app_states: Map.put(state.app_states, socket, report),
+        focus_webhooks: focus_webhooks
+    })
   end
 
   defp close_app_state(state, socket) do
@@ -232,7 +235,7 @@ defmodule ChalkSync.Live.Episode do
       end
     end
 
-    ChalkSync.Stateholder.Postgres.Focus.close_interval(
+    Focus.close_interval(
       state.episode,
       authority.participant_id,
       current.state,
