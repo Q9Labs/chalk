@@ -11,6 +11,7 @@ import { comparePublicationCursor, parseSFUPublicationID, publicationKey, requir
 import { chunks, desiredRemotePublications, droppedRemoteTracks, matchRemotePullTracks, publicationsByTrack, reconcileRemoteTracks, trackKey } from "./remote-track-response";
 import { freezeSnapshot, snapshotEqual } from "./snapshot";
 import { failuresOf, isGoneStatus, isRateLimited, mediaTargetFailure, simulcastUnsupported } from "./failure-policy";
+import { addLocalTransceiver } from "./local-transceiver";
 import { retryableRemotePull } from "./remote-pull-scheduler";
 import { LocalPublicationLedger, type LocalPublicationHandle, type LocalTrackState, type OwnedLocalPublication } from "./local-publications";
 import { LocalRecoveryScheduler, type LocalRecovery } from "./local-recovery";
@@ -40,23 +41,7 @@ import {
   VIEWER_LAYER_BATCH_SIZE,
   VIEWER_LAYER_UPDATE_INTERVAL_MS,
 } from "./sfu-limits";
-import {
-  PAGE_VISIBILITY_EVENTS,
-  activeOfferedMids,
-  bundleTagOf,
-  connectionIsClosed,
-  connectionIsLive,
-  createLocalOffer,
-  firefoxCameraSimulcastUnsupported,
-  observeConnectionState,
-  pageIsHidden,
-  pictureInPictureTracks,
-  requireTransceiverMid,
-  safeStopTrack,
-  safeStopTransceiver,
-  transceiverOf,
-  withDeadline,
-} from "./peer-connection";
+import { PAGE_VISIBILITY_EVENTS, activeOfferedMids, bundleTagOf, connectionIsClosed, connectionIsLive, createLocalOffer, observeConnectionState, pageIsHidden, pictureInPictureTracks, requireTransceiverMid, safeStopTrack, safeStopTransceiver, transceiverOf, withDeadline } from "./peer-connection";
 import { createCallStatsCollector, type CallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { SFUError } from "./types";
@@ -77,6 +62,7 @@ export class SFUClient implements ClientMediaPlane {
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
+  readonly #cameraSimulcast: boolean;
   readonly #replaceMediaConnection: ((observedConnectionId: string) => Promise<SFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
@@ -187,6 +173,7 @@ export class SFUClient implements ClientMediaPlane {
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
+    this.#cameraSimulcast = options.cameraSimulcast ?? true;
     this.#videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now(), options.unreportedVideoTileWaitMs ?? UNREPORTED_TILE_WAIT_MS);
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
@@ -1105,32 +1092,13 @@ export class SFUClient implements ClientMediaPlane {
     }
   }
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
-    const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
+    const transceiver = state.transceiver ?? addLocalTransceiver(connection, state, this.#cameraSimulcast);
     const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, detachedAt: null, lifecycle: { kind: "pending" } };
     this.#locals.owned.add(publication);
     if (state.transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
     state.transceiver = transceiver;
     return publication;
-  }
-  #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): RTCRtpTransceiver {
-    if (state.source !== "camera" || firefoxCameraSimulcastUnsupported()) return connection.addTransceiver(state.track, { direction: "sendonly" });
-    // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
-    // Match a single-stream camera's temporal mode so h does not spend
-    // its constrained uplink budget on extra temporal-layer overhead.
-    const sendEncodings = [
-      { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2500000, scalabilityMode: "L1T1" },
-      { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650000, scalabilityMode: "L1T1" },
-    ];
-    try {
-      return connection.addTransceiver(state.track, {
-        direction: "sendonly",
-        sendEncodings,
-      });
-    } catch (error) {
-      if (!simulcastUnsupported(error)) throw error;
-      return connection.addTransceiver(state.track, { direction: "sendonly" });
-    }
   }
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number): Promise<void> {
     let sessionDescription: Awaited<ReturnType<typeof createLocalOffer>>;
