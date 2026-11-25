@@ -144,7 +144,8 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 		t.Fatalf("wrong attempt completion error = %v", err)
 	}
 	pageToken, _ := utilities.NewID()
-	pageClaim, err := repository.ClaimRenderJob(ctx, jobs[0].JobID, now, now.Add(time.Minute), pageToken, "document-renderer")
+	claimNow := time.Now().UTC()
+	pageClaim, err := repository.ClaimRenderJob(ctx, jobs[0].JobID, claimNow, claimNow.Add(time.Minute), pageToken, "document-renderer")
 	if err != nil {
 		t.Fatalf("claim page job: %v", err)
 	}

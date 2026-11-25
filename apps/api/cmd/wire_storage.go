@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
@@ -36,9 +37,15 @@ func (w *apiWiring) wireStorage() error {
 			if w.redisClient == nil {
 				return fmt.Errorf("presenting workload auth requires Redis")
 			}
-			invoker, err := presenting.NewLambdaInvoker(context.Background(), w.cfg.Presenting.RendererFunction, w.cfg.RecordingKMS.Region)
-			if err != nil {
-				return fmt.Errorf("configure presenting renderer invoke: %w", err)
+			var invoker presenting.RendererInvoker
+			if strings.TrimSpace(w.cfg.Presenting.RendererEndpoint) != "" {
+				invoker = presenting.NewHTTPInvoker(w.cfg.Presenting.RendererEndpoint)
+			} else {
+				lambdaInvoker, err := presenting.NewLambdaInvoker(context.Background(), w.cfg.Presenting.RendererFunction, w.cfg.RecordingKMS.Region)
+				if err != nil {
+					return fmt.Errorf("configure presenting renderer invoke: %w", err)
+				}
+				invoker = lambdaInvoker
 			}
 			if w.syncParticipantVerifierConfigured {
 				presentingRepository := postgres.NewPresentingRepository(w.pool)

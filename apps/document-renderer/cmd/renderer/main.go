@@ -48,6 +48,10 @@ func main() {
 		logger.Error("renderer configuration failed", "error", err)
 		os.Exit(1)
 	}
+	if address := os.Getenv("RENDERER_LOCAL_ADDR"); address != "" {
+		runLocalRenderer(address, control, logger)
+		return
+	}
 	if endpoint := os.Getenv("AWS_LAMBDA_RUNTIME_API"); endpoint != "" {
 		runLambdaRuntime(endpoint, control, logger)
 		return
@@ -95,6 +99,34 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func runLocalRenderer(address string, control controlplane.ControlClient, logger *slog.Logger) {
+	server := &http.Server{Addr: address, ReadHeaderTimeout: 5 * time.Second}
+	http.DefaultServeMux.Handle("/invoke", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var event invocationEvent
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&event); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+			defer cancel()
+			if err := processOne(ctx, control, event); err != nil {
+				logger.Error("local render invocation failed", "error", err)
+			}
+		}()
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	logger.Info("local presenting renderer listening", "address", address)
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Error("local presenting renderer stopped", "error", err)
+		os.Exit(1)
+	}
 }
 
 func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logger *slog.Logger) {
