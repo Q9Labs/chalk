@@ -48,15 +48,23 @@ function escapeAttribute(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
 
+function macCard(macDownload, version) {
+  return macDownload
+    ? `<a class="download primary" href="${escapeAttribute(macDownload)}">${appleLogo}<div><strong>Download for Mac</strong><span>Version ${escapeAttribute(version)} · macOS 14 or later · Apple silicon and Intel</span></div><span class="arrow" aria-hidden="true">↓</span></a>`
+    : `<div class="download pending">${appleLogo}<div><strong>Mac</strong><span>The Mac download isn’t available yet.</span></div></div>`;
+}
+
+function windowsCard(storeHref) {
+  return storeHref
+    ? `<a class="download" href="${escapeAttribute(storeHref)}" rel="noopener">${windowsLogo}<div><strong>Get it from the Microsoft Store</strong><span>Windows 10 version 2004 or later, and Windows 11 · x64</span></div><span class="arrow" aria-hidden="true">→</span></a>`
+    : `<div class="download pending">${windowsLogo}<div><strong>Windows</strong><span>Coming soon to the Microsoft Store.</span></div></div>`;
+}
+
 export function downloadPage({ channel, version, macDownload, storeHref }) {
   const nightly = channel === "staging";
   const title = nightly ? "Chalk Helper for Chalk Nightly" : "Chalk Helper";
-  const mac = macDownload
-    ? `<a class="download primary" href="${escapeAttribute(macDownload)}">${appleLogo}<div><strong>Download for Mac</strong><span>Version ${escapeAttribute(version)} · macOS 14 or later · Apple silicon and Intel</span></div><span class="arrow" aria-hidden="true">↓</span></a>`
-    : `<div class="download pending">${appleLogo}<div><strong>Mac</strong><span>The Mac download isn’t available yet.</span></div></div>`;
-  const windows = storeHref
-    ? `<a class="download" href="${escapeAttribute(storeHref)}" rel="noopener">${windowsLogo}<div><strong>Get it from the Microsoft Store</strong><span>Windows 10 version 2004 or later, and Windows 11 · x64</span></div><span class="arrow" aria-hidden="true">→</span></a>`
-    : `<div class="download pending">${windowsLogo}<div><strong>Windows</strong><span>Coming soon to the Microsoft Store.</span></div></div>`;
+  const mac = macCard(macDownload, version);
+  const windows = windowsCard(storeHref);
 
   return `<!doctype html>
 <html lang="en">
