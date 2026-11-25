@@ -53,7 +53,7 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	planned, err := s.queries.ListSFUWindowBookings(ctx, sqlc.ListSFUWindowBookingsParams{
+	planned, err := s.queries.ListUpcomingScheduledEpisodes(ctx, sqlc.ListUpcomingScheduledEpisodesParams{
 		WindowStart: timestamptzValue(now),
 		WindowEnd:   timestamptzValue(now.Add(lookahead)),
 	})
@@ -78,7 +78,8 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 		liveSpaces[spaceKey{episode.TenantID.Bytes, episode.SpaceID.Bytes}] = episode
 		demand.LiveSlots += sfufleet.ClassSlots(int(episode.Participants), slotsPerNode)
 	}
-	for _, booking := range planned {
+	for i := len(planned) - 1; i >= 0; i-- {
+		booking := planned[i]
 		start, end := booking.StartsAt.Time, booking.ExpectedEndsAt.Time
 		key := spaceKey{booking.TenantID.Bytes, booking.SpaceID.Bytes}
 		covered := 0

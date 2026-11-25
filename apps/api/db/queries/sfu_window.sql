@@ -55,17 +55,6 @@ where episode.status in ('active', 'ending')
   and episode.config_snapshot -> 'media_plane_binding' ->> 'provider' = 'chalk_sfu'
   and episode.config_snapshot -> 'media_plane_binding' ->> 'adapter_fingerprint' = sqlc.arg(fingerprint)::text;
 
--- name: ListSFUWindowBookings :many
-select booking.tenant_id, booking.space_id, booking.starts_at, booking.expected_ends_at,
-    jsonb_array_length(booking.expected_participants)::integer as participant_count
-from scheduled_episodes booking
-join spaces space on space.tenant_id = booking.tenant_id and space.id = booking.space_id
-where booking.cancelled_at is null
-  and space.archived_at is null
-  and booking.starts_at < sqlc.arg(window_end)::timestamptz
-  and booking.expected_ends_at > sqlc.arg(window_start)::timestamptz
-order by booking.starts_at desc, booking.id;
-
 -- name: ForgetSFUWindowIntent :execrows
 delete from sfu_window_nodes
 where id = $1 and phase = 'starting' and provider_id is null;
