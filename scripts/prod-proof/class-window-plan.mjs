@@ -8,7 +8,7 @@ export const defaults = { cameras: 2, episodePacketCeiling: 11520, largeCallPart
 
 // DigitalOcean list prices per month for the sizes this proof uses. Hourly is the monthly price over 730 hours; check the
 // current price page before a run that will be billed.
-export const dropletMonthlyUsd = { "s-1vcpu-1gb": 6, "s-2vcpu-2gb": 18, "s-4vcpu-8gb": 48 };
+const dropletMonthlyUsd = { "s-1vcpu-1gb": 6, "s-2vcpu-2gb": 18, "s-4vcpu-8gb": 48 };
 // The Basic Droplet monthly ceiling is reached after 672 billed hours.
 const hoursPerMonth = 672;
 

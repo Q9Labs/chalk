@@ -87,15 +87,22 @@ if (command === "plan") {
   fail("expected a plan or run command");
 }
 
-async function runWindow() {
+function requireDisposableTarget() {
   const environment = values.environment;
   if (!["nightly", "staging"].includes(environment)) fail("--environment must be nightly or staging");
   if (values.confirm !== environment) fail("--confirm must repeat --environment");
   if (!values["expect-api-host"]) fail("--expect-api-host names the run's own API host");
   if (process.env.CHALK_PROOF_CONFIG_SOURCE !== "env") fail("set CHALK_PROOF_CONFIG_SOURCE=env; the 1Password default is the production proof Tenant");
-  if (!values["window-start"] || Number.isNaN(Date.parse(values["window-start"]))) fail("--window-start must be an ISO time");
+  if (!process.env.CHALK_PROOF_API_URL) fail("set CHALK_PROOF_API_URL to the disposable stack");
+  const configuredOrigin = new URL(process.env.CHALK_PROOF_API_URL);
+  if (configuredOrigin.hostname === "api.chalkmeet.com") fail("this proof does not run against the production API");
+  if (configuredOrigin.host !== values["expect-api-host"]) fail("the configured API host is not --expect-api-host");
+}
+
+function windowOptions() {
   const windowIso = values["window-start"];
   const windowStart = Date.parse(windowIso);
+  if (Number.isNaN(windowStart)) fail("--window-start must be an ISO time");
   const lead = windowStart - Date.now();
   if (lead < 3 * 60_000 || lead > 25 * 60_000) fail("the shared start must be 3 to 25 minutes away");
   const classes = whole(values.classes ?? "0", "--classes");
@@ -110,6 +117,12 @@ async function runWindow() {
   const shareDuty = Number(values["share-duty"]);
   if (!(shareDuty >= 0 && shareDuty <= 1)) fail("--share-duty must be between 0 and 1");
   const out = resolve(values.out ?? `.private/class-window/${windowIso.replace(/[:.]/g, "-")}`);
+  return { windowIso, windowStart, classes, firstClass, holdMs, overrunClass, overrunMs, participants, shareDuty, out };
+}
+
+async function runWindow() {
+  requireDisposableTarget();
+  const { windowIso, windowStart, classes, firstClass, holdMs, overrunClass, overrunMs, participants, shareDuty, out } = windowOptions();
 
   const { loadConfig, createRun, errorEvidence, save, publicFailure, waitFor } = await import("./runtime.mjs");
   const { cleanupRun } = await import("./cleanup.mjs");
@@ -118,10 +131,6 @@ async function runWindow() {
   const { manualPolicy } = await import("./space-fixture.mjs");
 
   await mkdir(out, { recursive: true, mode: 0o700 });
-  if (!process.env.CHALK_PROOF_API_URL) fail("set CHALK_PROOF_API_URL to the disposable stack");
-  const configuredOrigin = new URL(process.env.CHALK_PROOF_API_URL);
-  if (configuredOrigin.hostname === "api.chalkmeet.com") fail("this proof does not run against the production API");
-  if (configuredOrigin.host !== values["expect-api-host"]) fail("the configured API host is not --expect-api-host");
   const config = await loadConfig({ capabilities: false });
 
   const controller = new AbortController();
