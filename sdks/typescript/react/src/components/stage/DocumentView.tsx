@@ -69,6 +69,54 @@ export function DocumentView({ document, people, primary, interactive }: Documen
     return Math.max(1, Math.round((readyPages / manifest.pageCount) * 100));
   }, [manifest, pages]);
 
+  const toolbarRef = React.useRef<HTMLDivElement>(null);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [measurement] Lift the call's notice stack above the floating document toolbar the way the reaction tray lifts it above itself; the property is removed when the toolbar unmounts.
+  useEffect(() => {
+    if (!primary || !interactive) return;
+    const bar = toolbarRef.current;
+    const frame = bar?.closest<HTMLElement>("[data-part='call-frame']");
+    const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");
+    if (!bar || !frame || !(notices?.offsetParent instanceof HTMLElement)) return;
+    const place = () => {
+      if (!(notices.offsetParent instanceof HTMLElement)) return;
+      const baseline = notices.offsetParent.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(notices).bottom);
+      frame.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - bar.getBoundingClientRect().top + 12)}px`);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      frame.style.removeProperty("--chalk-reaction-toast-lift");
+    };
+  }, [primary, interactive]);
+
+  const pageContent = pageInfo?.imageUrl ? (
+    <img
+      src={pageInfo.imageUrl}
+      alt={`${fileName}, page ${page}`}
+      draggable={false}
+      className={zoom === 100 ? "h-full w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"}
+      style={zoom === 100 ? undefined : { width: `${zoom}%` }}
+    />
+  ) : (
+    <div role="status" className="rounded-xl bg-[var(--chalk-overlay-scrim-soft)] px-4 py-3 text-sm">
+      Page {page} is still being prepared
+    </div>
+  );
+
+  // In the side strip the tile shell already carries the file label, so the Document renders as a bare page thumbnail.
+  if (!primary) {
+    return (
+      <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[var(--chalk-app-tile-base)] p-1.5 text-[var(--chalk-on-overlay)]" data-document-viewer data-document-id={document.documentId}>
+        {ready && pageInfo?.imageUrl ? (
+          <img src={pageInfo.imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className="max-h-full max-w-full object-contain" />
+        ) : (
+          <span className="grid h-9 w-8 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-[10px] font-bold">PDF</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] text-[var(--chalk-on-overlay)]" data-document-viewer data-document-id={document.documentId}>
       {thumbnails && ready ? (
@@ -87,64 +135,62 @@ export function DocumentView({ document, people, primary, interactive }: Documen
         </div>
       ) : null}
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-4">
+        {!mine && (
+          <div className="z-10 flex shrink-0 justify-center pb-1 pt-2">
+            <div className="flex items-center gap-2 rounded-full bg-[var(--chalk-overlay-strong)] py-1.5 pl-3 pr-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
+              {following ? (
+                <span className="flex items-center gap-1.5 pr-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--chalk-accent)]" aria-hidden="true" />
+                  Following {presenterFirst} · page {document.page}
+                </span>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <StageIcon name="info" size={13} />
+                    You're on page {page}
+                  </span>
+                  <button type="button" className="rounded-full bg-[var(--chalk-on-overlay)] px-2.5 py-1 font-medium text-[var(--chalk-overlay-inverse)] hover:opacity-85" onClick={() => setOwnPage(null)}>
+                    Back to {presenterFirst}'s page
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="relative min-h-0 flex-1">
           {manifest?.status === "preparing" || !manifest ? (
-            <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-4 shadow-lg">
-              <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-[10px] font-bold text-[var(--chalk-on-overlay)]">PDF</span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">
-                  Preparing {fileName}
-                  {preparedPercent !== null ? ` · ${preparedPercent}%` : ""}
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--chalk-overlay-track)]">
-                  <div className="h-full rounded-full bg-[var(--chalk-overlay-track-fill)]" style={{ width: `${preparedPercent ?? 35}%` }} />
+            <div className="grid h-full place-items-center p-4">
+              <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-4 shadow-lg">
+                <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-[10px] font-bold text-[var(--chalk-on-overlay)]">PDF</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">
+                    Preparing {fileName}
+                    {preparedPercent !== null ? ` · ${preparedPercent}%` : ""}
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--chalk-overlay-track)]">
+                    <div className="h-full rounded-full bg-[var(--chalk-overlay-track-fill)]" style={{ width: `${preparedPercent ?? 35}%` }} />
+                  </div>
                 </div>
               </div>
             </div>
           ) : manifest.status === "failed" ? (
-            <div role="alert" className="rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-5 text-sm">
-              This document could not be prepared.
+            <div className="grid h-full place-items-center p-4">
+              <div role="alert" className="rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-5 text-sm">
+                This document could not be prepared.
+              </div>
             </div>
-          ) : pageInfo?.imageUrl ? (
-            <img
-              src={pageInfo.imageUrl}
-              alt={`${fileName}, page ${page}`}
-              draggable={false}
-              className={zoom === 100 ? "max-h-full max-w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"}
-              style={zoom === 100 ? undefined : { width: `${zoom}%` }}
-            />
+          ) : zoom === 100 ? (
+            <div className="absolute inset-0 flex items-center justify-center p-4">{pageContent}</div>
           ) : (
-            <div role="status" className="rounded-xl bg-[var(--chalk-overlay-scrim-soft)] px-4 py-3 text-sm">
-              Page {page} is still being prepared
-            </div>
+            <div className="absolute inset-0 overflow-auto p-4">{pageContent}</div>
           )}
         </div>
       <div className="absolute bottom-3 left-3 z-20 flex max-w-[45%] items-center gap-1.5 truncate rounded-full bg-[var(--chalk-overlay-strong)] px-3 py-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
         <StageIcon name="file" size={13} />
         <span className="truncate">{mine ? "Your PDF" : `${presenterName}'s PDF`} · {fileName}</span>
       </div>
-      {!mine && (
-        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--chalk-overlay-strong)] py-1.5 pl-3 pr-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
-          {following ? (
-            <span className="flex items-center gap-1.5 pr-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--chalk-accent)]" aria-hidden="true" />
-              Following {presenterFirst} · page {document.page}
-            </span>
-          ) : (
-            <>
-              <span className="flex items-center gap-1.5">
-                <StageIcon name="info" size={13} />
-                You're on page {page}
-              </span>
-              <button type="button" className="rounded-full bg-[var(--chalk-on-overlay)] px-2.5 py-1 font-medium text-[var(--chalk-overlay-inverse)] hover:opacity-85" onClick={() => setOwnPage(null)}>
-                Back to {presenterFirst}'s page
-              </button>
-            </>
-          )}
-        </div>
-      )}
       {primary && interactive ? (
-        <div className="pointer-events-none z-10 flex justify-center pb-3">
+        <div className="pointer-events-none z-10 flex justify-center pb-3" ref={toolbarRef}>
           <div className={toolbar}>
             {ready ? (
             <>
