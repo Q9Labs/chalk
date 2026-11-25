@@ -1,5 +1,6 @@
 import { FOCUS_COPY } from "../focus/focus-copy";
 import { deviceHint } from "../../selectors/device-hint";
+import { effectiveFocus } from "../../selectors/space-selectors";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -247,8 +248,11 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
         isMuted: participant.media.microphone !== "active",
         isVideoEnabled: participant.media.camera === "active",
         isHandRaised: participant.handRaised,
-        focusLabel: focusLabel(participant.focus),
-        notFocused: !participant.focus?.allowed && !participant.focus?.steppedAway && participant.focus?.appState !== undefined && participant.focus.appState !== "active",
+        focusLabel: focusLabel(effectiveFocus(participant, participantsSlice.roster)),
+        notFocused: (() => {
+          const focus = effectiveFocus(participant, participantsSlice.roster);
+          return !focus?.allowed && !focus?.steppedAway && focus?.appState !== undefined && focus.appState !== "active";
+        })(),
         handOrder: handOrders.get(participant.participantId),
         isSpeaking: participant.presence.speaking,
         isReconnecting: participant.presence.state === "disconnected",

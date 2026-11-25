@@ -5,6 +5,17 @@ import type { AudioParticipant } from "../components/audio-output/AudioOutput";
 import type { Participant } from "../components/participant-grid/ParticipantGrid";
 import type { ParticipantListParticipant } from "../components/participants-panel/ParticipantsPanel";
 
+/**
+ * A person using two devices is away only when neither connected device is active. Sync still
+ * reports each Participant separately; this selector is where the UI reads them as one person.
+ */
+export function effectiveFocus(participant: SpaceParticipant, participants: readonly SpaceParticipant[]): SpaceParticipant["focus"] {
+  const focus = participant.focus;
+  if (!focus?.appState || focus.appState === "active") return focus;
+  const activeElsewhere = participants.some((other) => other.participantId !== participant.participantId && other.identityId !== undefined && other.identityId === participant.identityId && other.presence.state === "connected" && other.focus?.appState === "active");
+  return activeElsewhere ? { ...focus, appState: "active", windowed: false } : focus;
+}
+
 /** Returns the first participant with a live screen-share track for the Spotlight layout. */
 export function toActiveScreenShare(participants: readonly Participant[]): Participant | undefined {
   return participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack != null);
@@ -35,7 +46,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       // The share tile waits for a picked source, so a cancelled browser picker never reflows the stage.
       isScreenSharing: localMedia.screen.state === "enabled",
       isHandRaised: localFromSync?.handRaised,
-      focus: localFromSync?.focus,
+      focus: localFromSync ? effectiveFocus(localFromSync, participants) : undefined,
       videoTrack: localMedia.camera.track,
       screenShareTrack: localMedia.screen.track,
     },
@@ -54,7 +65,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isVideoEnabled: Boolean(media?.camera),
       isScreenSharing: Boolean(media?.screen),
       isHandRaised: participant.handRaised,
-      focus: participant.focus,
+      focus: effectiveFocus(participant, participants),
       ...tileSignal(participant),
       ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
       videoTrack: media?.camera,
