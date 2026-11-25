@@ -3241,11 +3241,8 @@ export interface components {
         | boolean
         | null;
       default_episode_duration_seconds?: number;
-      focus: {
-        Set: boolean;
-        Value?: {
-          enabled: boolean;
-        } | null;
+      focus?: {
+        enabled: boolean;
       };
       linger_window_seconds?: number;
       maximum_episode_duration_seconds?: number;

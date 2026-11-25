@@ -9,17 +9,37 @@ import type { ActionResult, ArtifactURLDTO, CueDTO, PastSessionAction, PastSessi
 export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string, viewerParticipantId: string | null = null): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
-  const [space, recordings, people, talk] = await Promise.all([
+  const [space, recordings, people, talk, focus] = await Promise.all([
     run(engine.api.spaces.getSpace({ params: { tenant_id: engine.tenantId, space_id: params.space_id } })),
     run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })),
     attendance(engine, params),
     talkTime(engine, params),
+    run(engine.api.episodes.getEpisodeFocus({ params })).catch((error) => {
+      if (error instanceof DashboardError && error.status === 404) return null;
+      throw error;
+    }),
   ]);
   return {
     callName: space.name,
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
     talkTime: talk,
+    focus:
+      focus && (focus.participants.some((person) => person.intervals.length || person.step_aways.length) || focus.allow_windows.length)
+        ? {
+            participants: focus.participants.map((person) => ({
+              participantId: person.participant_id,
+              displayName: person.display_name,
+              awayTimeSeconds: person.away_time_seconds,
+              timesAway: person.times_away,
+              longestAwaySeconds: person.longest_away_seconds,
+              reportingCoverageSeconds: person.reporting_coverage_seconds,
+              intervals: person.intervals.map((interval) => ({ state: interval.state, windowed: interval.windowed, startedAt: interval.started_at, endedAt: interval.ended_at })),
+              stepAways: person.step_aways.map((step) => ({ reason: step.reason, startedAt: step.started_at, endedAt: step.ended_at ?? null })),
+            })),
+            allowWindows: focus.allow_windows.map((window) => ({ actorParticipantId: window.actor_participant_id, startedAt: window.started_at, endsAt: window.ends_at, endedAt: window.ended_at ?? null })),
+          }
+        : null,
     // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
     recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, transcriptPageSize("past-session")))),
     nextCursor: recordings.pagination.next_cursor,

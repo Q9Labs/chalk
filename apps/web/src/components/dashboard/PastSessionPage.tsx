@@ -2,7 +2,7 @@ import { Delete02Icon } from "@q9labsai/chalk-react/utils";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 
-import type { AttendanceDTO } from "../../lib/dashboard/contracts";
+import type { AttendanceDTO, FocusDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { clock, duration, longDay } from "../../lib/dashboard/format";
 import { videoState } from "../../lib/dashboard/recording";
@@ -144,6 +144,7 @@ function Detail({ ids, page, parts, crumb, onDeleted }: { readonly ids: Ids; rea
         </section>
       )}
       <TalkTime talk={page.session.talkTime} playback={playback} />
+      {page.session.focus ? <FocusSection focus={page.session.focus} startedAt={episode.startedAt} endedAt={end} /> : null}
       <WhoJoined attendance={attendance} startedAt={episode.startedAt} endedAt={end} />
       {deleting && shownTranscript ? (
         <DeleteTranscript
@@ -157,6 +158,75 @@ function Detail({ ids, page, parts, crumb, onDeleted }: { readonly ids: Ids; rea
         />
       ) : null}
     </Page>
+  );
+}
+
+function secondsText(total: number): string {
+  const seconds = Math.max(0, Math.round(total));
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 1) return `${seconds}s`;
+  const rest = seconds % 60;
+  if (minutes < 60) return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
+}
+
+function stateLabel(state: string, windowed: boolean): string {
+  if (state === "background") return "not focused";
+  if (state === "inactive") return windowed ? "Split View" : "other window";
+  return "active";
+}
+
+/** Focus intervals and totals for one session. Reporting coverage is time, never a score. */
+function FocusSection({ focus, startedAt, endedAt }: { readonly focus: FocusDTO; readonly startedAt: string; readonly endedAt: string }) {
+  const start = Date.parse(startedAt);
+  const span = Math.max(Date.parse(endedAt) - start, 60_000);
+  const episodeSeconds = Math.max(Math.round((Date.parse(endedAt) - start) / 1000), 1);
+  const at = (iso: string) => Math.min(Math.max((Date.parse(iso) - start) / span, 0), 1);
+  const rows = focus.participants.filter((person) => person.intervals.length > 0 || person.stepAways.length > 0);
+  return (
+    <section className="card wj" aria-labelledby="focus-title">
+      <div className="ph">
+        <h2 id="focus-title">
+          Focus <span className="cnt">{rows.length}</span>
+        </h2>
+      </div>
+      <div className="wjt">
+        {rows.map((person) => {
+          const summary = person.timesAway ? `not focused ${secondsText(person.awayTimeSeconds)}, ${person.timesAway} ${person.timesAway === 1 ? "time" : "times"}, longest ${secondsText(person.longestAwaySeconds)}` : "no away time";
+          return (
+            <div key={person.participantId} className="wjr" style={{ gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1.4fr)" }}>
+              <div className="wjp">
+                <Avatar name={person.displayName} size={26} />
+                <span className="ell">{person.displayName}</span>
+              </div>
+              <div className="num" style={{ minWidth: 0 }}>
+                {summary}
+                <span className="mu" style={{ display: "block", fontSize: "var(--type-caption)" }}>
+                  reporting {secondsText(person.reportingCoverageSeconds)} of {secondsText(episodeSeconds)}
+                </span>
+              </div>
+              <div className="track dsk" style={{ height: 12, overflow: "hidden" }} aria-label={`${person.displayName} Focus timeline`}>
+                {person.intervals.map((interval, index) => {
+                  const from = at(interval.startedAt);
+                  const width = Math.max(at(interval.endedAt) - from, 0.004);
+                  const color = interval.state === "active" ? "color-mix(in srgb, var(--chalk-success) 58%, transparent)" : "var(--chalk-warning)";
+                  return <i key={`${interval.startedAt}-${index}`} title={`${stateLabel(interval.state, interval.windowed)} ${clock(interval.startedAt)} to ${clock(interval.endedAt)}`} style={{ left: `${from * 100}%`, width: `${width * 100}%`, background: color, opacity: 1 }} />;
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {focus.allowWindows.length ? (
+          <div className="wjr" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+            <div className="num mu">
+              Other tabs were allowed {focus.allowWindows.length} {focus.allowWindows.length === 1 ? "time" : "times"}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

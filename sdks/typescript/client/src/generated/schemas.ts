@@ -2085,16 +2085,11 @@ export const UpdateSpaceRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission_policy: Schema.optional(Schema.Unknown),
     default_episode_duration_seconds: Schema.optional(Schema.Number),
-    focus: Schema.Struct({
-      Set: Schema.Boolean,
-      Value: Schema.optional(
-        Schema.NullOr(
-          Schema.Struct({
-            enabled: Schema.Boolean,
-          }),
-        ),
-      ),
-    }),
+    focus: Schema.optional(
+      Schema.Struct({
+        enabled: Schema.Boolean,
+      }),
+    ),
     linger_window_seconds: Schema.optional(Schema.Number),
     maximum_episode_duration_seconds: Schema.optional(Schema.Number),
     media_plane: Schema.optional(Schema.NullOr(Schema.Literal("chalk_sfu"))),

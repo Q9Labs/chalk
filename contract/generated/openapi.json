@@ -19603,21 +19603,11 @@
           "focus": {
             "additionalProperties": false,
             "properties": {
-              "Set": {
+              "enabled": {
                 "type": "boolean"
-              },
-              "Value": {
-                "additionalProperties": false,
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["enabled"],
-                "type": ["object", "null"]
               }
             },
-            "required": ["Set"],
+            "required": ["enabled"],
             "type": "object"
           },
           "linger_window_seconds": {
@@ -19766,7 +19756,6 @@
             "type": "string"
           }
         },
-        "required": ["focus"],
         "type": "object"
       },
       "UpdateTenantRequest": {
