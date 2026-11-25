@@ -112,7 +112,7 @@
     "apps/api/internal/webhooks/events.go": 307,
     "apps/sync/lib/chalk_sync/chat/sql.ex": 358,
     "apps/sync/lib/chalk_sync/episodes/reducer.ex": 446,
-    "apps/sync/lib/chalk_sync/protocol.ex": 393,
+    "apps/sync/lib/chalk_sync/protocol.ex": 394,
     "apps/sync/lib/chalk_sync/provider_bridge/codec.ex": 376,
     "apps/sync/lib/chalk_sync/retention/sql.ex": 380,
     "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex": 367,
