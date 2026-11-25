@@ -2,7 +2,7 @@
 # Measures each production SKU at the packet budget `deploy` renders for it, with one
 # load-generator Droplet per node so the generator is not the bottleneck.
 #
-#   capacity up                    create two generators, then the bench pair (primary s-2vcpu-2gb at 36000,
+#   capacity up                    create two generators (or CAPACITY_GENERATOR_ROLES, space-separated), then the bench pair (primary s-2vcpu-2gb at 36000,
 #                                  standby s-1vcpu-1gb at 22000), and copy the live test and certificates
 #   capacity run <primary|standby> <name> [VAR=value ...]
 #                                  run TestLiveSmokeClasses against that node while sampling its host (SFU_LIVE_CAPTURES
@@ -22,6 +22,7 @@ set -euo pipefail
 region=sgp1
 tag=chalk-sfu-bench
 generator_size=${CAPACITY_GENERATOR_SIZE:-s-4vcpu-8gb}
+generator_roles=${CAPACITY_GENERATOR_ROLES:-"primary standby"}
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../../../../infrastructure/sfu/lib.sh
 source "${here}/../../../../../infrastructure/sfu/lib.sh"
@@ -51,18 +52,18 @@ up() {
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
   stamp="$(date -u +%m%d%H%M)"
   trap 'echo "capacity: up failed, deleting what was created" >&2; down || true' ERR
-  for role in primary standby; do
+  for role in ${generator_roles}; do
     doctl compute droplet create "chalk-sfu-bench-${stamp}-gen-${role}" --region "$region" --size "$generator_size" \
       --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json | \
       jq 'if type == "array" then . else [.] end' >"${state}/generator-${role}.json"
     echo "generator ${role}: Droplet $(jq -r '.[0].id' "${state}/generator-${role}.json") (${generator_size})"
   done
   local control="" role_address
-  for role in primary standby; do
+  for role in ${generator_roles}; do
     control+="${control:+,}$(address_of "${state}/generator-${role}.json")"
   done
   BENCH_CONTROL_ADDRESSES="$control" "${here}/bench" up
-  for role in primary standby; do
+  for role in ${generator_roles}; do
     role_address="$(address_of "${state}/generator-${role}.json")"
     for _ in $(seq 40); do
       ssh "${ssh_options[@]}" "root@${role_address}" true 2>/dev/null && break
@@ -88,13 +89,13 @@ done'
 run() {
   local role="${1:?role}" name="${2:?name}"
   shift 2
-  [[ "$role" == primary || "$role" == standby ]] || die "role is primary or standby"
+  [[ "$role" =~ ^[a-z0-9-]+$ ]] || die "bad generator role ${role}"
   local generator node dest settings=("$@")
   local capture_setting=false setting
   for setting in "${settings[@]}"; do [[ "$setting" == SFU_LIVE_CAPTURES=* ]] && capture_setting=true; done
   $capture_setting || settings=(SFU_LIVE_CAPTURES=1 "${settings[@]}")
   generator="$(address_of "${state}/generator-${role}.json")"
-  node="${CAPACITY_NODE:-$(node_address "$role")}"
+  node="${CAPACITY_NODE:-$(node_address "${role%%-*}")}"
   dest="${out}/${name}-${role}"
   mkdir -p "$dest"
   if [[ -z "${CAPACITY_SKIP_NODE_SAMPLER:-}" ]]; then
@@ -130,12 +131,12 @@ summarize() {
 down() {
   local role id ids=()
   "${here}/bench" down || echo "capacity: bench down reported a problem; check: doctl compute droplet list" >&2
-  for role in primary standby; do
-    [[ -f "${state}/generator-${role}.json" ]] || continue
-    id="$(jq -r '.[0].id' "${state}/generator-${role}.json")"
+  for file in "${state}"/generator-*.json; do
+    [[ -f "$file" ]] || continue
+    id="$(jq -r '.[0].id' "$file")"
     ids+=("$id")
     doctl compute droplet delete "$id" --force || echo "capacity: could not delete Droplet ${id}" >&2
-    rm -f "${state}/generator-${role}.json"
+    rm -f "$file"
   done
   # Droplets delete asynchronously, so wait until none of ours is listed.
   local listed=0
