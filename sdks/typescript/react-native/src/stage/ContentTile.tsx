@@ -156,6 +156,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
       sceneStatus: status,
       connectionStatus,
       viewsAvailable: capabilities.viewsAvailable,
+      closeAvailable: canPresent,
       ...(canManage && access.policy !== null && transport?.setDrawPolicy
         ? {
             whoCanDraw: {
@@ -168,7 +169,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
         : {}),
       colors,
     }),
-    [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, canManage, access, transport, colors],
+    [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, canPresent, canManage, access, transport, colors],
   );
   const onClose = useCallback(() => {
     if (!transport) return;
