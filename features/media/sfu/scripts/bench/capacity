@@ -43,7 +43,7 @@ node_address() { address_of "${bench_dir}/$1.json"; }
 
 up() {
   [[ -f "${SFU_LIVE_TEST_BIN:-}" ]] || die "set SFU_LIVE_TEST_BIN to the linux/amd64 live test binary"
-  [[ ! -e "${state}/generator-primary.json" ]] || die "generators exist; run: capacity down"
+  ! compgen -G "${state}/generator-*.json" >/dev/null || die "generators exist; run: capacity down"
   mkdir -p "$state" "$out"
   chmod 700 "$state"
   rm -f "${state}/known_hosts" # generators are disposable; a reused address must not keep an old host key
