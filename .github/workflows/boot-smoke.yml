@@ -114,6 +114,9 @@ jobs:
       - name: Join a call with fake media through the SFU
         run: node .agents/skills/verify-chalk/scripts/join-call.mjs "ci-${GITHUB_RUN_ID}"
 
+      - name: Prove autoplay-aware lobby and reload re-entry
+        run: node .agents/skills/verify-chalk/scripts/autoplay-lobby.mjs "ci-autoplay-${GITHUB_RUN_ID}"
+
       - name: Tear down
         if: always()
         run: |
