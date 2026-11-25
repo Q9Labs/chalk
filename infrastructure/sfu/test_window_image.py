@@ -80,11 +80,23 @@ elif tool == 'doctl':
     if args[:2] == ['compute', 'ssh-key']:
         print(json.dumps([{'id': 4242, 'name': 'chalk-sfu-operator'}]))
     elif args[:3] == ['compute', 'droplet', 'create']:
-        Path(root, 'user-data.yaml').write_text(Path(args[args.index('--user-data-file') + 1]).read_text())
-        print(json.dumps([{'id': 777, 'networks': {'v4': [{'type': 'private', 'ip_address': '10.0.0.2'}, {'type': 'public', 'ip_address': builder}]}}]))
+        if '--user-data-file' in args:
+            Path(root, 'user-data.yaml').write_text(Path(args[args.index('--user-data-file') + 1]).read_text())
+        networks = [] if os.environ.get('MOCK_NO_ADDRESS') else [{'type': 'public', 'ip_address': builder}]
+        print(json.dumps([{'id': 777, 'networks': {'v4': networks}}]))
+    elif args[:3] == ['compute', 'snapshot', 'get'] and os.environ.get('MOCK_VERIFY'):
+        print(json.dumps([{'name': 'chalk-sfu-window-staging-mock'}]))
+    elif args[:3] == ['compute', 'firewall', 'create']:
+        print(json.dumps([{'id': 'test-firewall'}]))
+    elif args[:3] == ['compute', 'droplet', 'get']:
+        sys.exit(1)
+    elif args[:3] == ['compute', 'droplet', 'delete'] and os.environ.get('MOCK_DELETE_FAIL'):
+        sys.exit(1)
     elif args[:3] == ['compute', 'snapshot', 'list']:
         name = re.search(r'--snapshot-name (\S+)', Path(root, 'doctl-calls').read_text()).group(1)
         print(json.dumps([{'id': '99001', 'name': name}]))
+elif tool == 'nc':
+    sys.exit(args[-1] == '22')
 elif tool == 'ssh':
     if '-N' in args:  # the tunnel: listen where the script expects it, until killed
         port = int(re.search(r'-L (\d+):', ' '.join(args)).group(1))
@@ -127,6 +139,7 @@ class WindowImageBuildTest(DeployHarness):
         super().setUp()
         self.window = self.deploy.with_name('window-image')
         (self.root / 'bin/mock').write_text(MOCK)
+        (self.root / 'bin/nc').symlink_to('mock')
         (self.root / 'bin/openssl').write_text(OPENSSL)
         (self.root / 'bin/openssl').chmod(0o755)
         (self.private / 'staging').mkdir(parents=True)
@@ -225,6 +238,23 @@ class WindowImageBuildTest(DeployHarness):
         result = self.run_window('verify', 'staging', '99001', '--revision', REVISION)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn('droplet create', self.read('doctl-calls'))
+
+    def test_verify_cleans_up_by_id_and_surfaces_a_failed_delete(self):
+        command = ('verify', 'staging', '99001', '--revision', REVISION)
+        good = self.run_window(*command, MOCK_VERIFY='1')
+        self.assertEqual(good.returncode, 0, good.stderr)
+        self.assertIn('firewall delete -f test-firewall', self.read('doctl-calls'))
+        (self.root / 'doctl-calls').unlink()
+        leak = self.run_window(*command, MOCK_VERIFY='1', MOCK_DELETE_FAIL='1')
+        self.assertNotEqual(leak.returncode, 0)
+        self.assertIn('droplet delete -f 777', leak.stderr)
+        self.assertNotIn('firewall delete', self.read('doctl-calls'))
+
+    def test_builder_id_is_known_if_address_lookup_fails(self):
+        result = self.build(MOCK_NO_ADDRESS='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('droplet get 777', self.read('doctl-calls'))
+        self.assertIn('droplet delete -f 777', self.read('doctl-calls'))
 
 
 class WindowServerCertificateTest(unittest.TestCase):

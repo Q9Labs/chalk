@@ -28,6 +28,7 @@ const rampMs = 120_000;
 const shareStartupMs = 30_000;
 const prepareMs = 90_000;
 const sharePeriodMs = 4 * 60_000;
+const minimumShareDuty = (shareStartupMs + 2 * sampleMs) / sharePeriodMs;
 const liveTimeoutMs = 120_000;
 
 const usage = [
@@ -109,13 +110,13 @@ function windowOptions() {
   if (classes < 1) fail("--classes must be at least 1");
   const firstClass = whole(values["first-class"], "--first-class");
   const holdMs = whole(values["hold-minutes"], "--hold-minutes") * 60_000;
-  if (holdMs <= rampMs + shareStartupMs) fail("--hold-minutes must leave time to sample media after the ramp");
+  if (holdMs < rampMs + shareStartupMs + 2 * sampleMs) fail("--hold-minutes must leave time for two screen samples after startup");
   const overrunClass = values["overrun-class"] === undefined ? -1 : whole(values["overrun-class"], "--overrun-class");
   const overrunMs = overrunClass < 0 ? 0 : whole(values["overrun-minutes"], "--overrun-minutes") * 60_000;
   if (lead + holdMs + overrunMs > 50 * 60_000) fail("finish within the proof key's lifetime (at most 50 minutes from now)");
   const participants = whole(values.participants, "--participants");
   const shareDuty = Number(values["share-duty"]);
-  if (!(shareDuty >= 0 && shareDuty <= 1)) fail("--share-duty must be between 0 and 1");
+  if (!(shareDuty >= minimumShareDuty && shareDuty <= 1)) fail("--share-duty must be at least 0.21 and at most 1 to prove screen share");
   const out = resolve(values.out ?? `.private/class-window/${windowIso.replace(/[:.]/g, "-")}`);
   return { windowIso, windowStart, classes, firstClass, holdMs, overrunClass, overrunMs, participants, shareDuty, out };
 }
@@ -193,6 +194,7 @@ async function runWindow() {
       const joiningStarted = performance.now();
       await Promise.all(guests.pages.map((page, guest) => page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: config.api_url, name: `Class ${index} guest ${guest + 1}` })));
       await waitFor(`class ${index} live`, () => allLive(guests.pages, participants), liveTimeoutMs, 2000, signal);
+      if (Date.now() > windowStart + rampMs) throw new Error("guests became live after the sampling ramp");
       const mediaLiveMs = Math.round(performance.now() - joiningStarted);
       const samples = await hold(guests.pages, resolve(directory, "samples.jsonl"), classEnd);
       ending.useSDK(guests.pages[0]);

@@ -93,9 +93,18 @@ need() {
   done
 }
 
-# droplet_address <droplet json file> prints the first Droplet's public IPv4 address.
+# Save the ID from create before waiting for the address, so a failed wait still cleans up by ID.
 droplet_address() {
-  jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "$1"
+  local id="$1" body="$2" address attempt
+  for ((attempt=0; attempt<60; attempt++)); do
+    if address="$(jq -er '.[0].networks.v4[]? | select(.type == "public") | .ip_address' "$body")"; then
+      printf '%s\n' "$address"
+      return
+    fi
+    sleep 5
+    doctl compute droplet get "$id" --output json >"$body" || return 1
+  done
+  die "Droplet ${id} did not get a public IPv4 address"
 }
 
 # Checks the window server certificate before a builder is paid for: it verifies against the environment's CA,
@@ -165,7 +174,8 @@ build() {
   builder_id="" builder="" tunnel="" keep_builder=$keep
   trap build_cleanup EXIT
 
-  echo "==> creating the builder in ${region}"
+  local builder_name="${tag_prefix}-builder-${revision:0:12}"
+  echo "==> creating ${builder_name} in ${region}"
   ssh-keygen -q -t ed25519 -N '' -C window-builder-host -f "${work}/host"
   {
     render_cloud_init "$control" "$operator"
@@ -174,11 +184,12 @@ build() {
     sed 's/^/    /' "${work}/host"
     echo "  ed25519_public: $(cut -d' ' -f1,2 "${work}/host.pub")"
   } >"${work}/user-data.yaml"
-  doctl compute droplet create "${tag_prefix}-builder-${revision:0:12}" --region "$region" --size "$size" --image ubuntu-24-04-x64 \
-    --ssh-keys "$key_id" --tag-name "${tag_prefix}-builder" --user-data-file "${work}/user-data.yaml" --wait --output json >"${work}/droplet.json"
-  builder_id="$(jq -r '.[0].id' "${work}/droplet.json")"
-  builder="$(droplet_address "${work}/droplet.json")"
-  [[ -n "$builder_id" && -n "$builder" ]] || die "could not read the builder's ID and address"
+  if ! doctl compute droplet create "$builder_name" --region "$region" --size "$size" --image ubuntu-24-04-x64 \
+    --ssh-keys "$key_id" --tag-name "${tag_prefix}-builder" --user-data-file "${work}/user-data.yaml" --output json >"${work}/droplet.json" ||
+    ! builder_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' "${work}/droplet.json")"; then
+    die "could not confirm creation of ${builder_name}; check the provider and delete it by ID if present"
+  fi
+  builder="$(droplet_address "$builder_id" "${work}/droplet.json")"
   printf '%s %s\n' "$builder" "$(cut -d' ' -f1,2 "${work}/host.pub")" >"${work}/known_hosts"
   builder_ssh_options "${work}/known_hosts"
   remote() { ssh "${ssh_options[@]}" "root@${builder}" "$@"; }
@@ -279,8 +290,9 @@ build_cleanup() {
   if [[ -n "$builder_id" ]]; then
     if $keep_builder; then
       echo "window-image: builder ${builder_id} kept at ${builder}; delete it: doctl compute droplet delete -f ${builder_id}" >&2
-    else
-      doctl compute droplet delete -f "$builder_id" >/dev/null || echo "window-image: could not delete builder ${builder_id}; delete it: doctl compute droplet delete -f ${builder_id}" >&2
+    elif ! doctl compute droplet delete -f "$builder_id" >/dev/null; then
+      echo "window-image: could not delete builder ${builder_id}; delete it: doctl compute droplet delete -f ${builder_id}" >&2
+      code=1
     fi
   fi
   rm -rf "$work"
@@ -308,27 +320,28 @@ verify() {
   [[ "$(doctl compute snapshot get "$snapshot_id" --output json | jq -r '.[0].name | startswith("'"${tag_prefix}-${environment}-"'")')" == true ]] ||
     die "snapshot ${snapshot_id} is not a ${environment} window image"
 
-  local operator tag="${tag_prefix}-verify" firewall="${tag_prefix}-verify-${environment}-$$"
+  local operator tag="${tag_prefix}-verify-${environment}-$$"
   operator="$(operator_cidr)"
   work="$(mktemp -d)"
   chmod 700 "$work"
-  clone_id="" firewall_id=""
+  clone_id="" firewall_id="" clone_name=""
   trap verify_cleanup EXIT
 
   # The firewall targets a tag, so the clone is covered from the moment it exists. The only source is this machine.
   echo "==> creating a clone of ${snapshot_id}"
   doctl compute tag create "$tag" >/dev/null
-  firewall_id="$(doctl compute firewall create --name "$firewall" --tag-names "$tag" --output json \
+  firewall_id="$(doctl compute firewall create --name "$tag" --tag-names "$tag" --output json \
     --inbound-rules "protocol:tcp,ports:22,address:${operator} protocol:tcp,ports:${control_port},address:${operator} protocol:tcp,ports:${media_port},address:${operator}" \
     --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" |
-    jq -r '.[0].id')"
+    jq -er '.[0].id | select(type == "string" and length > 0)')"
   # The verification source must be allowed by the image's existing host
   # firewall; modifying it here would not test what the controller will boot.
-  doctl compute droplet create "${tag_prefix}-verify-${snapshot_id}" --region "$region" --size "$size" --image "$snapshot_id" \
-    --tag-name "$tag" --wait --output json >"${work}/droplet.json"
-  clone_id="$(jq -r '.[0].id' "${work}/droplet.json")"
+  clone_name="$tag"
+  doctl compute droplet create "$clone_name" --region "$region" --size "$size" --image "$snapshot_id" \
+    --tag-name "$tag" --output json >"${work}/droplet.json"
+  clone_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' "${work}/droplet.json")"
   local address ready=""
-  address="$(droplet_address "${work}/droplet.json")"
+  address="$(droplet_address "$clone_id" "${work}/droplet.json")"
   sfu_operator_cert "$environment"
 
   echo "==> waiting for the clone's node"
@@ -350,8 +363,17 @@ verify() {
 verify_cleanup() {
   local code=$?
   trap - EXIT
-  [[ -z "$clone_id" ]] || doctl compute droplet delete -f "$clone_id" >/dev/null || echo "window-image: could not delete ${clone_id}; delete it: doctl compute droplet delete -f ${clone_id}" >&2
-  [[ -z "$firewall_id" ]] || doctl compute firewall delete -f "$firewall_id" >/dev/null || echo "window-image: could not delete firewall ${firewall_id}" >&2
+  if [[ -n "$clone_name" && -z "$clone_id" ]]; then
+    echo "window-image: create result unknown; find ${clone_name} and delete by ID if present; retain firewall ${firewall_id} until confirmed gone" >&2
+    code=1
+  elif [[ -n "$clone_id" ]] && ! doctl compute droplet delete -f "$clone_id" >/dev/null; then
+    echo "window-image: could not delete ${clone_id}; delete it: doctl compute droplet delete -f ${clone_id}" >&2
+    echo "window-image: leaving firewall ${firewall_id} in place until the clone is gone" >&2
+    code=1
+  elif [[ -n "$firewall_id" ]] && ! doctl compute firewall delete -f "$firewall_id" >/dev/null; then
+    echo "window-image: could not delete firewall ${firewall_id}; delete it: doctl compute firewall delete -f ${firewall_id}" >&2
+    code=1
+  fi
   rm -rf "$work"
   exit "$code"
 }
