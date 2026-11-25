@@ -1,0 +1,14 @@
+{
+  "name": "chalk-node-agent-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "agent": "node agent.mjs",
+    "run": "node run.mjs"
+  },
+  "dependencies": {
+    "@discordjs/opus": "0.11.0",
+    "@roamhq/wrtc": "0.10.0",
+    "werift": "0.28.0"
+  }
+}
