@@ -64,41 +64,48 @@ func (q *Queries) GetScheduledEpisode(ctx context.Context, arg GetScheduledEpiso
 }
 
 const listUpcomingScheduledEpisodes = `-- name: ListUpcomingScheduledEpisodes :many
-select tenant_id, space_id, id, starts_at, expected_ends_at, expected_participants, metadata, cancelled_at, created_at, updated_at
-from scheduled_episodes
-where cancelled_at is null
-  and starts_at >= $1 and starts_at < $2
-order by starts_at, tenant_id, space_id, id
-limit $3
+select booking.tenant_id, booking.space_id, booking.id, booking.starts_at, booking.expected_ends_at,
+    jsonb_array_length(booking.expected_participants)::integer as participant_count
+from scheduled_episodes booking
+join spaces space on space.tenant_id = booking.tenant_id and space.id = booking.space_id
+where booking.cancelled_at is null
+  and space.archived_at is null
+  and booking.starts_at > $1::timestamptz - interval '7 days'
+  and booking.starts_at < $2::timestamptz
+  and booking.expected_ends_at > $1::timestamptz
+order by booking.starts_at, booking.tenant_id, booking.space_id, booking.id
 `
 
 type ListUpcomingScheduledEpisodesParams struct {
 	WindowStart pgtype.Timestamptz `json:"window_start"`
 	WindowEnd   pgtype.Timestamptz `json:"window_end"`
-	RowLimit    int32              `json:"row_limit"`
 }
 
-// The operational lookahead: bookings that are not cancelled and start in [window_start, window_end), earliest first.
-func (q *Queries) ListUpcomingScheduledEpisodes(ctx context.Context, arg ListUpcomingScheduledEpisodesParams) ([]ScheduledEpisode, error) {
-	rows, err := q.db.Query(ctx, listUpcomingScheduledEpisodes, arg.WindowStart, arg.WindowEnd, arg.RowLimit)
+type ListUpcomingScheduledEpisodesRow struct {
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	SpaceID          pgtype.UUID        `json:"space_id"`
+	ID               pgtype.UUID        `json:"id"`
+	StartsAt         pgtype.Timestamptz `json:"starts_at"`
+	ExpectedEndsAt   pgtype.Timestamptz `json:"expected_ends_at"`
+	ParticipantCount int32              `json:"participant_count"`
+}
+
+func (q *Queries) ListUpcomingScheduledEpisodes(ctx context.Context, arg ListUpcomingScheduledEpisodesParams) ([]ListUpcomingScheduledEpisodesRow, error) {
+	rows, err := q.db.Query(ctx, listUpcomingScheduledEpisodes, arg.WindowStart, arg.WindowEnd)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ScheduledEpisode
+	var items []ListUpcomingScheduledEpisodesRow
 	for rows.Next() {
-		var i ScheduledEpisode
+		var i ListUpcomingScheduledEpisodesRow
 		if err := rows.Scan(
 			&i.TenantID,
 			&i.SpaceID,
 			&i.ID,
 			&i.StartsAt,
 			&i.ExpectedEndsAt,
-			&i.ExpectedParticipants,
-			&i.Metadata,
-			&i.CancelledAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.ParticipantCount,
 		); err != nil {
 			return nil, err
 		}
