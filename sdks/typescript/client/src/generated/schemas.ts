@@ -324,6 +324,19 @@ export const CreateMembershipRequestSchema = /* @__PURE__ */ (() =>
   }))();
 export type CreateMembershipRequest = typeof CreateMembershipRequestSchema.Type;
 
+export const CreatePresentingDocumentRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachmentId: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type CreatePresentingDocumentRequest = typeof CreatePresentingDocumentRequestSchema.Type;
+
+export const CreatePresentingDocumentResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    documentId: Schema.String,
+    status: Schema.String,
+  }))();
+export type CreatePresentingDocumentResponse = typeof CreatePresentingDocumentResponseSchema.Type;
+
 export const CreatePublicSpaceRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     display_name: Schema.String.check(Schema.isMinLength(1)),
@@ -967,6 +980,41 @@ export const PrepareRecordingRequestSchema = /* @__PURE__ */ (() =>
     starts_at: DateTimeStringSchema,
   }))();
 export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
+
+export const PresentingDocumentManifestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachmentId: Schema.String,
+    documentId: Schema.String,
+    failure: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          code: Schema.String,
+          message: Schema.String,
+        }),
+      ),
+    ),
+    fileName: Schema.String,
+    pageCount: Schema.optional(Schema.Number),
+    pages: Schema.Array(
+      Schema.Struct({
+        height: Schema.Number,
+        imageUrl: Schema.optional(Schema.String),
+        page: Schema.Number,
+        status: Schema.String,
+        thumbnailUrl: Schema.optional(Schema.String),
+        width: Schema.Number,
+      }),
+    ),
+    status: Schema.String,
+  }))();
+export type PresentingDocumentManifest = typeof PresentingDocumentManifestSchema.Type;
+
+export const PresentingDocumentPageZoomSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expiresAt: Schema.String,
+    imageUrl: Schema.String,
+  }))();
+export type PresentingDocumentPageZoom = typeof PresentingDocumentPageZoomSchema.Type;
 
 export const ProblemReportAvailabilitySchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2732,6 +2780,20 @@ export const CreateMembership429ResponseHeadersSchema = /* @__PURE__ */ (() =>
   }))();
 export type CreateMembership429ResponseHeaders = typeof CreateMembership429ResponseHeadersSchema.Type;
 
+export const CreatePresentingDocumentRequestBodySchema = /* @__PURE__ */ (() => CreatePresentingDocumentRequestSchema)();
+export type CreatePresentingDocumentRequestBody = typeof CreatePresentingDocumentRequestBodySchema.Type;
+
+export const CreatePresentingDocumentResponseSchema = /* @__PURE__ */ (() => CreatePresentingDocumentResponseSchema)();
+export type CreatePresentingDocumentResponse = typeof CreatePresentingDocumentResponseSchema.Type;
+
+export const CreatePresentingDocument429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreatePresentingDocument429ResponseHeaders = typeof CreatePresentingDocument429ResponseHeadersSchema.Type;
+
 export const CreatePublicSpaceRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
@@ -3091,6 +3153,41 @@ export const GetParticipantEpisodeStatus429ResponseHeadersSchema = /* @__PURE__ 
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
+
+export const GetPresentingDocumentPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    documentId: Schema.String,
+  }))();
+export type GetPresentingDocumentPathParams = typeof GetPresentingDocumentPathParamsSchema.Type;
+
+export const GetPresentingDocumentResponseSchema = /* @__PURE__ */ (() => PresentingDocumentManifestSchema)();
+export type GetPresentingDocumentResponse = typeof GetPresentingDocumentResponseSchema.Type;
+
+export const GetPresentingDocument429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetPresentingDocument429ResponseHeaders = typeof GetPresentingDocument429ResponseHeadersSchema.Type;
+
+export const GetPresentingDocumentPageZoomPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    documentId: Schema.String,
+    page: Schema.NumberFromString,
+  }))();
+export type GetPresentingDocumentPageZoomPathParams = typeof GetPresentingDocumentPageZoomPathParamsSchema.Type;
+
+export const GetPresentingDocumentPageZoomResponseSchema = /* @__PURE__ */ (() => PresentingDocumentPageZoomSchema)();
+export type GetPresentingDocumentPageZoomResponse = typeof GetPresentingDocumentPageZoomResponseSchema.Type;
+
+export const GetPresentingDocumentPageZoom429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetPresentingDocumentPageZoom429ResponseHeaders = typeof GetPresentingDocumentPageZoom429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -5442,6 +5539,139 @@ export const ParticipantNotFoundErrorSchema = ParticipantNotFoundErrorWireSchema
   }),
 );
 
+export class PresentingDocumentNotFoundError extends Schema.TaggedErrorClass<PresentingDocumentNotFoundError>()("PresentingDocumentNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.document_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingDocumentNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.document_not_found"),
+    message: Schema.String,
+  }),
+});
+export const PresentingDocumentNotFoundErrorSchema = PresentingDocumentNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingDocumentNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingDocumentNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingDocumentNotReadyError extends Schema.TaggedErrorClass<PresentingDocumentNotReadyError>()("PresentingDocumentNotReadyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.document_not_ready"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingDocumentNotReadyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.document_not_ready"),
+    message: Schema.String,
+  }),
+});
+export const PresentingDocumentNotReadyErrorSchema = PresentingDocumentNotReadyErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingDocumentNotReadyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingDocumentNotReadyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingInvalidRequestError extends Schema.TaggedErrorClass<PresentingInvalidRequestError>()("PresentingInvalidRequestError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.invalid_request"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingInvalidRequestErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.invalid_request"),
+    message: Schema.String,
+  }),
+});
+export const PresentingInvalidRequestErrorSchema = PresentingInvalidRequestErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingInvalidRequestError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingInvalidRequestError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingPageNotFoundError extends Schema.TaggedErrorClass<PresentingPageNotFoundError>()("PresentingPageNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.page_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingPageNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.page_not_found"),
+    message: Schema.String,
+  }),
+});
+export const PresentingPageNotFoundErrorSchema = PresentingPageNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingPageNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingPageNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingRendererUnavailableError extends Schema.TaggedErrorClass<PresentingRendererUnavailableError>()("PresentingRendererUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.renderer_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingRendererUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.renderer_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const PresentingRendererUnavailableErrorSchema = PresentingRendererUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingRendererUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingRendererUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingUnsupportedTypeError extends Schema.TaggedErrorClass<PresentingUnsupportedTypeError>()("PresentingUnsupportedTypeError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.unsupported_type"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingUnsupportedTypeErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.unsupported_type"),
+    message: Schema.String,
+  }),
+});
+export const PresentingUnsupportedTypeErrorSchema = PresentingUnsupportedTypeErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingUnsupportedTypeError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingUnsupportedTypeError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class PresentingZoomNotReadyError extends Schema.TaggedErrorClass<PresentingZoomNotReadyError>()("PresentingZoomNotReadyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.zoom_not_ready"),
+    message: Schema.String,
+  }),
+}) {}
+export const PresentingZoomNotReadyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("presenting.zoom_not_ready"),
+    message: Schema.String,
+  }),
+});
+export const PresentingZoomNotReadyErrorSchema = PresentingZoomNotReadyErrorWireSchema.pipe(
+  Schema.decodeTo(PresentingZoomNotReadyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "PresentingZoomNotReadyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RecordingArtifactNotFoundError extends Schema.TaggedErrorClass<RecordingArtifactNotFoundError>()("RecordingArtifactNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("recording_artifact.not_found"),
@@ -7017,6 +7247,22 @@ export const CreateMembershipErrorSchema = Schema.Union([
 ]);
 export type CreateMembershipError = typeof CreateMembershipErrorSchema.Type;
 
+export const CreatePresentingDocumentErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PresentingDocumentNotFoundErrorSchema,
+  PresentingDocumentNotReadyErrorSchema,
+  PresentingInvalidRequestErrorSchema,
+  PresentingPageNotFoundErrorSchema,
+  PresentingRendererUnavailableErrorSchema,
+  PresentingUnsupportedTypeErrorSchema,
+  PresentingZoomNotReadyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+]);
+export type CreatePresentingDocumentError = typeof CreatePresentingDocumentErrorSchema.Type;
+
 export const CreatePublicSpaceErrorSchema = Schema.Union([
   ArrivalInvalidHandleErrorSchema,
   ArrivalUnavailableErrorSchema,
@@ -7311,6 +7557,36 @@ export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatusErrorSchema.Type;
+
+export const GetPresentingDocumentErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PresentingDocumentNotFoundErrorSchema,
+  PresentingDocumentNotReadyErrorSchema,
+  PresentingInvalidRequestErrorSchema,
+  PresentingPageNotFoundErrorSchema,
+  PresentingRendererUnavailableErrorSchema,
+  PresentingUnsupportedTypeErrorSchema,
+  PresentingZoomNotReadyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+]);
+export type GetPresentingDocumentError = typeof GetPresentingDocumentErrorSchema.Type;
+
+export const GetPresentingDocumentPageZoomErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PresentingDocumentNotFoundErrorSchema,
+  PresentingDocumentNotReadyErrorSchema,
+  PresentingInvalidRequestErrorSchema,
+  PresentingPageNotFoundErrorSchema,
+  PresentingRendererUnavailableErrorSchema,
+  PresentingUnsupportedTypeErrorSchema,
+  PresentingZoomNotReadyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+]);
+export type GetPresentingDocumentPageZoomError = typeof GetPresentingDocumentPageZoomErrorSchema.Type;
 
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
@@ -8161,6 +8437,7 @@ export const ChalkOperationPolicies = {
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createPresentingDocument: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createPublicSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

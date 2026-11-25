@@ -14,9 +14,12 @@ const presentingWorkloadRole = "document-renderer"
 
 type presentingWorkerLeaseBody struct {
 	JobID      string `json:"job_id"`
+	TenantID   string `json:"tenant_id"`
+	SpaceID    string `json:"space_id"`
 	DocumentID string `json:"document_id"`
 	Attempt    int    `json:"attempt"`
 	LeaseToken string `json:"lease_token"`
+	Page       int    `json:"page"`
 }
 
 type presentingClaimBody struct {
@@ -241,11 +244,19 @@ func presentingLease(body presentingWorkerLeaseBody) (presenting.RenderLease, er
 	if err != nil {
 		return presenting.RenderLease{}, err
 	}
+	tenantID, err := utilities.ParseID(body.TenantID)
+	if err != nil {
+		return presenting.RenderLease{}, err
+	}
+	spaceID, err := utilities.ParseID(body.SpaceID)
+	if err != nil {
+		return presenting.RenderLease{}, err
+	}
 	token, err := utilities.ParseID(body.LeaseToken)
 	if err != nil || body.Attempt < 1 {
 		return presenting.RenderLease{}, errors.New("invalid lease")
 	}
-	return presenting.RenderLease{JobID: jobID, DocumentID: documentID, Attempt: body.Attempt, LeaseToken: token, LeaseOwner: presentingWorkloadRole}, nil
+	return presenting.RenderLease{TenantID: tenantID, SpaceID: spaceID, JobID: jobID, DocumentID: documentID, Attempt: body.Attempt, LeaseToken: token, LeaseOwner: presentingWorkloadRole, Page: body.Page}, nil
 }
 
 func writePresentingWorkerError(w http.ResponseWriter, err error) {

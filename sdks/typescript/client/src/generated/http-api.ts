@@ -60,6 +60,26 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("createPresentingDocument", "/v1/presenting/documents", {
+      payload: S.CreatePresentingDocumentRequestBodySchema,
+      success: S.CreatePresentingDocumentResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PresentingInvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PresentingDocumentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingPageNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingDocumentNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingZoomNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.PresentingUnsupportedTypeErrorSchema.pipe(HttpApiSchema.status(422)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.PresentingRendererUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createWebhookEndpoint", "/v1/tenants/:tenant_id/webhook-endpoints", {
       params: S.CreateWebhookEndpointPathParamsSchema,
       headers: S.CreateWebhookEndpointRequestHeadersSchema,
@@ -201,6 +221,44 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ChatStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getPresentingDocument", "/v1/presenting/documents/:documentId", {
+      params: S.GetPresentingDocumentPathParamsSchema,
+      success: S.GetPresentingDocumentResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PresentingInvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PresentingDocumentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingPageNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingDocumentNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingZoomNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingUnsupportedTypeErrorSchema.pipe(HttpApiSchema.status(422)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.PresentingRendererUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getPresentingDocumentPageZoom", "/v1/presenting/documents/:documentId/pages/:page/zoom", {
+      params: S.GetPresentingDocumentPageZoomPathParamsSchema,
+      success: S.GetPresentingDocumentPageZoomResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PresentingInvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PresentingDocumentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingPageNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingDocumentNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingZoomNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingUnsupportedTypeErrorSchema.pipe(HttpApiSchema.status(422)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.PresentingRendererUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
