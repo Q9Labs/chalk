@@ -176,6 +176,19 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         markFailed(file.attachmentId, "open");
       }
     };
+    const downloadFile = async (file: ChatAttachment) => {
+      if (!onResolveAttachmentUrl) return;
+      try {
+        const url = await onResolveAttachmentUrl(file.attachmentId);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = file.fileName;
+        anchor.rel = "noopener";
+        anchor.click();
+      } catch {
+        markFailed(file.attachmentId, "open");
+      }
+    };
     if (isSystem) return <p className="call-chat-system">{content}</p>;
     return (
       <div className={cn("call-message-group", isLocal && "is-local", !isFirstInGroup && "is-continuation", className)}>
@@ -282,13 +295,19 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                           <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
                         </span>
                       </button>
-                      {presentable && onOpenAttachmentOnStage ? (
-                        <span className="call-file-actions">
+                      <span className="call-file-actions">
+                        {presentable && onOpenAttachmentOnStage ? (
                           <button type="button" onClick={() => void onOpenAttachmentOnStage(file)}>
                             Open on stage
                           </button>
-                        </span>
-                      ) : null}
+                        ) : null}
+                        <button type="button" onClick={() => void openFile(file)}>
+                          Open in new tab
+                        </button>
+                        <button type="button" onClick={() => void downloadFile(file)}>
+                          Download
+                        </button>
+                      </span>
                     </span>
                   );
                 })}
