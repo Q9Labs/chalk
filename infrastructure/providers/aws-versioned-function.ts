@@ -135,7 +135,8 @@ const settled = Effect.fn(function* (functionName: string) {
 
 export function requireRunOwnedFunction(stageName: string, functionName: string) {
   const stage = parseStage(stageName);
-  if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
+  const allowed = [`chalk-${stage.name}-transcription-dispatcher`, `chalk-${stage.name}-document-renderer`];
+  if (stage.kind !== "ephemeral" || !allowed.includes(functionName)) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
 }
 type Configuration = Pick<FunctionProps, "environment">;
 // Lambda returns environment variables in its own order, and deepEqual compares a redacted record in
