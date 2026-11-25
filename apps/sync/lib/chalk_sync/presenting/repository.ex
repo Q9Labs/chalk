@@ -4,6 +4,7 @@ defmodule ChalkSync.Presenting.Repository do
   alias ChalkSync.Contract.GeneratedPresentingV1, as: Schema
   alias ChalkSync.Database
   alias ChalkSync.Presenting.Protocol
+  alias ChalkSync.Presenting.Statements
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.PostgresRepository.Store
 
@@ -226,8 +227,6 @@ defmodule ChalkSync.Presenting.Repository do
       started_at_ms: started_at_ms
     }
   end
-
-  alias ChalkSync.Presenting.Statements
 
 
   defp context(identity),
