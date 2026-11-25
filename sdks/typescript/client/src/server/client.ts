@@ -22,6 +22,20 @@ import type {
   RecordingDownloadURL,
   RecordingExportRequestAcceptedResponse,
   RecordingList,
+  PutScheduledEpisodeInput,
+  RotateWebhookSecretResponse,
+  ScheduledEpisode,
+  Transcript,
+  TranscriptDocument,
+  TranscriptDownloadURL,
+  TranscriptList,
+  TranscriptRequestAccepted,
+  UpdateWebhookEndpointInput,
+  WebhookDeliveryCreated,
+  WebhookDeliveryList,
+  WebhookEndpoint,
+  WebhookEndpointList,
+  WebhookEndpointWithSecret,
   Space,
   SpacePublicInvite,
   SpaceList,
@@ -39,9 +53,12 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const participantPath = (spaceId: string, episodeId: string, participantId: string) => `${episodePath(spaceId, episodeId)}/participants/${segment(participantId)}`;
   const recordingPath = (recordingId: string) => `${tenantPath}/recordings/${segment(recordingId)}`;
   const apiKeyPath = (apiKeyId: string) => `${tenantPath}/api-keys/${segment(apiKeyId)}`;
+  const transcriptPath = (transcriptId: string) => `${tenantPath}/transcripts/${segment(transcriptId)}`;
+  const webhookEndpointPath = (endpointId: string) => `${tenantPath}/webhook-endpoints/${segment(endpointId)}`;
+  const scheduledEpisodePath = (spaceId: string, scheduledEpisodeId: string) => `${spacePath(spaceId)}/scheduled-episodes/${segment(scheduledEpisodeId)}`;
   const admissionRequestPath = (spaceId: string, requestHandle: string) => `${spacePath(spaceId)}/public-admission-requests/${segment(requestHandle)}`;
   // Reads and idempotent writes retry on their own; `post` retries only when the caller supplies an idempotency key.
-  const send = <T>(method: "DELETE" | "GET" | "PATCH" | "POST", path: string, expectedStatus: number, body?: unknown) => request<T>({ method, path, body, expectedStatus, retry: "always" });
+  const send = <T>(method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT", path: string, expectedStatus: number, body?: unknown) => request<T>({ method, path, body, expectedStatus, retry: "always" });
   const post = <T>(path: string, expectedStatus: number, idempotency: ChalkIdempotencyOptions | undefined, body?: unknown) => request<T>({ method: "POST", path, body, expectedStatus, idempotency, retry: "caller_idempotency" });
   return {
     spaces: {
@@ -50,7 +67,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       get: (spaceId) => send<Space>("GET", spacePath(spaceId), 200),
       list: (input) => send<SpaceList>("GET", `${tenantPath}/spaces${query({ archived: input?.archived, cursor: input?.cursor, page_size: input?.pageSize })}`, 200),
       restore: (spaceId) => send<Space>("POST", `${spacePath(spaceId)}/restore`, 200),
-      update: (spaceId, input) => send<Space>("PATCH", spacePath(spaceId), 200, { recording_policy: input.recordingPolicy, transcription_policy: input.transcriptionPolicy }),
+      update: (spaceId, input) => send<Space>("PATCH", spacePath(spaceId), 200, { metadata: input.metadata, recording_policy: input.recordingPolicy, transcription_policy: input.transcriptionPolicy }),
     },
     episodes: {
       create: (spaceId, input, idempotency) => post<Episode>(`${spacePath(spaceId)}/episodes`, 201, idempotency, { metadata: input.metadata, started_at: input.startedAt }),
@@ -85,6 +102,31 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       get: (recordingId) => send<Recording>("GET", recordingPath(recordingId), 200),
       requestExport: (recordingId) => send<RecordingExportRequestAcceptedResponse>("POST", `${recordingPath(recordingId)}/export`, 202, {}),
       createDownloadURL: (recordingId, input) => send<RecordingDownloadURL>("POST", `${recordingPath(recordingId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds, download: input.download }),
+    },
+    transcripts: {
+      list: (input) => send<TranscriptList>("GET", `${tenantPath}/transcripts${query({ cursor: input?.cursor, page_size: input?.pageSize, recording_id: input?.recordingId })}`, 200),
+      get: (transcriptId) => send<Transcript>("GET", transcriptPath(transcriptId), 200),
+      document: (transcriptId) => send<TranscriptDocument>("GET", `${transcriptPath(transcriptId)}/document`, 200),
+      text: (transcriptId) => request<string>({ method: "GET", path: `${transcriptPath(transcriptId)}/text`, expectedStatus: 200, response: "text", retry: "always" }),
+      createDownloadURL: (transcriptId, input) => send<TranscriptDownloadURL>("POST", `${transcriptPath(transcriptId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds }),
+      request: (recordingId, input) =>
+        post<TranscriptRequestAccepted>(`${recordingPath(recordingId)}/transcripts`, 202, { idempotencyKey: input.idempotencyKey }, { idempotency_key: input.idempotencyKey, language: input.language, languages: input.languages === undefined ? undefined : [...input.languages] }),
+      delete: (transcriptId) => send<void>("DELETE", transcriptPath(transcriptId), 204),
+    },
+    webhookEndpoints: {
+      create: (input, idempotency) => post<WebhookEndpointWithSecret>(`${tenantPath}/webhook-endpoints`, 201, idempotency, createWebhookEndpointRequest(input)),
+      list: (input) => send<WebhookEndpointList>("GET", `${tenantPath}/webhook-endpoints${query({ cursor: input?.cursor, page_size: input?.pageSize })}`, 200),
+      get: (endpointId) => send<WebhookEndpoint>("GET", webhookEndpointPath(endpointId), 200),
+      update: (endpointId, input, idempotency) => request<WebhookEndpoint>({ method: "PATCH", path: webhookEndpointPath(endpointId), body: updateWebhookEndpointRequest(input), expectedStatus: 200, idempotency, headers: { "if-match": String(input.revision) }, retry: "caller_idempotency" }),
+      rotateSecret: (endpointId, input, idempotency) => post<RotateWebhookSecretResponse>(`${webhookEndpointPath(endpointId)}/rotate-secret`, 200, idempotency, { revoke_previous_immediately: input.revokePreviousImmediately }),
+      delete: (endpointId, input, idempotency) => request<void>({ method: "DELETE", path: webhookEndpointPath(endpointId), expectedStatus: 204, idempotency, headers: { "if-match": String(input.revision) }, retry: "caller_idempotency" }),
+      listDeliveries: (endpointId, input) => send<WebhookDeliveryList>("GET", `${webhookEndpointPath(endpointId)}/deliveries${query({ cursor: input?.cursor, event_type: input?.eventTypes, page_size: input?.pageSize, state: input?.states })}`, 200),
+      redeliver: (endpointId, deliveryId, idempotency) => post<WebhookDeliveryCreated>(`${webhookEndpointPath(endpointId)}/deliveries/${segment(deliveryId)}/redeliver`, 201, idempotency),
+    },
+    scheduledEpisodes: {
+      put: (spaceId, scheduledEpisodeId, input) => send<ScheduledEpisode>("PUT", scheduledEpisodePath(spaceId, scheduledEpisodeId), 200, putScheduledEpisodeRequest(input)),
+      get: (spaceId, scheduledEpisodeId) => send<ScheduledEpisode>("GET", scheduledEpisodePath(spaceId, scheduledEpisodeId), 200),
+      delete: (spaceId, scheduledEpisodeId) => send<void>("DELETE", scheduledEpisodePath(spaceId, scheduledEpisodeId), 204),
     },
     publicInvites: {
       get: (spaceId) => send<SpacePublicInvite>("GET", `${spacePath(spaceId)}/public-invite`, 200),
@@ -121,6 +163,21 @@ function participantAdmissionRequest(input: AdmitParticipantInput) {
     identity_external_id: input.identityExternalId,
     metadata: input.metadata,
     participant_id: input.participantId,
+    admission: input.admission,
+  };
+}
+function createWebhookEndpointRequest(input: import("./types.js").CreateWebhookEndpointInput) {
+  return { api_version: input.apiVersion, enabled: input.enabled, event_types: [...input.eventTypes], name: input.name, url: input.url };
+}
+function updateWebhookEndpointRequest(input: UpdateWebhookEndpointInput) {
+  return { api_version: input.apiVersion, enabled: input.enabled, event_types: input.eventTypes === undefined ? undefined : [...input.eventTypes], name: input.name, url: input.url };
+}
+function putScheduledEpisodeRequest(input: PutScheduledEpisodeInput) {
+  return {
+    expected_ends_at: input.expectedEndsAt,
+    expected_participants: input.expectedParticipants?.map((participant) => ({ identity_external_id: participant.identityExternalId, name: participant.name, role: participant.role })),
+    metadata: input.metadata,
+    starts_at: input.startsAt,
   };
 }
 function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknown> {
@@ -132,9 +189,13 @@ function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknow
   };
 }
 // Undefined values are skipped, so a filter the caller left out never reaches the URL.
-function query(params: Readonly<Record<string, boolean | number | string | undefined>>): string {
+function query(params: Readonly<Record<string, boolean | number | string | readonly string[] | undefined>>): string {
   const search = new URLSearchParams();
-  for (const [name, value] of Object.entries(params)) if (value !== undefined) search.set(name, String(value));
+  for (const [name, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) for (const item of value) search.append(name, item);
+    else search.set(name, String(value));
+  }
   const text = search.toString();
   return text === "" ? "" : `?${text}`;
 }

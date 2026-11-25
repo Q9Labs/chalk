@@ -95,7 +95,7 @@ the client will no longer be used; it releases the Connection and its resources.
 
 Use `client.recording.start()` and `client.recording.stop()` inside an Episode, or set the Space's Automatic Recording policy. There is no REST Recording start/stop operation.
 
-The server SDK requests Exports and creates download URLs. Subscribe to `recording.completed` for verified MP4 readiness and `transcript.completed` for document readiness; both also emit `started` and `failed`. See the [webhook guide](docs/webhooks.md).
+The server SDK requests Exports and creates download URLs. It also lists, reads and deletes Transcripts, requests on-demand Transcription, manages webhook endpoints and deliveries, and writes Scheduled Episodes. Subscribe to `recording.completed` for verified MP4 readiness and `transcript.completed` for document readiness; both also emit `started` and `failed`. See the [webhook guide](docs/webhooks.md).
 
 ## Feature controllers
 

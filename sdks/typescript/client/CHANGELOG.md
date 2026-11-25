@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.2.0
+
+- Cover the server-side Transcript, webhook endpoint and Scheduled Episode REST resources in `createChalkServerClient`, including on-demand Transcription, delivery redelivery and webhook secret rotation. Participant admission now sends `admission`, and Space update sends `metadata`.
+
 ## 6.1.0
 
 - Negotiate screen annotation with Sync for the active screen publication. The client stops sending annotation commands and withdraws ink when the server disables the feature, without interrupting screen sharing.

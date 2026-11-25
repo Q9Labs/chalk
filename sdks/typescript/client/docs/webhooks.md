@@ -4,28 +4,27 @@ Chalk delivers signed Events at least once and without ordering guarantees. A re
 
 ## Manage webhook endpoints
 
-Use the public HTTP API from your backend to create, update, rotate, test, and inspect webhook endpoints. The `@q9labsai/chalk-client/webhooks` entry point verifies signatures and processes deliveries; it does not manage endpoints.
-
-Create an endpoint with a Tenant-scoped API key carrying `webhooks:write`. Supply a fresh idempotency key for each new mutation and reuse it when retrying that same request:
+Use `createChalkServerClient` from your backend to create, update, rotate, test, and inspect webhook endpoints. The `@q9labsai/chalk-client/webhooks` entry point verifies signatures and processes deliveries; it does not manage endpoints.
 
 ```ts
-const response = await fetch(`https://api.chalkmeet.com/v1/tenants/${process.env.CHALK_TENANT_ID}/webhook-endpoints`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${process.env.CHALK_API_KEY}`,
-    "content-type": "application/json",
-    "Idempotency-Key": crypto.randomUUID(),
-  },
-  body: JSON.stringify({
-    api_version: 1,
+import { createChalkServerClient } from "@q9labsai/chalk-client/server";
+
+const chalk = createChalkServerClient({
+  apiKey: process.env.CHALK_API_KEY!,
+  tenantId: process.env.CHALK_TENANT_ID!,
+  apiBaseURL: "https://api.chalkmeet.com",
+});
+
+const endpoint = await chalk.webhookEndpoints.create(
+  {
+    apiVersion: 1,
     enabled: true,
-    event_types: ["episode.started", "episode.ended", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed"],
+    eventTypes: ["episode.started", "episode.ended", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed"],
     name: "Application events",
     url: "https://hooks.example.com/chalk",
-  }),
-});
-if (response.status !== 201) throw new Error(`Webhook creation failed: ${response.status}`);
-const endpoint = await response.json();
+  },
+  { idempotencyKey: crypto.randomUUID() },
+);
 await storeSecret(endpoint.secret);
 ```
 

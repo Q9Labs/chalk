@@ -7,7 +7,9 @@ export type ServerRequest = {
   readonly body?: unknown;
   readonly expectedStatus: number;
   readonly idempotency?: ChalkIdempotencyOptions;
-  readonly method: "DELETE" | "GET" | "PATCH" | "POST";
+  readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+  readonly response?: "json" | "text";
+  readonly headers?: Readonly<Record<string, string>>;
   readonly path: string;
   readonly retry: RetryMode;
 };
@@ -43,7 +45,7 @@ export function createServerRequester(options: ChalkServerClientOptions, apiKey:
 
 async function performAttempt<T>(attempt: Attempt, index: number): Promise<T> {
   const response = await fetchAttempt(attempt, index);
-  if (response.status === attempt.input.expectedStatus) return decodeSuccess<T>(response);
+  if (response.status === attempt.input.expectedStatus) return decodeSuccess<T>(response, attempt.input.response);
   if (canRetryResponse(response, attempt.retries, index)) return retryResponse<T>(response, attempt, index);
   throw await responseError(response, attempt.input.retry !== "never");
 }
@@ -68,8 +70,9 @@ async function retryResponse<T>(response: Response, attempt: Attempt, index: num
   return performAttempt<T>(attempt, index + 1);
 }
 
-async function decodeSuccess<T>(response: Response): Promise<T> {
+async function decodeSuccess<T>(response: Response, responseType: "json" | "text" = "json"): Promise<T> {
   if (response.status === 204) return undefined as T;
+  if (responseType === "text") return (await response.text()) as T;
   try {
     return (await response.json()) as T;
   } catch {
@@ -89,7 +92,7 @@ function requestURL(attempt: Attempt): URL {
 function requestInit(attempt: Attempt): RequestInit {
   return {
     method: attempt.input.method,
-    headers: requestHeaders(attempt.options, attempt.apiKey, attempt.input.body !== undefined, attempt.idempotencyKey),
+    headers: requestHeaders(attempt.options, attempt.apiKey, attempt.input.body !== undefined, attempt.idempotencyKey, attempt.input.headers),
     ...serializedBody(attempt.input.body),
   };
 }
@@ -99,8 +102,9 @@ function serializedBody(body: unknown): { readonly body?: string } {
   return { body: JSON.stringify(body) };
 }
 
-function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBody: boolean, idempotencyKeyValue: string | undefined): Headers {
+function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBody: boolean, idempotencyKeyValue: string | undefined, requestHeadersValue: Readonly<Record<string, string>> | undefined): Headers {
   const headers = new Headers(options.headers);
+  for (const [name, value] of Object.entries(requestHeadersValue ?? {})) headers.set(name, value);
   if (hasBody) headers.set("content-type", "application/json");
   if (idempotencyKeyValue !== undefined) headers.set("idempotency-key", idempotencyKeyValue);
   headers.set("authorization", `Bearer ${apiKey}`);

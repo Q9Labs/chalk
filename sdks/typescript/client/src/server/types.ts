@@ -1,3 +1,4 @@
+import type { components } from "../generated/openapi-types";
 import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
 export type { AccessGrant } from "../access/grant.js";
@@ -30,6 +31,7 @@ export type CreateSpaceInput = {
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
 export type UpdateSpaceInput = {
+  readonly metadata?: unknown;
   readonly recordingPolicy?: RecordingPolicy;
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
@@ -112,6 +114,7 @@ export type EpisodeEnd = {
   readonly status: string;
 };
 export type AdmitParticipantInput = {
+  readonly admission?: "direct" | "policy";
   /** Stable person key scoped to this tenant. Mutually exclusive with identityId. */
   readonly identityExternalId?: string;
   readonly identityId?: string;
@@ -258,6 +261,78 @@ export type CreateRecordingDownloadURLInput = {
   readonly expiresInSeconds: number;
   readonly download?: boolean;
 };
+
+type OpenAPISchema<Name extends keyof components["schemas"]> = components["schemas"][Name];
+export type Transcript = OpenAPISchema<"Transcript">;
+export type TranscriptList = OpenAPISchema<"TranscriptList">;
+export type TranscriptDocument = OpenAPISchema<"TranscriptDocument">;
+export type TranscriptDownloadURL = OpenAPISchema<"TranscriptDownloadURL">;
+export type TranscriptRequestAccepted = OpenAPISchema<"TranscriptRequestAcceptedResponse">;
+export type ListTranscriptsInput = {
+  readonly cursor?: string;
+  readonly pageSize?: number;
+  readonly recordingId?: string;
+};
+export type RequestTranscriptInput = {
+  readonly idempotencyKey: string;
+  readonly language?: string;
+  readonly languages?: readonly string[];
+};
+export type CreateTranscriptDownloadURLInput = {
+  readonly expiresInSeconds: number;
+};
+export type WebhookEndpoint = OpenAPISchema<"WebhookEndpoint">;
+export type WebhookEndpointWithSecret = OpenAPISchema<"WebhookEndpointWithSecret">;
+export type WebhookEndpointList = OpenAPISchema<"WebhookEndpointList">;
+export type WebhookDeliveryList = OpenAPISchema<"WebhookDeliveryList">;
+export type WebhookDeliveryCreated = OpenAPISchema<"WebhookDeliveryCreated">;
+export type RotateWebhookSecretResponse = OpenAPISchema<"RotateWebhookSecretResponse">;
+export type WebhookEventType = WebhookEndpoint["event_types"][number];
+export type WebhookDeliveryState = "pending" | "retry_wait" | "delivering" | "succeeded" | "exhausted" | "canceled" | "erased";
+export type CreateWebhookEndpointInput = {
+  readonly apiVersion: number;
+  readonly enabled: boolean;
+  readonly eventTypes: readonly WebhookEventType[];
+  readonly name: string;
+  readonly url: string;
+};
+export type UpdateWebhookEndpointInput = {
+  readonly apiVersion?: number;
+  readonly enabled?: boolean;
+  readonly eventTypes?: readonly WebhookEventType[];
+  readonly name?: string;
+  readonly revision: number;
+  readonly url?: string;
+};
+export type DeleteWebhookEndpointInput = {
+  readonly revision: number;
+};
+export type RotateWebhookSecretInput = {
+  readonly revokePreviousImmediately: boolean;
+};
+export type ListWebhookEndpointsInput = {
+  readonly cursor?: string;
+  readonly pageSize?: number;
+};
+export type ListWebhookDeliveriesInput = {
+  readonly cursor?: string;
+  readonly eventTypes?: readonly WebhookEventType[];
+  readonly pageSize?: number;
+  readonly states?: readonly WebhookDeliveryState[];
+};
+export type ScheduledEpisode = OpenAPISchema<"ScheduledEpisode">;
+export type ScheduledEpisodeParticipantInput = {
+  readonly identityExternalId?: string;
+  readonly name: string;
+  readonly role?: string;
+};
+export type PutScheduledEpisodeInput = {
+  readonly expectedEndsAt: string;
+  readonly expectedParticipants?: readonly ScheduledEpisodeParticipantInput[];
+  readonly metadata?: unknown;
+  readonly startsAt: string;
+};
+
 export type ChalkServerClient = {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;
@@ -287,6 +362,30 @@ export type ChalkServerClient = {
     get(recordingId: string): Promise<Recording>;
     requestExport(recordingId: string): Promise<RecordingExportRequestAcceptedResponse>;
     createDownloadURL(recordingId: string, input: CreateRecordingDownloadURLInput): Promise<RecordingDownloadURL>;
+  };
+  readonly transcripts: {
+    list(input?: ListTranscriptsInput): Promise<TranscriptList>;
+    get(transcriptId: string): Promise<Transcript>;
+    document(transcriptId: string): Promise<TranscriptDocument>;
+    text(transcriptId: string): Promise<string>;
+    createDownloadURL(transcriptId: string, input: CreateTranscriptDownloadURLInput): Promise<TranscriptDownloadURL>;
+    request(recordingId: string, input: RequestTranscriptInput): Promise<TranscriptRequestAccepted>;
+    delete(transcriptId: string): Promise<void>;
+  };
+  readonly webhookEndpoints: {
+    create(input: CreateWebhookEndpointInput, options?: ChalkIdempotencyOptions): Promise<WebhookEndpointWithSecret>;
+    list(input?: ListWebhookEndpointsInput): Promise<WebhookEndpointList>;
+    get(endpointId: string): Promise<WebhookEndpoint>;
+    update(endpointId: string, input: UpdateWebhookEndpointInput, options?: ChalkIdempotencyOptions): Promise<WebhookEndpoint>;
+    rotateSecret(endpointId: string, input: RotateWebhookSecretInput, options?: ChalkIdempotencyOptions): Promise<RotateWebhookSecretResponse>;
+    delete(endpointId: string, input: DeleteWebhookEndpointInput, options?: ChalkIdempotencyOptions): Promise<void>;
+    listDeliveries(endpointId: string, input?: ListWebhookDeliveriesInput): Promise<WebhookDeliveryList>;
+    redeliver(endpointId: string, deliveryId: string, options?: ChalkIdempotencyOptions): Promise<WebhookDeliveryCreated>;
+  };
+  readonly scheduledEpisodes: {
+    put(spaceId: string, scheduledEpisodeId: string, input: PutScheduledEpisodeInput): Promise<ScheduledEpisode>;
+    get(spaceId: string, scheduledEpisodeId: string): Promise<ScheduledEpisode>;
+    delete(spaceId: string, scheduledEpisodeId: string): Promise<void>;
   };
   readonly publicInvites: {
     get(spaceId: string): Promise<SpacePublicInvite>;
