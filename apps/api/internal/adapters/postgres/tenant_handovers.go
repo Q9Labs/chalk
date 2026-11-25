@@ -35,6 +35,9 @@ func (r TenantHandoverRepository) Create(ctx context.Context, input tenanthandov
 	if err != nil {
 		return tenanthandovers.Handover{}, false, err
 	}
+	if owner == "" {
+		return tenanthandovers.Handover{}, false, tenanthandovers.ErrOwnershipChanged
+	}
 	if input.Actor.Kind == tenanthandovers.ActorService && owner != input.Actor.ServiceID {
 		return tenanthandovers.Handover{}, false, tenanthandovers.ErrForbidden
 	}
