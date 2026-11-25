@@ -144,7 +144,6 @@ build() {
   done
   [[ "$(node_table --arg size "$size" '.sizes[$size] != null')" == true ]] || die "size ${size} is not a measured size in ${sfu_table}"
   need doctl docker jq openssl ssh ssh-keygen curl git awk
-  doctl account get >/dev/null || die "doctl is not signed in"
   [[ -r "$SFU_SSH_KEY" ]] || die "no readable SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY to the operator key"
 
   environment_values "$environment"
@@ -311,7 +310,6 @@ verify() {
     esac
   done
   need doctl jq openssl curl nc
-  doctl account get >/dev/null || die "doctl is not signed in"
   environment_values "$environment"
   dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
   [[ -n "$revision" ]] || revision="$(jq -r .revision "${dir}/window-image-${snapshot_id}.json" 2>/dev/null)" ||
