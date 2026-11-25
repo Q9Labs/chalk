@@ -2,6 +2,7 @@ import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import ports from "../scripts/dev/ports.json";
+import { webMediaFixture } from "../scripts/web-proof/media.mjs";
 
 /** A minimal one-page PDF the chat attachment pipeline accepts. */
 const PDF_BYTES = `%PDF-1.4
@@ -21,7 +22,7 @@ startxref
 
 async function joinTwo(contexts: BrowserContext[]): Promise<[Page, Page]> {
   const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
-  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}`).href);
+  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://127.0.0.1:${ports.web}`).href);
   await a.getByLabel("Your name", { exact: true }).fill("Nora");
   await a.getByRole("button", { name: "Join call", exact: true }).click();
   await a.getByRole("button", { name: "Video tile for Nora", exact: true }).waitFor();
@@ -40,6 +41,7 @@ async function joinTwo(contexts: BrowserContext[]): Promise<[Page, Page]> {
 test("one person presents a PDF and it lands on both stages", async () => {
   const browser = await chromium.launch();
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
+  for (const context of contexts) await context.addInitScript(webMediaFixture(1, { permission: "granted" }));
   try {
     const [a, b] = await joinTwo(contexts);
 
