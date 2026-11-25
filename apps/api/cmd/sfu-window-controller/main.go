@@ -39,16 +39,33 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	conn, err := connectControllerDatabase(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(context.Background())
+	store, err := postgres.NewSFUWindowStore(conn, os.Getenv("CHALK_SFU_WINDOW_FIREWALL_ID"))
+	if err != nil {
+		return err
+	}
+	reconciler, err := sfufleet.NewReconciler(policy, store, provider, control)
+	if err != nil {
+		return err
+	}
+	return reconcileContinuously(ctx, conn, reconciler)
+}
+
+func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {
 	db, err := pgx.ParseConfig(os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL"))
 	if err != nil || os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL") == "" {
-		return errors.New("set CHALK_SFU_WINDOW_DATABASE_URL to a direct database connection")
+		return nil, errors.New("set CHALK_SFU_WINDOW_DATABASE_URL to a direct database connection")
 	}
 	if !verifiedDatabaseEndpoint(&pgconn.FallbackConfig{Host: db.Host, TLSConfig: db.TLSConfig}) {
-		return errors.New("SFU window database requires verify-full TLS for remote connections")
+		return nil, errors.New("SFU window database requires verify-full TLS for remote connections")
 	}
 	for _, fallback := range db.Fallbacks {
 		if !verifiedDatabaseEndpoint(fallback) {
-			return errors.New("SFU window database requires verify-full TLS for remote fallbacks")
+			return nil, errors.New("SFU window database requires verify-full TLS for remote fallbacks")
 		}
 	}
 	db.ConnectTimeout = 5 * time.Second
@@ -58,22 +75,17 @@ func run(ctx context.Context) error {
 	db.RuntimeParams["lock_timeout"] = "2s"
 	conn, err := pgx.ConnectConfig(ctx, db)
 	if err != nil {
-		return errors.New("connect to the SFU window database")
+		return nil, errors.New("connect to the SFU window database")
 	}
-	defer conn.Close(context.Background())
 	var acquired bool
 	if err := conn.QueryRow(ctx, "select pg_try_advisory_lock($1::bigint)", controllerLease).Scan(&acquired); err != nil || !acquired {
-		return errors.New("acquire the SFU window controller lease")
+		_ = conn.Close(context.Background())
+		return nil, errors.New("acquire the SFU window controller lease")
 	}
+	return conn, nil
+}
 
-	store, err := postgres.NewSFUWindowStore(conn, os.Getenv("CHALK_SFU_WINDOW_FIREWALL_ID"))
-	if err != nil {
-		return err
-	}
-	reconciler, err := sfufleet.NewReconciler(policy, store, provider, control)
-	if err != nil {
-		return err
-	}
+func reconcileContinuously(ctx context.Context, conn *pgx.Conn, reconciler *sfufleet.Reconciler) error {
 	tick := time.NewTicker(sfufleet.ReconcileEvery)
 	defer tick.Stop()
 	for {

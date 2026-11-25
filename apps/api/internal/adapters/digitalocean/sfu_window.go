@@ -100,30 +100,54 @@ type SFUWindow struct {
 }
 
 func NewSFUWindow(config SFUWindowConfig) (*SFUWindow, error) {
-	if config.BaseURL == "" {
-		config.BaseURL = defaultBaseURL
-	}
-	baseURL, err := url.Parse(config.BaseURL)
-	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" ||
-		strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 ||
-		!validDigitalOceanTag(config.OwnerTag) || !validDigitalOceanTag(config.FirewallTag) || config.OwnerTag == config.FirewallTag ||
-		!canonicalUUID(config.FirewallID) || !canonicalUUID(config.VPCUUID) || config.SnapshotID <= 0 || !validRegionSlug(config.Region) {
+	baseURL, err := parseSFUWindowBaseURL(config.BaseURL)
+	if err != nil {
 		return nil, ErrSFUWindowInvalid
 	}
+	if !validSFUWindowTags(config) || !validSFUWindowNetwork(config) || !validSFUWindowToken(config.Token) {
+		return nil, ErrSFUWindowInvalid
+	}
+	return &SFUWindow{
+		baseURL: baseURL, client: newSFUWindowHTTPClient(config.HTTPClient), token: config.Token,
+		ownerTag: config.OwnerTag, firewallTag: config.FirewallTag, firewallID: config.FirewallID,
+		snapshotID: config.SnapshotID, region: config.Region, vpcUUID: config.VPCUUID,
+	}, nil
+}
+
+func parseSFUWindowBaseURL(raw string) (*url.URL, error) {
+	if raw == "" {
+		raw = defaultBaseURL
+	}
+	baseURL, err := url.Parse(raw)
+	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" {
+		return nil, ErrSFUWindowInvalid
+	}
+	return baseURL, nil
+}
+
+func validSFUWindowTags(config SFUWindowConfig) bool {
+	return validDigitalOceanTag(config.OwnerTag) && validDigitalOceanTag(config.FirewallTag) && config.OwnerTag != config.FirewallTag
+}
+
+func validSFUWindowNetwork(config SFUWindowConfig) bool {
+	return canonicalUUID(config.FirewallID) && canonicalUUID(config.VPCUUID) && config.SnapshotID > 0 && validRegionSlug(config.Region)
+}
+
+func validSFUWindowToken(token string) bool {
+	return strings.TrimSpace(token) != "" && len(token) <= 4096
+}
+
+func newSFUWindowHTTPClient(configured *http.Client) *http.Client {
 	client := &http.Client{Timeout: 15 * time.Second}
-	if config.HTTPClient != nil {
-		copied := *config.HTTPClient
+	if configured != nil {
+		copied := *configured
 		client = &copied
 		if client.Timeout == 0 {
 			client.Timeout = 15 * time.Second
 		}
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &SFUWindow{
-		baseURL: baseURL, client: client, token: config.Token,
-		ownerTag: config.OwnerTag, firewallTag: config.FirewallTag, firewallID: config.FirewallID,
-		snapshotID: config.SnapshotID, region: config.Region, vpcUUID: config.VPCUUID,
-	}, nil
+	return client
 }
 
 // Observe reads the single droplet whose name is exactly name. Any droplet that

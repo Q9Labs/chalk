@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -36,88 +37,140 @@ func ListSFUWindowRoutes(ctx context.Context, queries sfuWindowDirectoryQueries,
 }
 
 type SFUWindowStore struct {
+	db       sfuWindowDB
 	queries  *sqlc.Queries
 	firewall pgtype.UUID
 }
 
-func NewSFUWindowStore(db sqlc.DBTX, firewallID string) (SFUWindowStore, error) {
+type sfuWindowDB interface {
+	sqlc.DBTX
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}
+
+type sfuWindowSpaceKey struct{ tenant, space [16]byte }
+
+func NewSFUWindowStore(db sfuWindowDB, firewallID string) (SFUWindowStore, error) {
 	var firewall pgtype.UUID
 	if err := firewall.Scan(firewallID); err != nil || !firewall.Valid {
 		return SFUWindowStore{}, errors.New("invalid SFU window provider firewall ID")
 	}
-	return SFUWindowStore{queries: sqlc.New(db), firewall: firewall}, nil
+	return SFUWindowStore{db: db, queries: sqlc.New(db), firewall: firewall}, nil
 }
 
 func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead time.Duration, slotsPerNode int) (sfufleet.Snapshot, error) {
+	// Match live Episodes, bookings and journal rows from one database snapshot.
+	// Release the transaction before the controller makes any provider requests.
+	var snapshot sfufleet.Snapshot
+	err := pgx.BeginTxFunc(ctx, s.db, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		var err error
+		snapshot, err = s.loadSnapshot(ctx, s.queries.WithTx(tx), application, lookahead, slotsPerNode)
+		return err
+	})
+	if err != nil {
+		return sfufleet.Snapshot{}, err
+	}
+	return snapshot, nil
+}
+
+func (s SFUWindowStore) loadSnapshot(ctx context.Context, queries *sqlc.Queries, application string, lookahead time.Duration, slotsPerNode int) (sfufleet.Snapshot, error) {
 	now := time.Now().UTC()
 	fingerprint, err := mediaplane.AdapterFingerprint(mediaplane.ProviderChalkSFU, application)
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	live, err := s.queries.ListSFULiveDemand(ctx, sqlc.ListSFULiveDemandParams{
+	live, err := queries.ListSFULiveDemand(ctx, sqlc.ListSFULiveDemandParams{
 		Provider: mediaplane.ProviderChalkSFU.SettingName(), Fingerprint: fingerprint,
 	})
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	planned, err := s.queries.ListUpcomingScheduledEpisodes(ctx, sqlc.ListUpcomingScheduledEpisodesParams{
+	planned, err := queries.ListUpcomingScheduledEpisodes(ctx, sqlc.ListUpcomingScheduledEpisodesParams{
 		WindowStart: timestamptzValue(now),
 		WindowEnd:   timestamptzValue(now.Add(lookahead)),
 	})
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	rows, err := s.queries.ListSFUWindowNodes(ctx, application)
+	rows, err := queries.ListSFUWindowNodes(ctx, application)
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	nodeSeconds, err := s.queries.ReadSFUWindowNodeSeconds(ctx, sqlc.ReadSFUWindowNodeSecondsParams{
+	nodeSeconds, err := queries.ReadSFUWindowNodeSeconds(ctx, sqlc.ReadSFUWindowNodeSecondsParams{
 		ApplicationID: application, ObservedAt: timestamptz(&now), Since: timestamptzValue(now.Add(-31 * 24 * time.Hour)),
 	})
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
 
-	type spaceKey struct{ tenant, space [16]byte }
-	liveSpaces := make(map[spaceKey]sqlc.ListSFULiveDemandRow, len(live))
-	demand := sfufleet.Demand{Bookings: make([]sfufleet.Booking, 0, len(planned))}
-	for _, episode := range live {
-		liveSpaces[spaceKey{episode.TenantID.Bytes, episode.SpaceID.Bytes}] = episode
-		demand.LiveSlots += sfufleet.ClassSlots(int(episode.Participants), slotsPerNode)
+	demand := buildSFUWindowDemand(now, lookahead, slotsPerNode, live, planned)
+	nodes, err := mapSFUWindowNodes(rows, s.firewall)
+	if err != nil {
+		return sfufleet.Snapshot{}, err
 	}
+	return sfufleet.Snapshot{
+		ObservedAt: now,
+		Demand:     demand,
+		NodeTime:   time.Duration(nodeSeconds) * time.Second,
+		Nodes:      nodes,
+	}, nil
+}
+
+func buildSFUWindowDemand(now time.Time, lookahead time.Duration, slotsPerNode int, live []sqlc.ListSFULiveDemandRow, planned []sqlc.ListUpcomingScheduledEpisodesRow) sfufleet.Demand {
+	liveSpaces, liveSlots := indexSFUWindowLiveDemand(live, slotsPerNode)
+	return sfufleet.Demand{
+		LiveSlots: liveSlots,
+		Bookings:  buildSFUWindowBookings(now, lookahead, slotsPerNode, liveSpaces, planned),
+	}
+}
+
+func indexSFUWindowLiveDemand(live []sqlc.ListSFULiveDemandRow, slotsPerNode int) (map[sfuWindowSpaceKey]sqlc.ListSFULiveDemandRow, int) {
+	liveSpaces := make(map[sfuWindowSpaceKey]sqlc.ListSFULiveDemandRow, len(live))
+	liveSlots := 0
+	for _, episode := range live {
+		liveSpaces[sfuWindowSpaceKey{episode.TenantID.Bytes, episode.SpaceID.Bytes}] = episode
+		liveSlots += sfufleet.ClassSlots(int(episode.Participants), slotsPerNode)
+	}
+	return liveSpaces, liveSlots
+}
+
+func buildSFUWindowBookings(now time.Time, lookahead time.Duration, slotsPerNode int, liveSpaces map[sfuWindowSpaceKey]sqlc.ListSFULiveDemandRow, planned []sqlc.ListUpcomingScheduledEpisodesRow) []sfufleet.Booking {
+	bookings := make([]sfufleet.Booking, 0, len(planned))
 	for i := len(planned) - 1; i >= 0; i-- {
 		booking := planned[i]
 		if !mediaplane.TenantMediaEnabled(booking.MediaPlaneProviderConfig) {
 			continue
 		}
 		start, end := booking.StartsAt.Time, booking.ExpectedEndsAt.Time
-		key := spaceKey{booking.TenantID.Bytes, booking.SpaceID.Bytes}
+		key := sfuWindowSpaceKey{booking.TenantID.Bytes, booking.SpaceID.Bytes}
 		covered := 0
 		if episode, ok := liveSpaces[key]; ok && episode.StartedAt.Valid && !start.After(now) &&
 			!episode.StartedAt.Time.Before(start.Add(-lookahead)) && episode.StartedAt.Time.Before(end) {
 			covered = sfufleet.ClassSlots(int(episode.Participants), slotsPerNode)
 			delete(liveSpaces, key)
 		}
-		demand.Bookings = append(demand.Bookings, sfufleet.Booking{
+		bookings = append(bookings, sfufleet.Booking{
 			StartsAt: start, EndsAt: end, Participants: int(booking.ParticipantCount), CoveredSlots: covered,
 		})
 	}
+	return bookings
+}
 
-	result := sfufleet.Snapshot{ObservedAt: now, Demand: demand, NodeTime: time.Duration(nodeSeconds) * time.Second}
+func mapSFUWindowNodes(rows []sqlc.SfuWindowNode, firewall pgtype.UUID) ([]sfufleet.Node, error) {
+	nodes := make([]sfufleet.Node, 0, len(rows))
 	for _, row := range rows {
-		if row.ProviderFirewallID != s.firewall {
-			return sfufleet.Snapshot{}, errors.New("SFU window journal belongs to a different provider firewall")
+		if row.ProviderFirewallID != firewall {
+			return nil, errors.New("SFU window journal belongs to a different provider firewall")
 		}
 		var address netip.Addr
 		if row.ControlAddress != nil {
 			address = *row.ControlAddress
 		}
-		result.Nodes = append(result.Nodes, sfufleet.Node{
+		nodes = append(nodes, sfufleet.Node{
 			ID: row.ID, ProviderID: row.ProviderID.Int64, Address: address, Phase: sfufleet.Phase(row.Phase),
 			CreatedAt: row.CreatedAt.Time, EmptySince: row.EmptySince.Time, EmptyIncarnation: row.EmptyIncarnation.String,
 		})
 	}
-	return result, nil
+	return nodes, nil
 }
 
 func (s SFUWindowStore) Reserve(ctx context.Context, application, id string, maxNodes int) error {

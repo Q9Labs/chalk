@@ -31,62 +31,82 @@ import (
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var answering, full, guarded, tooOld bool // a compatible node answered; one was full; one's host guard refused; some node is known to be old
-	best := mediaplane.Placement{}
-	bestRoom := 0
+	selection := f.selectPlacement()
+	if selection.placement.Node != "" {
+		f.inflight[selection.placement.Node] = append(f.inflight[selection.placement.Node], time.Now())
+		return selection.placement, true
+	}
+	return selection.overflow(), false
+}
+
+type placementSelection struct {
+	placement mediaplane.Placement
+	room      int
+	answering bool
+	full      bool
+	guarded   bool
+	tooOld    bool
+}
+
+func (f *Fleet) selectPlacement() placementSelection {
+	var selection placementSelection
 	for _, node := range f.placementOrder {
 		standby := f.standbys[node.node]
-		if standby && best.Node != "" {
+		if standby && selection.placement.Node != "" {
 			break
 		}
-		switch f.verdicts[node.node] {
-		case verdictTooOld:
-			tooOld = true
-			continue
-		case verdictUnknown:
-			continue
+		selection.consider(f, node, standby)
+		if selection.placement.Node != "" && (standby || len(f.windows) == 0) {
+			break
 		}
-		load, probed := f.loads[node.node]
-		if !probed || time.Since(load.at) > probeFreshness {
-			continue
-		}
-		answering = true
-		free := load.room - len(f.inflightOn(node.node))*load.episode
-		switch {
-		case load.Draining:
-		case load.hostGuard:
-			guarded = true
-		case free < load.episode:
-			full = true
-		default:
-			if best.Node == "" || free > bestRoom {
-				bestRoom = free
-				best = mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: mediaplane.PlacementPrimary}
-				if standby {
-					best.Reason = mediaplane.PlacementStandby
-				}
+	}
+	return selection
+}
+
+func (selection *placementSelection) consider(f *Fleet, node *Adapter, standby bool) {
+	switch f.verdicts[node.node] {
+	case verdictTooOld:
+		selection.tooOld = true
+		return
+	case verdictUnknown:
+		return
+	}
+	load, probed := f.loads[node.node]
+	if !probed || time.Since(load.at) > probeFreshness {
+		return
+	}
+	selection.answering = true
+	free := load.room - len(f.inflightOn(node.node))*load.episode
+	switch {
+	case load.Draining:
+	case load.hostGuard:
+		selection.guarded = true
+	case free < load.episode:
+		selection.full = true
+	default:
+		if selection.placement.Node == "" || free > selection.room {
+			selection.room = free
+			selection.placement = mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: mediaplane.PlacementPrimary}
+			if standby {
+				selection.placement.Reason = mediaplane.PlacementStandby
 			}
 		}
-		if best.Node != "" && (standby || len(f.windows) == 0) {
-			break
-		}
 	}
-	if best.Node != "" {
-		f.inflight[best.Node] = append(f.inflight[best.Node], time.Now())
-		return best, true
-	}
+}
+
+func (selection placementSelection) overflow() mediaplane.Placement {
 	none := mediaplane.Placement{Reason: mediaplane.PlacementOverflowNodeUnavailable}
 	switch {
-	case full:
+	case selection.full:
 		none.Reason = mediaplane.PlacementOverflowNoRoom
-	case guarded:
+	case selection.guarded:
 		none.Reason = mediaplane.PlacementOverflowHostGuard
-	case answering:
+	case selection.answering:
 		none.Reason = mediaplane.PlacementOverflowDraining
-	case tooOld:
+	case selection.tooOld:
 		none.Reason = mediaplane.PlacementOverflowNodeProtocol
 	}
-	return none, false
+	return none
 }
 
 // inflightOn returns the Episodes placed on a node less than inflightTTL ago and
