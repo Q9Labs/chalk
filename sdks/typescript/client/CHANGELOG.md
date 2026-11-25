@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The server client supports Transcript listing, retrieval, and deletion, including structured documents, plain text, signed download URLs, and on-demand transcription requests.
+- Manage webhook endpoints and their revisions and secrets, list deliveries, and request redelivery with the server client.
+- Put, get, and cancel Scheduled Episodes with the server client. Participant admission now forwards `admission`, and Space updates forward `metadata` alongside artifact policies.
+
 ## 6.1.0
 
 - Negotiate screen annotation with Sync for the active screen publication. The client stops sending annotation commands and withdraws ink when the server disables the feature, without interrupting screen sharing.

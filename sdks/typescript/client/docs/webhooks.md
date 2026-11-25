@@ -4,34 +4,27 @@ Chalk delivers signed Events at least once and without ordering guarantees. A re
 
 ## Manage webhook endpoints
 
-Use the public HTTP API from your backend to create, update, rotate, test, and inspect webhook endpoints. The `@q9labsai/chalk-client/webhooks` entry point verifies signatures and processes deliveries; it does not manage endpoints.
+Use `createChalkServerClient` from `@q9labsai/chalk-client/server` on your backend to manage webhook endpoints. The separate `@q9labsai/chalk-client/webhooks` entry point verifies signatures and processes incoming deliveries.
 
 Create an endpoint with a Tenant-scoped API key carrying `webhooks:write`. Supply a fresh idempotency key for each new mutation and reuse it when retrying that same request:
 
 ```ts
-const response = await fetch(`https://api.chalkmeet.com/v1/tenants/${process.env.CHALK_TENANT_ID}/webhook-endpoints`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${process.env.CHALK_API_KEY}`,
-    "content-type": "application/json",
-    "Idempotency-Key": crypto.randomUUID(),
-  },
-  body: JSON.stringify({
-    api_version: 1,
+const endpoint = await client.webhookEndpoints.create(
+  {
+    apiVersion: 1,
     enabled: true,
-    event_types: ["episode.started", "episode.ended", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed"],
+    eventTypes: ["episode.ended", "recording.completed", "transcript.completed"],
     name: "Application events",
     url: "https://hooks.example.com/chalk",
-  }),
-});
-if (response.status !== 201) throw new Error(`Webhook creation failed: ${response.status}`);
-const endpoint = await response.json();
+  },
+  { idempotencyKey: crypto.randomUUID() },
+);
 await storeSecret(endpoint.secret);
 ```
 
 Use `webhooks:read` for endpoint and delivery inspection and `webhooks:delete` for deletion. The [public OpenAPI contract](../../../../contract/generated/openapi.json) defines the request and response shapes. Do not put an API key or signing secret in browser code.
 
-The `secret` field appears only in create and rotate-secret responses. Store it immediately; list, get, update, test, and delivery responses cannot recover it. Update and delete calls require the endpoint revision as a quoted `If-Match` value such as `"3"`. Delivery listing accepts `state`, `event_type`, `page_size`, and `cursor`; delivery detail includes every attempt's outcome, HTTP status, timing, latency, and stable error code.
+The `secret` field appears only in `create` and `rotateSecret` responses. Store it immediately; list, get, update, and delivery responses cannot recover it. Pass the current revision in `update(id, { revision, ...changes }, options)` or `delete(id, revision, options)`; the SDK sends the quoted `If-Match` header. Use `listDeliveries(id, { states, eventTypes, pageSize, cursor })` to filter deliveries and `redeliver(id, deliveryId, options)` to enqueue a new delivery. The HTTP API also exposes a test delivery and a delivery detail with each attempt's outcome, HTTP status, timing, latency, and stable error code.
 
 Install the client package and import the server-only receiver surface:
 
