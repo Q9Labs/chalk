@@ -8,7 +8,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.ConfirmedFact
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts
-  alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOutcome
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
@@ -32,15 +31,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
       ) do
     with {:ok, admission} <-
            Admission.lock_reserved_admission_for_external(connection, episode, external) do
-      participant = Authority.lock_participant(connection, episode, admission.participant_id)
-
       Admission.finalize_admission_approval(
         connection,
         episode,
         external,
         state,
         :participant_joined,
-        Admission.admission_join_payload(admission, state, participant)
+        Admission.admission_join_payload(admission, state)
       )
     end
   end

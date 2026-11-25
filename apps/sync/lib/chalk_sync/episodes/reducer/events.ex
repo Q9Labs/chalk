@@ -24,28 +24,21 @@ defmodule ChalkSync.Episodes.Reducer.Events do
 
   def apply_payload(state, "participant_joined", payload) do
     with :ok <-
-           Validation.exact_keys(
-             payload,
-             [
-               "admission_revision",
-               "display_name",
-               "participant_id",
-               "role"
-             ] ++ Validation.present_keys(payload, ["identity_kind"])
-           ),
+           Validation.exact_keys(payload, [
+             "admission_revision",
+             "display_name",
+             "participant_id",
+             "role"
+           ]),
          false <- joined?(state, payload["participant_id"]),
          true <- map_size(state.participants) < @max_participants,
          {:ok, admission_request_id} <- matching_admission_request(state, payload) do
-      participant =
-        %{
-          display_name: payload["display_name"],
-          hand_raised: false,
-          role: payload["role"],
-          admission_revision: payload["admission_revision"],
-          identity_kind: payload["identity_kind"]
-        }
-        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-        |> Map.new()
+      participant = %{
+        display_name: payload["display_name"],
+        hand_raised: false,
+        role: payload["role"],
+        admission_revision: payload["admission_revision"]
+      }
 
       next =
         state

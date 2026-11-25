@@ -33,7 +33,6 @@ defmodule ChalkSync.Episodes.Reducer do
             participants: %{}
 
   @type participant :: %{
-          optional(:identity_kind) => String.t(),
           display_name: String.t(),
           hand_raised: boolean(),
           role: String.t(),
@@ -256,14 +255,12 @@ defmodule ChalkSync.Episodes.Reducer do
 
   def from_snapshot(_episode_id, _snapshot), do: {:error, :invalid_snapshot}
 
-  def snapshot(%__MODULE__{} = state), do: snapshot_with_details(state, true)
-
-  defp snapshot_with_details(%__MODULE__{} = state, include_details) do
+  def snapshot(%__MODULE__{} = state) do
     participants =
       state.participants
       |> Enum.sort_by(&elem(&1, 0))
       |> Enum.map(fn {participant_id, participant} ->
-        base = %{
+        %{
           "participant_id" => participant_id,
           "display_name" => participant.display_name,
           "hand_raised" => participant.hand_raised,
@@ -271,12 +268,6 @@ defmodule ChalkSync.Episodes.Reducer do
           "capabilities" => Map.get(state.role_capabilities, participant.role, []),
           "admission_revision" => participant.admission_revision
         }
-
-        if include_details do
-          maybe_put(base, "identity_kind", Map.get(participant, :identity_kind))
-        else
-          base
-        end
       end)
 
     %{
@@ -297,15 +288,12 @@ defmodule ChalkSync.Episodes.Reducer do
   def snapshot(%__MODULE__{} = state, _protocol_version), do: snapshot(state)
 
   def digest(%__MODULE__{} = state) do
-    canonical = state |> snapshot_with_details(false) |> CanonicalJSON.encode!()
+    canonical = state |> snapshot() |> CanonicalJSON.encode!()
     :crypto.hash(:sha256, [@digest_prefix, <<@state_schema_version::unsigned-big-32>>, canonical])
   end
 
   def wire_snapshot(%__MODULE__{} = state),
     do: Map.put(snapshot(state), "state_digest", Base.encode16(digest(state), case: :lower))
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   def snapshot_bytes(%__MODULE__{} = state),
     do: state |> wire_snapshot() |> JSON.encode!() |> byte_size()
@@ -393,7 +381,7 @@ defmodule ChalkSync.Episodes.Reducer do
   defp hand_event_name(false), do: "hand_lowered"
 
   defp normalize_join(state, payload) do
-    allowed = ["participant_id", "display_name", "role", "admission_revision", "identity_kind"]
+    allowed = ["participant_id", "display_name", "role", "admission_revision"]
 
     with true <- Enum.all?(Map.keys(payload), &(&1 in allowed)),
          participant_id when is_binary(participant_id) <- payload["participant_id"],
@@ -404,22 +392,16 @@ defmodule ChalkSync.Episodes.Reducer do
 
       admission_revision = Map.get(payload, "admission_revision", state.revision + 1)
 
-      identity_kind = Map.get(payload, "identity_kind")
-
       if Validation.valid_role?(role) and
            Map.has_key?(state.role_capabilities, role) and is_integer(admission_revision) and
-           admission_revision >= 1 and
-           (is_nil(identity_kind) or identity_kind in ["user", "agent", "guest"]) do
+           admission_revision >= 1 do
         {:ok,
          %{
            "participant_id" => participant_id,
            "display_name" => display_name,
            "role" => role,
-           "admission_revision" => admission_revision,
-           "identity_kind" => identity_kind
-         }
-         |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-         |> Map.new()}
+           "admission_revision" => admission_revision
+         }}
       else
         {:error, :invalid_payload}
       end

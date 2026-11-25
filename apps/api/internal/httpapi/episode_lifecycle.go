@@ -306,6 +306,9 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 
 func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
+		if err := authorizeIdentityKind(ctx, request.Body.IdentityKind); err != nil {
+			return participantLifecycleResponse{}, err
+		}
 		// Refuse an SDK that cannot run the Episode's media before admission stores
 		// the Participant and takes a join seat. Other resolution failures surface
 		// from the join below, as before, so a waiting-room request needs no media.
@@ -372,7 +375,21 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 	}).Permission(authorizer, writeEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorIdentityKindConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorIdentityKindConflict, apiErrorIdentityKindForbidden, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
+}
+
+func authorizeIdentityKind(ctx context.Context, kind episodes.IdentityKind) error {
+	if kind != episodes.IdentityKindAgent {
+		return nil
+	}
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return apiErrorUnauthenticated
+	}
+	if principal.Kind == authentication.PrincipalAPIKey || principal.Kind == authentication.PrincipalService {
+		return nil
+	}
+	return apiErrorIdentityKindForbidden
 }
 
 func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant, clients mediaplane.ClientProviders) (mediaplane.Join, error) {

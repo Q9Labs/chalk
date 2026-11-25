@@ -8,6 +8,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.JoinSeats
+  alias ChalkSync.Stateholder.Postgres.ParticipantDetails
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Recovery, as: SQL
   alias ChalkSync.Stateholder.Recovery
@@ -33,8 +34,16 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
                params,
                timeout: @transaction_timeout_ms
              ) do
-          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &Control.event_from_row/1)}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
+          {:ok, %{rows: rows}} ->
+            events = Enum.map(rows, &Control.event_from_row/1)
+
+            case ParticipantDetails.read(Database.connection(episode), episode) do
+              {:ok, details} -> {:ok, ParticipantDetails.overlay_events(events, details)}
+              {:retryable, reason} -> {:retryable, reason}
+            end
+
+          {:error, _reason} ->
+            {:retryable, :dependency_unavailable}
         end
       end,
       {:retryable, :dependency_unavailable}
@@ -65,14 +74,17 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
             {:error, reason}
         end
 
-      case result do
-        %Recovery{replay_cursor: revision} = recovery
-        when status == "ended" and is_integer(revision) ->
-          %{recovery | mode: :replay, terminal_reason: :episode_ended}
+      result =
+        case result do
+          %Recovery{replay_cursor: revision} = recovery
+          when status == "ended" and is_integer(revision) ->
+            %{recovery | mode: :replay, terminal_reason: :episode_ended}
 
-        other ->
-          other
-      end
+          other ->
+            other
+        end
+
+      overlay_recovery_details(result, connection, identity.episode)
     else
       {:error, reason} -> {:error, reason}
     end
@@ -85,6 +97,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     with {:ok, control, status} <- read_control(connection, params),
          {:ok, state} <- Control.validate_fold(episode, control) do
       build_recovery(connection, episode, state, status, cursor, 1)
+      |> overlay_recovery_details(connection, episode)
     else
       {:error, reason} -> {:error, reason}
     end
@@ -268,6 +281,14 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
       terminal_reason: if(status == "ended", do: :episode_ended)
     }
   end
+
+  defp overlay_recovery_details(%Recovery{snapshot: snapshot} = recovery, connection, episode)
+       when is_map(snapshot) do
+    details = ParticipantDetails.read!(connection, episode)
+    %{recovery | snapshot: ParticipantDetails.overlay_snapshot(snapshot, details)}
+  end
+
+  defp overlay_recovery_details(recovery, _connection, _episode), do: recovery
 
   defp terminal_recovery(state, reason) do
     %Recovery{

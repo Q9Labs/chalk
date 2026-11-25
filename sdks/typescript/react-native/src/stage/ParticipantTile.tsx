@@ -93,7 +93,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
     <TileShell selected={following} cameraOn={video !== null} level={level} speaking={tile.speaking} testID={`tile.${id}`}>
       {video ?? (
         <View style={styles.center}>
-          <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
+          <FaceAvatar level={level} lookAround name={tile.name} showAIBadge={tile.agent} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />

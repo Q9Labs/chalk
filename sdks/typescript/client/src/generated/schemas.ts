@@ -4873,6 +4873,25 @@ export const IdentityKindConflictErrorSchema = IdentityKindConflictErrorWireSche
   }),
 );
 
+export class IdentityKindForbiddenError extends Schema.TaggedErrorClass<IdentityKindForbiddenError>()("IdentityKindForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindForbiddenErrorSchema = IdentityKindForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class McpOauthConnectionNotFoundError extends Schema.TaggedErrorClass<McpOauthConnectionNotFoundError>()("McpOauthConnectionNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("mcp_oauth.connection_not_found"),
@@ -6876,6 +6895,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
   IdentityKindConflictErrorSchema,
+  IdentityKindForbiddenErrorSchema,
   MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,

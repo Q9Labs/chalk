@@ -65,6 +65,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
     return (
       <ScreenSharePresentation
         sharedByName={item.participant.displayName}
+        sharedByAgent={item.participant.identityKind === "agent"}
         media={media}
         mediaVisible={mediaVisible}
         state={state ?? item.participant.screenShareState}

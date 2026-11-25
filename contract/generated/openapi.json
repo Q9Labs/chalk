@@ -8002,7 +8002,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden"]
           },
           "404": {
             "content": {

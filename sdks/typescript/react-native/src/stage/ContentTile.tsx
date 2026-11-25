@@ -55,7 +55,9 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
   const track = useSpaceSelector(selectScreen);
   const publicationId = useSpaceSelector(selectPublication);
   const selectName = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.participants.roster.find((person) => person.participantId === sharerId)?.displayName ?? "", [sharerId]);
+  const selectAgent = useMemo(() => (snapshot: SpaceSnapshot) => snapshot.participants.roster.find((person) => person.participantId === sharerId)?.identityKind === "agent", [sharerId]);
   const sharerName = useSpaceSelector(selectName);
+  const sharerAgent = useSpaceSelector(selectAgent);
   const selfId = useSpaceSelector(selectSelfId);
   const slot = useDevScenario().screenSlots?.[sharerId];
   const streamURL = useMemo(() => (track ? createNativeMediaStream(track).toURL() : null), [track]);
@@ -69,7 +71,7 @@ function ScreenShare({ annotation, sharerId, inner, mini, onShowInSpotlight }: {
       </View>
       {mini ? <Pressable accessibilityLabel={`Show ${name} in spotlight`} accessibilityRole="button" onPress={onShowInSpotlight} style={StyleSheet.absoluteFill} testID="tile.content.open" /> : null}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <NameTag icon="share" name={name} testID="tile.content.name" />
+        <NameTag agent={sharerAgent} icon="share" name={name} testID="tile.content.name" />
       </View>
     </>
   );
