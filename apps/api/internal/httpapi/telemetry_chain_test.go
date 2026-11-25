@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 
+	"github.com/q9labs/chalk/apps/api/db/migrations"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -71,15 +74,21 @@ func (l pinnedReceipt) Admit(ctx context.Context, identity telemetrydelivery.Ide
 func TestTelemetryChainEndWrongScreen(t *testing.T) {
 	databaseURL := os.Getenv("CHALK_TELEMETRY_TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("set CHALK_TELEMETRY_TEST_DATABASE_URL to an isolated, migrated database")
+		t.Skip("set CHALK_TELEMETRY_TEST_DATABASE_URL to a PostgreSQL database")
 	}
-	pool, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatal("open chain database")
-	}
-	defer pool.Close()
-	ledger := postgres.NewTelemetryLedger(pool)
 	existing := os.Getenv("CHALK_CHAIN_EXISTING_EPISODE") == "1"
+	var pool *pgxpool.Pool
+	if existing {
+		var err error
+		pool, err = pgxpool.New(t.Context(), databaseURL)
+		if err != nil {
+			t.Fatal("open chain database")
+		}
+		defer pool.Close()
+	} else {
+		pool = isolatedChainDatabase(t, databaseURL)
+	}
+	ledger := postgres.NewTelemetryLedger(pool)
 	for _, run := range []string{"positive", "healthy"} {
 		t.Run(run, func(t *testing.T) {
 			var frames []map[string]any
@@ -159,6 +168,63 @@ func TestTelemetryChainEndWrongScreen(t *testing.T) {
 			}
 		})
 	}
+}
+
+// isolatedChainDatabase keeps the end-to-end relay proof away from integration
+// tests in other packages: relaying is intentionally global, and the shared gate
+// database can contain synthetic payloads that are not production evidence rows.
+func isolatedChainDatabase(t *testing.T, databaseURL string) *pgxpool.Pool {
+	t.Helper()
+	adminConfig, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := pgxpool.NewWithConfig(t.Context(), adminConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := utilities.NewID()
+	if err != nil {
+		admin.Close()
+		t.Fatal(err)
+	}
+	name := "chalk_chain_" + strings.ReplaceAll(id.String(), "-", "")
+	if _, err := admin.Exec(t.Context(), "create database "+name); err != nil {
+		admin.Close()
+		t.Fatalf("create isolated chain database: %v", err)
+	}
+
+	targetConfig := adminConfig.Copy()
+	targetConfig.ConnConfig.Database = name
+	database := stdlib.OpenDB(*targetConfig.ConnConfig)
+	provider, err := goose.NewProvider(goose.DialectPostgres, database, migrations.Files, goose.WithLogger(goose.NopLogger()))
+	if err == nil {
+		_, err = provider.Up(t.Context())
+	}
+	closeErr := database.Close()
+	if err != nil {
+		admin.Close()
+		t.Fatalf("migrate isolated chain database: %v", err)
+	}
+	if closeErr != nil {
+		admin.Close()
+		t.Fatal(closeErr)
+	}
+	pool, err := pgxpool.NewWithConfig(t.Context(), targetConfig)
+	if err != nil {
+		admin.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := admin.Exec(ctx, "drop database if exists "+name+" with (force)"); err != nil {
+			t.Errorf("drop isolated chain database: %v", err)
+		}
+		admin.Close()
+	})
+	return pool
 }
 
 func kernelRecords(frames []map[string]any) []map[string]any {
