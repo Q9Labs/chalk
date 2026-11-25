@@ -37,6 +37,7 @@ var (
 	ErrInvalidSpaceField          = errors.New("invalid space field")
 	ErrInvalidRecordingPolicy     = errors.New("invalid Recording policy")
 	ErrInvalidTranscriptionPolicy = errors.New("invalid Transcription policy")
+	ErrInvalidFocusSettings       = errors.New("invalid focus settings")
 	ErrSpaceNotFound              = errors.New("space not found")
 	ErrSpaceSlugAlreadyUsed       = errors.New("space slug already used")
 	ErrInvalidRequestKey          = errors.New("invalid space request key")
@@ -79,6 +80,43 @@ func DefaultRoles() []DefaultRole {
 	return roles
 }
 
+type FocusSettings struct {
+	Enabled bool `json:"enabled"`
+}
+
+func (settings *FocusSettings) UnmarshalJSON(data []byte) error {
+	var decoded struct {
+		Enabled *bool `json:"enabled"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil || decoded.Enabled == nil {
+		return errors.New("invalid focus settings")
+	}
+	settings.Enabled = *decoded.Enabled
+	return nil
+}
+
+// OptionalFocusSettings preserves omitted, explicit null, and concrete settings for PATCH requests.
+type OptionalFocusSettings struct {
+	Set   bool
+	Value *FocusSettings
+}
+
+func (value *OptionalFocusSettings) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if strings.TrimSpace(string(data)) == "null" {
+		value.Value = nil
+		return nil
+	}
+	var settings FocusSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return errors.New("invalid focus settings")
+	}
+	value.Value = &settings
+	return nil
+}
+
 type Space struct {
 	ID       utilities.ID
 	Name     string
@@ -91,6 +129,7 @@ type Space struct {
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
+	Focus                         FocusSettings
 	RecordingPolicy               artifactpolicy.RecordingMode
 	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode
@@ -185,6 +224,7 @@ type CreateSpaceInput struct {
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
+	Focus                         FocusSettings
 	RecordingPolicy               artifactpolicy.RecordingMode
 	RecordingPolicySet            bool
 	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
@@ -209,6 +249,7 @@ type UpdateSpaceInput struct {
 	Metadata                      utilities.OptionalJSON
 	RecurringPolicy               utilities.OptionalJSON
 	AdmissionPolicy               utilities.OptionalJSON
+	Focus                         OptionalFocusSettings
 	RecordingPolicy               OptionalRecordingPolicy
 	TranscriptLanguage            artifactpolicy.OptionalTranscriptLanguage
 	TranscriptionPolicy           OptionalTranscriptionPolicy
@@ -516,6 +557,9 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 	if err := validateOptionalLingerWindow(input.LingerWindowSeconds); err != nil {
 		return err
 	}
+	if input.Focus.Set && input.Focus.Value == nil {
+		return ErrInvalidFocusSettings
+	}
 
 	return nil
 }
@@ -642,6 +686,7 @@ type createFingerprintInput struct {
 	Metadata                      json.RawMessage                    `json:"metadata"`
 	RecurringPolicy               json.RawMessage                    `json:"recurring_policy"`
 	AdmissionPolicy               json.RawMessage                    `json:"admission_policy"`
+	Focus                         FocusSettings                      `json:"focus"`
 	RecordingPolicy               artifactpolicy.RecordingMode       `json:"recording_policy"`
 	RecordingPolicySet            bool                               `json:"recording_policy_set"`
 	TranscriptLanguage            *artifactpolicy.TranscriptLanguage `json:"transcript_language,omitempty"`
@@ -657,6 +702,7 @@ func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 		Name: input.Name, Slug: input.Slug, MediaPlane: input.MediaPlane,
 		Metadata: input.Metadata, RecurringPolicy: input.RecurringPolicy, AdmissionPolicy: input.AdmissionPolicy,
 		RecordingPolicy: input.RecordingPolicy, RecordingPolicySet: input.RecordingPolicySet,
+		Focus:               input.Focus,
 		TranscriptionPolicy: input.TranscriptionPolicy, TranscriptionPolicySet: input.TranscriptionPolicySet,
 		TranscriptLanguage:            input.TranscriptLanguage,
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds, MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,

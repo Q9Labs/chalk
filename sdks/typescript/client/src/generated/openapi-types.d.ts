@@ -1685,6 +1685,9 @@ export interface components {
         | boolean
         | null;
       default_episode_duration_seconds: number;
+      focus?: {
+        enabled: boolean;
+      } | null;
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
       /** @enum {string} */
@@ -2437,6 +2440,9 @@ export interface components {
       default_episode_duration_seconds: number;
       /** @enum {string|null} */
       effective_media_plane: "chalk_sfu" | null;
+      focus: {
+        enabled: boolean;
+      };
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
@@ -3187,6 +3193,12 @@ export interface components {
         | boolean
         | null;
       default_episode_duration_seconds?: number;
+      focus: {
+        Set: boolean;
+        Value?: {
+          enabled: boolean;
+        } | null;
+      };
       linger_window_seconds?: number;
       maximum_episode_duration_seconds?: number;
       /** @enum {string|null} */

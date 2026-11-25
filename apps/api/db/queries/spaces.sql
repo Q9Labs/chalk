@@ -43,6 +43,7 @@ insert into spaces (
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -62,6 +63,7 @@ select
     coalesce(sqlc.narg(recording_policy)::text, 'automatic'),
     coalesce(sqlc.narg(transcription_policy)::text, tenant_facts.transcription_default_mode),
     sqlc.narg(transcript_language)::text,
+    coalesce(sqlc.narg(focus)::jsonb, '{"enabled":false}'::jsonb),
     sqlc.arg(default_episode_duration_seconds),
     sqlc.arg(maximum_episode_duration_seconds),
     sqlc.arg(linger_window_seconds),
@@ -333,6 +335,7 @@ set
         else recording_policy
     end,
     transcript_language = case when sqlc.arg(transcript_language_set)::boolean then sqlc.narg(transcript_language)::text else transcript_language end,
+    focus = case when sqlc.arg(focus_set)::boolean then sqlc.narg(focus)::jsonb else focus end,
     transcription_policy = case
         when sqlc.arg(transcription_policy_set)::boolean then sqlc.arg(transcription_policy)::text
         else transcription_policy

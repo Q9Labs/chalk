@@ -15502,6 +15502,16 @@
           "default_episode_duration_seconds": {
             "type": "integer"
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": ["object", "null"]
+          },
           "linger_window_seconds": {
             "type": "integer"
           },
@@ -17667,6 +17677,16 @@
             "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": "object"
+          },
           "id": {
             "$ref": "#/components/schemas/SpaceId"
           },
@@ -17849,6 +17869,7 @@
           "created_by_user_id",
           "default_episode_duration_seconds",
           "effective_media_plane",
+          "focus",
           "id",
           "linger_window_seconds",
           "maximum_episode_duration_seconds",
@@ -19306,6 +19327,26 @@
           "default_episode_duration_seconds": {
             "type": "integer"
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "Set": {
+                "type": "boolean"
+              },
+              "Value": {
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["enabled"],
+                "type": ["object", "null"]
+              }
+            },
+            "required": ["Set"],
+            "type": "object"
+          },
           "linger_window_seconds": {
             "type": "integer"
           },
@@ -19452,6 +19493,7 @@
             "type": "string"
           }
         },
+        "required": ["focus"],
         "type": "object"
       },
       "UpdateTenantRequest": {

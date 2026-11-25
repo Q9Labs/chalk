@@ -64,6 +64,7 @@ type spaceResponse struct {
 	Metadata                      any                              `json:"metadata"`
 	RecurringPolicy               any                              `json:"recurring_policy"`
 	AdmissionPolicy               any                              `json:"admission_policy"`
+	Focus                         spaces.FocusSettings             `json:"focus"`
 	DefaultEpisodeDurationSeconds int32                            `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32                            `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32                            `json:"linger_window_seconds"`
@@ -88,6 +89,7 @@ type createSpaceRequest struct {
 	Metadata                      utilities.OptionalJSON                    `json:"metadata"`
 	RecurringPolicy               utilities.OptionalJSON                    `json:"recurring_policy"`
 	AdmissionPolicy               utilities.OptionalJSON                    `json:"admission_policy"`
+	Focus                         *spaces.FocusSettings                     `json:"focus"`
 	DefaultEpisodeDurationSeconds int32                                     `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32                                     `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32                                     `json:"linger_window_seconds"`
@@ -103,6 +105,7 @@ type updateSpaceRequest struct {
 	Metadata                      utilities.OptionalJSON                    `json:"metadata"`
 	RecurringPolicy               utilities.OptionalJSON                    `json:"recurring_policy"`
 	AdmissionPolicy               utilities.OptionalJSON                    `json:"admission_policy"`
+	Focus                         spaces.OptionalFocusSettings              `json:"focus"`
 	DefaultEpisodeDurationSeconds spaces.OptionalInt32                      `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds spaces.OptionalInt32                      `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           spaces.OptionalInt32                      `json:"linger_window_seconds"`
@@ -370,7 +373,7 @@ var spaceRules = errorRules{
 	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
 	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
 	ruleFor(apiErrorInvalidMediaPlane, spaces.ErrInvalidMediaPlane),
-	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField),
+	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField, spaces.ErrInvalidFocusSettings),
 	ruleFor(apiErrorInvalidSpaceArtifactPolicy, spaces.ErrInvalidRecordingPolicy, spaces.ErrInvalidTranscriptionPolicy),
 	ruleFor(apiErrorSpaceNotFound, spaces.ErrSpaceNotFound),
 	ruleFor(apiErrorSpaceSlugAlreadyUsed, spaces.ErrSpaceSlugAlreadyUsed),
@@ -438,6 +441,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		Metadata:                      rawJSONValue(space.Metadata),
 		RecurringPolicy:               rawJSONValue(space.RecurringPolicy),
 		AdmissionPolicy:               rawJSONValue(space.AdmissionPolicy),
+		Focus:                         space.Focus,
 		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           space.LingerWindowSeconds,
@@ -480,6 +484,7 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 		Metadata:                      request.Metadata.Value,
 		RecurringPolicy:               request.RecurringPolicy.Value,
 		AdmissionPolicy:               request.AdmissionPolicy.Value,
+		Focus:                         createFocusSettings(request.Focus),
 		DefaultEpisodeDurationSeconds: request.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: request.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           request.LingerWindowSeconds,
@@ -491,6 +496,13 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 		CreatedByUserID:               userID,
 		RequestKey:                    requestKey,
 	}, nil
+}
+
+func createFocusSettings(settings *spaces.FocusSettings) spaces.FocusSettings {
+	if settings == nil {
+		return spaces.FocusSettings{}
+	}
+	return *settings
 }
 
 func (request updateSpaceRequest) toUpdateInput() (spaces.UpdateSpaceInput, error) {
@@ -509,6 +521,7 @@ func (request updateSpaceRequest) toUpdateInput() (spaces.UpdateSpaceInput, erro
 		Metadata:                      request.Metadata,
 		RecurringPolicy:               request.RecurringPolicy,
 		AdmissionPolicy:               request.AdmissionPolicy,
+		Focus:                         request.Focus,
 		DefaultEpisodeDurationSeconds: request.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: request.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           request.LingerWindowSeconds,
