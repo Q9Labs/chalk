@@ -16,7 +16,7 @@ import (
 )
 
 func (w *apiWiring) wireRecordingPipeline() error {
-	recordingRepository := postgres.NewRecordingRepository(w.queries)
+	recordingRepository := postgres.NewRecordingRepositoryWithPool(w.queries, w.pool)
 	w.options.Recordings = recordings.NewService(recordingRepository)
 	w.recordingPipelineRepository = postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(w.queries, w.pool, w.diagnostics.Queries).WithTenantLimits(w.cfg.TenantLimits).WithAdmissionLimits(w.cfg.RecordingAdmission)
 	w.recordingPipelineRepository = w.recordingPipelineRepository.WithTranscriptionEnabled(w.cfg.Capabilities.Transcription)

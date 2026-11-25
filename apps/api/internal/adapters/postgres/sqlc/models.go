@@ -439,6 +439,8 @@ type Recording struct {
 	Metadata           []byte             `json:"metadata"`
 	FailureCode        pgtype.Text        `json:"failure_code"`
 	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	DeletedBy          pgtype.Text        `json:"deleted_by"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }

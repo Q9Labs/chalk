@@ -46,15 +46,15 @@ type ArtifactFailure struct {
 	Code string `json:"code"`
 }
 type RecordingSnapshot struct {
-	ID, SpaceID, EpisodeID, Status   string
-	StartedAt, CompletedAt, FailedAt *time.Time
-	Failure                          *ArtifactFailure
-	CreatedAt, UpdatedAt             time.Time
+	ID, SpaceID, EpisodeID, Status              string
+	StartedAt, CompletedAt, FailedAt, DeletedAt *time.Time
+	Failure                                     *ArtifactFailure
+	CreatedAt, UpdatedAt                        time.Time
 }
 type TranscriptSnapshot struct {
 	ID, RecordingID, SpaceID, EpisodeID, Status string
 	Languages                                   []string
-	StartedAt, CompletedAt, FailedAt            *time.Time
+	StartedAt, CompletedAt, FailedAt, DeletedAt *time.Time
 	Failure                                     *ArtifactFailure
 	CreatedAt, UpdatedAt                        time.Time
 }
@@ -108,6 +108,7 @@ type recordingObject struct {
 	StartedAt   *string          `json:"started_at"`
 	CompletedAt *string          `json:"completed_at"`
 	FailedAt    *string          `json:"failed_at"`
+	DeletedAt   *string          `json:"deleted_at"`
 	Failure     *ArtifactFailure `json:"failure"`
 	CreatedAt   string           `json:"created_at"`
 	UpdatedAt   string           `json:"updated_at"`
@@ -125,6 +126,7 @@ type transcriptObject struct {
 	StartedAt   *string          `json:"started_at"`
 	CompletedAt *string          `json:"completed_at"`
 	FailedAt    *string          `json:"failed_at"`
+	DeletedAt   *string          `json:"deleted_at"`
 	Failure     *ArtifactFailure `json:"failure"`
 	CreatedAt   string           `json:"created_at"`
 	UpdatedAt   string           `json:"updated_at"`
@@ -197,19 +199,19 @@ func EncodeTestEvent(metadata EventMetadata, endpointID utilities.ID) ([]byte, [
 }
 
 func EncodeRecordingEvent(metadata EventMetadata, s RecordingSnapshot) ([]byte, [32]byte, error) {
-	if !metadata.Name.isOneOf(EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed) {
+	if !metadata.Name.isOneOf(EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed, EventRecordingDeleted) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validRecordingID(s.ID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid recording identity")
 	}
-	if err := validateArtifactTransition(metadata.Name, s.Status, s.StartedAt, s.CompletedAt, s.FailedAt, s.Failure); err != nil {
+	if err := validateArtifactTransition(metadata.Name, s.Status, s.StartedAt, s.CompletedAt, s.FailedAt, s.DeletedAt, s.Failure); err != nil {
 		return nil, [32]byte{}, err
 	}
-	return encodeEvent(metadata, recordingData{Object: recordingObject{s.ID, s.SpaceID, s.EpisodeID, s.Status, optionalTimestamp(s.StartedAt), optionalTimestamp(s.CompletedAt), optionalTimestamp(s.FailedAt), s.Failure, timestamp(s.CreatedAt), timestamp(s.UpdatedAt)}})
+	return encodeEvent(metadata, recordingData{Object: recordingObject{s.ID, s.SpaceID, s.EpisodeID, s.Status, optionalTimestamp(s.StartedAt), optionalTimestamp(s.CompletedAt), optionalTimestamp(s.FailedAt), optionalTimestamp(s.DeletedAt), s.Failure, timestamp(s.CreatedAt), timestamp(s.UpdatedAt)}})
 }
 func EncodeTranscriptEvent(metadata EventMetadata, s TranscriptSnapshot) ([]byte, [32]byte, error) {
-	if !metadata.Name.isOneOf(EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed) {
+	if !metadata.Name.isOneOf(EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed, EventTranscriptDeleted) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validUUIDv4(s.ID) || !validRecordingID(s.RecordingID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
@@ -222,14 +224,14 @@ func EncodeTranscriptEvent(metadata EventMetadata, s TranscriptSnapshot) ([]byte
 		}
 		seenLanguages[language] = struct{}{}
 	}
-	if err := validateArtifactTransition(metadata.Name, s.Status, s.StartedAt, s.CompletedAt, s.FailedAt, s.Failure); err != nil {
+	if err := validateArtifactTransition(metadata.Name, s.Status, s.StartedAt, s.CompletedAt, s.FailedAt, s.DeletedAt, s.Failure); err != nil {
 		return nil, [32]byte{}, err
 	}
 	languages := s.Languages
 	if languages == nil {
 		languages = []string{}
 	}
-	return encodeEvent(metadata, transcriptData{Object: transcriptObject{s.ID, s.RecordingID, s.SpaceID, s.EpisodeID, s.Status, languages, optionalTimestamp(s.StartedAt), optionalTimestamp(s.CompletedAt), optionalTimestamp(s.FailedAt), s.Failure, timestamp(s.CreatedAt), timestamp(s.UpdatedAt)}})
+	return encodeEvent(metadata, transcriptData{Object: transcriptObject{s.ID, s.RecordingID, s.SpaceID, s.EpisodeID, s.Status, languages, optionalTimestamp(s.StartedAt), optionalTimestamp(s.CompletedAt), optionalTimestamp(s.FailedAt), optionalTimestamp(s.DeletedAt), s.Failure, timestamp(s.CreatedAt), timestamp(s.UpdatedAt)}})
 }
 
 func encodeEvent[T any](metadata EventMetadata, data T) ([]byte, [32]byte, error) {
@@ -250,8 +252,8 @@ func encodeEvent[T any](metadata EventMetadata, data T) ([]byte, [32]byte, error
 	return body, sha256.Sum256(body), nil
 }
 
-func validateArtifactTransition(eventName EventName, status string, startedAt, completedAt, failedAt *time.Time, failure *ArtifactFailure) error {
-	if !strings.HasSuffix(string(eventName), "."+status) || zeroTime(startedAt) || nonNilZeroTime(completedAt) || nonNilZeroTime(failedAt) {
+func validateArtifactTransition(eventName EventName, status string, startedAt, completedAt, failedAt, deletedAt *time.Time, failure *ArtifactFailure) error {
+	if !strings.HasSuffix(string(eventName), "."+status) || zeroTime(startedAt) || nonNilZeroTime(completedAt) || nonNilZeroTime(failedAt) || nonNilZeroTime(deletedAt) {
 		return errors.New("artifact event status does not match transition")
 	}
 	switch status {
@@ -266,6 +268,10 @@ func validateArtifactTransition(eventName EventName, status string, startedAt, c
 	case "failed":
 		if zeroTime(failedAt) || completedAt != nil || failure == nil || len(failure.Code) < 1 || len(failure.Code) > 96 {
 			return errors.New("invalid failed artifact snapshot")
+		}
+	case "deleted":
+		if zeroTime(deletedAt) || failure != nil {
+			return errors.New("invalid deleted artifact snapshot")
 		}
 	default:
 		return errors.New("invalid artifact status")

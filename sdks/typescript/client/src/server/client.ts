@@ -85,6 +85,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       get: (recordingId) => send<Recording>("GET", recordingPath(recordingId), 200),
       requestExport: (recordingId) => send<RecordingExportRequestAcceptedResponse>("POST", `${recordingPath(recordingId)}/export`, 202, {}),
       createDownloadURL: (recordingId, input) => send<RecordingDownloadURL>("POST", `${recordingPath(recordingId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds, download: input.download }),
+      delete: (recordingId) => send<void>("DELETE", recordingPath(recordingId), 204),
     },
     publicInvites: {
       get: (spaceId) => send<SpacePublicInvite>("GET", `${spacePath(spaceId)}/public-invite`, 200),

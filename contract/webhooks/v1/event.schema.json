@@ -25,9 +25,11 @@
     { "$ref": "#/$defs/recordingStarted" },
     { "$ref": "#/$defs/recordingCompleted" },
     { "$ref": "#/$defs/recordingFailed" },
+    { "$ref": "#/$defs/recordingDeleted" },
     { "$ref": "#/$defs/transcriptStarted" },
     { "$ref": "#/$defs/transcriptCompleted" },
     { "$ref": "#/$defs/transcriptFailed" },
+    { "$ref": "#/$defs/transcriptDeleted" },
     { "$ref": "#/$defs/endpointTest" }
   ],
   "$defs": {
@@ -111,15 +113,16 @@
     },
     "recordingObject": {
       "type": "object",
-      "required": ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      "required": ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "deleted_at", "failure", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/recordingID" },
         "space_id": { "$ref": "#/$defs/uuid" },
         "episode_id": { "$ref": "#/$defs/uuid" },
-        "status": { "enum": ["started", "completed", "failed"] },
+        "status": { "enum": ["started", "completed", "failed", "deleted"] },
         "started_at": { "$ref": "#/$defs/timestamp" },
         "completed_at": { "$ref": "#/$defs/nullableTimestamp" },
         "failed_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "deleted_at": { "$ref": "#/$defs/nullableTimestamp" },
         "failure": { "$ref": "#/$defs/failure" },
         "created_at": { "$ref": "#/$defs/timestamp" },
         "updated_at": { "$ref": "#/$defs/timestamp" }
@@ -128,13 +131,13 @@
     },
     "transcriptObject": {
       "type": "object",
-      "required": ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      "required": ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "deleted_at", "failure", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
         "recording_id": { "$ref": "#/$defs/recordingID" },
         "space_id": { "$ref": "#/$defs/uuid" },
         "episode_id": { "$ref": "#/$defs/uuid" },
-        "status": { "enum": ["started", "completed", "failed"] },
+        "status": { "enum": ["started", "completed", "failed", "deleted"] },
         "languages": {
           "type": "array",
           "items": { "type": "string" },
@@ -143,6 +146,7 @@
         "started_at": { "$ref": "#/$defs/timestamp" },
         "completed_at": { "$ref": "#/$defs/nullableTimestamp" },
         "failed_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "deleted_at": { "$ref": "#/$defs/nullableTimestamp" },
         "failure": { "$ref": "#/$defs/failure" },
         "created_at": { "$ref": "#/$defs/timestamp" },
         "updated_at": { "$ref": "#/$defs/timestamp" }
@@ -247,7 +251,7 @@
       "properties": {
         "event": { "const": "recording.started" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "started" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "started" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "deleted_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
         }
       }
     },
@@ -255,7 +259,7 @@
       "properties": {
         "event": { "const": "recording.completed" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "completed" }, "completed_at": { "$ref": "#/$defs/timestamp" }, "failed_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "completed" }, "completed_at": { "$ref": "#/$defs/timestamp" }, "failed_at": { "type": "null" }, "deleted_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
         }
       }
     },
@@ -263,7 +267,15 @@
       "properties": {
         "event": { "const": "recording.failed" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "failed" }, "completed_at": { "type": "null" }, "failed_at": { "$ref": "#/$defs/timestamp" }, "failure": { "type": "object" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "failed" }, "completed_at": { "type": "null" }, "failed_at": { "$ref": "#/$defs/timestamp" }, "deleted_at": { "type": "null" }, "failure": { "type": "object" } } } } }]
+        }
+      }
+    },
+    "recordingDeleted": {
+      "properties": {
+        "event": { "const": "recording.deleted" },
+        "data": {
+          "allOf": [{ "$ref": "#/$defs/recordingData" }, { "properties": { "object": { "properties": { "status": { "const": "deleted" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "deleted_at": { "$ref": "#/$defs/timestamp" }, "failure": { "type": "null" } } } } }]
         }
       }
     },
@@ -271,7 +283,7 @@
       "properties": {
         "event": { "const": "transcript.started" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "started" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "started" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "deleted_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
         }
       }
     },
@@ -279,7 +291,7 @@
       "properties": {
         "event": { "const": "transcript.completed" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "completed" }, "completed_at": { "$ref": "#/$defs/timestamp" }, "failed_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "completed" }, "completed_at": { "$ref": "#/$defs/timestamp" }, "failed_at": { "type": "null" }, "deleted_at": { "type": "null" }, "failure": { "type": "null" } } } } }]
         }
       }
     },
@@ -287,7 +299,15 @@
       "properties": {
         "event": { "const": "transcript.failed" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "failed" }, "completed_at": { "type": "null" }, "failed_at": { "$ref": "#/$defs/timestamp" }, "failure": { "type": "object" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "failed" }, "completed_at": { "type": "null" }, "failed_at": { "$ref": "#/$defs/timestamp" }, "deleted_at": { "type": "null" }, "failure": { "type": "object" } } } } }]
+        }
+      }
+    },
+    "transcriptDeleted": {
+      "properties": {
+        "event": { "const": "transcript.deleted" },
+        "data": {
+          "allOf": [{ "$ref": "#/$defs/transcriptData" }, { "properties": { "object": { "properties": { "status": { "const": "deleted" }, "completed_at": { "type": "null" }, "failed_at": { "type": "null" }, "deleted_at": { "$ref": "#/$defs/timestamp" }, "failure": { "type": "null" } } } } }]
         }
       }
     },

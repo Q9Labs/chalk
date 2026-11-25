@@ -43,32 +43,42 @@ export const webhookFixturesV1 = [
   {
     event: "recording.started",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000009","event":"recording.started","api_version":1,"occurred_at":"2026-07-12T18:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T18:06:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000009","event":"recording.started","api_version":1,"occurred_at":"2026-07-12T18:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"deleted_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T18:06:00.000Z"}}}',
   },
   {
     event: "recording.completed",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000010","event":"recording.completed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"completed","started_at":"2026-07-12T18:06:00.000Z","completed_at":"2026-07-12T19:06:00.000Z","failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000010","event":"recording.completed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"completed","started_at":"2026-07-12T18:06:00.000Z","completed_at":"2026-07-12T19:06:00.000Z","failed_at":null,"deleted_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
   },
   {
     event: "recording.failed",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000011","event":"recording.failed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"failed","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:06:00.000Z","failure":{"code":"recording_processing_failed"},"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000011","event":"recording.failed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"failed","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:06:00.000Z","deleted_at":null,"failure":{"code":"recording_processing_failed"},"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
+  },
+  {
+    event: "recording.deleted",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000016","event":"recording.deleted","api_version":1,"occurred_at":"2026-07-12T19:20:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"deleted","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"deleted_at":"2026-07-12T19:20:00.000Z","failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:20:00.000Z"}}}',
   },
   {
     event: "transcript.started",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000012","event":"transcript.started","api_version":1,"occurred_at":"2026-07-12T19:07:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:07:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000012","event":"transcript.started","api_version":1,"occurred_at":"2026-07-12T19:07:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"deleted_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:07:00.000Z"}}}',
   },
   {
     event: "transcript.completed",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000013","event":"transcript.completed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"completed","languages":["en"],"started_at":"2026-07-12T19:07:00.000Z","completed_at":"2026-07-12T19:12:00.000Z","failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000013","event":"transcript.completed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"completed","languages":["en"],"started_at":"2026-07-12T19:07:00.000Z","completed_at":"2026-07-12T19:12:00.000Z","failed_at":null,"deleted_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
   },
   {
     event: "transcript.failed",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000014","event":"transcript.failed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"failed","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:12:00.000Z","failure":{"code":"transcription_failed"},"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000014","event":"transcript.failed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"failed","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:12:00.000Z","deleted_at":null,"failure":{"code":"transcription_failed"},"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
+  },
+  {
+    event: "transcript.deleted",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000017","event":"transcript.deleted","api_version":1,"occurred_at":"2026-07-12T19:20:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"deleted","languages":["en"],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"deleted_at":"2026-07-12T19:20:00.000Z","failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:20:00.000Z"}}}',
   },
   {
     event: "endpoint.test",

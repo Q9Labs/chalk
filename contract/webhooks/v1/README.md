@@ -27,7 +27,8 @@ emission boundary requires a new numeric API version and new fixtures.
 Recording and Transcript lifecycle Events are subscribable. Recording completion
 is emitted with the verified Export MP4 commit; Transcript completion is emitted
 with the ready document commit. Capture readiness and terminal worker failures
-produce their corresponding lifecycle Events transactionally.
+produce their corresponding lifecycle Events transactionally. Permanent deletion removes the recording objects,
+then commits the tombstone and recording.deleted together. A transcript removed with it emits transcript.deleted in the same transaction. Delivery begins after that commit.
 
 ## Participant timing and computing attendance
 
