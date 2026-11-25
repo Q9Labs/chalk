@@ -70,22 +70,24 @@ func TestPresentingDocumentAccessDeniedIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	noCapability := newPresentingFixture(t, pool, "{publishAudio}")
-	if _, err := repository.CreateDocument(ctx, noCapability.subject, noCapability.attachment, utilities.ID{}); !errors.Is(err, presenting.ErrPermissionDenied) {
+	if _, err := repository.CreateDocument(ctx, noCapability.subject, noCapability.attachment, newTestID(t)); !errors.Is(err, presenting.ErrPermissionDenied) {
 		t.Fatalf("no capability error = %v", err)
 	}
 	stranger, _ := utilities.NewID()
 	nonParticipant := fixture.subject
 	nonParticipant.ParticipantID = stranger
-	if _, err := repository.CreateDocument(ctx, nonParticipant, fixture.attachment, utilities.ID{}); !errors.Is(err, presenting.ErrPermissionDenied) {
+	if _, err := repository.CreateDocument(ctx, nonParticipant, fixture.attachment, newTestID(t)); !errors.Is(err, presenting.ErrPermissionDenied) {
 		t.Fatalf("nonparticipant error = %v", err)
 	}
 
 	otherEpisode, _ := utilities.NewID()
 	otherParticipant, _ := utilities.NewID()
-	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(otherEpisode), uuid(fixture.tenant), uuid(fixture.space))
-	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,'{publishScreen}',1,'active','collaborator')`, uuid(otherParticipant), uuid(fixture.tenant), uuid(fixture.space), uuid(otherEpisode))
-	otherSubject := presenting.Subject{TenantID: fixture.tenant, SpaceID: fixture.space, EpisodeID: otherEpisode, ParticipantID: otherParticipant, ParticipantGeneration: 1}
-	if _, err := repository.CreateDocument(ctx, otherSubject, fixture.attachment, utilities.ID{}); !errors.Is(err, presenting.ErrPermissionDenied) {
+	otherSpace, _ := utilities.NewID()
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting other',$3,'chalk_sfu')`, uuid(otherSpace), uuid(fixture.tenant), "presenting-other-"+otherSpace.String())
+	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(otherEpisode), uuid(fixture.tenant), uuid(otherSpace))
+	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,'{publishScreen}',1,'active','collaborator')`, uuid(otherParticipant), uuid(fixture.tenant), uuid(otherSpace), uuid(otherEpisode))
+	otherSubject := presenting.Subject{TenantID: fixture.tenant, SpaceID: otherSpace, EpisodeID: otherEpisode, ParticipantID: otherParticipant, ParticipantGeneration: 1}
+	if _, err := repository.CreateDocument(ctx, otherSubject, fixture.attachment, newTestID(t)); !errors.Is(err, presenting.ErrPermissionDenied) {
 		t.Fatalf("other episode error = %v", err)
 	}
 }
@@ -95,7 +97,7 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 	repository := NewPresentingRepository(pool)
 	fixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
-	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, utilities.ID{})
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
 	if err != nil {
 		t.Fatalf("create document: %v", err)
 	}

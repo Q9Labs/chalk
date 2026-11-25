@@ -8,6 +8,7 @@ package render
 #include <stdlib.h>
 #include <string.h>
 #include <fpdfview.h>
+#include <fpdf_edit.h>
 
 static FPDF_DOCUMENT load_mem(void *data, int length) {
 	return FPDF_LoadMemDocument(data, length, "");
@@ -95,8 +96,8 @@ func RenderPDFPage(data []byte, pageNumber int, targetEdge int) ([]byte, int, in
 		return nil, 0, 0, "corrupt", fmt.Errorf("pdf page %d unavailable", pageNumber)
 	}
 	defer C.FPDF_ClosePage(page)
-	widthPoints := float64(C.FPDFPage_GetWidth(page))
-	heightPoints := float64(C.FPDFPage_GetHeight(page))
+	widthPoints := float64(C.FPDF_GetPageWidth(page))
+	heightPoints := float64(C.FPDF_GetPageHeight(page))
 	rotation := int(C.FPDFPage_GetRotation(page))
 	displayWidth, displayHeight := widthPoints, heightPoints
 	if rotation == 1 || rotation == 3 {
