@@ -50,6 +50,10 @@ func Post[Request any, Response any](path string, operationID string, decode End
 	return newEndpoint(http.MethodPost, path, operationID, decode, handle)
 }
 
+func Put[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPut, path, operationID, decode, handle)
+}
+
 func Patch[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return newEndpoint(http.MethodPatch, path, operationID, decode, handle)
 }

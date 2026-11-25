@@ -858,6 +858,23 @@ const episodesGroup = HttpApiGroup.make("episodes")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("cancelScheduledEpisode", "/v1/tenants/:tenant_id/spaces/:space_id/scheduled-episodes/:scheduled_episode_id", {
+      params: S.CancelScheduledEpisodePathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.ScheduledEpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createEpisode", "/v1/tenants/:tenant_id/spaces/:space_id/episodes", {
       params: S.CreateEpisodePathParamsSchema,
       headers: S.CreateEpisodeRequestHeadersSchema,
@@ -976,6 +993,24 @@ const episodesGroup = HttpApiGroup.make("episodes")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getScheduledEpisode", "/v1/tenants/:tenant_id/spaces/:space_id/scheduled-episodes/:scheduled_episode_id", {
+      params: S.GetScheduledEpisodePathParamsSchema,
+      success: S.GetScheduledEpisodeResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.ScheduledEpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ScheduledEpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("issueEpisodeParticipantSyncToken", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/sync-token", {
       params: S.IssueEpisodeParticipantSyncTokenPathParamsSchema,
       success: S.IssueEpisodeParticipantSyncTokenResponseSchema.pipe(HttpApiSchema.status(201)),
@@ -1023,6 +1058,31 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.put("putScheduledEpisode", "/v1/tenants/:tenant_id/spaces/:space_id/scheduled-episodes/:scheduled_episode_id", {
+      params: S.PutScheduledEpisodePathParamsSchema,
+      payload: S.PutScheduledEpisodeRequestBodySchema,
+      success: S.PutScheduledEpisodeResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ScheduledEpisodeInvalidExpectedParticipantsErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ScheduledEpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ScheduledEpisodeInvalidMetadataErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ScheduledEpisodeInvalidScheduleErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ScheduledEpisodeCancelledErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ScheduledEpisodeSpaceArchivedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),

@@ -2,6 +2,10 @@
 
 ## 6.1.0
 
+### Scheduled Episodes
+
+- The API adds `putScheduledEpisode`, `getScheduledEpisode` and `cancelScheduledEpisode` under `/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}`, so a scheduler can record when an Episode is expected and who is expected. A Scheduled Episode never starts or ends an Episode and grants no access. Apply the `scheduled_episodes` migration before deploying the API. The generated clients gain the three operations and no new scope.
+
 ### Screen annotation
 
 - `@q9labsai/chalk-client` negotiates annotation with Sync for the active screen share. Turning annotation off during a call withdraws ink and disables drawing without interrupting the share.
