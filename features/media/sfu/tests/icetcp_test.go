@@ -2,6 +2,7 @@ package tests
 
 import (
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,6 +44,9 @@ func TestICETCPCarriesMediaForAPeerWithoutUDP(t *testing.T) {
 // A peer whose network allows only one of the node's TCP listeners still reaches the node:
 // the answer's other TCP candidates are removed, and the selected pair must use the second listener.
 func TestICETCPSecondListenerCarriesMediaForATCPOnlyPeer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the SFU deploys only on Linux; Windows loopback ICE-TCP does not exercise the production path")
+	}
 	firstPort, secondPort := freeTCPPort(t), freeTCPPort(t)
 	for secondPort == firstPort {
 		secondPort = freeTCPPort(t)
