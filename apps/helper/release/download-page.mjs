@@ -52,10 +52,10 @@ export function downloadPage({ channel, version, macDownload, storeHref }) {
   const nightly = channel === "staging";
   const title = nightly ? "Chalk Helper for Chalk Nightly" : "Chalk Helper";
   const mac = macDownload
-    ? `<a class="download primary" href="${escapeAttribute(macDownload)}">${appleLogo}<div><strong>Download for Mac</strong><span>Version ${version} · macOS 14 or later · Apple silicon and Intel</span></div><span class="arrow" aria-hidden="true">↓</span></a>`
+    ? `<a class="download primary" href="${escapeAttribute(macDownload)}">${appleLogo}<div><strong>Download for Mac</strong><span>Version ${escapeAttribute(version)} · macOS 14 or later · Apple silicon and Intel</span></div><span class="arrow" aria-hidden="true">↓</span></a>`
     : `<div class="download pending">${appleLogo}<div><strong>Mac</strong><span>The Mac download isn’t available yet.</span></div></div>`;
   const windows = storeHref
-    ? `<a class="download" href="${escapeAttribute(storeHref)}" rel="noopener">${windowsLogo}<div><strong>Get it from the Microsoft Store</strong><span>Windows 10 and 11 · x64</span></div><span class="arrow" aria-hidden="true">→</span></a>`
+    ? `<a class="download" href="${escapeAttribute(storeHref)}" rel="noopener">${windowsLogo}<div><strong>Get it from the Microsoft Store</strong><span>Windows 10 version 2004 or later, and Windows 11 · x64</span></div><span class="arrow" aria-hidden="true">→</span></a>`
     : `<div class="download pending">${windowsLogo}<div><strong>Windows</strong><span>Coming soon to the Microsoft Store.</span></div></div>`;
 
   return `<!doctype html>
@@ -81,7 +81,7 @@ export function downloadPage({ channel, version, macDownload, storeHref }) {
   <ol>
     <li><div><b>Install Chalk Helper and open it.</b> It waits quietly in the background.</div></li>
     <li><div><b>Share your screen in a Chalk call.</b> Chalk offers to connect Helper.</div></li>
-    <li><div><b>Click Allow in Helper.</b> Then type the code Helper shows into Chalk.</div></li>
+    <li><div><b>Click Allow in Helper.</b> Type the code Helper shows into Chalk, then pick the screen or window you’re sharing in Helper.</div></li>
     <li><div><b>Marks appear on your screen as people draw.</b> Others still see them on your share as usual.</div></li>
   </ol>
   <footer>Helper connects to a call only after you allow it, and you can disconnect it at any time.</footer>

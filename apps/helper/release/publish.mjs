@@ -64,8 +64,8 @@ function storeDownload() {
   return listing.href;
 }
 
-function renderPage(macDownload) {
-  return downloadPage({ channel: CHANNEL, version: VERSION, macDownload, storeHref: storeDownload() });
+function renderPage(macDownload, version) {
+  return downloadPage({ channel: CHANNEL, version, macDownload, storeHref: storeDownload() });
 }
 
 const latest = await fetch(url(`${channelRoot}/latest.json`), { signal: AbortSignal.timeout(30_000) });
@@ -89,7 +89,7 @@ try {
       }
       macDownload = release + macInstaller;
     }
-    writeFileSync(page, renderPage(macDownload));
+    writeFileSync(page, renderPage(macDownload, current?.version));
     await publish(page, `${channelRoot}/index.html`, "text/html; charset=utf-8", "no-store");
   } else {
     if (current && new Intl.Collator("en", { numeric: true }).compare(VERSION, current.version) <= 0) {
@@ -101,7 +101,7 @@ try {
 
     const manifest = join(temporary, "latest.json");
     writeFileSync(manifest, JSON.stringify({ version: VERSION, platforms }, null, 2) + "\n");
-    writeFileSync(page, renderPage(url(`${releaseRoot}/${macInstaller}`)));
+    writeFileSync(page, renderPage(url(`${releaseRoot}/${macInstaller}`), VERSION));
 
     const immutable = "public, max-age=31536000, immutable";
     await publish(join(directory, macInstaller), `${releaseRoot}/${macInstaller}`, "application/x-apple-diskimage", immutable);
