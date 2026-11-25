@@ -98,6 +98,11 @@ it("keeps the lobby open when reload autoplay evidence is blocked", async () => 
   await entry("access.media_proof_rejected");
   await expectMessage("Join call");
   expect(requests).toEqual([]);
+  const join = [...document.querySelectorAll("button")].find((button) => button.textContent === "Join call");
+  expect(join).toBeDefined();
+  await act(async () => join?.click());
+  await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));
+  expect(requests).not.toContain("fresh");
 });
 
 async function expectMessage(message: string) {

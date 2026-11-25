@@ -169,6 +169,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (!active.current || !send({ type: "rejoinReleased", attempt })) return;
           attempt = latest.current.attempt;
         }
+        if (reloadMarker) {
+          const admission = await resumePublicSpace(client, reloadMarker, slug);
+          settle(attempt, { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } });
+          return;
+        }
         const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken });
         try {
           await navigatePublicSpace(arrived.canonicalSlug, arrived.inviteLink);
@@ -186,7 +191,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         if (active.current) send({ type: "failed", attempt, failure: entryFailure(cause) });
       });
     },
-    [client, defaultJoinOptions, inviteCode, latest, navigatePublicSpace, send, settle, slug],
+    [client, defaultJoinOptions, inviteCode, latest, navigatePublicSpace, reloadMarker, send, settle, slug],
   );
   useEffect(() => {
     if (automaticName || reloadMarker) return;
