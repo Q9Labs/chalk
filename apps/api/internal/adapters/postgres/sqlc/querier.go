@@ -48,6 +48,7 @@ type Querier interface {
 	// the active Episodes, which are few, and checks only their seats; starting from every control row
 	// would walk every ended Episode too.
 	ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error)
+	ClaimPresentingRenderJob(ctx context.Context, arg ClaimPresentingRenderJobParams) (PresentingRenderJob, error)
 	ClaimRecordingCaptureCommand(ctx context.Context, arg ClaimRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
 	ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
@@ -72,6 +73,8 @@ type Querier interface {
 	CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error)
 	CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error)
 	CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error)
+	CompletePresentingDocumentIfReady(ctx context.Context, arg CompletePresentingDocumentIfReadyParams) (int64, error)
+	CompletePresentingRenderJob(ctx context.Context, arg CompletePresentingRenderJobParams) (int64, error)
 	CompleteRecordingCaptureCommand(ctx context.Context, arg CompleteRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	CompleteRecordingJob(ctx context.Context, arg CompleteRecordingJobParams) (RecordingJob, error)
 	CompleteRecordingRender(ctx context.Context, arg CompleteRecordingRenderParams) (CompleteRecordingRenderRow, error)
@@ -83,6 +86,7 @@ type Querier interface {
 	// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
 	CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
+	CountPresentingReadyPages(ctx context.Context, arg CountPresentingReadyPagesParams) (int32, error)
 	CountTelemetryParticipantSources(ctx context.Context, arg CountTelemetryParticipantSourcesParams) (int64, error)
 	CountTenantLiveEpisodes(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountWebhookEndpoints(ctx context.Context, tenantID pgtype.UUID) (int32, error)
@@ -103,6 +107,8 @@ type Querier interface {
 	CreateMCPOAuthGrant(ctx context.Context, arg CreateMCPOAuthGrantParams) error
 	CreateMCPOAuthToken(ctx context.Context, arg CreateMCPOAuthTokenParams) error
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (CreateMembershipRow, error)
+	CreatePresentingDocument(ctx context.Context, arg CreatePresentingDocumentParams) (CreatePresentingDocumentRow, error)
+	CreatePresentingRenderJob(ctx context.Context, arg CreatePresentingRenderJobParams) (PresentingRenderJob, error)
 	CreateRecordingReservation(ctx context.Context, arg CreateRecordingReservationParams) (CreateRecordingReservationRow, error)
 	CreateRecordingTranscriptionSource(ctx context.Context, arg CreateRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	CreateRecordingTranscriptionSourceChunk(ctx context.Context, arg CreateRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
@@ -125,6 +131,7 @@ type Querier interface {
 	DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg DecideMCPOAuthAuthorizationRequestParams) (DecideMCPOAuthAuthorizationRequestRow, error)
 	DelayTelemetryOutbox(ctx context.Context, ids []int64) error
 	DeleteExpiredMCPOAuthGrantRows(ctx context.Context, arg DeleteExpiredMCPOAuthGrantRowsParams) error
+	DeletePresentingDocument(ctx context.Context, arg DeletePresentingDocumentParams) (int64, error)
 	DeleteShippedTelemetryOutbox(ctx context.Context, ids []int64) error
 	DeleteStaleMCPOAuthRegistrations(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
@@ -147,6 +154,8 @@ type Querier interface {
 	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)
+	FailPresentingDocument(ctx context.Context, arg FailPresentingDocumentParams) (int64, error)
+	FailPresentingRenderJob(ctx context.Context, arg FailPresentingRenderJobParams) (int64, error)
 	FailRecordingCaptureCommand(ctx context.Context, arg FailRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	FailRecordingJob(ctx context.Context, arg FailRecordingJobParams) (FailRecordingJobRow, error)
 	FinalizeRecordingBundleAllocation(ctx context.Context, arg FinalizeRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
@@ -164,6 +173,8 @@ type Querier interface {
 	GetArtifactJob(ctx context.Context, id pgtype.UUID) (ArtifactJob, error)
 	GetArtifactJobByIdempotency(ctx context.Context, arg GetArtifactJobByIdempotencyParams) (ArtifactJob, error)
 	GetAuthorizedChatAttachmentDownload(ctx context.Context, arg GetAuthorizedChatAttachmentDownloadParams) (GetAuthorizedChatAttachmentDownloadRow, error)
+	GetAuthorizedPresentingDocument(ctx context.Context, arg GetAuthorizedPresentingDocumentParams) (GetAuthorizedPresentingDocumentRow, error)
+	GetAuthorizedPresentingPage(ctx context.Context, arg GetAuthorizedPresentingPageParams) (GetAuthorizedPresentingPageRow, error)
 	GetAutoSpaceLifecycle(ctx context.Context, arg GetAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	GetChatAttachmentByClientID(ctx context.Context, arg GetChatAttachmentByClientIDParams) (GetChatAttachmentByClientIDRow, error)
 	GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAttachmentByUploadIDParams) (GetChatAttachmentByUploadIDRow, error)
@@ -179,6 +190,7 @@ type Querier interface {
 	GetMCPOAuthGrant(ctx context.Context, id pgtype.UUID) (GetMCPOAuthGrantRow, error)
 	GetMCPOAuthRefreshToken(ctx context.Context, tokenHash string) (GetMCPOAuthRefreshTokenRow, error)
 	GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error)
+	GetPresentingRenderJobDocument(ctx context.Context, arg GetPresentingRenderJobDocumentParams) (GetPresentingRenderJobDocumentRow, error)
 	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
@@ -261,8 +273,10 @@ type Querier interface {
 	GetWebhookEndpoint(ctx context.Context, arg GetWebhookEndpointParams) (GetWebhookEndpointRow, error)
 	GetWhiteboardFileUpload(ctx context.Context, arg GetWhiteboardFileUploadParams) (GetWhiteboardFileUploadRow, error)
 	HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifactJobParams) (ArtifactJob, error)
+	HeartbeatPresentingRenderJob(ctx context.Context, arg HeartbeatPresentingRenderJobParams) (int64, error)
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
+	InsertPresentingDocumentPage(ctx context.Context, arg InsertPresentingDocumentPageParams) error
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (InsertRecordingBundleRow, error)
 	InsertRecordingBundleAllocation(ctx context.Context, arg InsertRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	InsertRecordingCaptureCommand(ctx context.Context, arg InsertRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
@@ -297,9 +311,12 @@ type Querier interface {
 	// timeline starts when its capture became ready, falling back to the row's
 	// creation time for Recordings that predate presentation sources.
 	ListEpisodeTalkTimeRecordings(ctx context.Context, arg ListEpisodeTalkTimeRecordingsParams) ([]ListEpisodeTalkTimeRecordingsRow, error)
+	ListExpiredPresentingDocuments(ctx context.Context, arg ListExpiredPresentingDocumentsParams) ([]ListExpiredPresentingDocumentsRow, error)
 	ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error)
+	ListPresentingDocumentPages(ctx context.Context, arg ListPresentingDocumentPagesParams) ([]PresentingDocumentPage, error)
+	ListPresentingPageRanges(ctx context.Context, arg ListPresentingPageRangesParams) ([]int32, error)
 	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)
 	ListRecordingDeadLetters(ctx context.Context, arg ListRecordingDeadLettersParams) ([]RecordingJob, error)
 	ListRecordingDeferredArtifactStates(ctx context.Context, arg ListRecordingDeferredArtifactStatesParams) ([]ListRecordingDeferredArtifactStatesRow, error)
@@ -418,6 +435,8 @@ type Querier interface {
 	MarkLifecycleEpisodeEnding(ctx context.Context, arg MarkLifecycleEpisodeEndingParams) (Episode, error)
 	MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkLifecycleParticipantLeavingParams) (Participant, error)
 	MarkMediaPlaneChangesEmitted(ctx context.Context, dollar_1 []int64) error
+	MarkPresentingPageReady(ctx context.Context, arg MarkPresentingPageReadyParams) (int64, error)
+	MarkPresentingZoomReady(ctx context.Context, arg MarkPresentingZoomReadyParams) (int64, error)
 	MarkRecordingCaptureCommandAmbiguous(ctx context.Context, commandID int64) (RecordingCaptureCommand, error)
 	MarkRecordingTranscriptionSourceDeletedIfClean(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedIfCleanParams) (RecordingTranscriptionSource, error)
 	MarkRecordingTranscriptionSourceExpired(ctx context.Context, arg MarkRecordingTranscriptionSourceExpiredParams) (RecordingTranscriptionSource, error)
@@ -429,6 +448,7 @@ type Querier interface {
 	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
 	PollHelperDeviceRequest(ctx context.Context, pollHash []byte) (HelperDeviceRequest, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
+	PresentingEnabled(ctx context.Context, defaultEnabled bool) (bool, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
 	// Replaces the expectation of a booking that is not cancelled. A cancelled booking is left alone and
 	// no row comes back. A replay that changes nothing keeps updated_at.
@@ -497,6 +517,7 @@ type Querier interface {
 	ScreenAnnotationEnabled(ctx context.Context, defaultEnabled bool) (bool, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
 	SetMediaPlaneKillSwitch(ctx context.Context, paused bool) error
+	SetPresentingDocumentInventory(ctx context.Context, arg SetPresentingDocumentInventoryParams) (int64, error)
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
