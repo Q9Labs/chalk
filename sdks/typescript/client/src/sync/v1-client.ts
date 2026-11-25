@@ -1,3 +1,4 @@
+import { observeWebFocus } from "./focus-web";
 import { v1NegotiatedExtensions } from "./v1-negotiated-extensions";
 import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
@@ -447,42 +448,16 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#focusCleanup?.();
     this.#focusCleanup = null;
     if (!this.#extensions.appState || typeof document === "undefined" || typeof window === "undefined") return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const clear = () => {
-      if (timer !== null) clearTimeout(timer);
-      timer = null;
-    };
-    const suppressed = () => {
-      const sharingScreen = this.#localPublications.some((publication) => (publication.source === "screen" || publication.source === "screen_audio") && publication.enabled);
-      const pip = "pictureInPictureElement" in document && document.pictureInPictureElement !== null;
-      return sharingScreen || pip;
-    };
-    const report = () => {
-      clear();
-      if (document.visibilityState === "hidden") this.setAppState("background", !document.hidden && window.innerWidth < window.screen.width);
-      else this.setAppState("active", window.innerWidth < window.screen.width || window.innerHeight < window.screen.height);
-    };
-    const away = () => {
-      clear();
-      timer = setTimeout(() => {
-        timer = null;
-        if (!suppressed()) this.setAppState("inactive", window.innerWidth < window.screen.width);
-      }, 2000);
-    };
-    const changed = () => {
-      if (document.visibilityState === "hidden") away();
-      else report();
-    };
-    document.addEventListener("visibilitychange", changed);
-    window.addEventListener("blur", away);
-    window.addEventListener("focus", report);
-    report();
-    this.#focusCleanup = () => {
-      clear();
-      document.removeEventListener("visibilitychange", changed);
-      window.removeEventListener("blur", away);
-      window.removeEventListener("focus", report);
-    };
+    this.#focusCleanup = observeWebFocus(
+      {
+        document,
+        window,
+        setTimeout: globalThis.setTimeout.bind(globalThis),
+        clearTimeout: globalThis.clearTimeout.bind(globalThis),
+        isScreenSharing: () => this.#localPublications.some((publication) => (publication.source === "screen" || publication.source === "screen_audio") && publication.enabled),
+      },
+      ({ state, windowed }) => this.setAppState(state, windowed),
+    );
   }
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;

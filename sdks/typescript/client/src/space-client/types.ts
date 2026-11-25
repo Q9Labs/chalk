@@ -9,7 +9,8 @@ import type { MediaControllerEffects } from "./media-controller";
 import type { OfflineActionsControllerEffects } from "./offline-actions";
 import type { ParticipantsControllerEffects } from "./participants-controller";
 import type { Participant, ParticipantsSlice } from "./participant-types";
-export type { ParticipantPresence, Participant, AdmissionRequest, AdmissionPolicy, AdmissionPolicyTarget, ParticipantsSlice } from "./participant-types";
+import type { FocusControllerEffects } from "./focus-controller";
+export type { ParticipantPresence, ParticipantFocus, Participant, AdmissionRequest, AdmissionPolicy, AdmissionPolicyTarget, ParticipantsSlice } from "./participant-types";
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
@@ -228,6 +229,7 @@ export type ChatController = PromiseController<Omit<ChatControllerEffects, "uplo
   readonly files: ChatFilesController;
 };
 export type OfflineController = PromiseController<Omit<OfflineActionsControllerEffects, "dispose">>;
+export type FocusController = PromiseController<Omit<FocusControllerEffects, "dispose">>;
 export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
@@ -237,6 +239,9 @@ export type ClientEventMap = {
     readonly participant: Participant;
   };
   readonly participantLeft: {
+    readonly participant: Participant;
+  };
+  readonly focusChanged: {
     readonly participant: Participant;
   };
   readonly episodeEnded: {
@@ -263,6 +268,7 @@ export type SpaceClient = {
   readonly media: MediaController;
   readonly chat: ChatController;
   readonly participants: ParticipantsController;
+  readonly focus: FocusController;
   readonly reactions: ReactionsController;
   readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;

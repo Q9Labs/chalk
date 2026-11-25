@@ -8,6 +8,7 @@ class PromiseSpaceClient implements SpaceClient {
   readonly media;
   readonly chat;
   readonly participants;
+  readonly focus;
   readonly offline;
   readonly reactions;
   readonly recording;
@@ -32,6 +33,7 @@ class PromiseSpaceClient implements SpaceClient {
     this.chat = { ...chatCommands, files: { upload, url, resolveUrl } };
     this.offline = toPromiseController(this.#runtime, controllers.offline);
     this.participants = toPromiseController(this.#runtime, controllers.participants);
+    this.focus = toPromiseController(this.#runtime, controllers.focus);
     this.reactions = toPromiseController(this.#runtime, controllers.reactions);
     this.recording = toPromiseController(this.#runtime, controllers.recording);
     this.whiteboard = toPromiseController(this.#runtime, controllers.whiteboard);

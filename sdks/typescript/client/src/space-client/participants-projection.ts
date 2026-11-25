@@ -44,6 +44,7 @@ function rosterFor(
         handRaised: participant.handRaised,
         media: participantMedia(participant.participantId, media),
         presence: participantPresence(participant.participantId, presence),
+        ...focusFor(participant.participantId, presence),
       }),
     ),
   );
@@ -78,6 +79,12 @@ function capabilitiesFor(control: readonly string[], collaboration: readonly str
   for (const capability of [...control, ...(collaboration ?? [])]) if (CAPABILITIES.has(capability as Capability)) capabilities.add(capability as Capability);
   return Object.freeze([...capabilities]);
 }
+function focusFor(participantId: string, presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"]): Pick<Participant, "focus"> {
+  const item = presence?.items.find((candidate) => candidate.participantId === participantId);
+  if (!item || (item.appState === undefined && item.stepAwayReason === undefined && item.allowed === undefined)) return {};
+  return { focus: Object.freeze({ ...(item.appState === undefined ? {} : { appState: item.appState }), ...(item.windowed === undefined ? {} : { windowed: item.windowed }), ...(item.stepAwayReason === undefined ? {} : { steppedAway: item.stepAwayReason }), ...(item.allowed === undefined ? {} : { allowed: item.allowed }) }) };
+}
+
 function participantMedia(participantId: string, media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]): ChalkParticipantMediaState {
   if (!media) return Object.freeze({ microphone: "unknown", camera: "unknown", screenShare: "unknown" });
   const enabled = media.items.filter((publication) => publication.participantId === participantId && publication.enabled);
