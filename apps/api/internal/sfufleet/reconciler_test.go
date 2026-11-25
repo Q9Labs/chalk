@@ -18,8 +18,8 @@ func TestWindowReconcilerKeepsLiveBindingsAndConfirmsDrain(t *testing.T) {
 	f.health = Health{Incarnation: "first-boot", Admission: true, Allocations: 2}
 	f.bound = true
 	f.reconcile(t, Draining, Draining)
-	if !f.health.Draining {
-		t.Fatal("the node is still accepting new Episodes")
+	if f.health.Draining {
+		t.Fatal("the node no longer accepts media for its live Episode")
 	}
 
 	// An Episode can be live before it has any SFU sessions, for example
@@ -29,6 +29,9 @@ func TestWindowReconcilerKeepsLiveBindingsAndConfirmsDrain(t *testing.T) {
 
 	f.bound = false
 	f.reconcile(t, Draining)
+	if !f.health.Draining {
+		t.Fatal("the node did not drain after its last Episode ended")
+	}
 	f.healthErr = errors.New("single missed probe")
 	f.reconcile(t, Draining)
 	f.healthErr = nil
@@ -49,7 +52,7 @@ func TestWindowReconcilerAdoptsAnAmbiguousCreate(t *testing.T) {
 		t.Fatalf("ambiguous create: %v", err)
 	}
 	f.reconcile(t, Starting)
-	f.droplet = Droplet{123, netip.MustParseAddr("192.0.2.9"), true}
+	f.droplet = Droplet{ID: 123, Address: netip.MustParseAddr("192.0.2.9"), Active: true}
 	f.health = Health{Incarnation: "first-boot", Admission: true}
 	f.reconcile(t, Starting, Serving, Serving)
 	if f.creates != 1 {
@@ -161,4 +164,8 @@ func (p fakeWindowProvider) Observe(context.Context, string) (Droplet, bool, err
 func (p fakeWindowProvider) Destroy(_ context.Context, _ string, id int64) error {
 	p.f.destroyed = id
 	return nil
+}
+
+func (p fakeWindowProvider) Gone(_ context.Context, _ string, id int64) (bool, error) {
+	return id == p.f.destroyed, nil
 }

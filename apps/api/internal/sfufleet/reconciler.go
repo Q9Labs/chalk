@@ -62,15 +62,17 @@ type Store interface {
 }
 
 type Droplet struct {
-	ID      int64
-	Address netip.Addr
-	Active  bool
+	ID       int64
+	Address  netip.Addr
+	Active   bool
+	Outdated bool
 }
 
 type Provider interface {
 	Create(context.Context, string) (possiblyCreated bool, err error)
 	Observe(context.Context, string) (Droplet, bool, error)
 	Destroy(context.Context, string, int64) error
+	Gone(context.Context, string, int64) (bool, error)
 }
 
 type Health struct {
@@ -133,7 +135,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return Result{}, fmt.Errorf("load SFU window demand and inventory: %w", err)
 	}
 	result := Result{Plan: PlanWindow(state.Demand, r.policy.Capacity, state.ObservedAt, Lookahead)}
-	if r.policy.Retire {
+	result.BudgetLimited = state.NodeTime >= r.policy.MonthlyNodeTime
+	if r.policy.Retire || result.BudgetLimited {
 		result.TargetNodes = 0
 	}
 
@@ -151,6 +154,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 				result.Online++
 				healthy[node.ID] = true
 			}
+			if err != nil {
+				gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
+				if gone {
+					return result, errors.Join(problems, r.transition(ctx, node, Draining))
+				}
+				err = errors.Join(err, providerErr)
+			}
 			problems = errors.Join(problems, err)
 		case Draining:
 			result.Draining++
@@ -166,15 +176,12 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 			continue
 		}
 		if needed > 0 {
-			if err := r.control.SetDrain(ctx, node.Address, false); err != nil {
-				problems = errors.Join(problems, err)
+			reopened, err := r.reopen(ctx, node)
+			problems = errors.Join(problems, err)
+			if reopened {
+				needed--
 				continue
 			}
-			if err := r.transition(ctx, node, Serving); err != nil {
-				return result, errors.Join(problems, err)
-			}
-			needed--
-			continue
 		}
 		problems = errors.Join(problems, r.advanceDrain(ctx, node, state.ObservedAt))
 	}
@@ -199,6 +206,20 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return result, errors.Join(problems, r.transition(ctx, node, Draining))
 	}
 	return result, problems
+}
+
+func (r *Reconciler) reopen(ctx context.Context, node Node) (bool, error) {
+	health, err := r.control.Observe(ctx, node.Address)
+	if err != nil || !health.Admission {
+		return false, err
+	}
+	if health.Draining {
+		if err := r.control.SetDrain(ctx, node.Address, false); err != nil {
+			return false, err
+		}
+	}
+	err = r.transition(ctx, node, Serving)
+	return err == nil, err
 }
 
 func (r *Reconciler) create(ctx context.Context) error {
@@ -237,6 +258,9 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 		}
 		next := node
 		next.ProviderID = droplet.ID
+		if droplet.Outdated {
+			return r.transition(ctx, next, Deleting)
+		}
 		if droplet.Active {
 			next.Address = droplet.Address
 		}
@@ -259,16 +283,26 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 }
 
 func (r *Reconciler) advanceDrain(ctx context.Context, node Node, now time.Time) error {
+	// The journal fence already blocks new Episode bindings. Keep SFU media
+	// admission open until existing Episodes end, including those whose first
+	// participant has not joined yet. No new binding can race this check.
+	unbound, err := r.store.Unbound(ctx, node.ID)
+	if err != nil || !unbound {
+		return errors.Join(err, r.clearEmpty(ctx, node))
+	}
 	health, err := r.control.Observe(ctx, node.Address)
 	if err != nil {
-		return errors.Join(err, r.clearEmpty(ctx, node))
+		gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
+		if gone {
+			return r.transition(ctx, node, Deleted)
+		}
+		return errors.Join(err, providerErr, r.clearEmpty(ctx, node))
 	}
 	if !health.Draining {
 		return errors.Join(r.clearEmpty(ctx, node), r.control.SetDrain(ctx, node.Address, true))
 	}
-	unbound, err := r.store.Unbound(ctx, node.ID)
-	if err != nil || !unbound || health.Allocations != 0 || health.CleanupDebt != 0 || health.Incarnation == "" {
-		return errors.Join(err, r.clearEmpty(ctx, node))
+	if health.Allocations != 0 || health.CleanupDebt != 0 || health.Incarnation == "" {
+		return r.clearEmpty(ctx, node)
 	}
 	if node.EmptySince.IsZero() || node.EmptyIncarnation != health.Incarnation {
 		node.EmptySince = now
@@ -304,6 +338,10 @@ func (r *Reconciler) delete(ctx context.Context, node Node) error {
 		return errors.New("SFU window deletion blocked by live binding or missing provider ID")
 	}
 	if err := r.provider.Destroy(ctx, node.ID, node.ProviderID); err != nil {
+		return err
+	}
+	gone, err := r.provider.Gone(ctx, node.ID, node.ProviderID)
+	if err != nil || !gone {
 		return err
 	}
 	return r.transition(ctx, node, Deleted)

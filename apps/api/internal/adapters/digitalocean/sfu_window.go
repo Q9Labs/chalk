@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,8 +44,8 @@ var (
 	// ErrSFUWindowFirewall means the pre-created firewall does not exclusively
 	// target the window tags, so Create sent nothing.
 	ErrSFUWindowFirewall = errors.New("sfu window: firewall does not agree with the window tags")
-	// ErrSFUWindowCreateUnknown marks every Create failure after the creation
-	// request may have reached DigitalOcean. The droplet may exist, so the caller
+	// ErrSFUWindowCreateUnknown marks a Create failure where DigitalOcean may
+	// have accepted the request. The droplet may exist, so the caller
 	// must settle the outcome with Observe and must not treat it as a rejection.
 	ErrSFUWindowCreateUnknown = errors.New("sfu window: create outcome unknown")
 )
@@ -78,9 +79,10 @@ type SFUWindowConfig struct {
 // droplet's single public IPv4 address, parsed rather than echoed. Active is
 // true only once DigitalOcean reports the droplet active and it has that address.
 type SFUWindowDroplet struct {
-	ID      int64
-	Address netip.Addr
-	Active  bool
+	ID       int64
+	Address  netip.Addr
+	Active   bool
+	Outdated bool
 }
 
 // SFUWindow creates, observes, and destroys temporary SFU droplets.
@@ -98,6 +100,7 @@ type SFUWindow struct {
 	region      string
 	vpcUUID     string
 	createMu    sync.Mutex
+	retryAt     atomic.Int64
 }
 
 func NewSFUWindow(config SFUWindowConfig) (*SFUWindow, error) {
@@ -142,10 +145,11 @@ func (a *SFUWindow) Observe(ctx context.Context, name string) (SFUWindowDroplet,
 	case 0:
 		return SFUWindowDroplet{}, false, nil
 	case 1:
-		if err := a.verifyOwned(droplets[0], name, true); err != nil {
+		if err := a.verifyOwned(droplets[0], name, false); err != nil {
 			return SFUWindowDroplet{}, false, err
 		}
 		node, err := mapSFUWindowDroplet(droplets[0])
+		node.Outdated = droplets[0].Image.ID != a.snapshotID
 		return node, err == nil, err
 	default:
 		return SFUWindowDroplet{}, false, fmt.Errorf("%w: %d droplets", ErrSFUWindowDuplicate, len(droplets))
@@ -153,8 +157,8 @@ func (a *SFUWindow) Observe(ctx context.Context, name string) (SFUWindowDroplet,
 }
 
 // Create submits one droplet creation. A failure that is not
-// ErrSFUWindowCreateUnknown guarantees no creation request was sent; every other
-// failure may have created the droplet. It never retries.
+// ErrSFUWindowCreateUnknown is either a preflight failure or a definitive
+// provider rejection; an unknown outcome may have created a Droplet.
 func (a *SFUWindow) Create(ctx context.Context, name string) error {
 	if !validSFUWindowName(name) {
 		return ErrSFUWindowInvalid
@@ -185,6 +189,13 @@ func (a *SFUWindow) Create(ctx context.Context, name string) error {
 		Droplet sfuWindowDropletJSON `json:"droplet"`
 	}
 	if err := a.send(ctx, http.MethodPost, "/v2/droplets", nil, payload, &response, http.StatusAccepted); err != nil {
+		var status *digitalOceanHTTPStatusError
+		if errors.As(err, &status) {
+			switch status.status {
+			case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusTooManyRequests:
+				return err
+			}
+		}
 		return fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
 	}
 	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
@@ -201,26 +212,11 @@ func (a *SFUWindow) Create(ctx context.Context, name string) error {
 // Destroy deletes the droplet with providerID only after reading it back by ID
 // and confirming it is the exact window node called name. A missing droplet is success.
 func (a *SFUWindow) Destroy(ctx context.Context, name string, providerID int64) error {
-	if !validSFUWindowName(name) || providerID <= 0 {
-		return ErrSFUWindowInvalid
+	present, err := a.ownedByID(ctx, name, providerID)
+	if err != nil || !present {
+		return err
 	}
 	path := "/v2/droplets/" + strconv.FormatInt(providerID, 10)
-	var response struct {
-		Droplet sfuWindowDropletJSON `json:"droplet"`
-	}
-	err := a.send(ctx, http.MethodGet, path, nil, nil, &response, http.StatusOK)
-	if errors.Is(err, errNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if response.Droplet.ID != providerID {
-		return fmt.Errorf("%w: provider ID mismatch", ErrSFUWindowDrift)
-	}
-	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
-		return err
-	}
 	err = a.send(ctx, http.MethodDelete, path, nil, nil, nil, http.StatusNoContent)
 	if errors.Is(err, errNotFound) {
 		return nil
@@ -228,12 +224,43 @@ func (a *SFUWindow) Destroy(ctx context.Context, name string, providerID int64) 
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "sfu window droplet deleted",
-		"event", "sfu_window.destroyed",
+	slog.InfoContext(ctx, "sfu window droplet deletion accepted",
+		"event", "sfu_window.destroy_accepted",
 		"node_name", name,
 		"provider_id", strconv.FormatInt(providerID, 10),
 	)
 	return nil
+}
+
+func (a *SFUWindow) Gone(ctx context.Context, name string, providerID int64) (bool, error) {
+	present, err := a.ownedByID(ctx, name, providerID)
+	return !present && err == nil, err
+}
+
+func (a *SFUWindow) ownedByID(ctx context.Context, name string, providerID int64) (bool, error) {
+	if !validSFUWindowName(name) || providerID <= 0 {
+		return false, ErrSFUWindowInvalid
+	}
+	path := "/v2/droplets/" + strconv.FormatInt(providerID, 10)
+	var response struct {
+		Droplet sfuWindowDropletJSON `json:"droplet"`
+	}
+	err := a.send(ctx, http.MethodGet, path, nil, nil, &response, http.StatusOK)
+	if errors.Is(err, errNotFound) {
+		// A token from another account also returns 404. Prove visibility
+		// of the pinned environment firewall before accepting absence.
+		return false, a.verifyFirewall(ctx)
+	}
+	if err != nil {
+		return false, err
+	}
+	if response.Droplet.ID != providerID {
+		return false, fmt.Errorf("%w: provider ID mismatch", ErrSFUWindowDrift)
+	}
+	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (a *SFUWindow) expectedTags() []string {
@@ -364,6 +391,9 @@ func (a *SFUWindow) nextQuery(next, expectedPath string) (url.Values, error) {
 
 // send makes one bounded request: no redirects, no retries, and a body capped at maximumResponseBytes.
 func (a *SFUWindow) send(ctx context.Context, method, path string, query url.Values, input, output any, expectedStatus int) error {
+	if retryAt := time.Unix(0, a.retryAt.Load()); retryAt.After(time.Now()) {
+		return &digitalOceanHTTPStatusError{status: http.StatusTooManyRequests, err: &SFUWindowRateLimitError{RetryAt: retryAt}}
+	}
 	endpoint := a.baseURL.ResolveReference(&url.URL{Path: path, RawQuery: query.Encode()})
 	var body io.Reader
 	if input != nil {
@@ -390,20 +420,27 @@ func (a *SFUWindow) send(ctx context.Context, method, path string, query url.Val
 		return fmt.Errorf("%w: %s %s", ErrSFUWindowProvider, method, path)
 	}
 	defer response.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maximumResponseBytes+1))
-	if err != nil || len(payload) > maximumResponseBytes {
-		return fmt.Errorf("%w: unreadable or oversized response", ErrSFUWindowProvider)
+	if response.StatusCode == http.StatusTooManyRequests {
+		now := time.Now()
+		deadline := retryDeadline(response.Header, now)
+		if deadline.IsZero() {
+			deadline = now.Add(time.Minute)
+		}
+		retry := &SFUWindowRateLimitError{RetryAt: deadline}
+		a.retryAt.Store(retry.RetryAt.UnixNano())
+		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: status 429: %w", ErrSFUWindowProvider, retry)}
 	}
 	switch {
-	case response.StatusCode == http.StatusTooManyRequests:
-		retry := &SFUWindowRateLimitError{RetryAt: retryDeadline(response.Header, time.Now())}
-		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: status 429: %w", ErrSFUWindowProvider, retry)}
 	case response.StatusCode == http.StatusNotFound:
 		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: errNotFound}
 	case response.StatusCode != expectedStatus:
 		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: status %d", ErrSFUWindowProvider, response.StatusCode)}
 	case output == nil:
 		return nil
+	}
+	payload, err := io.ReadAll(io.LimitReader(response.Body, maximumResponseBytes+1))
+	if err != nil || len(payload) > maximumResponseBytes {
+		return fmt.Errorf("%w: unreadable or oversized response", ErrSFUWindowProvider)
 	}
 	if err := json.Unmarshal(payload, output); err != nil {
 		return fmt.Errorf("%w: invalid response body", ErrSFUWindowProvider)
