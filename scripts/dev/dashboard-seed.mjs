@@ -6,7 +6,7 @@ import { runChecked } from "./chalk-resources.mjs";
 import { chalkSfuPlane } from "./config.mjs";
 
 export const dashboardServiceScopes =
-  "tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete";
+  "tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,focus:read,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete";
 
 // Only the local supervisor imports this module; neither deployment entrypoint does.
 export function dashboardArtifactBindings(config) {
@@ -95,6 +95,24 @@ export async function seedDashboard({ config, serviceToken, systemToken }) {
         }
         commit;`);
     }
+
+    await sql(`insert into episode_focus_intervals(tenant_id,space_id,episode_id,participant_id,state,windowed,started_at,ended_at)
+      select e.tenant_id,e.space_id,e.id,p.id,part.state,part.windowed,e.started_at+part.start_offset,e.started_at+part.end_offset
+      from episodes e
+      join participants p on p.tenant_id=e.tenant_id and p.space_id=e.space_id and p.episode_id=e.id and p.name='Maya Chen'
+      join (values
+        ('active',false,interval '0 minutes',interval '8 minutes'),
+        ('inactive',false,interval '8 minutes',interval '14 minutes'),
+        ('active',false,interval '14 minutes',interval '20 minutes'),
+        ('background',false,interval '20 minutes',interval '26 minutes'),
+        ('active',false,interval '26 minutes',interval '32 minutes')
+      ) part(state,windowed,start_offset,end_offset) on true
+      where e.id='${episode.id}' and not exists(select 1 from episode_focus_intervals where tenant_id=e.tenant_id and episode_id=e.id);
+    insert into episode_focus_step_aways(tenant_id,space_id,episode_id,participant_id,actor_participant_id,reason,started_at,ended_at)
+      select e.tenant_id,e.space_id,e.id,p.id,p.id,'reading',e.started_at+interval '9 minutes',e.started_at+interval '12 minutes'
+      from episodes e
+      join participants p on p.tenant_id=e.tenant_id and p.space_id=e.space_id and p.episode_id=e.id and p.name='Maya Chen'
+      where e.id='${episode.id}' and not exists(select 1 from episode_focus_step_aways where tenant_id=e.tenant_id and episode_id=e.id);`);
     if (index === 0) {
       artifacts[`/local-dashboard/tenants/${owner.id}/recordings/transcript.json`] = {
         schemaVersion: "transcript.v1",
