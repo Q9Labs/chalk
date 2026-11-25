@@ -133,8 +133,11 @@ type Guard struct {
 // nodes is the table of node sizes, ports and guard limits. The deploy scripts and the OpenTofu
 // module read the same file, so a node is described once. A size's packet budget admits only as many
 // classes as keep the node's own CPU under about 65% of what its vCPUs deliver at the worst steal
-// seen (52% over 10 s): a 3-person, 2-camera class reserves 7170 packets/s and costs about 11% of
-// one vCPU, so 22000 admits 3 classes on 1 vCPU and 36000 admits 5 on 2 (docs/plans/sfu-capacity-calibration.md).
+// seen (52% over 10 s). A 3-person, 2-camera class reserves 7170 packets/s unrecorded and 9330 with
+// a recorder capture pulling every track; measured SFU forwarding costs about 12% of one vCPU per
+// recorded class, so the steal-hardened line is 2.5 recorded classes per vCPU: 46650 admits 5 on
+// 2 vCPUs, 93300 10 on 4 and 177270 19 on 8, the last capped by measurement below the model's 20
+// (docs/plans/sfu-capacity-calibration.md).
 // Production closes admission to new Episodes at 40% steal; the other environments keep 25 so the
 // guard stays easy to exercise there.
 //
