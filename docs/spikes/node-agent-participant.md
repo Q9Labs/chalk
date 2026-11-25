@@ -12,7 +12,7 @@ The smallest practical implementation is a custom platform adapter around `creat
 
 - `spikes/node-agent/agent.mjs`: high-level Node participant, access closure, platform adapter, PCM probes, tone writer.
 - `spikes/node-agent/webrtc-adapters.mjs`: `@roamhq/wrtc` and `werift` adapters.
-- `spikes/node-agent/run.mjs`: admission, browser-participant orchestration, checks, and measurements. It uses the server SDK to create/reuse an Episode and admit the Node participant, then joins browser guests through the real invite page.
+- `spikes/node-agent/run.mjs`: admission, browser-participant orchestration, checks, and measurements. It uses the server SDK to end any previous local Episode, create an Episode and admit the Node participant, then joins browser guests through the real invite page.
 - `spikes/node-agent/package.json` and lockfile: isolated spike dependencies.
 
 The code is deliberately throwaway. It imports the locally built SDK `dist` output and is not part of the workspace build.
@@ -48,13 +48,23 @@ Measurements are single-loopback-run values on this VM. Browser automation and t
 | 4 participants | `@roamhq/wrtc` | 245 ms | 60 ms | 319 ms | 11.8% of one core | 333 MB | 3 |
 | 4 participants | `werift` | 360 ms | 18 ms | 321 ms | 11.0% of one core | 355 MB | 3 |
 
-Additional werift 4-participant process measurements after agent construction: about 11.9% of one core and about 28 MB RSS delta. That is the best per-agent estimate from this spike, but it still includes SDK bookkeeping and the measurement probes.
+Additional process measurements after agent construction: werift in the 4-participant run used about 11.9% of one core and about 28 MB final RSS delta; `@roamhq/wrtc` in the 15-minute two-participant run averaged about 5.24% of one core and had a rough peak RSS increase of 76 MB over the pre-agent baseline. These are the best per-agent estimates from this spike, but they still include SDK bookkeeping and measurement probes and are not clean child-process measurements.
 
-The browser-to-Node numbers varied widely because detection depends on browser audio-clock startup, Opus frameing, the scheduled marker, and a simple RMS threshold. The consistent interpretation is that media arrives in the hundreds of milliseconds or less on loopback after warm-up, not that 18 ms or 607 ms is a stable library property. The Node-to-browser measurement has the same limitation; it detects inbound decoded audio energy, not sound leaving a speaker.
+The browser-to-Node numbers varied widely because detection depends on browser audio-clock startup, Opus frame timing, the scheduled marker, and a simple RMS threshold. The consistent interpretation is that media arrives in the hundreds of milliseconds or less on loopback after warm-up, not that 18 ms or 607 ms is a stable library property. The Node-to-browser measurement has the same limitation; it detects inbound decoded audio energy, not sound leaving a speaker.
 
 ## Access renewal
 
-_PLACEHOLDER_RENEWAL_
+PASS for `@roamhq/wrtc`. The agent stayed live for 939,371 ms (15.66 minutes) in a two-participant call. The SDK issued three access refreshes, each about 240 seconds after the previous one, and every refresh completed without media-connection replacement. At the end the SFU snapshot was still `live`, `peerConnectionState` was `connected`, `iceConnectionState` was `completed`, one local microphone track existed, and one remote track existed. The run measured 193 ms SDK join, 5.24% of one core for the mostly idle long-running process, and a rough peak RSS increase of 76 MB over the pre-agent baseline.
+
+The renewal path was the normal SDK access path, not a spike-side timer: the access callback retained the latest participant generation and media token, called `participants.issueAccess`, and returned the fresh grant. This was not run for 15 minutes with werift; because renewal is primarily SDK/server behavior, there is no reason to expect a library difference until media replacement or network failure is involved.
+
+## Recommendation
+
+Use `@roamhq/wrtc` for the next prototype iteration because it supplies the complete native WebRTC media pipeline and direct PCM source/sink APIs. That is the smallest path to reliable listening and speaking, and it is much better positioned for later video and screen tracks. Do not treat it as production-approved: its WebRTC M106 base is old, so the production decision should be revisited against a current native binding or a maintained media stack before shipping `chalk-agent`.
+
+Use `werift` as the proof that a pure TypeScript implementation can interoperate with the Chalk SFU and as a source of protocol insight. Do not choose it for the next agent milestone unless the project is willing to own Opus jitter/plc, packetization, congestion-control integration, video codec plumbing, and WebRTC API compatibility work.
+
+Versions tested: `@roamhq/wrtc` 0.10.0, `werift` 0.28.0, and `@discordjs/opus` 0.11.0 for werift PCM transcoding.
 
 ## Library notes
 
@@ -69,7 +79,7 @@ What worked:
 Concerns:
 
 - The package wraps an old native WebRTC build (M106). That is a security, codec, interoperability, and maintenance risk for a supported agent.
-- Its native process/thread lifecycle needs explicit shutdown testing; early standalone instantiation did not exit promptly even after `close()`.
+- Its native process/thread lifecycle needs soak and shutdown testing; the short harness processes exited, but that does not prove long-running behavior.
 - PCM access is nonstandard and library-specific.
 
 ### `werift`
@@ -78,7 +88,7 @@ What worked:
 
 - The connection interoperated with the Chalk SFU after one configuration adaptation.
 - RTP receive hooks exposed remote Opus packets; decoding them with `@discordjs/opus` yielded PCM frames.
-- PCM could be encoded to Opus and written as RTP with payload type 111, a 48 kHz timestamp, and 20 ms frames; browsers received it as audio.
+- PCM could be encoded to Opus and written as RTP with payload type 111, a 48 kHz timestamp, and 10 ms frames; browsers received it as audio.
 
 Required adaptation and concerns:
 
@@ -142,5 +152,6 @@ The existing media code already guards most direct `document` uses. The spike di
 - SFU restart or media connection replacement during a live call.
 - Literal speaker output; browser audibility means decoded inbound audio energy in WebRTC stats.
 - WAV-file playback specifically. The spike generated PCM tones; a WAV input would be a trivial PCM feeder only in the uncompressed 48 kHz case, but that path was not implemented.
-- Long-term memory leaks beyond the short runs described here.
+- Long-term memory leaks beyond the 15.66-minute renewal run; the RSS measurement is especially rough because browser automation shared the process.
+- A 15-minute werift renewal run specifically.
 - Production authentication, tenancy isolation, or deployment packaging.
