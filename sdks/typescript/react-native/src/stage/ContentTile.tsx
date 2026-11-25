@@ -1,4 +1,4 @@
-import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { canDrawWhiteboard, ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
@@ -19,6 +19,7 @@ import { matchLayer, type StageAnnotation } from "../screen-annotation/model";
 import { useNativeAnnotationSource } from "../screen-annotation/use-native-annotation-source";
 import { useTheme } from "../theme/theme";
 import { radii } from "../theme/tokens";
+import { closeNativeBoard } from "../whiteboard/board-presentation";
 import { useStageView } from "./stage-view";
 import { useSpaceSelector } from "./space-selector";
 
@@ -118,6 +119,7 @@ const selectConnection = (snapshot: SpaceSnapshot) => snapshot.connection.status
 const selectAccess = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access;
 const selectCanSave = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access.canDraw;
 const selectCanManage = (snapshot: SpaceSnapshot) => snapshot.self.can("manageWhiteboard");
+const selectCanDrawBoard = (snapshot: SpaceSnapshot) => canDrawWhiteboard(snapshot.whiteboard, snapshot.self.can("drawWhiteboard"));
 const selectSceneId = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.sceneId;
 
 /** The shared board uses the same renderer, tools and view protocol as web. */
@@ -135,6 +137,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const sceneId = useSpaceSelector(selectSceneId);
   const access = useSpaceSelector(selectAccess);
   const canManage = useSpaceSelector(selectCanManage);
+  const canPresent = useSpaceSelector(selectCanDrawBoard);
   const toasts = useToasts();
   const transport = useMemo(() => client.whiteboard.transport(), [client, status]);
   const [capabilities, setCapabilities] = useState({ canDraw: false, canClear: false, viewsAvailable: false });
@@ -168,18 +171,26 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
     [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, canManage, access, transport, colors],
   );
   const onClose = useCallback(() => {
-    void (async () => {
-      if (canManage) await transport?.setPresentation?.(false);
-      view.setBoardOpen(false);
-      view.setFollowing(null);
-    })().catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t close the board. Try again." }));
-  }, [canManage, transport, toasts, view.setBoardOpen, view.setFollowing]);
+    if (!transport) return;
+    void closeNativeBoard(client, view, transport).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t close the board. Try again." }));
+  }, [client, transport, toasts, view]);
   const journeyId = useRef(`board-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`).current;
 
   return (
     <>
       {transport ? (
-        <EmbeddedWhiteboard board={board} canClear={capabilities.canClear} canDraw={!mini && capabilities.canDraw} journeyId={journeyId} onCloseBoard={onClose} onFollow={view.setFollowing} style={StyleSheet.absoluteFill} testID="tile.content.board" theme={scheme} transport={transport} />
+        <EmbeddedWhiteboard
+          board={board}
+          canClear={capabilities.canClear}
+          canDraw={!mini && capabilities.canDraw}
+          journeyId={journeyId}
+          onCloseBoard={canPresent ? onClose : undefined}
+          onFollow={view.setFollowing}
+          style={StyleSheet.absoluteFill}
+          testID="tile.content.board"
+          theme={scheme}
+          transport={transport}
+        />
       ) : null}
       {mini ? (
         <>
