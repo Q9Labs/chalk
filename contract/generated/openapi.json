@@ -17056,14 +17056,7 @@
         "additionalProperties": false,
         "properties": {
           "expected_ends_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/DateTimeString"
           },
           "expected_participants": {
             "items": {
@@ -17094,17 +17087,10 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "starts_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/DateTimeString"
           }
         },
-        "required": ["expected_participants"],
+        "required": ["expected_ends_at", "starts_at"],
         "type": "object"
       },
       "Recording": {

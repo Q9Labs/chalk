@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/scheduledepisodes"
@@ -57,6 +58,11 @@ func (r ScheduledEpisodeRepository) Put(ctx context.Context, input scheduledepis
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The upsert only skips a booking that is cancelled.
 			return scheduledepisodes.ErrCancelled
+		}
+		var invalidJSON *pgconn.PgError
+		if errors.As(err, &invalidJSON) && (invalidJSON.Code == "22P05" || invalidJSON.Code == "22003") {
+			// JSONB rejects embedded NUL and numbers outside its numeric range.
+			return scheduledepisodes.ErrInvalidMetadata
 		}
 		if err != nil {
 			return fmt.Errorf("put Scheduled Episode: %w", err)

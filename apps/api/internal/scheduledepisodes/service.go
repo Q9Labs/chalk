@@ -191,7 +191,7 @@ func prepareParticipants(participants []ExpectedParticipant) ([]ExpectedParticip
 }
 
 func validText(value string, limit int) bool {
-	return utf8.ValidString(value) && len(value) <= limit
+	return utf8.ValidString(value) && len(value) <= limit && strings.IndexByte(value, 0) < 0
 }
 
 // prepareMetadata accepts nothing or one JSON object. Absent and null both mean no metadata.

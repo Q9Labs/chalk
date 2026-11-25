@@ -2238,8 +2238,8 @@ export interface components {
       };
     };
     PutScheduledEpisodeRequest: {
-      expected_ends_at?: components["schemas"]["DateTimeString"] | null;
-      expected_participants: {
+      expected_ends_at: components["schemas"]["DateTimeString"];
+      expected_participants?: {
         identity_external_id?: string;
         name: string;
         role?: string;
@@ -2253,7 +2253,7 @@ export interface components {
         | number
         | boolean
         | null;
-      starts_at?: components["schemas"]["DateTimeString"] | null;
+      starts_at: components["schemas"]["DateTimeString"];
     };
     Recording: {
       created_at: components["schemas"]["DateTimeString"];
