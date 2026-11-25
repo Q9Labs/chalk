@@ -19,7 +19,7 @@ func download(ctx context.Context, url string, maxBytes int64, expectedSHA256 st
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("download source: %w", err)
+		return nil, transferTransportError("download source")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -27,7 +27,7 @@ func download(ctx context.Context, url string, maxBytes int64, expectedSHA256 st
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read source: %w", err)
+		return nil, transferTransportError("read source")
 	}
 	if int64(len(body)) > maxBytes {
 		return nil, fmt.Errorf("source exceeds size cap")
@@ -55,11 +55,19 @@ func upload(ctx context.Context, target signedUpload, body []byte) error {
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("upload render: %w", err)
+		return transferTransportError("upload render")
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("upload render returned status %d", response.StatusCode)
 	}
 	return nil
+}
+
+type transferError string
+
+func (e transferError) Error() string { return string(e) }
+
+func transferTransportError(operation string) error {
+	return transferError(operation + " transport failed")
 }

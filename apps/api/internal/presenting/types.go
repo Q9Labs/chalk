@@ -43,20 +43,21 @@ type Failure struct {
 }
 
 type Document struct {
-	TenantID     utilities.ID
-	SpaceID      utilities.ID
-	EpisodeID    utilities.ID
-	DocumentID   utilities.ID
-	AttachmentID utilities.ID
-	FileName     string
-	MIMEType     string
-	ByteLength   int64
-	SourceKey    string
-	SourceSHA256 [32]byte
-	Status       string
-	Failure      *Failure
-	PageCount    int
-	Created      bool
+	TenantID       utilities.ID
+	SpaceID        utilities.ID
+	EpisodeID      utilities.ID
+	DocumentID     utilities.ID
+	AttachmentID   utilities.ID
+	FileName       string
+	MIMEType       string
+	ByteLength     int64
+	SourceKey      string
+	SourceSHA256   [32]byte
+	Status         string
+	Failure        *Failure
+	PageCount      int
+	Created        bool
+	InventoryJobID utilities.ID
 }
 
 type Page struct {
@@ -69,6 +70,9 @@ type Page struct {
 	ImageURL     string
 	ThumbnailURL string
 	ExpiresAt    time.Time
+	ImageKey     string
+	ThumbnailKey string
+	ZoomKey      string
 }
 
 type PageSpec struct {
@@ -94,6 +98,17 @@ type RenderJob struct {
 	Kind      string
 	PageStart int
 	PageEnd   int
+}
+
+type RenderUpload struct {
+	TenantID   utilities.ID
+	SpaceID    utilities.ID
+	DocumentID utilities.ID
+	JobID      utilities.ID
+	Page       int
+	Rendition  string
+	Attempt    int
+	ObjectKey  string
 }
 
 type RenderAssignment struct {
@@ -128,6 +143,7 @@ type RendererInvoker interface {
 type Repository interface {
 	CreateDocument(context.Context, Subject, utilities.ID, utilities.ID) (Document, error)
 	CreateRenderJob(context.Context, RenderJob) error
+	TrackRenderUploads(context.Context, []RenderUpload) error
 	AuthorizedDocument(context.Context, Subject, utilities.ID) (Document, error)
 	ListPages(context.Context, Document) ([]Page, error)
 	AuthorizedPage(context.Context, Subject, utilities.ID, int) (Document, Page, error)
@@ -140,6 +156,7 @@ type Repository interface {
 	CompleteZoom(context.Context, RenderLease) error
 	EnsureZoomJob(context.Context, Document, int, time.Time) (RenderJob, bool, error)
 	ListExpiredDocuments(context.Context, time.Time, time.Time, int) ([]Document, error)
+	ListDocumentObjectKeys(context.Context, Document) ([]string, error)
 	DeleteDocument(context.Context, Document) error
 }
 
@@ -153,9 +170,19 @@ type Service struct {
 	repository Repository
 	objects    ObjectStore
 	invoker    RendererInvoker
+	available  func(context.Context) bool
 	now        func() time.Time
 }
 
 func NewService(repository Repository, objects ObjectStore, invoker RendererInvoker) Service {
 	return Service{repository: repository, objects: objects, invoker: invoker, now: time.Now}
+}
+
+func (s Service) WithAvailability(available func(context.Context) bool) Service {
+	s.available = available
+	return s
+}
+
+func (s Service) isAvailable(ctx context.Context) bool {
+	return s.available != nil && s.available(ctx)
 }

@@ -406,16 +406,19 @@ type PresentingDocument struct {
 }
 
 type PresentingDocumentPage struct {
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	SpaceID     pgtype.UUID        `json:"space_id"`
-	DocumentID  pgtype.UUID        `json:"document_id"`
-	Page        int32              `json:"page"`
-	Width       int32              `json:"width"`
-	Height      int32              `json:"height"`
-	Status      string             `json:"status"`
-	ZoomReadyAt pgtype.Timestamptz `json:"zoom_ready_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	Page         int32              `json:"page"`
+	Width        int32              `json:"width"`
+	Height       int32              `json:"height"`
+	Status       string             `json:"status"`
+	ZoomReadyAt  pgtype.Timestamptz `json:"zoom_ready_at"`
+	ImageKey     pgtype.Text        `json:"image_key"`
+	ThumbnailKey pgtype.Text        `json:"thumbnail_key"`
+	ZoomKey      pgtype.Text        `json:"zoom_key"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PresentingRenderJob struct {
@@ -438,6 +441,18 @@ type PresentingRenderJob struct {
 	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PresentingRenderUpload struct {
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	SpaceID    pgtype.UUID        `json:"space_id"`
+	DocumentID pgtype.UUID        `json:"document_id"`
+	JobID      pgtype.UUID        `json:"job_id"`
+	Page       int32              `json:"page"`
+	Rendition  string             `json:"rendition"`
+	Attempt    int32              `json:"attempt"`
+	ObjectKey  string             `json:"object_key"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type PresentingSetting struct {

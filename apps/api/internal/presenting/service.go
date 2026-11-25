@@ -29,17 +29,10 @@ func (s Service) Create(ctx context.Context, subject Subject, attachmentID utili
 	if !document.Created {
 		return document, nil
 	}
-	jobID, err := utilities.NewID()
-	if err != nil {
-		return Document{}, fmt.Errorf("generate presenting inventory job id: %w", err)
+	if document.InventoryJobID.IsZero() {
+		return Document{}, fmt.Errorf("presenting document was created without an inventory job")
 	}
-	job := RenderJob{Kind: "inventory", PageStart: 1, PageEnd: 1, RenderLease: RenderLease{
-		TenantID: document.TenantID, SpaceID: document.SpaceID, DocumentID: document.DocumentID, JobID: jobID,
-	}}
-	if err := s.repository.CreateRenderJob(ctx, job); err != nil {
-		return Document{}, err
-	}
-	s.invoke(ctx, InvokeInput{JobID: jobID})
+	s.invoke(ctx, InvokeInput{JobID: document.InventoryJobID})
 	return document, nil
 }
 
@@ -100,7 +93,7 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 		}
 	}
 	signed, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{
-		Key: zoomKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, pageNumber), ExpiresIn: PageURLLifetime,
+		Key: page.ZoomKey, ExpiresIn: PageURLLifetime,
 	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("sign presenting zoom page: %w", err)
@@ -110,13 +103,13 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 
 func (s Service) signPage(ctx context.Context, document Document, page *Page) error {
 	image, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{
-		Key: imageKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, page.Page), ExpiresIn: PageURLLifetime,
+		Key: page.ImageKey, ExpiresIn: PageURLLifetime,
 	})
 	if err != nil {
 		return fmt.Errorf("sign presenting page image: %w", err)
 	}
 	thumbnail, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{
-		Key: thumbnailKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, page.Page), ExpiresIn: PageURLLifetime,
+		Key: page.ThumbnailKey, ExpiresIn: PageURLLifetime,
 	})
 	if err != nil {
 		return fmt.Errorf("sign presenting page thumbnail: %w", err)

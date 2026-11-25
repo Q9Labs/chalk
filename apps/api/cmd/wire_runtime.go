@@ -71,7 +71,7 @@ func logStartup(logger *slog.Logger, cfg config.Config) {
 
 func (w *apiWiring) openRedis() error {
 	var err error
-	needsRedis := w.cfg.Transcription.WorkloadAuthSecret != "" || w.cfg.Presenting.WorkloadAuthSecret != "" || w.cfg.Observability.Environment != config.DefaultEnvironment
+	needsRedis := w.cfg.Transcription.WorkloadAuthSecret != "" || (w.cfg.Capabilities.Presenting && w.cfg.Presenting.WorkloadAuthSecret != "") || w.cfg.Observability.Environment != config.DefaultEnvironment
 	if needsRedis {
 		w.redisClient, err = redisadapter.Open(w.cfg.Redis.URL)
 		if err != nil {

@@ -181,5 +181,8 @@ func (c ControlClient) sign(method, path string, body []byte) map[string]string 
 		"x-chalk-workload-role":        "document-renderer",
 		"x-chalk-workload-audience":    c.audience,
 		"x-chalk-workload-body-sha256": bodySHA,
+		"x-chalk-journey-id":           c.journeyID,
+		"traceparent":                  c.traceparent,
+		"tracestate":                   c.tracestate,
 	}
 }

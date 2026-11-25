@@ -91,13 +91,23 @@ inserted as (
         file_name, mime_type, byte_length, source_object_key, source_sha256,
         status, failure_code, failure_message, page_count, created_at, updated_at, true as created
 ),
+inventory_job as (
+    insert into presenting_render_jobs (
+        tenant_id, space_id, document_id, job_id, kind, page_start, page_end, status, attempt_limit, available_at
+    )
+    select tenant_id, space_id, document_id, sqlc.arg(inventory_job_id)::uuid, 'inventory', 1, 1, 'queued', 4, now()
+    from inserted
+    on conflict do nothing
+    returning job_id
+),
 selected as (
-    select * from inserted
+    select inserted.*, (select job_id from inventory_job) as inventory_job_id from inserted
     union all
     select
         document.tenant_id, document.space_id, document.episode_id, document.document_id, document.attachment_id,
         document.file_name, document.mime_type, document.byte_length, document.source_object_key, document.source_sha256,
-        document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at, false as created
+        document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at, false as created,
+        null::uuid as inventory_job_id
     from presenting_documents document
     join authority on true
     where document.tenant_id = authority.tenant_id
@@ -121,6 +131,10 @@ join episodes episode
     on episode.tenant_id = document.tenant_id
     and episode.space_id = document.space_id
     and episode.id = document.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where document.tenant_id = sqlc.arg(tenant_id)
     and document.space_id = sqlc.arg(space_id)
     and document.episode_id = sqlc.arg(episode_id)
@@ -128,10 +142,15 @@ where document.tenant_id = sqlc.arg(tenant_id)
     and participant.id = sqlc.arg(participant_id)
     and participant.generation = sqlc.arg(participant_generation)
     and participant.status = 'active'
-    and episode.status = 'active';
+    and episode.status = 'active'
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    );
 
 -- name: ListPresentingDocumentPages :many
-select tenant_id, space_id, document_id, page, width, height, status, zoom_ready_at, created_at, updated_at
+select tenant_id, space_id, document_id, page, width, height, status, zoom_ready_at, image_key, thumbnail_key, zoom_key, created_at, updated_at
 from presenting_document_pages
 where tenant_id = sqlc.arg(tenant_id)
     and space_id = sqlc.arg(space_id)
@@ -141,7 +160,7 @@ order by page;
 -- name: GetAuthorizedPresentingPage :one
 select
     document.status as document_status,
-    page.tenant_id, page.space_id, page.document_id, page.page, page.width, page.height, page.status, page.zoom_ready_at, page.created_at, page.updated_at
+    page.tenant_id, page.space_id, page.document_id, page.page, page.width, page.height, page.status, page.zoom_ready_at, page.image_key, page.thumbnail_key, page.zoom_key, page.created_at, page.updated_at
 from presenting_document_pages page
 join presenting_documents document
     on document.tenant_id = page.tenant_id
@@ -155,6 +174,10 @@ join episodes episode
     on episode.tenant_id = document.tenant_id
     and episode.space_id = document.space_id
     and episode.id = document.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where page.tenant_id = sqlc.arg(tenant_id)
     and page.space_id = sqlc.arg(space_id)
     and document.episode_id = sqlc.arg(episode_id)
@@ -163,7 +186,12 @@ where page.tenant_id = sqlc.arg(tenant_id)
     and participant.id = sqlc.arg(participant_id)
     and participant.generation = sqlc.arg(participant_generation)
     and participant.status = 'active'
-    and episode.status = 'active';
+    and episode.status = 'active'
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    );
 
 -- name: CreatePresentingRenderJob :one
 insert into presenting_render_jobs (
@@ -227,9 +255,18 @@ select
     document.file_name, document.mime_type, document.byte_length, document.source_object_key, document.source_sha256,
     document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at
 from presenting_documents document
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where document.tenant_id = sqlc.arg(tenant_id)
     and document.space_id = sqlc.arg(space_id)
-    and document.document_id = sqlc.arg(document_id);
+    and document.document_id = sqlc.arg(document_id)
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    );
 
 -- name: HeartbeatPresentingRenderJob :execrows
 update presenting_render_jobs
@@ -246,7 +283,7 @@ where tenant_id = sqlc.arg(tenant_id)
 
 -- name: CompletePresentingRenderJob :execrows
 update presenting_render_jobs
-set status = 'succeeded', completed_at = now(), lease_expires_at = null, updated_at = now()
+set status = 'succeeded', completed_at = now(), updated_at = now()
 where tenant_id = sqlc.arg(tenant_id)
     and space_id = sqlc.arg(space_id)
     and document_id = sqlc.arg(document_id)
@@ -258,7 +295,7 @@ where tenant_id = sqlc.arg(tenant_id)
 
 -- name: FailPresentingRenderJob :execrows
 update presenting_render_jobs
-set status = 'failed', error_code = sqlc.arg(error_code), error_message = sqlc.arg(error_message), completed_at = now(), lease_expires_at = null, updated_at = now()
+set status = 'failed', error_code = sqlc.arg(error_code), error_message = sqlc.arg(error_message), completed_at = now(), updated_at = now()
 where tenant_id = sqlc.arg(tenant_id)
     and space_id = sqlc.arg(space_id)
     and document_id = sqlc.arg(document_id)
@@ -283,7 +320,7 @@ where tenant_id = sqlc.arg(tenant_id)
 
 -- name: MarkPresentingPageReady :execrows
 update presenting_document_pages page
-set status = 'ready', updated_at = now()
+set status = 'ready', image_key = sqlc.arg(image_key), thumbnail_key = sqlc.arg(thumbnail_key), updated_at = now()
 where page.tenant_id = sqlc.arg(tenant_id)
     and page.space_id = sqlc.arg(space_id)
     and page.document_id = sqlc.arg(document_id)
@@ -295,6 +332,7 @@ where page.tenant_id = sqlc.arg(tenant_id)
             and job.document_id = page.document_id
             and job.job_id = sqlc.arg(job_id)
             and job.status = 'leased'
+            and job.kind in ('inventory', 'pages')
             and job.attempt_count = sqlc.arg(attempt_count)
             and job.lease_owner = sqlc.arg(lease_owner)
             and job.lease_token = sqlc.arg(lease_token)
@@ -303,13 +341,27 @@ where page.tenant_id = sqlc.arg(tenant_id)
     );
 
 -- name: MarkPresentingZoomReady :execrows
-update presenting_document_pages
-set zoom_ready_at = sqlc.arg(zoom_ready_at), updated_at = now()
-where tenant_id = sqlc.arg(tenant_id)
-    and space_id = sqlc.arg(space_id)
-    and document_id = sqlc.arg(document_id)
-    and page = sqlc.arg(page)
-    and status = 'ready';
+update presenting_document_pages page
+set zoom_ready_at = sqlc.arg(zoom_ready_at), zoom_key = sqlc.arg(zoom_key), updated_at = now()
+where page.tenant_id = sqlc.arg(tenant_id)
+    and page.space_id = sqlc.arg(space_id)
+    and page.document_id = sqlc.arg(document_id)
+    and page.page = sqlc.arg(page)
+    and page.status = 'ready'
+    and exists (
+        select 1 from presenting_render_jobs job
+        where job.tenant_id = page.tenant_id
+            and job.space_id = page.space_id
+            and job.document_id = page.document_id
+            and job.job_id = sqlc.arg(job_id)
+            and job.kind = 'zoom'
+            and job.status = 'leased'
+            and job.attempt_count = sqlc.arg(attempt_count)
+            and job.lease_owner = sqlc.arg(lease_owner)
+            and job.lease_token = sqlc.arg(lease_token)
+            and job.lease_expires_at > sqlc.arg(now_at)
+            and page.page between job.page_start and job.page_end
+    );
 
 -- name: FailPresentingDocument :execrows
 update presenting_documents
@@ -368,6 +420,32 @@ limit sqlc.arg(batch_limit);
 
 -- name: DeletePresentingDocument :execrows
 delete from presenting_documents
+where tenant_id = sqlc.arg(tenant_id)
+    and space_id = sqlc.arg(space_id)
+    and document_id = sqlc.arg(document_id);
+
+-- name: InsertPresentingRenderUpload :execrows
+insert into presenting_render_uploads (
+    tenant_id, space_id, document_id, job_id, page, rendition, attempt, object_key
+) values (
+    sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(document_id), sqlc.arg(job_id), sqlc.arg(page), sqlc.arg(rendition), sqlc.arg(attempt), sqlc.arg(object_key)
+)
+on conflict (tenant_id, space_id, document_id, job_id, page, rendition, attempt) do nothing;
+
+-- name: GetPresentingRenderUpload :one
+select object_key
+from presenting_render_uploads
+where tenant_id = sqlc.arg(tenant_id)
+    and space_id = sqlc.arg(space_id)
+    and document_id = sqlc.arg(document_id)
+    and job_id = sqlc.arg(job_id)
+    and page = sqlc.arg(page)
+    and rendition = sqlc.arg(rendition)
+    and attempt = sqlc.arg(attempt);
+
+-- name: ListPresentingDocumentObjectKeys :many
+select object_key
+from presenting_render_uploads
 where tenant_id = sqlc.arg(tenant_id)
     and space_id = sqlc.arg(space_id)
     and document_id = sqlc.arg(document_id);

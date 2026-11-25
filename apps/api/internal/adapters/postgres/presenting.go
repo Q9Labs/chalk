@@ -44,10 +44,14 @@ func (r PresentingRepository) CreateDocument(ctx context.Context, subject presen
 	default:
 		return presenting.Document{}, presenting.ErrUnsupportedType
 	}
+	inventoryJobID, err := utilities.NewID()
+	if err != nil {
+		return presenting.Document{}, fmt.Errorf("generate presenting inventory job id: %w", err)
+	}
 	row, err := r.queries.CreatePresentingDocument(ctx, sqlc.CreatePresentingDocumentParams{
 		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
 		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
-		AttachmentID: uuid(attachmentID), DocumentID: uuid(documentID),
+		AttachmentID: uuid(attachmentID), DocumentID: uuid(documentID), InventoryJobID: uuid(inventoryJobID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return presenting.Document{}, presenting.ErrPermissionDenied
@@ -55,7 +59,14 @@ func (r PresentingRepository) CreateDocument(ctx context.Context, subject presen
 	if err != nil {
 		return presenting.Document{}, fmt.Errorf("create presenting document: %w", err)
 	}
-	return presentingDocument(row.TenantID, row.SpaceID, row.EpisodeID, row.DocumentID, row.AttachmentID, row.FileName, row.MimeType, row.ByteLength, row.SourceObjectKey, row.SourceSha256, row.Status, row.FailureCode, row.FailureMessage, row.PageCount, row.Created)
+	document, err := presentingDocument(row.TenantID, row.SpaceID, row.EpisodeID, row.DocumentID, row.AttachmentID, row.FileName, row.MimeType, row.ByteLength, row.SourceObjectKey, row.SourceSha256, row.Status, row.FailureCode, row.FailureMessage, row.PageCount, row.Created)
+	if err != nil {
+		return presenting.Document{}, err
+	}
+	if row.InventoryJobID.Valid {
+		document.InventoryJobID = utilities.IDFromBytes(row.InventoryJobID.Bytes)
+	}
+	return document, nil
 }
 
 func (r PresentingRepository) CreateRenderJob(ctx context.Context, job presenting.RenderJob) error {
@@ -73,6 +84,24 @@ func (r PresentingRepository) CreateRenderJob(ctx context.Context, job presentin
 	})
 	if err != nil || row.JobID.Valid {
 		return err
+	}
+	return nil
+}
+
+func (r PresentingRepository) TrackRenderUploads(ctx context.Context, uploads []presenting.RenderUpload) error {
+	for _, upload := range uploads {
+		if upload.Page < 1 || upload.Page > presenting.MaxPages || upload.Attempt < 1 || upload.Attempt > presenting.RenderAttemptLimit || len(upload.ObjectKey) == 0 || len(upload.ObjectKey) > 1024 {
+			return presenting.ErrInvalidInput
+		}
+		if upload.Rendition != "image" && upload.Rendition != "thumbnail" && upload.Rendition != "zoom" {
+			return presenting.ErrInvalidInput
+		}
+		if _, err := r.queries.InsertPresentingRenderUpload(ctx, sqlc.InsertPresentingRenderUploadParams{
+			TenantID: uuid(upload.TenantID), SpaceID: uuid(upload.SpaceID), DocumentID: uuid(upload.DocumentID), JobID: uuid(upload.JobID),
+			Page: int32(upload.Page), Rendition: upload.Rendition, Attempt: int32(upload.Attempt), ObjectKey: upload.ObjectKey,
+		}); err != nil {
+			return fmt.Errorf("track presenting render upload: %w", err)
+		}
 	}
 	return nil
 }
@@ -98,7 +127,7 @@ func (r PresentingRepository) ListPages(ctx context.Context, document presenting
 	}
 	pages := make([]presenting.Page, 0, len(rows))
 	for _, row := range rows {
-		pages = append(pages, presentingPage(row.DocumentID, row.Page, row.Width, row.Height, row.Status, row.ZoomReadyAt))
+		pages = append(pages, presentingPage(row.DocumentID, row.Page, row.Width, row.Height, row.Status, row.ZoomReadyAt, row.ImageKey, row.ThumbnailKey, row.ZoomKey))
 	}
 	return pages, nil
 }
@@ -115,7 +144,7 @@ func (r PresentingRepository) AuthorizedPage(ctx context.Context, subject presen
 		return presenting.Document{}, presenting.Page{}, fmt.Errorf("read presenting page: %w", err)
 	}
 	document := presenting.Document{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, DocumentID: documentID, Status: row.DocumentStatus}
-	return document, presentingPage(row.DocumentID, row.Page, row.Width, row.Height, row.Status, row.ZoomReadyAt), nil
+	return document, presentingPage(row.DocumentID, row.Page, row.Width, row.Height, row.Status, row.ZoomReadyAt, row.ImageKey, row.ThumbnailKey, row.ZoomKey), nil
 }
 
 func (r PresentingRepository) ClaimRenderJob(ctx context.Context, jobID utilities.ID, now, leaseUntil time.Time, token utilities.ID, owner string) (presenting.RenderAssignment, error) {
@@ -183,11 +212,8 @@ func (r PresentingRepository) CompleteInventory(ctx context.Context, report pres
 			return nil, fmt.Errorf("store presenting page inventory: %w", err)
 		}
 	}
-	if rows, err := q.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: 1}); err != nil || rows != 1 {
-		if err == nil {
-			err = presenting.ErrInvalidInput
-		}
-		return nil, fmt.Errorf("mark presenting first page ready: %w", err)
+	if err := publishPresentingPage(ctx, q, lease, 1); err != nil {
+		return nil, err
 	}
 	if report.PageCount == 1 {
 		if _, err := q.CompletePresentingDocumentIfReady(ctx, sqlc.CompletePresentingDocumentIfReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), ReadyPages: pgtype.Int4{Int32: 1, Valid: true}}); err != nil {
@@ -220,14 +246,16 @@ func (r PresentingRepository) MarkPageReady(ctx context.Context, lease presentin
 	if page < 1 || page > presenting.MaxPages {
 		return presenting.ErrInvalidInput
 	}
-	rows, err := r.queries.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("mark presenting page ready: %w", err)
+		return fmt.Errorf("begin presenting page publication: %w", err)
 	}
-	if rows != 1 {
-		return presenting.ErrLeaseLost
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+	if err := publishPresentingPage(ctx, q, lease, page); err != nil {
+		return err
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r PresentingRepository) CompleteRenderJob(ctx context.Context, lease presenting.RenderLease) error {
@@ -270,7 +298,14 @@ func (r PresentingRepository) CompleteZoom(ctx context.Context, lease presenting
 	}
 	defer tx.Rollback(ctx)
 	q := sqlc.New(tx)
-	rows, err := q.MarkPresentingZoomReady(ctx, sqlc.MarkPresentingZoomReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(lease.Page), ZoomReadyAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
+	zoomKey, err := presentingRenderUploadKey(ctx, q, lease, lease.Page, "zoom")
+	if err != nil {
+		return err
+	}
+	rows, err := q.MarkPresentingZoomReady(ctx, sqlc.MarkPresentingZoomReadyParams{
+		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(lease.Page), ZoomReadyAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, ZoomKey: pgtype.Text{String: zoomKey, Valid: true},
+		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	})
 	if err != nil {
 		return fmt.Errorf("mark presenting zoom ready: %w", err)
 	}
@@ -318,6 +353,14 @@ func (r PresentingRepository) ListExpiredDocuments(ctx context.Context, now, end
 	return documents, nil
 }
 
+func (r PresentingRepository) ListDocumentObjectKeys(ctx context.Context, document presenting.Document) ([]string, error) {
+	keys, err := r.queries.ListPresentingDocumentObjectKeys(ctx, sqlc.ListPresentingDocumentObjectKeysParams{TenantID: uuid(document.TenantID), SpaceID: uuid(document.SpaceID), DocumentID: uuid(document.DocumentID)})
+	if err != nil {
+		return nil, fmt.Errorf("list presenting document object keys: %w", err)
+	}
+	return keys, nil
+}
+
 func (r PresentingRepository) DeleteDocument(ctx context.Context, document presenting.Document) error {
 	rows, err := r.queries.DeletePresentingDocument(ctx, sqlc.DeletePresentingDocumentParams{TenantID: uuid(document.TenantID), SpaceID: uuid(document.SpaceID), DocumentID: uuid(document.DocumentID)})
 	if err != nil {
@@ -327,6 +370,43 @@ func (r PresentingRepository) DeleteDocument(ctx context.Context, document prese
 		return objectcleanup.ErrLeaseLost
 	}
 	return nil
+}
+
+func publishPresentingPage(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease, page int) error {
+	imageKey, err := presentingRenderUploadKey(ctx, q, lease, page, "image")
+	if err != nil {
+		return err
+	}
+	thumbnailKey, err := presentingRenderUploadKey(ctx, q, lease, page, "thumbnail")
+	if err != nil {
+		return err
+	}
+	rows, err := q.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{
+		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page),
+		ImageKey: pgtype.Text{String: imageKey, Valid: true}, ThumbnailKey: pgtype.Text{String: thumbnailKey, Valid: true},
+		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("mark presenting page ready: %w", err)
+	}
+	if rows != 1 {
+		return presenting.ErrLeaseLost
+	}
+	return nil
+}
+
+func presentingRenderUploadKey(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease, page int, rendition string) (string, error) {
+	key, err := q.GetPresentingRenderUpload(ctx, sqlc.GetPresentingRenderUploadParams{
+		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID),
+		Page: int32(page), Rendition: rendition, Attempt: int32(lease.Attempt),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", presenting.ErrLeaseLost
+	}
+	if err != nil {
+		return "", fmt.Errorf("read tracked presenting upload: %w", err)
+	}
+	return key, nil
 }
 
 func completePresentingJob(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {
@@ -360,8 +440,11 @@ func presentingDocument(tenantID, spaceID, episodeID, documentID, attachmentID p
 	return document, nil
 }
 
-func presentingPage(documentID pgtype.UUID, page, width, height int32, status string, zoomReady pgtype.Timestamptz) presenting.Page {
-	return presenting.Page{DocumentID: utilities.IDFromBytes(documentID.Bytes), Page: int(page), Width: int(width), Height: int(height), Status: status, ZoomReady: zoomReady.Valid}
+func presentingPage(documentID pgtype.UUID, page, width, height int32, status string, zoomReady pgtype.Timestamptz, imageKey, thumbnailKey, zoomKey pgtype.Text) presenting.Page {
+	return presenting.Page{
+		DocumentID: utilities.IDFromBytes(documentID.Bytes), Page: int(page), Width: int(width), Height: int(height), Status: status, ZoomReady: zoomReady.Valid,
+		ImageKey: imageKey.String, ThumbnailKey: thumbnailKey.String, ZoomKey: zoomKey.String,
+	}
 }
 
 func presentingJob(row sqlc.PresentingRenderJob) presenting.RenderJob {

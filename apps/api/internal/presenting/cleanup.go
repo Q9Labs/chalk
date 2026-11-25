@@ -55,16 +55,13 @@ func (w CleanupWorker) Run(ctx context.Context) (objectcleanup.Result, error) {
 }
 
 func (w CleanupWorker) deleteDocumentObjects(ctx context.Context, document Document) error {
-	for page := 1; page <= document.PageCount; page++ {
-		keys := []string{
-			imageKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, page),
-			thumbnailKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, page),
-			zoomKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, page),
-		}
-		for _, key := range keys {
-			if err := w.objects.DeleteObject(ctx, key); err != nil && !errors.Is(err, objectstorage.ErrObjectNotFound) {
-				return fmt.Errorf("delete presenting page object: %w", err)
-			}
+	keys, err := w.repository.ListDocumentObjectKeys(ctx, document)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := w.objects.DeleteObject(ctx, key); err != nil && !errors.Is(err, objectstorage.ErrObjectNotFound) {
+			return fmt.Errorf("delete presenting page object: %w", err)
 		}
 	}
 	return nil

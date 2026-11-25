@@ -37,6 +37,23 @@ func newPresentingFixture(t *testing.T, pool *pgxpool.Pool, capabilities string)
 	return presentingTestFixture{tenant: tenant, space: space, episode: episode, participant: participant, attachment: attachment, subject: presenting.Subject{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 1}}
 }
 
+func trackTestUploads(t *testing.T, repository PresentingRepository, lease presenting.RenderLease, pages ...int) {
+	t.Helper()
+	uploads := make([]presenting.RenderUpload, 0, len(pages)*2)
+	for _, page := range pages {
+		for _, rendition := range []string{"image", "thumbnail"} {
+			uploads = append(uploads, presenting.RenderUpload{
+				TenantID: lease.TenantID, SpaceID: lease.SpaceID, DocumentID: lease.DocumentID, JobID: lease.JobID,
+				Page: page, Rendition: rendition, Attempt: lease.Attempt,
+				ObjectKey: "test-presenting-upload/" + lease.DocumentID.String() + "/" + lease.JobID.String() + "/" + rendition + "-" + string(rune('0'+page)),
+			})
+		}
+	}
+	if err := repository.TrackRenderUploads(context.Background(), uploads); err != nil {
+		t.Fatalf("track uploads: %v", err)
+	}
+}
+
 func TestPresentingDocumentAccessAndIdempotencyIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)
@@ -47,7 +64,7 @@ func TestPresentingDocumentAccessAndIdempotencyIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create document: %v", err)
 	}
-	if !document.Created || document.DocumentID != documentID {
+	if !document.Created || document.DocumentID != documentID || document.InventoryJobID.IsZero() {
 		t.Fatalf("unexpected document: %+v", document)
 	}
 	replacementID, _ := utilities.NewID()
@@ -55,7 +72,7 @@ func TestPresentingDocumentAccessAndIdempotencyIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repeat create document: %v", err)
 	}
-	if again.Created || again.DocumentID != documentID {
+	if again.Created || again.DocumentID != documentID || !again.InventoryJobID.IsZero() {
 		t.Fatalf("idempotent create returned %+v", again)
 	}
 	if _, err := repository.AuthorizedDocument(ctx, fixture.subject, documentID); err != nil {
@@ -101,10 +118,9 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 	if err != nil {
 		t.Fatalf("create document: %v", err)
 	}
-	inventoryJobID, _ := utilities.NewID()
-	inventoryJob := presenting.RenderJob{Kind: "inventory", PageStart: 1, PageEnd: 1, RenderLease: presenting.RenderLease{TenantID: fixture.tenant, SpaceID: fixture.space, DocumentID: document.DocumentID, JobID: inventoryJobID}}
-	if err := repository.CreateRenderJob(ctx, inventoryJob); err != nil {
-		t.Fatalf("create inventory job: %v", err)
+	inventoryJobID := document.InventoryJobID
+	if inventoryJobID.IsZero() {
+		t.Fatalf("document creation did not return its inventory job: %+v", document)
 	}
 	now := time.Now().UTC()
 	token, _ := utilities.NewID()
@@ -113,6 +129,7 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 		t.Fatalf("claim inventory job: %v", err)
 	}
 	lease := claimed.Job.RenderLease
+	trackTestUploads(t, repository, lease, 1)
 	report := presenting.InventoryReport{Lease: lease, PageCount: 2, Pages: []presenting.PageSpec{{Page: 1, Width: 1600, Height: 900}, {Page: 2, Width: 1600, Height: 900}}}
 	jobs, err := repository.CompleteInventory(ctx, report, 25)
 	if err != nil {
@@ -132,6 +149,7 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 		t.Fatalf("claim page job: %v", err)
 	}
 	pageLease := pageClaim.Job.RenderLease
+	trackTestUploads(t, repository, pageLease, 2)
 	badLease := pageLease
 	badLease.LeaseToken, _ = utilities.NewID()
 	if err := repository.MarkPageReady(ctx, badLease, 2); !errors.Is(err, presenting.ErrLeaseLost) {
@@ -145,5 +163,52 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 	}
 	if err := repository.CompleteRenderJob(ctx, pageLease); err != nil {
 		t.Fatalf("repeated completion must be idempotent: %v", err)
+	}
+}
+
+func TestPresentingOnePageRenderLifecycleIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if document.InventoryJobID.IsZero() {
+		t.Fatal("document creation did not atomically create an inventory job")
+	}
+	now := time.Now().UTC()
+	token, _ := utilities.NewID()
+	claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, now, now.Add(time.Minute), token, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim inventory job: %v", err)
+	}
+	lease := claimed.Job.RenderLease
+	trackTestUploads(t, repository, lease, 1)
+	report := presenting.InventoryReport{Lease: lease, PageCount: 1, Pages: []presenting.PageSpec{{Page: 1, Width: 1600, Height: 900}}}
+	jobs, err := repository.CompleteInventory(ctx, report, 25)
+	if err != nil {
+		t.Fatalf("complete one-page inventory: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Fatalf("one-page document fanned out unexpectedly: %+v", jobs)
+	}
+	stored, err := repository.AuthorizedDocument(ctx, fixture.subject, document.DocumentID)
+	if err != nil {
+		t.Fatalf("read completed document: %v", err)
+	}
+	if stored.Status != "ready" || stored.PageCount != 1 {
+		t.Fatalf("one-page document status = %+v", stored)
+	}
+	pages, err := repository.ListPages(ctx, stored)
+	if err != nil {
+		t.Fatalf("list pages: %v", err)
+	}
+	if len(pages) != 1 || pages[0].Status != "ready" || pages[0].ImageKey == "" || pages[0].ThumbnailKey == "" {
+		t.Fatalf("published page = %+v", pages)
+	}
+	if err := repository.CompleteRenderJob(ctx, lease); err != nil {
+		t.Fatalf("repeated inventory completion must be idempotent: %v", err)
 	}
 }

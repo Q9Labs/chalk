@@ -5746,6 +5746,9 @@ create table presenting_document_pages (
     height integer not null,
     status text not null,
     zoom_ready_at timestamptz,
+    image_key text,
+    thumbnail_key text,
+    zoom_key text,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (tenant_id, space_id, document_id, page),
@@ -5755,7 +5758,11 @@ create table presenting_document_pages (
     check (page between 1 and 300),
     check (width between 1 and 3200 and height between 1 and 3200),
     check (status in ('pending', 'ready')),
-    check ((status = 'ready') or zoom_ready_at is null)
+    check (image_key is null or octet_length(image_key) between 1 and 1024),
+    check (thumbnail_key is null or octet_length(thumbnail_key) between 1 and 1024),
+    check (zoom_key is null or octet_length(zoom_key) between 1 and 1024),
+    check (status <> 'ready' or (image_key is not null and thumbnail_key is not null)),
+    check ((zoom_ready_at is null) = (zoom_key is null))
 );
 create index presenting_document_pages_zoom_idx
     on presenting_document_pages(tenant_id, space_id, document_id, page)
@@ -5804,3 +5811,26 @@ create unique index presenting_render_jobs_one_active_idx
 create index presenting_render_jobs_claim_idx
     on presenting_render_jobs(available_at, created_at, job_id)
     where status in ('queued', 'leased');
+
+create table presenting_render_uploads (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    document_id uuid not null,
+    job_id uuid not null,
+    page integer not null,
+    rendition text not null,
+    attempt integer not null,
+    object_key text not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, document_id, job_id, page, rendition, attempt),
+    foreign key (tenant_id, space_id, document_id, job_id)
+        references presenting_render_jobs(tenant_id, space_id, document_id, job_id)
+        on delete cascade,
+    unique (object_key),
+    check (page between 1 and 300),
+    check (rendition in ('image', 'thumbnail', 'zoom')),
+    check (attempt between 1 and 8),
+    check (octet_length(object_key) between 1 and 1024)
+);
+create index presenting_render_uploads_document_idx
+    on presenting_render_uploads(tenant_id, space_id, document_id, created_at);

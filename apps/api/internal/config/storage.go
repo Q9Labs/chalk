@@ -92,10 +92,8 @@ func (cfg *Config) loadStorage() error {
 		ControlAudience:    envOrDefault(PresentingControlAudience, DefaultTranscriptionControlAudience),
 		RendererFunction:   envOrDefault(PresentingRendererFunction, ""),
 	}
-	if cfg.Capabilities.Presenting {
-		if err := validatePresentingConfig(cfg.Presenting, cfg.SyncToken, cfg.R2); err != nil {
-			return err
-		}
+	if cfg.Capabilities.Presenting && !presentingConfigComplete(cfg.Presenting, cfg.SyncToken, cfg.R2) {
+		cfg.Capabilities.Presenting = false
 	}
 	cfg.Transcription = TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
@@ -128,17 +126,11 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 	return nil
 }
 
-func validatePresentingConfig(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config) error {
-	if len(presenting.WorkloadAuthSecret) < 32 {
-		return fmt.Errorf("%s must contain at least 32 bytes when %s=true", PresentingWorkloadAuthSecret, PresentingEnabled)
-	}
-	if strings.TrimSpace(presenting.RendererFunction) == "" {
-		return fmt.Errorf("%s must be set when %s=true", PresentingRendererFunction, PresentingEnabled)
-	}
-	if len(syncToken.PrivateKey) == 0 {
-		return fmt.Errorf("%s, %s, %s, and %s must be set when %s=true", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey, PresentingEnabled)
-	}
-	return validateR2Config(r2, PresentingEnabled)
+func presentingConfigComplete(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config) bool {
+	return len(presenting.WorkloadAuthSecret) >= 32 &&
+		strings.TrimSpace(presenting.RendererFunction) != "" &&
+		len(syncToken.PrivateKey) != 0 &&
+		validateR2Config(r2, PresentingEnabled) == nil
 }
 
 func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {

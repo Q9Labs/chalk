@@ -39,8 +39,9 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.Capabilities.ScreenAnnotation = postgres.ScreenAnnotationSettings{
 		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.ScreenAnnotation,
 	}.Enabled
+	presentingWired := w.options.Presenting != nil && w.options.PresentingWorkloadAuthorizer != nil
 	w.options.Capabilities.Presenting = postgres.PresentingSettings{
-		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting,
+		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting && presentingWired,
 	}.Enabled
 	if w.options.HelperAccess != nil {
 		w.options.HelperAccess.WithAnnotationAvailability(w.options.Capabilities.ScreenAnnotation)

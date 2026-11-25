@@ -28,6 +28,9 @@ type invocationEvent struct {
 }
 
 func main() {
+	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
+		os.Exit(render.RunChild(mode, os.Args[1:]))
+	}
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
 	}
@@ -141,7 +144,10 @@ func processOne(ctx context.Context, control worker.ControlClient, event invocat
 	if assignment == nil {
 		return nil
 	}
-	return worker.Process(ctx, control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate), *assignment)
+	if err := worker.Process(ctx, control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate), *assignment); err != nil {
+		return fmt.Errorf("render job %s: %w", assignment.JobID, err)
+	}
+	return nil
 }
 
 func postRuntimeResult(client *http.Client, url string, body []byte, logger *slog.Logger) {

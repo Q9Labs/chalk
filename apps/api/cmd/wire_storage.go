@@ -43,7 +43,7 @@ func (w *apiWiring) wireStorage() error {
 			if w.syncParticipantVerifierConfigured {
 				presentingRepository := postgres.NewPresentingRepository(w.pool)
 				w.presentingCleanupScheduler = objectcleanup.NewScheduler(presenting.NewCleanupWorker(presentingRepository, storage), 0, w.logger)
-				service := presenting.NewService(presentingRepository, storage, invoker)
+				service := presenting.NewService(presentingRepository, storage, invoker).WithAvailability(postgres.PresentingSettings{Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting}.Enabled)
 				w.options.Presenting = service
 			}
 		}

@@ -43,7 +43,7 @@ type ControlAssignment struct {
 }
 
 func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAssignment, bool, error) {
-	if s.repository == nil || s.objects == nil {
+	if s.repository == nil || s.objects == nil || !s.isAvailable(ctx) {
 		return ControlAssignment{}, false, ErrRenderUnavailable
 	}
 	now := s.now().UTC()
@@ -62,6 +62,25 @@ func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAs
 	ttl := time.Until(leaseExpiry)
 	if ttl <= 0 {
 		return ControlAssignment{}, false, ErrNoRenderJob
+	}
+	tracked := make([]RenderUpload, 0, (claimed.Job.PageEnd-claimed.Job.PageStart+1)*2)
+	for page := claimed.Job.PageStart; page <= claimed.Job.PageEnd; page++ {
+		base := RenderUpload{TenantID: claimed.Job.TenantID, SpaceID: claimed.Job.SpaceID, DocumentID: claimed.Job.DocumentID, JobID: claimed.Job.JobID, Page: page, Attempt: claimed.Job.Attempt}
+		if claimed.Job.Kind == "zoom" {
+			base.Rendition = "zoom"
+			base.ObjectKey = attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+			tracked = append(tracked, base)
+			continue
+		}
+		base.Rendition = "image"
+		base.ObjectKey = attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+		tracked = append(tracked, base)
+		base.Rendition = "thumbnail"
+		base.ObjectKey = attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+		tracked = append(tracked, base)
+	}
+	if err := s.repository.TrackRenderUploads(ctx, tracked); err != nil {
+		return ControlAssignment{}, false, err
 	}
 	source, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: claimed.Document.SourceKey, ExpiresIn: ttl})
 	if err != nil {
@@ -82,11 +101,11 @@ func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAs
 	for _, page := range pages {
 		upload := PageUploads{Page: page}
 		if claimed.Job.Kind == "zoom" {
-			upload.Zoom, err = s.signUpload(ctx, zoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, page), ttl)
+			upload.Zoom, err = s.signUpload(ctx, attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
 		} else {
-			upload.Image, err = s.signUpload(ctx, imageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, page), ttl)
+			upload.Image, err = s.signUpload(ctx, attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
 			if err == nil {
-				upload.Thumbnail, err = s.signUpload(ctx, thumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, page), ttl)
+				upload.Thumbnail, err = s.signUpload(ctx, attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
 			}
 		}
 		if err != nil {

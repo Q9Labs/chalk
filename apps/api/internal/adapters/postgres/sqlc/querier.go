@@ -192,6 +192,7 @@ type Querier interface {
 	GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error)
 	GetPresentingAttachmentMIMEType(ctx context.Context, arg GetPresentingAttachmentMIMETypeParams) (string, error)
 	GetPresentingRenderJobDocument(ctx context.Context, arg GetPresentingRenderJobDocumentParams) (GetPresentingRenderJobDocumentRow, error)
+	GetPresentingRenderUpload(ctx context.Context, arg GetPresentingRenderUploadParams) (string, error)
 	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
@@ -278,6 +279,7 @@ type Querier interface {
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
 	InsertPresentingDocumentPage(ctx context.Context, arg InsertPresentingDocumentPageParams) error
+	InsertPresentingRenderUpload(ctx context.Context, arg InsertPresentingRenderUploadParams) (int64, error)
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (InsertRecordingBundleRow, error)
 	InsertRecordingBundleAllocation(ctx context.Context, arg InsertRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	InsertRecordingCaptureCommand(ctx context.Context, arg InsertRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
@@ -316,6 +318,7 @@ type Querier interface {
 	ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error)
+	ListPresentingDocumentObjectKeys(ctx context.Context, arg ListPresentingDocumentObjectKeysParams) ([]string, error)
 	ListPresentingDocumentPages(ctx context.Context, arg ListPresentingDocumentPagesParams) ([]PresentingDocumentPage, error)
 	ListPresentingPageRanges(ctx context.Context, arg ListPresentingPageRangesParams) ([]int32, error)
 	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)

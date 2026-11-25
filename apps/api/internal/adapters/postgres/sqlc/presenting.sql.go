@@ -133,7 +133,7 @@ func (q *Queries) CompletePresentingDocumentIfReady(ctx context.Context, arg Com
 
 const completePresentingRenderJob = `-- name: CompletePresentingRenderJob :execrows
 update presenting_render_jobs
-set status = 'succeeded', completed_at = now(), lease_expires_at = null, updated_at = now()
+set status = 'succeeded', completed_at = now(), updated_at = now()
 where tenant_id = $1
     and space_id = $2
     and document_id = $3
@@ -252,13 +252,23 @@ inserted as (
         file_name, mime_type, byte_length, source_object_key, source_sha256,
         status, failure_code, failure_message, page_count, created_at, updated_at, true as created
 ),
+inventory_job as (
+    insert into presenting_render_jobs (
+        tenant_id, space_id, document_id, job_id, kind, page_start, page_end, status, attempt_limit, available_at
+    )
+    select tenant_id, space_id, document_id, $8::uuid, 'inventory', 1, 1, 'queued', 4, now()
+    from inserted
+    on conflict do nothing
+    returning job_id
+),
 selected as (
-    select tenant_id, space_id, episode_id, document_id, attachment_id, file_name, mime_type, byte_length, source_object_key, source_sha256, status, failure_code, failure_message, page_count, created_at, updated_at, created from inserted
+    select inserted.tenant_id, inserted.space_id, inserted.episode_id, inserted.document_id, inserted.attachment_id, inserted.file_name, inserted.mime_type, inserted.byte_length, inserted.source_object_key, inserted.source_sha256, inserted.status, inserted.failure_code, inserted.failure_message, inserted.page_count, inserted.created_at, inserted.updated_at, inserted.created, (select job_id from inventory_job) as inventory_job_id from inserted
     union all
     select
         document.tenant_id, document.space_id, document.episode_id, document.document_id, document.attachment_id,
         document.file_name, document.mime_type, document.byte_length, document.source_object_key, document.source_sha256,
-        document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at, false as created
+        document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at, false as created,
+        null::uuid as inventory_job_id
     from presenting_documents document
     join authority on true
     where document.tenant_id = authority.tenant_id
@@ -266,7 +276,7 @@ selected as (
         and document.attachment_id = authority.attachment_id
         and not exists (select 1 from inserted)
 )
-select tenant_id, space_id, episode_id, document_id, attachment_id, file_name, mime_type, byte_length, source_object_key, source_sha256, status, failure_code, failure_message, page_count, created_at, updated_at, created from selected
+select tenant_id, space_id, episode_id, document_id, attachment_id, file_name, mime_type, byte_length, source_object_key, source_sha256, status, failure_code, failure_message, page_count, created_at, updated_at, created, inventory_job_id from selected
 `
 
 type CreatePresentingDocumentParams struct {
@@ -277,6 +287,7 @@ type CreatePresentingDocumentParams struct {
 	ParticipantGeneration int64       `json:"participant_generation"`
 	AttachmentID          pgtype.UUID `json:"attachment_id"`
 	DocumentID            pgtype.UUID `json:"document_id"`
+	InventoryJobID        pgtype.UUID `json:"inventory_job_id"`
 }
 
 type CreatePresentingDocumentRow struct {
@@ -297,6 +308,7 @@ type CreatePresentingDocumentRow struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Created         bool               `json:"created"`
+	InventoryJobID  pgtype.UUID        `json:"inventory_job_id"`
 }
 
 func (q *Queries) CreatePresentingDocument(ctx context.Context, arg CreatePresentingDocumentParams) (CreatePresentingDocumentRow, error) {
@@ -308,6 +320,7 @@ func (q *Queries) CreatePresentingDocument(ctx context.Context, arg CreatePresen
 		arg.ParticipantGeneration,
 		arg.AttachmentID,
 		arg.DocumentID,
+		arg.InventoryJobID,
 	)
 	var i CreatePresentingDocumentRow
 	err := row.Scan(
@@ -328,6 +341,7 @@ func (q *Queries) CreatePresentingDocument(ctx context.Context, arg CreatePresen
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Created,
+		&i.InventoryJobID,
 	)
 	return i, err
 }
@@ -445,7 +459,7 @@ func (q *Queries) FailPresentingDocument(ctx context.Context, arg FailPresenting
 
 const failPresentingRenderJob = `-- name: FailPresentingRenderJob :execrows
 update presenting_render_jobs
-set status = 'failed', error_code = $1, error_message = $2, completed_at = now(), lease_expires_at = null, updated_at = now()
+set status = 'failed', error_code = $1, error_message = $2, completed_at = now(), updated_at = now()
 where tenant_id = $3
     and space_id = $4
     and document_id = $5
@@ -500,6 +514,10 @@ join episodes episode
     on episode.tenant_id = document.tenant_id
     and episode.space_id = document.space_id
     and episode.id = document.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where document.tenant_id = $1
     and document.space_id = $2
     and document.episode_id = $3
@@ -508,6 +526,11 @@ where document.tenant_id = $1
     and participant.generation = $6
     and participant.status = 'active'
     and episode.status = 'active'
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    )
 `
 
 type GetAuthorizedPresentingDocumentParams struct {
@@ -572,7 +595,7 @@ func (q *Queries) GetAuthorizedPresentingDocument(ctx context.Context, arg GetAu
 const getAuthorizedPresentingPage = `-- name: GetAuthorizedPresentingPage :one
 select
     document.status as document_status,
-    page.tenant_id, page.space_id, page.document_id, page.page, page.width, page.height, page.status, page.zoom_ready_at, page.created_at, page.updated_at
+    page.tenant_id, page.space_id, page.document_id, page.page, page.width, page.height, page.status, page.zoom_ready_at, page.image_key, page.thumbnail_key, page.zoom_key, page.created_at, page.updated_at
 from presenting_document_pages page
 join presenting_documents document
     on document.tenant_id = page.tenant_id
@@ -586,6 +609,10 @@ join episodes episode
     on episode.tenant_id = document.tenant_id
     and episode.space_id = document.space_id
     and episode.id = document.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where page.tenant_id = $1
     and page.space_id = $2
     and document.episode_id = $3
@@ -595,6 +622,11 @@ where page.tenant_id = $1
     and participant.generation = $7
     and participant.status = 'active'
     and episode.status = 'active'
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    )
 `
 
 type GetAuthorizedPresentingPageParams struct {
@@ -617,6 +649,9 @@ type GetAuthorizedPresentingPageRow struct {
 	Height         int32              `json:"height"`
 	Status         string             `json:"status"`
 	ZoomReadyAt    pgtype.Timestamptz `json:"zoom_ready_at"`
+	ImageKey       pgtype.Text        `json:"image_key"`
+	ThumbnailKey   pgtype.Text        `json:"thumbnail_key"`
+	ZoomKey        pgtype.Text        `json:"zoom_key"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
@@ -642,6 +677,9 @@ func (q *Queries) GetAuthorizedPresentingPage(ctx context.Context, arg GetAuthor
 		&i.Height,
 		&i.Status,
 		&i.ZoomReadyAt,
+		&i.ImageKey,
+		&i.ThumbnailKey,
+		&i.ZoomKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -708,9 +746,18 @@ select
     document.file_name, document.mime_type, document.byte_length, document.source_object_key, document.source_sha256,
     document.status, document.failure_code, document.failure_message, document.page_count, document.created_at, document.updated_at
 from presenting_documents document
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where document.tenant_id = $1
     and document.space_id = $2
     and document.document_id = $3
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (attachment.status = 'ready' and attachment.expires_at > now())
+    )
 `
 
 type GetPresentingRenderJobDocumentParams struct {
@@ -760,6 +807,43 @@ func (q *Queries) GetPresentingRenderJobDocument(ctx context.Context, arg GetPre
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPresentingRenderUpload = `-- name: GetPresentingRenderUpload :one
+select object_key
+from presenting_render_uploads
+where tenant_id = $1
+    and space_id = $2
+    and document_id = $3
+    and job_id = $4
+    and page = $5
+    and rendition = $6
+    and attempt = $7
+`
+
+type GetPresentingRenderUploadParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	DocumentID pgtype.UUID `json:"document_id"`
+	JobID      pgtype.UUID `json:"job_id"`
+	Page       int32       `json:"page"`
+	Rendition  string      `json:"rendition"`
+	Attempt    int32       `json:"attempt"`
+}
+
+func (q *Queries) GetPresentingRenderUpload(ctx context.Context, arg GetPresentingRenderUploadParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPresentingRenderUpload,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.DocumentID,
+		arg.JobID,
+		arg.Page,
+		arg.Rendition,
+		arg.Attempt,
+	)
+	var object_key string
+	err := row.Scan(&object_key)
+	return object_key, err
 }
 
 const heartbeatPresentingRenderJob = `-- name: HeartbeatPresentingRenderJob :execrows
@@ -833,6 +917,43 @@ func (q *Queries) InsertPresentingDocumentPage(ctx context.Context, arg InsertPr
 	return err
 }
 
+const insertPresentingRenderUpload = `-- name: InsertPresentingRenderUpload :execrows
+insert into presenting_render_uploads (
+    tenant_id, space_id, document_id, job_id, page, rendition, attempt, object_key
+) values (
+    $1, $2, $3, $4, $5, $6, $7, $8
+)
+on conflict (tenant_id, space_id, document_id, job_id, page, rendition, attempt) do nothing
+`
+
+type InsertPresentingRenderUploadParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	DocumentID pgtype.UUID `json:"document_id"`
+	JobID      pgtype.UUID `json:"job_id"`
+	Page       int32       `json:"page"`
+	Rendition  string      `json:"rendition"`
+	Attempt    int32       `json:"attempt"`
+	ObjectKey  string      `json:"object_key"`
+}
+
+func (q *Queries) InsertPresentingRenderUpload(ctx context.Context, arg InsertPresentingRenderUploadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPresentingRenderUpload,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.DocumentID,
+		arg.JobID,
+		arg.Page,
+		arg.Rendition,
+		arg.Attempt,
+		arg.ObjectKey,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listExpiredPresentingDocuments = `-- name: ListExpiredPresentingDocuments :many
 select document.tenant_id, document.space_id, document.episode_id, document.document_id, document.page_count
 from presenting_documents document
@@ -893,8 +1014,42 @@ func (q *Queries) ListExpiredPresentingDocuments(ctx context.Context, arg ListEx
 	return items, nil
 }
 
+const listPresentingDocumentObjectKeys = `-- name: ListPresentingDocumentObjectKeys :many
+select object_key
+from presenting_render_uploads
+where tenant_id = $1
+    and space_id = $2
+    and document_id = $3
+`
+
+type ListPresentingDocumentObjectKeysParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	DocumentID pgtype.UUID `json:"document_id"`
+}
+
+func (q *Queries) ListPresentingDocumentObjectKeys(ctx context.Context, arg ListPresentingDocumentObjectKeysParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPresentingDocumentObjectKeys, arg.TenantID, arg.SpaceID, arg.DocumentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPresentingDocumentPages = `-- name: ListPresentingDocumentPages :many
-select tenant_id, space_id, document_id, page, width, height, status, zoom_ready_at, created_at, updated_at
+select tenant_id, space_id, document_id, page, width, height, status, zoom_ready_at, image_key, thumbnail_key, zoom_key, created_at, updated_at
 from presenting_document_pages
 where tenant_id = $1
     and space_id = $2
@@ -926,6 +1081,9 @@ func (q *Queries) ListPresentingDocumentPages(ctx context.Context, arg ListPrese
 			&i.Height,
 			&i.Status,
 			&i.ZoomReadyAt,
+			&i.ImageKey,
+			&i.ThumbnailKey,
+			&i.ZoomKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -986,27 +1144,30 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 
 const markPresentingPageReady = `-- name: MarkPresentingPageReady :execrows
 update presenting_document_pages page
-set status = 'ready', updated_at = now()
-where page.tenant_id = $1
-    and page.space_id = $2
-    and page.document_id = $3
-    and page.page = $4
+set status = 'ready', image_key = $1, thumbnail_key = $2, updated_at = now()
+where page.tenant_id = $3
+    and page.space_id = $4
+    and page.document_id = $5
+    and page.page = $6
     and exists (
         select 1 from presenting_render_jobs job
         where job.tenant_id = page.tenant_id
             and job.space_id = page.space_id
             and job.document_id = page.document_id
-            and job.job_id = $5
+            and job.job_id = $7
             and job.status = 'leased'
-            and job.attempt_count = $6
-            and job.lease_owner = $7
-            and job.lease_token = $8
-            and job.lease_expires_at > $9
+            and job.kind in ('inventory', 'pages')
+            and job.attempt_count = $8
+            and job.lease_owner = $9
+            and job.lease_token = $10
+            and job.lease_expires_at > $11
             and page.page between job.page_start and job.page_end
     )
 `
 
 type MarkPresentingPageReadyParams struct {
+	ImageKey     pgtype.Text        `json:"image_key"`
+	ThumbnailKey pgtype.Text        `json:"thumbnail_key"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	SpaceID      pgtype.UUID        `json:"space_id"`
 	DocumentID   pgtype.UUID        `json:"document_id"`
@@ -1020,6 +1181,8 @@ type MarkPresentingPageReadyParams struct {
 
 func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentingPageReadyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markPresentingPageReady,
+		arg.ImageKey,
+		arg.ThumbnailKey,
 		arg.TenantID,
 		arg.SpaceID,
 		arg.DocumentID,
@@ -1037,30 +1200,56 @@ func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentin
 }
 
 const markPresentingZoomReady = `-- name: MarkPresentingZoomReady :execrows
-update presenting_document_pages
-set zoom_ready_at = $1, updated_at = now()
-where tenant_id = $2
-    and space_id = $3
-    and document_id = $4
-    and page = $5
-    and status = 'ready'
+update presenting_document_pages page
+set zoom_ready_at = $1, zoom_key = $2, updated_at = now()
+where page.tenant_id = $3
+    and page.space_id = $4
+    and page.document_id = $5
+    and page.page = $6
+    and page.status = 'ready'
+    and exists (
+        select 1 from presenting_render_jobs job
+        where job.tenant_id = page.tenant_id
+            and job.space_id = page.space_id
+            and job.document_id = page.document_id
+            and job.job_id = $7
+            and job.kind = 'zoom'
+            and job.status = 'leased'
+            and job.attempt_count = $8
+            and job.lease_owner = $9
+            and job.lease_token = $10
+            and job.lease_expires_at > $11
+            and page.page between job.page_start and job.page_end
+    )
 `
 
 type MarkPresentingZoomReadyParams struct {
-	ZoomReadyAt pgtype.Timestamptz `json:"zoom_ready_at"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	SpaceID     pgtype.UUID        `json:"space_id"`
-	DocumentID  pgtype.UUID        `json:"document_id"`
-	Page        int32              `json:"page"`
+	ZoomReadyAt  pgtype.Timestamptz `json:"zoom_ready_at"`
+	ZoomKey      pgtype.Text        `json:"zoom_key"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	Page         int32              `json:"page"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	AttemptCount int32              `json:"attempt_count"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	LeaseToken   pgtype.UUID        `json:"lease_token"`
+	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) MarkPresentingZoomReady(ctx context.Context, arg MarkPresentingZoomReadyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markPresentingZoomReady,
 		arg.ZoomReadyAt,
+		arg.ZoomKey,
 		arg.TenantID,
 		arg.SpaceID,
 		arg.DocumentID,
 		arg.Page,
+		arg.JobID,
+		arg.AttemptCount,
+		arg.LeaseOwner,
+		arg.LeaseToken,
+		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err

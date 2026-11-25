@@ -1,23 +1,19 @@
 package worker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
-	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -61,34 +57,35 @@ func (f renderFailure) Error() string { return f.err.Error() }
 func (f renderFailure) Unwrap() error { return f.err }
 
 func processInventory(ctx context.Context, control ControlClient, assignment Assignment, source []byte) error {
-	pageSpecs := []map[string]int{}
-	if assignment.MIMEType == "application/pdf" {
-		inventory, failureCode, err := render.PDFInventoryFromBytes(source)
-		if err != nil {
-			return renderFailure{code: failureCode, err: err}
-		}
-		for _, page := range inventory.Pages {
-			pageSpecs = append(pageSpecs, map[string]int{"page": len(pageSpecs) + 1, "width": page.Width, "height": page.Height})
-		}
-	} else {
-		width, height, err := imageDimensions(source)
-		if err != nil {
-			return renderFailure{code: "corrupt", err: err}
-		}
-		width, height = render.ScaledDimensions(width, height, standardEdge)
-		pageSpecs = append(pageSpecs, map[string]int{"page": 1, "width": width, "height": height})
+	sourcePath, cleanup, err := writeSource(source)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	inventoryPrefix := renderedPrefix(sourcePath, 0, 0)
+	if err := runIsolatedChild(ctx, executable, "inventory", sourcePath, inventoryPrefix, assignment.MIMEType); err != nil {
+		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+	}
+	pageSpecs, err := readInventory(inventoryPrefix)
+	if err != nil {
+		return err
 	}
 	if len(pageSpecs) > 300 {
 		return renderFailure{code: "too_many_pages", err: fmt.Errorf("document has %d pages", len(pageSpecs))}
 	}
-	if err := renderAndUploadEagerPage(ctx, assignment, source, 1, assignment.Uploads[0]); err != nil {
+	bitmap, width, height, err := renderIsolatedEagerPage(ctx, executable, sourcePath, assignment.MIMEType, 1)
+	if err != nil {
+		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+	}
+	if err := uploadEagerRenditions(ctx, assignment.Uploads[0], bitmap, width, height); err != nil {
 		return err
 	}
 	if err := control.CompleteInventory(ctx, assignment, pageSpecs); err != nil {
 		return fmt.Errorf("complete inventory: %w", err)
-	}
-	if err := control.PageReady(ctx, assignment, 1); err != nil {
-		return fmt.Errorf("report first page: %w", err)
 	}
 	return nil
 }
@@ -154,22 +151,23 @@ func processZoom(ctx context.Context, control ControlClient, assignment Assignme
 	target := assignment.Uploads[0]
 	var bitmap []byte
 	var width, height int
-	var failureCode string
 	var err error
-	if assignment.MIMEType == "application/pdf" {
-		bitmap, width, height, failureCode, err = render.RenderPDFPage(source, target.Page, zoomEdge)
-		if err != nil {
-			return renderFailure{code: failureCode, err: err}
-		}
-	} else {
-		bitmap, width, height, err = decodeImageBGRA(source)
-		if err != nil {
-			return renderFailure{code: "corrupt", err: err}
-		}
-		bitmap, width, height, err = render.ResizeBGRA(bitmap, width, height, zoomEdge)
-		if err != nil {
-			return err
-		}
+	sourcePath, cleanup, err := writeSource(source)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	bitmap, width, height, err = renderIsolatedBitmap(ctx, executable, sourcePath, assignment.MIMEType, target.Page, zoomEdge)
+	if err != nil {
+		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+	}
+	bitmap, width, height, err = render.ResizeBGRA(bitmap, width, height, zoomEdge)
+	if err != nil {
+		return err
 	}
 	encoded, err := render.EncodeWebP(bitmap, width, height, webPQuality)
 	if err != nil {
@@ -184,23 +182,22 @@ func processZoom(ctx context.Context, control ControlClient, assignment Assignme
 	return nil
 }
 
-func renderAndUploadEagerPage(ctx context.Context, assignment Assignment, source []byte, page int, target pageUploads) error {
-	var bitmap []byte
-	var width, height int
-	var failureCode string
-	var err error
-	if assignment.MIMEType == "application/pdf" {
-		bitmap, width, height, failureCode, err = render.RenderPDFPage(source, page, standardEdge)
-		if err != nil {
-			return renderFailure{code: failureCode, err: err}
+func renderIsolatedEagerPage(ctx context.Context, executable, sourcePath, mimeType string, page int) ([]byte, int, int, error) {
+	return renderIsolatedBitmap(ctx, executable, sourcePath, mimeType, page, standardEdge)
+}
+
+func renderIsolatedBitmap(ctx context.Context, executable, sourcePath, mimeType string, page, target int) ([]byte, int, int, error) {
+	if mimeType == "application/pdf" {
+		if err := renderIsolatedPDFPage(ctx, executable, sourcePath, page, target); err != nil {
+			return nil, 0, 0, err
 		}
-	} else {
-		bitmap, width, height, err = decodeImageBGRA(source)
-		if err != nil {
-			return renderFailure{code: "corrupt", err: err}
-		}
+		return readRenderedPage(sourcePath, page, target)
 	}
-	return uploadEagerRenditions(ctx, target, bitmap, width, height)
+	prefix := renderedPrefix(sourcePath, 1, 0)
+	if err := runIsolatedChild(ctx, executable, "image", sourcePath, prefix); err != nil {
+		return nil, 0, 0, err
+	}
+	return readRenderedPage(sourcePath, 1, 0)
 }
 
 func uploadEagerRenditions(ctx context.Context, target pageUploads, bitmap []byte, width, height int) error {
@@ -230,13 +227,58 @@ func renderIsolatedPDFPage(ctx context.Context, executable, sourcePath string, p
 	prefix := renderedPrefix(sourcePath, page, target)
 	_ = os.Remove(prefix + ".raw")
 	_ = os.Remove(prefix + ".json")
-	command := exec.CommandContext(ctx, executable, sourcePath, prefix, strconv.Itoa(page), strconv.Itoa(target))
-	command.Env = append(os.Environ(), "RENDER_PAGE_MODE=1")
+	return runIsolatedChild(ctx, executable, "page", sourcePath, prefix, strconv.Itoa(page), strconv.Itoa(target))
+}
+
+func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
+	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	command := exec.CommandContext(childCtx, executable, args...)
+	environment := []string{"RENDER_CHILD_MODE=" + mode}
+	if libraryPath := os.Getenv("LD_LIBRARY_PATH"); libraryPath != "" {
+		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
+	}
+	command.Env = environment
+	configureIsolatedChild(command)
 	output, err := command.CombinedOutput()
+	if childCtx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)
+	}
 	if err != nil {
-		return fmt.Errorf("render page %d in isolated process: %w: %s", page, err, string(output))
+		message := strings.TrimSpace(string(output))
+		if len(message) > 160 {
+			message = message[:160]
+		}
+		return fmt.Errorf("isolated %s render failed: %s", mode, message)
 	}
 	return nil
+}
+
+func classifyIsolatedFailure(err error) string {
+	message := err.Error()
+	if strings.Contains(message, "password") || strings.Contains(message, "pdfium error 4") {
+		return "password_protected"
+	}
+	if strings.Contains(message, "exceed renderer bounds") || strings.Contains(message, "wall-clock") || strings.Contains(message, "memory") {
+		return "too_large"
+	}
+	return "corrupt"
+}
+
+func readInventory(prefix string) ([]map[string]int, error) {
+	encoded, err := os.ReadFile(prefix + ".inventory")
+	if err != nil {
+		return nil, err
+	}
+	var pages []map[string]int
+	if err := json.Unmarshal(encoded, &pages); err != nil {
+		return nil, err
+	}
+	_ = os.Remove(prefix + ".inventory")
+	if len(pages) == 0 {
+		return nil, fmt.Errorf("inventory child returned no pages")
+	}
+	return pages, nil
 }
 
 func readRenderedPage(sourcePath string, page, target int) ([]byte, int, int, error) {
@@ -273,35 +315,6 @@ func writeSource(source []byte) (string, func(), error) {
 		return "", func() {}, err
 	}
 	return path, func() { os.RemoveAll(directory) }, nil
-}
-
-func imageDimensions(source []byte) (int, int, error) {
-	config, _, err := image.DecodeConfig(bytes.NewReader(source))
-	return config.Width, config.Height, err
-}
-
-func decodeImageBGRA(source []byte) ([]byte, int, int, error) {
-	decoded, _, err := image.Decode(bytes.NewReader(source))
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	bounds := decoded.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
-	if width < 1 || height < 1 || width > 12000 || height > 12000 {
-		return nil, 0, 0, fmt.Errorf("invalid image dimensions %dx%d", width, height)
-	}
-	output := make([]byte, width*height*4)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			r, g, b, a := decoded.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
-			offset := (y*width + x) * 4
-			output[offset] = byte(b >> 8)
-			output[offset+1] = byte(g >> 8)
-			output[offset+2] = byte(r >> 8)
-			output[offset+3] = byte(a >> 8)
-		}
-	}
-	return output, width, height, nil
 }
 
 func finishFailure(ctx context.Context, control ControlClient, assignment Assignment, code string, cause error) error {
