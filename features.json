@@ -552,6 +552,21 @@
       ]
     },
     {
+      "name": "scheduled-episodes",
+      "summary": "Keeps the plan for a future Episode in a Space: when it is expected and who is expected. It never starts an Episode or admits anyone.",
+      "paths": [
+        "apps/api/db/migrations/20261125120000_scheduled_episodes.sql",
+        "apps/api/db/queries/scheduled_episodes.sql",
+        "apps/api/internal/adapters/postgres/scheduled_episode_harness_test.go",
+        "apps/api/internal/adapters/postgres/scheduled_episodes.go",
+        "apps/api/internal/adapters/postgres/scheduled_episodes_integration_test.go",
+        "apps/api/internal/adapters/postgres/sqlc/scheduled_episodes.sql.go",
+        "apps/api/internal/httpapi/scheduled_episodes.go",
+        "apps/api/internal/httpapi/scheduled_episodes_test.go",
+        "apps/api/internal/scheduledepisodes"
+      ]
+    },
+    {
       "name": "invite-codes",
       "summary": "Creates and accepts public Invite codes for joining a Space.",
       "paths": [

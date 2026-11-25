@@ -10928,6 +10928,484 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}": {
+      "delete": {
+        "description": "Cancels a Scheduled Episode. Answers 204 each time it is repeated, and also for an id that was never written: the id is then reserved as cancelled, so a delayed write of it is refused instead of bringing the booking back. A live Episode in the Space is not affected.",
+        "operationId": "cancelScheduledEpisode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheduled_episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["scheduled_episode.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["space.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Cancel scheduled episode",
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      },
+      "get": {
+        "description": "Reads a Scheduled Episode. A cancelled booking still answers, with status cancelled and the plan it had; an id that was never written, or only cancelled before it was written, answers not found.",
+        "operationId": "getScheduledEpisode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheduled_episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledEpisode"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["scheduled_episode.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["scheduled_episode.not_found", "space.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get scheduled episode",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
+      },
+      "put": {
+        "description": "Creates or replaces the plan for a future Episode in a Space. The caller picks the UUID in the path, and the body is the whole expectation: starts_at and expected_ends_at in any RFC 3339 offset, the expected participants and optional metadata. Repeating the same request changes nothing. A Scheduled Episode is a plan only: it never starts or ends an Episode, admits anyone or changes what the Space allows, and the clock never changes it. A cancelled booking cannot be written again.",
+        "operationId": "putScheduledEpisode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheduled_episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutScheduledEpisodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledEpisode"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "scheduled_episode.invalid_expected_participants", "scheduled_episode.invalid_id", "scheduled_episode.invalid_metadata", "scheduled_episode.invalid_schedule", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["space.not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["scheduled_episode.cancelled", "scheduled_episode.space_archived"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Put scheduled episode",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/telemetry": {
       "post": {
         "operationId": "uploadTelemetry",
@@ -16574,6 +17052,47 @@
         "required": ["arrival", "invite_link", "lifecycle_until", "space"],
         "type": "object"
       },
+      "PutScheduledEpisodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_ends_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "expected_participants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "identity_external_id": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "role": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["name"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "items": {},
+            "type": ["object", "array", "string", "number", "boolean", "null"]
+          },
+          "starts_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          }
+        },
+        "required": ["expected_ends_at", "starts_at"],
+        "type": "object"
+      },
       "Recording": {
         "additionalProperties": false,
         "properties": {
@@ -16962,6 +17481,73 @@
           }
         },
         "required": ["endpoint_id", "previous_secret_expires_at", "revision", "secret"],
+        "type": "object"
+      },
+      "ScheduledEpisode": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "expected_ends_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "expected_participants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "identity_external_id": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                }
+              },
+              "required": ["name"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "items": {},
+            "type": ["object", "array", "string", "number", "boolean", "null"]
+          },
+          "space_id": {
+            "$ref": "#/components/schemas/SpaceId"
+          },
+          "starts_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "$ref": "#/components/schemas/TenantId"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          }
+        },
+        "required": ["created_at", "expected_ends_at", "expected_participants", "id", "metadata", "space_id", "starts_at", "status", "tenant_id", "updated_at"],
         "type": "object"
       },
       "ScreenAnnotationHelperPairRequest": {

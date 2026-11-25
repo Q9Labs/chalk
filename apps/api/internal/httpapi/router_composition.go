@@ -30,6 +30,7 @@ func v1RouteGroups(options Options) []routeGroup {
 		recordingPreparationEndpoints(options.RecordingPreparations, options.TenantAuthz),
 		episodeLifecycleEndpoints(options.Spaces, options.Tenants, options.Episodes, options.SyncTokens, options.SyncTokenRefresh, options.ParticipantMediaIssuer, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.ParticipantGeneration, options.MediaPlane, options.TenantAuthz),
 		{getEpisodeTalkTimeEndpoint(options.EpisodeTalkTime, options.TenantAuthz)},
+		scheduledEpisodeEndpoints(options.ScheduledEpisodes, options.TenantAuthz),
 		recordingEndpoints(options.Recordings, options.RecordingExports, options.RecordingDownloads, options.TenantAuthz),
 		{getRecordingCapturePoolEndpoint(options.RecordingCapturePool, options.TenantAuthz)},
 		transcriptArtifactEndpoints(options.TranscriptArtifacts, options.RecordingObjects, options.RecordingDownloads, options.TenantAuthz),

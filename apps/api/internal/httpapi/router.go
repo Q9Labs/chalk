@@ -123,6 +123,7 @@ type Options struct {
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
 	ProblemReports         ProblemReportService
+	ScheduledEpisodes      ScheduledEpisodeService
 }
 
 func NewRouter(options Options) http.Handler {

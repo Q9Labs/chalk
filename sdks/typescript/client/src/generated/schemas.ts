@@ -1041,6 +1041,23 @@ export const PublicSpaceCreatedSchema = /* @__PURE__ */ (() =>
   }))();
 export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
 
+export const PutScheduledEpisodeRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expected_ends_at: DateTimeStringSchema,
+    expected_participants: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+          name: Schema.String.check(Schema.isMinLength(1)),
+          role: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        }),
+      ),
+    ),
+    metadata: Schema.optional(Schema.Unknown),
+    starts_at: DateTimeStringSchema,
+  }))();
+export type PutScheduledEpisodeRequest = typeof PutScheduledEpisodeRequestSchema.Type;
+
 export const RecordingExportSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     failure_code: Schema.optional(Schema.NullOr(Schema.String)),
@@ -1188,6 +1205,28 @@ export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
     secret: Schema.String,
   }))();
 export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
+
+export const ScheduledEpisodeSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cancelled_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    created_at: DateTimeStringSchema,
+    expected_ends_at: DateTimeStringSchema,
+    expected_participants: Schema.Array(
+      Schema.Struct({
+        identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+        name: Schema.String,
+        role: Schema.optional(Schema.String),
+      }),
+    ),
+    id: UUIDSchema,
+    metadata: Schema.Unknown,
+    space_id: SpaceIdSchema,
+    starts_at: DateTimeStringSchema,
+    status: Schema.String,
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type ScheduledEpisode = typeof ScheduledEpisodeSchema.Type;
 
 export const ScreenAnnotationHelperPairRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2582,6 +2621,22 @@ export const CancelEpisodeParticipantJoin429ResponseHeadersSchema = /* @__PURE__
   }))();
 export type CancelEpisodeParticipantJoin429ResponseHeaders = typeof CancelEpisodeParticipantJoin429ResponseHeadersSchema.Type;
 
+export const CancelScheduledEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    scheduled_episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CancelScheduledEpisodePathParams = typeof CancelScheduledEpisodePathParamsSchema.Type;
+
+export const CancelScheduledEpisode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CancelScheduledEpisode429ResponseHeaders = typeof CancelScheduledEpisode429ResponseHeadersSchema.Type;
+
 export const CancelSpaceRecordingPreparationPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     space_id: SpaceIdSchema,
@@ -3064,6 +3119,25 @@ export type GetRecordingCapturePoolPathParams = typeof GetRecordingCapturePoolPa
 
 export const GetRecordingCapturePoolResponseSchema = /* @__PURE__ */ (() => RecordingCapturePoolSchema)();
 export type GetRecordingCapturePoolResponse = typeof GetRecordingCapturePoolResponseSchema.Type;
+
+export const GetScheduledEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    scheduled_episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetScheduledEpisodePathParams = typeof GetScheduledEpisodePathParamsSchema.Type;
+
+export const GetScheduledEpisodeResponseSchema = /* @__PURE__ */ (() => ScheduledEpisodeSchema)();
+export type GetScheduledEpisodeResponse = typeof GetScheduledEpisodeResponseSchema.Type;
+
+export const GetScheduledEpisode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetScheduledEpisode429ResponseHeaders = typeof GetScheduledEpisode429ResponseHeadersSchema.Type;
 
 export const GetSpacePathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3745,6 +3819,28 @@ export const PrepareSpaceRecording429ResponseHeadersSchema = /* @__PURE__ */ (()
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type PrepareSpaceRecording429ResponseHeaders = typeof PrepareSpaceRecording429ResponseHeadersSchema.Type;
+
+export const PutScheduledEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    scheduled_episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type PutScheduledEpisodePathParams = typeof PutScheduledEpisodePathParamsSchema.Type;
+
+export const PutScheduledEpisodeRequestBodySchema = /* @__PURE__ */ (() => PutScheduledEpisodeRequestSchema)();
+export type PutScheduledEpisodeRequestBody = typeof PutScheduledEpisodeRequestBodySchema.Type;
+
+export const PutScheduledEpisodeResponseSchema = /* @__PURE__ */ (() => ScheduledEpisodeSchema)();
+export type PutScheduledEpisodeResponse = typeof PutScheduledEpisodeResponseSchema.Type;
+
+export const PutScheduledEpisode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type PutScheduledEpisode429ResponseHeaders = typeof PutScheduledEpisode429ResponseHeadersSchema.Type;
 
 export const RedeliverWebhookDeliveryPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -5650,6 +5746,139 @@ export const RequestRateLimitedErrorSchema = RequestRateLimitedErrorWireSchema.p
   }),
 );
 
+export class ScheduledEpisodeCancelledError extends Schema.TaggedErrorClass<ScheduledEpisodeCancelledError>()("ScheduledEpisodeCancelledError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.cancelled"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeCancelledErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.cancelled"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeCancelledErrorSchema = ScheduledEpisodeCancelledErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeCancelledError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeCancelledError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeInvalidExpectedParticipantsError extends Schema.TaggedErrorClass<ScheduledEpisodeInvalidExpectedParticipantsError>()("ScheduledEpisodeInvalidExpectedParticipantsError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_expected_participants"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeInvalidExpectedParticipantsErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_expected_participants"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeInvalidExpectedParticipantsErrorSchema = ScheduledEpisodeInvalidExpectedParticipantsErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeInvalidExpectedParticipantsError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeInvalidExpectedParticipantsError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeInvalidIdError extends Schema.TaggedErrorClass<ScheduledEpisodeInvalidIdError>()("ScheduledEpisodeInvalidIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeInvalidIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_id"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeInvalidIdErrorSchema = ScheduledEpisodeInvalidIdErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeInvalidIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeInvalidIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeInvalidMetadataError extends Schema.TaggedErrorClass<ScheduledEpisodeInvalidMetadataError>()("ScheduledEpisodeInvalidMetadataError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_metadata"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeInvalidMetadataErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_metadata"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeInvalidMetadataErrorSchema = ScheduledEpisodeInvalidMetadataErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeInvalidMetadataError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeInvalidMetadataError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeInvalidScheduleError extends Schema.TaggedErrorClass<ScheduledEpisodeInvalidScheduleError>()("ScheduledEpisodeInvalidScheduleError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_schedule"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeInvalidScheduleErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.invalid_schedule"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeInvalidScheduleErrorSchema = ScheduledEpisodeInvalidScheduleErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeInvalidScheduleError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeInvalidScheduleError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeNotFoundError extends Schema.TaggedErrorClass<ScheduledEpisodeNotFoundError>()("ScheduledEpisodeNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.not_found"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeNotFoundErrorSchema = ScheduledEpisodeNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ScheduledEpisodeSpaceArchivedError extends Schema.TaggedErrorClass<ScheduledEpisodeSpaceArchivedError>()("ScheduledEpisodeSpaceArchivedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.space_archived"),
+    message: Schema.String,
+  }),
+}) {}
+export const ScheduledEpisodeSpaceArchivedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("scheduled_episode.space_archived"),
+    message: Schema.String,
+  }),
+});
+export const ScheduledEpisodeSpaceArchivedErrorSchema = ScheduledEpisodeSpaceArchivedErrorWireSchema.pipe(
+  Schema.decodeTo(ScheduledEpisodeSpaceArchivedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ScheduledEpisodeSpaceArchivedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class ServiceInternalError extends Schema.TaggedErrorClass<ServiceInternalError>()("ServiceInternalError", {
   error: Schema.Struct({
     code: Schema.Literal("service.internal_error"),
@@ -6710,6 +6939,19 @@ export const CancelEpisodeParticipantJoinErrorSchema = Schema.Union([
 ]);
 export type CancelEpisodeParticipantJoinError = typeof CancelEpisodeParticipantJoinErrorSchema.Type;
 
+export const CancelScheduledEpisodeErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ScheduledEpisodeInvalidIdErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type CancelScheduledEpisodeError = typeof CancelScheduledEpisodeErrorSchema.Type;
+
 export const CancelSpaceRecordingPreparationErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7078,6 +7320,20 @@ export type GetRecordingCapturePoolError = typeof GetRecordingCapturePoolErrorSc
 
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
+
+export const GetScheduledEpisodeErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ScheduledEpisodeInvalidIdErrorSchema,
+  ScheduledEpisodeNotFoundErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetScheduledEpisodeError = typeof GetScheduledEpisodeErrorSchema.Type;
 
 export const GetSpaceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetSpaceError = typeof GetSpaceErrorSchema.Type;
@@ -7481,6 +7737,26 @@ export const PrepareSpaceRecordingErrorSchema = Schema.Union([
 ]);
 export type PrepareSpaceRecordingError = typeof PrepareSpaceRecordingErrorSchema.Type;
 
+export const PutScheduledEpisodeErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ScheduledEpisodeCancelledErrorSchema,
+  ScheduledEpisodeInvalidExpectedParticipantsErrorSchema,
+  ScheduledEpisodeInvalidIdErrorSchema,
+  ScheduledEpisodeInvalidMetadataErrorSchema,
+  ScheduledEpisodeInvalidScheduleErrorSchema,
+  ScheduledEpisodeSpaceArchivedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type PutScheduledEpisodeError = typeof PutScheduledEpisodeErrorSchema.Type;
+
 export const RedeliverWebhookDeliveryErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7880,6 +8156,7 @@ export const ChalkOperationPolicies = {
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelEpisodeParticipantJoin: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  cancelScheduledEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7902,6 +8179,7 @@ export const ChalkOperationPolicies = {
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeTalkTime: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getScheduledEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
@@ -7928,6 +8206,7 @@ export const ChalkOperationPolicies = {
   preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceEntrance: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  putScheduledEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rememberScreenAnnotationHelperDevice: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

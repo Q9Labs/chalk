@@ -42,6 +42,61 @@ The first line contains the Space title, UTC recording start date, and recording
 
 The existing `/document` and `/download-url` routes remain JSON APIs with unchanged behavior. The text export exposes the same validated reader fields as `/document`, not provider metadata or raw storage objects. Incomplete transcripts return `409`. Download the attachment with a normal HTTP client to retain its streaming body and filename; this non-JSON route is not included in the generated JSON client or the TypeScript server SDK.
 
+### Schedule an Episode
+
+A Scheduled Episode records that an Episode is expected in a Space: when, and who. It is a plan kept for the caller. It does not start or end an Episode, admit anyone, or change what the Space allows. Use these three operations on `/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}`:
+
+- `putScheduledEpisode` (`PUT`) with `episodes:write` creates the booking or replaces its whole plan. It answers `200` with the booking both times.
+- `getScheduledEpisode` (`GET`) with `episodes:read` reads it.
+- `cancelScheduledEpisode` (`DELETE`) with `episodes:write` cancels it and answers `204`.
+
+Authenticate with a Tenant API key. The key's Tenant must match `tenant_id`, and the Space must belong to that Tenant, or the call fails with `403` or `space.not_found`. The `scheduled_episode_id` is a UUID that you choose. It is unique within its Space and never changes, so one id in two Spaces is two bookings. There is no list operation: keep your own record of the ids you booked.
+
+The `PUT` body replaces the whole plan, so anything you leave out is cleared:
+
+```json
+{
+  "starts_at": "2027-03-01T10:00:00+04:00",
+  "expected_ends_at": "2027-03-01T11:30:00+04:00",
+  "expected_participants": [
+    { "name": "Ada", "role": "host", "identity_external_id": "ada-1" },
+    { "name": "Guest" }
+  ],
+  "metadata": { "booking": "b-1" }
+}
+```
+
+- `starts_at` and `expected_ends_at` are required RFC 3339 times with an offset. Chalk stores and returns them in UTC at microsecond precision. The end must be after the start, and the plan can be at most 7 days long, the same as the longest Space allows. Chalk never compares them with the clock, so a plan in the past is accepted like any other.
+- `expected_participants` is optional and holds up to 200 entries. `name` is required (up to 256 bytes), `role` is optional (up to 128 bytes), and `identity_external_id` is optional (up to 256 bytes) and unique within the booking. Anyone listed here is only a note: it gives them no access.
+- `metadata` is optional and must be a JSON object of at most 8 KiB.
+- Unknown fields are rejected.
+
+The response carries `id`, `tenant_id`, `space_id`, `status` (`scheduled` or `cancelled`), `starts_at`, `expected_ends_at`, `expected_participants`, `metadata`, `cancelled_at`, `created_at` and `updated_at`.
+
+Errors:
+
+| Status | Code                                              | Meaning                                                                               |
+| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 400    | `scheduled_episode.invalid_id`                    | The booking id is not a UUID.                                                         |
+| 400    | `scheduled_episode.invalid_schedule`              | A time is missing, the end is not after the start, or the plan is longer than 7 days. |
+| 400    | `scheduled_episode.invalid_expected_participants` | A participant is missing a name, repeats an identity, or exceeds a limit.             |
+| 400    | `scheduled_episode.invalid_metadata`              | Metadata is not a JSON object or is too large.                                        |
+| 404    | `space.not_found`                                 | The Space does not exist in this Tenant.                                              |
+| 404    | `scheduled_episode.not_found`                     | `GET` found no booking with that id.                                                  |
+| 409    | `scheduled_episode.cancelled`                     | `PUT` named a booking that was cancelled.                                             |
+| 409    | `scheduled_episode.space_archived`                | `PUT` named an archived Space.                                                        |
+
+**Duplicate and stale delivery.** `PUT` is safe to retry. Sending the same plan again returns the stored booking and leaves `updated_at` alone. Sending a different plan replaces the stored one, and the last write to arrive wins. Chalk keeps no revision number, so a caller that can deliver out of order must serialize its writes for one booking, and treat the booking id as permanent.
+
+`DELETE` is safe to retry and always answers `204` for a Space in the Tenant, including for an id that was never written. The first cancel sets `cancelled_at` and later ones leave it alone. A cancelled booking keeps its plan, so `GET` still shows it with `status` `cancelled`. Cancellation is permanent: a later `PUT` for the same id, such as a delayed retry that arrives after the cancel, answers `409 scheduled_episode.cancelled` and changes nothing. To book again, use a new id. Cancelling an id that was never written reserves it the same way, so a `PUT` that overtakes its own cancel cannot bring the booking back, and a `GET` for that id answers `404`. Chalk keeps these records and does not expire them. Archiving a Space stops new plans for it with `409`, while `GET` and `DELETE` still work.
+
+**What a Scheduled Episode does not do.**
+
+- It never starts or ends an Episode. Nothing happens when the start or end time passes, and no Episode is ever created from a plan.
+- It never admits anyone or changes access. Join codes, invites, Capabilities and the Space's configuration are unchanged, and a name in `expected_participants` is not a grant.
+- It does not change the rule of one live Episode per Space, and bookings may overlap each other and any live Episode.
+- It is not checked against the clock, so Chalk never rejects, expires or completes a booking because of the time.
+
 ### Use generated clients carefully
 
 The TypeScript client has generated HTTP and schema modules for server-side use. Keep Tenant credentials and webhook management on the server. For a live Space, use `SpaceClient` and its AccessGrant boundary instead of issuing Participant media or Sync requests directly.
