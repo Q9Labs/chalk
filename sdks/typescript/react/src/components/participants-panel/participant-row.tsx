@@ -149,6 +149,7 @@ export function ParticipantRow({
           ) : null}
         </div>
         {subLine ? <div className="call-person-sub">{subLine}</div> : null}
+        {participant.description ? <div className="call-person-sub">{participant.description}</div> : null}
       </div>
 
       <PersonStateSlots participant={participant} handNumber={handNumber} />

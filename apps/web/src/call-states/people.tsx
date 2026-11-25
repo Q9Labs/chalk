@@ -12,7 +12,7 @@ const SMALL: readonly Person[] = [
   { ...akash, handRaised: true },
   { ...sofia, microphone: false, camera: false },
 ];
-const SMALL_WITH_AGENT: readonly Person[] = [SMALL[0]!, { ...SMALL[1]!, agent: true }, SMALL[2]!];
+const SMALL_WITH_AGENT: readonly Person[] = [SMALL[0]!, { ...SMALL[1]!, agent: true, description: "AI teammate" }, SMALL[2]!];
 const BIG: readonly Person[] = [
   { ...nora, host: true, speaking: true },
   { ...akash, handRaised: true, sharing: true },

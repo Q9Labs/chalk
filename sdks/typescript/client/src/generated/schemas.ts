@@ -3,6 +3,7 @@
 import { Schema, SchemaGetter } from "effect";
 
 export const ChalkCodePointLimits = {
+  "AdmitEpisodeParticipantRequest.description": 80,
   "CreateSpaceRequest.name": 120,
   "CreateTenantRequest.external_id": 512,
   "ProblemReportRequest.description": 1000,
@@ -124,6 +125,7 @@ export type AccessGrant = typeof AccessGrantSchema.Type;
 export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission: Schema.optional(Schema.Literals(["policy", "direct"])),
+    description: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 80))),
     identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
     identity_id: Schema.optional(UUIDSchema),
     identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
@@ -923,6 +925,7 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
     ),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: ParticipantIdSchema,
@@ -950,6 +953,7 @@ export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
     }),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: UUIDSchema,
@@ -5386,6 +5390,25 @@ export const ParticipantConnectionSupersededErrorSchema = ParticipantConnectionS
   }),
 );
 
+export class ParticipantDescriptionForbiddenError extends Schema.TaggedErrorClass<ParticipantDescriptionForbiddenError>()("ParticipantDescriptionForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantDescriptionForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantDescriptionForbiddenErrorSchema = ParticipantDescriptionForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantDescriptionForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantDescriptionForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class ParticipantGenerationMismatchError extends Schema.TaggedErrorClass<ParticipantGenerationMismatchError>()("ParticipantGenerationMismatchError", {
   error: Schema.Struct({
     code: Schema.Literal("participant.generation_mismatch"),
@@ -6898,6 +6921,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   IdentityKindForbiddenErrorSchema,
   MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
+  ParticipantDescriptionForbiddenErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,

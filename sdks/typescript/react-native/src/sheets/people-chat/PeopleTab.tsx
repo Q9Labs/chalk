@@ -243,20 +243,29 @@ const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, can
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <ChalkText accessibilityLabel={status ? `${participant.displayName}, ${status}` : participant.displayName} numberOfLines={1} style={styles.name} variant="bodyMedium">
-        {participant.displayName}
-        {isSelf ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  (You)"}
+      <View style={styles.who}>
+        <View style={styles.nameLine}>
+          <ChalkText accessibilityLabel={status ? `${participant.displayName}, ${status}` : participant.displayName} numberOfLines={1} style={styles.name} variant="bodyMedium">
+            {participant.displayName}
+            {isSelf ? (
+              <ChalkText tone="textMuted" variant="meta">
+                {"  (You)"}
+              </ChalkText>
+            ) : null}
+            {host ? (
+              <ChalkText tone="textMuted" variant="meta">
+                {"  Host"}
+              </ChalkText>
+            ) : null}
+          </ChalkText>
+          {participant.identityKind === "agent" ? <AIBadge testID={`people.ai.${participant.participantId}`} /> : null}
+        </View>
+        {participant.description ? (
+          <ChalkText numberOfLines={1} style={styles.description} testID={`people.description.${participant.participantId}`} tone="textMuted" variant="meta">
+            {participant.description}
           </ChalkText>
         ) : null}
-        {host ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  Host"}
-          </ChalkText>
-        ) : null}
-      </ChalkText>
-      {participant.identityKind === "agent" ? <AIBadge testID={`people.ai.${participant.participantId}`} /> : null}
+      </View>
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />
@@ -325,7 +334,10 @@ const styles = StyleSheet.create({
   none: { paddingVertical: space[4], paddingHorizontal: space[2] },
   row: { flexDirection: "row", alignItems: "center", gap: space["2-5"], minHeight: 52, paddingLeft: space[2], paddingRight: space[1], borderRadius: corners.xl },
   handRow: { gap: space[2] },
-  name: { flex: 1 },
+  who: { flex: 1 },
+  nameLine: { flexDirection: "row", alignItems: "center", gap: space["1-5"] },
+  name: { flexShrink: 1 },
+  description: { marginTop: space["0-5"] },
   handNumber: { width: 20, height: 20, borderRadius: corners.pill, alignItems: "center", justifyContent: "center", backgroundColor: fixed.hand },
   status: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
   // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step

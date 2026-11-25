@@ -7,7 +7,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
   alias ChalkSync.ProtocolV1
 
   @off_reason_keys ["off_reason", "off_revision"]
-  @participant_detail_keys ["identity_kind"]
+  @participant_detail_keys ["identity_kind", "description"]
 
   def encode_with_context(state, encoded) when is_binary(encoded) do
     encode_with_context(state, JSON.decode!(encoded))

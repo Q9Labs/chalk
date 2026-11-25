@@ -1091,13 +1091,25 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_participant?(%{"participant_id" => id, "display_name" => name,
       "hand_raised" => raised, "admission_revision" => admission_revision, "role" => role,
       "capabilities" => capabilities} = participant, role_capabilities) do
-    exact_keys?(participant, ["participant_id", "display_name", "hand_raised",
-        "admission_revision", "role", "capabilities"] ++ Enum.filter(["identity_kind"],
-        &Map.has_key?(participant, &1))) and valid_uuid?(id) and bounded_string?(name, 1,
-        256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and
-        bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role) and
-        (not Map.has_key?(participant, "identity_kind") or
-        participant["identity_kind"] in ["user", "agent", "guest"])
+    exact_keys?(participant, [
+  "participant_id",
+  "display_name",
+  "hand_raised",
+  "admission_revision",
+  "role",
+  "capabilities"
+] ++ Enum.filter([
+  "identity_kind",
+  "description"
+], &Map.has_key?(participant, &1))) and valid_uuid?(id) and bounded_string?(name, 1, 256) and
+    is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role,
+    1, 64) and capabilities == Map.get(role_capabilities, role) and
+    (not Map.has_key?(participant, "identity_kind") or participant["identity_kind"] in [
+  "user",
+  "agent",
+  "guest"
+]) and (not Map.has_key?(participant, "description") or
+    bounded_string?(participant["description"], 1, 320))
   end
   defp valid_participant?(_participant, _role_capabilities), do: false
 
@@ -1169,7 +1181,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "role",
   "admission_revision"
 ] ++ Enum.filter([
-  "identity_kind"
+  "identity_kind",
+  "description"
 ], &Map.has_key?(payload, &1))) and valid_uuid?(participant_id) and bounded_string?(display_name,
     1, 256) and bounded_string?(role, 1, 64) and role != "" and role == String.trim(role) and
     valid_positive_integer?(admission_revision) and (not Map.has_key?(payload,
@@ -1177,7 +1190,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "user",
   "agent",
   "guest"
-])
+]) and (not Map.has_key?(payload, "description") or bounded_string?(payload["description"], 1,
+    320))
   end
 
   defp valid_event_payload?("participant_left", %{"participant_id" => participant_id,

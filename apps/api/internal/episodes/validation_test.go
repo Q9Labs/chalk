@@ -2,6 +2,7 @@ package episodes
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -65,6 +66,32 @@ func TestPrepareAdmissionInputIdentityKind(t *testing.T) {
 	})
 }
 
+func TestPrepareAdmissionInputDescription(t *testing.T) {
+	t.Run("accepts eighty Unicode characters", func(t *testing.T) {
+		input := admissionInputForTest(t)
+		input.Description = strings.Repeat("å", 80)
+		if err := prepareAdmissionInput(&input); err != nil {
+			t.Fatalf("prepare description: %v", err)
+		}
+	})
+
+	for name, description := range map[string]string{
+		"eighty-one characters": strings.Repeat("a", 81),
+		"leading space":         " AI teammate",
+		"trailing space":        "AI teammate ",
+		"line break":            "AI\nteammate",
+		"control character":     "AI\tteammate",
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			input := admissionInputForTest(t)
+			input.Description = description
+			if err := prepareAdmissionInput(&input); !errors.Is(err, ErrInvalidParticipantDescription) {
+				t.Fatalf("prepare description = %v, want invalid participant description", err)
+			}
+		})
+	}
+}
+
 func TestAdmissionFingerprintIdentityKindCompatibility(t *testing.T) {
 	omitted := admissionInputForTest(t)
 	explicitUser := omitted
@@ -83,5 +110,14 @@ func TestAdmissionFingerprintIdentityKindCompatibility(t *testing.T) {
 	}
 	if agent.Request.Fingerprint == omitted.Request.Fingerprint {
 		t.Fatal("agent kind must change the idempotency fingerprint")
+	}
+
+	described := omitted
+	described.Description = "AI teammate"
+	if err := prepareAdmissionInput(&described); err != nil {
+		t.Fatalf("prepare described admission: %v", err)
+	}
+	if described.Request.Fingerprint == omitted.Request.Fingerprint {
+		t.Fatal("description must change the idempotency fingerprint")
 	}
 }

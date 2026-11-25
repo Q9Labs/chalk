@@ -136,14 +136,15 @@ describe("V1SyncClient", () => {
     expect(unprovenSettled).toBe(false);
     expect(await store.load()).toHaveLength(2);
   });
-  it("keeps participant identity kind as additive metadata outside the control digest", async () => {
+  it("keeps participant details as additive metadata outside the control digest", async () => {
     const base = stateWithPeer("collaborator");
-    const detailed = { ...base, participants: base.participants.map((participant) => (participant.participantId === peerId ? { ...participant, identityKind: "agent" as const } : participant)) };
+    const detailed = { ...base, participants: base.participants.map((participant) => (participant.participantId === peerId ? { ...participant, identityKind: "agent" as const, description: "AI teammate" } : participant)) };
     expect(await computeV1StateDigest(detailed)).toBe(await computeV1StateDigest(base));
 
     const wire = await wireSnapshot(detailed);
     const decoded = snapshotToState(wire);
     expect(decoded.participants.find((participant) => participant.participantId === peerId)?.identityKind).toBe("agent");
+    expect(decoded.participants.find((participant) => participant.participantId === peerId)?.description).toBe("AI teammate");
     expect(await computeV1StateDigest(decoded)).toBe(await computeV1StateDigest(base));
   });
 });

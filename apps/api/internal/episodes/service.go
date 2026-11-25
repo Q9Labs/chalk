@@ -19,6 +19,7 @@ var (
 	ErrInvalidParticipantID               = errors.New("invalid episode participant id")
 	ErrInvalidParticipantGeneration       = errors.New("invalid episode participant generation")
 	ErrInvalidParticipantName             = errors.New("invalid episode participant name")
+	ErrInvalidParticipantDescription      = errors.New("invalid participant description")
 	ErrInvalidIdentityMode                = errors.New("invalid episode participant identity mode")
 	ErrIdentityKindConflict               = errors.New("episode participant identity kind conflicts with the registered identity")
 	ErrInvalidAdmissionPolicy             = errors.New("invalid episode admission policy")
@@ -251,6 +252,7 @@ type AdmitParticipantInput struct {
 	EpisodeID          utilities.ID
 	ParticipantID      utilities.ID
 	Name               string
+	Description        string
 	Metadata           json.RawMessage
 	Role               string
 	IdentityID         utilities.ID
@@ -308,6 +310,7 @@ type Participant struct {
 	AccountID    utilities.ID
 	IdentityID   utilities.ID
 	Role         string
+	Description  string
 	Capabilities []string
 	Generation   int64
 	Status       string

@@ -114,6 +114,21 @@ func TestAdmitParticipantAgentKindRequiresBackendCredential(t *testing.T) {
 		}
 	})
 
+	t.Run("session collaborator cannot set a description", func(t *testing.T) {
+		probe := newProbe()
+		principal := authentication.Principal{Kind: authentication.PrincipalUser, UserID: mustID(t, "77777777-7777-4777-8777-777777777777")}
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"name":"Akash Rao","role":"collaborator","description":"AI teammate"}`))
+		request.Header.Set(idempotencyKeyHeader, "admission-request-1")
+		response := httptest.NewRecorder()
+		admissionRouter(probe, principal).ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"participant.description_forbidden"`) {
+			t.Fatalf("status/body = %d %s, want participant.description_forbidden 403", response.Code, response.Body.String())
+		}
+		if probe.calls != 0 {
+			t.Fatal("forbidden session description reached the service")
+		}
+	})
+
 	for _, tc := range []struct {
 		name      string
 		principal authentication.Principal
@@ -130,7 +145,7 @@ func TestAdmitParticipantAgentKindRequiresBackendCredential(t *testing.T) {
 			if response.Code != http.StatusCreated {
 				t.Fatalf("status = %d, want 201: %s", response.Code, response.Body.String())
 			}
-			if probe.calls != 1 || probe.input.IdentityKind != episodes.IdentityKindAgent {
+			if probe.calls != 1 || probe.input.IdentityKind != episodes.IdentityKindAgent || probe.input.Description != "" {
 				t.Fatalf("service calls/kind = %d %q", probe.calls, probe.input.IdentityKind)
 			}
 		})

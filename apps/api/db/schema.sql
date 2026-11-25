@@ -566,6 +566,7 @@ create table episode_create_requests (
 create table participants (
     id uuid primary key,
     name text,
+    description text,
     metadata jsonb,
     capabilities text[] not null,
     tenant_id uuid not null references tenants(id),

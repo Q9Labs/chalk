@@ -55,7 +55,7 @@ defmodule ChalkSync.Live.ParticipantDetailsPostgresTest do
 
     Postgrex.query!(
       connection,
-      "update participants set identity_id=$2 where tenant_id=$1 and id=$3",
+      "update participants set identity_id=$2, description='AI teammate' where tenant_id=$1 and id=$3",
       [
         UUID.dump!(fixture.episode.tenant_id),
         UUID.dump!(identity_id),
@@ -66,11 +66,13 @@ defmodule ChalkSync.Live.ParticipantDetailsPostgresTest do
     {detailed_welcome, detailed} = session(port, "/v1/sync?participant_details=1", host)
     assert detailed_welcome["participant_details"] == true
     assert participant_kind(detailed_welcome, host) == "agent"
+    assert participant(detailed_welcome, host)["description"] == "AI teammate"
     Client.close_tcp(detailed)
 
     {legacy_welcome, legacy} = session(port, "/v1/sync", host)
     refute Map.has_key?(legacy_welcome, "participant_details")
     refute participant(legacy_welcome, host)["identity_kind"]
+    refute participant(legacy_welcome, host)["description"]
     Client.close_tcp(legacy)
   end
 

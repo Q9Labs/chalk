@@ -551,7 +551,7 @@ function strictSnapshot(value: unknown): boolean {
     !isObject(value.role_capabilities) ||
     (value.recording !== null && !exactObject(value.recording, ["recording_id", "status", "failure_code"])) ||
     !Array.isArray(value.participants) ||
-    !value.participants.every((participant) => exactObjectWithOptional(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind"])) ||
+    !value.participants.every((participant) => exactObjectWithOptional(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind", "description"])) ||
     !Array.isArray(value.admission_requests) ||
     !value.admission_requests.every((request) => exactObject(request, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]))
   )
@@ -579,7 +579,7 @@ function strictEvent(value: Record<string, unknown>): boolean {
   const common = ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"];
   switch (value.name) {
     case "participant_joined":
-      return exactObjectWithOptional(value.payload, ["participant_id", "display_name", "role", "admission_revision"], ["identity_kind"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "display_name", "role", "admission_revision"], ["identity_kind", "description"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "participant_left":
       return exactObjectWithOptional(value.payload, ["participant_id", "reason"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "episode_started":
@@ -812,11 +812,12 @@ export const ParticipantSchema = Schema.Struct({
   admission_revision: PositiveIntegerSchema,
   role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))),
   identity_kind: Schema.optional(Schema.Union([Schema.Literal("user"), Schema.Literal("agent"), Schema.Literal("guest")])),
+  description: Schema.optional(boundedUtf8String(320, 1)),
   capabilities: Schema.Array(CapabilitySchema).check(
     Schema.isMaxLength(23),
     Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique capabilities" })),
   ),
-}).check(exactKeysWithOptional(["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind"]));
+}).check(exactKeysWithOptional(["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind", "description"]));
 export const AdmissionRequestSchema = Schema.Struct({ admission_request_id: UuidSchema, participant_id: UuidSchema, display_name: boundedUtf8String(256, 1), role: RoleSchema, expires_at_ms: PositiveIntegerSchema }).check(
   exactKeys(["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]),
 );
@@ -981,6 +982,7 @@ const ParticipantJoinedLifecycleIntentIdEventVariantSchema = Schema.Struct({
     display_name: boundedUtf8String(256, 1),
     role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))),
     identity_kind: Schema.optional(Schema.Union([Schema.Literal("user"), Schema.Literal("agent"), Schema.Literal("guest")])),
+    description: Schema.optional(boundedUtf8String(320, 1)),
     admission_revision: PositiveIntegerSchema,
   }),
   lifecycle_intent_id: UuidSchema,

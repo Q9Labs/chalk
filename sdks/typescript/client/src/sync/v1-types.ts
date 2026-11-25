@@ -45,6 +45,7 @@ export type V1Participant = {
   readonly handRaised: boolean;
   readonly admissionRevision: number;
   readonly identityKind?: V1IdentityKind;
+  readonly description?: string;
   readonly role: V1Role;
   readonly eligibleRoles: readonly V1Role[];
   readonly capabilities: readonly V1Capability[];

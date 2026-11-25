@@ -82,6 +82,7 @@ defmodule ChalkSync.SyncPostgres do
           display_name: "Participant #{index}",
           capabilities: capabilities,
           role: role,
+          description: Map.get(participant, :description),
           admission_lifecycle_intent_id:
             Map.get_lazy(participant, :admission_lifecycle_intent_id, &UUID.generate/0)
         }

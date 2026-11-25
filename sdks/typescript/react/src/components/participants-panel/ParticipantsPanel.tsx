@@ -16,6 +16,7 @@ export interface ParticipantListParticipant {
   id: string;
   displayName: string;
   identityKind?: "user" | "agent" | "guest";
+  description?: string;
   deviceHint?: string;
   role?: string;
   /** Whether the participant has the endEpisode capability. */
@@ -226,6 +227,7 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
         id: participant.participantId,
         displayName: participant.displayName,
         ...(participant.identityKind === undefined ? {} : { identityKind: participant.identityKind }),
+        ...(participant.description === undefined ? {} : { description: participant.description }),
         deviceHint: deviceHint(participant, participantsSlice.roster),
         role: participant.role,
         isHost: participant.capabilities.includes("endEpisode"),

@@ -65,6 +65,7 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
       handRaised: participant.hand_raised,
       admissionRevision: participant.admission_revision,
       ...(participant.identity_kind === undefined ? {} : { identityKind: participant.identity_kind }),
+      ...(participant.description === undefined ? {} : { description: participant.description }),
       role: participant.role,
       // The canonical wire contract carries one requested/assigned role. Keep
       // the former list-shaped alias for consumers that still render it.
@@ -231,6 +232,7 @@ function participantFromJoin(state: V1ControlState, payload: Extract<EventFrame,
     handRaised: false,
     admissionRevision: payload.admission_revision,
     ...(payload.identity_kind === undefined ? {} : { identityKind: payload.identity_kind }),
+    ...(payload.description === undefined ? {} : { description: payload.description }),
     role: payload.role,
     eligibleRoles: [payload.role],
     capabilities: [...capabilities],

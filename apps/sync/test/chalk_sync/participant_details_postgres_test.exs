@@ -43,7 +43,7 @@ defmodule ChalkSync.ParticipantDetailsPostgresTest do
 
     Postgrex.query!(
       connection,
-      "update participants set identity_id=$2 where tenant_id=$1 and id=$3",
+      "update participants set identity_id=$2, description='AI teammate' where tenant_id=$1 and id=$3",
       [
         UUID.dump!(fixture.episode.tenant_id),
         UUID.dump!(identity_id),
@@ -55,6 +55,7 @@ defmodule ChalkSync.ParticipantDetailsPostgresTest do
              Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert decision.event.payload["identity_kind"] == "agent"
+    assert decision.event.payload["description"] == "AI teammate"
 
     [[stored_payload, folded_state]] =
       Postgrex.query!(
@@ -95,13 +96,17 @@ defmodule ChalkSync.ParticipantDetailsPostgresTest do
            ]
 
     refute Map.has_key?(stored_payload, "identity_kind")
+    refute Map.has_key?(stored_payload, "description")
     refute Map.has_key?(stored_participant, "identity_kind")
+    refute Map.has_key?(stored_participant, "description")
 
     assert {:ok, recovery} = Postgres.recover_episode(fixture.episode, nil)
     [wire_participant] = recovery.snapshot["participants"]
     assert wire_participant["identity_kind"] == "agent"
+    assert wire_participant["description"] == "AI teammate"
 
     assert {:ok, [replayed]} = Postgres.recovery_page(fixture.episode, 0, decision.revision)
     assert replayed.payload["identity_kind"] == "agent"
+    assert replayed.payload["description"] == "AI teammate"
   end
 end

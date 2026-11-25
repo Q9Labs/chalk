@@ -37,3 +37,10 @@ func optionalTimestampString(value *time.Time) *string {
 	formatted := utilities.FormatTimestamp(*value)
 	return &formatted
 }
+
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}

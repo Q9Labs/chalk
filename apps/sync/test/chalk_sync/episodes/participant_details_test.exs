@@ -44,12 +44,19 @@ defmodule ChalkSync.Episodes.ParticipantDetailsTest do
                :participant_joined,
                Map.put(@join, "identity_kind", "agent")
              )
+
+    assert {:error, :invalid_payload} =
+             Reducer.apply_lifecycle(
+               state,
+               :participant_joined,
+               Map.put(@join, "description", "AI teammate")
+             )
   end
 
   test "durable participant identity details overlay wire snapshots and join events" do
     state = Reducer.new("episode", %{})
     {:ok, event, next} = Reducer.apply_lifecycle(state, :participant_joined, @join)
-    details = %{@participant_id => %{"identity_kind" => "agent"}}
+    details = %{@participant_id => %{"identity_kind" => "agent", "description" => "AI teammate"}}
 
     [participant] =
       next
@@ -58,7 +65,12 @@ defmodule ChalkSync.Episodes.ParticipantDetailsTest do
       |> Map.fetch!("participants")
 
     assert participant["identity_kind"] == "agent"
+    assert participant["description"] == "AI teammate"
     assert ParticipantDetails.overlay_event(event, details).payload["identity_kind"] == "agent"
+
+    assert ParticipantDetails.overlay_event(event, details).payload["description"] ==
+             "AI teammate"
+
     assert Reducer.digest(next) == Reducer.digest(next)
   end
 end

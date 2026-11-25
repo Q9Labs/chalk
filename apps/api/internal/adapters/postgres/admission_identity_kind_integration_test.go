@@ -66,17 +66,21 @@ func TestAdmissionIdentityKindIsStableForAnExternalIdentity(t *testing.T) {
 	}
 
 	service := episodes.NewService(NewEpisodeLifecycleRepository(pool))
-	admit := func(kind episodes.IdentityKind) error {
-		_, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{
+	admit := func(kind episodes.IdentityKind, descriptions ...string) error {
+		input := episodes.AdmitParticipantInput{
 			Admission: episodes.AdmissionDirect, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 			ParticipantID: accountTenantIntegrationID(t), Name: "Participant", Role: "collaborator",
 			IdentityExternalID: "stable-external", IdentityKind: kind,
 			Request: episodes.Request{Key: accountTenantIntegrationID(t).String()},
-		})
+		}
+		if len(descriptions) > 0 {
+			input.Description = descriptions[0]
+		}
+		_, err := service.AdmitParticipant(ctx, input)
 		return err
 	}
 
-	if err := admit(episodes.IdentityKindAgent); err != nil {
+	if err := admit(episodes.IdentityKindAgent, "AI teammate"); err != nil {
 		t.Fatalf("admit agent: %v", err)
 	}
 	if err := admit(episodes.IdentityKindAgent); err != nil {
@@ -89,5 +93,10 @@ func TestAdmissionIdentityKindIsStableForAnExternalIdentity(t *testing.T) {
 	var kind string
 	if err := pool.QueryRow(ctx, `select kind from identities where tenant_id = $1 and external_id = 'stable-external'`, tenantID.Bytes()).Scan(&kind); err != nil || kind != "agent" {
 		t.Fatalf("stored kind = %q, err = %v, want agent", kind, err)
+	}
+
+	var description string
+	if err := pool.QueryRow(ctx, `select coalesce(description, '') from participants where tenant_id = $1 and episode_id = $2 order by created_at limit 1`, tenantID.Bytes(), episodeID.Bytes()).Scan(&description); err != nil || description != "AI teammate" {
+		t.Fatalf("stored description = %q, err = %v, want AI teammate", description, err)
 	}
 }

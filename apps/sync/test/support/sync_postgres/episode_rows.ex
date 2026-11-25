@@ -10,12 +10,7 @@ defmodule ChalkSync.SyncPostgres.EpisodeRows do
   def insert_join_history(connection, episode, participants, policy) do
     Enum.reduce(participants, Reducer.new(episode.episode_id, policy), fn participant, state ->
       {:ok, event, next_state} =
-        Reducer.apply_lifecycle(state, :participant_joined, %{
-          "participant_id" => participant.id,
-          "display_name" => participant.display_name,
-          "role" => participant.role,
-          "admission_revision" => state.revision + 1
-        })
+        Reducer.apply_lifecycle(state, :participant_joined, join_payload(state, participant))
 
       insert_join_intent_and_event(connection, episode, participant, event, next_state)
       next_state
@@ -144,15 +139,19 @@ defmodule ChalkSync.SyncPostgres.EpisodeRows do
     )
   end
 
+  defp join_payload(state, participant) do
+    %{
+      "participant_id" => participant.id,
+      "display_name" => participant.display_name,
+      "role" => participant.role,
+      "admission_revision" => state.revision + 1
+    }
+  end
+
   def state_for(episode, participants, policy) do
     Enum.reduce(participants, Reducer.new(episode.episode_id, policy), fn participant, state ->
       {:ok, _event, state} =
-        Reducer.apply_lifecycle(state, :participant_joined, %{
-          "participant_id" => participant.id,
-          "display_name" => participant.display_name,
-          "role" => participant.role,
-          "admission_revision" => state.revision + 1
-        })
+        Reducer.apply_lifecycle(state, :participant_joined, join_payload(state, participant))
 
       state
     end)

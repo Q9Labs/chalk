@@ -329,6 +329,12 @@
           "enum": ["user", "agent", "guest"],
           "optional": true
         },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
+          "optional": true
+        },
         "capabilities": {
           "kind": "array",
           "maxItems": 23,
@@ -971,6 +977,12 @@
         "identityKind": {
           "kind": "string",
           "enum": ["user", "agent", "guest"],
+          "optional": true
+        },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
           "optional": true
         },
         "admissionRevision": {

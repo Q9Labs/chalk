@@ -1507,6 +1507,7 @@ export interface components {
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
       admission?: "policy" | "direct";
+      description?: string;
       identity_external_id?: string;
       identity_id?: components["schemas"]["UUID"];
       /** @enum {string} */
@@ -2153,6 +2154,7 @@ export interface components {
       } | null;
       participant: {
         capabilities: string[];
+        description?: string | null;
         episode_id: components["schemas"]["EpisodeId"];
         generation: number;
         id: components["schemas"]["ParticipantId"];
@@ -2177,6 +2179,7 @@ export interface components {
       };
       participant: {
         capabilities: string[];
+        description?: string | null;
         episode_id: components["schemas"]["EpisodeId"];
         generation: number;
         id: components["schemas"]["UUID"];

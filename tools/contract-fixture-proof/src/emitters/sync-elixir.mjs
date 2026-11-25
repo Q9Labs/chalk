@@ -19,6 +19,12 @@ await writeFile(outputPath, wrapElixirSource(source));
 function renderElixir(contract) {
   const welcomeFlags = welcomeFlagsFor(contract);
   const limits = contract.limits;
+  const participantFields = Object.entries(contract.snapshot.participants.items).map(([name, field]) => [snakeCase(name), field]);
+  const participantRequiredKeys = participantFields.filter(([, field]) => !field.optional).map(([name]) => name);
+  const participantOptional = participantFields.filter(([, field]) => field.optional);
+  const participantOptionalKeys = participantOptional.map(([name]) => name);
+  const participantKeysExpression = participantOptionalKeys.length === 0 ? renderElixirValue(participantRequiredKeys) : `${renderElixirValue(participantRequiredKeys)} ++ Enum.filter(${renderElixirValue(participantOptionalKeys)}, &Map.has_key?(participant, &1))`;
+  const participantOptionalChecks = participantOptional.map(([name, field]) => `(not Map.has_key?(participant, ${JSON.stringify(name)}) or ${renderElixirFieldCheck(field, `participant[${JSON.stringify(name)}]`)})`).join(" and ");
   const eventOrigins = Object.fromEntries(contract.events.map((event) => [event.name, event.origin]));
   const metadata = {
     version: contract.version,
@@ -276,7 +282,7 @@ function renderElixir(contract) {
     "  defp valid_snapshot?(_snapshot), do: false",
     "",
     '  defp valid_participant?(%{"participant_id" => id, "display_name" => name, "hand_raised" => raised, "admission_revision" => admission_revision, "role" => role, "capabilities" => capabilities} = participant, role_capabilities) do',
-    '    exact_keys?(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"] ++ Enum.filter(["identity_kind"], &Map.has_key?(participant, &1))) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role) and (not Map.has_key?(participant, "identity_kind") or participant["identity_kind"] in ["user", "agent", "guest"])',
+    `    exact_keys?(participant, ${participantKeysExpression}) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role)${participantOptionalChecks ? ` and ${participantOptionalChecks}` : ""}`,
     "  end",
     "  defp valid_participant?(_participant, _role_capabilities), do: false",
     "",

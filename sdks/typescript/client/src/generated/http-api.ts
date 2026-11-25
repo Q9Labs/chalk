@@ -827,6 +827,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.IdentityKindForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ParticipantDescriptionForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),

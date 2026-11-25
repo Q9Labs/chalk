@@ -8002,7 +8002,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden", "participant.description_forbidden"]
           },
           "404": {
             "content": {
@@ -15030,6 +15030,12 @@
             "enum": ["policy", "direct"],
             "type": "string"
           },
+          "description": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
+          },
           "identity_external_id": {
             "maxLength": 256,
             "minLength": 1,
@@ -16743,6 +16749,9 @@
                 },
                 "type": "array"
               },
+              "description": {
+                "type": ["string", "null"]
+              },
               "episode_id": {
                 "$ref": "#/components/schemas/EpisodeId"
               },
@@ -16834,6 +16843,9 @@
                   "type": "string"
                 },
                 "type": "array"
+              },
+              "description": {
+                "type": ["string", "null"]
               },
               "episode_id": {
                 "$ref": "#/components/schemas/EpisodeId"

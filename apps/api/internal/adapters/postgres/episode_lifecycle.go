@@ -203,6 +203,7 @@ func mapLifecycleParticipant(row sqlc.Participant) episodes.Participant {
 		AccountID:    nullableID(row.AccountID),
 		IdentityID:   nullableID(row.IdentityID),
 		Role:         row.Role,
+		Description:  row.Description.String,
 		Capabilities: append([]string(nil), row.Capabilities...),
 		Generation:   row.Generation,
 		Status:       row.Status,

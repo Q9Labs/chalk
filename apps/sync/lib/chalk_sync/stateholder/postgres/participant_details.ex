@@ -12,7 +12,8 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDetails do
       when identities.id is not null then identities.kind
       when participants.account_id is not null or participants.role = 'owner' then 'user'
       else 'guest'
-    end)::text
+    end)::text,
+    participants.description
   from participants
   left join identities
     on identities.tenant_id = participants.tenant_id
@@ -38,8 +39,15 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDetails do
   end
 
   defp details_from_rows(rows) do
-    Map.new(rows, fn [participant_id, identity_kind] ->
-      {UUID.load!(participant_id), %{"identity_kind" => identity_kind}}
+    Map.new(rows, fn [participant_id, identity_kind, description] ->
+      details = %{"identity_kind" => identity_kind}
+
+      details =
+        if is_binary(description) and description != "",
+          do: Map.put(details, "description", description),
+          else: details
+
+      {UUID.load!(participant_id), details}
     end)
   end
 
