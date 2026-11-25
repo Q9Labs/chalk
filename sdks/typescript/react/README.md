@@ -46,11 +46,12 @@ as the final `participants.issueAccess` argument with the server-only state from
 Sound cues are on by default. People already in a call hear a quiet chime when
 a new participant joins, at most once every three seconds. Initial rosters,
 your own joins, and reconnects do not chime. Playback follows browser autoplay
-rules. If a participant enters without a gesture and Chrome or Edge blocks remote
-sound, the classroom shows a "Tap to turn on sound" pill. One click, tap, or key
-press anywhere retries every blocked audio element and sound cue, then the pill
-disappears. The state comes only from real play refusals and AudioContext state.
-A refusal never interrupts the call or queues old chimes.
+rules. If playback is still blocked after joining, the classroom shows the
+existing notice "Your browser paused the sound. Click anywhere to hear the class."
+One click, tap, or key press anywhere retries every blocked audio element and
+sound cue, then the notice disappears. The state comes only from real play
+refusals and AudioContext state. A refusal never interrupts the call or queues
+old chimes.
 Embedding apps can disable all cues with `features={{ sounds: false }}` on
 `Chalk` or `SpaceView`. A participant's Sounds preference also applies.
 
