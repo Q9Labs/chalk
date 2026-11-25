@@ -6,7 +6,8 @@ import { cn } from "../../utils/cn";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout, type StageTileRenderContext } from "./Stage";
-import { buildStageItems, type StageItem } from "./stage-items";
+import { buildStageItems, type ContentItem, type StageItem } from "./stage-items";
+import { usePresenting } from "../../bindings/hooks";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
 
@@ -35,6 +36,8 @@ const Board = lazy(() =>
   ),
 );
 
+const DocumentView = lazy(() => import("./DocumentView").then((module) => ({ default: module.DocumentView })));
+
 export interface StageScreenAnnotation extends Omit<ScreenAnnotationOptions, "publicationId"> {
   readonly context: AnnotationPresentationContext;
   readonly publicationForTrack: (track: MediaStreamTrack) => string | undefined;
@@ -59,7 +62,16 @@ export interface SpaceStageProps {
 }
 /** One keyed renderer for people, the live board and each screen, in both layouts. */
 export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, screenAnnotation, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
-  const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
+  const presenting = usePresenting();
+  const documents = useMemo(
+    () =>
+      presenting.documents.map((document) => {
+        const manifest = presenting.manifests[document.documentId];
+        return { ...document, fileName: manifest?.fileName, status: manifest?.status, pageCount: manifest?.pageCount };
+      }),
+    [presenting.documents, presenting.manifests],
+  );
+  const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true, documents), [tiles, whiteboard?.isOpen, documents]);
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
   const [localPin, setLocalPin] = useState<string | null>(null);
   const pin = pinnedId === undefined ? localPin : pinnedId;
@@ -99,7 +111,23 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
     [setPin],
   );
   const renderContentTile = useCallback(
-    (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
+    (item: ContentItem, context: StageTileRenderContext) => {
+      if (item.kind === "document") {
+        return (
+          <StageContentTileSurface
+            item={item}
+            {...context}
+            mediaVisible
+            media={
+              <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
+                <Suspense fallback={<div className="grid h-full place-items-center bg-[#202124] text-sm text-white/70">Opening document</div>}>
+                  <DocumentView document={item.document} people={tiles} primary={context.primary} interactive={context.active} />
+                </Suspense>
+              </div>
+            }
+          />
+        );
+      }
       if (item.kind === "screen-share") {
         const track = item.participant.screenShareTrack;
         const publicationId = track && screenAnnotation?.publicationForTrack(track);

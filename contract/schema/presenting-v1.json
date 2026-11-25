@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chalk presenting, Sync v1 extension",
+  "$comment": "Sync v1 sends these frames only in the live phase on a negotiated connection. The ordered Document list is small, so changes carry a complete replacement rather than deltas.",
+  "x-chalk": {
+    "negotiation": {
+      "query": "presenting",
+      "version": 1,
+      "welcome": "presenting"
+    },
+    "limits": {
+      "commandBytes": 4096,
+      "stateBytes": 32768,
+      "maxDocuments": 8,
+      "maxPage": 10000,
+      "minZoomPercent": 25,
+      "maxZoomPercent": 400,
+      "operationReceiptTtlMs": 300000,
+      "operationFutureSkewMs": 30000,
+      "operationReceiptsPerEpisode": 1024
+    }
+  },
+  "$defs": {
+    "Document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_id", "presenter_id", "page", "zoom", "started_at_ms"],
+      "properties": {
+        "document_id": { "type": "string", "format": "uuid" },
+        "presenter_id": { "type": "string", "format": "uuid" },
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "zoom": { "type": "integer", "minimum": 25, "maximum": 400 },
+        "started_at_ms": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "State": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "documents"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "documents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Document" },
+          "minItems": 0,
+          "maxItems": 8
+        }
+      }
+    },
+    "Present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "document_id"],
+      "properties": {
+        "kind": { "const": "present" },
+        "document_id": { "type": "string", "format": "uuid" }
+      }
+    },
+    "SetState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "document_id"],
+      "properties": {
+        "kind": { "const": "set_state" },
+        "document_id": { "type": "string", "format": "uuid" },
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "zoom": { "type": "integer", "minimum": 25, "maximum": 400 }
+      }
+    },
+    "Stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "document_id"],
+      "properties": {
+        "kind": { "const": "stop" },
+        "document_id": { "type": "string", "format": "uuid" }
+      }
+    },
+    "Command": {
+      "oneOf": [
+        { "$ref": "#/$defs/Present" },
+        { "$ref": "#/$defs/SetState" },
+        { "$ref": "#/$defs/Stop" }
+      ]
+    },
+    "ClientRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": { "type": { "enum": ["presenting_state_request"] } }
+    },
+    "ClientCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operation_id", "command"],
+      "properties": {
+        "type": { "enum": ["presenting_command"] },
+        "operation_id": { "type": "string", "format": "uuid" },
+        "command": { "$ref": "#/$defs/Command" }
+      }
+    },
+    "ClientFrame": {
+      "oneOf": [
+        { "$ref": "#/$defs/ClientRequest" },
+        { "$ref": "#/$defs/ClientCommand" }
+      ]
+    },
+    "Accepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "revision"],
+      "properties": {
+        "kind": { "const": "accepted" },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "Rejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": { "const": "rejected" },
+        "reason": {
+          "enum": ["forbidden", "invalid_target", "not_active", "operation_id_conflict", "rate_limited", "capacity", "invalid_state"]
+        }
+      }
+    },
+    "CommandResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/Accepted" },
+        { "$ref": "#/$defs/Rejected" }
+      ]
+    },
+    "ServerState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "server_at_ms", "state"],
+      "properties": {
+        "type": { "enum": ["presenting_state"] },
+        "server_at_ms": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "enabled": { "const": false },
+        "state": {
+          "oneOf": [
+            { "$ref": "#/$defs/State" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "ServerChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "server_at_ms", "state"],
+      "properties": {
+        "type": { "enum": ["presenting_changed"] },
+        "server_at_ms": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "state": { "$ref": "#/$defs/State" }
+      }
+    },
+    "ServerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operation_id", "result"],
+      "properties": {
+        "type": { "enum": ["presenting_receipt"] },
+        "operation_id": { "type": "string", "format": "uuid" },
+        "result": { "$ref": "#/$defs/CommandResult" }
+      }
+    },
+    "ServerFrame": {
+      "oneOf": [
+        { "$ref": "#/$defs/ServerState" },
+        { "$ref": "#/$defs/ServerChange" },
+        { "$ref": "#/$defs/ServerReceipt" }
+      ]
+    }
+  }
+}

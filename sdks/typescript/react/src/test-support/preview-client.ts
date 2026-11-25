@@ -176,6 +176,18 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       setPolicy: async (policy: OfflineActionsPolicy) => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, policy } })),
     },
     whiteboard: { transport: () => null },
+    presenting: {
+      present: async () => ({ kind: "unavailable" }),
+      setPage: async () => ({ kind: "unavailable" }),
+      setZoom: async () => ({ kind: "unavailable" }),
+      stop: async () => ({ kind: "unavailable" }),
+      manifest: async () => {
+        throw new TypeError("preview presenting is unavailable");
+      },
+      zoomUrl: async () => {
+        throw new TypeError("preview presenting is unavailable");
+      },
+    },
     telemetry: { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
@@ -220,6 +232,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     recording: { current: null },
     offline: { pending: [], decisionNeeded: false, policy: "ask" },
     whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
+    presenting: { status: "connecting", revision: 0, documents: [], manifests: {} },
   };
 }
 
