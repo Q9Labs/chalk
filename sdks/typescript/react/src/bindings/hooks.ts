@@ -45,6 +45,21 @@ export function useParticipants(): ParticipantsSlice {
   return useSnapshotSlice(selectParticipants);
 }
 
+/** Focus state and commands. `own` is this device's report; roster entries carry the states the viewer may see. */
+export function useFocus() {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participants = useParticipants();
+  return useMemo(
+    () => ({
+      ...client.focus,
+      own: participants.roster.find((participant) => participant.participantId === self.participantId)?.focus,
+      participants: participants.roster.filter((participant) => participant.focus !== undefined),
+    }),
+    [client.focus, participants.roster, self.participantId],
+  );
+}
+
 export function useMedia(): MediaSlice {
   return useSnapshotSlice(selectMedia);
 }
