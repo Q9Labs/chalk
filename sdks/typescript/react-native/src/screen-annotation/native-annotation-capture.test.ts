@@ -201,7 +201,7 @@ it.each([
 
     capture.releaseTrack(track!);
     expect(track?.readyState).toBe("ended");
-    expect(nativeEvents).toEqual(isIOS ? [] : enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
+    expect(nativeEvents).toEqual(isIOS ? ["broadcast picker", "webrtc display capture"] : enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
   } finally {
     detach();
     annotation.dispose();
