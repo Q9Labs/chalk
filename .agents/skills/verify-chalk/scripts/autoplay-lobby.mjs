@@ -5,6 +5,7 @@ import { runJourney } from "./journey.mjs";
 import { incomingAudioLevel } from "../../../../scripts/web-proof/media.mjs";
 
 const waitMs = 30_000;
+const pollMs = 250;
 const remembered = (name, theme) => `(() => {
   localStorage.setItem("chalk.display-name", ${JSON.stringify(name)});
   localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
@@ -18,6 +19,16 @@ async function noGesture(page, expression) {
   await cdp.detach().catch(() => undefined);
   if (result.exceptionDetails) throw new Error(`strict page evaluation failed: ${result.exceptionDetails.text}`);
   return result.result.value;
+}
+
+
+async function waitForNoGesture(page, expression, timeoutMs, label) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await noGesture(page, expression)) return;
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
 }
 
 const lobbyEvidence = `(() => {
@@ -46,7 +57,7 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
   for (const [who, label] of [[strict, "desktop-dark"], [strictMobile, "mobile-light"], [strictDesktopLight, "desktop-light"], [strictMobileDark, "mobile-dark"]]) {
     await step(`${who.name} with remembered devices and no gesture is offered the lobby`, async () => {
       await who.page.goto(link);
-      await who.page.waitForSelector("#join-display-name", { timeout: 15_000 });
+      await waitForNoGesture(who.page, `Boolean(document.querySelector("#join-display-name"))`, 15_000, `${who.name} lobby`);
       const evidence = await noGesture(who.page, lobbyEvidence);
       if (evidence.input !== who.name) throw new Error(`remembered name was not filled for ${who.name}: ${evidence.input}`);
       if (!evidence.joining) throw new Error(`${who.name} did not get the Join call lobby`);
