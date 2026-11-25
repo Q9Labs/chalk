@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
@@ -9,6 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
 
@@ -29,6 +31,19 @@ func (w *apiWiring) wireStorage() error {
 			chatService := chatattachments.NewService(chatRepository, storage)
 			w.options.ChatAttachments = chatService
 			w.options.ChatParticipants = w.syncParticipantVerifier
+		}
+		if w.cfg.Capabilities.Presenting {
+			if w.redisClient == nil {
+				return fmt.Errorf("presenting workload auth requires Redis")
+			}
+			invoker, err := presenting.NewLambdaInvoker(context.Background(), w.cfg.Presenting.RendererFunction, w.cfg.RecordingKMS.Region)
+			if err != nil {
+				return fmt.Errorf("configure presenting renderer invoke: %w", err)
+			}
+			if w.syncParticipantVerifierConfigured {
+				service := presenting.NewService(postgres.NewPresentingRepository(w.pool), storage, invoker)
+				w.options.Presenting = service
+			}
 		}
 		if w.cfg.Capabilities.WhiteboardFiles {
 			whiteboardRepository := postgres.NewWhiteboardFileRepository(w.pool)

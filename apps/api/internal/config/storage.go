@@ -16,6 +16,9 @@ const (
 	TranscriptionWorkloadAuthSecret     = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
 	TranscriptionControlAudience        = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction     = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
+	PresentingWorkloadAuthSecret        = "CHALK_PRESENTING_WORKLOAD_AUTH_SECRET"
+	PresentingControlAudience           = "CHALK_PRESENTING_CONTROL_AUDIENCE"
+	PresentingRendererFunction          = "CHALK_PRESENTING_RENDERER_FUNCTION_NAME"
 	RecordingKMSKeyID                   = "CHALK_RECORDING_KMS_KEY_ID"
 	RecordingKMSRegion                  = "CHALK_RECORDING_KMS_REGION"
 	RecordingKMSRequestTimeoutMS        = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
@@ -35,6 +38,12 @@ type TranscriptionConfig struct {
 	WorkloadAuthSecret string
 	ControlAudience    string
 	DispatcherFunction string
+}
+
+type PresentingConfig struct {
+	WorkloadAuthSecret string
+	ControlAudience    string
+	RendererFunction   string
 }
 
 func (cfg *Config) loadTimeouts() error {
@@ -78,6 +87,16 @@ func (cfg *Config) loadStorage() error {
 			return fmt.Errorf("%s and %s must be set when %s=true", RecordingKMSKeyID, RecordingKMSRegion, RecordingEnabled)
 		}
 	}
+	cfg.Presenting = PresentingConfig{
+		WorkloadAuthSecret: envOrDefault(PresentingWorkloadAuthSecret, ""),
+		ControlAudience:    envOrDefault(PresentingControlAudience, DefaultTranscriptionControlAudience),
+		RendererFunction:   envOrDefault(PresentingRendererFunction, ""),
+	}
+	if cfg.Capabilities.Presenting {
+		if err := validatePresentingConfig(cfg.Presenting, cfg.SyncToken, cfg.R2); err != nil {
+			return err
+		}
+	}
 	cfg.Transcription = TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
 		ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
@@ -107,6 +126,19 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 		return err
 	}
 	return nil
+}
+
+func validatePresentingConfig(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config) error {
+	if len(presenting.WorkloadAuthSecret) < 32 {
+		return fmt.Errorf("%s must contain at least 32 bytes when %s=true", PresentingWorkloadAuthSecret, PresentingEnabled)
+	}
+	if strings.TrimSpace(presenting.RendererFunction) == "" {
+		return fmt.Errorf("%s must be set when %s=true", PresentingRendererFunction, PresentingEnabled)
+	}
+	if len(syncToken.PrivateKey) == 0 {
+		return fmt.Errorf("%s, %s, %s, and %s must be set when %s=true", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey, PresentingEnabled)
+	}
+	return validateR2Config(r2, PresentingEnabled)
 }
 
 func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {

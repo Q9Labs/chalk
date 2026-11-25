@@ -58,6 +58,17 @@ func (w *apiWiring) wireTranscription() error {
 		w.recordingSourceCleanupScheduler = transcripts.NewLocalCleanupScheduler(worker, 0, w.logger)
 	}
 
+	if w.cfg.Capabilities.Presenting {
+		if w.redisClient == nil {
+			return errors.New("presenting workload auth requires Redis")
+		}
+		nonces := redisadapter.NewWorkloadNonceStore(w.redisClient)
+		w.options.PresentingWorkloadAuthorizer = httpapi.NewHMACWorkloadAuthorizer(httpapi.HMACWorkloadAuthorizerConfig{
+			Secret: []byte(w.cfg.Presenting.WorkloadAuthSecret), Environment: w.cfg.Observability.Environment,
+			ReleaseID: w.cfg.Observability.Version, Audience: w.cfg.Presenting.ControlAudience, Nonces: nonces,
+		})
+	}
+
 	// Keep worker control behind the internal workload boundary.
 	w.options.TranscriptTextMetadata = postgres.NewTranscriptTextRepository(w.queries)
 	w.options.ChunkAuthority = transcriptionAuthority

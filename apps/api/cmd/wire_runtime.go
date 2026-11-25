@@ -65,12 +65,13 @@ func logStartup(logger *slog.Logger, cfg config.Config) {
 		"request_logs", cfg.Observability.RequestLogs,
 		"recording_enabled", cfg.Capabilities.Recording,
 		"transcription_enabled", cfg.Capabilities.Transcription,
+		"presenting_enabled", cfg.Capabilities.Presenting,
 	)
 }
 
 func (w *apiWiring) openRedis() error {
 	var err error
-	needsRedis := w.cfg.Transcription.WorkloadAuthSecret != "" || w.cfg.Observability.Environment != config.DefaultEnvironment
+	needsRedis := w.cfg.Transcription.WorkloadAuthSecret != "" || w.cfg.Presenting.WorkloadAuthSecret != "" || w.cfg.Observability.Environment != config.DefaultEnvironment
 	if needsRedis {
 		w.redisClient, err = redisadapter.Open(w.cfg.Redis.URL)
 		if err != nil {

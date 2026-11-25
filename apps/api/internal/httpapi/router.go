@@ -36,6 +36,7 @@ type CapabilityStatus struct {
 	Transcription    bool
 	WhiteboardFiles  bool
 	ScreenAnnotation func(context.Context) bool
+	Presenting       func(context.Context) bool
 }
 
 type Options struct {
@@ -116,15 +117,16 @@ type Options struct {
 	FinalizerWorker        TranscriptFinalizerWorkerService
 	FinalizerAuthority     FinalizerAuthority
 
-	Webhooks               WebhookService
-	ChatAttachments        ChatAttachmentService
-	ChatParticipants       ChatParticipantVerifier
-	Presenting             PresentingService
-	WhiteboardFiles        WhiteboardFileService
-	WhiteboardParticipants WhiteboardParticipantVerifier
-	PublicInvites          PublicInviteService
-	ProblemReports         ProblemReportService
-	ScheduledEpisodes      ScheduledEpisodeService
+	Webhooks                     WebhookService
+	ChatAttachments              ChatAttachmentService
+	ChatParticipants             ChatParticipantVerifier
+	Presenting                   PresentingService
+	PresentingWorkloadAuthorizer WorkloadAuthorizer
+	WhiteboardFiles              WhiteboardFileService
+	WhiteboardParticipants       WhiteboardParticipantVerifier
+	PublicInvites                PublicInviteService
+	ProblemReports               ProblemReportService
+	ScheduledEpisodes            ScheduledEpisodeService
 }
 
 func NewRouter(options Options) http.Handler {
@@ -208,12 +210,13 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 			return
 		}
 		annotationEnabled := capabilities.ScreenAnnotation != nil && capabilities.ScreenAnnotation(ctx)
+		presentingEnabled := capabilities.Presenting != nil && capabilities.Presenting(ctx)
 		body := map[string]any{
 			"status": "ok",
 			"dependencies": map[string]string{
 				"postgres": "ok",
 			},
-			"capabilities": capabilityReadiness(capabilities, annotationEnabled),
+			"capabilities": capabilityReadiness(capabilities, annotationEnabled, presentingEnabled),
 		}
 		if backlog != nil {
 			if count, oldest, observed := backlog(); observed {
@@ -244,16 +247,17 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus, d
 		"dependencies": map[string]string{
 			dependency: "unavailable",
 		},
-		"capabilities": capabilityReadiness(capabilities, false),
+		"capabilities": capabilityReadiness(capabilities, false, false),
 	})
 }
 
-func capabilityReadiness(capabilities CapabilityStatus, annotationEnabled bool) map[string]string {
+func capabilityReadiness(capabilities CapabilityStatus, annotationEnabled bool, presentingEnabled bool) map[string]string {
 	return map[string]string{
 		"recording":         enabledStatus(capabilities.Recording),
 		"transcription":     enabledStatus(capabilities.Transcription),
 		"whiteboard_files":  enabledStatus(capabilities.WhiteboardFiles),
 		"screen_annotation": enabledStatus(annotationEnabled),
+		"presenting":        enabledStatus(presentingEnabled),
 	}
 }
 
