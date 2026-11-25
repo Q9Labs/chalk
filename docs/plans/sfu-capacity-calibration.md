@@ -25,6 +25,21 @@ Failures worth remembering:
 
 **Second node trigger.** One production node carries 5 classes of 3 guests (soak) and 2 classes of 6 guests (derived). Alert and ask the SFU lead for a second node when the evening peak passes 3 concurrent 3-guest classes or the first 6-guest class appears.
 
+
+## 2026-11-25 re-calibration for recorded classes
+
+The bench re-measured capacity with the recorder capture shape included: three participants, one
+screen share, and one capture session pulling every microphone, camera and screen. One such class
+reserves 9,330 packets/s (7,170 unrecorded plus 2,160 of capture pulls) and costs about 12% of one
+vCPU in SFU forwarding, measured on three sizes. The sizing model above is unchanged; applying it to
+the measured cost gives 2.5 recorded classes per vCPU: `s-2vcpu-2gb` admits 5 recorded classes at
+46,650, `s-4vcpu-8gb` 10 at 93,300 and `s-8vcpu-16gb` 19 at 177,270, the last capped by measurement
+below the model's 20. Note what the old budget meant in practice: 36,000 never admitted a fourth
+recorded class (4 x 9,330 = 37,320), so an all-recorded node carried 3, not the assumed 4. Clean-bench
+ceilings without steal run higher - 8+ on 2 vCPUs, 13 proven on 4, 19 on 8 - but those counts sit in
+the burst-stall zone this document sizes against. Evidence and analysis: the 2026-11-25 droplet-size
+frontier bench report; the capture worker's own decode/encode CPU is outside the SFU measurement.
+
 ## Not proved
 
 - The five-hour, three-class staging soak has one pass and one fail. The failing run stalled in its first minute, when steal spiked to 54% and own CPU reached 59%. A start-up ramp or the spike could explain it, so the staging capacity comes from the model, not from a passing soak.
