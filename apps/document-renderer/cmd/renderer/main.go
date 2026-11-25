@@ -15,6 +15,7 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/worker"
 )
@@ -58,24 +59,24 @@ func main() {
 	}
 }
 
-func configureControl(ctx context.Context) (worker.ControlClient, error) {
+func configureControl(ctx context.Context) (controlplane.ControlClient, error) {
 	secret := os.Getenv("CHALK_PRESENTING_WORKLOAD_AUTH_SECRET")
 	if secret == "" {
 		parameterARN := os.Getenv("CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN")
 		if parameterARN == "" {
-			return worker.ControlClient{}, fmt.Errorf("missing presenting workload auth secret or parameter ARN")
+			return controlplane.ControlClient{}, fmt.Errorf("missing presenting workload auth secret or parameter ARN")
 		}
 		config, err := awsconfig.LoadDefaultConfig(ctx)
 		if err != nil {
-			return worker.ControlClient{}, err
+			return controlplane.ControlClient{}, err
 		}
 		withDecryption := true
 		output, err := ssm.NewFromConfig(config).GetParameter(ctx, &ssm.GetParameterInput{Name: &parameterARN, WithDecryption: &withDecryption})
 		if err != nil {
-			return worker.ControlClient{}, fmt.Errorf("read presenting workload auth parameter: %w", err)
+			return controlplane.ControlClient{}, fmt.Errorf("read presenting workload auth parameter: %w", err)
 		}
 		if output.Parameter == nil || output.Parameter.Value == nil {
-			return worker.ControlClient{}, fmt.Errorf("presenting workload auth parameter is empty")
+			return controlplane.ControlClient{}, fmt.Errorf("presenting workload auth parameter is empty")
 		}
 		secret = *output.Parameter.Value
 	}
@@ -84,9 +85,9 @@ func configureControl(ctx context.Context) (worker.ControlClient, error) {
 	environment := envOr("CHALK_ENVIRONMENT", envOr("ENVIRONMENT", "staging"))
 	releaseID := envOr("CHALK_RELEASE_ID", "unknown")
 	if baseURL == "" || len(secret) < 32 {
-		return worker.ControlClient{}, fmt.Errorf("renderer control configuration is incomplete")
+		return controlplane.ControlClient{}, fmt.Errorf("renderer control configuration is incomplete")
 	}
-	return worker.NewControlClient(baseURL, secret, environment, releaseID, audience), nil
+	return controlplane.NewControlClient(baseURL, secret, environment, releaseID, audience), nil
 }
 
 func envOr(name, fallback string) string {
@@ -96,7 +97,7 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-func runLambdaRuntime(endpoint string, control worker.ControlClient, logger *slog.Logger) {
+func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logger *slog.Logger) {
 	client := &http.Client{Timeout: 0}
 	base := "http://" + endpoint + "/2018-06-01/runtime"
 	for {
@@ -136,7 +137,7 @@ func runLambdaRuntime(endpoint string, control worker.ControlClient, logger *slo
 	}
 }
 
-func processOne(ctx context.Context, control worker.ControlClient, event invocationEvent) error {
+func processOne(ctx context.Context, control controlplane.ControlClient, event invocationEvent) error {
 	assignment, err := control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate).Claim(ctx, event.JobID)
 	if err != nil {
 		return err

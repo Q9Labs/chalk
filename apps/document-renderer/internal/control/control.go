@@ -1,4 +1,4 @@
-package worker
+package control
 
 import (
 	"bytes"
@@ -17,17 +17,17 @@ import (
 	"time"
 )
 
-type signedUpload struct {
+type SignedUpload struct {
 	URL       string            `json:"url"`
 	Headers   map[string]string `json:"headers"`
 	ExpiresAt string            `json:"expiresAt"`
 }
 
-type pageUploads struct {
+type PageUploads struct {
 	Page      int          `json:"page"`
-	Image     signedUpload `json:"image"`
-	Thumbnail signedUpload `json:"thumbnail"`
-	Zoom      signedUpload `json:"zoom"`
+	Image     SignedUpload `json:"image"`
+	Thumbnail SignedUpload `json:"thumbnail"`
+	Zoom      SignedUpload `json:"zoom"`
 }
 
 type Assignment struct {
@@ -46,7 +46,7 @@ type Assignment struct {
 	SourceURL       string        `json:"sourceUrl"`
 	SourceSizeBytes int64         `json:"sourceSizeBytes"`
 	SourceSHA256    string        `json:"sourceSha256"`
-	Uploads         []pageUploads `json:"uploads"`
+	Uploads         []PageUploads `json:"uploads"`
 }
 
 type ControlClient struct {

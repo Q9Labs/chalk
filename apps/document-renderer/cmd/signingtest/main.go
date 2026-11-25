@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/q9labs/chalk/apps/document-renderer/internal/worker"
+	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 )
 
 type signedRequest struct {
@@ -21,7 +21,7 @@ func main() {
 		os.Exit(2)
 	}
 	body := []byte(`{"job_id":"00000000-0000-0000-0000-000000000001"}`)
-	client := worker.NewControlClient("http://control.invalid", os.Args[1], os.Args[2], os.Args[3], os.Args[4]).WithJourney(
+	client := controlplane.NewControlClient("http://control.invalid", os.Args[1], os.Args[2], os.Args[3], os.Args[4]).WithJourney(
 		os.Args[5],
 		"00-1234567890abcdef1234567890abcdef-abcdef1234567890-01",
 		"interop=trace-state",

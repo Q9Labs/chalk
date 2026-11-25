@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 )
 
 func download(ctx context.Context, url string, maxBytes int64, expectedSHA256 string) ([]byte, error) {
@@ -41,7 +43,7 @@ func download(ctx context.Context, url string, maxBytes int64, expectedSHA256 st
 	return body, nil
 }
 
-func upload(ctx context.Context, target signedUpload, body []byte) error {
+func upload(ctx context.Context, target controlplane.SignedUpload, body []byte) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPut, target.URL, bytes.NewReader(body))
 	if err != nil {

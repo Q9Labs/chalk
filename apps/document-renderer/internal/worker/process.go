@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 )
 
@@ -23,7 +24,7 @@ const (
 	webPQuality   = 78
 )
 
-func Process(ctx context.Context, control ControlClient, assignment Assignment) error {
+func Process(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment) error {
 	source, err := download(ctx, assignment.SourceURL, assignment.SourceSizeBytes+1, assignment.SourceSHA256)
 	if err != nil {
 		return err
@@ -56,7 +57,7 @@ type renderFailure struct {
 func (f renderFailure) Error() string { return f.err.Error() }
 func (f renderFailure) Unwrap() error { return f.err }
 
-func processInventory(ctx context.Context, control ControlClient, assignment Assignment, source []byte) error {
+func processInventory(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
 	sourcePath, cleanup, err := writeSource(source)
 	if err != nil {
 		return err
@@ -90,7 +91,7 @@ func processInventory(ctx context.Context, control ControlClient, assignment Ass
 	return nil
 }
 
-func processPages(ctx context.Context, control ControlClient, assignment Assignment, source []byte) error {
+func processPages(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
 	if assignment.MIMEType != "application/pdf" {
 		return fmt.Errorf("image documents do not have page fanout jobs")
 	}
@@ -144,7 +145,7 @@ func processPages(ctx context.Context, control ControlClient, assignment Assignm
 	return nil
 }
 
-func processZoom(ctx context.Context, control ControlClient, assignment Assignment, source []byte) error {
+func processZoom(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
 	if len(assignment.Uploads) != 1 {
 		return fmt.Errorf("zoom assignment does not name exactly one page")
 	}
@@ -200,7 +201,7 @@ func renderIsolatedBitmap(ctx context.Context, executable, sourcePath, mimeType 
 	return readRenderedPage(sourcePath, 1, 0)
 }
 
-func uploadEagerRenditions(ctx context.Context, target pageUploads, bitmap []byte, width, height int) error {
+func uploadEagerRenditions(ctx context.Context, target controlplane.PageUploads, bitmap []byte, width, height int) error {
 	standard, standardWidth, standardHeight, err := render.ResizeBGRA(bitmap, width, height, standardEdge)
 	if err != nil {
 		return err
@@ -320,7 +321,7 @@ func writeSource(source []byte) (string, func(), error) {
 	return path, func() { os.RemoveAll(directory) }, nil
 }
 
-func finishFailure(ctx context.Context, control ControlClient, assignment Assignment, code string, cause error) error {
+func finishFailure(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, code string, cause error) error {
 	if reportErr := control.Fail(ctx, assignment, code, cause.Error()); reportErr != nil {
 		return fmt.Errorf("report render failure (%v): %w", cause, reportErr)
 	}
