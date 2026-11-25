@@ -78,50 +78,46 @@ function mount() {
   return { client, host, root };
 }
 
-it("never shows the sound prompt when remote audio plays", async () => {
+it("stays visually silent when remote audio plays", async () => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   const { host } = mount();
   await flush();
   expect(host.querySelector("button")).toBeNull();
 });
 
-it("shows one accessible prompt after a real autoplay rejection", async () => {
+it("records a real autoplay rejection without rendering a prompt", async () => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue({ name: "NotAllowedError" });
-  const { host } = mount();
+  const { client, host } = mount();
   await flush();
 
-  const status = host.querySelector("[role=status]");
-  const button = host.querySelector("button");
-  expect(status?.getAttribute("aria-live")).toBe("polite");
-  expect(button?.textContent).toBe("Tap to turn on sound");
-  expect(button?.getAttribute("type")).toBe("button");
+  expect(client.getSnapshot().media.audioPlayback.blocked).toBe(true);
+  expect(host.querySelector("button")).toBeNull();
 });
 
-it("does not show the prompt for a play failure that is not an autoplay refusal", async () => {
+it("stays unblocked for a play failure that is not an autoplay refusal", async () => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue({ name: "AbortError" });
   const { host } = mount();
   await flush();
   expect(host.querySelector("button")).toBeNull();
 });
 
-it("a click anywhere resumes blocked output and removes the prompt", async () => {
-  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValueOnce({ name: "NotAllowedError" }).mockResolvedValue(undefined);
-  const { host } = mount();
+it("a click anywhere resumes blocked output", async () => {
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValueOnce({ name: "NotAllowedError" }).mockResolvedValue(undefined);
+  const { client } = mount();
   await flush();
-  expect(host.querySelector("button")).not.toBeNull();
+  expect(client.getSnapshot().media.audioPlayback.blocked).toBe(true);
 
   document.body.click();
   await flush();
-  expect(play).toHaveBeenCalledTimes(2);
-  expect(host.querySelector("button")).toBeNull();
+  expect(client.getSnapshot().media.audioPlayback.blocked).toBe(false);
 });
 
-it("clicking the prompt resumes blocked output", async () => {
+it("a key press resumes blocked output", async () => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValueOnce({ name: "NotAllowedError" }).mockResolvedValue(undefined);
-  const { host } = mount();
+  const { client } = mount();
   await flush();
 
-  host.querySelector<HTMLButtonElement>("button")?.click();
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
   await flush();
-  expect(host.querySelector("button")).toBeNull();
+  expect(client.getSnapshot().media.audioPlayback.blocked).toBe(false);
 });

@@ -54,3 +54,9 @@ export async function arrivalEvent(client: ChalkPublicClient, arrival: PublicSpa
     }
   }
 }
+
+/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
+export async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
+  if (!inviteToken) throw new Error(neutralSpaceError);
+  return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });
+}

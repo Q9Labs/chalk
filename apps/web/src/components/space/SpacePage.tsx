@@ -1,6 +1,7 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
+import { browserAllowsMediaAutoplay } from "./browser-autoplay";
 import { useTheme } from "../../lib/theme-context";
-import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type ChalkPublicClient, type JoinOptions, type PublicSpaceArrival } from "@q9labsai/chalk-client";
+import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type JoinOptions } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
@@ -9,7 +10,7 @@ import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
-import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
+import { arriveAtSpace, arrivalEvent, leaveArrival, reArrive } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
 import { FailedEntry } from "./FailedEntry";
@@ -81,7 +82,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   });
   // A visitor who already chose devices in this browser skips the device step and joins with that choice.
   const [rememberedDevices] = useState(() => readRememberedDevices());
-  const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: Boolean(reloadMarker), stepOpen: !reloadMarker && !(automaticName && rememberedDevices) }));
+  const [autoplayAllowed] = useState(browserAllowsMediaAutoplay);
+  const resumeAutomatically = Boolean(reloadMarker) && autoplayAllowed;
+  const rememberedAutoArrival = Boolean(automaticName && rememberedDevices && autoplayAllowed);
+  const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: resumeAutomatically, stepOpen: !resumeAutomatically && !rememberedAutoArrival }));
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState<string>();
@@ -126,7 +130,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     if (warmAfterCall) warmCall();
   }, [warmAfterCall]);
   useEffect(() => {
-    if (resumeAttempted.current || !reloadMarker) return;
+    if (resumeAttempted.current || !reloadMarker || !autoplayAllowed) return;
     resumeAttempted.current = true;
     const { attempt } = latest.current;
     setDisplayName(reloadMarker.displayName);
@@ -136,7 +140,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       (admission) => settle(attempt, { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } }),
       (cause: unknown) => settle(attempt, { type: "failed", failure: resumeFailure(cause) }),
     );
-  }, [client, latest, reloadMarker, settle, slug]);
+  }, [autoplayAllowed, client, latest, reloadMarker, settle, slug]);
   const start = useCallback(
     (settings: WebJoinSettings = defaultJoinOptions, fromStep = false) => {
       const normalizedDisplayName = settings.displayName.trim();
@@ -200,10 +204,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     };
   }, [automaticName, reloadMarker]);
   useEffect(() => {
-    if (!automaticName || !rememberedDevices || reloadMarker || autoArrivalAttempted.current) return;
+    if (!automaticName || !rememberedDevices || !autoplayAllowed || reloadMarker || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
     void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
-  }, [automaticName, reloadMarker, rememberedDevices, start]);
+  }, [automaticName, autoplayAllowed, reloadMarker, rememberedDevices, start]);
   const waiting = entrance.phase === "waiting" && !entrance.cancelling ? entrance.waiting : undefined;
   const waitingAttempt = entrance.attempt;
   useEffect(() => {
@@ -413,12 +417,6 @@ function resumeFailure(cause: unknown): EntryFailure {
 /** Gives back an admission the entrance no longer wants. Any other outcome holds nothing to give back. */
 function releaseAdmission(outcome: ArrivalOutcome): void {
   if (outcome.type === "admitted") void outcome.joined.session.leave().catch(() => undefined);
-}
-
-/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
-async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
-  if (!inviteToken) throw new Error(neutralSpaceError);
-  return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });
 }
 
 async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: string): Promise<void> {

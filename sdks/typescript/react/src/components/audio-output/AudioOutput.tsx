@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { toAudioParticipants } from "../../selectors/space-selectors";
 import { useParticipantVolumeContext } from "../participants-panel/participant-volume-context";
-import { ChalkButton } from "../chalk-ui/ChalkButton";
 
 export interface AudioParticipant {
   id: string;
@@ -29,8 +28,6 @@ export interface AudioOutputProps {
   audioOutputDeviceId?: string;
   /** Per-participant volume override (0-1). Takes precedence over volume prop. */
   getParticipantVolume?: (participantId: string) => number;
-  /** Label for the single prompt shown when the browser blocks playback. */
-  resumeAudioLabel?: string;
 }
 
 /**
@@ -42,7 +39,7 @@ type SinkAwareAudioElement = HTMLAudioElement & {
   sinkId?: string;
 };
 
-export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume, resumeAudioLabel = "Tap to turn on sound" }: AudioOutputProps) {
+export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioOutputProps) {
   const client = useSpaceClient();
   const media = useMedia();
   const self = useSelf();
@@ -122,7 +119,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     [effectiveParticipants],
   );
 
-  const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
+  const unlockEvents = useMemo(() => ["touchend", "click", "keydown"] as const, []);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own autoplay gesture listeners until playback is unblocked.
   useEffect(() => {
@@ -334,14 +331,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     };
   }, []);
 
-  if (!media.audioPlayback.blocked) return null;
-  return (
-    <div className="absolute inset-x-0 top-4 z-50 flex justify-center" role="status" aria-live="polite">
-      <ChalkButton variant="solid" className="min-h-11 shadow-(--elevation-toast)" onClick={() => void client.media.resumeAudioPlayback().catch(() => undefined)}>
-        {resumeAudioLabel}
-      </ChalkButton>
-    </div>
-  );
+  return null;
 }
 
 AudioOutput.displayName = "AudioOutput";

@@ -16,6 +16,11 @@ const restoreCanvas = vi.hoisted(() => {
   return () => Object.defineProperty(HTMLCanvasElement.prototype, "getContext", descriptor);
 });
 afterAll(restoreCanvas);
+class RunningAudioContext {
+  readonly state = "running";
+  async close() {}
+}
+
 const marker = { space: "design-lab", episodeId: "33333333-3333-4333-8333-333333333333", participantId: "44444444-4444-4444-8444-444444444444", participantGeneration: 1, arrivalHandle: "initial-arrival", mediaProof: "stale-proof", displayName: "Ada", microphone: false, camera: false };
 const freshArrival = { state: "pending", arrival_handle: "new-arrival", identity: "guest", retry_after: 60, space: { name: "Design Lab", slug: "design-lab", admission_mode: "approval" } };
 const requests: string[] = [];
@@ -25,6 +30,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   // Vitest leaves Node's localStorage in place when it exists. Use the browser storage.
   vi.stubGlobal("localStorage", jsdom.window.localStorage);
+  vi.stubGlobal("AudioContext", RunningAudioContext);
   requests.length = 0;
   window.name = "";
   sessionStorage.clear();
@@ -77,6 +83,21 @@ it("joins fresh when window.open inherits a copy of the reload marker", async ()
   await entry("access.media_proof_rejected");
   await expectMessage("Asking to join Design Lab");
   expect(requests).toEqual(["fresh"]);
+});
+
+it("keeps the lobby open when reload autoplay evidence is blocked", async () => {
+  vi.stubGlobal(
+    "AudioContext",
+    class {
+      readonly state = "suspended";
+      async close() {}
+    },
+  );
+  localStorage.setItem("chalk.display-name", "Ada");
+  writeReloadRejoin(sessionStorage, marker);
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect(requests).toEqual([]);
 });
 
 async function expectMessage(message: string) {
