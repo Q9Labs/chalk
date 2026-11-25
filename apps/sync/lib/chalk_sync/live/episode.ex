@@ -162,9 +162,17 @@ defmodule ChalkSync.Live.Episode do
           report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
           Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)
 
+          focus_webhooks =
+            if current do
+              Map.delete(state.focus_webhooks, {socket, current.started_at_ms})
+            else
+              state.focus_webhooks
+            end
+
           Projections.presence_snapshot(%{
             state
-            | app_states: Map.put(state.app_states, socket, report)
+            | app_states: Map.put(state.app_states, socket, report),
+              focus_webhooks: focus_webhooks
           })
         end
     end
@@ -191,8 +199,6 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
-  defp close_reported_app_state(_state, _socket, _authority, nil, _ended_at_ms), do: :ok
-
   @doc """
   Emits the live Focus webhook once a reported state has actually held for ten seconds.
   Timer messages for replaced or disconnected reports are stale and do nothing.
@@ -214,6 +220,8 @@ defmodule ChalkSync.Live.Episode do
       _ -> state
     end
   end
+
+  defp close_reported_app_state(_state, _socket, _authority, nil, _ended_at_ms), do: :ok
 
   defp close_reported_app_state(state, socket, authority, current, ended_at_ms) do
     if ended_at_ms - current.started_at_ms >= 10_000 do
