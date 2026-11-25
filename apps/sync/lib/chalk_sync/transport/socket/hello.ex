@@ -181,7 +181,11 @@ defmodule ChalkSync.Transport.Socket.Hello do
            entry_stage(:focus_policy, fn ->
              ChalkSync.Stateholder.Postgres.Focus.enabled?(identity.episode)
            end),
-         state = %{state | app_state: state.app_state && app_state_enabled},
+         state = %{
+           state
+           | app_state:
+               state.app_state && app_state_enabled && "focus.exempt" not in identity.capabilities
+         },
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_entry(state, identity, recovery, hello),
          state = %{

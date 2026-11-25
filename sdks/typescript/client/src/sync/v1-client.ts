@@ -835,9 +835,9 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
-    this.#startFocusReporting();
     this.#recovery = null;
     this.#phase = { phase: "live" };
+    this.#startFocusReporting();
     this.#connectStartedAt = null;
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
