@@ -3,6 +3,7 @@ package presenting
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
@@ -164,9 +165,15 @@ func (s Service) CompleteInventory(ctx context.Context, report InventoryReport) 
 	if err != nil {
 		return err
 	}
+	var wait sync.WaitGroup
 	for _, job := range jobs {
-		_ = s.invokeJob(ctx, job, false)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_ = s.invokeJob(ctx, job, false)
+		}()
 	}
+	wait.Wait()
 	return nil
 }
 
