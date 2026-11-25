@@ -124,7 +124,8 @@ defmodule ChalkSync.SyncPostgres.Rows do
         Map.get(policy, :default_episode_duration_seconds, 86_400),
       "maximum_episode_duration_seconds" =>
         Map.get(policy, :maximum_episode_duration_seconds, 86_400),
-      "artifact_policy" => artifact_policy
+      "artifact_policy" => artifact_policy,
+      "focus" => Map.get(policy, :focus, Map.get(policy, "focus", %{"enabled" => false}))
     }
     |> Map.merge(Map.take(policy, ["linger_window_seconds"]))
   end

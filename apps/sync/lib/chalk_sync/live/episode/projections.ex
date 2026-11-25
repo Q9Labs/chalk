@@ -84,12 +84,54 @@ defmodule ChalkSync.Live.Episode.Projections do
            |> put_known("identity_id", seat.identity_id)
            |> put_known("device_type", seat.device_type)
            |> put_known("connection_quality", seat_quality(state, seat))
+           |> put_focus(state, seat)
          end)}
 
       {:retryable, reason} ->
         {:error, reason}
     end
   end
+
+  defp put_focus(item, state, seat) do
+    if seat.focus_enabled do
+      item
+      |> put_focus_state(state, seat)
+      |> put_known("focus_step_away_reason", seat.step_away_reason)
+      |> put_allowed(seat.focus_allowed)
+    else
+      item
+    end
+  end
+
+  defp put_focus_state(item, state, seat) do
+    tracked = seat.identity_kind != "agent" and "focus.exempt" not in (seat.capabilities || [])
+
+    if tracked do
+      reports =
+        state.connections
+        |> Enum.filter(fn {_socket, authority} ->
+          authority.participant_id == seat.participant_id and
+            authority.generation == seat.generation
+        end)
+        |> Enum.map(fn {socket, _authority} -> Map.get(state.app_states, socket) end)
+        |> Enum.reject(&is_nil/1)
+
+      case Enum.find(reports, &(&1.state == "active")) || List.first(reports) do
+        nil ->
+          item
+
+        report ->
+          item
+          |> Map.put("focus_app_state", report.state)
+          |> Map.put("focus_windowed", report.windowed)
+      end
+    else
+      item
+    end
+  end
+
+  defp put_allowed(item, true), do: Map.put(item, "focus_allowed", true)
+  defp put_allowed(item, _allowed), do: item
 
   # Two sockets of one seat can report different tiers; the guests see the worse one.
   defp seat_quality(state, seat) do
