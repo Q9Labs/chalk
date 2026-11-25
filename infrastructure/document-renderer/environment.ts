@@ -7,6 +7,8 @@ export const buildEnvironment = (input: DocumentRendererInputs): { [key: string]
   CHALK_CONFIG_DIGEST: String(input.config_digest),
   CONTROL_API_BASE_URL: String(input.control_api_url),
   CONTROL_API_AUDIENCE: String(input.control_api_audience),
+  CONTROL_API_ENVIRONMENT: String(input.control_api_environment),
+  CONTROL_API_RELEASE_ID: String(input.control_api_release_id),
   CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN: String(input.api_workload_auth_parameter_arn),
   LD_LIBRARY_PATH: "/var/task/lib",
 });

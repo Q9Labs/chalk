@@ -18,6 +18,8 @@ const inputSchema = Schema.Struct({
   ephemeral_storage_size: Schema.Number,
   control_api_url: Schema.String,
   control_api_audience: Schema.String,
+  control_api_environment: Schema.String,
+  control_api_release_id: Schema.String,
   api_workload_auth_parameter_arn: Schema.String,
   ssm_kms_key_arns: Schema.Array(Schema.String),
   log_retention_days: Schema.Number,

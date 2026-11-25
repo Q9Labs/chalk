@@ -90,8 +90,8 @@ func configureControl(ctx context.Context) (controlplane.ControlClient, error) {
 	}
 	baseURL := os.Getenv("CONTROL_API_BASE_URL")
 	audience := envOr("CONTROL_API_AUDIENCE", "chalk-control-api")
-	environment := envOr("CHALK_ENVIRONMENT", envOr("ENVIRONMENT", "staging"))
-	releaseID := envOr("CHALK_RELEASE_ID", "unknown")
+	environment := envOr("CONTROL_API_ENVIRONMENT", envOr("CHALK_ENVIRONMENT", envOr("ENVIRONMENT", "staging")))
+	releaseID := envOr("CONTROL_API_RELEASE_ID", envOr("CHALK_RELEASE_ID", "unknown"))
 	if baseURL == "" || len(secret) < 32 {
 		return controlplane.ControlClient{}, fmt.Errorf("renderer control configuration is incomplete")
 	}
