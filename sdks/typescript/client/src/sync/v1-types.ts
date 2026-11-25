@@ -29,6 +29,9 @@ export const V1_CAPABILITIES = [
   "endEpisode",
   "manageMembers",
   "clearSpaceContent",
+  "attention.view",
+  "attention.manage",
+  "attention.exempt",
 ] as const;
 export type V1Capability = (typeof V1_CAPABILITIES)[number];
 // Roles are customer-defined; the wire accepts any non-empty role name.
@@ -92,6 +95,11 @@ export type V1Presence = {
   readonly activeSpeaker: boolean;
   /** How well this person's own link carries the call, as they rate it. Absent means unknown. */
   readonly connectionQuality?: "good" | "weak" | "poor";
+  /** Observable app state reported by this person. Absent means not reporting or not visible to you. */
+  readonly appState?: "active" | "inactive" | "background";
+  readonly windowed?: boolean;
+  readonly stepAwayReason?: "reading" | "notes" | "break";
+  readonly allowed?: boolean;
 };
 export type V1Projection<T> = {
   readonly projectionId: string;
@@ -153,6 +161,26 @@ export type V1TargetCommand =
       readonly payload: {
         readonly policy: V1AdmissionTarget;
       };
+    }
+  | {
+      readonly name: "set_step_away";
+      readonly payload: {
+        readonly reason: "reading" | "notes" | "break";
+      };
+    }
+  | {
+      readonly name: "clear_step_away";
+      readonly payload: Record<string, never>;
+    }
+  | {
+      readonly name: "open_app_state_allowance";
+      readonly payload: {
+        readonly minutes: number;
+      };
+    }
+  | {
+      readonly name: "close_app_state_allowance";
+      readonly payload: Record<string, never>;
     }
   | {
       readonly name: "assign_roles";

@@ -8,6 +8,7 @@ export function v1NegotiatedExtensions(welcome?: Welcome) {
     entryConfirmation: welcome?.entry_confirmation === true,
     mediaOffReason: welcome?.media_off_reason === true,
     connectionQuality: welcome?.connection_quality === true,
+    appState: welcome?.app_state === true,
     annotation,
     annotationBurnIn: annotation && welcome?.screen_annotation_burn_in === true,
   };

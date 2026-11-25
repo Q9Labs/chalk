@@ -114,6 +114,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
   #extensions = v1NegotiatedExtensions();
+  #attentionCleanup: (() => void) | null = null;
   readonly annotation = new AnnotationReplica((wire) => {
     if (!this.#socket || this.#phase.phase !== "live" || !this.#extensions.annotation) return false;
     try {
@@ -266,6 +267,10 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!this.#extensions.connectionQuality || this.#phase.phase !== "live") return;
     this.#send({ type: "connection_quality_set", quality });
   }
+  setAppState(state: "active" | "inactive" | "background", windowed: boolean): void {
+    if (!this.#extensions.appState || this.#phase.phase !== "live") return;
+    this.#send({ type: "app_state_set", state, windowed });
+  }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
@@ -343,6 +348,19 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   setAdmissionPolicy(policy: V1AdmissionTarget, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#sendTarget({ name: "set_admission_policy", payload: { policy } }, options);
+  }
+  stepAway(reason: "reading" | "notes" | "break", options?: CommandOptions): Promise<V1CommandResult> {
+    return this.#sendTarget({ name: "set_step_away", payload: { reason } }, options);
+  }
+  returnFromStepAway(options?: CommandOptions): Promise<V1CommandResult> {
+    return this.#sendTarget({ name: "clear_step_away", payload: {} }, options);
+  }
+  allowOtherTabs(minutes: number, options?: CommandOptions): Promise<V1CommandResult> {
+    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 480) throw new V1SyncError("allowance must be a whole number of minutes from 1 through 480", "invalid_payload");
+    return this.#sendTarget({ name: "open_app_state_allowance", payload: { minutes } }, options);
+  }
+  endAllowance(options?: CommandOptions): Promise<V1CommandResult> {
+    return this.#sendTarget({ name: "close_app_state_allowance", payload: {} }, options);
   }
   assignRole(participantId: string, role: V1AssignableRole, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#sendTarget({ name: "assign_roles", payload: { participant_id: participantId, role } }, options);
@@ -424,6 +442,47 @@ export class V1SyncClient implements V1CollaborationClient {
     const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => this.#requests.set(requestId, { resolve, reject, settled: false, frame }));
     this.#send(frame);
     return promise;
+  }
+  #startAttentionReporting(): void {
+    this.#attentionCleanup?.();
+    this.#attentionCleanup = null;
+    if (!this.#extensions.appState || typeof document === "undefined" || typeof window === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    };
+    const suppressed = () => {
+      const sharingScreen = this.#localPublications.some((publication) => (publication.source === "screen" || publication.source === "screen_audio") && publication.enabled);
+      const pip = "pictureInPictureElement" in document && document.pictureInPictureElement !== null;
+      return sharingScreen || pip;
+    };
+    const report = () => {
+      clear();
+      if (document.visibilityState === "hidden") this.setAppState("background", !document.hidden && window.innerWidth < window.screen.width);
+      else this.setAppState("active", window.innerWidth < window.screen.width || window.innerHeight < window.screen.height);
+    };
+    const away = () => {
+      clear();
+      timer = setTimeout(() => {
+        timer = null;
+        if (!suppressed()) this.setAppState("inactive", window.innerWidth < window.screen.width);
+      }, 2000);
+    };
+    const changed = () => {
+      if (document.visibilityState === "hidden") away();
+      else report();
+    };
+    document.addEventListener("visibilitychange", changed);
+    window.addEventListener("blur", away);
+    window.addEventListener("focus", report);
+    report();
+    this.#attentionCleanup = () => {
+      clear();
+      document.removeEventListener("visibilitychange", changed);
+      window.removeEventListener("blur", away);
+      window.removeEventListener("focus", report);
+    };
   }
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
@@ -801,6 +860,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
+    this.#startAttentionReporting();
     this.#recovery = null;
     this.#phase = { phase: "live" };
     this.#connectStartedAt = null;
@@ -850,6 +910,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#commandScheduler.disconnect();
     this.#media = null;
     this.#presence = null;
+    this.#attentionCleanup?.();
+    this.#attentionCleanup = null;
     this.#options.mediaPlane?.remotePublicationsChanged?.([], this.#mediaEnded() ? "available" : "unavailable");
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
