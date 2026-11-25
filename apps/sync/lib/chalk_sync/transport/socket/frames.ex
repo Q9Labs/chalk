@@ -17,6 +17,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
     |> own_identity_projection(state)
     |> device_projection(presence_hint_keys(state))
     |> media_projection(state)
+    |> attention_projection(state)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
@@ -51,6 +52,40 @@ defmodule ChalkSync.Transport.Socket.Frames do
     do: %{frame | "item" => Map.drop(item, keys)}
 
   defp device_projection(frame, _keys), do: frame
+
+  defp attention_projection(frame, %{app_state: true, identity: identity}) do
+    viewer = "attention.view" in (identity.capabilities || [])
+
+    update_items(frame, "presence", fn item ->
+      if viewer or item["participant_id"] == identity.participant_id do
+        item
+      else
+        strip_attention(item)
+      end
+    end)
+  end
+
+  defp attention_projection(frame, _state) do
+    update_items(frame, "presence", &strip_attention/1)
+  end
+
+  defp strip_attention(item) do
+    item
+    |> Map.delete("app_state")
+    |> Map.delete("windowed")
+    |> Map.delete("step_away_reason")
+    |> Map.delete("allowed")
+  end
+
+  defp update_items(%{"stream" => kind, "items" => items} = frame, kind, fun)
+       when is_list(items) do
+    %{frame | "items" => Enum.map(items, fun)}
+  end
+
+  defp update_items(%{"stream" => kind, "item" => item} = frame, kind, fun),
+    do: %{frame | "item" => fun.(item)}
+
+  defp update_items(frame, _kind, _fun), do: frame
 
   defp media_projection(frame, %{media_off_reason: true}), do: frame
 

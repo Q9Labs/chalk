@@ -39,6 +39,7 @@ defmodule ChalkSync.Transport.Socket.State do
       annotation: nil,
       annotation_commands: [],
       connection_quality: Map.get(opts, :connection_quality, false),
+      app_state: Map.get(opts, :app_state, false),
       participant_devices: Map.get(opts, :participant_devices, false),
       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),

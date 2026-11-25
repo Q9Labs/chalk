@@ -156,6 +156,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
         state.screen_annotation && state.screen_annotation_burn_in
       )
       |> Map.put(:connection_quality, state.connection_quality)
+      |> Map.put(:app_state, state.app_state)
       |> Map.put(
         :entry_generation,
         state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)
@@ -176,6 +177,11 @@ defmodule ChalkSync.Transport.Socket.Hello do
              confirm_legacy_entry(identity, state.entry_confirmation)
            end),
          {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
+         {:ok, app_state_enabled} <-
+           entry_stage(:attention_policy, fn ->
+             ChalkSync.Stateholder.Postgres.Attention.enabled?(identity.episode)
+           end),
+         state = %{state | app_state: state.app_state && app_state_enabled},
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_entry(state, identity, recovery, hello),
          state = %{

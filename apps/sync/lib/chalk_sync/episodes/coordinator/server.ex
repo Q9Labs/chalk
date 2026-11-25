@@ -161,6 +161,9 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
   def handle_call({:set_connection_quality, socket, identity, quality}, _from, state),
     do: LiveFrames.set_connection_quality(state, socket, identity, quality)
 
+  def handle_call({:set_app_state, socket, identity, app_state, windowed}, _from, state),
+    do: LiveFrames.set_app_state(state, socket, identity, app_state, windowed)
+
   def handle_call({:expire_live_requests, now_ms}, _from, state) do
     {:reply, :ok, LiveFrames.expire_live_requests_at(state, now_ms)}
   end

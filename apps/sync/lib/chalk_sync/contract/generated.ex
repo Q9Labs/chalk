@@ -10,7 +10,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
-    "assign_roles" => :assign_roles
+    "assign_roles" => :assign_roles,
+    "set_step_away" => :set_step_away,
+    "clear_step_away" => :clear_step_away,
+    "open_app_state_allowance" => :open_app_state_allowance,
+    "close_app_state_allowance" => :close_app_state_allowance
   }
   @client_operations %{
     "admit_participant" => :admit_participant,
@@ -43,7 +47,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "participant_microphone_stopped" => "external",
     "participant_camera_stopped" => "external",
     "participant_screen_share_stopped" => "external",
-    "recording_status_changed" => "external"
+    "recording_status_changed" => "external",
+    "step_away_set" => "command",
+    "step_away_cleared" => "command",
+    "app_state_allowance_opened" => "command",
+    "app_state_allowance_closed" => "command"
   }
   @limits %{
     "decodedInboundFrameBytes" => 65_536,
@@ -148,6 +156,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "chat_read_set",
           "chat_reaction_set",
           "connection_quality_set",
+          "app_state_set",
           "ping"
         ],
         "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 5}
@@ -557,7 +566,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "extendEpisode",
     "endEpisode",
     "manageMembers",
-    "clearSpaceContent"
+    "clearSpaceContent",
+    "attention.view",
+    "attention.manage",
+    "attention.exempt"
   ]
   @terminal_reasons ["episode_ended", "participant_inactive", "stale_participant_generation"]
   @rejection_reasons [
@@ -641,6 +653,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   @media_sources ["microphone", "camera", "screen"]
   @presence_states ["connected", "disconnected"]
   @connection_qualities ["good", "weak", "poor"]
+  @app_states ["active", "inactive", "background"]
+  @step_away_reasons ["reading", "notes", "break"]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
   @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
@@ -672,6 +686,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "delivery_ack" -> decode_delivery_ack(frame)
         "recovery_ack" -> decode_recovery_ack(frame)
         "connection_quality_set" -> decode_connection_quality_set(frame)
+        "app_state_set" -> decode_app_state_set(frame)
         "entered" -> if(exact_keys?(frame, ["type"]), do: {:ok, :entered}, else: {:error,
             :invalid_entered})
         "ping" -> if(exact_keys?(frame, ["type"]), do: {:ok, :ping}, else: {:error,
@@ -711,6 +726,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set,
       quality}}, else: {:error, :invalid_connection_quality})
   defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}
+  defp decode_app_state_set(%{"state" => state,
+      "windowed" => windowed} = frame) when state in @app_states and is_boolean(windowed),
+      do: if(exact_keys?(frame, ["type", "state", "windowed"]), do: {:ok, {:app_state_set, state,
+      windowed}}, else: {:error, :invalid_app_state})
+  defp decode_app_state_set(_frame), do: {:error, :invalid_app_state}
 
   defp decode_command(%{"command_id" => command_id, "name" => name,
       "payload" => payload} = frame) do
@@ -751,6 +771,34 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "role"
 ]) and valid_uuid?(participant_id) and bounded_string?(role, 1, 64) and role != "" and
     role == String.trim(role)
+  end
+
+  defp valid_command_payload?("set_step_away", %{"reason" => reason} = payload) do
+    exact_keys?(payload, [
+  "reason"
+]) and reason in [
+  "reading",
+  "notes",
+  "break"
+]
+  end
+
+  defp valid_command_payload?("clear_step_away", %{} = payload) do
+    exact_keys?(payload, [
+
+]) and true
+  end
+
+  defp valid_command_payload?("open_app_state_allowance", %{"minutes" => minutes} = payload) do
+    exact_keys?(payload, [
+  "minutes"
+]) and valid_positive_integer?(minutes)
+  end
+
+  defp valid_command_payload?("close_app_state_allowance", %{} = payload) do
+    exact_keys?(payload, [
+
+]) and true
   end
 
   defp valid_command_payload?(_name, _payload), do: false
@@ -1013,7 +1061,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
-    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
+    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","app_state","screen_annotation","screen_annotation_burn_in"],
         &Map.has_key?(frame, &1))
     base = base ++ flags
     valid_flags = Enum.all?(flags, &(frame[&1] == true))
@@ -1310,6 +1358,40 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ] and (is_nil(failure_code) or bounded_string?(failure_code, 1, 96))
   end
 
+  defp valid_event_payload?("step_away_set", %{"participant_id" => participant_id,
+      "reason" => reason} = payload) do
+    exact_keys?(payload, [
+  "participant_id",
+  "reason"
+]) and valid_uuid?(participant_id) and reason in [
+  "reading",
+  "notes",
+  "break"
+]
+  end
+
+  defp valid_event_payload?("step_away_cleared",
+      %{"participant_id" => participant_id} = payload) do
+    exact_keys?(payload, [
+  "participant_id"
+]) and valid_uuid?(participant_id)
+  end
+
+  defp valid_event_payload?("app_state_allowance_opened",
+      %{"actor_participant_id" => actor_participant_id, "minutes" => minutes} = payload) do
+    exact_keys?(payload, [
+  "actor_participant_id",
+  "minutes"
+]) and valid_uuid?(actor_participant_id) and valid_positive_integer?(minutes)
+  end
+
+  defp valid_event_payload?("app_state_allowance_closed",
+      %{"actor_participant_id" => actor_participant_id} = payload) do
+    exact_keys?(payload, [
+  "actor_participant_id"
+]) and valid_uuid?(actor_participant_id)
+  end
+
   defp valid_event_payload?(_name, _payload), do: false
 
   defp valid_replay_page?(%{"recovery_id" => recovery_id, "first_revision" => first_revision,
@@ -1380,15 +1462,19 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
-      "device_type", "admission_revision", "connection_quality"], &Map.has_key?(item, &1))) and
-      (not Map.has_key?(item, "connection_quality") or
-      item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item,
-      "identity_id") or valid_uuid?(item["identity_id"])) and (not Map.has_key?(item,
-      "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and
-      (not Map.has_key?(item, "admission_revision") or
-      valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and
-      state in @presence_states and is_boolean(speaking) and is_boolean(active) and
-      (state != "disconnected" or (not speaking and not active))
+      "device_type", "admission_revision", "connection_quality", "app_state", "windowed",
+      "step_away_reason", "allowed"], &Map.has_key?(item, &1))) and (not Map.has_key?(item,
+      "connection_quality") or item["connection_quality"] in @connection_qualities) and
+      (not Map.has_key?(item, "app_state") or item["app_state"] in @app_states) and
+      (not Map.has_key?(item, "windowed") or is_boolean(item["windowed"])) and
+      (not Map.has_key?(item, "step_away_reason") or
+      item["step_away_reason"] in @step_away_reasons) and (not Map.has_key?(item, "allowed") or
+      is_boolean(item["allowed"])) and (not Map.has_key?(item, "identity_id") or
+      valid_uuid?(item["identity_id"])) and (not Map.has_key?(item, "device_type") or
+      item["device_type"] in ["phone", "tablet", "computer"]) and (not Map.has_key?(item,
+      "admission_revision") or valid_positive_integer?(item["admission_revision"])) and
+      valid_uuid?(id) and state in @presence_states and is_boolean(speaking) and
+      is_boolean(active) and (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false
   defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision}),
       do: valid_positive_integer?(revision)

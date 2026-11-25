@@ -375,6 +375,44 @@ defmodule ChalkSync.Episodes.Reducer do
     end
   end
 
+  defp command_target(state, actor_id, :set_step_away, payload) do
+    with :ok <- Validation.exact_keys(payload, ["participantId", "reason"]),
+         participant_id when participant_id == actor_id <- payload["participantId"],
+         reason when reason in ["reading", "notes", "break"] <- payload["reason"],
+         {:ok, _participant} <- Events.participant(state, participant_id) do
+      {:ok, "step_away_set", %{"participant_id" => participant_id, "reason" => reason}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(state, actor_id, :clear_step_away, payload) do
+    with :ok <- Validation.exact_keys(payload, ["participantId"]),
+         participant_id when participant_id == actor_id <- payload["participantId"],
+         {:ok, _participant} <- Events.participant(state, participant_id) do
+      {:ok, "step_away_cleared", %{"participant_id" => participant_id}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(_state, _actor_id, :open_app_state_allowance, payload) do
+    with :ok <- Validation.exact_keys(payload, ["minutes"]),
+         minutes when is_integer(minutes) and minutes in 1..480 <- payload["minutes"] do
+      {:ok, "app_state_allowance_opened", %{"minutes" => minutes}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(_state, _actor_id, :close_app_state_allowance, payload) do
+    with :ok <- Validation.exact_keys(payload, []) do
+      {:ok, "app_state_allowance_closed", %{}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
   defp command_target(_state, _actor_id, _name, _payload), do: {:error, :unknown_command}
 
   defp hand_event_name(true), do: "hand_raised"

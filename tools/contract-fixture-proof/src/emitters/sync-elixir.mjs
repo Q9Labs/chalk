@@ -67,6 +67,8 @@ function renderElixir(contract) {
     ...renderAttribute("media_sources", contract.projectionFrames.mediaSnapshot.items.source),
     ...renderAttribute("presence_states", contract.projectionFrames.presenceSnapshot.items.state),
     ...renderAttribute("connection_qualities", contract.connectionQualitySet.quality),
+    ...renderAttribute("app_states", contract.appStateSet.state),
+    ...renderAttribute("step_away_reasons", ["reading", "notes", "break"]),
     "  @uuid ~r/\\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\z/i",
     "  @traceparent ~r/\\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\\z/",
     "  @tracestate ~r/\\A[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*\\z/",
@@ -98,6 +100,7 @@ function renderElixir(contract) {
     '        "delivery_ack" -> decode_delivery_ack(frame)',
     '        "recovery_ack" -> decode_recovery_ack(frame)',
     '        "connection_quality_set" -> decode_connection_quality_set(frame)',
+    '        "app_state_set" -> decode_app_state_set(frame)',
     '        "entered" -> if(exact_keys?(frame, ["type"]), do: {:ok, :entered}, else: {:error, :invalid_entered})',
     '        "ping" -> if(exact_keys?(frame, ["type"]), do: {:ok, :ping}, else: {:error, :invalid_ping})',
     "        nil -> {:error, :missing_type}",
@@ -126,6 +129,8 @@ function renderElixir(contract) {
     "",
     '  defp decode_connection_quality_set(%{"quality" => quality} = frame) when quality in @connection_qualities, do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set, quality}}, else: {:error, :invalid_connection_quality})',
     "  defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}",
+    '  defp decode_app_state_set(%{"state" => state, "windowed" => windowed} = frame) when state in @app_states and is_boolean(windowed), do: if(exact_keys?(frame, ["type", "state", "windowed"]), do: {:ok, {:app_state_set, state, windowed}}, else: {:error, :invalid_app_state})',
+    '  defp decode_app_state_set(_frame), do: {:error, :invalid_app_state}',
     "",
     '  defp decode_command(%{"command_id" => command_id, "name" => name, "payload" => payload} = frame) do',
     '    if exact_keys?(frame, ["type", "command_id", "name", "payload"]) and valid_command_id?(command_id) and valid_command_payload?(name, payload),',
@@ -343,7 +348,7 @@ function renderElixir(contract) {
     '  defp projection_item_limit("presence"), do: 500',
     "  defp projection_item_limit(_stream), do: -1",
     '  defp valid_projection_item?("media", %{"participant_id" => id, "source" => source, "enabled" => enabled, "publication_id" => publication_id} = item), do: exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"] ++ Enum.filter(["off_reason", "off_revision"], &Map.has_key?(item, &1))) and valid_uuid?(id) and source in @media_sources and is_boolean(enabled) and (is_nil(publication_id) or bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id)) and valid_media_off_reason?(item)',
-    '  defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state, "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id", "device_type", "admission_revision", "connection_quality"], &Map.has_key?(item, &1))) and (not Map.has_key?(item, "connection_quality") or item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item, "identity_id") or valid_uuid?(item["identity_id"])) and (not Map.has_key?(item, "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and (not Map.has_key?(item, "admission_revision") or valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and state in @presence_states and is_boolean(speaking) and is_boolean(active) and (state != "disconnected" or (not speaking and not active))',
+    '  defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state, "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id", "device_type", "admission_revision", "connection_quality", "app_state", "windowed", "step_away_reason", "allowed"], &Map.has_key?(item, &1))) and (not Map.has_key?(item, "connection_quality") or item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item, "app_state") or item["app_state"] in @app_states) and (not Map.has_key?(item, "windowed") or is_boolean(item["windowed"])) and (not Map.has_key?(item, "step_away_reason") or item["step_away_reason"] in @step_away_reasons) and (not Map.has_key?(item, "allowed") or is_boolean(item["allowed"])) and (not Map.has_key?(item, "identity_id") or valid_uuid?(item["identity_id"])) and (not Map.has_key?(item, "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and (not Map.has_key?(item, "admission_revision") or valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and state in @presence_states and is_boolean(speaking) and is_boolean(active) and (state != "disconnected" or (not speaking and not active))',
     "  defp valid_projection_item?(_stream, _item), do: false",
     '  defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision}), do: valid_positive_integer?(revision)',
     '  defp valid_media_off_reason?(%{"off_reason" => reason, "enabled" => false} = item) when reason in ["self", "dead"], do: not Map.has_key?(item, "off_revision")',
@@ -444,7 +449,7 @@ function renderElixirCommandPayloads(commands) {
     const fields = Object.entries(command.payload).map(([name, field]) => [snakeCase(name), field]);
     const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
     const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
+    const checks = fields.length === 0 ? "true" : fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
     return [`  defp valid_command_payload?(${JSON.stringify(command.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
   });
 }
@@ -465,7 +470,7 @@ function renderElixirEventPayloads(events) {
     const fields = Object.entries(event.payload).map(([name, field]) => [snakeCase(name), field]);
     const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
     const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
+    const checks = fields.length === 0 ? "true" : fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
     return [`  defp valid_event_payload?(${JSON.stringify(event.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
   });
 }

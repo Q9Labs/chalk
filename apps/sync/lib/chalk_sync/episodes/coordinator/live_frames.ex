@@ -167,6 +167,19 @@ defmodule ChalkSync.Episodes.Coordinator.LiveFrames do
     end)
   end
 
+  def set_app_state(state, socket, identity, app_state, windowed) do
+    with_live_socket(state, socket, identity, fn ->
+      case LiveEpisode.set_app_state(state.live, socket, app_state, windowed) do
+        {:ok, live, frames} ->
+          broadcast_live_frames(live, frames)
+          {:reply, :ok, %{state | live: live}}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    end)
+  end
+
   defp with_live_socket(state, socket, identity, handle) do
     case Map.get(state.sockets, socket) do
       %{mode: :live, identity: ^identity} -> handle.()

@@ -40,7 +40,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
+      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "app_state_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 5,
@@ -430,6 +430,14 @@ function strictCommand(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, ["policy"]);
     case "assign_roles":
       return exactObject(value.payload, ["participant_id", "role"]);
+    case "set_step_away":
+      return exactObject(value.payload, ["reason"]);
+    case "clear_step_away":
+      return exactObject(value.payload, []);
+    case "open_app_state_allowance":
+      return exactObject(value.payload, ["minutes"]);
+    case "close_app_state_allowance":
+      return exactObject(value.payload, []);
     default:
       return false;
   }
@@ -531,6 +539,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "recovery_id", "revision", "state_digest"]);
     case "connection_quality_set":
       return exactObject(value, ["type", "quality"]);
+    case "app_state_set":
+      return exactObject(value, ["type", "state", "windowed"]);
     case "entered":
       return exactObject(value, ["type"]);
     case "ping":
@@ -551,7 +561,7 @@ function strictSnapshot(value: unknown): boolean {
   )
     return false;
   const roleCapabilities = value.role_capabilities;
-  if (!isObject(roleCapabilities) || Object.keys(roleCapabilities).length === 0 || !Object.values(roleCapabilities).every((capabilities) => Array.isArray(capabilities) && uniqueStrings(capabilities) && capabilities.length <= 23)) return false;
+  if (!isObject(roleCapabilities) || Object.keys(roleCapabilities).length === 0 || !Object.values(roleCapabilities).every((capabilities) => Array.isArray(capabilities) && uniqueStrings(capabilities) && capabilities.length <= 26)) return false;
   if (value.recording !== null && (value.recording.status === "failed") !== (value.recording.failure_code !== null)) return false;
   const participantIds = new Set<unknown>();
   for (const participant of value.participants) {
@@ -606,6 +616,14 @@ function strictEvent(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "recording_status_changed":
       return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+    case "step_away_set":
+      return exactObject(value.payload, ["participant_id", "reason"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+    case "step_away_cleared":
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+    case "app_state_allowance_opened":
+      return exactObject(value.payload, ["actor_participant_id", "minutes"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+    case "app_state_allowance_closed":
+      return exactObject(value.payload, ["actor_participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     default:
       return false;
   }
@@ -626,6 +644,10 @@ function strictProjectionItem(value: unknown, stream: unknown): boolean {
         ...(Object.hasOwn(value, "device_type") ? ["device_type"] : []),
         ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : []),
         ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
+        ...(Object.hasOwn(value, "app_state") ? ["app_state"] : []),
+        ...(Object.hasOwn(value, "windowed") ? ["windowed"] : []),
+        ...(Object.hasOwn(value, "step_away_reason") ? ["step_away_reason"] : []),
+        ...(Object.hasOwn(value, "allowed") ? ["allowed"] : []),
       ])
     );
   return false;
@@ -639,7 +661,7 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
-  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "screen_annotation", "screen_annotation_burn_in"].filter((key) => Object.hasOwn(value, key));
+  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "app_state", "screen_annotation", "screen_annotation_burn_in"].filter((key) => Object.hasOwn(value, key));
   if (flags.some((key) => value[key] !== true)) return false;
   if (value.screen_annotation_burn_in === true && value.screen_annotation !== true) return false;
   const fields = [...base, ...flags, ...(extensionValid ? ["extensions"] : []), ...["entry_generation", "participant_identity_id"].filter((key) => Object.hasOwn(value, key))];
@@ -780,6 +802,9 @@ export const CapabilitySchema = Schema.Union([
   Schema.Literal("endEpisode"),
   Schema.Literal("manageMembers"),
   Schema.Literal("clearSpaceContent"),
+  Schema.Literal("attention.view"),
+  Schema.Literal("attention.manage"),
+  Schema.Literal("attention.exempt"),
 ]);
 export const RoleSchema = boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value === value.trim() ? undefined : { path: [], issue: "role names must not have surrounding whitespace" })));
 export const TerminalRecoveryReasonSchema = Schema.Union([Schema.Literal("episode_ended"), Schema.Literal("participant_inactive"), Schema.Literal("stale_participant_generation")]);
@@ -868,6 +893,16 @@ export const AssignRolesCommandFrameSchema = Schema.Struct({
   payload: Schema.Struct({ participant_id: UuidSchema, role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
 }).check(boundedFrame(65536));
 export type AssignRolesCommandFrame = typeof AssignRolesCommandFrameSchema.Type;
+export const SetStepAwayCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("set_step_away"), payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("reading"), Schema.Literal("notes"), Schema.Literal("break")]) }) }).check(
+  boundedFrame(65536),
+);
+export type SetStepAwayCommandFrame = typeof SetStepAwayCommandFrameSchema.Type;
+export const ClearStepAwayCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("clear_step_away"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type ClearStepAwayCommandFrame = typeof ClearStepAwayCommandFrameSchema.Type;
+export const OpenAppStateAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("open_app_state_allowance"), payload: Schema.Struct({ minutes: PositiveIntegerSchema }) }).check(boundedFrame(65536));
+export type OpenAppStateAllowanceCommandFrame = typeof OpenAppStateAllowanceCommandFrameSchema.Type;
+export const CloseAppStateAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("close_app_state_allowance"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type CloseAppStateAllowanceCommandFrame = typeof CloseAppStateAllowanceCommandFrameSchema.Type;
 export const AdmitParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("admit_participant"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
 export type AdmitParticipantOperationFrame = typeof AdmitParticipantOperationFrameSchema.Type;
 export const DenyAdmissionOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("deny_admission"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
@@ -1243,6 +1278,70 @@ const RecordingStatusChangedExternalOperationIdEventVariantSchema = Schema.Struc
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
 );
+const StepAwaySetCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("step_away_set"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_id: UuidSchema, reason: Schema.Union([Schema.Literal("reading"), Schema.Literal("notes"), Schema.Literal("break")]) }),
+  command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const StepAwayClearedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("step_away_cleared"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_id: UuidSchema }),
+  command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AppStateAllowanceOpenedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("app_state_allowance_opened"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ actor_participant_id: UuidSchema, minutes: PositiveIntegerSchema }),
+  command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AppStateAllowanceClosedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("app_state_allowance_closed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ actor_participant_id: UuidSchema }),
+  command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
 export const ParticipantJoinedEventFrameSchema = ParticipantJoinedLifecycleIntentIdEventVariantSchema;
 export const ParticipantLeftEventFrameSchema = ParticipantLeftExternalOperationIdEventVariantSchema;
 export const EpisodeStartedEventFrameSchema = EpisodeStartedLifecycleIntentIdEventVariantSchema;
@@ -1260,6 +1359,10 @@ export const ParticipantMicrophoneStoppedEventFrameSchema = ParticipantMicrophon
 export const ParticipantCameraStoppedEventFrameSchema = ParticipantCameraStoppedExternalOperationIdEventVariantSchema;
 export const ParticipantScreenShareStoppedEventFrameSchema = ParticipantScreenShareStoppedExternalOperationIdEventVariantSchema;
 export const RecordingStatusChangedEventFrameSchema = RecordingStatusChangedExternalOperationIdEventVariantSchema;
+export const StepAwaySetEventFrameSchema = StepAwaySetCommandIdEventVariantSchema;
+export const StepAwayClearedEventFrameSchema = StepAwayClearedCommandIdEventVariantSchema;
+export const AppStateAllowanceOpenedEventFrameSchema = AppStateAllowanceOpenedCommandIdEventVariantSchema;
+export const AppStateAllowanceClosedEventFrameSchema = AppStateAllowanceClosedCommandIdEventVariantSchema;
 export const EventFrameSchema = Schema.Union([
   ParticipantJoinedEventFrameSchema,
   ParticipantLeftEventFrameSchema,
@@ -1278,6 +1381,10 @@ export const EventFrameSchema = Schema.Union([
   ParticipantCameraStoppedEventFrameSchema,
   ParticipantScreenShareStoppedEventFrameSchema,
   RecordingStatusChangedEventFrameSchema,
+  StepAwaySetEventFrameSchema,
+  StepAwayClearedEventFrameSchema,
+  AppStateAllowanceOpenedEventFrameSchema,
+  AppStateAllowanceClosedEventFrameSchema,
 ]);
 
 export const CollaborationCapabilitySchema = Schema.Union([Schema.Literal("sendReaction"), Schema.Literal("sendChat")]);
@@ -1306,6 +1413,7 @@ const WelcomeBase = {
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
   media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   connection_quality: Schema.optionalKey(Schema.Literal(true)),
+  app_state: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation_burn_in: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
@@ -1371,6 +1479,10 @@ export const PresenceProjectionItemSchema = Schema.Struct({
   device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
   admission_revision: Schema.optional(PositiveIntegerSchema),
   connection_quality: Schema.optional(Schema.Literals(["good", "weak", "poor"])),
+  app_state: Schema.optional(Schema.Literals(["active", "inactive", "background"])),
+  windowed: Schema.optional(Schema.Boolean),
+  step_away_reason: Schema.optional(Schema.Literals(["reading", "notes", "break"])),
+  allowed: Schema.optional(Schema.Boolean),
 }).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));
 export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
   type: Schema.Literal("projection_snapshot"),
@@ -1508,6 +1620,7 @@ export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), c
 export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal("entered") });
 export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal("entered_ack"), ...ServerCorrelationFields });
 export const ConnectionQualitySetFrameSchema = Schema.Struct({ type: Schema.Literal("connection_quality_set"), quality: Schema.Union([Schema.Literal("good"), Schema.Literal("weak"), Schema.Literal("poor")]) });
+export const AppStateSetFrameSchema = Schema.Struct({ type: Schema.Literal("app_state_set"), state: Schema.Union([Schema.Literal("active"), Schema.Literal("inactive"), Schema.Literal("background")]), windowed: Schema.Boolean });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
 export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong"), ...ServerCorrelationFields });
 
@@ -1521,6 +1634,10 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         SetDisplayNameCommandFrameSchema,
         SetAdmissionPolicyCommandFrameSchema,
         AssignRolesCommandFrameSchema,
+        SetStepAwayCommandFrameSchema,
+        ClearStepAwayCommandFrameSchema,
+        OpenAppStateAllowanceCommandFrameSchema,
+        CloseAppStateAllowanceCommandFrameSchema,
         AdmitParticipantOperationFrameSchema,
         DenyAdmissionOperationFrameSchema,
         MuteParticipantOperationFrameSchema,
@@ -1545,6 +1662,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         RecoveryAckFrameSchema,
         EnteredFrameSchema,
         ConnectionQualitySetFrameSchema,
+        AppStateSetFrameSchema,
         PingFrameSchema,
       ]),
     ),

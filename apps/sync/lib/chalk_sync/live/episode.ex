@@ -22,7 +22,8 @@ defmodule ChalkSync.Live.Episode do
     :media_observation_cursor,
     :media_projection,
     :presence_projection,
-    :connection_qualities
+    :connection_qualities,
+    :app_states
   ]
   defstruct [
     :episode,
@@ -36,7 +37,8 @@ defmodule ChalkSync.Live.Episode do
     :media_observation_cursor,
     :media_projection,
     :presence_projection,
-    :connection_qualities
+    :connection_qualities,
+    :app_states
   ]
 
   @type t :: %__MODULE__{}
@@ -55,7 +57,8 @@ defmodule ChalkSync.Live.Episode do
       media_observation_cursor: nil,
       media_projection: nil,
       presence_projection: nil,
-      connection_qualities: %{}
+      connection_qualities: %{},
+      app_states: %{}
     }
   end
 
@@ -102,7 +105,8 @@ defmodule ChalkSync.Live.Episode do
           state
           | connections: connections,
             requests: requests,
-            connection_qualities: Map.delete(state.connection_qualities, socket)
+            connection_qualities: Map.delete(state.connection_qualities, socket),
+            app_states: close_app_state(state, socket)
         }
     end
   end
@@ -129,6 +133,62 @@ defmodule ChalkSync.Live.Episode do
           | connection_qualities: Map.put(state.connection_qualities, socket, quality)
         })
     end
+  end
+
+  @doc """
+  Records the observable app state one live socket reports. Closing the prior interval is the
+  only durable write; a socket loss leaves the intervening time as not reporting.
+  """
+  @spec set_app_state(t(), pid(), String.t(), boolean()) :: {:ok, t(), [map()]} | {:error, atom()}
+  def set_app_state(%__MODULE__{} = state, socket, app_state, windowed)
+      when app_state in ["active", "inactive", "background"] and is_boolean(windowed) do
+    case Map.fetch(state.connections, socket) do
+      :error ->
+        {:error, :not_live}
+
+      {:ok, authority} ->
+        now_ms = System.system_time(:millisecond)
+        current = Map.get(state.app_states, socket)
+
+        if (current && current.state == app_state) and current.windowed == windowed do
+          {:ok, state, []}
+        else
+          close_reported_app_state(state, authority, current, now_ms)
+          report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
+
+          Projections.presence_snapshot(%{
+            state
+            | app_states: Map.put(state.app_states, socket, report)
+          })
+        end
+    end
+  end
+
+  defp close_app_state(state, socket) do
+    case {Map.pop(state.app_states, socket), Map.get(state.connections, socket)} do
+      {{nil, app_states}, _authority} ->
+        app_states
+
+      {{current, app_states}, authority} when is_map(current) and is_map(authority) ->
+        close_reported_app_state(state, authority, current, System.system_time(:millisecond))
+        app_states
+
+      {_result, _authority} ->
+        state.app_states
+    end
+  end
+
+  defp close_reported_app_state(_state, _authority, nil, _ended_at_ms), do: :ok
+
+  defp close_reported_app_state(state, authority, current, ended_at_ms) do
+    ChalkSync.Stateholder.Postgres.Attention.close_interval(
+      state.episode,
+      authority.participant_id,
+      current.state,
+      current.windowed,
+      current.started_at_ms,
+      ended_at_ms
+    )
   end
 
   @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}
