@@ -81,7 +81,7 @@ export function downloadPage({ channel, version, macDownload, storeHref }) {
   <ol>
     <li><div><b>Install Chalk Helper and open it.</b> It waits quietly in the background.</div></li>
     <li><div><b>Share your screen in a Chalk call.</b> Chalk offers to connect Helper.</div></li>
-    <li><div><b>Click Allow in Helper.</b> Type the code Helper shows into Chalk, then pick the screen or window you’re sharing in Helper.</div></li>
+    <li><div><b>Click Allow in Helper.</b> Type the code Helper shows into Chalk. Then pick the screen you’re sharing in Helper, or choose <b>Follow captured window</b> if you’re sharing a window.</div></li>
     <li><div><b>Marks appear on your screen as people draw.</b> Others still see them on your share as usual.</div></li>
   </ol>
   <footer>Helper connects to a call only after you allow it, and you can disconnect it at any time.</footer>
