@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/netip"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -19,74 +18,6 @@ const (
 	// Keep enough budget to run a newly created node through the lookahead.
 	minimumNodeTime = Lookahead
 )
-
-type Phase string
-
-const (
-	Starting Phase = "starting"
-	Serving  Phase = "serving"
-	Draining Phase = "draining"
-	Deleting Phase = "deleting"
-	Deleted  Phase = "deleted"
-)
-
-type Node struct {
-	ID               string
-	ProviderID       int64
-	Address          netip.Addr
-	Phase            Phase
-	CreatedAt        time.Time
-	EmptySince       time.Time
-	EmptyIncarnation string
-}
-
-type Route struct {
-	ID        string
-	Address   netip.Addr
-	Accepting bool
-}
-
-type Snapshot struct {
-	ObservedAt time.Time
-	Demand     Demand
-	Nodes      []Node // oldest first, excluding deleted rows
-	NodeTime   time.Duration
-}
-
-type Store interface {
-	Load(ctx context.Context, application string, lookahead time.Duration, slotsPerNode int) (Snapshot, error)
-	Reserve(ctx context.Context, application, id string, maxNodes int) error
-	Save(ctx context.Context, id string, from Phase, next Node) error
-	Unbound(ctx context.Context, id string) (bool, error)
-	ForgetIntent(ctx context.Context, id string) error
-}
-
-type Droplet struct {
-	ID       int64
-	Address  netip.Addr
-	Active   bool
-	Outdated bool
-}
-
-type Provider interface {
-	Create(context.Context, string) (possiblyCreated bool, err error)
-	Observe(context.Context, string) (Droplet, bool, error)
-	Destroy(context.Context, string, int64) error
-	Gone(context.Context, string, int64) (bool, error)
-}
-
-type Health struct {
-	Incarnation string
-	Admission   bool
-	Draining    bool
-	Allocations int
-	CleanupDebt int
-}
-
-type Control interface {
-	Observe(context.Context, netip.Addr) (Health, error)
-	SetDrain(context.Context, netip.Addr, bool) error
-}
 
 type Policy struct {
 	Application     string
@@ -150,14 +81,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		case Serving:
 			result.Serving++
 			health, err := r.control.Observe(ctx, node.Address)
+			if err == nil && health.Incompatible {
+				return result, errors.Join(problems, r.transition(ctx, node, Draining))
+			}
 			if err == nil && health.Admission && !health.Draining {
 				result.Online++
 				healthy[node.ID] = true
 			}
 			if err != nil {
 				gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
-				if gone {
-					return result, errors.Join(problems, r.transition(ctx, node, Draining))
+				if providerErr == nil && gone {
+					// A provider-confirmed absence needs no drain. Keep the
+					// Episode's binding intact but return the paid pool slot.
+					return result, errors.Join(problems, r.transition(ctx, node, Deleted))
 				}
 				err = errors.Join(err, providerErr)
 			}
@@ -175,15 +111,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		if node.Phase != Draining {
 			continue
 		}
-		if needed > 0 {
-			reopened, err := r.reopen(ctx, node)
-			problems = errors.Join(problems, err)
-			if reopened {
-				needed--
-				continue
-			}
+		reopened, err := r.advanceDrain(ctx, node, state.ObservedAt, needed > 0)
+		problems = errors.Join(problems, err)
+		if reopened {
+			needed--
 		}
-		problems = errors.Join(problems, r.advanceDrain(ctx, node, state.ObservedAt))
 	}
 
 	if needed > 0 && len(state.Nodes) < r.policy.Capacity.MaxNodes {
@@ -206,20 +138,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return result, errors.Join(problems, r.transition(ctx, node, Draining))
 	}
 	return result, problems
-}
-
-func (r *Reconciler) reopen(ctx context.Context, node Node) (bool, error) {
-	health, err := r.control.Observe(ctx, node.Address)
-	if err != nil || !health.Admission {
-		return false, err
-	}
-	if health.Draining {
-		if err := r.control.SetDrain(ctx, node.Address, false); err != nil {
-			return false, err
-		}
-	}
-	err = r.transition(ctx, node, Serving)
-	return err == nil, err
 }
 
 func (r *Reconciler) create(ctx context.Context) error {
@@ -248,6 +166,13 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 			return err
 		}
 		if !found {
+			if node.ProviderID != 0 {
+				gone, err := r.provider.Gone(ctx, node.ID, node.ProviderID)
+				if err != nil || !gone {
+					return err
+				}
+				return r.transition(ctx, node, Deleted)
+			}
 			if now.Sub(node.CreatedAt) >= bootstrapLimit {
 				return errors.New("SFU window create has no provider confirmation; inspect the reserved intent")
 			}
@@ -282,37 +207,46 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 	return r.transition(ctx, node, Serving)
 }
 
-func (r *Reconciler) advanceDrain(ctx context.Context, node Node, now time.Time) error {
+func (r *Reconciler) advanceDrain(ctx context.Context, node Node, now time.Time, needCapacity bool) (bool, error) {
+	health, err := r.control.Observe(ctx, node.Address)
+	if err != nil {
+		gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
+		if providerErr == nil && gone {
+			return false, r.transition(ctx, node, Deleted)
+		}
+		return false, errors.Join(err, providerErr, r.clearEmpty(ctx, node))
+	}
+	if needCapacity && health.Admission {
+		if health.Draining {
+			if err := r.control.SetDrain(ctx, node.Address, false); err != nil {
+				return false, err
+			}
+		}
+		err := r.transition(ctx, node, Serving)
+		return err == nil, err
+	}
 	// The journal fence already blocks new Episode bindings. Keep SFU media
 	// admission open until existing Episodes end, including those whose first
 	// participant has not joined yet. No new binding can race this check.
 	unbound, err := r.store.Unbound(ctx, node.ID)
 	if err != nil || !unbound {
-		return errors.Join(err, r.clearEmpty(ctx, node))
-	}
-	health, err := r.control.Observe(ctx, node.Address)
-	if err != nil {
-		gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
-		if gone {
-			return r.transition(ctx, node, Deleted)
-		}
-		return errors.Join(err, providerErr, r.clearEmpty(ctx, node))
+		return false, errors.Join(err, r.clearEmpty(ctx, node))
 	}
 	if !health.Draining {
-		return errors.Join(r.clearEmpty(ctx, node), r.control.SetDrain(ctx, node.Address, true))
+		return false, errors.Join(r.clearEmpty(ctx, node), r.control.SetDrain(ctx, node.Address, true))
 	}
 	if health.Allocations != 0 || health.CleanupDebt != 0 || health.Incarnation == "" {
-		return r.clearEmpty(ctx, node)
+		return false, r.clearEmpty(ctx, node)
 	}
 	if node.EmptySince.IsZero() || node.EmptyIncarnation != health.Incarnation {
 		node.EmptySince = now
 		node.EmptyIncarnation = health.Incarnation
-		return r.store.Save(ctx, node.ID, Draining, node)
+		return false, r.store.Save(ctx, node.ID, Draining, node)
 	}
 	if now.Sub(node.EmptySince) < ReconcileEvery {
-		return nil
+		return false, nil
 	}
-	return r.transition(ctx, node, Deleting)
+	return false, r.transition(ctx, node, Deleting)
 }
 
 func (r *Reconciler) clearEmpty(ctx context.Context, node Node) error {

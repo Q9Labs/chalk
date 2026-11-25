@@ -43,9 +43,10 @@ where scheduled_episodes.cancelled_at is null;
 
 -- name: ListUpcomingScheduledEpisodes :many
 select booking.tenant_id, booking.space_id, booking.id, booking.starts_at, booking.expected_ends_at,
-    jsonb_array_length(booking.expected_participants)::integer as participant_count
+    jsonb_array_length(booking.expected_participants)::integer as participant_count, tenant.media_plane_provider_config
 from scheduled_episodes booking
 join spaces space on space.tenant_id = booking.tenant_id and space.id = booking.space_id
+join tenants tenant on tenant.id = booking.tenant_id
 where booking.cancelled_at is null
   and space.archived_at is null
   and booking.starts_at > sqlc.arg(window_start)::timestamptz - interval '7 days'

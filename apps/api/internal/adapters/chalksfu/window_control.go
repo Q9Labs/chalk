@@ -43,11 +43,12 @@ func (c WindowControl) Observe(ctx context.Context, address netip.Addr) (sfuflee
 		status == http.StatusServiceUnavailable && !*ready.Draining {
 		return sfufleet.Health{}, fmt.Errorf("invalid SFU window health")
 	}
+	compatible := ready.Protocol >= minNodeProtocol && ready.Revision == c.revision && ready.PacketBudget >= 36000
 	return sfufleet.Health{
-		Incarnation: ready.NodeIncarnation,
-		Admission: ready.Protocol >= minNodeProtocol && ready.Revision == c.revision &&
-			ready.PacketBudget >= 36000 && ready.Host.AdmissionReason == "",
-		Draining: *ready.Draining, Allocations: *ready.Allocations, CleanupDebt: *ready.CleanupDebt,
+		Incarnation:  ready.NodeIncarnation,
+		Admission:    compatible && ready.Host.AdmissionReason == "",
+		Incompatible: !compatible,
+		Draining:     *ready.Draining, Allocations: *ready.Allocations, CleanupDebt: *ready.CleanupDebt,
 	}, nil
 }
 

@@ -25,17 +25,40 @@ func (q *Queries) ForgetSFUWindowIntent(ctx context.Context, id string) (int64, 
 	return result.RowsAffected(), nil
 }
 
+const isSFUWindowNodeGone = `-- name: IsSFUWindowNodeGone :one
+select exists (
+    select 1 from sfu_window_nodes where id = $1 and application_id = $2 and deleted_at is not null
+) as gone
+`
+
+type IsSFUWindowNodeGoneParams struct {
+	ID            string `json:"id"`
+	ApplicationID string `json:"application_id"`
+}
+
+func (q *Queries) IsSFUWindowNodeGone(ctx context.Context, arg IsSFUWindowNodeGoneParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isSFUWindowNodeGone, arg.ID, arg.ApplicationID)
+	var gone bool
+	err := row.Scan(&gone)
+	return gone, err
+}
+
 const isSFUWindowNodeUnbound = `-- name: IsSFUWindowNodeUnbound :one
 select not exists (
     select 1 from episodes
     where status in ('active', 'ending')
-      and config_snapshot -> 'media_plane_binding' ->> 'provider' = 'chalk_sfu'
-      and config_snapshot -> 'media_plane_binding' ->> 'node' = $1::text
+      and config_snapshot -> 'media_plane_binding' ->> 'provider' = $1::text
+      and config_snapshot -> 'media_plane_binding' ->> 'node' = $2::text
 ) as unbound
 `
 
-func (q *Queries) IsSFUWindowNodeUnbound(ctx context.Context, nodeID string) (bool, error) {
-	row := q.db.QueryRow(ctx, isSFUWindowNodeUnbound, nodeID)
+type IsSFUWindowNodeUnboundParams struct {
+	Provider string `json:"provider"`
+	NodeID   string `json:"node_id"`
+}
+
+func (q *Queries) IsSFUWindowNodeUnbound(ctx context.Context, arg IsSFUWindowNodeUnboundParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isSFUWindowNodeUnbound, arg.Provider, arg.NodeID)
 	var unbound bool
 	err := row.Scan(&unbound)
 	return unbound, err
@@ -82,9 +105,14 @@ select episode.tenant_id, episode.space_id, episode.started_at,
        and participant.status in ('joining', 'active', 'leaving'))::integer as participants
 from episodes episode
 where episode.status in ('active', 'ending')
-  and episode.config_snapshot -> 'media_plane_binding' ->> 'provider' = 'chalk_sfu'
-  and episode.config_snapshot -> 'media_plane_binding' ->> 'adapter_fingerprint' = $1::text
+  and episode.config_snapshot -> 'media_plane_binding' ->> 'provider' = $1::text
+  and episode.config_snapshot -> 'media_plane_binding' ->> 'adapter_fingerprint' = $2::text
 `
+
+type ListSFULiveDemandParams struct {
+	Provider    string `json:"provider"`
+	Fingerprint string `json:"fingerprint"`
+}
 
 type ListSFULiveDemandRow struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
@@ -93,8 +121,8 @@ type ListSFULiveDemandRow struct {
 	Participants int32              `json:"participants"`
 }
 
-func (q *Queries) ListSFULiveDemand(ctx context.Context, fingerprint string) ([]ListSFULiveDemandRow, error) {
-	rows, err := q.db.Query(ctx, listSFULiveDemand, fingerprint)
+func (q *Queries) ListSFULiveDemand(ctx context.Context, arg ListSFULiveDemandParams) ([]ListSFULiveDemandRow, error) {
+	rows, err := q.db.Query(ctx, listSFULiveDemand, arg.Provider, arg.Fingerprint)
 	if err != nil {
 		return nil, err
 	}

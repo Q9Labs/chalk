@@ -286,7 +286,8 @@ type Querier interface {
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error)
-	IsSFUWindowNodeUnbound(ctx context.Context, nodeID string) (bool, error)
+	IsSFUWindowNodeGone(ctx context.Context, arg IsSFUWindowNodeGoneParams) (bool, error)
+	IsSFUWindowNodeUnbound(ctx context.Context, arg IsSFUWindowNodeUnboundParams) (bool, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
 	// Separate pending expiry from admitted cleanup. The lateral lookup starts
 	// cleanup at current active seats, never at retained admitted-request history.
@@ -320,7 +321,7 @@ type Querier interface {
 	// makes the Participant active again.
 	ListRenewableSourceGrants(ctx context.Context, arg ListRenewableSourceGrantsParams) ([]ListRenewableSourceGrantsRow, error)
 	ListRoutableSFUWindowNodes(ctx context.Context, applicationID string) ([]ListRoutableSFUWindowNodesRow, error)
-	ListSFULiveDemand(ctx context.Context, fingerprint string) ([]ListSFULiveDemandRow, error)
+	ListSFULiveDemand(ctx context.Context, arg ListSFULiveDemandParams) ([]ListSFULiveDemandRow, error)
 	ListSFUWindowNodes(ctx context.Context, applicationID string) ([]SfuWindowNode, error)
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
