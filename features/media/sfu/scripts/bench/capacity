@@ -43,6 +43,7 @@ up() {
   [[ ! -e "${state}/generator-primary.json" ]] || die "generators exist; run: capacity down"
   mkdir -p "$state" "$out"
   chmod 700 "$state"
+  rm -f "${state}/known_hosts" # generators are disposable; a reused address must not keep an old host key
   local key_id stamp role
   key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
