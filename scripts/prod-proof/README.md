@@ -138,6 +138,10 @@ The decrypted folder holds environment identifiers and call evidence. Keep it pr
 
 `.private/prod-proof/<run>/report.json` holds each result, with policy snapshots, WebRTC stats, signed event summaries, the MP4, ffprobe output, the contact sheet, Transcript document and timing. The command prints phase results and the absolute path. Review the contact sheet as one image. Remove local artifacts after the release handoff; they contain production identifiers but no saved owner credentials.
 
+## Class window
+
+`class-window.mjs plan` prints the arithmetic for N concurrent three-person classes with cameras and a screen share: the packets/s each class reserves, the SFU nodes it needs, the droplet cost and any headroom warning. It makes no network call. `class-window.mjs run` drives the classes against a stack the operator stood up for the run. Each class is one Space, one Episode and three SDK guests. The guests join at one shared window, camera is judged from decoded frames every ten seconds, and screen share runs in stretches (guest 0 shares, the other two must decode it). A class passes only when every camera window and every screen window passes after the ramp; a run with no windows fails. `run` refuses unless `CHALK_PROOF_CONFIG_SOURCE=env` and `--expect-api-host` names the API it talks to, so the production proof Tenant cannot be reached by accident. Its output under `.private/class-window/` holds run identifiers and stays out of Git.
+
 ## Cancellation and recovery
 
 Each invocation has a unique run ID (`CHALK_PROOF_RUN_ID` overrides it; 1 to 51 letters, digits, underscores or hyphens). Run keys expire after 55 minutes. Keys and Spaces are named `chalk-proof:<run-id>`, and Space and Episode metadata hold `proof_run_id`. Recover a cancelled invocation from its private local ownership file; the workflow's `always()` step does the same, and it is safe to repeat:
