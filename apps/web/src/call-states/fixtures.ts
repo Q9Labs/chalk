@@ -11,6 +11,8 @@ export type Person = {
   readonly speaking?: boolean;
   readonly handRaised?: boolean;
   readonly sharing?: boolean;
+  /** Marks this roster entry as an agent participant. */
+  readonly agent?: boolean;
   /** Holds the host capabilities, so the roster marks the person as a host. */
   readonly host?: boolean;
   /** How this guest's own link reads to everyone else. */
@@ -166,6 +168,7 @@ function participant(person: Person, capabilities: readonly Capability[]): Parti
     participantId: person.id,
     displayName: person.name,
     role: "guest",
+    ...(person.agent ? { identityKind: "agent" as const } : {}),
     eligibleRoles: ["guest", "host"],
     capabilities,
     handRaised: person.handRaised ?? false,
