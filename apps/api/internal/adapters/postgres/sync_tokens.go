@@ -76,7 +76,7 @@ func (r EpisodeLifecycleRepository) ReplaceParticipantMediaConnection(ctx contex
 
 func replaceParticipantMediaConnection(ctx context.Context, tx pgx.Tx, key synctokens.SubjectKey, generation int64, previous, next string) error {
 	result, err := tx.Exec(ctx, `update participants set media_connection_id = $7, media_connection_generation = $5
- where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4 and generation = $5 and status = 'active'
+ where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4 and generation = $5 and status in ('joining', 'active')
  and (media_connection_generation is distinct from generation or media_connection_id is null or media_connection_id = $6)`,
 		uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, previous, next)
 	if err != nil {
@@ -93,7 +93,7 @@ func (r EpisodeLifecycleRepository) ReserveParticipantMediaRefresh(ctx context.C
 		var binding string
 		var bindingGeneration int64
 		err := tx.QueryRow(ctx, `select coalesce(media_connection_id,''),coalesce(media_connection_generation,0) from participants
- where tenant_id=$1 and space_id=$2 and episode_id=$3 and id=$4 and generation=$5 and status='active' for update`,
+ where tenant_id=$1 and space_id=$2 and episode_id=$3 and id=$4 and generation=$5 and status in ('joining','active') for update`,
 			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation).Scan(&binding, &bindingGeneration)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return accessgrants.ErrConnectionSuperseded
@@ -131,7 +131,7 @@ func (r EpisodeLifecycleRepository) LoadParticipantMediaRefresh(ctx context.Cont
 		err := tx.QueryRow(ctx, `select r.response_ciphertext,r.created_at from participant_media_refreshes r
  join participants p on p.tenant_id=r.tenant_id and p.space_id=r.space_id and p.episode_id=r.episode_id and p.id=r.participant_id
  where r.tenant_id=$1 and r.space_id=$2 and r.episode_id=$3 and r.participant_id=$4 and r.participant_generation=$5 and r.request_hash=$6
- and p.generation=$5 and p.status='active' and p.media_connection_generation=$5 and p.media_connection_id=r.connection_id
+ and p.generation=$5 and p.status in ('joining','active') and p.media_connection_generation=$5 and p.media_connection_id=r.connection_id
  and r.created_at + ($7::bigint * interval '1 second') > clock_timestamp()`,
 			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, requestHash[:], int64(accessgrants.RefreshReplayWindow/time.Second)).Scan(&row.Ciphertext, &row.CreatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {

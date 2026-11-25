@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -140,6 +139,15 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 			}
+			resumed := false
+			if !replaceMediaConnection {
+				stage = "media_connection"
+				join, replaceMediaConnection, err = resumeOrReplaceAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
+				if err != nil {
+					return accessGrantResponse{}, err
+				}
+				resumed = !replaceMediaConnection
+			}
 			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
 			if replayReplacement {
 				subject = previous
@@ -169,32 +177,11 @@ func issueAccessGrantEndpoint(
 					replaceMediaConnection = false
 				} else {
 					stage = "media_binding"
-					reservation := previous
-					if conditionalReplacement {
-						reservation.ConnectionID = fmt.Sprintf("replacement:%x", requestHash)
-						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
-					} else {
-						reservationID, idErr := utilities.NewID()
-						if idErr != nil {
-							return accessGrantResponse{}, idErr
-						}
-						reservation.ConnectionID = "replacement:" + reservationID.String()
-						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
-					}
+					reservation, release, err := reserveAccessGrantReplacement(ctx, generations, previous, requestHash)
 					if err != nil {
-						return accessGrantResponse{}, accessGrantRefreshError(err)
+						return accessGrantResponse{}, err
 					}
-					original := previous
-					defer func() {
-						if failure == nil {
-							return
-						}
-						cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-						defer cancel()
-						if err := generations.ReplaceParticipantMediaConnection(cleanup, reservation, original); err != nil && !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
-							failure = errors.Join(failure, fmt.Errorf("release media refresh reservation: %w", err))
-						}
-					}()
+					defer release(&failure)
 					previous = reservation
 				}
 			}
@@ -204,7 +191,7 @@ func issueAccessGrantEndpoint(
 				if err == nil {
 					subject, err = accessGrantSubjectForJoin(request, join)
 				}
-			} else {
+			} else if !resumed {
 				join, err = resumeAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
 			}
 			if err != nil {
