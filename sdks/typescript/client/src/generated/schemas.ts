@@ -330,13 +330,6 @@ export const CreatePresentingDocumentRequestSchema = /* @__PURE__ */ (() =>
   }))();
 export type CreatePresentingDocumentRequest = typeof CreatePresentingDocumentRequestSchema.Type;
 
-export const CreatePresentingDocumentResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    documentId: Schema.String,
-    status: Schema.String,
-  }))();
-export type CreatePresentingDocumentResponse = typeof CreatePresentingDocumentResponseSchema.Type;
-
 export const CreatePublicSpaceRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     display_name: Schema.String.check(Schema.isMinLength(1)),
@@ -980,6 +973,13 @@ export const PrepareRecordingRequestSchema = /* @__PURE__ */ (() =>
     starts_at: DateTimeStringSchema,
   }))();
 export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
+
+export const PresentingDocumentCreatedSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    documentId: Schema.String,
+    status: Schema.String,
+  }))();
+export type PresentingDocumentCreated = typeof PresentingDocumentCreatedSchema.Type;
 
 export const PresentingDocumentManifestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2783,7 +2783,7 @@ export type CreateMembership429ResponseHeaders = typeof CreateMembership429Respo
 export const CreatePresentingDocumentRequestBodySchema = /* @__PURE__ */ (() => CreatePresentingDocumentRequestSchema)();
 export type CreatePresentingDocumentRequestBody = typeof CreatePresentingDocumentRequestBodySchema.Type;
 
-export const CreatePresentingDocumentResponseSchema = /* @__PURE__ */ (() => CreatePresentingDocumentResponseSchema)();
+export const CreatePresentingDocumentResponseSchema = /* @__PURE__ */ (() => PresentingDocumentCreatedSchema)();
 export type CreatePresentingDocumentResponse = typeof CreatePresentingDocumentResponseSchema.Type;
 
 export const CreatePresentingDocument429ResponseHeadersSchema = /* @__PURE__ */ (() =>

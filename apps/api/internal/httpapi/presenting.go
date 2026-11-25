@@ -118,7 +118,7 @@ func createPresentingDocumentEndpoint(service PresentingService) Endpoint[create
 		}).
 		Needs(service).Auth(APIAuthParticipantSync).RateLimit(authenticatedWriteRateLimit).
 		RequestBody("CreatePresentingDocumentRequest", createPresentingDocumentBody{}).
-		Responds(http.StatusOK, "CreatePresentingDocumentResponse", createPresentingDocumentResponse{}).
+		Responds(http.StatusOK, "PresentingDocumentCreated", createPresentingDocumentResponse{}).
 		Errors(presentingErrors()...).ErrorRules(presentingRules)
 }
 

@@ -930,7 +930,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePresentingDocumentResponse"
+                  "$ref": "#/components/schemas/PresentingDocumentCreated"
                 }
               }
             },
@@ -15926,19 +15926,6 @@
         "required": ["attachmentId"],
         "type": "object"
       },
-      "CreatePresentingDocumentResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "documentId": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": ["documentId", "status"],
-        "type": "object"
-      },
       "CreatePublicSpaceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -17353,6 +17340,19 @@
           }
         },
         "required": ["expected_revision", "starts_at"],
+        "type": "object"
+      },
+      "PresentingDocumentCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": ["documentId", "status"],
         "type": "object"
       },
       "PresentingDocumentManifest": {

@@ -1721,10 +1721,6 @@ export interface components {
     CreatePresentingDocumentRequest: {
       attachmentId: string;
     };
-    CreatePresentingDocumentResponse: {
-      documentId: string;
-      status: string;
-    };
     CreatePublicSpaceRequest: {
       display_name: string;
     };
@@ -2246,6 +2242,10 @@ export interface components {
     PrepareRecordingRequest: {
       expected_revision: number;
       starts_at: components["schemas"]["DateTimeString"];
+    };
+    PresentingDocumentCreated: {
+      documentId: string;
+      status: string;
     };
     PresentingDocumentManifest: {
       attachmentId: string;
@@ -4313,7 +4313,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["CreatePresentingDocumentResponse"];
+          "application/json": components["schemas"]["PresentingDocumentCreated"];
         };
       };
       /** @description Bad Request */
