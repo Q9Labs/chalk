@@ -89,14 +89,16 @@ private final class ScreenFrameEncoder: @unchecked Sendable {
         attachmentModeOut: nil
       ) as? NSNumber
     )?.uintValue ?? 0
-    let header = """
-      HTTP/1.1 200 OK\r
-      Content-Length: \(jpeg.count)\r
-      Buffer-Width: \(width)\r
-      Buffer-Height: \(height)\r
-      Buffer-Orientation: \(orientation)\r
-      \r
-      """
+    // WebRTC's reader waits for the blank line that ends the headers, so every line ends in CRLF.
+    let header = [
+      "HTTP/1.1 200 OK",
+      "Content-Length: \(jpeg.count)",
+      "Buffer-Width: \(width)",
+      "Buffer-Height: \(height)",
+      "Buffer-Orientation: \(orientation)",
+      "",
+      "",
+    ].joined(separator: "\r\n")
     guard var message = header.data(using: String.Encoding.utf8) else { return nil }
     message.append(jpeg)
     return message
@@ -162,6 +164,9 @@ private final class ScreenShareSocketSender: @unchecked Sendable {
       failure?(screenShareError("The Chalk screen-share socket could not be created."))
       return
     }
+    // Chalk closing its end must fail the next send, not raise SIGPIPE and kill the extension.
+    var noSignal: Int32 = 1
+    setsockopt(socketDescriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
 
     var address = sockaddr_un()
     address.sun_family = sa_family_t(AF_UNIX)

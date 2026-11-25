@@ -101,7 +101,7 @@ final class ChalkBroadcastModule: NSObject {
         return
       }
       self.picker = picker
-      let timeout = DispatchWorkItem { [weak self] in self?.fail() }
+      let timeout = DispatchWorkItem { [weak self] in self?.fail("Screen sharing didn’t start within a minute.") }
       pending = Pending(resolve: resolve, reject: reject, timeout: timeout)
       resignedWhilePending = false
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.startTimeout, execute: timeout)
@@ -129,9 +129,9 @@ final class ChalkBroadcastModule: NSObject {
     }
   }
 
-  private func fail() {
+  private func fail(_ message: String = "Screen sharing was cancelled.") {
     guard let pending = take() else { return }
-    pending.reject("NotAllowedError", "Screen sharing was cancelled.", nil)
+    pending.reject("NotAllowedError", message, nil)
   }
 
   private func take() -> Pending? {

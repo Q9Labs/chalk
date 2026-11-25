@@ -592,14 +592,7 @@
     {
       "name": "embedding",
       "summary": "Embeds a Space and connects host applications to the Dashboard.",
-      "paths": [
-        "apps/web/src/components/landing/EmbedSection.tsx",
-        "apps/web/src/routes/dashboard.connect.tsx",
-        "sdks/typescript/react-native/src/components/native-space-view",
-        "sdks/typescript/react-native/src/frame",
-        "sdks/typescript/react/src/components/chalk",
-        "sdks/typescript/react/src/components/chalk-ui"
-      ]
+      "paths": ["apps/web/src/components/landing/EmbedSection.tsx", "apps/web/src/routes/dashboard.connect.tsx", "sdks/typescript/react-native/src/frame", "sdks/typescript/react/src/components/chalk", "sdks/typescript/react/src/components/chalk-ui"]
     },
     {
       "name": "shared",
