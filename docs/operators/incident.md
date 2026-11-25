@@ -81,7 +81,7 @@ insert into presenting_settings (singleton, enabled) values (true, false)
 on conflict (singleton) do update set enabled = excluded.enabled;
 ```
 
-API `/readyz` shows `capabilities.presenting: disabled` on the next request. Participant presenting routes then reject new reads and writes with `presenting.disabled`; live calls, chat attachments and screen shares stay in place. Renderer invocations already leased can finish their current object writes, but no new Document can be created while the switch is off.
+API `/readyz` shows `capabilities.presenting: disabled` on the next request. Participant presenting routes then reject new reads and writes with `presenting.disabled`; live calls, chat attachments and screen shares stay in place. Renderer control claims are rejected while the switch is off. Leases already issued may drain only through their completion, failure, heartbeat, page-ready and zoom-completion callbacks; their object writes remain unpublished if their lease has expired. No new Document can be created while the switch is off.
 
 Use the same statement with `true` to turn presenting back on, or `delete from presenting_settings where singleton;` to use the startup default again.
 
