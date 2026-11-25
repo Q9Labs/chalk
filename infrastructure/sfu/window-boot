@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Starts the Chalk SFU on a window node, on every boot of a Droplet made from the window snapshot.
+
+The snapshot holds the SFU image, the environment's server certificate as rootless Podman secrets and two
+templates, so it carries no address and no per-node setting. This script finds what only the running Droplet
+knows: its own public IPv4 address (from DigitalOcean's metadata service, which hands out no secret) and its
+measured node size (from the vCPU count and the SFU's node table). It renders the settings and the unit and
+starts the node. Any doubt is a failure and the node stays down: a node that announced a wrong address would
+look healthy and fail every call.
+"""
+import ipaddress
+import json
+import os
+import pwd
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+CONFIG = Path('/etc/chalk-sfu')
+USER = 'chalk-sfu'
+METADATA = 'http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address'
+PLACEHOLDER = re.compile(r'__[A-Z_]+__')
+
+
+def fetch_metadata():
+    # The metadata service is link-local, and a proxy in the environment must never sit between it and us.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(METADATA, timeout=3) as reply:
+        return reply.read(64).decode('ascii', 'replace')
+
+
+def public_ipv4(fetch=None, attempts=60, pause=2.0, sleep=None):
+    """The Droplet's public IPv4 address, or an error. Only a globally routable unicast address passes."""
+    fetch, sleep = fetch or fetch_metadata, sleep or time.sleep
+    last = 'no answer'
+    for attempt in range(attempts):
+        try:
+            text = fetch().strip()
+            address = ipaddress.IPv4Address(text)
+            if address.is_global and not address.is_multicast:
+                return str(address)
+            last = f'{text} is not a public address'
+        except (OSError, ValueError) as error:
+            last = f'{type(error).__name__}: {error}'
+        if attempt + 1 < attempts:
+            sleep(pause)
+    raise SystemExit(f'no usable public IPv4 address from the metadata service ({last})')
+
+
+def node_size(table, vcpus):
+    """The measured size with this many vCPUs, as the deploy picks it, or an error."""
+    for name, size in table['sizes'].items():
+        if size['vcpus'] == vcpus:
+            return name, size
+    raise SystemExit(f'no measured node size for {vcpus} vCPUs; load-test the size and add it to node.json')
+
+
+def render(template, values):
+    text = template
+    for name, value in values.items():
+        text = text.replace(f'__{name}__', value)
+    left = PLACEHOLDER.findall(text)
+    if left:
+        raise SystemExit(f'template still has {sorted(set(left))} after rendering')
+    return text
+
+
+def install(path, text, uid, gid):
+    temporary = path.with_name(path.name + '.new')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'w') as handle:
+        handle.write(text)
+    os.chown(temporary, uid, gid)
+    os.replace(temporary, path)
+
+
+def local_addresses():
+    reply = subprocess.run(['ip', '-j', '-4', 'address', 'show'], capture_output=True, text=True, check=True)
+    return {entry['local'] for link in json.loads(reply.stdout) for entry in link.get('addr_info', [])}
+
+
+def main():
+    manifest = json.loads((CONFIG / 'window-image.json').read_text())
+    table = json.loads((CONFIG / 'node.json').read_text())
+    size_name, size = node_size(table, len(os.sched_getaffinity(0)))
+    address = public_ipv4()
+    try:
+        # The public address sits on the Droplet's own interface. A mismatch is logged, not fatal: a reserved
+        # IP or a provider change must not turn a working node off, and the call check still decides.
+        if address not in local_addresses():
+            print(f'warning: {address} is not on a local interface', file=sys.stderr)
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f'warning: could not list local addresses: {error}', file=sys.stderr)
+
+    account = pwd.getpwnam(USER)
+    home = Path(account.pw_dir)
+    install(home / '.config/chalk-sfu/sfu.env',
+            render((CONFIG / 'sfu.env.template').read_text(),
+                   {'ANNOUNCE_IP': address, 'NODE_SIZE': size_name, 'GOMEMLIMIT': size['goMemLimit']}),
+            account.pw_uid, account.pw_gid)
+    install(home / '.config/containers/systemd/chalk-sfu.container',
+            render((CONFIG / 'chalk-sfu.container.template').read_text(), {'MEMORY_LIMIT': size['containerMemory']}),
+            account.pw_uid, account.pw_gid)
+
+    # Linger starts the user manager at boot; starting it again waits for it and changes nothing.
+    subprocess.run(['systemctl', 'start', f'user@{account.pw_uid}.service'], check=True)
+    for command in (['daemon-reload'], ['restart', 'chalk-sfu.service']):
+        subprocess.run(['systemctl', '--user', '-M', f'{USER}@', *command], check=True)
+    print(f'started chalk-sfu {manifest["revision"]} as {size_name}, announcing {address}')
+
+
+if __name__ == '__main__':
+    main()
