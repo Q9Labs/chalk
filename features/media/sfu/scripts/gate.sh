@@ -24,6 +24,7 @@ printf '\n==> Template render and deploy branch tests (mocked ssh, doctl, docker
 python3 "${repo_root}/infrastructure/sfu/test_templates.py"
 python3 "${repo_root}/infrastructure/sfu/test_otlp_token_check.py"
 python3 "${repo_root}/infrastructure/sfu/test_window_image.py"
+python3 "${repo_root}/infrastructure/sfu/test_window_boot.py"
 printf '\n==> Contention tests\n'
 node "${repo_root}/scripts/test/run.mjs" node --test "${repo_root}/features/scorecard/contention.test.mjs" "${repo_root}/features/scorecard/chalk-sfu.test.mjs" "${repo_root}/features/scorecard/cf-sfu-card.test.mjs" "${repo_root}/features/scorecard/nightly-graph.test.mjs" "${repo_root}/features/scorecard/staging-metrics.test.mjs" "${repo_root}/features/scorecard/diagnostics.test.mjs" "${repo_root}/features/scorecard/stats.test.mjs" "${repo_root}/features/scorecard/baseline.test.mjs" "${repo_root}/features/scorecard/regression.test.mjs" "${repo_root}/scripts/prod-proof/latency-stages.test.mjs"
 

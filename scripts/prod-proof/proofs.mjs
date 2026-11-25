@@ -26,7 +26,7 @@ export async function createProofKey(run) {
   run.ownership = { keyId: key.api_key.id };
   run.apiKey = key.secret;
   await saveOwnership(run);
-  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, run.signal);
+  run.apiRequest = (method, path, body, signal = run.signal) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, signal);
   return key.api_key.id;
 }
 export async function prepareIntegration(run, webhooks) {
@@ -42,7 +42,7 @@ export async function prepareIntegration(run, webhooks) {
   return receiver;
 }
 // Use a configured Space or create one. Either must admit new Chalk SFU Episodes.
-export async function createSpace(run, policy = manualPolicy, { reuse = true } = {}) {
+export async function createSpace(run, policy = manualPolicy, { reuse = true, episodeDurationSeconds } = {}) {
   const pinName = pinnedSpaceVariable(policy);
   const existing = reuse ? await pinnedSpace(run, policy, pinName) : undefined;
   if (existing) {
@@ -51,7 +51,7 @@ export async function createSpace(run, policy = manualPolicy, { reuse = true } =
     await save(`${run.directory}/space.json`, existing);
     return existing;
   }
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, metadata: { proof_run_id: run.runId } }));
+  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, episodeDurationSeconds, metadata: { proof_run_id: run.runId } }));
   checkSpacePlane(space);
   checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);

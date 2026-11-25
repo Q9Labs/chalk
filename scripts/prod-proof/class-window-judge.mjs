@@ -28,15 +28,11 @@ export function judgeClass({ samples, participants = 3, sharer = 0, rampMs = 120
     const previous = samples[index - 1];
     const current = samples[index];
     if (current.at < rampMs) continue;
-    const cameraOk = current.guests.every(
-      (rows, guest) => advancedStreams(previous.guests[guest], rows, isCamera) >= participants - 1,
-    );
+    const cameraOk = current.guests.every((rows, guest) => advancedStreams(previous.guests[guest], rows, isCamera) >= participants - 1);
     cameraWindows.push({ at: current.at, ok: cameraOk });
     const sameStretch = current.shareOn && previous.shareOn && current.shareStartedAt === previous.shareStartedAt;
-    if (sameStretch && current.at - current.shareStartedAt >= shareStartupMs) {
-      const screenOk = current.guests.every(
-        (rows, guest) => guest === sharer || advancedStreams(previous.guests[guest], rows, isScreen) >= 1,
-      );
+    if (sameStretch && previous.at - previous.shareStartedAt >= shareStartupMs) {
+      const screenOk = current.guests.every((rows, guest) => guest === sharer || advancedStreams(previous.guests[guest], rows, isScreen) >= 1);
       screenWindows.push({ at: current.at, ok: screenOk });
     }
   }

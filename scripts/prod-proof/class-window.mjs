@@ -8,7 +8,7 @@
 //   CHALK_PROOF_CONFIG_SOURCE=env CHALK_PROOF_API_KEY=... CHALK_PROOF_TENANT_ID=... CHALK_PROOF_API_URL=... \
 //     CHALK_PROOF_WEB_URL=... CHALK_PROOF_PROOF_ORIGIN=... CHALK_PROOF_WEBHOOK_SERVICE_URL=... CHALK_PROOF_WEBHOOK_ENDPOINT_ID=... \
 //     node scripts/prod-proof/class-window.mjs run --environment staging --confirm staging --expect-api-host <host> \
-//       --window-start 2026-11-26T20:00:00Z --first-class 0 --classes 5 --hold-minutes 60
+//       --window-start 2026-11-26T20:00:00Z --first-class 0 --classes 5 --hold-minutes 20
 //
 // `run` never reads the 1Password default, which is the production proof Tenant. It needs a stack the operator stood up
 // for this run, and it refuses unless the API host it talks to is the one named by --expect-api-host. It writes
@@ -128,7 +128,11 @@ async function runWindow() {
   const signal = controller.signal;
   const shardRunId = `cw-${windowIso.replace(/\D/g, "").slice(0, 14)}-${firstClass}-${randomUUID().slice(0, 8)}`;
   const shardRun = await createRun(config, resolve(out, "shard"), signal, shardRunId);
+  const stop = () => controller.abort(new Error("Class window interrupted"));
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
   let origin;
+  let cleanupFailed = false;
   const verdicts = [];
   try {
     origin = (await prepareIntegration(shardRun, false)).origin;
@@ -137,9 +141,16 @@ async function runWindow() {
       verdicts.push(result.status === "fulfilled" ? result.value : { class: firstClass + offset, pass: false, reason: "class-crashed" });
     });
   } finally {
-    await cleanupRun(shardRun).catch((error) => publicFailure("shard cleanup", error));
+    await cleanupRun(shardRun).catch((error) => {
+      cleanupFailed = true;
+      publicFailure("shard cleanup", error);
+    });
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
   }
   const verdict = judgeRun(verdicts);
+  if (cleanupFailed || signal.aborted) verdict.pass = false;
+  if (cleanupFailed) verdict.cleanupFailed = true;
   await save(resolve(out, "verdict.json"), { window: windowIso, firstClass, classes, participants, shareDuty, verdicts, ...verdict });
   console.log(`class-window: ${verdict.passed}/${verdict.classes} classes passed${verdict.failed.length ? `; failed ${verdict.failed.join(",")}` : ""}`);
   if (!verdict.pass) process.exitCode = 1;
@@ -147,12 +158,15 @@ async function runWindow() {
   async function runClass(index) {
     const directory = resolve(out, `class-${index}`);
     const run = await createRun(config, directory, signal, `${shardRunId}-k${index}`);
+    const scheduledEnd = windowStart + holdMs;
+    const classEnd = scheduledEnd + (index === overrunClass ? overrunMs : 0);
     let booking;
+    let result;
     try {
       await createProofKey(run);
-      const space = await createSpace(run, manualPolicy, { reuse: false });
+      const episodeDurationSeconds = Math.ceil((classEnd - windowStart + prepareMs) / 1000) + 60;
+      const space = await createSpace(run, manualPolicy, { reuse: false, episodeDurationSeconds });
       booking = `${run.tenantPath}/spaces/${space.id}/scheduled-episodes/${randomUUID()}`;
-      const scheduledEnd = windowStart + holdMs;
       await run.apiRequest("PUT", booking, {
         starts_at: new Date(windowStart).toISOString(),
         expected_ends_at: new Date(scheduledEnd).toISOString(),
@@ -165,30 +179,31 @@ async function runWindow() {
       const { episode } = await openEpisodeInSpace(run, space);
       const openEpisodeMs = Math.round(performance.now() - openingStarted);
       const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
-      const guests = await launchGuests(run, space, episode, null, origin, false, participants, { deferJoin: true });
+      const guests = await launchGuests(run, space, episode, null, origin, true, participants, { deferJoin: true });
       await until(windowStart, signal);
       const joiningStarted = performance.now();
-      await Promise.all(
-        guests.pages.map((page, guest) =>
-          page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: config.api_url, name: `Class ${index} guest ${guest + 1}` }),
-        ),
-      );
+      await Promise.all(guests.pages.map((page, guest) => page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: config.api_url, name: `Class ${index} guest ${guest + 1}` })));
       await waitFor(`class ${index} live`, () => allLive(guests.pages, participants), liveTimeoutMs, 2000, signal);
       const mediaLiveMs = Math.round(performance.now() - joiningStarted);
-      const classEnd = scheduledEnd + (index === overrunClass ? overrunMs : 0);
       const samples = await hold(guests.pages, resolve(directory, "samples.jsonl"), classEnd);
       ending.useSDK(guests.pages[0]);
       await ending.end();
-      const result = { class: index, openEpisodeMs, mediaLiveMs, ...judgeClass({ samples, participants, rampMs, shareStartupMs }) };
-      await save(resolve(directory, "verdict.json"), result);
-      return result;
+      result = { class: index, openEpisodeMs, mediaLiveMs, ...judgeClass({ samples, participants, rampMs, shareStartupMs }) };
     } catch (error) {
       publicFailure(`class ${index}`, error);
       await save(resolve(directory, "error.json"), errorEvidence(error)).catch(() => {});
-      return { class: index, pass: false, reason: "class-failed" };
+      result = { class: index, pass: false, reason: "class-failed" };
     } finally {
-      if (booking) await run.apiRequest("DELETE", booking).catch((error) => publicFailure(`class ${index} cancel`, error));
-      await cleanupRun(run).catch((error) => publicFailure(`class ${index} cleanup`, error));
+      if (booking) await run.apiRequest("DELETE", booking, undefined, AbortSignal.timeout(30_000)).catch((error) => cleanupFailure("cancel", error));
+      await cleanupRun(run).catch((error) => cleanupFailure("cleanup", error));
+    }
+    await save(resolve(directory, "verdict.json"), result);
+    return result;
+
+    function cleanupFailure(action, error) {
+      publicFailure(`class ${index} ${action}`, error);
+      result.pass = false;
+      result.cleanupFailed = true;
     }
   }
 
@@ -198,10 +213,11 @@ async function runWindow() {
     const samples = [];
     let shareOn = false;
     let shareStartedAt = null;
-    for (let at = windowStart; at < end; at += sampleMs) {
+    const firstSample = windowStart + Math.ceil((Date.now() - windowStart) / sampleMs) * sampleMs;
+    for (let at = Math.min(firstSample, end); at <= end; at += sampleMs) {
       await until(at, signal);
       const offset = at - windowStart;
-      const wanted = offset >= rampMs && (offset - rampMs) % sharePeriodMs < shareDuty * sharePeriodMs;
+      const wanted = at === end ? shareOn : offset >= rampMs && (offset - rampMs) % sharePeriodMs < shareDuty * sharePeriodMs;
       if (wanted !== shareOn) {
         await pages[0].evaluate((enabled) => window.proofClient.media.setScreenShareEnabled(enabled), wanted);
         shareOn = wanted;
@@ -217,9 +233,7 @@ async function runWindow() {
 }
 
 function videoInbound(rows) {
-  return rows
-    .filter((row) => row.type === "inbound-rtp" && row.kind === "video")
-    .map(({ type, kind, source, id, connection, framesDecoded, bytesReceived }) => ({ type, kind, source, id, connection, framesDecoded, bytesReceived }));
+  return rows.filter((row) => row.type === "inbound-rtp" && row.kind === "video").map(({ type, kind, source, id, connection, framesDecoded, bytesReceived }) => ({ type, kind, source, id, connection, framesDecoded, bytesReceived }));
 }
 
 async function until(atMs, signal) {

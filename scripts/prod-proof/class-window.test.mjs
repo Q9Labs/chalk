@@ -113,7 +113,7 @@ test("a screen that stops decoding fails at the first window after the stall", (
     participants: 3,
   });
   assert.equal(verdict.pass, false);
-  assert.equal(verdict.screen.firstFailureAt, 150_000);
+  assert.equal(verdict.screen.firstFailureAt, 160_000);
 });
 
 test("a class that never shares fails, because a screen check with no windows cannot pass", () => {
@@ -151,7 +151,10 @@ test("advancedStreams counts only matching rows whose decoder moved", () => {
     { ...before[1], framesDecoded: 10 },
     { ...before[2], framesDecoded: 12 },
   ];
-  assert.equal(advancedStreams(before, after, (row) => row.source === "camera"), 1);
+  assert.equal(
+    advancedStreams(before, after, (row) => row.source === "camera"),
+    1,
+  );
 });
 
 test("judgeRun fails an empty run and names the failed classes", () => {
