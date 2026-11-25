@@ -50,7 +50,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
         ];
   for (const [name, target] of mounts) args.push("--mount", `type=volume,source=${names.cache}-${name},target=${target}`);
   for (const key of Object.keys(env)) args.push("--env", key);
-  args.push(image, ...(command || (service === "api" ? ["sh", "-c", 'set -e; go build -buildvcs=false -o /tmp/chalk-api ./cmd; python3 -m http.server "$CHALK_DEV_ARTIFACT_PORT" --bind 127.0.0.1 --directory /dashboard-artifacts & exec /tmp/chalk-api'] : ["mix", "run", "--no-halt"])));
+  args.push(image, ...(command || (service === "api" ? ["sh", "-c", 'set -e; go build -buildvcs=false -o /tmp/chalk-api ./cmd; python3 /workspace/scripts/dev/artifact-server.py "$CHALK_DEV_ARTIFACT_PORT" /dashboard-artifacts & exec /tmp/chalk-api'] : ["mix", "run", "--no-halt"])));
   return args;
 }
 
