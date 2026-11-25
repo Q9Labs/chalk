@@ -44,13 +44,15 @@ mkdir -p "$WORK/package/lib" "$WORK/package/licenses/pdfium"
 cp "$WORK/bootstrap" "$WORK/package/bootstrap"
 cp "$WORK/pdfium/lib/libpdfium.so" "$WORK/package/lib/"
 cp "$WORK/pdfium/licenses/." "$WORK/package/licenses/pdfium/" 2>/dev/null || true
-# The Go binary links the system libwebp. Copy the exact runtime object and its sonames into the zip.
-while read -r library; do
-  [[ -n "$library" ]] || continue
-  cp -L "$library" "$WORK/package/lib/$(basename "$library")"
-done < <(ldd "$WORK/bootstrap" | awk '/libwebp\.so/{print $3}')
-if ! compgen -G "$WORK/package/lib/libwebp.so*" >/dev/null; then
-  echo "libwebp runtime object was not copied" >&2
+# Copy the arm64 libwebp runtime objects and their SONAME symlinks. Cross builds cannot run ldd on the result.
+for pattern in libwebp.so libwebp.so.7 libwebp.so.7.* libsharpyuv.so libsharpyuv.so.0 libsharpyuv.so.0.*; do
+  for library in /usr/lib/aarch64-linux-gnu/$pattern /lib/aarch64-linux-gnu/$pattern; do
+    [[ -e "$library" ]] || continue
+    cp -a "$library" "$WORK/package/lib/"
+  done
+done
+if ! compgen -G "$WORK/package/lib/libwebp.so*" >/dev/null || ! compgen -G "$WORK/package/lib/libsharpyuv.so*" >/dev/null; then
+  echo "libwebp runtime objects were not copied" >&2
   exit 1
 fi
 for notice in /usr/share/doc/libwebp*/COPYING /usr/share/doc/libwebp*/README.md /usr/share/licenses/libwebp*/LICENSE; do
