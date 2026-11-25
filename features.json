@@ -555,6 +555,7 @@
       "paths": [
         "apps/api/db/migrations/20261125120000_scheduled_episodes.sql",
         "apps/api/db/queries/scheduled_episodes.sql",
+        "apps/api/internal/adapters/postgres/scheduled_episode_harness_test.go",
         "apps/api/internal/adapters/postgres/scheduled_episodes.go",
         "apps/api/internal/adapters/postgres/scheduled_episodes_integration_test.go",
         "apps/api/internal/adapters/postgres/sqlc/scheduled_episodes.sql.go",
