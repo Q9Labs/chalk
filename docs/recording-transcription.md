@@ -20,7 +20,7 @@ flowchart LR
   temp --> render[CPU render worker]
   render --> artifact[Private R2<br/>MP4 + transcript source]
   artifact --> dispatcher[AWS Lambda dispatcher]
-  dispatcher --> asr[Whisper / MAI]
+  dispatcher --> asr[OpenRouter / MAI-Transcribe-2]
   asr --> api
   dispatcher --> cleanup[Durable cleanup]
 ```
@@ -78,26 +78,21 @@ At admission an explicit request `language` wins over the Space, then the tenant
 The resolved mode is stored on the transcript and every chunk job, so retries and
 claims never re-read current settings.
 
-Fixed mode sends the language to the qualified Whisper adapter. Auto uses
-MAI-Transcribe-2 through OpenRouter when `CODESWITCH_PROVIDER=mai` is set. If MAI
-is unavailable, Auto fails closed and retries. It never falls back to Whisper,
-because that would change output quality and privacy without anyone choosing it.
+Fixed and Auto modes both use `microsoft/mai-transcribe-2` through OpenRouter.
+A fixed language is sent as a hint when Microsoft documents that code for MAI.
+Other accepted Chalk codes, such as Amharic (`am`) and Welsh (`cy`), use MAI's
+automatic detection with no guarantee of language coverage. Urdu (`ur`) is
+supported, but may come back in Devanagari; the adapter converts those tokens to
+Urdu script for fixed Urdu and Auto. No request falls back to Whisper.
 
 ## Submitted audio and cost
 
-Cost follows audio actually submitted, not wall-clock time. The recorder cuts each
-microphone source's full span into chunks of at most five minutes, with no voice
-activity detection, and the decoder keeps silence in the source. So four
-microphones over a one-hour meeting submit about four provider audio-hours before
-retries. Muting does not remove duration. Only absent tracks or shorter spans do.
-
-Silence is trimmed only in the MAI adapter, which removes long silence and keeps
-an offset map to restore timestamps. Fixed-language Whisper still receives the
-original audio. Trimming earlier, per speaking span before chunk encoding, is
-feasible but must handle detection misses, quiet speech, all-silent sources and
-the manifest's minimum of one chunk. Measure provider spend from reported
-metadata, which is recorded only when the provider returns it. Do not quote a
-price from this document.
+The recorder splits each microphone track into chunks of at most five minutes.
+The dispatcher removes long silences and submits the remaining speech in batches
+of up to 60 seconds. It maps the returned timestamps back to the source track.
+An entirely silent chunk makes no provider request. Cost follows the audio
+submitted, not the Episode duration or the untrimmed tracks. The transcript
+document records the sum of OpenRouter's `usage.cost` in USD.
 
 ## Boot check
 

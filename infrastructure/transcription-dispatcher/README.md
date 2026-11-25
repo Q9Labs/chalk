@@ -17,7 +17,10 @@ tags, SSE-SQS and the queues' 256 KiB message limit are preserved.
 
 [`config.ts`](config.ts) checks the former module's validations and preconditions before
 planning. It also checks that the hexadecimal and base64 ZIP hashes agree.
-Defaults do not enable a provider. Provider credentials and workload credentials
+New dispatcher ZIPs require `codeswitch_provider = "mai"` and
+`openrouter_token_parameter_arn`. MAI can be configured on its own. Retain legacy
+Whisper inputs on an existing environment only while a rollback to a Whisper
+ZIP is needed. Provider credentials and workload credentials
 remain SSM SecureStrings; the Lambda receives exact parameter ARNs, not their
 values. Disabled-provider configuration and unset identity pins are omitted.
 The execution role cannot read reusable object-storage credentials or databases.

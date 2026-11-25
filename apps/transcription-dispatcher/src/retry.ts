@@ -31,52 +31,28 @@ export interface RetryRuntime {
   now(): number;
 }
 
-export interface FallbackResult {
-  result: ProviderResult;
-  providerAttempts: number;
-  usedFallback: boolean;
-}
-
-type PrimaryOutcome = { ok: true; result: ProviderResult; attempts: number } | { ok: false; failure: unknown; attempts: number };
-
-export async function transcribeWithFallback(options: { primary?: TranscriptionProvider; fallback?: TranscriptionProvider; request: ProviderRequest; policy: ProviderPolicy; circuit: InvocationCircuit; runtime?: Partial<RetryRuntime> }): Promise<FallbackResult> {
-  const { primary, fallback, request, policy, circuit } = options;
+export async function transcribeWithRetry(options: { provider: TranscriptionProvider; request: ProviderRequest; policy: ProviderPolicy; circuit: InvocationCircuit; runtime?: Partial<RetryRuntime> }): Promise<{ result: ProviderResult; providerAttempts: number }> {
+  const { provider, request, policy, circuit } = options;
   const runtime: RetryRuntime = {
     sleep: options.runtime?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
     random: options.runtime?.random ?? Math.random,
     now: options.runtime?.now ?? Date.now,
   };
-  if (!primary || circuit.isOpen(runtime.now())) {
-    if (!fallback) throw new ProviderError("no available transcription provider", "retryable");
-    return { result: await invokeProvider(fallback, request), providerAttempts: 1, usedFallback: true };
-  }
-  const outcome = await retryPrimary(primary, request, policy, circuit, runtime);
-  if (outcome.ok) return { result: outcome.result, providerAttempts: outcome.attempts, usedFallback: false };
-  if (!fallback) throw outcome.failure;
-  return { result: await invokeProvider(fallback, request), providerAttempts: outcome.attempts + 1, usedFallback: true };
-}
-
-/** Tries the primary provider until it succeeds, fails for good, or the retries or the circuit run out. */
-async function retryPrimary(primary: TranscriptionProvider, request: ProviderRequest, policy: ProviderPolicy, circuit: InvocationCircuit, runtime: RetryRuntime): Promise<PrimaryOutcome> {
+  if (circuit.isOpen(runtime.now())) throw new ProviderError("transcription provider circuit is open", "retryable");
   for (let retry = 0; ; retry += 1) {
     try {
-      const result = await invokeProvider(primary, request);
+      const result = await provider.transcribe(request);
+      if (result.segments.length === 0 && result.text.trim().length > 0) throw new ProviderError("provider returned no timings", "schema");
       circuit.recordSuccess();
-      return { ok: true, result, attempts: retry + 1 };
+      return { result, providerAttempts: retry + 1 };
     } catch (error) {
       circuit.recordFailure(runtime.now());
       const kind = providerFailureKind(error);
       const canRetry = (kind === "retryable" || kind === "timeout") && retry < policy.maxRetries && !circuit.isOpen(runtime.now());
-      if (!canRetry) return { ok: false, failure: error, attempts: retry + 1 };
+      if (!canRetry) throw error;
       await runtime.sleep(backoff(policy, retry, runtime.random()));
     }
   }
-}
-
-async function invokeProvider(provider: TranscriptionProvider, request: ProviderRequest): Promise<ProviderResult> {
-  const result = await provider.transcribe(request);
-  if (result.segments.length === 0 && result.text.trim().length > 0) throw new ProviderError("provider returned no timings", "schema");
-  return result;
 }
 
 function backoff(policy: ProviderPolicy, retry: number, random: number): number {

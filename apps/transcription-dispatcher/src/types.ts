@@ -1,4 +1,3 @@
-import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { ClaimResponse, CleanupAssignment, FinalizeClaimResponse } from "./assignment-types.js";
 import type { ProviderPolicy, ProviderResult, TranscriptProviderSummary, TranscriptionProvider } from "./provider-types.js";
 
@@ -9,8 +8,7 @@ export interface JourneyContext {
 }
 
 export interface ReleaseConfig {
-  codeswitchProvider?: "mai";
-  openRouterToken?: string;
+  openRouterToken: string;
   environment: string;
   releaseId: string;
   controlApiAudience: string;
@@ -19,25 +17,6 @@ export interface ReleaseConfig {
   concurrency: number;
   timeoutReserveMs: number;
   privacyGateAccepted: boolean;
-  deepInfra: {
-    enabled: boolean;
-    token?: string;
-    executionIdentityPin?: string;
-    modelVersionPin?: string;
-    adapterContractVersion?: string;
-    corpusDigest?: string;
-    model: typeof DEEPINFRA_MODEL;
-  };
-  cloudflare:
-    | { enabled: false }
-    | {
-        enabled: true;
-        token: string;
-        accountId: string;
-        modelSlug: typeof CLOUDFLARE_MODEL;
-        adapterContractVersion: string;
-        corpusDigest: string;
-      };
   provider: ProviderPolicy;
 }
 
@@ -116,9 +95,7 @@ export interface DispatcherEvent {
 export interface DispatcherDependencies {
   config: ReleaseConfig;
   control: ControlApi;
-  codeswitch?: TranscriptionProvider;
-  primary?: TranscriptionProvider;
-  fallback?: TranscriptionProvider;
+  transcriber: TranscriptionProvider;
   fetch: typeof fetch;
   logger?: DispatcherLogger;
   now?: () => number;

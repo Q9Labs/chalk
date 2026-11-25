@@ -1,5 +1,4 @@
 import { ConfigError } from "./errors.js";
-import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { DispatcherSecrets, SecretParameterNames } from "./secrets.js";
 import type { ProviderPolicy } from "./provider-types.js";
 import type { ReleaseConfig } from "./types.js";
@@ -55,51 +54,19 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
   };
 }
 
-const CORPUS_DIGEST = /^[a-f0-9]{32,128}$/i;
-const DEEPINFRA_ADAPTER_CONTRACT = "deepinfra-native-whisper-turbo.v1";
-
-/** What the field readers above cannot check: values that must agree with each other or match a pinned release fact. */
-function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
-  if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
-    throw new ConfigError("nightly requires its own control API URL and audience");
-  }
-  if (!config.privacyGateAccepted) throw new ConfigError("transcription privacy gate is not accepted");
-  if (!config.deepInfra.enabled && !config.cloudflare.enabled) throw new ConfigError("at least one transcription provider must be enabled");
-  if (config.cloudflare.enabled) {
-    if (!/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) throw new ConfigError("Cloudflare adapter contract version is required");
-    if (!CORPUS_DIGEST.test(config.cloudflare.corpusDigest)) throw new ConfigError("Cloudflare corpus digest is required");
-  }
-  if (config.deepInfra.enabled) {
-    if (config.deepInfra.adapterContractVersion !== DEEPINFRA_ADAPTER_CONTRACT) throw new ConfigError("DeepInfra adapter contract is not supported");
-    if (!config.deepInfra.corpusDigest || !CORPUS_DIGEST.test(config.deepInfra.corpusDigest)) throw new ConfigError("DeepInfra corpus digest is required when enabled");
-  }
-  return config;
-}
-
-function codeswitchProvider(env: NodeJS.ProcessEnv): "mai" | undefined {
-  const selected = env.CODESWITCH_PROVIDER;
-  if (selected && selected !== "mai") throw new ConfigError("code-switching provider is not release-qualified");
-  return selected === "mai" ? "mai" : undefined;
-}
-
-/** The SSM parameters this release needs, chosen by the same provider switches `loadReleaseConfig` reads. */
+/** The two SSM parameters used by the running dispatcher. */
 export function secretParameterNames(env: NodeJS.ProcessEnv): SecretParameterNames {
   return {
-    ...(codeswitchProvider(env) ? { openRouterToken: requiredEnv(env, "OPENROUTER_TOKEN_PARAMETER_ARN") } : {}),
-    ...(boolean(env, "DEEPINFRA_ENABLED") ? { deepInfraToken: requiredEnv(env, "DEEPINFRA_TOKEN_PARAMETER_ARN") } : {}),
-    ...(boolean(env, "CLOUDFLARE_AI_ENABLED") ? { cloudflareAiToken: requiredEnv(env, "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") } : {}),
+    openRouterToken: requiredEnv(env, "OPENROUTER_TOKEN_PARAMETER_ARN"),
     workloadAuth: requiredEnv(env, "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN"),
   };
 }
 
 /** Reads only the variables named in this file (`env` defaults to `process.env` so tests can pass their own). */
 export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?: DispatcherSecrets): ReleaseConfig {
-  const deepInfraEnabled = boolean(env, "DEEPINFRA_ENABLED");
-  const cloudflareEnabled = boolean(env, "CLOUDFLARE_AI_ENABLED");
   if (!secrets) throw new ConfigError("provider secrets must be resolved from SSM");
-  const selected = codeswitchProvider(env);
   const config: ReleaseConfig = {
-    ...(selected ? { codeswitchProvider: "mai", openRouterToken: requiredSecret(secrets.openRouterToken, "OpenRouter") } : {}),
+    openRouterToken: requiredSecret(secrets.openRouterToken, "OpenRouter"),
     environment: requiredEnv(env, "CHALK_ENVIRONMENT"),
     releaseId: requiredEnv(env, "CHALK_RELEASE_ID"),
     controlApiAudience: requiredEnv(env, "CONTROL_API_AUDIENCE"),
@@ -108,33 +75,13 @@ export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?
     concurrency: integer(env, "TRANSCRIPTION_CONCURRENCY", 3, 50),
     timeoutReserveMs: integer(env, "TRANSCRIPTION_TIMEOUT_RESERVE_MS", 60_000, 900_000),
     privacyGateAccepted: boolean(env, "TRANSCRIPTION_PRIVACY_GATE_ACCEPTED"),
-    deepInfra: {
-      enabled: deepInfraEnabled,
-      ...(deepInfraEnabled ? { token: requiredSecret(secrets.deepInfraToken, "DeepInfra") } : {}),
-      ...(deepInfraEnabled ? { adapterContractVersion: requiredEnv(env, "DEEPINFRA_ADAPTER_CONTRACT_VERSION"), corpusDigest: requiredEnv(env, "DEEPINFRA_CORPUS_DIGEST") } : {}),
-      ...(deepInfraEnabled && env.DEEPINFRA_EXECUTION_IDENTITY_PIN ? { executionIdentityPin: env.DEEPINFRA_EXECUTION_IDENTITY_PIN } : {}),
-      ...(deepInfraEnabled && env.DEEPINFRA_MODEL_VERSION_PIN ? { modelVersionPin: env.DEEPINFRA_MODEL_VERSION_PIN } : {}),
-      model: DEEPINFRA_MODEL,
-    },
-    cloudflare: cloudflareEnabled
-      ? {
-          enabled: true,
-          token: requiredSecret(secrets.cloudflareAiToken, "Cloudflare"),
-          accountId: requiredEnv(env, "CLOUDFLARE_ACCOUNT_ID"),
-          modelSlug: cloudflareModel(env),
-          adapterContractVersion: requiredEnv(env, "CLOUDFLARE_ADAPTER_CONTRACT_VERSION"),
-          corpusDigest: requiredEnv(env, "CLOUDFLARE_CORPUS_DIGEST"),
-        }
-      : { enabled: false },
     provider: policyFromEnv(env),
   };
-  return validateReleaseConfig(config);
-}
-
-function cloudflareModel(env: NodeJS.ProcessEnv): typeof CLOUDFLARE_MODEL {
-  const model = requiredEnv(env, "CLOUDFLARE_MODEL_SLUG");
-  if (model !== CLOUDFLARE_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
-  return model;
+  if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
+    throw new ConfigError("nightly requires its own control API URL and audience");
+  }
+  if (!config.privacyGateAccepted) throw new ConfigError("transcription privacy gate is not accepted");
+  return config;
 }
 
 function requiredSecret(value: string | undefined, provider: string): string {

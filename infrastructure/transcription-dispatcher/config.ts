@@ -271,7 +271,7 @@ export const parseInputs = (value: unknown): DispatcherInputs => {
   };
   validateQualifiedProviders();
   const validateProviderSelection = () => {
-    requireInput(input.deepinfra_enabled || input.cloudflare_enabled, "Select at least one qualified provider");
+    requireInput(input.codeswitch_provider === "mai" || input.deepinfra_enabled || input.cloudflare_enabled, "Select at least one qualified provider");
     requireInput((input.control_api_invoker_principal === null) === (input.control_api_invoke_source_arn === null), "Configure both control API permission fields, or neither");
     requireInput(input.codeswitch_provider !== "mai" || new RegExp(`^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/${input.environment_name}/`).test(input.openrouter_token_parameter_arn), "MAI requires an environment-scoped secret ARN");
   };
