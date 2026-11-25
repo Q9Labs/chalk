@@ -7,6 +7,8 @@
 #   capacity run <primary|standby> <name> [VAR=value ...]
 #                                  run TestLiveSmokeClasses against that node while sampling its host (SFU_LIVE_CAPTURES
 #                                  defaults to 1 here, because fleet sizing is for recorded classes), then
+#                                  CAPACITY_NODE overrides the target node and CAPACITY_SKIP_NODE_SAMPLER=1 shares
+#                                  another run's sampler, so two generators can split classes on one node
 #                                  fetch the logs into $CAPACITY_OUT/<name>-<role>/ (SFU_LIVE_* settings go in VAR=value)
 #   capacity summarize <dir>       print one run's numbers as JSON: pps in and out, CPU, steal, RSS, repair, stalls
 #   capacity down                  delete the generators and the bench pair, then list what is left
@@ -92,11 +94,13 @@ run() {
   for setting in "${settings[@]}"; do [[ "$setting" == SFU_LIVE_CAPTURES=* ]] && capture_setting=true; done
   $capture_setting || settings=(SFU_LIVE_CAPTURES=1 "${settings[@]}")
   generator="$(address_of "${state}/generator-${role}.json")"
-  node="$(node_address "$role")"
+  node="${CAPACITY_NODE:-$(node_address "$role")}"
   dest="${out}/${name}-${role}"
   mkdir -p "$dest"
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true; cat > /tmp/cap-sampler; chmod +x /tmp/cap-sampler; : > /tmp/capacity-host.log
-    nohup /tmp/cap-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
+  if [[ -z "${CAPACITY_SKIP_NODE_SAMPLER:-}" ]]; then
+    ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true; cat > /tmp/cap-sampler; chmod +x /tmp/cap-sampler; : > /tmp/capacity-host.log
+      nohup /tmp/cap-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
+  fi
   # The test exits non-zero when a run breaks its own rules; the logs are the result either way.
   # The test runs detached on the generator and leaves a done file, so a dropped SSH link from this
   # machine does not end the run; the poll below reconnects.
@@ -106,9 +110,13 @@ run() {
       SFU_LIVE_DIAGNOSTICS=/opt/load/runs/${name}.diag.jsonl SFU_LIVE_SAMPLE=10s ${settings[*]} \
       ./sfu-live.test -test.run '^TestLiveSmokeClasses\\\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1; echo \\\$? >/opt/load/runs/${name}.done\" >/dev/null 2>&1 </dev/null &"
   until ssh "${ssh_options[@]}" -o ConnectTimeout=20 "root@${generator}" "test -f /opt/load/runs/${name}.done" 2>/dev/null; do sleep 20; done
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true"
+  if [[ -z "${CAPACITY_SKIP_NODE_SAMPLER:-}" ]]; then
+    ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true"
+  fi
   scp -q "${ssh_options[@]}" "root@${generator}:/opt/load/runs/${name}.*" "$dest/"
-  scp -q "${ssh_options[@]}" "root@${node}:/tmp/capacity-host.log" "${dest}/host.log"
+  if [[ -z "${CAPACITY_SKIP_NODE_SAMPLER:-}" ]]; then
+    scp -q "${ssh_options[@]}" "root@${node}:/tmp/capacity-host.log" "${dest}/host.log"
+  fi
   mv "${dest}/${name}.log" "${dest}/test.log"
   mv "${dest}/${name}.jsonl" "${dest}/samples.jsonl" 2>/dev/null || true
   mv "${dest}/${name}.diag.jsonl" "${dest}/diagnostics.jsonl" 2>/dev/null || true
