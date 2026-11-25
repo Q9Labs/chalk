@@ -38,6 +38,8 @@ const nora: Person = PEOPLE[0]!;
 const akash: Person = PEOPLE[1]!;
 const sofia: Person = PEOPLE[2]!;
 const malik: Person = PEOPLE[3]!;
+const priya: Person = PEOPLE[4]!;
+const eli: Person = PEOPLE[5]!;
 const crowd = (count: number): Person[] => Array.from({ length: count }, (_, index) => ({ ...PEOPLE[index % PEOPLE.length]!, id: `p${index}`, name: index < PEOPLE.length ? PEOPLE[index]!.name : `${PEOPLE[index % PEOPLE.length]!.name.split(" ")[0]} ${index}` }));
 
 const openChat: Action = { click: "Chat" };
@@ -121,6 +123,26 @@ export const CALL_STATES: readonly CallState[] = [
             { ...nora, speaking: true },
             { ...akash, microphone: false, handRaised: true },
             { ...sofia, camera: false },
+          ],
+        })}
+        layout="grid"
+      />
+    ),
+  },
+  {
+    id: "devices",
+    title: "Phones, tablets and a foldable show their device; computers show none",
+    render: () => (
+      <Live
+        snapshot={liveSnapshot({
+          self: { device: "mac" },
+          others: [
+            { ...nora, device: "iphone" },
+            { ...akash, device: "ipad" },
+            { ...sofia, device: "windows" },
+            { ...malik, device: "android_tablet" },
+            { ...priya, device: "android_foldable" },
+            { ...eli, device: "android_phone" },
           ],
         })}
         layout="grid"

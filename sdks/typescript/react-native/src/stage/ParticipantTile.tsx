@@ -1,4 +1,4 @@
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { participantDevice, type ParticipantDevice, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSharedValue, withTiming } from "react-native-reanimated";
@@ -40,10 +40,13 @@ type TileModel = {
   readonly speaking: boolean;
   readonly track: MediaStreamTrack | null;
   readonly back: boolean;
+  readonly device: ParticipantDevice | undefined;
 };
 
 /** Below this width your own tile reads "You", because "<name> (You)" leaves no room for the name. */
 const SELF_NAME_MIN_WIDTH = 120;
+/** Below this width the device badge shows its icon alone. */
+const DEVICE_LABEL_MIN_WIDTH = 200;
 
 function selectTile(id: string) {
   return (snapshot: SpaceSnapshot): TileModel => {
@@ -59,6 +62,7 @@ function selectTile(id: string) {
       speaking: participant?.presence.speaking ?? false,
       track,
       back: isSelf && cameraFacing(snapshot.media) === "back",
+      device: participantDevice(participant),
     };
   };
 }
@@ -95,7 +99,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
+      <NameTag device={tile.device} deviceLabel={width >= DEVICE_LABEL_MIN_WIDTH} following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );

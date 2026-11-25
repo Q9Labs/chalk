@@ -40,3 +40,30 @@ it("lists the people and leaves the call-wide host controls to the call menu", (
   expect(text).not.toContain("Mute everyone");
   expect(document.querySelector("[aria-label='People']")).not.toBeNull();
 });
+
+it("shows each person's device under their name, with a count when one person is on two", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const base = createSnapshot([]);
+  const roster: Participant[] = [
+    { ...person("me"), identityId: "me-id", deviceKind: "mac" },
+    { ...person("nora"), identityId: "nora-id", deviceKind: "iphone" },
+    { ...person("noraLaptop"), identityId: "nora-id", deviceKind: "windows" },
+    { ...person("sofia"), identityId: "sofia-id", deviceType: "tablet" },
+    { ...person("akash"), identityId: "akash-id" },
+  ];
+  const client = createPreviewClient({ ...base, self: { ...base.self, participantId: "me" }, participants: { roster, admissionQueue: [], admissionPolicy: "open" } });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() =>
+    root.render(
+      <SpaceClientContext.Provider value={client}>
+        <ParticipantsPanel />
+      </SpaceClientContext.Provider>,
+    ),
+  );
+  const subLines = Object.fromEntries([...document.body.querySelectorAll(".call-person-row")].map((row) => [row.querySelector(".call-person-name")?.textContent ?? "", row.querySelector(".call-person-sub")?.textContent ?? ""]));
+  expect(subLines.me).toBe("Mac");
+  expect(subLines.nora).toBe("iPhone · 2 devices");
+  expect(subLines.noraLaptop).toBe("Windows · 2 devices");
+  expect(subLines.sofia).toBe("Tablet");
+  expect(subLines.akash).toBe("");
+});

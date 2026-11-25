@@ -5259,6 +5259,7 @@ create table participant_device_hints (
     participant_id uuid primary key,
     generation bigint not null check (generation > 0),
     device_type text check (device_type in ('phone', 'tablet', 'computer')),
+    device_kind text check (device_kind in ('iphone', 'ipad', 'android_phone', 'android_tablet', 'android_foldable', 'mac', 'windows', 'linux', 'chromeos')),
     foreign key (tenant_id, space_id, episode_id, participant_id)
         references participants(tenant_id, space_id, episode_id, id) on delete cascade
 );

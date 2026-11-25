@@ -172,10 +172,10 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   }
   #deviceFor(participant: V1Participant, presence: readonly V1Presence[]): SeatDevice | undefined {
     const previous = this.#devices.get(participant.participantId);
-    const known: Pick<SeatDevice, "identityId" | "deviceType"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
-    const hint: Pick<SeatDevice, "identityId" | "deviceType"> = this.#hintFor(participant, presence) ?? {};
+    const known: Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
+    const hint: Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind"> = this.#hintFor(participant, presence) ?? {};
     const identityId = hint.identityId ?? known.identityId;
-    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType } : undefined;
+    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType, deviceKind: hint.deviceKind ?? known.deviceKind } : undefined;
   }
   #hintFor(participant: V1Participant, presence: readonly V1Presence[]): V1Presence | undefined {
     return presence.find((item) => {

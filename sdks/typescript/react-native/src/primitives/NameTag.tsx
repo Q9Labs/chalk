@@ -1,3 +1,4 @@
+import type { ParticipantDevice } from "@q9labsai/chalk-client";
 import { memo } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMeasuredRef } from "../frame/measurement";
@@ -17,11 +18,15 @@ export type NameTagProps = {
   /** Raised hand; `handOrder` shows the place in the queue when more than one hand is up. */
   readonly handRaised?: boolean;
   readonly handOrder?: number;
+  /** What the person is on. A phone, tablet or foldable gets a badge at the tile's bottom-right; a computer gets none. */
+  readonly device?: ParticipantDevice;
+  /** Name the device beside its icon; off on a narrow tile, where the icon alone fits. */
+  readonly deviceLabel?: boolean;
   readonly testID?: string;
 };
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
-export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
+export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, device, deviceLabel = false, testID }: NameTagProps): React.JSX.Element {
   const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
@@ -53,6 +58,16 @@ export const NameTag = memo(function NameTag({ name, muted = false, pinned = fal
           </View>
         ) : null}
       </View>
+      {device && device.form !== "computer" ? (
+        <View accessible accessibilityLabel={`${name}: on ${device.label}`} style={styles.device} testID={testID ? `${testID}.device` : undefined}>
+          <Icon color={fixed.overlayText} name={device.form} size={14} />
+          {deviceLabel ? (
+            <ChalkText color={fixed.overlayText} numberOfLines={1} variant="label">
+              {device.label}
+            </ChalkText>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -65,8 +80,10 @@ export const nameTagZone = INSET + HEIGHT;
 
 const styles = StyleSheet.create({
   // `.tag`: 8 pt from the bottom-left corner and never wider than the tile less 16 pt.
-  slot: { position: "absolute", left: INSET, right: INSET, bottom: INSET, flexDirection: "row", zIndex: 2 },
+  slot: { position: "absolute", left: INSET, right: INSET, bottom: INSET, flexDirection: "row", gap: space[2], zIndex: 2 },
   tag: { flexShrink: 1, height: HEIGHT, paddingHorizontal: space[2], borderRadius: corners.md, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: space["1-5"] },
+  // The device badge shares the name tag's overlay look and sits at the far end; the name tag gives way to it.
+  device: { flexShrink: 0, marginLeft: "auto", height: HEIGHT, paddingHorizontal: space[2], borderRadius: corners.md, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: space["1-5"] },
   name: { flexShrink: 1 },
   you: { flexShrink: 0 },
   hand: { flexDirection: "row", alignItems: "center", gap: space["0-5"] },

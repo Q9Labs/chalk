@@ -2,6 +2,7 @@
 
 ## 6.1.0
 
+- Show each participant's device: a bottom-right badge on tiles for phones, tablets and foldables, and the device under every name in the People panel.
 - Offer temporary and kept ink on a live screen share when Sync enables annotation. Sharers can move the controls, manage marks, open an annotated Picture-in-Picture preview, or pair Chalk Helper where supported.
 - Say "Something on our side failed" instead of "Your network may block calls" when Chalk's media signalling refuses a join with a non-retryable 4xx.
 

@@ -523,6 +523,8 @@ function validateSyncContractDocument(value) {
     const frame = requireObjectProperty(projectionFrames, property, `projectionFrames.${property} is required`);
     requireArrayProperty(frame, "exactFields", `projectionFrames.${property}.exactFields are required`);
   }
+  const presenceItems = requireObjectProperty(/** @type {JsonObject} */ (projectionFrames.presenceSnapshot), "items", "projectionFrames.presenceSnapshot.items is required");
+  requireArrayProperty(presenceItems, "deviceKind", "projectionFrames.presenceSnapshot.items.deviceKind is required");
 
   const acknowledgements = /** @type {JsonObject} */ (value.acks);
   if (JSON.stringify(acknowledgements.delivery) !== JSON.stringify(["original", "duplicate"]) || JSON.stringify(acknowledgements.outcomes) !== JSON.stringify(["committed", "satisfied", "rejected", "command_id_conflict"])) {
