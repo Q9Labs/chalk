@@ -8,8 +8,9 @@ import type { Participant } from "../participant-grid/ParticipantGrid";
 import { StageIcon } from "./StageIcon";
 import type { StageDocument } from "./stage-items";
 
-const button = "grid h-8 min-w-8 place-items-center rounded-full px-2 text-[var(--chalk-on-overlay)] transition hover:bg-white/10 disabled:opacity-40";
-const toolbar = "pointer-events-auto flex items-center gap-1 rounded-full bg-[var(--chalk-overlay-strong)] p-1 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg outline outline-1 outline-white/10 backdrop-blur";
+const button = "flex h-9 min-w-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[var(--chalk-on-overlay)] transition hover:bg-white/10 disabled:opacity-40";
+const toolbar = "pointer-events-auto flex items-center rounded-full bg-[var(--chalk-overlay-strong)] p-1 text-sm text-[var(--chalk-on-overlay)] shadow-lg outline outline-1 outline-white/10 backdrop-blur";
+const separator = "mx-0.5 h-5 w-px shrink-0 bg-white/15";
 
 export interface DocumentViewProps {
   readonly document: StageDocument;
@@ -85,8 +86,8 @@ export function DocumentView({ document, people, primary, interactive }: Documen
           ))}
         </div>
       ) : null}
-      <div className="relative min-w-0 flex-1 overflow-auto">
-        <div className="grid h-full min-h-full place-items-center p-4">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-4">
           {manifest?.status === "preparing" || !manifest ? (
             <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-black/45 p-4 shadow-lg">
               <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-red-500 text-[10px] font-bold text-white">PDF</span>
@@ -105,14 +106,19 @@ export function DocumentView({ document, people, primary, interactive }: Documen
               This document could not be prepared.
             </div>
           ) : pageInfo?.imageUrl ? (
-            <img src={zoom > 125 ? pageInfo.imageUrl : pageInfo.imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className="max-h-full max-w-full object-contain shadow-2xl" style={zoom === 100 ? undefined : { maxWidth: `${zoom}%`, width: `${zoom}%` }} />
+            <img
+              src={pageInfo.imageUrl}
+              alt={`${fileName}, page ${page}`}
+              draggable={false}
+              className={zoom === 100 ? "max-h-full max-w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"}
+              style={zoom === 100 ? undefined : { width: `${zoom}%` }}
+            />
           ) : (
             <div role="status" className="rounded-xl bg-black/40 px-4 py-3 text-sm">
               Page {page} is still being prepared
             </div>
           )}
         </div>
-      </div>
       <div className="absolute bottom-3 left-3 z-20 flex max-w-[45%] items-center gap-1.5 truncate rounded-full bg-[var(--chalk-overlay-strong)] px-3 py-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
         <StageIcon name="file" size={13} />
         <span className="truncate">{mine ? "Your PDF" : `${presenterName}'s PDF`} · {fileName}</span>
@@ -138,13 +144,14 @@ export function DocumentView({ document, people, primary, interactive }: Documen
         </div>
       )}
       {primary && interactive ? (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
+        <div className="pointer-events-none z-10 flex justify-center pb-3">
           <div className={toolbar}>
             {ready ? (
             <>
             <button type="button" className={button} aria-label="Toggle page thumbnails" aria-pressed={thumbnails} onClick={() => setThumbnails((open) => !open)}>
               <StageIcon name="file" size={16} />
             </button>
+            <span className={separator} aria-hidden="true" />
             <button type="button" className={button} aria-label="Previous page" disabled={page <= 1} onClick={() => turn(page - 1)}>
               <StageIcon name="chevron-left" size={16} />
             </button>
@@ -154,6 +161,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
             <button type="button" className={button} aria-label="Next page" disabled={page >= pageCount} onClick={() => turn(page + 1)}>
               <StageIcon name="chevron-right" size={16} />
             </button>
+            <span className={separator} aria-hidden="true" />
             <button type="button" className={button} aria-label="Zoom out" disabled={zoom <= 25} onClick={() => changeZoom(mine ? document.zoom : localZoom, -25, mine, document.documentId, client.presenting.setZoom, setLocalZoom)}>
               <StageIcon name="zoom-out" size={16} />
             </button>
@@ -161,25 +169,31 @@ export function DocumentView({ document, people, primary, interactive }: Documen
             <button type="button" className={button} aria-label="Zoom in" disabled={zoom >= 400} onClick={() => changeZoom(mine ? document.zoom : localZoom, 25, mine, document.documentId, client.presenting.setZoom, setLocalZoom)}>
               <StageIcon name="zoom-in" size={16} />
             </button>
+            <span className={separator} aria-hidden="true" />
             <button type="button" className={button} aria-label="Fit page" onClick={() => (mine ? void client.presenting.setZoom(document.documentId, 100) : setLocalZoom(100))}>
               <StageIcon name="fit" size={16} />
             </button>
             </>
             ) : null}
             {downloadUrl && ready ? (
-              <a className={button} href={downloadUrl} download={fileName} aria-label="Download document">
+              <a className={cn(button, "px-3")} href={downloadUrl} download={fileName} aria-label="Download document">
                 <StageIcon name="download" size={16} />
+                Download
               </a>
             ) : null}
             {mine || self.can("stopScreenOthers") ? (
-              <button type="button" className={cn(button, "bg-red-500/80 hover:bg-red-500")} onClick={() => void client.presenting.stop(document.documentId)}>
+              <>
+              <span className={separator} aria-hidden="true" />
+              <button type="button" className={cn(button, "px-3 text-red-400 hover:bg-white/10 hover:text-red-300")} onClick={() => void client.presenting.stop(document.documentId)}>
                 <StageIcon name="close" size={14} />
                 Stop showing
               </button>
+              </>
             ) : null}
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
