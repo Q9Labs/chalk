@@ -41,7 +41,7 @@ import {
   VIEWER_LAYER_BATCH_SIZE,
   VIEWER_LAYER_UPDATE_INTERVAL_MS,
 } from "./sfu-limits";
-import { PAGE_VISIBILITY_EVENTS, activeOfferedMids, bundleTagOf, connectionIsClosed, connectionIsLive, createLocalOffer, observeConnectionState, pageIsHidden, pictureInPictureTracks, requireTransceiverMid, safeStopTrack, safeStopTransceiver, transceiverOf, withDeadline } from "./peer-connection";
+import { PAGE_VISIBILITY_EVENTS, activeOfferedMids, bundleTagOf, connectionIsClosed, connectionIsLive, createLocalOffer, observeConnectionState, pageIsHidden, pictureInPictureTracks, requireTransceiverMid, safeStopTrack, safeStopTransceiver, transceiverOf, waitForConnectionLive, withDeadline } from "./peer-connection";
 import { createCallStatsCollector, type CallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { SFUError } from "./types";
@@ -1076,7 +1076,7 @@ export class SFUClient implements ClientMediaPlane {
     try {
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
       await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
-      if (!wasLive) await this.#waitForConnection(connection, generation);
+      if (!wasLive) await waitForConnectionLive(connection, () => this.#requireGeneration(generation), CONNECTION_TIMEOUT_MS);
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       this.#settleLocalPublications(publications);
@@ -1664,7 +1664,7 @@ export class SFUClient implements ClientMediaPlane {
       }
       await this.#completeRenegotiation(response, connection, connectionId, generation);
       if (matched.length === 0) return [];
-      await this.#waitForConnection(connection, generation).catch((error: unknown) => {
+      await waitForConnectionLive(connection, () => this.#requireGeneration(generation), CONNECTION_TIMEOUT_MS).catch((error: unknown) => {
         // A connection that never went live is not a transient pull error: report it so the call recovers or fails.
         if (connection === this.#connection && this.#connectedEpoch !== this.#connectionEpoch && generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
         throw error;
@@ -1913,17 +1913,6 @@ export class SFUClient implements ClientMediaPlane {
     this.#publishSnapshot("recovering", null);
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
-  }
-  #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return waitFor(
-      () => {
-        this.#requireGeneration(generation);
-        return connectionIsLive(connection);
-      },
-      CONNECTION_TIMEOUT_MS,
-      "Timed out waiting for the Chalk SFU peer connection",
-      "ice_connection_failed",
-    );
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;

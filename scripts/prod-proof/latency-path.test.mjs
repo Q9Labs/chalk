@@ -64,11 +64,11 @@ test("direct leaves the configuration alone and the page without a wrapper", () 
   assert.equal(configurationFor("direct", configuration), configuration);
 });
 
-test("only the blocked paths change the browser's launch arguments, and only the blocked-no-relay path cannot join", () => {
+test("only the blocked paths change the browser's launch arguments, and every path can join", () => {
   for (const path of ICE_PATHS) assert.equal(chromiumArgsFor(path).length, path.startsWith("blocked-") ? 1 : 0, path);
   assert.deepEqual(
     ICE_PATHS.filter((path) => !joinExpected(path)),
-    ["blocked-no-relay"],
+    [],
   );
 });
 

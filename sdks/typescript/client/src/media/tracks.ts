@@ -1,6 +1,6 @@
 import type { MediaPublicationSource } from "./plane";
 import { SFUError } from "./types";
-import type { SFUErrorCode, SFUPublication, SFUPublicationSnapshot, SFUSessionDescription } from "./types";
+import type { SFUPublication, SFUPublicationSnapshot, SFUSessionDescription } from "./types";
 
 export type PublicationCursor = {
   readonly incarnation: number;
@@ -113,10 +113,10 @@ function publicationSignature(publications: readonly SFUPublication[]): string {
     .join("\u0001");
 }
 
-export async function waitFor(predicate: () => boolean, timeoutMs: number, timeoutMessage = "Timed out waiting for a remote media track", timeoutCode: SFUErrorCode = "media_failed"): Promise<void> {
+export async function waitFor(predicate: () => boolean, timeoutMs: number, timeoutMessage = "Timed out waiting for a remote media track"): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new SFUError(timeoutMessage, timeoutCode);
+    if (Date.now() >= deadline) throw new SFUError(timeoutMessage, "media_failed");
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
   }
 }

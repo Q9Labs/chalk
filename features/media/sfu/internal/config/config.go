@@ -260,18 +260,6 @@ func Load(lookup Lookup) (Config, error) {
 	return cfg, nil
 }
 
-// tcpAddrs reads the plural listener setting, with SFU_TCP_ADDR as the single-listener form
-// existing local runs use.
-func tcpAddrs(r reader) []string {
-	if addrs := r.list("SFU_TCP_ADDRS"); len(addrs) > 0 {
-		return addrs
-	}
-	if legacy := r.text("SFU_TCP_ADDR", ""); legacy != "" {
-		return []string{legacy}
-	}
-	return nil
-}
-
 // remoteTracksOf is the most tracks one session receives from a call of n sessions that
 // publish `cameras` cameras and a microphone each, plus a screen share and its audio.
 // A capture is not a session, so it receives every one of the n.

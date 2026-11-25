@@ -14,12 +14,21 @@ export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
 node_table() { jq -r "$@" "$sfu_table"; }
 control_port="$(node_table .ports.control)"
 media_port="$(node_table .ports.media)"
-media_tcp_port="$(node_table .ports.mediaTcp)"
+# An older rollback source has no mediaTcp entry. The tooling still knows 443, but uses it only
+# for a target whose SFU source declares the listener.
+media_tcp_port="$(node_table '.ports.mediaTcp // 443')"
+media_tcp_supported="$(node_table '.ports.mediaTcp != null')"
 udp_buffer="$(node_table .udpBufferBytes)"
 
 # SFU_FROM_CI is set by a release, which has no 1Password, doctl or person to trust a new host key.
 # Its private directory comes complete from the GitHub environment: the operator certificate is not
-# issued, the host firewall is left as the last operator run set it, and an unknown host is refused.
+# issued, control and SSH host firewall rules are left as the last operator run set them, and an unknown host is refused.
+
+# sfu_check_tcp_public <host> <port> proves a public TCP connect reaches the node,
+# not merely that the control API answers through the SSH tunnel.
+sfu_check_tcp_public() {
+  timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/$2"' bash "$1" "$2" 2>/dev/null
+}
 
 # sfu_operator_cert <env> issues the operator's one-day certificate, unless a release brought one.
 sfu_operator_cert() {

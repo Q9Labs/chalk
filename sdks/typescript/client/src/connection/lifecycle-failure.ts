@@ -22,7 +22,10 @@ export function mediaRefusalField(cause: unknown): { readonly mediaHttpStatus?: 
   return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 403 && !retryableConnection ? { mediaHttpStatus: status } : {};
 }
 
-/** Whether media startup timed out or failed in ICE, as a failure field. The failure detail uses it to tell a network block from a media-signalling fault. */
+/** Whether media startup failed on the ICE path, as a failure field. A whole-connection timeout counts only when ICE itself failed or never established; a connected ICE leg with a stalled DTLS handshake is not a VPN-shaped failure. */
 export function mediaIceFailureField(cause: unknown): { readonly mediaIceFailure?: true } {
-  return cause instanceof SFUError && cause.code === "ice_connection_failed" ? { mediaIceFailure: true } : {};
+  if (!(cause instanceof SFUError)) return {};
+  if (cause.code === "ice_connection_failed") return { mediaIceFailure: true };
+  const state = cause.options.iceConnectionState;
+  return cause.code === "media_failed" && (state === "failed" || state === "new" || state === "checking") ? { mediaIceFailure: true } : {};
 }

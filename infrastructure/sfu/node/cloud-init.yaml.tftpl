@@ -15,8 +15,10 @@ write_files:
       # The pacers send in bursts; a full send buffer drops outgoing media.
       net.core.wmem_max = ${udp_buffer}
       net.core.wmem_default = ${udp_buffer}
-      # ICE-TCP listens on 443 from the rootless container. This opens only 443 in addition
-      # to the already-unprivileged high ports; ports below 443 stay privileged.
+      # ICE-TCP listens on 443 from the rootless container. Linux has no per-port or
+      # per-user form of this setting: every port from 443 up becomes unprivileged on the
+      # host. Ports 1024 and up already were, so the incremental exposure is 443-1023;
+      # the firewall still decides remote reachability. Ports below 443 stay privileged.
       net.ipv4.ip_unprivileged_port_start = 443
   - path: /etc/ssh/sshd_config.d/90-chalk-sfu.conf
     content: |

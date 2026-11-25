@@ -75,14 +75,14 @@ operator_cidr() {
 # render_cloud_init renders node/cloud-init.yaml.tftpl the way OpenTofu does, for its two loops. The ports and the
 # UDP buffer come from the node table. It is the production bootstrap, unchanged.
 render_cloud_init() {
-  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v media_tcp_port="$media_tcp_port" -v udp_buffer="$udp_buffer" '
     /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
     /^%\{ endfor ~\}$/ {
       count = split(list, addresses, ",")
       for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
       looping = 0; next
     }
-    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{media_tcp_port\}/, media_tcp_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
   ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
