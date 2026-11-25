@@ -7,7 +7,7 @@ This runbook keeps the rules for releasing transcript-first transcription to pro
 ## Constraints
 
 - The dispatcher is a Node.js arm64 Lambda with no VPC attachment, NAT gateway, database access or reusable object-storage permission. It reads credentials only from exact SSM SecureString ARNs, calls the control API over public authenticated HTTPS, and receives only job-scoped presigned R2 authorities. Its [Alchemy stack](../infrastructure/transcription-dispatcher/README.md) is `infrastructure/transcription-dispatcher/alchemy.run.ts`, pinned at `2.0.0-beta.87`.
-- The provider is direct DeepInfra with an adapter contract version. Set `deepinfra_enabled = true` and `cloudflare_enabled = false`. Do not substitute Cloudflare, a VPC/NAT design or a rendered MP4 path to get around a blocker.
+- The only runtime transcription provider is OpenRouter using `microsoft/mai-transcribe-2`. It requires the environment-scoped OpenRouter SSM key. Do not substitute another provider, add VPC/NAT, or send rendered MP4 to get around a blocker.
 - The provider corpus digest is mandatory when DeepInfra is enabled. It must be the digest of the retained, passing qualification corpus for this adapter and model. A short request or a made-up digest does not qualify. Optional execution-identity and model-version pins stay absent until the provider returns a stable value to assert. They are not qualification evidence.
 - The release owner confirms outside this repo that the provider account is active, funded as intended and has automatic top-ups disabled.
 - Transcript-first capture bundles live under `tenants/<tenant>/recordings/<recording>/capture/`, outside the 24-hour R2 lifecycle prefixes (`transcription/chunks/` and `transcription/orphans/`, component `r2-transcription-lifecycle`), so no broad R2 lifecycle change is needed. The API keeps the source authority and cleanup fencing valid for the recording source and Export window (30 days, capped in `artifactpolicy`). Transcript retention is unchanged.
@@ -17,6 +17,14 @@ This runbook keeps the rules for releasing transcript-first transcription to pro
 ## Release path
 
 Use [Nightly and Promote](managed-release.md). Never publish a ZIP, deploy it by hand or bypass the guarded Alchemy driver, because those paths skip the build binding, proof and rollback guards. Promote copies the exact verified ZIP bytes and never rebuilds them. Rollback selects the prior recorded ZIP and image pins. Each environment keeps its own redacted Alchemy stack inputs, SSM references, audience, roles, queues and alarms. The driver checks a complete in-memory plan, applies that same object, verifies the exact ZIP hash and requires a second all-no-op plan. An environment with no Alchemy state fails before deployment.
+
+Before the first MAI-only release, confirm the private Alchemy inputs
+`codeswitch_provider = "mai"` and `openrouter_token_parameter_arn` are set.
+If absent, review the plan from
+`python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <environment-scoped-arn>`
+and rerun with `--apply`. A configured environment needs no settings change.
+Keep any previous DeepInfra settings and key through the rollback window: the
+new ZIP does not read them, but the earlier ZIP needs them for fixed languages.
 
 ## Replacing the running release
 
@@ -49,6 +57,8 @@ To check the stage, expect only `noop` from `pnpm infra plan transcription-dispa
 For a release rollback, select the prior recorded manifest through the normal
 [managed release rollback](managed-release.md) path. It selects the previous
 versioned ZIP and verifies its digest without rebuilding or changing ownership.
+Do not disable the OpenRouter binding as a rollback; the running dispatcher
+requires it. Restore the prior ZIP with its existing provider settings instead.
 
 For an infrastructure-ownership rollback, stop all Alchemy writers and save the current Alchemy state privately. Restore the previous version of the former OpenTofu state object from the versioned state bucket, then forget only this stage's Alchemy records:
 

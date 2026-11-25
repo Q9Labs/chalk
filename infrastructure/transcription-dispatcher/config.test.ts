@@ -26,6 +26,15 @@ const valid = {
   deepinfra_corpus_digest: "ef".repeat(32),
 };
 
+test("MAI can be the only configured provider", () => {
+  const arn = "arn:aws:ssm:ap-southeast-1:012345678901:parameter/chalk/nightly-test/openrouter";
+  const input = parseInputs({ ...valid, deepinfra_enabled: false, codeswitch_provider: "mai", openrouter_token_parameter_arn: arn });
+  const env = buildEnvironment(input);
+  assert.equal(env.OPENROUTER_TOKEN_PARAMETER_ARN, arn);
+  assert.equal("DEEPINFRA_TOKEN_PARAMETER_ARN" in env, false);
+  assert.equal("CLOUDFLARE_AI_TOKEN_PARAMETER_ARN" in env, false);
+});
+
 test("defaults preserve timing and explicitly enabled providers; runtime receives only configured SSM authorities", () => {
   const input = parseInputs(valid);
   const env = buildEnvironment(input);

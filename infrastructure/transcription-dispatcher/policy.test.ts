@@ -50,8 +50,8 @@ function declaration(input: DispatcherInputs) {
     output: jsonValue(props.outputs),
   };
 }
-function fixture(input = original) {
-  const before = declaration(original),
+function fixture(input = original, previous = original) {
+  const before = declaration(previous),
     after = declaration(input);
   return {
     resources: before.resources.map((row) => {
@@ -121,6 +121,11 @@ test("media_release_changes_only_exact_artifact_and_metadata", () => {
 });
 const secret = `arn:aws:ssm:ap-southeast-1:${"0".repeat(12)}:parameter/chalk/nightly-test/mai`;
 const mai = parseInputs({ ...original, codeswitch_provider: "mai", openrouter_token_parameter_arn: secret, config_digest: `sha256:${"90".repeat(32)}` });
+test("media release works on a MAI-only stack", () => {
+  const previous = parseInputs({ ...mai, deepinfra_enabled: false, deepinfra_corpus_digest: "" });
+  const next = parseInputs({ ...release, codeswitch_provider: "mai", openrouter_token_parameter_arn: secret, deepinfra_enabled: false, deepinfra_corpus_digest: "" });
+  verify(fixture(next, previous), next, "release");
+});
 test("mai_does_not_expand_other_permissions_or_change_code", () => {
   verify(fixture(mai), mai, "mai");
   const permissions = plainPlan(fixture(mai));

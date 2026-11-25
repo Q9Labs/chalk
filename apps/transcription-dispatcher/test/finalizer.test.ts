@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { RecorderControlApiClient } from "../src/control-api.js";
 import { runDispatcher } from "../src/dispatcher.js";
+import { MaiTranscribeProvider } from "../src/mai-provider.js";
 import { createWorkloadSigner } from "../src/workload-auth.js";
 import type { DispatcherDependencies, ReleaseConfig } from "../src/types.js";
 
@@ -14,8 +15,7 @@ const config: ReleaseConfig = {
   concurrency: 1,
   timeoutReserveMs: 1_000,
   privacyGateAccepted: true,
-  deepInfra: { enabled: false, model: "openai/whisper-large-v3-turbo" },
-  cloudflare: { enabled: false },
+  openRouterToken: "test-token",
   provider: {
     timeoutMs: 10_000,
     maxAudioBytes: 1_024,
@@ -89,6 +89,7 @@ describe("transcription finalizer failures", () => {
       { getRemainingTimeInMillis: () => 30_000 },
       {
         config,
+        transcriber: new MaiTranscribeProvider({ fetch, token: config.openRouterToken, policy: config.provider }),
         control,
         fetch: async () => {
           if (failure === "download") throw new TypeError("request failed");
@@ -136,6 +137,7 @@ describe("transcription finalizer failures", () => {
     };
     const dependencies: DispatcherDependencies = {
       config,
+      transcriber: new MaiTranscribeProvider({ fetch, token: config.openRouterToken, policy: config.provider }),
       control: {
         claim: async () => ({ assignments: [] }),
         heartbeat: async () => undefined,

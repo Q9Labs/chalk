@@ -20,7 +20,6 @@ def main():
     parser.add_argument('--profile', default='q9labs')
     parser.add_argument('--region', default='ap-southeast-1')
     parser.add_argument('--secret-parameter-arn')
-    parser.add_argument('--disable', action='store_true')
     parser.add_argument('--apply', action='store_true', help='Apply the checked plan; otherwise plan only')
     parser.add_argument('--plan-output', type=Path, help='Save a private review copy of the plan')
     args = parser.parse_args()
@@ -33,20 +32,17 @@ def main():
     require(current['State'] == 'Active' and current['LastUpdateStatus'] == 'Successful', 'dispatcher is not healthy')
     require(current['CodeSha256'] == inputs['artifact_sha256_base64'], 'dispatcher code drifted from state')
     env = dict(current['Environment']['Variables'])
-    env.pop('CODESWITCH_PROVIDER', None)
-    env.pop('OPENROUTER_TOKEN_PARAMETER_ARN', None)
-    if not args.disable:
-        env.update(CODESWITCH_PROVIDER='mai', OPENROUTER_TOKEN_PARAMETER_ARN=arn)
+    env.update(CODESWITCH_PROVIDER='mai', OPENROUTER_TOKEN_PARAMETER_ARN=arn)
     env.pop('CHALK_CONFIG_DIGEST', None)
     inputs['config_digest'] = 'sha256:' + digest(json.dumps(env, sort_keys=True, separators=(',', ':')))
     env['CHALK_CONFIG_DIGEST'] = inputs['config_digest']
-    inputs.update(codeswitch_provider='' if args.disable else 'mai', openrouter_token_parameter_arn='' if args.disable else arn)
+    inputs.update(codeswitch_provider='mai', openrouter_token_parameter_arn=arn)
     run_plan(provider, inputs, 'mai', apply=args.apply, plan_output=args.plan_output)
     if args.apply:
         observed = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
         require(observed['Environment']['Variables'] == env, 'MAI configuration readback mismatch')
         require(observed['CodeSha256'] == current['CodeSha256'], 'MAI migration changed code')
-    print(json.dumps({'checked': True, 'applied': args.apply, 'auto': 'paused' if args.disable else 'mai', 'code_unchanged': True}))
+    print(json.dumps({'checked': True, 'applied': args.apply, 'provider': 'mai', 'code_unchanged': True}))
 
 
 if __name__ == '__main__':

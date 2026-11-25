@@ -4,10 +4,10 @@ import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { isReasonWord } from "./provider-failure.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
-import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
+import { InvocationCircuit, transcribeWithRetry } from "./retry.js";
 import { validateSpeakerTurnManifest } from "./speaker-turn-manifest.js";
 import { fetchVerified, putResult } from "./storage.js";
-import type { ProviderResult, TranscriptionProvider } from "./provider-types.js";
+import type { ProviderResult } from "./provider-types.js";
 import type { CompletionInput, ControlApi, DispatcherContext, DispatcherDependencies, DispatcherLogger, JourneyContext } from "./types.js";
 
 type Manifest = ReturnType<typeof validateSpeakerTurnManifest>;
@@ -16,12 +16,11 @@ export function transcriptionQueue(context: DispatcherContext, dependencies: Dis
   const logger = loggerOf(dependencies);
   const now = dependencies.now ?? Date.now;
   const { circuitFailureThreshold, circuitCooldownMs } = dependencies.config.provider;
-  const fixedCircuit = new InvocationCircuit(circuitFailureThreshold, circuitCooldownMs);
-  const autoCircuit = new InvocationCircuit(circuitFailureThreshold, circuitCooldownMs);
+  const circuit = new InvocationCircuit(circuitFailureThreshold, circuitCooldownMs);
   return {
     logPrefix: "dispatcher",
     claim: async (limit, journey) => (await dependencies.control.claim({ limit, context: journey })).assignments,
-    process: (assignment, journey) => processAssignment(assignment, journey, context, dependencies, assignment.transcriptLanguage?.mode === "fixed" ? fixedCircuit : autoCircuit, now),
+    process: (assignment, journey) => processAssignment(assignment, journey, context, dependencies, circuit, now),
     release: (assignment, journey) => safeRetry(dependencies.control, assignment, journey, "timeout_reserve", false, logger),
   };
 }
@@ -31,8 +30,8 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
   try {
     await dependencies.control.heartbeat({ assignment, context: journey });
     const { audio, manifest } = await fetchInputs(assignment, dependencies);
-    const transcription = await transcribeWithFallback({
-      ...providersFor(assignment, dependencies),
+    const transcription = await transcribeWithRetry({
+      provider: dependencies.transcriber,
       request: {
         signal: AbortSignal.timeout(Math.max(1, context.getRemainingTimeInMillis() - dependencies.config.timeoutReserveMs)),
         transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" },
@@ -66,7 +65,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     });
     const stored = await putResult({ fetch: dependencies.fetch, url: assignment.outputPutUrl, body: serializeTranscript(document), maxBytes: dependencies.config.provider.maxResponseBytes, tooLarge: "normalized transcript exceeded bound", logger, logPrefix: "dispatcher" });
     await dependencies.control.complete({ ...completionInput(assignment, stored, transcription.result), context: journey });
-    logger.info("dispatcher_completed", { provider: transcription.result.provider, fallback: transcription.usedFallback, attempts: transcription.providerAttempts });
+    logger.info("dispatcher_completed", { provider: transcription.result.provider, attempts: transcription.providerAttempts });
     return "completed";
   } catch (error) {
     if (isLateCompletion(error)) {
@@ -111,17 +110,6 @@ function parseManifest(bytes: Uint8Array, assignment: TranscriptionAssignment): 
   } catch {
     throw new AssignmentError("speaker turn manifest is invalid");
   }
-}
-
-/** Auto language uses the code-switching provider alone; a fixed language uses the primary with the fallback behind it. */
-function providersFor(assignment: TranscriptionAssignment, dependencies: DispatcherDependencies): { primary?: TranscriptionProvider; fallback?: TranscriptionProvider } {
-  const auto = (assignment.transcriptLanguage?.mode ?? "auto") === "auto";
-  if (auto && !dependencies.codeswitch) throw new ProviderError("Auto transcription provider is unavailable", "retryable");
-  const primary = auto ? dependencies.codeswitch : dependencies.primary;
-  return {
-    ...(primary ? { primary } : {}),
-    ...(!auto && dependencies.fallback ? { fallback: dependencies.fallback } : {}),
-  };
 }
 
 function completionInput(assignment: TranscriptionAssignment, stored: { checksumSha256: string; sizeBytes: number }, result: ProviderResult): CompletionInput {
