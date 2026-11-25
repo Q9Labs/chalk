@@ -1114,7 +1114,7 @@ func (n *nodeTotals) add(inspected protocol.InspectResponse) {
 }
 
 // qualityBreak names the first signal past the step-up's limits: the pacer
-// queue p95 over 20 ms, steal over 25%, closed admission, receive-buffer
+// queue p95 past the idle-node 50 ms bucket, steal over 25%, closed admission, receive-buffer
 // drops, pacer drops or a new microphone or screen stall since the previous sample. A
 // camera stall is not a break, because the allocator may lower a camera.
 func qualityBreak(previous, sample liveSample) string {
@@ -1123,7 +1123,7 @@ func qualityBreak(previous, sample liveSample) string {
 		return "readyz failed: " + sample.ReadyErr
 	}
 	switch {
-	case ready.Host.QueueDelayP95Ms > 20:
+	case ready.Host.QueueDelayP95Ms > 50:
 		return fmt.Sprintf("pacer queue p95 %.1f ms", ready.Host.QueueDelayP95Ms)
 	case ready.Host.StealPercent != nil && *ready.Host.StealPercent > 25:
 		return fmt.Sprintf("steal %.1f%%", *ready.Host.StealPercent)
