@@ -1,4 +1,5 @@
 import { ScreenAnnotationFixture } from "./screen-annotation";
+import { BesideScreenShareState, PreparingState, PresenterState, ViewerBrowsingState, ViewerFollowingState } from "./presenting";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -44,6 +45,11 @@ const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
+  { id: "presenting-presenter", title: "Presenting: presenter view", render: () => <PresenterState /> },
+  { id: "presenting-viewer-following", title: "Presenting: viewer following", render: () => <ViewerFollowingState /> },
+  { id: "presenting-viewer-browsing", title: "Presenting: viewer browsing ahead", actions: [{ click: "Next page" }, { click: "Next page" }], render: () => <ViewerBrowsingState /> },
+  { id: "presenting-preparing", title: "Presenting: preparing", render: () => <PreparingState /> },
+  { id: "presenting-beside-screenshare", title: "Presenting: document beside a screen share", render: () => <BesideScreenShareState /> },
   { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
   { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
   { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },
