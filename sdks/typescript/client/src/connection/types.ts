@@ -71,6 +71,8 @@ export type ConnectionFailure = {
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
   /** The HTTP status when Chalk's own media signalling refused the request. */
   readonly mediaHttpStatus?: number;
+  /** Media startup timed out or failed while ICE was connecting. */
+  readonly mediaIceFailure?: true;
 };
 
 export class ConnectionError extends Error {

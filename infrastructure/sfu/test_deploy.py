@@ -69,7 +69,7 @@ class DeployStartTest(unittest.TestCase):
             time.sleep(0.1)
         self.assertIn(f'-i {key}', calls.read_text())
 
-    def test_a_release_run_reconciles_no_firewall_and_trusts_no_new_host(self):
+    def test_a_release_run_reconciles_only_media_firewall_ports_and_trusts_no_new_host(self):
         key = self.root / 'operator_key'
         key.write_text('x')
         fake = self.root / 'bin'
@@ -79,11 +79,44 @@ class DeployStartTest(unittest.TestCase):
         result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key), 'SFU_FROM_CI': '1'}, capture_output=True, text=True, timeout=30)
         # The fake node has no vCPU count, so the run stops there, after the step that would have called doctl and issued nothing.
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('release run: the host firewall stays', result.stdout)
+        self.assertIn('release run: control and SSH host firewall rules stay', result.stdout)
+        self.assertIn(f"ufw allow {TABLE['ports']['media']}/tcp", (self.root / 'ssh-calls').read_text())
+        self.assertIn(f"ufw allow {TABLE['ports']['mediaTcp']}/tcp", (self.root / 'ssh-calls').read_text())
         self.assertFalse((self.root / 'doctl-called').exists())
         self.assertIn('StrictHostKeyChecking=yes', (self.root / 'ssh-calls').read_text())
         self.assertNotIn('accept-new', (self.root / 'ssh-calls').read_text())
 
+    def test_a_release_run_to_an_sfu_source_without_tcp443_restores_the_privileged_port_boundary(self):
+        key = self.root / 'operator_key'
+        key.write_text('x')
+        source = self.root / 'old-sfu/internal/config'
+        source.mkdir(parents=True)
+        table = json.loads(json.dumps(TABLE))
+        del table['ports']['mediaTcp']
+        (source / 'node.json').write_text(json.dumps(table))
+        fake = self.root / 'bin'
+        (fake / 'ssh').write_text(f'#!/bin/sh\necho "$@" >> {self.root}/ssh-calls\nexit 0\n')
+        result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key), 'SFU_FROM_CI': '1', 'SFU_SOURCE_ROOT': str(self.root / 'old-sfu')}, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        calls = (self.root / 'ssh-calls').read_text()
+        self.assertIn(f"ufw allow {TABLE['ports']['media']}/tcp", calls)
+        self.assertNotIn(f"ufw allow {TABLE['ports']['mediaTcp']}/tcp", calls)
+        self.assertIn(f"ufw delete allow {TABLE['ports']['mediaTcp']}/tcp", calls)
+        self.assertIn('net.ipv4.ip_unprivileged_port_start = 1024', calls)
+
+
+class PublicTCPProbeTest(unittest.TestCase):
+    def probe(self, *args):
+        return subprocess.run(['bash', '-c', 'source "$1" && sfu_check_tcp_public "$2" "$3"', 'probe', str(DEPLOY.with_name('lib.sh')), *args], capture_output=True, timeout=10)
+
+    def test_the_public_tcp_probe_accepts_a_listener_and_refuses_a_closed_port(self):
+        listener = subprocess.Popen(['python3', '-c', 'import socket,time,sys; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("127.0.0.1",0)); print(s.getsockname()[1], flush=True); s.listen(); time.sleep(10)'], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(listener.kill)
+        port = listener.stdout.readline().strip()
+        self.assertEqual(self.probe('127.0.0.1', port).returncode, 0)
+        listener.kill()
+        listener.communicate()
+        self.assertNotEqual(self.probe('127.0.0.1', port).returncode, 0)
 
 
 class ReadyzTest(unittest.TestCase):

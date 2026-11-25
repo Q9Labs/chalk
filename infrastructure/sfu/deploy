@@ -23,7 +23,7 @@
 # Without capture.conf the deploy removes the worker, except in a release run, which leaves it as it is. It starts after the SFU is ready.
 # The worker exports its telemetry when the directory also holds otlp-log-headers and otlp-trace-headers.
 # A release (SFU_FROM_CI=1) runs this without 1Password, doctl or a person: the private directory comes
-# complete from the GitHub environment, the operator certificate is not issued, the host firewall is not
+# complete from the GitHub environment, the operator certificate is not issued, control and SSH host firewall rules are not
 # reconciled and an unknown host key is refused. SFU_SOURCE_ROOT builds the node from another
 # checkout's features/media/sfu, so the release builds the commit it ships with this checkout's tooling.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
@@ -77,7 +77,7 @@ done
 remote test -f /var/lib/chalk-sfu-bootstrapped
 
 if [[ -n "${SFU_FROM_CI:-}" ]]; then
-  echo "==> release run: the host firewall stays as the last operator run set it"
+  echo "==> release run: control and SSH host firewall rules stay as the last operator run set them"
 else
   echo "==> matching the host firewall to the cloud firewall"
   sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '
@@ -93,7 +93,7 @@ else
   # another way (host bits set, a /32) is not taken for a new source and its
   # existing rule removed. New rules go in before stale ones come out, so this SSH
   # session stays allowed.
-  remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
+  remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port}" <<'RECONCILE'
 set -euo pipefail
 python3 - "$1" "$2" <<'PY'
 import base64, ipaddress, re, subprocess, sys
@@ -126,11 +126,16 @@ for key in sorted(have.keys() - want):
         ufw("delete", *existing.split())
         print("host firewall: removed", existing)
 PY
-# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
-# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
-ufw allow "$3"/tcp > /dev/null
 RECONCILE
 fi
+
+# Media firewall reconciliation is part of every deploy, including a release run. A node made before
+# ICE-TCP or TCP 443 cannot rely on first boot or ignored user_data to have it; ufw skips a rule that exists.
+# A rollback target without TCP 443 removes that host opening again.
+echo "==> opening the media TCP host firewall ports"
+media_tcp_step="ufw delete allow ${media_tcp_port}/tcp >/dev/null 2>&1 || true"
+[[ "$media_tcp_supported" == true ]] && media_tcp_step="ufw allow ${media_tcp_port}/tcp >/dev/null"
+remote "ufw allow ${media_port}/tcp >/dev/null; ${media_tcp_step}"
 [[ "$mode" == --firewall-only ]] && exit 0
 
 # A release run leaves the capture worker as it is, so only an operator run with capture.conf uses the trace token.
@@ -139,7 +144,11 @@ otlp_files=(otlp-headers otlp-log-headers)
 sfu_check_otlp_tokens "$dir" "${otlp_files[@]}"
 
 # A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
-remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
+# The low-port boundary follows the target SFU source, so a rollback to a binary without TCP 443
+# restores the default instead of leaving every unprivileged process able to claim 443-1023.
+unprivileged_port_start=1024
+[[ "$media_tcp_supported" == true ]] && unprivileged_port_start=443
+remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\nnet.ipv4.ip_unprivileged_port_start = ${unprivileged_port_start}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
 
 # The node's size picks its settings from the SFU's node table (packet budget, steal limit, memory),
 # and the node reads the budget and steal limit itself from SFU_NODE_SIZE and SFU_ENVIRONMENT.
@@ -202,7 +211,7 @@ if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
   exit 2
 fi
 {
-  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__MEDIA_TCP_PORT__|${media_tcp_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
     -e "s|__UDP_BUFFER__|${udp_buffer}|" -e "s|__NODE_SIZE__|${node_size}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
     -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
     "${node_dir}/sfu.env.in"
@@ -371,6 +380,13 @@ echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .
 sent="$(jq -r '.host.udpSendBufferBytes' <<<"$ready")"
 echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferErrors // "unknown"' <<<"$ready")"
 ((sent >= udp_buffer)) || { echo "the send buffer is below ${udp_buffer} bytes; check net.core.wmem_max" >&2; exit 1; }
+
+echo "==> checking public ICE-TCP reachability"
+tcp_probe_ports=("$media_port")
+[[ "$media_tcp_supported" == true ]] && tcp_probe_ports+=("$media_tcp_port")
+for tcp_port in "${tcp_probe_ports[@]}"; do
+  sfu_check_tcp_public "$host" "$tcp_port" || { echo "public TCP ${tcp_port} does not reach ${host}; check the cloud and host firewalls" >&2; exit 1; }
+done
 
 if $capture_on; then
   echo "==> starting the capture worker"

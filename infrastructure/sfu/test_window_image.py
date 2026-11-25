@@ -185,6 +185,8 @@ class WindowImageBuildTest(DeployHarness):
         user_data = self.read('user-data.yaml')
         self.assertIn(f'ufw allow proto tcp from {OPERATOR}/32 to any port 22', user_data)
         self.assertIn('ufw allow proto tcp from 192.0.2.10/32 to any port ' + str(TABLE['ports']['control']), user_data)
+        self.assertIn('ufw allow ' + str(TABLE['ports']['mediaTcp']) + '/tcp', user_data)
+        self.assertNotIn('${media_tcp_port}', user_data)
         self.assertRegex(user_data, r'ssh_keys:\n  ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----')
         calls = self.read('ssh-calls')
         self.assertIn('StrictHostKeyChecking=yes', calls)

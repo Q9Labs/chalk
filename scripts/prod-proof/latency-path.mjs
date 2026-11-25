@@ -20,8 +20,8 @@ const BLOCK_UDP_ARG = "--force-webrtc-ip-handling-policy=disable_non_proxied_udp
 /** Chromium launch arguments a path needs. */
 export const chromiumArgsFor = (/** @type {IcePath} */ path) => (path.startsWith("blocked-") ? [BLOCK_UDP_ARG] : []);
 
-/** Whether the path is expected to reach the SFU. A path that cannot is measured as a failed join, not as a broken run. */
-export const joinExpected = (/** @type {IcePath} */ path) => path !== "blocked-no-relay";
+/** Whether the path is expected to reach the SFU. ICE-TCP on 443 makes even the no-relay blocked-UDP path reachable. */
+export const joinExpected = () => true;
 
 /**
  * pathMismatch compares the path a cycle asked for with the pair the browser selected, which is the only evidence of how the media
