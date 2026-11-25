@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { downloadPage } from "./download-page.mjs";
 
 const { CHANNEL, VERSION, DOWNLOAD_ORIGIN, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, STORE_LINK_ONLY, STORE_URL } = process.env;
 const refreshStoreLink = STORE_LINK_ONLY === "true";
@@ -60,27 +61,11 @@ function storeDownload() {
   if (!listing.href.startsWith("https://apps.microsoft.com/")) {
     throw new Error("The Windows listing must be an https://apps.microsoft.com Microsoft Store URL.");
   }
-  const href = listing.href.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-  return `<p><a href="${href}">Get Chalk Helper from the Microsoft Store</a></p>`;
+  return listing.href;
 }
 
-function downloadPage(macDownload) {
-  const title = CHANNEL === "staging" ? "Chalk Helper for Chalk Nightly" : "Chalk Helper";
-  const macLink = macDownload ? `<p><a href="${macDownload}">Download for macOS 14 or later</a> (Apple silicon and Intel)</p>` : "";
-  const links = [macLink, storeDownload()].filter(Boolean).join("\n  ");
-
-  return `<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title>
-<main>
-  <h1>${title}</h1>
-  <p>See other participants’ annotations while you share your screen in Chalk.</p>
-  ${links || "<p>Downloads are not available yet.</p>"}
-</main>
-</html>
-`;
+function renderPage(macDownload) {
+  return downloadPage({ channel: CHANNEL, version: VERSION, macDownload, storeHref: storeDownload() });
 }
 
 const latest = await fetch(url(`${channelRoot}/latest.json`), { signal: AbortSignal.timeout(30_000) });
@@ -104,7 +89,7 @@ try {
       }
       macDownload = release + macInstaller;
     }
-    writeFileSync(page, downloadPage(macDownload));
+    writeFileSync(page, renderPage(macDownload));
     await publish(page, `${channelRoot}/index.html`, "text/html; charset=utf-8", "no-store");
   } else {
     if (current && new Intl.Collator("en", { numeric: true }).compare(VERSION, current.version) <= 0) {
@@ -116,7 +101,7 @@ try {
 
     const manifest = join(temporary, "latest.json");
     writeFileSync(manifest, JSON.stringify({ version: VERSION, platforms }, null, 2) + "\n");
-    writeFileSync(page, downloadPage(url(`${releaseRoot}/${macInstaller}`)));
+    writeFileSync(page, renderPage(url(`${releaseRoot}/${macInstaller}`)));
 
     const immutable = "public, max-age=31536000, immutable";
     await publish(join(directory, macInstaller), `${releaseRoot}/${macInstaller}`, "application/x-apple-diskimage", immutable);
