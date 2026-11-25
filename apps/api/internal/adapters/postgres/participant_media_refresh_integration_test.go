@@ -11,7 +11,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 // A participant admitted but not yet active (status joining, pending join seat) whose SFU session
@@ -37,20 +40,26 @@ func TestJoiningParticipantMediaConnectionReplacementIsTokenKeyedAndReplayed(t *
 	}
 
 	tenantID, spaceID, episodeID, participantID := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	journeyID := accountTenantIntegrationID(t)
+	ctx = observability.ContextWithJourneyID(ctx, journeyID)
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
-		for _, query := range []string{
-			`delete from participant_media_refreshes where tenant_id = $1`,
-			`delete from sync_lifecycle_intents where tenant_id = $1`,
-			`delete from participant_join_seats where tenant_id = $1`,
-			`delete from participants where tenant_id = $1`,
-			`delete from sync_episode_control where tenant_id = $1`,
-			`delete from episodes where tenant_id = $1`,
-			`delete from spaces where tenant_id = $1`,
-			`delete from tenants where id = $1`,
+		for _, remove := range []struct {
+			query string
+			id    utilities.ID
+		}{
+			{`delete from participant_media_refreshes where tenant_id = $1`, tenantID},
+			{`delete from sync_lifecycle_intents where tenant_id = $1`, tenantID},
+			{`delete from observability_journey_events where journey_id = $1`, journeyID},
+			{`delete from participant_join_seats where tenant_id = $1`, tenantID},
+			{`delete from participants where tenant_id = $1`, tenantID},
+			{`delete from sync_episode_control where tenant_id = $1`, tenantID},
+			{`delete from episodes where tenant_id = $1`, tenantID},
+			{`delete from spaces where tenant_id = $1`, tenantID},
+			{`delete from tenants where id = $1`, tenantID},
 		} {
-			if _, err := pool.Exec(cleanup, query, tenantID.Bytes()); err != nil {
+			if _, err := pool.Exec(cleanup, remove.query, remove.id.Bytes()); err != nil {
 				t.Errorf("clean up joining participant fixture: %v", err)
 			}
 		}
@@ -60,7 +69,7 @@ func TestJoiningParticipantMediaConnectionReplacementIsTokenKeyedAndReplayed(t *
 		args  []any
 	}{
 		{`insert into tenants(id, name) values($1, 'Joining refresh')`, []any{tenantID.Bytes()}},
-		{`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Joining refresh', $2, $3, 'chalk_sfu')`, []any{spaceID.Bytes(), tenantID.Bytes(), "joining-refresh-" + spaceID.String()}},
+		{`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Joining refresh', $2, $3, $4)`, []any{spaceID.Bytes(), tenantID.Bytes(), "joining-refresh-" + spaceID.String(), string(mediaplane.ProviderChalkSFU)}},
 		{`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio"]},"admission_policy":{"mode":"open"}}'::jsonb)`, []any{episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()}},
 		{`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes) values($1, $2, $3, '{}'::jsonb, 1, $4, 2)`, []any{tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), make([]byte, 32)}},
 	} {
