@@ -2,7 +2,7 @@ import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { browserAllowsMediaAutoplay } from "./browser-autoplay";
 import { entranceAutoplayDecision } from "./entrance-autoplay";
 import { useTheme } from "../../lib/theme-context";
-import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type JoinOptions } from "@q9labsai/chalk-client";
+import { arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, preconnect, readReloadRejoin, readSpaceInviteToken, type JoinOptions } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
@@ -13,7 +13,7 @@ import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 import { arriveAtSpace, arrivalEvent, leaveArrival, reArrive, resumeReloadOutcome } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
-import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
+import { entryFailure, neutralSpaceError, resumeFailure } from "./entry-failure";
 import { FailedEntry } from "./FailedEntry";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 const displayNameStorageKey = "chalk.display-name";
@@ -160,6 +160,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         send({ type: "failed", attempt: previous.attempt, failure: { message: neutralSpaceError, retryable: false } });
         return;
       }
+      const reloadResumeMarker = reloadMarker && !resumeAttempted.current ? reloadMarker : undefined;
+      if (reloadResumeMarker) resumeAttempted.current = true;
       send({ type: "started", fromStep });
       let { attempt } = latest.current;
       warmCall();
@@ -171,7 +173,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (!active.current || !send({ type: "rejoinReleased", attempt })) return;
           attempt = latest.current.attempt;
         }
-        if (reloadMarker) return settle(attempt, await resumeReloadOutcome(client, reloadMarker, slug));
+        if (reloadResumeMarker) return settle(attempt, await resumeReloadOutcome(client, reloadResumeMarker, slug));
         const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken });
         try {
           await navigatePublicSpace(arrived.canonicalSlug, arrived.inviteLink);
@@ -409,12 +411,6 @@ function useEntrance(initial: () => Entrance) {
     return true;
   }, []);
   return { entrance, send, latest };
-}
-
-function resumeFailure(cause: unknown): EntryFailure {
-  if (cause instanceof AccessMediaProofRejectedError) return { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" };
-  if (cause instanceof MediaUnavailableError) return entryFailure(cause);
-  return { message: "Could not return to the Episode. Check your access before joining again.", retryable: true };
 }
 
 /** Gives back an admission the entrance no longer wants. Any other outcome holds nothing to give back. */
