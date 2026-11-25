@@ -64,7 +64,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const pages = useMemo(() => manifest?.pages ?? [], [manifest?.pages]);
 
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-[#202124] text-white" data-document-viewer data-document-id={document.documentId}>
+    <div className="relative flex h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] text-white" data-document-viewer data-document-id={document.documentId}>
       {thumbnails && ready ? (
         <div className="z-10 flex w-[136px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-white/10 bg-black/25 p-2">
           {pages.map((candidate) => (
