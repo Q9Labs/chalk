@@ -20,8 +20,11 @@ import (
 )
 
 type invocationEvent struct {
-	Source string `json:"source"`
-	JobID  string `json:"jobId"`
+	Source      string `json:"source"`
+	JobID       string `json:"jobId"`
+	JourneyID   string `json:"journeyId"`
+	Traceparent string `json:"traceparent"`
+	Tracestate  string `json:"tracestate"`
 }
 
 func main() {
@@ -131,14 +134,14 @@ func runLambdaRuntime(endpoint string, control worker.ControlClient, logger *slo
 }
 
 func processOne(ctx context.Context, control worker.ControlClient, event invocationEvent) error {
-	assignment, err := control.Claim(ctx, event.JobID)
+	assignment, err := control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate).Claim(ctx, event.JobID)
 	if err != nil {
 		return err
 	}
 	if assignment == nil {
 		return nil
 	}
-	return worker.Process(ctx, control, *assignment)
+	return worker.Process(ctx, control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate), *assignment)
 }
 
 func postRuntimeResult(client *http.Client, url string, body []byte, logger *slog.Logger) {

@@ -56,6 +56,9 @@ type ControlClient struct {
 	releaseID   string
 	audience    string
 	httpClient  *http.Client
+	journeyID   string
+	traceparent string
+	tracestate  string
 }
 
 func NewControlClient(baseURL, secret, environment, releaseID, audience string) ControlClient {
@@ -114,6 +117,11 @@ func (c ControlClient) Fail(ctx context.Context, assignment Assignment, code, me
 	return c.postLease(ctx, "/internal/v1/presenting/render/fail", body)
 }
 
+func (c ControlClient) WithJourney(journeyID, traceparent, tracestate string) ControlClient {
+	c.journeyID, c.traceparent, c.tracestate = journeyID, traceparent, tracestate
+	return c
+}
+
 func leaseBody(assignment Assignment, page int) map[string]any {
 	return map[string]any{
 		"job_id": assignment.JobID, "tenant_id": assignment.TenantID, "space_id": assignment.SpaceID,
@@ -161,7 +169,7 @@ func (c ControlClient) sign(method, path string, body []byte) map[string]string 
 	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
 	digest := sha256.Sum256(body)
 	bodySHA := hex.EncodeToString(digest[:])
-	canonical := strings.Join([]string{strings.ToUpper(method), path, bodySHA, timestamp, nonce, c.environment, c.releaseID, "document-renderer", "", "", "", c.audience}, "\n")
+	canonical := strings.Join([]string{strings.ToUpper(method), path, bodySHA, timestamp, nonce, c.environment, c.releaseID, "document-renderer", c.journeyID, c.traceparent, c.tracestate, c.audience}, "\n")
 	mac := hmac.New(sha256.New, []byte(c.secret))
 	_, _ = mac.Write([]byte(canonical))
 	return map[string]string{

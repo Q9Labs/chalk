@@ -16,7 +16,7 @@ const functionProps = Schema.Struct({
   functionName: Schema.String,
   description: Schema.String,
   role: Schema.String,
-  runtime: Schema.Literal("nodejs22.x"),
+  runtime: Schema.Union([Schema.Literal("nodejs22.x"), Schema.Literal("provided.al2023")]),
   handler: Schema.String,
   architectures: Schema.Array(Schema.Literal("arm64")),
   code: Schema.Struct({ bucket: Schema.String, key: Schema.String, version: Schema.String, sha256: Schema.String }),

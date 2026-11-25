@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (s Service) Create(ctx context.Context, subject Subject, attachmentID utilities.ID) (Document, error) {
@@ -126,6 +128,14 @@ func (s Service) signPage(ctx context.Context, document Document, page *Page) er
 func (s Service) invoke(ctx context.Context, input InvokeInput) {
 	if s.invoker == nil {
 		return
+	}
+	if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
+		input.JourneyID = journeyID
+	}
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		input.Traceparent = span.TraceID().String() + "-" + span.SpanID().String()
+		input.Traceparent = "00-" + span.TraceID().String() + "-" + span.SpanID().String() + "-" + span.TraceFlags().String()
+		input.Tracestate = span.TraceState().String()
 	}
 	if err := s.invoker.Invoke(ctx, input); err != nil {
 		// The durable job remains queued; the renderer reconcile schedule is the backstop.
