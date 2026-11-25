@@ -44,8 +44,8 @@ func TestDestroyMissingDropletIsIdempotent(t *testing.T) {
 
 func TestWrongAccountCannotConfirmAbsence(t *testing.T) {
 	fake := newFakeDigitalOcean(t, routes(nil, nil))
-	if gone, err := fake.adapter().Gone(t.Context(), testWindowName, 4242); gone || !errors.Is(err, ErrSFUWindowFirewall) {
-		t.Fatalf("gone=%t err=%v, want unconfirmed with missing firewall", gone, err)
+	if _, found, err := fake.adapter().Inspect(t.Context(), testWindowName, 4242); found || !errors.Is(err, ErrSFUWindowFirewall) {
+		t.Fatalf("found=%t err=%v, want unconfirmed with missing firewall", found, err)
 	}
 }
 

@@ -5644,6 +5644,7 @@ create index scheduled_episodes_upcoming_idx
 create table sfu_window_nodes (
     id text primary key check (id ~ '^window-sfu-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
     application_id text not null,
+    provider_firewall_id uuid not null,
     provider_id bigint unique check (provider_id > 0),
     control_address inet check (family(control_address) = 4 and masklen(control_address) = 32),
     phase text not null default 'starting' check (phase in ('starting', 'serving', 'draining', 'deleting', 'deleted')),

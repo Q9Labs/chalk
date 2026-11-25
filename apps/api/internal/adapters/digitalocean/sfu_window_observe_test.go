@@ -49,7 +49,7 @@ func TestSFUWindowRejectsUnownedNames(t *testing.T) {
 		if _, _, err := adapter.Observe(context.Background(), name); !errors.Is(err, ErrSFUWindowInvalid) {
 			t.Errorf("Observe(%q) = %v", name, err)
 		}
-		if err := adapter.Create(context.Background(), name); !errors.Is(err, ErrSFUWindowInvalid) {
+		if _, err := adapter.Create(context.Background(), name); !errors.Is(err, ErrSFUWindowInvalid) {
 			t.Errorf("Create(%q) = %v", name, err)
 		}
 		if err := adapter.Destroy(context.Background(), name, 1); !errors.Is(err, ErrSFUWindowInvalid) {

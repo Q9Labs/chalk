@@ -14,7 +14,7 @@ import (
 
 func TestCreateSendsExactPinnedRequest(t *testing.T) {
 	fake := newFakeDigitalOcean(t, routes(nil, []map[string]any{goodFirewall(), {"id": "99999999-2222-4333-8444-555555555555", "status": "succeeded", "tags": []string{"unrelated"}}}))
-	if err := fake.adapter().Create(context.Background(), testWindowName); err != nil {
+	if _, err := fake.adapter().Create(context.Background(), testWindowName); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	var methods []string
@@ -63,7 +63,7 @@ func TestCreateRefusesDisagreeingFirewallBeforeAnyPost(t *testing.T) {
 	}
 	for name, firewalls := range cases {
 		fake := newFakeDigitalOcean(t, routes(nil, firewalls))
-		if err := fake.adapter().Create(context.Background(), testWindowName); !errors.Is(err, ErrSFUWindowFirewall) || errors.Is(err, ErrSFUWindowCreateUnknown) {
+		if _, err := fake.adapter().Create(context.Background(), testWindowName); !errors.Is(err, ErrSFUWindowFirewall) || errors.Is(err, ErrSFUWindowCreateUnknown) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 		if fake.count(http.MethodPost) != 0 {
@@ -74,13 +74,13 @@ func TestCreateRefusesDisagreeingFirewallBeforeAnyPost(t *testing.T) {
 
 func TestCreateRefusesExistingNodeBeforeAnyPost(t *testing.T) {
 	fake := newFakeDigitalOcean(t, routes([]map[string]any{windowDroplet()}, []map[string]any{goodFirewall()}))
-	err := fake.adapter().Create(context.Background(), testWindowName)
+	_, err := fake.adapter().Create(context.Background(), testWindowName)
 	if !errors.Is(err, ErrSFUWindowExists) || errors.Is(err, ErrSFUWindowCreateUnknown) || fake.count(http.MethodPost) != 0 {
 		t.Fatalf("existing: err=%v posts=%d", err, fake.count(http.MethodPost))
 	}
 	foreign := windowDroplet(func(d map[string]any) { d["tags"] = []string{"someone-else"} })
 	fake = newFakeDigitalOcean(t, routes([]map[string]any{foreign}, []map[string]any{goodFirewall()}))
-	err = fake.adapter().Create(context.Background(), testWindowName)
+	_, err = fake.adapter().Create(context.Background(), testWindowName)
 	if !errors.Is(err, ErrSFUWindowDrift) || errors.Is(err, ErrSFUWindowCreateUnknown) || fake.count(http.MethodPost) != 0 {
 		t.Fatalf("foreign same name: err=%v posts=%d", err, fake.count(http.MethodPost))
 	}
@@ -88,7 +88,7 @@ func TestCreateRefusesExistingNodeBeforeAnyPost(t *testing.T) {
 
 func TestCreatePreflightProviderFailureSentNoPost(t *testing.T) {
 	fake := newFakeDigitalOcean(t, func(w http.ResponseWriter, r *http.Request, _ string) { http.Error(w, "down", http.StatusBadGateway) })
-	err := fake.adapter().Create(context.Background(), testWindowName)
+	_, err := fake.adapter().Create(context.Background(), testWindowName)
 	if !errors.Is(err, ErrSFUWindowProvider) || errors.Is(err, ErrSFUWindowCreateUnknown) || fake.count(http.MethodPost) != 0 {
 		t.Fatalf("err=%v posts=%d", err, fake.count(http.MethodPost))
 	}
@@ -139,7 +139,7 @@ func TestCreateAmbiguityIsAlwaysPotentiallyCommittedAndNeverRetried(t *testing.T
 	}
 	for name, respond := range cases {
 		fake := newFakeDigitalOcean(t, post(respond))
-		err := fake.adapter().Create(context.Background(), testWindowName)
+		_, err := fake.adapter().Create(context.Background(), testWindowName)
 		if err == nil || errors.Is(err, ErrSFUWindowCreateUnknown) == (name == "rate limited") {
 			t.Errorf("%s: unexpected classification: %v", name, err)
 		}
@@ -157,17 +157,17 @@ func TestCreateAmbiguityIsAlwaysPotentiallyCommittedAndNeverRetried(t *testing.T
 	limited := newFakeDigitalOcean(t, post(cases["rate limited"]))
 	var rateLimit *SFUWindowRateLimitError
 	adapter := limited.adapter()
-	if err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || !rateLimit.RetryAt.After(time.Now()) {
+	if _, err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || !rateLimit.RetryAt.After(time.Now()) {
 		t.Fatalf("rate limit not surfaced: %v", err)
 	}
 	before := len(limited.requests)
-	if err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || len(limited.requests) != before {
+	if _, err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || len(limited.requests) != before {
 		t.Fatalf("retried despite provider deadline: %v", err)
 	}
 	rejected := newFakeDigitalOcean(t, post(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 	}))
-	if err := rejected.adapter().Create(context.Background(), testWindowName); err == nil || errors.Is(err, ErrSFUWindowCreateUnknown) {
+	if _, err := rejected.adapter().Create(context.Background(), testWindowName); err == nil || errors.Is(err, ErrSFUWindowCreateUnknown) {
 		t.Fatalf("422 was not a definitive rejection: %v", err)
 	}
 }
@@ -189,7 +189,7 @@ func TestCreateTimeoutIsUnknownOutcome(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	if err := fake.adapter().Create(ctx, testWindowName); !errors.Is(err, ErrSFUWindowCreateUnknown) {
+	if _, err := fake.adapter().Create(ctx, testWindowName); !errors.Is(err, ErrSFUWindowCreateUnknown) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -222,7 +222,7 @@ func TestConcurrentCreateOfOneNameSendsOnePost(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			results[index] = adapter.Create(context.Background(), testWindowName)
+			_, results[index] = adapter.Create(context.Background(), testWindowName)
 		}()
 	}
 	wait.Wait()

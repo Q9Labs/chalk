@@ -65,8 +65,16 @@ func TestSFUWindowDrainFencesBindings(t *testing.T) {
 	for _, id := range [][16]byte{space.Bytes(), secondSpace.Bytes()} {
 		mustExec(pool, "insert into spaces(id, tenant_id, name, slug, media_plane) values ($1, $2, 'Window', $1::uuid::text, $3)", id, tenant.Bytes(), mediaplane.ProviderChalkSFU.SettingName())
 	}
-	mustExec(pool, "insert into sfu_window_nodes(id, application_id, provider_id, control_address, phase) values ($1, 'fence-test', $2, '192.0.2.1', 'serving')",
-		node, time.Now().UnixNano())
+	firewall := accountTenantIntegrationID(t).String()
+	mustExec(pool, "insert into sfu_window_nodes(id, application_id, provider_firewall_id, provider_id, control_address, phase) values ($1, 'fence-test', $2, $3, '192.0.2.1', 'serving')",
+		node, firewall, time.Now().UnixNano())
+	wrongAccount, err := NewSFUWindowStore(pool, accountTenantIntegrationID(t).String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wrongAccount.Load(ctx, "fence-test", time.Minute, 4); err == nil {
+		t.Fatal("loaded live journal rows with a different provider firewall")
+	}
 
 	bindingSQL := `insert into episodes(id, tenant_id, space_id, status, config_snapshot)
 		values ($1, $2, $3, 'active', jsonb_build_object('media_plane_binding', jsonb_build_object('provider', $5::text, 'node', $4::text)))`
@@ -95,7 +103,10 @@ func TestSFUWindowDrainFencesBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustExec(pool, drainSQL, node)
-	store := NewSFUWindowStore(pool)
+	store, err := NewSFUWindowStore(pool, firewall)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if unbound, err := store.Unbound(ctx, node); err != nil || unbound {
 		t.Fatalf("draining node still binds a live Episode: unbound = %v, err = %v", unbound, err)
 	}

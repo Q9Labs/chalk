@@ -36,11 +36,16 @@ func ListSFUWindowRoutes(ctx context.Context, queries sfuWindowDirectoryQueries,
 }
 
 type SFUWindowStore struct {
-	queries *sqlc.Queries
+	queries  *sqlc.Queries
+	firewall pgtype.UUID
 }
 
-func NewSFUWindowStore(db sqlc.DBTX) SFUWindowStore {
-	return SFUWindowStore{queries: sqlc.New(db)}
+func NewSFUWindowStore(db sqlc.DBTX, firewallID string) (SFUWindowStore, error) {
+	var firewall pgtype.UUID
+	if err := firewall.Scan(firewallID); err != nil || !firewall.Valid {
+		return SFUWindowStore{}, errors.New("invalid SFU window provider firewall ID")
+	}
+	return SFUWindowStore{queries: sqlc.New(db), firewall: firewall}, nil
 }
 
 func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead time.Duration, slotsPerNode int) (sfufleet.Snapshot, error) {
@@ -100,6 +105,9 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 
 	result := sfufleet.Snapshot{ObservedAt: now, Demand: demand, NodeTime: time.Duration(nodeSeconds) * time.Second}
 	for _, row := range rows {
+		if row.ProviderFirewallID != s.firewall {
+			return sfufleet.Snapshot{}, errors.New("SFU window journal belongs to a different provider firewall")
+		}
 		var address netip.Addr
 		if row.ControlAddress != nil {
 			address = *row.ControlAddress
@@ -114,7 +122,7 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 
 func (s SFUWindowStore) Reserve(ctx context.Context, application, id string, maxNodes int) error {
 	count, err := s.queries.ReserveSFUWindowNode(ctx, sqlc.ReserveSFUWindowNodeParams{
-		ID: id, ApplicationID: application, MaxNodes: int64(maxNodes),
+		ID: id, ApplicationID: application, ProviderFirewallID: s.firewall, MaxNodes: int64(maxNodes),
 	})
 	return checkSFUWindowWrite(count, err)
 }

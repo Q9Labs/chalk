@@ -2,6 +2,7 @@
 create table sfu_window_nodes (
     id text primary key check (id ~ '^window-sfu-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
     application_id text not null,
+    provider_firewall_id uuid not null,
     provider_id bigint unique check (provider_id > 0),
     control_address inet check (family(control_address) = 4 and masklen(control_address) = 32),
     phase text not null default 'starting' check (phase in ('starting', 'serving', 'draining', 'deleting', 'deleted')),
@@ -53,8 +54,13 @@ for each row execute function fence_sfu_window_binding();
 -- +goose StatementBegin
 do $$
 begin
-    if exists (select from sfu_window_nodes where deleted_at is null) then
-        raise exception 'retire SFU window nodes before removing their journal';
+    lock table episodes in share row exclusive mode;
+    lock table sfu_window_nodes in access exclusive mode;
+    if exists (select from sfu_window_nodes where deleted_at is null)
+       or exists (select from episodes
+                  where status in ('active', 'ending')
+                    and config_snapshot -> 'media_plane_binding' ->> 'node' like 'window-sfu-%') then
+        raise exception 'retire SFU window nodes and finish their Episodes before removing the journal';
     end if;
 end;
 $$;

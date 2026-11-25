@@ -18,6 +18,8 @@ const (
 	RouteEpisodesRetire  = Prefix + "/episodes/retire"
 	RouteEpisodesSources = Prefix + "/episodes/sources"
 	RouteDrain           = Prefix + "/drain"
+	RouteDrainFenced     = RouteDrain + "/fenced"
+	RouteUndrainFenced   = RouteUndrain + "/fenced"
 	RouteUndrain         = Prefix + "/undrain"
 )
 

@@ -2,10 +2,13 @@ package chalksfu
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -38,7 +41,7 @@ func (c WindowControl) Observe(ctx context.Context, address netip.Addr) (sfuflee
 	if err != nil {
 		return sfufleet.Health{}, fmt.Errorf("read SFU window health: %s", mediaplane.ClassifyTransportCause(ctx, err))
 	}
-	if ready.Draining == nil || ready.Allocations == nil || ready.CleanupDebt == nil ||
+	if !ready.DrainIfMatch || ready.Draining == nil || ready.Allocations == nil || ready.CleanupDebt == nil ||
 		!mediaplane.ValidIncarnation(ready.NodeIncarnation) || *ready.Allocations < 0 || *ready.CleanupDebt < 0 ||
 		status == http.StatusServiceUnavailable && !*ready.Draining {
 		return sfufleet.Health{}, fmt.Errorf("invalid SFU window health")
@@ -52,16 +55,28 @@ func (c WindowControl) Observe(ctx context.Context, address netip.Addr) (sfuflee
 	}, nil
 }
 
-func (c WindowControl) SetDrain(ctx context.Context, address netip.Addr, draining bool) error {
-	route := protocol.RouteUndrain
+func (c WindowControl) SetDrain(ctx context.Context, address netip.Addr, incarnation string, draining bool) error {
+	route := protocol.RouteUndrainFenced
 	if draining {
-		route = protocol.RouteDrain
+		route = protocol.RouteDrainFenced
 	}
-	var state protocol.DrainState
-	if err := c.adapter(address).call(ctx, route, nil, &state); err != nil {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.adapter(address).base.JoinPath(route).String(), nil)
+	if err != nil {
 		return err
 	}
-	if state.Draining != draining {
+	request.Header.Set("If-Match", strconv.Quote(incarnation))
+	reply, err := c.client.Do(request)
+	if err != nil {
+		return fmt.Errorf("set SFU window drain: %s", mediaplane.ClassifyTransportCause(ctx, err))
+	}
+	defer reply.Body.Close()
+	if reply.StatusCode != http.StatusOK {
+		return fmt.Errorf("SFU window drain status %d", reply.StatusCode)
+	}
+	var state struct {
+		Draining *bool `json:"draining"`
+	}
+	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&state); err != nil || state.Draining == nil || *state.Draining != draining {
 		return fmt.Errorf("SFU window control did not confirm the drain state")
 	}
 	return nil

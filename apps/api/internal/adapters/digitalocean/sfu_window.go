@@ -155,27 +155,27 @@ func (a *SFUWindow) Observe(ctx context.Context, name string) (SFUWindowDroplet,
 // Create submits one droplet creation. A failure that is not
 // ErrSFUWindowCreateUnknown is either a preflight failure or a definitive
 // provider rejection; an unknown outcome may have created a Droplet.
-func (a *SFUWindow) Create(ctx context.Context, name string) error {
+func (a *SFUWindow) Create(ctx context.Context, name string) (int64, error) {
 	if !validSFUWindowName(name) {
-		return ErrSFUWindowInvalid
+		return 0, ErrSFUWindowInvalid
 	}
 	a.createMu.Lock()
 	defer a.createMu.Unlock()
 	if err := a.verifyFirewall(ctx); err != nil {
-		return err
+		return 0, err
 	}
 	droplets, err := a.dropletsNamed(ctx, name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(droplets) > 0 {
 		if len(droplets) > 1 {
-			return fmt.Errorf("%w: %d droplets", ErrSFUWindowDuplicate, len(droplets))
+			return 0, fmt.Errorf("%w: %d droplets", ErrSFUWindowDuplicate, len(droplets))
 		}
 		if err := a.verifyOwned(droplets[0], name, true); err != nil {
-			return err
+			return 0, err
 		}
-		return ErrSFUWindowExists
+		return 0, ErrSFUWindowExists
 	}
 
 	payload := sfuWindowCreateRequest{
@@ -189,26 +189,26 @@ func (a *SFUWindow) Create(ctx context.Context, name string) error {
 		if errors.As(err, &status) {
 			switch status.status {
 			case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusTooManyRequests:
-				return err
+				return 0, err
 			}
 		}
-		return fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
+		return 0, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
 	}
 	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
-		return fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
+		return 0, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
 	}
 	slog.InfoContext(ctx, "sfu window droplet creation accepted",
 		"event", "sfu_window.create_accepted",
 		"node_name", name,
 		"provider_id", strconv.FormatInt(response.Droplet.ID, 10),
 	)
-	return nil
+	return response.Droplet.ID, nil
 }
 
 // Destroy deletes the droplet with providerID only after reading it back by ID
 // and confirming it is the exact window node called name. A missing droplet is success.
 func (a *SFUWindow) Destroy(ctx context.Context, name string, providerID int64) error {
-	present, err := a.ownedByID(ctx, name, providerID)
+	_, present, err := a.Inspect(ctx, name, providerID)
 	if err != nil || !present {
 		return err
 	}
@@ -228,14 +228,10 @@ func (a *SFUWindow) Destroy(ctx context.Context, name string, providerID int64) 
 	return nil
 }
 
-func (a *SFUWindow) Gone(ctx context.Context, name string, providerID int64) (bool, error) {
-	present, err := a.ownedByID(ctx, name, providerID)
-	return !present && err == nil, err
-}
-
-func (a *SFUWindow) ownedByID(ctx context.Context, name string, providerID int64) (bool, error) {
+// Inspect confirms that the immutable provider ID still owns the window name.
+func (a *SFUWindow) Inspect(ctx context.Context, name string, providerID int64) (SFUWindowDroplet, bool, error) {
 	if !validSFUWindowName(name) || providerID <= 0 {
-		return false, ErrSFUWindowInvalid
+		return SFUWindowDroplet{}, false, ErrSFUWindowInvalid
 	}
 	path := "/v2/droplets/" + strconv.FormatInt(providerID, 10)
 	var response struct {
@@ -245,16 +241,18 @@ func (a *SFUWindow) ownedByID(ctx context.Context, name string, providerID int64
 	if errors.Is(err, errNotFound) {
 		// A token from another account also returns 404. Prove visibility
 		// of the pinned environment firewall before accepting absence.
-		return false, a.verifyFirewall(ctx)
+		return SFUWindowDroplet{}, false, a.verifyFirewall(ctx)
 	}
 	if err != nil {
-		return false, err
+		return SFUWindowDroplet{}, false, err
 	}
 	if response.Droplet.ID != providerID {
-		return false, fmt.Errorf("%w: provider ID mismatch", ErrSFUWindowDrift)
+		return SFUWindowDroplet{}, false, fmt.Errorf("%w: provider ID mismatch", ErrSFUWindowDrift)
 	}
 	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
-		return false, err
+		return SFUWindowDroplet{}, false, err
 	}
-	return true, nil
+	node, err := mapSFUWindowDroplet(response.Droplet)
+	node.Outdated = response.Droplet.Image.ID != a.snapshotID
+	return node, err == nil, err
 }

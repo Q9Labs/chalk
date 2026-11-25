@@ -66,7 +66,11 @@ func run(ctx context.Context) error {
 		return errors.New("acquire the SFU window controller lease")
 	}
 
-	reconciler, err := sfufleet.NewReconciler(policy, postgres.NewSFUWindowStore(conn), provider, control)
+	store, err := postgres.NewSFUWindowStore(conn, os.Getenv("CHALK_SFU_WINDOW_FIREWALL_ID"))
+	if err != nil {
+		return err
+	}
+	reconciler, err := sfufleet.NewReconciler(policy, store, provider, control)
 	if err != nil {
 		return err
 	}
@@ -162,9 +166,14 @@ func (p windowProvider) Observe(ctx context.Context, id string) (sfufleet.Drople
 	return sfufleet.Droplet(droplet), found, err
 }
 
-func (p windowProvider) Create(ctx context.Context, id string) (bool, error) {
-	err := p.SFUWindow.Create(ctx, id)
-	return err == nil || errors.Is(err, digitalocean.ErrSFUWindowCreateUnknown) ||
+func (p windowProvider) Inspect(ctx context.Context, id string, providerID int64) (sfufleet.Droplet, bool, error) {
+	droplet, found, err := p.SFUWindow.Inspect(ctx, id, providerID)
+	return sfufleet.Droplet(droplet), found, err
+}
+
+func (p windowProvider) Create(ctx context.Context, id string) (int64, bool, error) {
+	providerID, err := p.SFUWindow.Create(ctx, id)
+	return providerID, err == nil || errors.Is(err, digitalocean.ErrSFUWindowCreateUnknown) ||
 		errors.Is(err, digitalocean.ErrSFUWindowExists), err
 }
 
