@@ -204,10 +204,10 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
     case "participant_screen_share_stopped":
       requireParticipant(state, event.payload.participant_id);
       return state;
-    case "step_away_set":
-    case "step_away_cleared":
-    case "app_state_allowance_opened":
-    case "app_state_allowance_closed":
+    case "focus_step_away_set":
+    case "focus_step_away_cleared":
+    case "focus_allowance_opened":
+    case "focus_allowance_closed":
       return state;
   }
 }
@@ -222,10 +222,10 @@ function applyOptimistic(state: V1ControlState, actorId: string, command: V1Targ
       return { ...state, admissionPolicy: command.payload.policy };
     case "assign_roles":
       return updateParticipant(state, command.payload.participant_id, (participant) => withDerivedRole(state, participant, command.payload.role), false);
-    case "set_step_away":
-    case "clear_step_away":
-    case "open_app_state_allowance":
-    case "close_app_state_allowance":
+    case "set_focus_step_away":
+    case "clear_focus_step_away":
+    case "open_focus_allowance":
+    case "close_focus_allowance":
       return state;
   }
 }

@@ -1192,7 +1192,7 @@ func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []by
 }
 
 const lockTenantSpaceForAdmission = `-- name: LockTenantSpaceForAdmission :one
-select id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, attention, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at from spaces
+select id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, focus, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at from spaces
 where tenant_id = $1 and id = $2
 for no key update
 `
@@ -1222,7 +1222,7 @@ func (q *Queries) LockTenantSpaceForAdmission(ctx context.Context, arg LockTenan
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
-		&i.Attention,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

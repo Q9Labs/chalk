@@ -29,9 +29,9 @@ export const V1_CAPABILITIES = [
   "endEpisode",
   "manageMembers",
   "clearSpaceContent",
-  "attention.view",
-  "attention.manage",
-  "attention.exempt",
+  "focus.view",
+  "focus.manage",
+  "focus.exempt",
 ] as const;
 export type V1Capability = (typeof V1_CAPABILITIES)[number];
 // Roles are customer-defined; the wire accepts any non-empty role name.
@@ -163,23 +163,23 @@ export type V1TargetCommand =
       };
     }
   | {
-      readonly name: "set_step_away";
+      readonly name: "set_focus_step_away";
       readonly payload: {
         readonly reason: "reading" | "notes" | "break";
       };
     }
   | {
-      readonly name: "clear_step_away";
+      readonly name: "clear_focus_step_away";
       readonly payload: Record<string, never>;
     }
   | {
-      readonly name: "open_app_state_allowance";
+      readonly name: "open_focus_allowance";
       readonly payload: {
         readonly minutes: number;
       };
     }
   | {
-      readonly name: "close_app_state_allowance";
+      readonly name: "close_focus_allowance";
       readonly payload: Record<string, never>;
     }
   | {

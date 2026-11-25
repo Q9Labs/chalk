@@ -1,4 +1,4 @@
-defmodule ChalkSync.Stateholder.Postgres.Attention do
+defmodule ChalkSync.Stateholder.Postgres.Focus do
   @moduledoc false
 
   alias ChalkSync.Database
@@ -11,7 +11,7 @@ defmodule ChalkSync.Stateholder.Postgres.Attention do
       fn ->
         case Postgrex.query(
                Database.connection(episode),
-               "select coalesce((config_snapshot -> 'attention' ->> 'enabled')::boolean, false) from episodes where tenant_id=$1 and space_id=$2 and id=$3",
+               "select coalesce((config_snapshot -> 'focus' ->> 'enabled')::boolean, false) from episodes where tenant_id=$1 and space_id=$2 and id=$3",
                Scope.episode(episode),
                timeout: 1_000
              ) do
@@ -42,7 +42,7 @@ defmodule ChalkSync.Stateholder.Postgres.Attention do
           Postgrex.query!(
             Database.connection(episode),
             """
-            insert into episode_attention_intervals (
+            insert into episode_focus_intervals (
               tenant_id, space_id, episode_id, participant_id, id, state, windowed, started_at, ended_at
             ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
             """,

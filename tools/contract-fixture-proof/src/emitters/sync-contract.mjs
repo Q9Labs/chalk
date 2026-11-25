@@ -304,9 +304,9 @@ function validateSyncContractDocument(value) {
     "endEpisode",
     "manageMembers",
     "clearSpaceContent",
-    "attention.view",
-    "attention.manage",
-    "attention.exempt",
+    "focus.view",
+    "focus.manage",
+    "focus.exempt",
   ];
   const capabilities = requireArrayProperty(value, "capabilities", "capabilities are required");
   if (JSON.stringify(capabilities) !== JSON.stringify(expectedCapabilities)) {
@@ -355,7 +355,7 @@ function validateSyncContractDocument(value) {
     validateFieldMap(command.payload, `command ${name} payload is required`);
     return name;
   });
-  if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles", "set_step_away", "clear_step_away", "open_app_state_allowance", "close_app_state_allowance"])) {
+  if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles", "set_focus_step_away", "clear_focus_step_away", "open_focus_allowance", "close_focus_allowance"])) {
     throw new Error("Invalid sync v1 contract: durable target command set must be exhaustive");
   }
 
@@ -392,10 +392,10 @@ function validateSyncContractDocument(value) {
     ["participant_camera_stopped", "external"],
     ["participant_screen_share_stopped", "external"],
     ["recording_status_changed", "external"],
-    ["step_away_set", "command"],
-    ["step_away_cleared", "command"],
-    ["app_state_allowance_opened", "command"],
-    ["app_state_allowance_closed", "command"],
+    ["focus_step_away_set", "command"],
+    ["focus_step_away_cleared", "command"],
+    ["focus_allowance_opened", "command"],
+    ["focus_allowance_closed", "command"],
   ];
   const events = requireArrayProperty(value, "events", "events are required");
   const eventDefinitions = events.map((event) => {

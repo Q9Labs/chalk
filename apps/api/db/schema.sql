@@ -250,7 +250,7 @@ create table spaces (
     transcription_policy text not null default 'automatic'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
     transcript_language text check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
-    attention jsonb not null default '{"enabled":false}'::jsonb,
+    focus jsonb not null default '{"enabled":false}'::jsonb,
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
@@ -264,10 +264,10 @@ create table spaces (
     check (maximum_episode_duration_seconds between 60 and 604800),
     check (default_episode_duration_seconds <= maximum_episode_duration_seconds),
     check (linger_window_seconds >= 0),
-    constraint spaces_attention_check check (
-        jsonb_typeof(attention) = 'object'
-        and attention <@ '{"enabled":false}'::jsonb
-        and jsonb_typeof(attention -> 'enabled') = 'boolean'
+    constraint spaces_focus_check check (
+        jsonb_typeof(focus) = 'object'
+        and focus <@ '{"enabled":false}'::jsonb
+        and jsonb_typeof(focus -> 'enabled') = 'boolean'
     )
 );
 create index spaces_tenant_created_at_id_idx on spaces(tenant_id, created_at desc, id desc);
@@ -302,7 +302,7 @@ as $$
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent', 'attention.view', 'attention.manage', 'attention.exempt'
+        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
     ]::text[]
         and cardinality(value) <= 26
         and cardinality(value) = (select count(distinct capability) from unnest(value) as capability)
@@ -1592,7 +1592,7 @@ create index sync_lifecycle_intents_episode_pending_idx
     on sync_lifecycle_intents(tenant_id, episode_id)
     where status = 'pending';
 
-create table episode_attention_intervals (
+create table episode_focus_intervals (
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
@@ -1611,10 +1611,10 @@ create table episode_attention_intervals (
         references participants(tenant_id, space_id, episode_id, id) on delete restrict,
     check (ended_at > started_at)
 );
-create index episode_attention_intervals_participant_idx
-    on episode_attention_intervals(tenant_id, space_id, episode_id, participant_id, started_at);
+create index episode_focus_intervals_participant_idx
+    on episode_focus_intervals(tenant_id, space_id, episode_id, participant_id, started_at);
 
-create table episode_attention_step_aways (
+create table episode_focus_step_aways (
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
@@ -1635,11 +1635,11 @@ create table episode_attention_step_aways (
         references participants(tenant_id, space_id, episode_id, id) on delete restrict,
     check (ended_at is null or ended_at >= started_at)
 );
-create unique index episode_attention_step_aways_one_open_idx
-    on episode_attention_step_aways(tenant_id, space_id, episode_id, participant_id)
+create unique index episode_focus_step_aways_one_open_idx
+    on episode_focus_step_aways(tenant_id, space_id, episode_id, participant_id)
     where ended_at is null;
 
-create table episode_attention_allow_windows (
+create table episode_focus_allow_windows (
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
@@ -1658,8 +1658,8 @@ create table episode_attention_allow_windows (
     check (ends_at > started_at),
     check (ended_at is null or ended_at >= started_at)
 );
-create index episode_attention_allow_windows_episode_idx
-    on episode_attention_allow_windows(tenant_id, space_id, episode_id, started_at);
+create index episode_focus_allow_windows_episode_idx
+    on episode_focus_allow_windows(tenant_id, space_id, episode_id, started_at);
 
 create table sync_control_events (
     tenant_id uuid not null,

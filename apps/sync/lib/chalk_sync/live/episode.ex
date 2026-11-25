@@ -181,7 +181,7 @@ defmodule ChalkSync.Live.Episode do
   defp close_reported_app_state(_state, _authority, nil, _ended_at_ms), do: :ok
 
   defp close_reported_app_state(state, authority, current, ended_at_ms) do
-    ChalkSync.Stateholder.Postgres.Attention.close_interval(
+    ChalkSync.Stateholder.Postgres.Focus.close_interval(
       state.episode,
       authority.participant_id,
       current.state,

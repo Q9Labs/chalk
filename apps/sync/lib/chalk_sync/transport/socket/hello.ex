@@ -178,8 +178,8 @@ defmodule ChalkSync.Transport.Socket.Hello do
            end),
          {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
          {:ok, app_state_enabled} <-
-           entry_stage(:attention_policy, fn ->
-             ChalkSync.Stateholder.Postgres.Attention.enabled?(identity.episode)
+           entry_stage(:focus_policy, fn ->
+             ChalkSync.Stateholder.Postgres.Focus.enabled?(identity.episode)
            end),
          state = %{state | app_state: state.app_state && app_state_enabled},
          {:ok, protocol_options, negotiated?, collaboration_version} <-

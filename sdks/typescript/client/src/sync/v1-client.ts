@@ -114,7 +114,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
   #extensions = v1NegotiatedExtensions();
-  #attentionCleanup: (() => void) | null = null;
+  #focusCleanup: (() => void) | null = null;
   readonly annotation = new AnnotationReplica((wire) => {
     if (!this.#socket || this.#phase.phase !== "live" || !this.#extensions.annotation) return false;
     try {
@@ -350,17 +350,17 @@ export class V1SyncClient implements V1CollaborationClient {
     return this.#sendTarget({ name: "set_admission_policy", payload: { policy } }, options);
   }
   stepAway(reason: "reading" | "notes" | "break", options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendTarget({ name: "set_step_away", payload: { reason } }, options);
+    return this.#sendTarget({ name: "set_focus_step_away", payload: { reason } }, options);
   }
   returnFromStepAway(options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendTarget({ name: "clear_step_away", payload: {} }, options);
+    return this.#sendTarget({ name: "clear_focus_step_away", payload: {} }, options);
   }
   allowOtherTabs(minutes: number, options?: CommandOptions): Promise<V1CommandResult> {
-    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 480) throw new V1SyncError("allowance must be a whole number of minutes from 1 through 480", "invalid_payload");
-    return this.#sendTarget({ name: "open_app_state_allowance", payload: { minutes } }, options);
+    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 240) throw new V1SyncError("allowance must be a whole number of minutes from 1 through 240", "invalid_payload");
+    return this.#sendTarget({ name: "open_focus_allowance", payload: { minutes } }, options);
   }
   endAllowance(options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendTarget({ name: "close_app_state_allowance", payload: {} }, options);
+    return this.#sendTarget({ name: "close_focus_allowance", payload: {} }, options);
   }
   assignRole(participantId: string, role: V1AssignableRole, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#sendTarget({ name: "assign_roles", payload: { participant_id: participantId, role } }, options);
@@ -443,9 +443,9 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#send(frame);
     return promise;
   }
-  #startAttentionReporting(): void {
-    this.#attentionCleanup?.();
-    this.#attentionCleanup = null;
+  #startFocusReporting(): void {
+    this.#focusCleanup?.();
+    this.#focusCleanup = null;
     if (!this.#extensions.appState || typeof document === "undefined" || typeof window === "undefined") return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const clear = () => {
@@ -477,7 +477,7 @@ export class V1SyncClient implements V1CollaborationClient {
     window.addEventListener("blur", away);
     window.addEventListener("focus", report);
     report();
-    this.#attentionCleanup = () => {
+    this.#focusCleanup = () => {
       clear();
       document.removeEventListener("visibilitychange", changed);
       window.removeEventListener("blur", away);
@@ -860,7 +860,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
-    this.#startAttentionReporting();
+    this.#startFocusReporting();
     this.#recovery = null;
     this.#phase = { phase: "live" };
     this.#connectStartedAt = null;
@@ -910,8 +910,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#commandScheduler.disconnect();
     this.#media = null;
     this.#presence = null;
-    this.#attentionCleanup?.();
-    this.#attentionCleanup = null;
+    this.#focusCleanup?.();
+    this.#focusCleanup = null;
     this.#options.mediaPlane?.remotePublicationsChanged?.([], this.#mediaEnded() ? "available" : "unavailable");
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");

@@ -196,7 +196,7 @@ defmodule ChalkSync.Episodes.Reducer.Events do
     end
   end
 
-  def apply_payload(state, "step_away_set", payload) do
+  def apply_payload(state, "focus_step_away_set", payload) do
     with :ok <- Validation.exact_keys(payload, ["participant_id", "reason"]),
          true <- payload["reason"] in ["reading", "notes", "break"],
          true <- joined?(state, payload["participant_id"]) do
@@ -206,7 +206,7 @@ defmodule ChalkSync.Episodes.Reducer.Events do
     end
   end
 
-  def apply_payload(state, "step_away_cleared", payload) do
+  def apply_payload(state, "focus_step_away_cleared", payload) do
     with :ok <- Validation.exact_keys(payload, ["participant_id"]),
          true <- joined?(state, payload["participant_id"]) do
       {:ok, state}
@@ -215,17 +215,17 @@ defmodule ChalkSync.Episodes.Reducer.Events do
     end
   end
 
-  def apply_payload(state, "app_state_allowance_opened", payload) do
-    with :ok <- Validation.exact_keys(payload, ["minutes"]),
-         true <- is_integer(payload["minutes"]) and payload["minutes"] in 1..480 do
+  def apply_payload(state, "focus_allowance_opened", payload) do
+    with :ok <- Validation.exact_keys(payload, ["actor_participant_id", "minutes"]),
+         true <- is_integer(payload["minutes"]) and payload["minutes"] in 1..240 do
       {:ok, state}
     else
       _ -> {:error, :invalid_payload}
     end
   end
 
-  def apply_payload(state, "app_state_allowance_closed", payload) do
-    with :ok <- Validation.exact_keys(payload, []) do
+  def apply_payload(state, "focus_allowance_closed", payload) do
+    with :ok <- Validation.exact_keys(payload, ["actor_participant_id"]) do
       {:ok, state}
     else
       _ -> {:error, :invalid_payload}

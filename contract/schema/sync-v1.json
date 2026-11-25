@@ -224,9 +224,9 @@
     "endEpisode",
     "manageMembers",
     "clearSpaceContent",
-    "attention.view",
-    "attention.manage",
-    "attention.exempt"
+    "focus.view",
+    "focus.manage",
+    "focus.exempt"
   ],
   "policy": {
     "defaultRoles": [
@@ -259,9 +259,9 @@
         "endEpisode",
         "manageMembers",
         "clearSpaceContent",
-        "attention.view",
-        "attention.manage",
-        "attention.exempt"
+        "focus.view",
+        "focus.manage",
+        "focus.exempt"
       ],
       "collaborator": [
         "publishAudio",
@@ -662,7 +662,7 @@
     {
       "direction": "client-to-server",
       "type": "command",
-      "name": "set_step_away",
+      "name": "set_focus_step_away",
       "capability": "subscribe",
       "payload": {
         "reason": [
@@ -675,15 +675,15 @@
     {
       "direction": "client-to-server",
       "type": "command",
-      "name": "clear_step_away",
+      "name": "clear_focus_step_away",
       "capability": "subscribe",
       "payload": {}
     },
     {
       "direction": "client-to-server",
       "type": "command",
-      "name": "open_app_state_allowance",
-      "capability": "attention.manage",
+      "name": "open_focus_allowance",
+      "capability": "focus.manage",
       "payload": {
         "minutes": {
           "kind": "integer",
@@ -695,8 +695,8 @@
     {
       "direction": "client-to-server",
       "type": "command",
-      "name": "close_app_state_allowance",
-      "capability": "attention.manage",
+      "name": "close_focus_allowance",
+      "capability": "focus.manage",
       "payload": {}
     }
   ],
@@ -1513,7 +1513,7 @@
       }
     },
     {
-      "name": "step_away_set",
+      "name": "focus_step_away_set",
       "origin": "command",
       "payload": {
         "participantId": "uuid",
@@ -1525,14 +1525,14 @@
       }
     },
     {
-      "name": "step_away_cleared",
+      "name": "focus_step_away_cleared",
       "origin": "command",
       "payload": {
         "participantId": "uuid"
       }
     },
     {
-      "name": "app_state_allowance_opened",
+      "name": "focus_allowance_opened",
       "origin": "command",
       "payload": {
         "actorParticipantId": "uuid",
@@ -1544,7 +1544,7 @@
       }
     },
     {
-      "name": "app_state_allowance_closed",
+      "name": "focus_allowance_closed",
       "origin": "command",
       "payload": {
         "actorParticipantId": "uuid"
@@ -1691,10 +1691,10 @@
           "device_type",
           "admission_revision",
           "connection_quality",
-          "app_state",
-          "windowed",
-          "step_away_reason",
-          "allowed"
+          "focus_app_state",
+          "focus_windowed",
+          "focus_step_away_reason",
+          "focus_allowed"
         ],
         "connectionQuality": [
           "good",
@@ -1737,7 +1737,7 @@
         "allowed": {
           "kind": "boolean"
         },
-        "appStateNegotiation": "app_state=1 WebSocket query opts into app-state reporting. app_state and windowed describe the reporting connection; step_away_reason and allowed are neutral declared states. All are omitted when unset, when the Episode config disables reporting, and for older clients. Non-viewers receive only their own fields."
+        "appStateNegotiation": "app_state=1 WebSocket query opts into app-state reporting. focus_app_state and focus_windowed describe the reporting connection; focus_step_away_reason and focus_allowed are neutral declared states. All are omitted when unset, when the Episode config disables reporting, and for older clients. Non-viewers receive only their own fields."
       }
     },
     "presenceEvent": {

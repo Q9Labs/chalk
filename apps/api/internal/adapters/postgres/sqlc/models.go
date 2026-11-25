@@ -123,7 +123,16 @@ type Episode struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
-type EpisodeAttentionAllowWindow struct {
+type EpisodeCreateRequest struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type EpisodeFocusAllowWindow struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	SpaceID            pgtype.UUID        `json:"space_id"`
 	EpisodeID          pgtype.UUID        `json:"episode_id"`
@@ -135,7 +144,7 @@ type EpisodeAttentionAllowWindow struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
-type EpisodeAttentionInterval struct {
+type EpisodeFocusInterval struct {
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	SpaceID       pgtype.UUID        `json:"space_id"`
 	EpisodeID     pgtype.UUID        `json:"episode_id"`
@@ -148,7 +157,7 @@ type EpisodeAttentionInterval struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
-type EpisodeAttentionStepAway struct {
+type EpisodeFocusStepAway struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	SpaceID            pgtype.UUID        `json:"space_id"`
 	EpisodeID          pgtype.UUID        `json:"episode_id"`
@@ -158,15 +167,6 @@ type EpisodeAttentionStepAway struct {
 	Reason             string             `json:"reason"`
 	StartedAt          pgtype.Timestamptz `json:"started_at"`
 	EndedAt            pgtype.Timestamptz `json:"ended_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-}
-
-type EpisodeCreateRequest struct {
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	SpaceID            pgtype.UUID        `json:"space_id"`
-	RequestKey         string             `json:"request_key"`
-	RequestFingerprint []byte             `json:"request_fingerprint"`
-	EpisodeID          pgtype.UUID        `json:"episode_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -1190,7 +1190,7 @@ type Space struct {
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
 	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
-	Attention                     []byte             `json:"attention"`
+	Focus                         []byte             `json:"focus"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`

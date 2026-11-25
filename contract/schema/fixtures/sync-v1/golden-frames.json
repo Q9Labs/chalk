@@ -60,6 +60,34 @@
       }
     },
     {
+      "type": "command",
+      "command_id": "command-00000005",
+      "name": "set_focus_step_away",
+      "payload": {
+        "reason": "reading"
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000006",
+      "name": "clear_focus_step_away",
+      "payload": {}
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000007",
+      "name": "open_focus_allowance",
+      "payload": {
+        "minutes": 15
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000008",
+      "name": "close_focus_allowance",
+      "payload": {}
+    },
+    {
       "type": "operation",
       "command_id": "operation-command-00",
       "name": "admit_participant",
@@ -198,6 +226,11 @@
     {
       "type": "connection_quality_set",
       "quality": "weak"
+    },
+    {
+      "type": "app_state_set",
+      "state": "inactive",
+      "windowed": true
     },
     {
       "type": "ping"
@@ -431,6 +464,22 @@
       }
     },
     {
+      "type": "projection_event",
+      "stream": "presence",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26",
+      "sequence": 3,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "state": "connected",
+        "speaking": false,
+        "active_speaker": false,
+        "focus_app_state": "inactive",
+        "focus_windowed": true,
+        "focus_step_away_reason": "reading",
+        "focus_allowed": false
+      }
+    },
+    {
       "type": "live_target_result",
       "operation_id": "operation-0000001",
       "name": "set_microphone_enabled",
@@ -489,6 +538,20 @@
       },
       "mode": "up_to_date",
       "connection_quality": true
+    },
+    {
+      "type": "welcome",
+      "protocol": 1,
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 18,
+        "state_schema_version": 1,
+        "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "mode": "up_to_date",
+      "app_state": true
     },
     {
       "type": "reaction",
@@ -669,6 +732,64 @@
         "display_name": "Grace Hopper"
       },
       "command_id": "event-command-0007"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "focus_step_away_set",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c90",
+      "base_revision": 20,
+      "revision": 21,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "reason": "reading"
+      },
+      "command_id": "command-00000005"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "focus_step_away_cleared",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c91",
+      "base_revision": 21,
+      "revision": 22,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
+      },
+      "command_id": "command-00000006"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "focus_allowance_opened",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c92",
+      "base_revision": 22,
+      "revision": 23,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "actor_participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "minutes": 15
+      },
+      "command_id": "command-00000007"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "focus_allowance_closed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c93",
+      "base_revision": 23,
+      "revision": 24,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "actor_participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
+      },
+      "command_id": "command-00000008"
     },
     {
       "type": "event",

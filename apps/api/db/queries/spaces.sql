@@ -88,7 +88,7 @@ returning *
                 'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
                 'requestMediaOthers', 'removeParticipant', 'manageRecording',
                 'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-                'clearSpaceContent'
+                'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
             ]::text[]
         ),
         (
@@ -137,6 +137,7 @@ select
     inserted.recording_policy,
     inserted.transcription_policy,
     inserted.transcript_language,
+    inserted.focus,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -161,7 +162,7 @@ values
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent'
+        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
     ]::text[]
 ),
 (
@@ -214,6 +215,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -242,6 +244,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -365,6 +368,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -395,6 +399,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -425,6 +430,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -462,7 +468,8 @@ insert into episodes (
         'admission_policy', spaces.admission_policy,
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
-        'linger_window_seconds', spaces.linger_window_seconds
+        'linger_window_seconds', spaces.linger_window_seconds,
+        'focus', spaces.focus
     )
 from spaces
 where

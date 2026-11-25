@@ -11,10 +11,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
     "assign_roles" => :assign_roles,
-    "set_step_away" => :set_step_away,
-    "clear_step_away" => :clear_step_away,
-    "open_app_state_allowance" => :open_app_state_allowance,
-    "close_app_state_allowance" => :close_app_state_allowance
+    "set_focus_step_away" => :set_focus_step_away,
+    "clear_focus_step_away" => :clear_focus_step_away,
+    "open_focus_allowance" => :open_focus_allowance,
+    "close_focus_allowance" => :close_focus_allowance
   }
   @client_operations %{
     "admit_participant" => :admit_participant,
@@ -48,10 +48,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "participant_camera_stopped" => "external",
     "participant_screen_share_stopped" => "external",
     "recording_status_changed" => "external",
-    "step_away_set" => "command",
-    "step_away_cleared" => "command",
-    "app_state_allowance_opened" => "command",
-    "app_state_allowance_closed" => "command"
+    "focus_step_away_set" => "command",
+    "focus_step_away_cleared" => "command",
+    "focus_allowance_opened" => "command",
+    "focus_allowance_closed" => "command"
   }
   @limits %{
     "decodedInboundFrameBytes" => 65_536,
@@ -567,9 +567,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "endEpisode",
     "manageMembers",
     "clearSpaceContent",
-    "attention.view",
-    "attention.manage",
-    "attention.exempt"
+    "focus.view",
+    "focus.manage",
+    "focus.exempt"
   ]
   @terminal_reasons ["episode_ended", "participant_inactive", "stale_participant_generation"]
   @rejection_reasons [
@@ -773,7 +773,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     role == String.trim(role)
   end
 
-  defp valid_command_payload?("set_step_away", %{"reason" => reason} = payload) do
+  defp valid_command_payload?("set_focus_step_away", %{"reason" => reason} = payload) do
     exact_keys?(payload, [
   "reason"
 ]) and reason in [
@@ -783,19 +783,19 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ]
   end
 
-  defp valid_command_payload?("clear_step_away", %{} = payload) do
+  defp valid_command_payload?("clear_focus_step_away", %{} = payload) do
     exact_keys?(payload, [
 
 ]) and true
   end
 
-  defp valid_command_payload?("open_app_state_allowance", %{"minutes" => minutes} = payload) do
+  defp valid_command_payload?("open_focus_allowance", %{"minutes" => minutes} = payload) do
     exact_keys?(payload, [
   "minutes"
 ]) and valid_positive_integer?(minutes)
   end
 
-  defp valid_command_payload?("close_app_state_allowance", %{} = payload) do
+  defp valid_command_payload?("close_focus_allowance", %{} = payload) do
     exact_keys?(payload, [
 
 ]) and true
@@ -1358,7 +1358,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ] and (is_nil(failure_code) or bounded_string?(failure_code, 1, 96))
   end
 
-  defp valid_event_payload?("step_away_set", %{"participant_id" => participant_id,
+  defp valid_event_payload?("focus_step_away_set", %{"participant_id" => participant_id,
       "reason" => reason} = payload) do
     exact_keys?(payload, [
   "participant_id",
@@ -1370,14 +1370,14 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ]
   end
 
-  defp valid_event_payload?("step_away_cleared",
+  defp valid_event_payload?("focus_step_away_cleared",
       %{"participant_id" => participant_id} = payload) do
     exact_keys?(payload, [
   "participant_id"
 ]) and valid_uuid?(participant_id)
   end
 
-  defp valid_event_payload?("app_state_allowance_opened",
+  defp valid_event_payload?("focus_allowance_opened",
       %{"actor_participant_id" => actor_participant_id, "minutes" => minutes} = payload) do
     exact_keys?(payload, [
   "actor_participant_id",
@@ -1385,7 +1385,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ]) and valid_uuid?(actor_participant_id) and valid_positive_integer?(minutes)
   end
 
-  defp valid_event_payload?("app_state_allowance_closed",
+  defp valid_event_payload?("focus_allowance_closed",
       %{"actor_participant_id" => actor_participant_id} = payload) do
     exact_keys?(payload, [
   "actor_participant_id"
@@ -1462,19 +1462,20 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
-      "device_type", "admission_revision", "connection_quality", "app_state", "windowed",
-      "step_away_reason", "allowed"], &Map.has_key?(item, &1))) and (not Map.has_key?(item,
-      "connection_quality") or item["connection_quality"] in @connection_qualities) and
-      (not Map.has_key?(item, "app_state") or item["app_state"] in @app_states) and
-      (not Map.has_key?(item, "windowed") or is_boolean(item["windowed"])) and
-      (not Map.has_key?(item, "step_away_reason") or
-      item["step_away_reason"] in @step_away_reasons) and (not Map.has_key?(item, "allowed") or
-      is_boolean(item["allowed"])) and (not Map.has_key?(item, "identity_id") or
-      valid_uuid?(item["identity_id"])) and (not Map.has_key?(item, "device_type") or
-      item["device_type"] in ["phone", "tablet", "computer"]) and (not Map.has_key?(item,
-      "admission_revision") or valid_positive_integer?(item["admission_revision"])) and
-      valid_uuid?(id) and state in @presence_states and is_boolean(speaking) and
-      is_boolean(active) and (state != "disconnected" or (not speaking and not active))
+      "device_type", "admission_revision", "connection_quality", "focus_app_state",
+      "focus_windowed", "focus_step_away_reason", "focus_allowed"], &Map.has_key?(item, &1))) and
+      (not Map.has_key?(item, "connection_quality") or
+      item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item,
+      "focus_app_state") or item["focus_app_state"] in @app_states) and (not Map.has_key?(item,
+      "focus_windowed") or is_boolean(item["focus_windowed"])) and (not Map.has_key?(item,
+      "focus_step_away_reason") or item["focus_step_away_reason"] in @step_away_reasons) and
+      (not Map.has_key?(item, "focus_allowed") or is_boolean(item["focus_allowed"])) and
+      (not Map.has_key?(item, "identity_id") or valid_uuid?(item["identity_id"])) and
+      (not Map.has_key?(item, "device_type") or item["device_type"] in ["phone", "tablet",
+      "computer"]) and (not Map.has_key?(item, "admission_revision") or
+      valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and
+      state in @presence_states and is_boolean(speaking) and is_boolean(active) and
+      (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false
   defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision}),
       do: valid_positive_integer?(revision)

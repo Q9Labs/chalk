@@ -430,13 +430,13 @@ function strictCommand(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, ["policy"]);
     case "assign_roles":
       return exactObject(value.payload, ["participant_id", "role"]);
-    case "set_step_away":
+    case "set_focus_step_away":
       return exactObject(value.payload, ["reason"]);
-    case "clear_step_away":
+    case "clear_focus_step_away":
       return exactObject(value.payload, []);
-    case "open_app_state_allowance":
+    case "open_focus_allowance":
       return exactObject(value.payload, ["minutes"]);
-    case "close_app_state_allowance":
+    case "close_focus_allowance":
       return exactObject(value.payload, []);
     default:
       return false;
@@ -616,13 +616,13 @@ function strictEvent(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "recording_status_changed":
       return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
-    case "step_away_set":
+    case "focus_step_away_set":
       return exactObject(value.payload, ["participant_id", "reason"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
-    case "step_away_cleared":
+    case "focus_step_away_cleared":
       return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
-    case "app_state_allowance_opened":
+    case "focus_allowance_opened":
       return exactObject(value.payload, ["actor_participant_id", "minutes"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
-    case "app_state_allowance_closed":
+    case "focus_allowance_closed":
       return exactObject(value.payload, ["actor_participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     default:
       return false;
@@ -802,9 +802,9 @@ export const CapabilitySchema = Schema.Union([
   Schema.Literal("endEpisode"),
   Schema.Literal("manageMembers"),
   Schema.Literal("clearSpaceContent"),
-  Schema.Literal("attention.view"),
-  Schema.Literal("attention.manage"),
-  Schema.Literal("attention.exempt"),
+  Schema.Literal("focus.view"),
+  Schema.Literal("focus.manage"),
+  Schema.Literal("focus.exempt"),
 ]);
 export const RoleSchema = boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value === value.trim() ? undefined : { path: [], issue: "role names must not have surrounding whitespace" })));
 export const TerminalRecoveryReasonSchema = Schema.Union([Schema.Literal("episode_ended"), Schema.Literal("participant_inactive"), Schema.Literal("stale_participant_generation")]);
@@ -893,16 +893,19 @@ export const AssignRolesCommandFrameSchema = Schema.Struct({
   payload: Schema.Struct({ participant_id: UuidSchema, role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
 }).check(boundedFrame(65536));
 export type AssignRolesCommandFrame = typeof AssignRolesCommandFrameSchema.Type;
-export const SetStepAwayCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("set_step_away"), payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("reading"), Schema.Literal("notes"), Schema.Literal("break")]) }) }).check(
-  boundedFrame(65536),
-);
-export type SetStepAwayCommandFrame = typeof SetStepAwayCommandFrameSchema.Type;
-export const ClearStepAwayCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("clear_step_away"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
-export type ClearStepAwayCommandFrame = typeof ClearStepAwayCommandFrameSchema.Type;
-export const OpenAppStateAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("open_app_state_allowance"), payload: Schema.Struct({ minutes: PositiveIntegerSchema }) }).check(boundedFrame(65536));
-export type OpenAppStateAllowanceCommandFrame = typeof OpenAppStateAllowanceCommandFrameSchema.Type;
-export const CloseAppStateAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("close_app_state_allowance"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
-export type CloseAppStateAllowanceCommandFrame = typeof CloseAppStateAllowanceCommandFrameSchema.Type;
+export const SetFocusStepAwayCommandFrameSchema = Schema.Struct({
+  type: Schema.Literal("command"),
+  command_id: CommandIdSchema,
+  name: Schema.Literal("set_focus_step_away"),
+  payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("reading"), Schema.Literal("notes"), Schema.Literal("break")]) }),
+}).check(boundedFrame(65536));
+export type SetFocusStepAwayCommandFrame = typeof SetFocusStepAwayCommandFrameSchema.Type;
+export const ClearFocusStepAwayCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("clear_focus_step_away"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type ClearFocusStepAwayCommandFrame = typeof ClearFocusStepAwayCommandFrameSchema.Type;
+export const OpenFocusAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("open_focus_allowance"), payload: Schema.Struct({ minutes: PositiveIntegerSchema }) }).check(boundedFrame(65536));
+export type OpenFocusAllowanceCommandFrame = typeof OpenFocusAllowanceCommandFrameSchema.Type;
+export const CloseFocusAllowanceCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("close_focus_allowance"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type CloseFocusAllowanceCommandFrame = typeof CloseFocusAllowanceCommandFrameSchema.Type;
 export const AdmitParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("admit_participant"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
 export type AdmitParticipantOperationFrame = typeof AdmitParticipantOperationFrameSchema.Type;
 export const DenyAdmissionOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("deny_admission"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
@@ -1278,10 +1281,10 @@ const RecordingStatusChangedExternalOperationIdEventVariantSchema = Schema.Struc
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
 );
-const StepAwaySetCommandIdEventVariantSchema = Schema.Struct({
+const FocusStepAwaySetCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
-  name: Schema.Literal("step_away_set"),
+  name: Schema.Literal("focus_step_away_set"),
   event_id: UuidSchema,
   base_revision: NonNegativeIntegerSchema,
   revision: PositiveIntegerSchema,
@@ -1294,10 +1297,10 @@ const StepAwaySetCommandIdEventVariantSchema = Schema.Struct({
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
 );
-const StepAwayClearedCommandIdEventVariantSchema = Schema.Struct({
+const FocusStepAwayClearedCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
-  name: Schema.Literal("step_away_cleared"),
+  name: Schema.Literal("focus_step_away_cleared"),
   event_id: UuidSchema,
   base_revision: NonNegativeIntegerSchema,
   revision: PositiveIntegerSchema,
@@ -1310,10 +1313,10 @@ const StepAwayClearedCommandIdEventVariantSchema = Schema.Struct({
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
 );
-const AppStateAllowanceOpenedCommandIdEventVariantSchema = Schema.Struct({
+const FocusAllowanceOpenedCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
-  name: Schema.Literal("app_state_allowance_opened"),
+  name: Schema.Literal("focus_allowance_opened"),
   event_id: UuidSchema,
   base_revision: NonNegativeIntegerSchema,
   revision: PositiveIntegerSchema,
@@ -1326,10 +1329,10 @@ const AppStateAllowanceOpenedCommandIdEventVariantSchema = Schema.Struct({
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
 );
-const AppStateAllowanceClosedCommandIdEventVariantSchema = Schema.Struct({
+const FocusAllowanceClosedCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
-  name: Schema.Literal("app_state_allowance_closed"),
+  name: Schema.Literal("focus_allowance_closed"),
   event_id: UuidSchema,
   base_revision: NonNegativeIntegerSchema,
   revision: PositiveIntegerSchema,
@@ -1359,10 +1362,10 @@ export const ParticipantMicrophoneStoppedEventFrameSchema = ParticipantMicrophon
 export const ParticipantCameraStoppedEventFrameSchema = ParticipantCameraStoppedExternalOperationIdEventVariantSchema;
 export const ParticipantScreenShareStoppedEventFrameSchema = ParticipantScreenShareStoppedExternalOperationIdEventVariantSchema;
 export const RecordingStatusChangedEventFrameSchema = RecordingStatusChangedExternalOperationIdEventVariantSchema;
-export const StepAwaySetEventFrameSchema = StepAwaySetCommandIdEventVariantSchema;
-export const StepAwayClearedEventFrameSchema = StepAwayClearedCommandIdEventVariantSchema;
-export const AppStateAllowanceOpenedEventFrameSchema = AppStateAllowanceOpenedCommandIdEventVariantSchema;
-export const AppStateAllowanceClosedEventFrameSchema = AppStateAllowanceClosedCommandIdEventVariantSchema;
+export const FocusStepAwaySetEventFrameSchema = FocusStepAwaySetCommandIdEventVariantSchema;
+export const FocusStepAwayClearedEventFrameSchema = FocusStepAwayClearedCommandIdEventVariantSchema;
+export const FocusAllowanceOpenedEventFrameSchema = FocusAllowanceOpenedCommandIdEventVariantSchema;
+export const FocusAllowanceClosedEventFrameSchema = FocusAllowanceClosedCommandIdEventVariantSchema;
 export const EventFrameSchema = Schema.Union([
   ParticipantJoinedEventFrameSchema,
   ParticipantLeftEventFrameSchema,
@@ -1381,10 +1384,10 @@ export const EventFrameSchema = Schema.Union([
   ParticipantCameraStoppedEventFrameSchema,
   ParticipantScreenShareStoppedEventFrameSchema,
   RecordingStatusChangedEventFrameSchema,
-  StepAwaySetEventFrameSchema,
-  StepAwayClearedEventFrameSchema,
-  AppStateAllowanceOpenedEventFrameSchema,
-  AppStateAllowanceClosedEventFrameSchema,
+  FocusStepAwaySetEventFrameSchema,
+  FocusStepAwayClearedEventFrameSchema,
+  FocusAllowanceOpenedEventFrameSchema,
+  FocusAllowanceClosedEventFrameSchema,
 ]);
 
 export const CollaborationCapabilitySchema = Schema.Union([Schema.Literal("sendReaction"), Schema.Literal("sendChat")]);
@@ -1479,10 +1482,10 @@ export const PresenceProjectionItemSchema = Schema.Struct({
   device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
   admission_revision: Schema.optional(PositiveIntegerSchema),
   connection_quality: Schema.optional(Schema.Literals(["good", "weak", "poor"])),
-  app_state: Schema.optional(Schema.Literals(["active", "inactive", "background"])),
-  windowed: Schema.optional(Schema.Boolean),
-  step_away_reason: Schema.optional(Schema.Literals(["reading", "notes", "break"])),
-  allowed: Schema.optional(Schema.Boolean),
+  focus_app_state: Schema.optional(Schema.Literals(["active", "inactive", "background"])),
+  focus_windowed: Schema.optional(Schema.Boolean),
+  focus_step_away_reason: Schema.optional(Schema.Literals(["reading", "notes", "break"])),
+  focus_allowed: Schema.optional(Schema.Boolean),
 }).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));
 export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
   type: Schema.Literal("projection_snapshot"),
@@ -1634,10 +1637,10 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         SetDisplayNameCommandFrameSchema,
         SetAdmissionPolicyCommandFrameSchema,
         AssignRolesCommandFrameSchema,
-        SetStepAwayCommandFrameSchema,
-        ClearStepAwayCommandFrameSchema,
-        OpenAppStateAllowanceCommandFrameSchema,
-        CloseAppStateAllowanceCommandFrameSchema,
+        SetFocusStepAwayCommandFrameSchema,
+        ClearFocusStepAwayCommandFrameSchema,
+        OpenFocusAllowanceCommandFrameSchema,
+        CloseFocusAllowanceCommandFrameSchema,
         AdmitParticipantOperationFrameSchema,
         DenyAdmissionOperationFrameSchema,
         MuteParticipantOperationFrameSchema,

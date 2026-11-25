@@ -197,19 +197,19 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
     :ok
   end
 
-  defp update_command_product(connection, identity, %{name: "step_away_set"} = event) do
+  defp update_command_product(connection, identity, %{name: "focus_step_away_set"} = event) do
     episode_params = Scope.episode(identity.episode)
     participant_id = Scope.uuid(event.payload["participant_id"])
 
     Postgrex.query!(
       connection,
-      "update episode_attention_step_aways set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and ended_at is null",
+      "update episode_focus_step_aways set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and ended_at is null",
       episode_params ++ [participant_id]
     )
 
     Postgrex.query!(
       connection,
-      "insert into episode_attention_step_aways (tenant_id,space_id,episode_id,participant_id,actor_participant_id,id,reason) values ($1,$2,$3,$4,$5,$6,$7)",
+      "insert into episode_focus_step_aways (tenant_id,space_id,episode_id,participant_id,actor_participant_id,id,reason) values ($1,$2,$3,$4,$5,$6,$7)",
       episode_params ++
         [
           participant_id,
@@ -222,28 +222,28 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
     :ok
   end
 
-  defp update_command_product(connection, identity, %{name: "step_away_cleared"} = event) do
+  defp update_command_product(connection, identity, %{name: "focus_step_away_cleared"} = event) do
     Postgrex.query!(
       connection,
-      "update episode_attention_step_aways set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and ended_at is null",
+      "update episode_focus_step_aways set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and ended_at is null",
       Scope.episode(identity.episode) ++ [Scope.uuid(event.payload["participant_id"])]
     )
 
     :ok
   end
 
-  defp update_command_product(connection, identity, %{name: "app_state_allowance_opened"} = event) do
+  defp update_command_product(connection, identity, %{name: "focus_allowance_opened"} = event) do
     episode_params = Scope.episode(identity.episode)
 
     Postgrex.query!(
       connection,
-      "update episode_attention_allow_windows set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and ended_at is null and ends_at > now()",
+      "update episode_focus_allow_windows set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and ended_at is null and ends_at > now()",
       episode_params
     )
 
     Postgrex.query!(
       connection,
-      "insert into episode_attention_allow_windows (tenant_id,space_id,episode_id,actor_participant_id,id,ends_at) values ($1,$2,$3,$4,$5,now() + ($6 || ' minutes')::interval)",
+      "insert into episode_focus_allow_windows (tenant_id,space_id,episode_id,actor_participant_id,id,ends_at) values ($1,$2,$3,$4,$5,now() + ($6 || ' minutes')::interval)",
       episode_params ++
         [
           Scope.uuid(identity.participant_id),
@@ -255,10 +255,10 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
     :ok
   end
 
-  defp update_command_product(connection, identity, %{name: "app_state_allowance_closed"}) do
+  defp update_command_product(connection, identity, %{name: "focus_allowance_closed"}) do
     Postgrex.query!(
       connection,
-      "update episode_attention_allow_windows set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and ended_at is null and ends_at > now()",
+      "update episode_focus_allow_windows set ended_at=now() where tenant_id=$1 and space_id=$2 and episode_id=$3 and ended_at is null and ends_at > now()",
       Scope.episode(identity.episode)
     )
 

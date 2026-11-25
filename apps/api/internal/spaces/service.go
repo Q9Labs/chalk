@@ -51,8 +51,8 @@ var allCapabilities = []string{
 	"manageWhiteboard", "manageAdmission", "assignRoles", "muteOthers",
 	"stopVideoOthers", "stopScreenOthers", "requestMediaOthers",
 	"removeParticipant", "manageRecording", "startEpisode", "extendEpisode",
-	"endEpisode", "manageMembers", "clearSpaceContent", "attention.view",
-	"attention.manage", "attention.exempt",
+	"endEpisode", "manageMembers", "clearSpaceContent", "focus.view",
+	"focus.manage", "focus.exempt",
 }
 
 var spaceRequestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)

@@ -189,11 +189,13 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
     do: "manageRecording"
 
   defp required_capability(:participant_leave), do: "self"
-  defp required_capability(name) when name in [:set_step_away, :clear_step_away], do: "self"
+
+  defp required_capability(name) when name in [:set_focus_step_away, :clear_focus_step_away],
+    do: "self"
 
   defp required_capability(name)
-       when name in [:open_app_state_allowance, :close_app_state_allowance],
-       do: "attention.manage"
+       when name in [:open_focus_allowance, :close_focus_allowance],
+       do: "focus.manage"
 
   defp required_capability(:end_episode), do: "endEpisode"
   defp required_capability(:extend_episode), do: "extendEpisode"

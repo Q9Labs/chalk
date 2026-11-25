@@ -11,7 +11,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                """
                select p.id, p.generation, p.identity_id, device.device_type,
                  (seat->>'admission_revision')::bigint, p.capabilities, coalesce(i.kind, 'user'),
-                 coalesce((e.config_snapshot->'attention'->>'enabled')::boolean, false),
+                 coalesce((e.config_snapshot->'focus'->>'enabled')::boolean, false),
                  step.reason, allowance.id is not null
                from sync_episode_control control
                join episodes e on e.tenant_id=control.tenant_id and e.space_id=control.space_id
@@ -24,14 +24,14 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                  and device.participant_id=p.id and device.generation=p.generation
                left join identities i on i.tenant_id=p.tenant_id and i.id=p.identity_id
                left join lateral (
-                 select reason from episode_attention_step_aways step
+                 select reason from episode_focus_step_aways step
                  where step.tenant_id=p.tenant_id and step.space_id=p.space_id
                    and step.episode_id=p.episode_id and step.participant_id=p.id
                    and step.ended_at is null
                  order by step.started_at desc limit 1
                ) step on true
                left join lateral (
-                 select id from episode_attention_allow_windows allowance
+                 select id from episode_focus_allow_windows allowance
                  where allowance.tenant_id=p.tenant_id and allowance.space_id=p.space_id
                    and allowance.episode_id=p.episode_id and allowance.ended_at is null
                    and allowance.ends_at > now()
@@ -55,7 +55,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                                  revision,
                                  capabilities,
                                  identity_kind,
-                                 attention_enabled,
+                                 focus_enabled,
                                  step_away_reason,
                                  allowed
                                ] ->
@@ -67,9 +67,9 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                  admission_revision: revision,
                  capabilities: capabilities || [],
                  identity_kind: identity_kind,
-                 attention_enabled: attention_enabled,
+                 focus_enabled: focus_enabled,
                  step_away_reason: step_away_reason,
-                 attention_allowed: allowed
+                 focus_allowed: allowed
                }
              end)}
 
