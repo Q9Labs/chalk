@@ -10,7 +10,7 @@ const script = new URL("./nightly-current-cut.sh", import.meta.url).pathname;
 const thisCut = { sha: "aaa", run: "100" };
 
 function deployment(sha, run, proof) {
-  return { sha, payload: { proof_run_id: run, proof_result: proof } };
+  return { task: "nightly-cut", sha, payload: { proof_run_id: run, proof_result: proof } };
 }
 
 // The deployments list is newest first, like the GitHub API returns it.
@@ -32,6 +32,27 @@ function cutIsCurrent(deployments, cut = thisCut) {
 
 test("the newest cut that passed its proof is current", () => {
   assert.equal(cutIsCurrent([deployment("aaa", "100", "passed")]), true);
+});
+
+test("a newer host proof does not hide the current passing cut", () => {
+  const deployments = [
+    { task: "nightly-host-proof", sha: "aaa", payload: {} },
+    deployment("aaa", "100", "passed"),
+  ];
+  const bin = mkdtempSync(join(tmpdir(), "current-cut-"));
+  writeFileSync(join(bin, "gh"), `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify(deployments)}\nJSON\n`);
+  chmodSync(join(bin, "gh"), 0o755);
+  const result = spawnSync("bash", ["-c", `source "${script}"; current_cut_sha_for_run`], {
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_REPOSITORY: "Q9Labs/chalk",
+      SOURCE_RUN: "100",
+      SOURCE_SHA: "aaa",
+    },
+  });
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.trim(), "aaa");
 });
 
 test("a newer cut that failed its proof does not make the build stale", () => {
