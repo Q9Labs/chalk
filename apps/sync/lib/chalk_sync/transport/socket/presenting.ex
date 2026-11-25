@@ -1,6 +1,7 @@
 defmodule ChalkSync.Transport.Socket.Presenting do
   @moduledoc "Per-socket presenting projection, ordered independently from Sync control."
 
+  alias ChalkSync.Observability
   alias ChalkSync.Presenting.{Availability, Fanout, Protocol, Repository}
   alias ChalkSync.Transport.Socket.Frames
 
@@ -168,8 +169,14 @@ defmodule ChalkSync.Transport.Socket.Presenting do
     end)
 
     case frames do
-      [] -> {:ok, state}
-      _ -> {:push, Enum.map(frames, &{:text, Frames.encode_with_context(state, &1)}), state}
+      [] ->
+        {:ok, state}
+
+      _ ->
+        # Extension frames follow the annotation shape: their own contract validates
+        # them above, and they encode outside the base protocol's frame union.
+        context = Observability.frame_fields(state.observability)
+        {:push, Enum.map(frames, &{:text, JSON.encode!(Map.merge(&1, context))}), state}
     end
   end
 end
