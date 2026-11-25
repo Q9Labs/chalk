@@ -21,6 +21,8 @@ export function dashboardArtifactBindings(config) {
     CHALK_RECORDING_KMS_REGION: "us-east-1",
     CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET: "local-dashboard-transcription-not-a-production-secret",
     CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME: "local-dashboard",
+    CHALK_PRESENTING_WORKLOAD_AUTH_SECRET: "local-dashboard-presenting-not-a-production-secret",
+    CHALK_PRESENTING_RENDERER_FUNCTION_NAME: "local-dashboard",
   };
 }
 
