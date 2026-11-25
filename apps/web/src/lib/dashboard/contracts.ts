@@ -84,12 +84,14 @@ export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
 ]);
-const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);
+const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "focus:read", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);
 const eventType = z.enum([
   "episode.ended",
   "episode.started",
   "participant.joined",
   "participant.left",
+  "participant.focus_changed",
+  "focus.completed",
   "recording.started",
   "recording.completed",
   "recording.failed",
@@ -101,7 +103,7 @@ const eventType = z.enum([
   "space.restored",
   "space.updated",
 ]);
-const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(14) };
+const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(16) };
 const websiteOrigin = z
   .string()
   .max(2048)

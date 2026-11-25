@@ -3366,7 +3366,7 @@ create table webhook_endpoint_revisions (
     ),
     constraint webhook_endpoint_revisions_api_version_check check (api_version = 1),
     constraint webhook_endpoint_revisions_event_types_check check (
-        cardinality(event_types) between 1 and 14
+        cardinality(event_types) between 1 and 16
         and event_types <@ array[
             'space.created',
             'space.updated',
@@ -3376,6 +3376,8 @@ create table webhook_endpoint_revisions (
             'episode.ended',
             'participant.joined',
             'participant.left',
+            'participant.focus_changed',
+            'focus.completed',
             'recording.started',
             'recording.completed',
             'recording.failed',
@@ -3423,6 +3425,8 @@ create table webhook_events (
         'episode.ended',
         'participant.joined',
         'participant.left',
+        'participant.focus_changed',
+        'focus.completed',
         'recording.started',
         'recording.completed',
         'recording.failed',

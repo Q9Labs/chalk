@@ -96,6 +96,7 @@ var validCapabilities = func() map[string]struct{} {
 
 type Repository interface {
 	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]AttendanceParticipant, error)
+	GetEpisodeFocus(context.Context, utilities.ID, utilities.ID, utilities.ID) (FocusArtifact, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]SpaceLiveEpisode, error)
 	ListSpaceActivity(context.Context, utilities.ID, []utilities.ID) ([]SpaceActivity, error)
 	CreateEpisode(context.Context, CreateEpisodeInput) (Episode, error)

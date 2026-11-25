@@ -9,6 +9,7 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Webhooks.Producer, as: WebhookProducer
 
   @enforce_keys [
     :episode,
@@ -181,6 +182,18 @@ defmodule ChalkSync.Live.Episode do
   defp close_reported_app_state(_state, _authority, nil, _ended_at_ms), do: :ok
 
   defp close_reported_app_state(state, authority, current, ended_at_ms) do
+    if ended_at_ms - current.started_at_ms >= 10_000 do
+      WebhookProducer.produce_focus_changed(state.episode, %{
+        id: authority.participant_id,
+        identity_id: Map.get(authority, :identity_id),
+        space_id: state.episode.space_id,
+        episode_id: state.episode.episode_id,
+        app_state: current.state,
+        windowed: current.windowed,
+        since: DateTime.from_unix!(current.started_at_ms, :millisecond)
+      })
+    end
+
     ChalkSync.Stateholder.Postgres.Focus.close_interval(
       state.episode,
       authority.participant_id,
@@ -257,6 +270,7 @@ defmodule ChalkSync.Live.Episode do
             {:ok,
              %{
                participant_id: identity.participant_id,
+               identity_id: identity.identity_id,
                generation: identity.participant_generation
              }}
 

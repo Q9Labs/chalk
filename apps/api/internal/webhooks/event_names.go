@@ -12,20 +12,22 @@ import (
 type EventName string
 
 const (
-	EventSpaceCreated        EventName = "space.created"
-	EventSpaceUpdated        EventName = "space.updated"
-	EventSpaceArchived       EventName = "space.archived"
-	EventSpaceRestored       EventName = "space.restored"
-	EventEpisodeStarted      EventName = "episode.started"
-	EventEpisodeEnded        EventName = "episode.ended"
-	EventParticipantJoined   EventName = "participant.joined"
-	EventParticipantLeft     EventName = "participant.left"
-	EventRecordingStarted    EventName = "recording.started"
-	EventRecordingCompleted  EventName = "recording.completed"
-	EventRecordingFailed     EventName = "recording.failed"
-	EventTranscriptStarted   EventName = "transcript.started"
-	EventTranscriptCompleted EventName = "transcript.completed"
-	EventTranscriptFailed    EventName = "transcript.failed"
+	EventSpaceCreated            EventName = "space.created"
+	EventSpaceUpdated            EventName = "space.updated"
+	EventSpaceArchived           EventName = "space.archived"
+	EventSpaceRestored           EventName = "space.restored"
+	EventEpisodeStarted          EventName = "episode.started"
+	EventEpisodeEnded            EventName = "episode.ended"
+	EventParticipantJoined       EventName = "participant.joined"
+	EventParticipantLeft         EventName = "participant.left"
+	EventParticipantFocusChanged EventName = "participant.focus_changed"
+	EventFocusCompleted          EventName = "focus.completed"
+	EventRecordingStarted        EventName = "recording.started"
+	EventRecordingCompleted      EventName = "recording.completed"
+	EventRecordingFailed         EventName = "recording.failed"
+	EventTranscriptStarted       EventName = "transcript.started"
+	EventTranscriptCompleted     EventName = "transcript.completed"
+	EventTranscriptFailed        EventName = "transcript.failed"
 	// EventEndpointTest is sent on request to one endpoint. No endpoint subscribes to it.
 	EventEndpointTest EventName = "endpoint.test"
 )
@@ -33,7 +35,7 @@ const (
 // subscribable lists the events an endpoint can subscribe to, in the order the
 // API documents them.
 var subscribable = []EventName{
-	EventEpisodeEnded, EventEpisodeStarted, EventParticipantJoined, EventParticipantLeft,
+	EventEpisodeEnded, EventEpisodeStarted, EventParticipantJoined, EventParticipantLeft, EventParticipantFocusChanged, EventFocusCompleted,
 	EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed,
 	EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed,
 	EventSpaceArchived, EventSpaceCreated, EventSpaceRestored, EventSpaceUpdated,

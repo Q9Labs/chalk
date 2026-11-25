@@ -22,6 +22,8 @@
     { "$ref": "#/$defs/episodeEnded" },
     { "$ref": "#/$defs/participantJoined" },
     { "$ref": "#/$defs/participantLeft" },
+    { "$ref": "#/$defs/participantFocusChanged" },
+    { "$ref": "#/$defs/focusCompleted" },
     { "$ref": "#/$defs/recordingStarted" },
     { "$ref": "#/$defs/recordingCompleted" },
     { "$ref": "#/$defs/recordingFailed" },
@@ -149,6 +151,20 @@
       },
       "additionalProperties": true
     },
+    "focusParticipantObject": {
+      "type": "object",
+      "required": ["id", "identity_id", "space_id", "episode_id", "app_state", "windowed", "since"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "identity_id": { "$ref": "#/$defs/nullableUUID" },
+        "space_id": { "$ref": "#/$defs/uuid" },
+        "episode_id": { "$ref": "#/$defs/uuid" },
+        "app_state": { "enum": ["active", "inactive", "background"] },
+        "windowed": { "type": "boolean" },
+        "since": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
     "spaceData": {
       "type": "object",
       "required": ["object"],
@@ -179,6 +195,12 @@
       "type": "object",
       "required": ["object"],
       "properties": { "object": { "$ref": "#/$defs/participantObject" } },
+      "additionalProperties": true
+    },
+    "focusParticipantData": {
+      "type": "object",
+      "required": ["object"],
+      "properties": { "object": { "$ref": "#/$defs/focusParticipantObject" } },
       "additionalProperties": true
     },
     "recordingData": {
@@ -242,6 +264,12 @@
           "allOf": [{ "$ref": "#/$defs/participantData" }, { "properties": { "object": { "properties": { "status": { "const": "left" }, "left_at": { "$ref": "#/$defs/timestamp" } } } } }]
         }
       }
+    },
+    "participantFocusChanged": {
+      "properties": { "event": { "const": "participant.focus_changed" }, "data": { "$ref": "#/$defs/focusParticipantData" } }
+    },
+    "focusCompleted": {
+      "properties": { "event": { "const": "focus.completed" }, "data": { "$ref": "#/$defs/episodeData" } }
     },
     "recordingStarted": {
       "properties": {

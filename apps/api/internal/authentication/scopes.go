@@ -21,6 +21,8 @@ const (
 	ScopeEpisodesWrite  Scope = "episodes:write"
 	ScopeEpisodesDelete Scope = "episodes:delete"
 
+	ScopeFocusRead Scope = "focus:read"
+
 	ScopeRecordingsRead   Scope = "recordings:read"
 	ScopeRecordingsWrite  Scope = "recordings:write"
 	ScopeRecordingsDelete Scope = "recordings:delete"
@@ -55,6 +57,7 @@ var AllScopes = []Scope{
 	ScopeEpisodesRead,
 	ScopeEpisodesWrite,
 	ScopeEpisodesDelete,
+	ScopeFocusRead,
 	ScopeRecordingsRead,
 	ScopeRecordingsWrite,
 	ScopeRecordingsDelete,

@@ -31,6 +31,7 @@ var (
 
 type EpisodeLifecycleService interface {
 	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]episodes.AttendanceParticipant, error)
+	GetEpisodeFocus(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.FocusArtifact, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]episodes.SpaceLiveEpisode, error)
 	ListSpaceActivity(context.Context, utilities.ID, []utilities.ID) ([]episodes.SpaceActivity, error)
 	CreateEpisode(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error)
@@ -234,6 +235,7 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
 		getEpisodeAttendanceEndpoint(lifecycle, authorizer),
+		getEpisodeFocusEndpoint(lifecycle, authorizer),
 		listSpaceLiveEpisodesEndpoint(lifecycle, authorizer),
 		listSpaceActivityEndpoint(lifecycle, authorizer),
 		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, generations, spacesService, tenantsService, media, authorizer),
