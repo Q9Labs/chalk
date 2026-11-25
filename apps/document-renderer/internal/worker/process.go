@@ -249,6 +249,9 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 		if len(message) > 160 {
 			message = message[:160]
 		}
+		if message == "" {
+			return fmt.Errorf("isolated %s render failed: %w", mode, err)
+		}
 		return fmt.Errorf("isolated %s render failed: %s", mode, message)
 	}
 	return nil
