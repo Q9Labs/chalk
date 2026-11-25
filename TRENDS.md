@@ -16,23 +16,23 @@ The last 14 nightly values of every metric, oldest first. A metric with a p95 bu
 
 | Metric | Unit | Values |
 |---|---|---|
-| `action.camera_toggle.off_ms` |  | – – – – – – – – 20 – 19 – 19 – |
-| `action.camera_toggle.on_ms` |  | – – – – – – – – 464 – 514 – 423 – |
-| `action.join.first_audio_ms` |  | – – – – – – – – 2313 – 3951 – 2243 – |
-| `action.join.first_video_ms` |  | – – – – – – – – 3142 – 5041 – 3474 – |
-| `action.leave_ack_ms` |  | – – – – – – – – 29 – 20 – 20 – |
-| `action.leave_media_removed_ms` |  | – – – – – – – – 61 – 43 – 41 – |
-| `action.leave_ms` |  | – – – – – – – – 40 – 31 – 30 – |
-| `action.mic_toggle.off_ms` |  | – – – – – – – – 20 – 19 – 19 – |
-| `action.mic_toggle.on_ms` |  | – – – – – – – – 241 – 262 – 241 – |
-| `action.publish.first_audio_ms` |  | – – – – – – – – 267 – 312 – 261 – |
-| `action.publish.first_frame_ms` |  | – – – – – – – – 1578 – 3021 – 2807 – |
-| `action.screenshare.start_ms` |  | – – – – – – – – 2023 – 2729 – 1949 – |
-| `action.screenshare.start_signal_ms` |  | – – – – – – – – 697 – 1261 – 877 – |
-| `action.screenshare.stop_ms` |  | – – – – – – – – 518 – 2311 – 506 – |
-| `action.screenshare.stop_signal_ms` |  | – – – – – – – – 31 – 29 – 22 – |
-| `action.spinup_ms` |  | – – – – – – – – 2601 – 3198 – 2663 – |
-| `action.unpublish.audio_removed_ms` |  | – – – – – – – – 216 – 264 – 228 – |
-| `action.unpublish.removed_ms` |  | – – – – – – – – 496 – 495 – 495 – |
-| `proof.leave_median_ms` | ms | 33.2 27.9 27.7 31.3 26.9 26.4 31.5 30.9 – 33.3 – 27.9 – 25.7 |
+| `action.camera_toggle.off_ms` | ms | – – – – – – – 20 – 19 – 19 – 19 |
+| `action.camera_toggle.on_ms` | ms | – – – – – – – 464 – 514 – 423 – 433 |
+| `action.join.first_audio_ms` | ms | – – – – – – – 2313 – 3951 – 2243 – 2216 |
+| `action.join.first_video_ms` | ms | – – – – – – – 3142 – 5041 – 3474 – 3531 |
+| `action.leave_ack_ms` | ms | – – – – – – – 29 – 20 – 20 – 21 |
+| `action.leave_media_removed_ms` | ms | – – – – – – – 61 – 43 – 41 – 42 |
+| `action.leave_ms` | ms | – – – – – – – 40 – 31 – 30 – 31 |
+| `action.mic_toggle.off_ms` | ms | – – – – – – – 20 – 19 – 19 – 19 |
+| `action.mic_toggle.on_ms` | ms | – – – – – – – 241 – 262 – 241 – 221 |
+| `action.publish.first_audio_ms` | ms | – – – – – – – 267 – 312 – 261 – 262 |
+| `action.publish.first_frame_ms` | ms | – – – – – – – 1578 – 3021 – 2807 – 1896 |
+| `action.screenshare.start_ms` | ms | – – – – – – – 2023 – 2729 – 1949 – 1890 |
+| `action.screenshare.start_signal_ms` | ms | – – – – – – – 697 – 1261 – 877 – 645 |
+| `action.screenshare.stop_ms` | ms | – – – – – – – 518 – 2311 – 506 – 506 |
+| `action.screenshare.stop_signal_ms` | ms | – – – – – – – 31 – 29 – 22 – 29 |
+| `action.spinup_ms` | ms | – – – – – – – 2601 – 3198 – 2663 – 2468 |
+| `action.unpublish.audio_removed_ms` | ms | – – – – – – – 216 – 264 – 228 – 213 |
+| `action.unpublish.removed_ms` | ms | – – – – – – – 496 – 495 – 495 – 496 |
+| `proof.leave_median_ms` |  | 27.9 27.7 31.3 26.9 26.4 31.5 30.9 – 33.3 – 27.9 – 25.7 – |
 
