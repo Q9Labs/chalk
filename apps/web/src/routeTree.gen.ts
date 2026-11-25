@@ -29,6 +29,7 @@ import { Route as DashboardAppAppsRouteImport } from './routes/dashboard._app.ap
 import { Route as DashboardAppDeveloperRouteImport } from './routes/dashboard._app.developer'
 import { Route as DashboardAppRecordingsRouteImport } from './routes/dashboard._app.recordings'
 import { Route as DashboardAppSessionsRouteImport } from './routes/dashboard._app.sessions'
+import { Route as DashboardHandoverHandoverIdRouteImport } from './routes/dashboard.handover.$handoverId'
 import { Route as DashboardCallSpaceIdJoinRouteImport } from './routes/dashboard_.call.$spaceId.join'
 import { Route as DashboardAppCallSpaceIdIndexRouteImport } from './routes/dashboard._app.call.$spaceId.index'
 import { Route as DashboardAppCallSpaceIdSessionEpisodeIdRouteImport } from './routes/dashboard._app.call.$spaceId.session.$episodeId'
@@ -131,6 +132,12 @@ const DashboardAppSessionsRoute = DashboardAppSessionsRouteImport.update({
   path: '/sessions',
   getParentRoute: () => DashboardAppRoute,
 } as any)
+const DashboardHandoverHandoverIdRoute =
+  DashboardHandoverHandoverIdRouteImport.update({
+    id: '/handover/$handoverId',
+    path: '/handover/$handoverId',
+    getParentRoute: () => DashboardRoute,
+  } as any)
 const DashboardCallSpaceIdJoinRoute =
   DashboardCallSpaceIdJoinRouteImport.update({
     id: '/dashboard_/call/$spaceId/join',
@@ -167,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
   '/dashboard/recordings': typeof DashboardAppRecordingsRoute
   '/dashboard/sessions': typeof DashboardAppSessionsRoute
+  '/dashboard/handover/$handoverId': typeof DashboardHandoverHandoverIdRoute
   '/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/': typeof DashboardAppIndexRoute
   '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
@@ -189,6 +197,7 @@ export interface FileRoutesByTo {
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
   '/dashboard/recordings': typeof DashboardAppRecordingsRoute
   '/dashboard/sessions': typeof DashboardAppSessionsRoute
+  '/dashboard/handover/$handoverId': typeof DashboardHandoverHandoverIdRoute
   '/space': typeof SpaceSpaceIndexRoute
   '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
   '/dashboard/call/$spaceId': typeof DashboardAppCallSpaceIdIndexRoute
@@ -214,6 +223,7 @@ export interface FileRoutesById {
   '/dashboard/_app/developer': typeof DashboardAppDeveloperRoute
   '/dashboard/_app/recordings': typeof DashboardAppRecordingsRoute
   '/dashboard/_app/sessions': typeof DashboardAppSessionsRoute
+  '/dashboard/handover/$handoverId': typeof DashboardHandoverHandoverIdRoute
   '/_space/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/_app/': typeof DashboardAppIndexRoute
   '/dashboard_/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/dashboard/developer'
     | '/dashboard/recordings'
     | '/dashboard/sessions'
+    | '/dashboard/handover/$handoverId'
     | '/space/'
     | '/dashboard/'
     | '/dashboard/call/$spaceId/join'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/dashboard/developer'
     | '/dashboard/recordings'
     | '/dashboard/sessions'
+    | '/dashboard/handover/$handoverId'
     | '/space'
     | '/dashboard/call/$spaceId/join'
     | '/dashboard/call/$spaceId'
@@ -285,6 +297,7 @@ export interface FileRouteTypes {
     | '/dashboard/_app/developer'
     | '/dashboard/_app/recordings'
     | '/dashboard/_app/sessions'
+    | '/dashboard/handover/$handoverId'
     | '/_space/space/'
     | '/dashboard/_app/'
     | '/dashboard_/call/$spaceId/join'
@@ -445,6 +458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAppSessionsRouteImport
       parentRoute: typeof DashboardAppRoute
     }
+    '/dashboard/handover/$handoverId': {
+      id: '/dashboard/handover/$handoverId'
+      path: '/handover/$handoverId'
+      fullPath: '/dashboard/handover/$handoverId'
+      preLoaderRoute: typeof DashboardHandoverHandoverIdRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard_/call/$spaceId/join': {
       id: '/dashboard_/call/$spaceId/join'
       path: '/dashboard/call/$spaceId/join'
@@ -512,12 +532,14 @@ interface DashboardRouteChildren {
   DashboardAppRoute: typeof DashboardAppRouteWithChildren
   DashboardConnectRoute: typeof DashboardConnectRoute
   DashboardSignInRoute: typeof DashboardSignInRoute
+  DashboardHandoverHandoverIdRoute: typeof DashboardHandoverHandoverIdRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAppRoute: DashboardAppRouteWithChildren,
   DashboardConnectRoute: DashboardConnectRoute,
   DashboardSignInRoute: DashboardSignInRoute,
+  DashboardHandoverHandoverIdRoute: DashboardHandoverHandoverIdRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(

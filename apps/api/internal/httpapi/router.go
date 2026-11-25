@@ -46,6 +46,7 @@ type Options struct {
 	CORS                 CORSOptions
 	LocalSystemToken     string
 	ServicePrincipal     authentication.ServiceCredential
+	DashboardServiceID   string
 
 	Middleware []func(http.Handler) http.Handler
 	Profiler   http.Handler
@@ -84,7 +85,8 @@ type Options struct {
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
 
-	Memberships MembershipService
+	Memberships     MembershipService
+	TenantHandovers TenantHandoverService
 
 	RecordingDownloads    RecordingDownloadService
 	RecordingExports      RecordingExportService

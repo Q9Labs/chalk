@@ -23,6 +23,7 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.CORS = httpapi.CORSOptions{AllowedOrigins: w.cfg.API.CORSAllowedOrigins, TenantOrigins: w.tenantService}
 	w.options.LocalSystemToken = w.cfg.API.LocalSystemToken
 	w.options.ServicePrincipal = w.cfg.API.ServicePrincipal
+	w.options.DashboardServiceID = w.cfg.API.ServicePrincipal.ID
 	w.options.OperatorReadTokenSHA256 = config.OperatorReadTokenSHA256()
 	w.options.Readiness = postgres.Readiness{Pool: w.pool, RequiredMigration: migrations.LatestVersion}
 	w.options.RetirementBacklog = func() (int, time.Duration, bool) {

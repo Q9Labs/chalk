@@ -25,6 +25,7 @@ func v1RouteGroups(options Options) []routeGroup {
 		mcpOAuthConnectionEndpoints(options.OAuth, options.TenantAuthz),
 		tenantEndpoints(options.Tenants, options.TenantAuthz),
 		membershipEndpoints(options.Memberships, options.TenantAuthz),
+		tenantHandoverEndpoints(options.TenantHandovers, options.TenantAuthz, options.DashboardServiceID),
 		{recordingEntranceEndpoint(options.RecordingEntrance, options.TenantAuthz)},
 		spaceEndpoints(options.Spaces, options.TenantAuthz),
 		recordingPreparationEndpoints(options.RecordingPreparations, options.TenantAuthz),
