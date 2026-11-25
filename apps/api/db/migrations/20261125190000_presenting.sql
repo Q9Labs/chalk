@@ -40,6 +40,7 @@ create table sync_presenting_receipts (
 create index sync_presenting_receipts_expiry
     on sync_presenting_receipts(expires_at_ms);
 
+-- +goose StatementBegin
 create function sync_presenting_changed() returns trigger language plpgsql as $$
 declare
     scope record;
@@ -49,6 +50,7 @@ begin
     return null;
 end;
 $$;
+-- +goose StatementEnd
 
 create trigger sync_presenting_state_changed
     after insert or update or delete on sync_presenting_states
@@ -58,6 +60,7 @@ create trigger sync_presenting_document_changed
     after insert or update or delete on sync_presenting_documents
     for each row execute function sync_presenting_changed();
 
+-- +goose StatementBegin
 create function sync_presenting_episode_ended() returns trigger language plpgsql as $$
 begin
     if new.status = 'ended' and old.status is distinct from 'ended' then
@@ -69,11 +72,13 @@ begin
     return null;
 end;
 $$;
+-- +goose StatementEnd
 
 create trigger sync_presenting_episode_ended
     after update of status on episodes
     for each row execute function sync_presenting_episode_ended();
 
+-- +goose StatementBegin
 create function sync_presenting_participant_left() returns trigger language plpgsql as $$
 begin
     if new.status = 'left' and old.status is distinct from 'left' then
@@ -87,6 +92,7 @@ begin
     return null;
 end;
 $$;
+-- +goose StatementEnd
 
 create trigger sync_presenting_participant_left
     after update of status on participants
