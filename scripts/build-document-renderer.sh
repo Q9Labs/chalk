@@ -10,8 +10,18 @@ OUT="$ROOT/releases/document-renderer"
 WORK="$OUT/work"
 rm -rf "$WORK"
 mkdir -p "$WORK/pdfium" "$OUT"
-if [[ "$(uname -s)" != Linux || "$(uname -m)" != aarch64 ]]; then
-  echo "document renderer packaging must run on Linux/arm64" >&2
+if [[ "$(uname -s)" != Linux ]]; then
+  echo "document renderer packaging must run on Linux" >&2
+  exit 2
+fi
+if [[ "$(uname -m)" == aarch64 ]]; then
+  export CC="${CC:-cc}"
+  RENDERER_CGO_LDFLAGS=""
+elif [[ "$(uname -m)" == x86_64 ]]; then
+  export CC="${CC:-aarch64-linux-gnu-gcc}"
+  RENDERER_CGO_LDFLAGS="-L/usr/lib/aarch64-linux-gnu"
+else
+  echo "unsupported packaging host architecture $(uname -m)" >&2
   exit 2
 fi
 archive="$WORK/pdfium-linux-arm64.tgz"
@@ -28,7 +38,7 @@ cp -R "$WORK/pdfium/include/." "$APP/vendor/pdfium/include/"
 cp "$WORK/pdfium/lib/libpdfium.so" "$APP/vendor/pdfium/lib/"
 (
   cd "$APP"
-  CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w -buildid=' -o "$WORK/bootstrap" ./cmd/renderer
+  CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="$RENDERER_CGO_LDFLAGS" go build -trimpath -ldflags='-s -w -buildid=' -o "$WORK/bootstrap" ./cmd/renderer
 )
 mkdir -p "$WORK/package/lib" "$WORK/package/licenses/pdfium"
 cp "$WORK/bootstrap" "$WORK/package/bootstrap"
