@@ -35,6 +35,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       // The share tile waits for a picked source, so a cancelled browser picker never reflows the stage.
       isScreenSharing: localMedia.screen.state === "enabled",
       isHandRaised: localFromSync?.handRaised,
+      focus: localFromSync?.focus,
       videoTrack: localMedia.camera.track,
       screenShareTrack: localMedia.screen.track,
     },
@@ -53,6 +54,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isVideoEnabled: Boolean(media?.camera),
       isScreenSharing: Boolean(media?.screen),
       isHandRaised: participant.handRaised,
+      focus: participant.focus,
       ...tileSignal(participant),
       ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
       videoTrack: media?.camera,

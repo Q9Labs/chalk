@@ -25,6 +25,8 @@ export interface ParticipantListParticipant {
   isMuted?: boolean;
   isVideoEnabled?: boolean;
   isHandRaised?: boolean;
+  focusLabel?: string;
+  notFocused?: boolean;
   /** Place in the queue of raised hands, counting from 1. */
   handOrder?: number;
   isSpeaking?: boolean;
@@ -177,6 +179,8 @@ export const ParticipantsPanelSurface = React.memo(
               {groups.you.map((person) => row(person))}
               {labelled && groups.hands.length ? <PeopleLabel text="Raised hands" count={groups.hands.length} /> : null}
               {groups.hands.map((person) => row(person))}
+              {labelled && groups.notFocused.length ? <PeopleLabel text="Not focused" count={groups.notFocused.length} /> : null}
+              {groups.notFocused.map((person) => row(person))}
               {labelled && groups.others.length ? <PeopleLabel text="In the call" count={groups.others.length} /> : null}
               {groups.others.map((person) => row(person))}
             </>
@@ -186,6 +190,15 @@ export const ParticipantsPanelSurface = React.memo(
     );
   },
 );
+
+function focusLabel(focus: import("@q9labsai/chalk-client").ParticipantFocus | undefined): string | undefined {
+  if (!focus) return undefined;
+  if (focus.steppedAway) return `Stepped away · ${focus.steppedAway[0].toUpperCase()}${focus.steppedAway.slice(1)}`;
+  if (focus.allowed && focus.appState !== "active") return "Allowed";
+  if (focus.appState === "background") return "Not focused";
+  if (focus.appState === "inactive") return focus.windowed ? "Split View" : "Other window";
+  return undefined;
+}
 
 function useParticipantVolumes(props: ParticipantsPanelProps) {
   const contextVolumeState = useParticipantVolumeContext();
@@ -233,6 +246,8 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
         isMuted: participant.media.microphone !== "active",
         isVideoEnabled: participant.media.camera === "active",
         isHandRaised: participant.handRaised,
+        focusLabel: focusLabel(participant.focus),
+        notFocused: !participant.focus?.allowed && !participant.focus?.steppedAway && participant.focus?.appState !== undefined && participant.focus.appState !== "active",
         handOrder: handOrders.get(participant.participantId),
         isSpeaking: participant.presence.speaking,
         isReconnecting: participant.presence.state === "disconnected",

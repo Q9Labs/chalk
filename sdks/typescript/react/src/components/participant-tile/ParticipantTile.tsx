@@ -33,6 +33,7 @@ export interface ParticipantTileProps {
     isReconnecting?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
+    focus?: import("../participant-grid/ParticipantGrid").TileFocus;
     handRaiseOrder?: number;
     /** 0 means unknown; 1–2 show a poor-connection badge. */
     connectionQuality?: 0 | 1 | 2 | 3 | 4;
@@ -146,6 +147,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         <>
+          {showStatus ? <FocusChip focus={participant.focus} /> : null}
           {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
@@ -240,6 +242,28 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
     </TileShell>
   );
 });
+
+function FocusChip({ focus }: { readonly focus?: import("../participant-grid/ParticipantGrid").TileFocus }) {
+  const [now, setNow] = useState(() => Date.now());
+  const state = focus?.appState;
+  const sinceRef = useRef(Date.now());
+  React.useEffect(() => {
+    sinceRef.current = Date.now();
+    if (state !== "background") return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [state]);
+  if (!focus) return null;
+  let label: string | null = null;
+  if (focus.steppedAway) label = `Stepped away · ${focus.steppedAway[0].toUpperCase()}${focus.steppedAway.slice(1)}`;
+  else if (focus.allowed && state !== "active") label = "Allowed";
+  else if (state === "background") {
+    const elapsed = Math.max(0, Math.floor((now - sinceRef.current) / 1000));
+    label = `Not focused ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  } else if (state === "inactive") label = focus.windowed ? "Split View" : "Other window";
+  if (!label) return null;
+  return <span role="status" data-part="tile-focus" className="pointer-events-none absolute left-2 top-2 z-30 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs font-medium text-[var(--chalk-overlay-warning)]">{label}</span>;
+}
 
 ParticipantTile.displayName = "ParticipantTile";
 ParticipantTileSurface.displayName = "ParticipantTileSurface";

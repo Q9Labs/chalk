@@ -238,6 +238,7 @@ export interface ParticipantRowProps {
 function PersonStateSlots({ participant, handNumber }: { readonly participant: ParticipantListParticipant; readonly handNumber?: number }) {
   return (
     <div className="call-person-state-slots">
+      {participant.focusLabel ? <span className="call-hand" role="status">{participant.focusLabel}</span> : null}
       {participant.isHandRaised ? (
         <span className="call-hand" data-solo={handNumber === undefined || undefined} role="img" aria-label={`Hand raised${handNumber ? `, number ${handNumber}` : ""}`}>
           <ShellIcon name="hand" size={14} />

@@ -7,6 +7,7 @@ import { toVideoParticipants } from "../../selectors/space-selectors";
 import { Stage } from "../stage/Stage";
 import { buildStageItems, type StageItem } from "../stage/stage-items";
 
+export type TileFocus = { readonly appState?: "active" | "inactive" | "background"; readonly windowed?: boolean; readonly steppedAway?: "reading" | "notes" | "break"; readonly allowed?: boolean };
 export interface Participant {
   id: string;
   displayName: string;
@@ -27,6 +28,7 @@ export interface Participant {
   isVideoPausedForNetwork?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
+  focus?: TileFocus;
   handRaiseOrder?: number;
   screenShareHasAudio?: boolean;
   screenShareAspect?: number;
