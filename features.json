@@ -594,6 +594,35 @@
       ]
     },
     {
+      "name": "presenting",
+      "summary": "Puts a file on the call Stage as a Document everyone can follow, with the renderer producing page images and Sync carrying presenter state.",
+      "paths": [
+        "apps/api/db/migrations/20261125190000_presenting.sql",
+        "apps/api/db/migrations/20261125230000_presenting.sql",
+        "apps/api/db/queries/presenting.sql",
+        "apps/api/internal/adapters/postgres/presenting.go",
+        "apps/api/internal/adapters/postgres/presenting_integration_test.go",
+        "apps/api/internal/adapters/postgres/presenting_settings.go",
+        "apps/api/internal/httpapi/presenting.go",
+        "apps/api/internal/httpapi/presenting_test.go",
+        "apps/api/internal/httpapi/presenting_worker.go",
+        "apps/api/internal/presenting",
+        "apps/document-renderer",
+        "apps/sync/lib/chalk_sync/contract/generated_presenting_v1.ex",
+        "apps/sync/lib/chalk_sync/presenting",
+        "apps/sync/lib/chalk_sync/transport/socket/presenting.ex",
+        "apps/sync/test/chalk_sync/presenting",
+        "contract/schema/presenting-v1.json",
+        "sdks/typescript/client/src/generated/presenting-v1.ts",
+        "sdks/typescript/client/src/presenting",
+        "sdks/typescript/client/src/space-client/presenting-controller.test.ts",
+        "sdks/typescript/client/src/space-client/presenting-controller.ts",
+        "sdks/typescript/react/src/components/stage/DocumentView.tsx",
+        "sdks/typescript/react/src/components/stage/presenting-files.ts",
+        "tools/contract-fixture-proof/src/emitters/presenting.mjs"
+      ]
+    },
+    {
       "name": "problem-reports",
       "summary": "Captures and routes diagnostic reports submitted by Participants.",
       "paths": [
