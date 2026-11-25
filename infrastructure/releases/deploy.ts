@@ -11,8 +11,11 @@ export const checkBootstrap = Effect.fn(function* (plan: Alchemist.StackPlan) {
   if ((yield* store.list(identity)).length || (yield* store.getOutput(identity)) !== undefined) return yield* Effect.die("Ephemeral stage already exists; refusing to claim or clean up another run");
   if (plan.actions.length || Object.keys(plan.native.deletions).length) return yield* Effect.die("Ephemeral bootstrap cannot contain actions or deletions");
   const resources = Object.values(plan.native.resources);
-  const expected = Object.entries(resourceTypes).filter(([name]) => name !== "ControlApiPermission");
-  if (resources.length !== expected.length || resources.some((row) => row.action !== "create" || !expected.some(([name, type]) => row.resource.FQN === name && row.resource.Type === type))) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated dispatcher resource set");
+  const types = plan.stack.name === "document-renderer"
+    ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm" }
+    : resourceTypes;
+  const expected = Object.entries(types).filter(([name]) => name !== "ControlApiPermission");
+  if (resources.length !== expected.length || resources.some((row) => row.action !== "create" || !expected.some(([name, type]) => row.resource.FQN === name && row.resource.Type === type))) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated workload resource set");
 });
 
 export const requireSeededState = Effect.fn(function* (plan: Alchemist.StackPlan) {

@@ -26,7 +26,7 @@ else
 fi
 archive="$WORK/pdfium-linux-arm64.tgz"
 curl -fsSL "https://github.com/bblanchon/pdfium-binaries/releases/download/$PDFIUM_VERSION/pdfium-linux-arm64.tgz" -o "$archive"
-actual="$(shasum -a256 "$archive" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then actual="$(sha256sum "$archive" | awk '{print $1}')"; else actual="$(shasum -a256 "$archive" | awk '{print $1}')"; fi
 if [[ "$actual" != "$PDFIUM_SHA256" ]]; then
   echo "pdfium digest mismatch: got $actual" >&2
   exit 1
@@ -74,6 +74,6 @@ with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as arch
             info.external_attr=(0o755 if name=='bootstrap' else 0o644)<<16
             with open(path,'rb') as fh: archive.writestr(info, fh.read())
 PY
-sha256="$(shasum -a256 "$OUT/document-renderer-linux-arm64.zip" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then sha256="$(sha256sum "$OUT/document-renderer-linux-arm64.zip" | awk '{print $1}')"; else sha256="$(shasum -a256 "$OUT/document-renderer-linux-arm64.zip" | awk '{print $1}')"; fi
 printf '{"schemaVersion":1,"artifact":"document-renderer-linux-arm64.zip","sha256":"%s","pdfiumVersion":"%s","pdfiumSha256":"%s"}\n' "$sha256" "$PDFIUM_VERSION" "$PDFIUM_SHA256" > "$OUT/manifest.json"
 printf 'artifact %s\nsha256 %s\n' "$OUT/document-renderer-linux-arm64.zip" "$sha256"
