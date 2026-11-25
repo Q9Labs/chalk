@@ -447,16 +447,23 @@ export class V1SyncClient implements V1CollaborationClient {
   #startFocusReporting(): void {
     this.#focusCleanup?.();
     this.#focusCleanup = null;
-    if (!this.#extensions.appState || typeof document === "undefined" || typeof window === "undefined") return;
+    if (!this.#extensions.appState) return;
+    const isScreenSharing = () => this.#localPublications.some((publication) => (publication.source === "screen" || publication.source === "screen_audio") && publication.enabled);
+    const report = (state: "active" | "inactive" | "background", windowed: boolean) => this.setAppState(state, windowed);
+    if (this.#options.observeAppState) {
+      this.#focusCleanup = this.#options.observeAppState({ report, isScreenSharing });
+      return;
+    }
+    if (typeof document === "undefined" || typeof window === "undefined") return;
     this.#focusCleanup = observeWebFocus(
       {
         document,
         window,
         setTimeout: globalThis.setTimeout.bind(globalThis),
         clearTimeout: globalThis.clearTimeout.bind(globalThis),
-        isScreenSharing: () => this.#localPublications.some((publication) => (publication.source === "screen" || publication.source === "screen_audio") && publication.enabled),
+        isScreenSharing,
       },
-      ({ state, windowed }) => this.setAppState(state, windowed),
+      ({ state, windowed }) => report(state, windowed),
     );
   }
   #connect(): void {

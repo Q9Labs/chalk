@@ -269,6 +269,10 @@ export type V1CollaborationClient = {
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
+export type V1AppStateObserver = (input: {
+  readonly report: (state: "active" | "inactive" | "background", windowed: boolean) => void;
+  readonly isScreenSharing: () => boolean;
+}) => () => void;
 export type V1SyncClientOptions = {
   readonly traceparent?: string;
   readonly telemetry?: TelemetrySink;
@@ -298,6 +302,8 @@ export type V1SyncClientOptions = {
   readonly maxPendingCollaborationRequests?: number;
   /** Asks Sync to hold the entry until `confirmEntered()`; set it only when the caller will call that method. */
   readonly entryConfirmation?: boolean;
+  /** Native or embedded platform Focus detection. Browser detection is the default when omitted. */
+  readonly observeAppState?: V1AppStateObserver;
 };
 export type V1Socket = SyncSocket;
 

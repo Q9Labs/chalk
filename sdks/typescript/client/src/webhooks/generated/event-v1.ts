@@ -52,6 +52,12 @@ export const webhookEventSchemaV1 = {
       $ref: "#/$defs/participantLeft",
     },
     {
+      $ref: "#/$defs/participantFocusChanged",
+    },
+    {
+      $ref: "#/$defs/focusCompleted",
+    },
+    {
       $ref: "#/$defs/recordingStarted",
     },
     {
@@ -302,6 +308,34 @@ export const webhookEventSchemaV1 = {
       },
       additionalProperties: true,
     },
+    focusParticipantObject: {
+      type: "object",
+      required: ["id", "identity_id", "space_id", "episode_id", "app_state", "windowed", "since"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        identity_id: {
+          $ref: "#/$defs/nullableUUID",
+        },
+        space_id: {
+          $ref: "#/$defs/uuid",
+        },
+        episode_id: {
+          $ref: "#/$defs/uuid",
+        },
+        app_state: {
+          enum: ["active", "inactive", "background"],
+        },
+        windowed: {
+          type: "boolean",
+        },
+        since: {
+          $ref: "#/$defs/timestamp",
+        },
+      },
+      additionalProperties: true,
+    },
     spaceData: {
       type: "object",
       required: ["object"],
@@ -346,6 +380,16 @@ export const webhookEventSchemaV1 = {
       properties: {
         object: {
           $ref: "#/$defs/participantObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    focusParticipantData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/focusParticipantObject",
         },
       },
       additionalProperties: true,
@@ -538,6 +582,26 @@ export const webhookEventSchemaV1 = {
               },
             },
           ],
+        },
+      },
+    },
+    participantFocusChanged: {
+      properties: {
+        event: {
+          const: "participant.focus_changed",
+        },
+        data: {
+          $ref: "#/$defs/focusParticipantData",
+        },
+      },
+    },
+    focusCompleted: {
+      properties: {
+        event: {
+          const: "focus.completed",
+        },
+        data: {
+          $ref: "#/$defs/episodeData",
         },
       },
     },
@@ -781,6 +845,8 @@ export const knownWebhookEventNamesV1 = [
   "episode.ended",
   "participant.joined",
   "participant.left",
+  "participant.focus_changed",
+  "focus.completed",
   "recording.started",
   "recording.completed",
   "recording.failed",
