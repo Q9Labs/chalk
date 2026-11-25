@@ -208,7 +208,7 @@ export class FakeTrack extends EventTarget {
   }
 }
 
-export interface HarnessOptions extends Pick<ConstructorParameters<typeof SFUClient>[0], "telemetry"> {
+export interface HarnessOptions extends Pick<ConstructorParameters<typeof SFUClient>[0], "telemetry" | "cameraSimulcast"> {
   readonly autoConnect?: boolean;
   /** Decides per peer, by creation index, whether it ever connects. */
   readonly connectsPeer?: (index: number) => boolean;
@@ -249,6 +249,7 @@ export function createSfuHarness<Peer extends TransportPeer>(options: HarnessOpt
     pollIntervalMs: options.pollIntervalMs ?? 60000,
     // Most tests never report tiles and expect video in the first pull.
     unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
+    cameraSimulcast: options.cameraSimulcast,
     onError: options.onError,
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
