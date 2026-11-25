@@ -6,9 +6,12 @@
 package scheduledepisodes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -202,9 +205,35 @@ func prepareMetadata(metadata json.RawMessage) (json.RawMessage, error) {
 	if len(metadata) > MaximumMetadataBytes {
 		return nil, ErrInvalidMetadata
 	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(metadata, &object); err != nil || object == nil {
+	compact := bytes.TrimSpace(metadata)
+	if len(compact) == 0 || compact[0] != '{' || !json.Valid(compact) {
 		return nil, ErrInvalidMetadata
 	}
-	return metadata, nil
+	// JSONB expands scientific notation. Bound the aggregate growth before
+	// asking Postgres to materialize the plan, without rounding its numbers.
+	remaining := MaximumMetadataBytes - len(metadata)
+	decoder := json.NewDecoder(bytes.NewReader(compact))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return metadata, nil
+		}
+		if err != nil {
+			return nil, ErrInvalidMetadata
+		}
+		number, ok := token.(json.Number)
+		if !ok {
+			continue
+		}
+		exponent := strings.IndexAny(number.String(), "eE")
+		if exponent < 0 {
+			continue
+		}
+		shift, err := strconv.Atoi(number.String()[exponent+1:])
+		if err != nil || shift > remaining || shift < -remaining {
+			return nil, ErrInvalidMetadata
+		}
+		remaining -= max(shift, -shift)
+	}
 }

@@ -88,6 +88,9 @@ func TestPutValidatesThePlanWithoutLookingAtTheClock(t *testing.T) {
 		{"too many participants", func(in *PutInput) { in.ExpectedParticipants = tooMany }, ErrInvalidExpectedParticipants},
 		{"metadata that is not an object", func(in *PutInput) { in.Metadata = json.RawMessage(`[1]`) }, ErrInvalidMetadata},
 		{"metadata that is null text", func(in *PutInput) { in.Metadata = json.RawMessage(`null`) }, ErrInvalidMetadata},
+		{"metadata that expands beyond the budget", func(in *PutInput) {
+			in.Metadata = json.RawMessage(`{"values":[1e4100,1e-4100]}`)
+		}, ErrInvalidMetadata},
 		{"metadata that is too large", func(in *PutInput) {
 			in.Metadata = json.RawMessage(`{"k":"` + strings.Repeat("v", MaximumMetadataBytes) + `"}`)
 		}, ErrInvalidMetadata},
