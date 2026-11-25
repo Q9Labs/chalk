@@ -87,9 +87,33 @@ type ArchiveTenantSpaceParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error) {
+type ArchiveTenantSpaceRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (ArchiveTenantSpaceRow, error) {
 	row := q.db.QueryRow(ctx, archiveTenantSpace, arg.TenantID, arg.ID)
-	var i Space
+	var i ArchiveTenantSpaceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -311,7 +335,7 @@ select
     $15,
     $16
 from tenant_facts
-returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, attention, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -666,9 +690,33 @@ type GetTenantSpaceParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) (Space, error) {
+type GetTenantSpaceRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) (GetTenantSpaceRow, error) {
 	row := q.db.QueryRow(ctx, getTenantSpace, arg.TenantID, arg.ID)
-	var i Space
+	var i GetTenantSpaceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -877,7 +925,31 @@ type ListTenantSpacesParams struct {
 	PageSize        int32              `json:"page_size"`
 }
 
-func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesParams) ([]Space, error) {
+type ListTenantSpacesRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesParams) ([]ListTenantSpacesRow, error) {
 	rows, err := q.db.Query(ctx, listTenantSpaces,
 		arg.TenantID,
 		arg.ArchivedSet,
@@ -891,9 +963,9 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Space
+	var items []ListTenantSpacesRow
 	for rows.Next() {
-		var i Space
+		var i ListTenantSpacesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -928,7 +1000,7 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 }
 
 const listTenantSpacesByActivity = `-- name: ListTenantSpacesByActivity :many
-select s.id, s.name, s.tenant_id, s.slug, s.media_plane, s.media_plane_setting_written, s.media_plane_setting_against, s.media_plane_setting, s.metadata, s.recurring_policy, s.admission_policy, s.recording_policy, s.transcription_policy, s.transcript_language, s.default_episode_duration_seconds, s.maximum_episode_duration_seconds, s.linger_window_seconds, s.created_by_user_id, s.updated_at, s.created_at, s.archived_at, a.active_at
+select s.id, s.name, s.tenant_id, s.slug, s.media_plane, s.media_plane_setting_written, s.media_plane_setting_against, s.media_plane_setting, s.metadata, s.recurring_policy, s.admission_policy, s.recording_policy, s.transcription_policy, s.transcript_language, s.attention, s.default_episode_duration_seconds, s.maximum_episode_duration_seconds, s.linger_window_seconds, s.created_by_user_id, s.updated_at, s.created_at, s.archived_at, a.active_at
 from space_activity a
 join spaces s on s.tenant_id = a.tenant_id and s.id = a.space_id
 where
@@ -996,6 +1068,7 @@ func (q *Queries) ListTenantSpacesByActivity(ctx context.Context, arg ListTenant
 			&i.Space.RecordingPolicy,
 			&i.Space.TranscriptionPolicy,
 			&i.Space.TranscriptLanguage,
+			&i.Space.Attention,
 			&i.Space.DefaultEpisodeDurationSeconds,
 			&i.Space.MaximumEpisodeDurationSeconds,
 			&i.Space.LingerWindowSeconds,
@@ -1092,9 +1165,33 @@ type RestoreTenantSpaceParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (Space, error) {
+type RestoreTenantSpaceRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (RestoreTenantSpaceRow, error) {
 	row := q.db.QueryRow(ctx, restoreTenantSpace, arg.TenantID, arg.ID)
-	var i Space
+	var i RestoreTenantSpaceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -1341,7 +1438,31 @@ type UpdateTenantSpaceParams struct {
 	ID                               pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error) {
+type UpdateTenantSpaceRow struct {
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	Slug                          string             `json:"slug"`
+	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
+	Metadata                      []byte             `json:"metadata"`
+	RecurringPolicy               []byte             `json:"recurring_policy"`
+	AdmissionPolicy               []byte             `json:"admission_policy"`
+	RecordingPolicy               string             `json:"recording_policy"`
+	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt                    pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (UpdateTenantSpaceRow, error) {
 	row := q.db.QueryRow(ctx, updateTenantSpace,
 		arg.NameSet,
 		arg.Name,
@@ -1372,7 +1493,7 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		arg.TenantID,
 		arg.ID,
 	)
-	var i Space
+	var i UpdateTenantSpaceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
