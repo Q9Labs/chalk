@@ -241,7 +241,7 @@ export const ChatPanelSurface = React.memo(
     // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Route a committed window drop into the composer once; the changing key is the drop identity.
     useEffect(() => {
       if (droppedFiles) selectFiles(droppedFiles.files);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- [subscription] The composer only re-stages uploads when the staged-file identity list changes, not on every render.
     }, [droppedFiles?.key]);
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;

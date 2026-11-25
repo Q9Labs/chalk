@@ -1,6 +1,6 @@
 import React, { type SVGProps } from "react";
 
-type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close";
+type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info";
 const paths: Record<StageIconName, React.ReactNode> = {
   share: (
     <>
@@ -71,6 +71,12 @@ const paths: Record<StageIconName, React.ReactNode> = {
   "chevron-left": <path d="M15 18l-6-6 6-6" />,
   "chevron-right": <path d="M9 18l6-6-6-6" />,
   close: <path d="M18 6L6 18M6 6l12 12" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </>
+  ),
 };
 
 /** The stage's compact controls share the approved tile icon shapes. */

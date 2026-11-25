@@ -10,12 +10,17 @@ const documentId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const presenterId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
 
 function harness(options: { readonly fetch: typeof globalThis.fetch; readonly replica?: Partial<PresentingReplica> }) {
+  // A fake replica with inspectable state: tests read what presenting left behind rather than intercepting calls.
+  const presented: string[] = [];
   const replica = {
     getSnapshot: () => ({ status: "ready", revision: 1, documents: [{ documentId, presenterId, page: 1, zoom: 100, startedAtMs: 5 }] }),
     subscribe: () => () => undefined,
-    present: vi.fn(async () => ({ kind: "accepted", revision: 2 }) as const),
-    setPage: vi.fn(async () => ({ kind: "accepted", revision: 3 }) as const),
-    stop: vi.fn(async () => ({ kind: "accepted", revision: 4 }) as const),
+    present: async (document: string) => {
+      presented.push(document);
+      return { kind: "accepted", revision: 2 } as const;
+    },
+    setPage: async () => ({ kind: "accepted", revision: 3 }) as const,
+    stop: async () => ({ kind: "accepted", revision: 4 }) as const,
     ...options.replica,
   } as unknown as PresentingReplica;
   const ports = { sync: { presenting: replica } } as unknown as ConnectionPorts;
@@ -27,7 +32,7 @@ function harness(options: { readonly fetch: typeof globalThis.fetch; readonly re
     runCommand: <A, E>(operation: (ports: ConnectionPorts) => Effect.Effect<A, E>) => operation(ports),
     getSyncToken: () => Effect.succeed("token"),
   } as unknown as ConnectionLifecycleCapability;
-  return { connection, replica, store: new SpaceStore() };
+  return { connection, replica, presented, store: new SpaceStore() };
 }
 
 const manifest = {
@@ -59,7 +64,7 @@ it("creates the renderer document then presents it through sync", async () => {
     requests.push(`${init?.method ?? "GET"} ${String(input)}`);
     return baseFetch(input, init);
   }) as typeof globalThis.fetch;
-  const { connection, replica, store } = harness({ fetch: recordingFetch });
+  const { connection, presented, store } = harness({ fetch: recordingFetch });
 
   await Effect.runPromise(
     Effect.scoped(
@@ -67,7 +72,7 @@ it("creates the renderer document then presents it through sync", async () => {
         const controller = yield* makePresentingController({ connection, store, apiBaseUrl: "https://api.example", fetch: recordingFetch });
         const result = yield* controller.present("attachment-1");
         expect(result).toEqual({ kind: "accepted", revision: 2 });
-        expect(replica.present).toHaveBeenCalledWith(documentId);
+        expect(presented).toEqual([documentId]);
         expect(requests).toContain("POST https://api.example/v1/presenting/documents");
       }),
     ),

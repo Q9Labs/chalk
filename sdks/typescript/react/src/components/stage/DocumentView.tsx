@@ -62,9 +62,14 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const fileName = manifest?.fileName ?? document.fileName ?? "Document";
   const downloadUrl = pageInfo?.imageUrl ?? manifest?.pages.find((candidate) => candidate.imageUrl)?.imageUrl;
   const pages = useMemo(() => manifest?.pages ?? [], [manifest?.pages]);
+  const preparedPercent = useMemo(() => {
+    if (!manifest || manifest.status !== "preparing" || !manifest.pageCount) return null;
+    const readyPages = pages.filter((candidate) => candidate.status === "ready").length;
+    return Math.max(1, Math.round((readyPages / manifest.pageCount) * 100));
+  }, [manifest, pages]);
 
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] text-white" data-document-viewer data-document-id={document.documentId}>
+    <div className="relative flex h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] text-[var(--chalk-on-overlay)]" data-document-viewer data-document-id={document.documentId}>
       {thumbnails && ready ? (
         <div className="z-10 flex w-[136px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-white/10 bg-black/25 p-2">
           {pages.map((candidate) => (
@@ -83,10 +88,16 @@ export function DocumentView({ document, people, primary, interactive }: Documen
       <div className="relative min-w-0 flex-1 overflow-auto">
         <div className="grid h-full min-h-full place-items-center p-4">
           {manifest?.status === "preparing" || !manifest ? (
-            <div role="status" className="w-72 rounded-2xl bg-black/45 p-5 text-center shadow-lg">
-              <div className="text-sm font-medium">Preparing {fileName}</div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/15">
-                <div className="h-full w-2/3 rounded-full bg-white/70" />
+            <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-black/45 p-4 shadow-lg">
+              <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-red-500 text-[10px] font-bold text-white">PDF</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">
+                  Preparing {fileName}
+                  {preparedPercent !== null ? ` · ${preparedPercent}%` : ""}
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
+                  <div className="h-full rounded-full bg-white/70" style={{ width: `${preparedPercent ?? 35}%` }} />
+                </div>
               </div>
             </div>
           ) : manifest.status === "failed" ? (
@@ -102,28 +113,35 @@ export function DocumentView({ document, people, primary, interactive }: Documen
           )}
         </div>
       </div>
-      <div className="absolute left-3 top-3 z-20 max-w-[45%] truncate rounded-full bg-[var(--chalk-overlay-strong)] px-3 py-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
-        {mine ? "Your PDF" : `${presenterFirst}'s PDF`} · {fileName}
+      <div className="absolute bottom-3 left-3 z-20 flex max-w-[45%] items-center gap-1.5 truncate rounded-full bg-[var(--chalk-overlay-strong)] px-3 py-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
+        <StageIcon name="file" size={13} />
+        <span className="truncate">{mine ? "Your PDF" : `${presenterName}'s PDF`} · {fileName}</span>
       </div>
       {!mine && (
-        <div className="absolute bottom-3 left-3 z-20 rounded-full bg-[var(--chalk-overlay-strong)] px-3 py-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
+        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--chalk-overlay-strong)] py-1.5 pl-3 pr-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
           {following ? (
-            <span>
+            <span className="flex items-center gap-1.5 pr-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" aria-hidden="true" />
               Following {presenterFirst} · page {document.page}
             </span>
           ) : (
-            <span className="flex items-center gap-2">
-              You're on page {page}
-              <button type="button" className="rounded-full bg-white/15 px-2 py-0.5 hover:bg-white/25" onClick={() => setOwnPage(null)}>
+            <>
+              <span className="flex items-center gap-1.5">
+                <StageIcon name="info" size={13} />
+                You're on page {page}
+              </span>
+              <button type="button" className="rounded-full bg-white px-2.5 py-1 font-medium text-black hover:bg-white/85" onClick={() => setOwnPage(null)}>
                 Back to {presenterFirst}'s page
               </button>
-            </span>
+            </>
           )}
         </div>
       )}
       {primary && interactive ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
           <div className={toolbar}>
+            {ready ? (
+            <>
             <button type="button" className={button} aria-label="Toggle page thumbnails" aria-pressed={thumbnails} onClick={() => setThumbnails((open) => !open)}>
               <StageIcon name="file" size={16} />
             </button>
@@ -146,13 +164,16 @@ export function DocumentView({ document, people, primary, interactive }: Documen
             <button type="button" className={button} aria-label="Fit page" onClick={() => (mine ? void client.presenting.setZoom(document.documentId, 100) : setLocalZoom(100))}>
               <StageIcon name="fit" size={16} />
             </button>
-            {downloadUrl ? (
+            </>
+            ) : null}
+            {downloadUrl && ready ? (
               <a className={button} href={downloadUrl} download={fileName} aria-label="Download document">
                 <StageIcon name="download" size={16} />
               </a>
             ) : null}
             {mine || self.can("stopScreenOthers") ? (
               <button type="button" className={cn(button, "bg-red-500/80 hover:bg-red-500")} onClick={() => void client.presenting.stop(document.documentId)}>
+                <StageIcon name="close" size={14} />
                 Stop showing
               </button>
             ) : null}

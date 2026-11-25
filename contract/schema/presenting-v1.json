@@ -77,11 +77,7 @@
       }
     },
     "Command": {
-      "oneOf": [
-        { "$ref": "#/$defs/Present" },
-        { "$ref": "#/$defs/SetState" },
-        { "$ref": "#/$defs/Stop" }
-      ]
+      "oneOf": [{ "$ref": "#/$defs/Present" }, { "$ref": "#/$defs/SetState" }, { "$ref": "#/$defs/Stop" }]
     },
     "ClientRequest": {
       "type": "object",
@@ -100,10 +96,7 @@
       }
     },
     "ClientFrame": {
-      "oneOf": [
-        { "$ref": "#/$defs/ClientRequest" },
-        { "$ref": "#/$defs/ClientCommand" }
-      ]
+      "oneOf": [{ "$ref": "#/$defs/ClientRequest" }, { "$ref": "#/$defs/ClientCommand" }]
     },
     "Accepted": {
       "type": "object",
@@ -126,10 +119,7 @@
       }
     },
     "CommandResult": {
-      "oneOf": [
-        { "$ref": "#/$defs/Accepted" },
-        { "$ref": "#/$defs/Rejected" }
-      ]
+      "oneOf": [{ "$ref": "#/$defs/Accepted" }, { "$ref": "#/$defs/Rejected" }]
     },
     "ServerState": {
       "type": "object",
@@ -140,10 +130,7 @@
         "server_at_ms": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "enabled": { "const": false },
         "state": {
-          "oneOf": [
-            { "$ref": "#/$defs/State" },
-            { "type": "null" }
-          ]
+          "oneOf": [{ "$ref": "#/$defs/State" }, { "type": "null" }]
         }
       }
     },
@@ -168,11 +155,7 @@
       }
     },
     "ServerFrame": {
-      "oneOf": [
-        { "$ref": "#/$defs/ServerState" },
-        { "$ref": "#/$defs/ServerChange" },
-        { "$ref": "#/$defs/ServerReceipt" }
-      ]
+      "oneOf": [{ "$ref": "#/$defs/ServerState" }, { "$ref": "#/$defs/ServerChange" }, { "$ref": "#/$defs/ServerReceipt" }]
     }
   }
 }

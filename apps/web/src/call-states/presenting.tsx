@@ -21,14 +21,14 @@ function pages(count: number, accent: string) {
   }));
 }
 
-export type PresentingFixtureOptions = {
+type PresentingFixtureOptions = {
   readonly presenter: "self" | "nora";
   readonly page?: number;
   readonly status?: "preparing" | "ready";
   readonly screenShare?: boolean;
 };
 
-export function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
+function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
   const presenterId = options.presenter === "self" ? "you" : nora.id;
   const documentId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
   const status = options.status ?? "ready";
