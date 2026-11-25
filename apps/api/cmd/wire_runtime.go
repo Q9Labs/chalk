@@ -164,6 +164,7 @@ type apiWiring struct {
 
 	chatCleanupScheduler       *objectcleanup.Scheduler
 	whiteboardCleanupScheduler *objectcleanup.Scheduler
+	presentingCleanupScheduler *objectcleanup.Scheduler
 	webhookProtector           *webhooks.AESGCMProtector
 	options                    httpapi.Options
 }

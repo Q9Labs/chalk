@@ -648,6 +648,60 @@ func (q *Queries) GetAuthorizedPresentingPage(ctx context.Context, arg GetAuthor
 	return i, err
 }
 
+const getPresentingAttachmentMIMEType = `-- name: GetPresentingAttachmentMIMEType :one
+select attachment.mime_type
+from participants participant
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = participant.tenant_id
+    and attachment.space_id = participant.space_id
+    and attachment.episode_id = participant.episode_id
+where participant.tenant_id = $1
+    and participant.space_id = $2
+    and participant.episode_id = $3
+    and participant.id = $4
+    and participant.generation = $5
+    and participant.status = 'active'
+    and episode.status = 'active'
+    and attachment.attachment_id = $6
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (
+            attachment.status = 'ready'
+            and attachment.participant_id = participant.id
+            and attachment.participant_generation = participant.generation
+            and attachment.expires_at > now()
+        )
+    )
+`
+
+type GetPresentingAttachmentMIMETypeParams struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+	AttachmentID          pgtype.UUID `json:"attachment_id"`
+}
+
+func (q *Queries) GetPresentingAttachmentMIMEType(ctx context.Context, arg GetPresentingAttachmentMIMETypeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPresentingAttachmentMIMEType,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+		arg.AttachmentID,
+	)
+	var mime_type string
+	err := row.Scan(&mime_type)
+	return mime_type, err
+}
+
 const getPresentingRenderJobDocument = `-- name: GetPresentingRenderJobDocument :one
 select
     document.tenant_id, document.space_id, document.episode_id, document.document_id, document.attachment_id,
@@ -780,7 +834,7 @@ func (q *Queries) InsertPresentingDocumentPage(ctx context.Context, arg InsertPr
 }
 
 const listExpiredPresentingDocuments = `-- name: ListExpiredPresentingDocuments :many
-select document.tenant_id, document.space_id, document.document_id
+select document.tenant_id, document.space_id, document.episode_id, document.document_id, document.page_count
 from presenting_documents document
 join episodes episode
     on episode.tenant_id = document.tenant_id
@@ -808,7 +862,9 @@ type ListExpiredPresentingDocumentsParams struct {
 type ListExpiredPresentingDocumentsRow struct {
 	TenantID   pgtype.UUID `json:"tenant_id"`
 	SpaceID    pgtype.UUID `json:"space_id"`
+	EpisodeID  pgtype.UUID `json:"episode_id"`
 	DocumentID pgtype.UUID `json:"document_id"`
+	PageCount  pgtype.Int4 `json:"page_count"`
 }
 
 func (q *Queries) ListExpiredPresentingDocuments(ctx context.Context, arg ListExpiredPresentingDocumentsParams) ([]ListExpiredPresentingDocumentsRow, error) {
@@ -820,7 +876,13 @@ func (q *Queries) ListExpiredPresentingDocuments(ctx context.Context, arg ListEx
 	var items []ListExpiredPresentingDocumentsRow
 	for rows.Next() {
 		var i ListExpiredPresentingDocumentsRow
-		if err := rows.Scan(&i.TenantID, &i.SpaceID, &i.DocumentID); err != nil {
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SpaceID,
+			&i.EpisodeID,
+			&i.DocumentID,
+			&i.PageCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -923,19 +985,37 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 }
 
 const markPresentingPageReady = `-- name: MarkPresentingPageReady :execrows
-update presenting_document_pages
+update presenting_document_pages page
 set status = 'ready', updated_at = now()
-where tenant_id = $1
-    and space_id = $2
-    and document_id = $3
-    and page = $4
+where page.tenant_id = $1
+    and page.space_id = $2
+    and page.document_id = $3
+    and page.page = $4
+    and exists (
+        select 1 from presenting_render_jobs job
+        where job.tenant_id = page.tenant_id
+            and job.space_id = page.space_id
+            and job.document_id = page.document_id
+            and job.job_id = $5
+            and job.status = 'leased'
+            and job.attempt_count = $6
+            and job.lease_owner = $7
+            and job.lease_token = $8
+            and job.lease_expires_at > $9
+            and page.page between job.page_start and job.page_end
+    )
 `
 
 type MarkPresentingPageReadyParams struct {
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	SpaceID    pgtype.UUID `json:"space_id"`
-	DocumentID pgtype.UUID `json:"document_id"`
-	Page       int32       `json:"page"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	Page         int32              `json:"page"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	AttemptCount int32              `json:"attempt_count"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	LeaseToken   pgtype.UUID        `json:"lease_token"`
+	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentingPageReadyParams) (int64, error) {
@@ -944,6 +1024,11 @@ func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentin
 		arg.SpaceID,
 		arg.DocumentID,
 		arg.Page,
+		arg.JobID,
+		arg.AttemptCount,
+		arg.LeaseOwner,
+		arg.LeaseToken,
+		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err

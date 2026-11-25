@@ -25,6 +25,7 @@ type serverResults struct {
 	dispatcher             <-chan error
 	deadlineScheduler      <-chan error
 	recordingMaintenance   <-chan error
+	presentingCleanup      <-chan error
 	whiteboardCleanup      <-chan error
 	chatCleanup            <-chan error
 	recordingSourceCleanup <-chan error
@@ -68,11 +69,16 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 		})
 	}
 
+	var presentingCleanupErr <-chan error
 	var whiteboardCleanupErr <-chan error
 	if w.whiteboardCleanupScheduler != nil {
 		whiteboardCleanupErr = startWorker(signalCtx, w.whiteboardCleanupScheduler.Run)
 	}
 	var chatCleanupErr <-chan error
+	if w.presentingCleanupScheduler != nil {
+		presentingCleanupErr = startWorker(signalCtx, w.presentingCleanupScheduler.Run)
+	}
+
 	if w.chatCleanupScheduler != nil {
 		chatCleanupErr = startWorker(signalCtx, w.chatCleanupScheduler.Run)
 	}
@@ -109,7 +115,7 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 	return serverResults{
 		server: serverErr, providerBridge: providerBridgeErr,
 		dispatcher: dispatcherErr, deadlineScheduler: deadlineSchedulerErr, recordingMaintenance: recordingMaintenanceErr,
-		whiteboardCleanup: whiteboardCleanupErr, chatCleanup: chatCleanupErr,
+		presentingCleanup: presentingCleanupErr, whiteboardCleanup: whiteboardCleanupErr, chatCleanup: chatCleanupErr,
 		recordingSourceCleanup: recordingSourceCleanupErr, publicInviteLifecycle: publicInviteLifecycleErr,
 	}, nil
 }

@@ -190,6 +190,7 @@ type Querier interface {
 	GetMCPOAuthGrant(ctx context.Context, id pgtype.UUID) (GetMCPOAuthGrantRow, error)
 	GetMCPOAuthRefreshToken(ctx context.Context, tokenHash string) (GetMCPOAuthRefreshTokenRow, error)
 	GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error)
+	GetPresentingAttachmentMIMEType(ctx context.Context, arg GetPresentingAttachmentMIMETypeParams) (string, error)
 	GetPresentingRenderJobDocument(ctx context.Context, arg GetPresentingRenderJobDocumentParams) (GetPresentingRenderJobDocumentRow, error)
 	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)

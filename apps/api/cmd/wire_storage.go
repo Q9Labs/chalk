@@ -41,7 +41,9 @@ func (w *apiWiring) wireStorage() error {
 				return fmt.Errorf("configure presenting renderer invoke: %w", err)
 			}
 			if w.syncParticipantVerifierConfigured {
-				service := presenting.NewService(postgres.NewPresentingRepository(w.pool), storage, invoker)
+				presentingRepository := postgres.NewPresentingRepository(w.pool)
+				w.presentingCleanupScheduler = objectcleanup.NewScheduler(presenting.NewCleanupWorker(presentingRepository, storage), 0, w.logger)
+				service := presenting.NewService(presentingRepository, storage, invoker)
 				w.options.Presenting = service
 			}
 		}

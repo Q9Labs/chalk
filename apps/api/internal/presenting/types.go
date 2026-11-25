@@ -86,6 +86,7 @@ type RenderLease struct {
 	LeaseToken  utilities.ID
 	LeaseOwner  string
 	LeaseExpiry time.Time
+	Page        int
 }
 
 type RenderJob struct {
@@ -138,6 +139,8 @@ type Repository interface {
 	FailRenderJob(context.Context, RenderLease, RenderFailure) error
 	CompleteZoom(context.Context, RenderLease) error
 	EnsureZoomJob(context.Context, Document, int, time.Time) (RenderJob, bool, error)
+	ListExpiredDocuments(context.Context, time.Time, time.Time, int) ([]Document, error)
+	DeleteDocument(context.Context, Document) error
 }
 
 type ObjectStore interface {

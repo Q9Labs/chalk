@@ -24,6 +24,8 @@ type PageUploads struct {
 
 type ControlAssignment struct {
 	JobID           string        `json:"jobId"`
+	TenantID        string        `json:"tenantId"`
+	SpaceID         string        `json:"spaceId"`
 	DocumentID      string        `json:"documentId"`
 	Kind            string        `json:"kind"`
 	PageStart       int           `json:"pageStart"`
@@ -66,7 +68,7 @@ func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAs
 		return ControlAssignment{}, false, fmt.Errorf("sign presenting source: %w", err)
 	}
 	assignment := ControlAssignment{
-		JobID: claimed.Job.JobID.String(), DocumentID: claimed.Document.DocumentID.String(), Kind: claimed.Job.Kind,
+		JobID: claimed.Job.JobID.String(), TenantID: claimed.Job.TenantID.String(), SpaceID: claimed.Job.SpaceID.String(), DocumentID: claimed.Document.DocumentID.String(), Kind: claimed.Job.Kind,
 		PageStart: claimed.Job.PageStart, PageEnd: claimed.Job.PageEnd, Attempt: claimed.Job.Attempt,
 		LeaseToken: token.String(), LeaseExpiresAt: leaseExpiry.UTC().Format(time.RFC3339Nano),
 		FileName: claimed.Document.FileName, MIMEType: claimed.Document.MIMEType,

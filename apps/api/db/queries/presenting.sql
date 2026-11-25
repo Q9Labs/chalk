@@ -1,6 +1,36 @@
 -- name: PresentingEnabled :one
 select coalesce((select enabled from presenting_settings where singleton), sqlc.arg(default_enabled)::boolean)::boolean;
 
+-- name: GetPresentingAttachmentMIMEType :one
+select attachment.mime_type
+from participants participant
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = participant.tenant_id
+    and attachment.space_id = participant.space_id
+    and attachment.episode_id = participant.episode_id
+where participant.tenant_id = sqlc.arg(tenant_id)
+    and participant.space_id = sqlc.arg(space_id)
+    and participant.episode_id = sqlc.arg(episode_id)
+    and participant.id = sqlc.arg(participant_id)
+    and participant.generation = sqlc.arg(participant_generation)
+    and participant.status = 'active'
+    and episode.status = 'active'
+    and attachment.attachment_id = sqlc.arg(attachment_id)
+    and attachment.cleanup_claim_token is null
+    and (
+        attachment.status = 'attached'
+        or (
+            attachment.status = 'ready'
+            and attachment.participant_id = participant.id
+            and attachment.participant_generation = participant.generation
+            and attachment.expires_at > now()
+        )
+    );
+
 -- name: CreatePresentingDocument :one
 with authority as materialized (
     select
@@ -252,12 +282,25 @@ where tenant_id = sqlc.arg(tenant_id)
     and status = 'preparing';
 
 -- name: MarkPresentingPageReady :execrows
-update presenting_document_pages
+update presenting_document_pages page
 set status = 'ready', updated_at = now()
-where tenant_id = sqlc.arg(tenant_id)
-    and space_id = sqlc.arg(space_id)
-    and document_id = sqlc.arg(document_id)
-    and page = sqlc.arg(page);
+where page.tenant_id = sqlc.arg(tenant_id)
+    and page.space_id = sqlc.arg(space_id)
+    and page.document_id = sqlc.arg(document_id)
+    and page.page = sqlc.arg(page)
+    and exists (
+        select 1 from presenting_render_jobs job
+        where job.tenant_id = page.tenant_id
+            and job.space_id = page.space_id
+            and job.document_id = page.document_id
+            and job.job_id = sqlc.arg(job_id)
+            and job.status = 'leased'
+            and job.attempt_count = sqlc.arg(attempt_count)
+            and job.lease_owner = sqlc.arg(lease_owner)
+            and job.lease_token = sqlc.arg(lease_token)
+            and job.lease_expires_at > sqlc.arg(now_at)
+            and page.page between job.page_start and job.page_end
+    );
 
 -- name: MarkPresentingZoomReady :execrows
 update presenting_document_pages
@@ -305,7 +348,7 @@ where tenant_id = sqlc.arg(tenant_id)
 order by page;
 
 -- name: ListExpiredPresentingDocuments :many
-select document.tenant_id, document.space_id, document.document_id
+select document.tenant_id, document.space_id, document.episode_id, document.document_id, document.page_count
 from presenting_documents document
 join episodes episode
     on episode.tenant_id = document.tenant_id

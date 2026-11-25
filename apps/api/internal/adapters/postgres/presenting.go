@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -28,6 +29,21 @@ func NewPresentingRepository(db presentingDB) PresentingRepository {
 }
 
 func (r PresentingRepository) CreateDocument(ctx context.Context, subject presenting.Subject, attachmentID, documentID utilities.ID) (presenting.Document, error) {
+	mimeType, err := r.queries.GetPresentingAttachmentMIMEType(ctx, sqlc.GetPresentingAttachmentMIMETypeParams{
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
+		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration, AttachmentID: uuid(attachmentID),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return presenting.Document{}, presenting.ErrPermissionDenied
+	}
+	if err != nil {
+		return presenting.Document{}, fmt.Errorf("read presenting source attachment: %w", err)
+	}
+	switch mimeType {
+	case "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp":
+	default:
+		return presenting.Document{}, presenting.ErrUnsupportedType
+	}
 	row, err := r.queries.CreatePresentingDocument(ctx, sqlc.CreatePresentingDocumentParams{
 		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID), EpisodeID: uuid(subject.EpisodeID),
 		ParticipantID: uuid(subject.ParticipantID), ParticipantGeneration: subject.ParticipantGeneration,
@@ -204,7 +220,7 @@ func (r PresentingRepository) MarkPageReady(ctx context.Context, lease presentin
 	if page < 1 || page > presenting.MaxPages {
 		return presenting.ErrInvalidInput
 	}
-	rows, err := r.queries.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page)})
+	rows, err := r.queries.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
 	if err != nil {
 		return fmt.Errorf("mark presenting page ready: %w", err)
 	}
@@ -254,7 +270,7 @@ func (r PresentingRepository) CompleteZoom(ctx context.Context, lease presenting
 	}
 	defer tx.Rollback(ctx)
 	q := sqlc.New(tx)
-	rows, err := q.MarkPresentingZoomReady(ctx, sqlc.MarkPresentingZoomReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: 1, ZoomReadyAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
+	rows, err := q.MarkPresentingZoomReady(ctx, sqlc.MarkPresentingZoomReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(lease.Page), ZoomReadyAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
 	if err != nil {
 		return fmt.Errorf("mark presenting zoom ready: %w", err)
 	}
@@ -282,6 +298,35 @@ func (r PresentingRepository) EnsureZoomJob(ctx context.Context, document presen
 	}
 	job.JobID = utilities.IDFromBytes(row.JobID.Bytes)
 	return job, true, nil
+}
+
+func (r PresentingRepository) ListExpiredDocuments(ctx context.Context, now, endedBefore time.Time, limit int) ([]presenting.Document, error) {
+	rows, err := r.queries.ListExpiredPresentingDocuments(ctx, sqlc.ListExpiredPresentingDocumentsParams{
+		NowAt: pgtype.Timestamptz{Time: now, Valid: true}, EndedBefore: pgtype.Timestamptz{Time: endedBefore, Valid: true}, BatchLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list expired presenting documents: %w", err)
+	}
+	documents := make([]presenting.Document, 0, len(rows))
+	for _, row := range rows {
+		document := presenting.Document{TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), DocumentID: utilities.IDFromBytes(row.DocumentID.Bytes)}
+		if row.PageCount.Valid {
+			document.PageCount = int(row.PageCount.Int32)
+		}
+		documents = append(documents, document)
+	}
+	return documents, nil
+}
+
+func (r PresentingRepository) DeleteDocument(ctx context.Context, document presenting.Document) error {
+	rows, err := r.queries.DeletePresentingDocument(ctx, sqlc.DeletePresentingDocumentParams{TenantID: uuid(document.TenantID), SpaceID: uuid(document.SpaceID), DocumentID: uuid(document.DocumentID)})
+	if err != nil {
+		return fmt.Errorf("delete presenting document: %w", err)
+	}
+	if rows != 1 {
+		return objectcleanup.ErrLeaseLost
+	}
+	return nil
 }
 
 func completePresentingJob(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {

@@ -77,12 +77,25 @@ type presentingZoomResponse struct {
 	ExpiresAt string `json:"expiresAt"`
 }
 
-func presentingEndpoints(service PresentingService, verifier ChatParticipantVerifier) []RouteEndpoint {
+func presentingEndpoints(service PresentingService, verifier ChatParticipantVerifier, enabled func(context.Context) bool) []RouteEndpoint {
 	auth := requireSyncParticipant(verifier, presentingSubjectContextKey{})
+	feature := requirePresentingEnabled(enabled)
 	return []RouteEndpoint{
-		createPresentingDocumentEndpoint(service).Middleware(auth),
-		getPresentingDocumentEndpoint(service).Middleware(auth),
-		getPresentingZoomEndpoint(service).Middleware(auth),
+		createPresentingDocumentEndpoint(service).Middleware(auth, feature),
+		getPresentingDocumentEndpoint(service).Middleware(auth, feature),
+		getPresentingZoomEndpoint(service).Middleware(auth, feature),
+	}
+}
+
+func requirePresentingEnabled(enabled func(context.Context) bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enabled != nil && !enabled(r.Context()) {
+				writeError(w, http.StatusForbidden, "presenting.disabled", "Presenting is disabled")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 
