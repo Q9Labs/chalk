@@ -16,6 +16,7 @@ export interface CallCardProps {
   readonly participantsEnabled?: boolean;
   readonly onClose?: () => void;
   readonly interactive?: boolean;
+  readonly overlay?: ReactNode;
   readonly children: ReactNode;
 }
 
@@ -23,7 +24,7 @@ export interface CallCardProps {
  * The inset card for desktop panels and the focus-trapped bottom sheet on phones. Escape closes it and focus returns to
  * where it came from. Panels keep their own landmarks, so the drawer itself carries no role.
  */
-export function CallCard({ state, onClose, interactive = true, children, panel, onPanelChange, peopleCount, chatEnabled = true, participantsEnabled = true }: CallCardProps) {
+export function CallCard({ state, onClose, interactive = true, overlay, children, panel, onPanelChange, peopleCount, chatEnabled = true, participantsEnabled = true }: CallCardProps) {
   const narrowWindow = useIsMobile();
   const phone = useNarrowCall() || narrowWindow;
   const id = useId();
@@ -97,6 +98,7 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
       <div id={`${id}-content`} role={onPanelChange ? "tabpanel" : undefined} aria-labelledby={onPanelChange ? `${id}-${selected}` : undefined} className="flex min-h-0 flex-1 flex-col">
         {children}
       </div>
+      {overlay}
     </>
   );
 

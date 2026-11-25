@@ -16,7 +16,7 @@ import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk } from "@q9labsai/chalk-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -41,6 +41,32 @@ const crowd = (count: number): Person[] => Array.from({ length: count }, (_, ind
 
 const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
+
+function ChatFileDropFixture() {
+  useEffect(() => {
+    let timer = 0;
+    let attempts = 0;
+    const openAndDrag = () => {
+      const button = document.querySelector<HTMLButtonElement>('button[aria-label="Chat"]');
+      const frame = document.querySelector<HTMLElement>("[data-part=call-frame]");
+      if ((!button || !frame) && attempts++ < 20) {
+        timer = window.setTimeout(openAndDrag, 50);
+        return;
+      }
+      button?.click();
+      timer = window.setTimeout(() => {
+        const target = document.querySelector<HTMLElement>("[data-part=call-frame]");
+        if (!target) return;
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(new File(["pdf"], "Algebra worksheet.pdf", { type: "application/pdf" }));
+        for (const type of ["dragenter", "dragover"]) target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
+      }, 100);
+    };
+    openAndDrag();
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <Live snapshot={liveSnapshot({ others: [nora, akash], chat: chatMessages() })} />;
+}
 
 export const CALL_STATES: readonly CallState[] = [
   { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
@@ -192,6 +218,7 @@ export const CALL_STATES: readonly CallState[] = [
 
   { id: "chat-empty", title: "Chat, no messages", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "chat", title: "Chat with messages and a file", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora, akash], chat: chatMessages() })} /> },
+  { id: "chat-file-drop", title: "Chat file drop target", render: () => <ChatFileDropFixture /> },
   {
     id: "participants",
     title: "Participants panel",
