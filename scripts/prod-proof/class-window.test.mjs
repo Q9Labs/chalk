@@ -45,7 +45,7 @@ test("node budgets admit three classes on one vCPU and five on two", () => {
 });
 
 test("twenty classes fit exactly four s-2vcpu-2gb nodes, with a headroom warning", () => {
-  const plan = planClassWindow({ classes: 20 });
+  const plan = planClassWindow({ classes: 20, shards: 4 });
   assert.equal(plan.nodesNeeded, 4);
   assert.equal(plan.classesPerNode, 5);
   assert.deepEqual(plan.droplets, { "s-2vcpu-2gb": 4, "s-4vcpu-8gb": 4 });
@@ -65,7 +65,7 @@ test("planClassWindow rejects an SFU size the node table does not measure", () =
 
 test("runCostUsd prices droplet hours from the monthly list price", () => {
   const cost = runCostUsd({ droplets: { "s-2vcpu-2gb": 4, "s-4vcpu-8gb": 4 }, hours: 3 });
-  assert.ok(Math.abs(cost - (12 * 18 + 12 * 48) / 730) < 1e-9);
+  assert.ok(Math.abs(cost - (12 * 18 + 12 * 48) / 672) < 1e-9);
   assert.throws(() => runCostUsd({ droplets: { "s-9vcpu-9gb": 1 }, hours: 1 }), /no list price/);
 });
 

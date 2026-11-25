@@ -9,7 +9,8 @@ export const defaults = { cameras: 2, episodePacketCeiling: 11520, largeCallPart
 // DigitalOcean list prices per month for the sizes this proof uses. Hourly is the monthly price over 730 hours; check the
 // current price page before a run that will be billed.
 export const dropletMonthlyUsd = { "s-1vcpu-1gb": 6, "s-2vcpu-2gb": 18, "s-4vcpu-8gb": 48 };
-const hoursPerMonth = 730;
+// The Basic Droplet monthly ceiling is reached after 672 billed hours.
+const hoursPerMonth = 672;
 
 /** The packets/s one Episode reserves: the nominal peak in admission.go, capped by the Episode ceiling and the node budget. */
 export function classReservation({ participants = 3, cameras = defaults.cameras, screen = true, budget }) {
@@ -50,6 +51,7 @@ export function runCostUsd({ droplets, hours }) {
 /** The whole plan for one run. `nodeSize` picks the SFU SKU; the default is production's primary. */
 export function planClassWindow({ classes, participants = 3, cameras = defaults.cameras, screen = true, shareDuty = 0.65, nodeSize = "s-2vcpu-2gb", generatorSize = "s-4vcpu-8gb", hours = 3, shards = 1 }) {
   if (!Number.isInteger(classes) || classes < 1) throw new Error("classes must be a positive integer");
+  if (!Number.isInteger(shards) || shards < 1) throw new Error("shards must be a positive integer");
   if (!(shareDuty >= 0 && shareDuty <= 1)) throw new Error("shareDuty must be between 0 and 1");
   const options = nodeOptions({ classes, participants, cameras, screen });
   const chosen = options.find((option) => option.size === nodeSize);
@@ -59,7 +61,8 @@ export function planClassWindow({ classes, participants = 3, cameras = defaults.
   const warnings = [];
   if (chosen.headroomPackets < reservation) warnings.push(`${nodeSize} has ${chosen.headroomPackets} packets/s of headroom, under one class (${reservation}); a class past the last full node is refused with 429 capacity_exceeded`);
   if (nodes * chosen.classesPerNode !== classes) warnings.push(`${nodes} ${nodeSize} nodes admit ${nodes * chosen.classesPerNode} classes, so ${nodes * chosen.classesPerNode - classes} class slots are unused`);
-  const droplets = { [nodeSize]: nodes, [generatorSize]: nodes };
+  const droplets = { [nodeSize]: nodes };
+  droplets[generatorSize] = (droplets[generatorSize] ?? 0) + shards;
   return {
     classes,
     guests: classes * participants,
