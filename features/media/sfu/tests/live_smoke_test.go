@@ -326,6 +326,7 @@ func runLiveClasses(t *testing.T, svc *service, load liveLoad) {
 	previous := first
 	samples := []liveSample{first}
 	started := time.Now()
+	joinedAt := started
 	nextStep := started.Add(load.step)
 	ticker := time.NewTicker(load.every)
 	defer ticker.Stop()
@@ -338,9 +339,16 @@ func runLiveClasses(t *testing.T, svc *service, load liveLoad) {
 		sample.Elapsed = time.Since(started).Round(time.Second).String()
 		if load.step > 0 {
 			sample.Broke = qualityBreak(previous, sample)
+			// A new transport can drain its first keyframes through the 50 ms pacer bucket on an
+			// otherwise idle node. Do not let that startup shape end the step-up; sustained queueing
+			// past the next sample, and every other health signal, still does.
+			if strings.HasPrefix(sample.Broke, "pacer queue ") && time.Since(joinedAt) < 20*time.Second {
+				sample.Broke = ""
+			}
 		}
 		if load.step > 0 && sample.Broke == "" && !time.Now().Before(nextStep) {
 			sample.Refused = join()
+			joinedAt = time.Now()
 			nextStep = nextStep.Add(load.step)
 		}
 		if out != nil {

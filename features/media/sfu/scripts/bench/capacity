@@ -63,17 +63,25 @@ up() {
     control+="${control:+,}$(address_of "${state}/generator-${role}.json")"
   done
   BENCH_CONTROL_ADDRESSES="$control" "${here}/bench" up
+  local setup_pids=() setup_pid setup_failed=0
   for role in ${generator_roles}; do
-    role_address="$(address_of "${state}/generator-${role}.json")"
-    for _ in $(seq 40); do
-      ssh "${ssh_options[@]}" "root@${role_address}" true 2>/dev/null && break
-      sleep 5
-    done
-    ssh "${ssh_options[@]}" "root@${role_address}" "mkdir -p /opt/load/tests/testdata /opt/load/certs /opt/load/runs"
-    scp -q "${ssh_options[@]}" "$SFU_LIVE_TEST_BIN" "root@${role_address}:/opt/load/tests/sfu-live.test"
-    scp -q "${ssh_options[@]}" "${sfu_root}"/tests/testdata/*.ivf "root@${role_address}:/opt/load/tests/testdata/"
-    scp -q "${ssh_options[@]}" "${bench_dir}/ca.crt" "${bench_dir}/operator.crt" "${bench_dir}/operator.key" "root@${role_address}:/opt/load/certs/"
+    (
+      role_address="$(address_of "${state}/generator-${role}.json")"
+      for _ in $(seq 40); do
+        ssh "${ssh_options[@]}" "root@${role_address}" true 2>/dev/null && break
+        sleep 5
+      done
+      ssh "${ssh_options[@]}" "root@${role_address}" "mkdir -p /opt/load/tests/testdata /opt/load/certs /opt/load/runs"
+      scp -q "${ssh_options[@]}" "$SFU_LIVE_TEST_BIN" "root@${role_address}:/opt/load/tests/sfu-live.test"
+      scp -q "${ssh_options[@]}" "${sfu_root}"/tests/testdata/*.ivf "root@${role_address}:/opt/load/tests/testdata/"
+      scp -q "${ssh_options[@]}" "${bench_dir}/ca.crt" "${bench_dir}/operator.crt" "${bench_dir}/operator.key" "root@${role_address}:/opt/load/certs/"
+    ) &
+    setup_pids+=("$!")
   done
+  for setup_pid in "${setup_pids[@]}"; do
+    wait "$setup_pid" || setup_failed=1
+  done
+  [[ "$setup_failed" == 0 ]]
   trap - ERR
   echo "capacity: ready. Delete today: capacity down"
 }

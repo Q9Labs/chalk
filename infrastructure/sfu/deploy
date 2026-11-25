@@ -214,6 +214,10 @@ if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
   echo "SFU_MAX_EPISODE_PARTICIPANTS applies to the bench environment only" >&2
   exit 2
 fi
+if [[ -n "${SFU_MAX_SESSIONS:-}" && "$environment" != bench ]]; then
+  echo "SFU_MAX_SESSIONS applies to the bench environment only" >&2
+  exit 2
+fi
 {
   sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
     -e "s|__UDP_BUFFER__|${udp_buffer}|" -e "s|__NODE_SIZE__|${node_size}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
@@ -221,6 +225,7 @@ fi
     "${node_dir}/sfu.env.in"
   if [[ -n "${SFU_PACKET_BUDGET:-}" ]]; then echo "SFU_PACKET_BUDGET=${SFU_PACKET_BUDGET}"; fi
   if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" ]]; then echo "SFU_MAX_EPISODE_PARTICIPANTS=${SFU_MAX_EPISODE_PARTICIPANTS}"; fi
+  if [[ -n "${SFU_MAX_SESSIONS:-}" ]]; then echo "SFU_MAX_SESSIONS=${SFU_MAX_SESSIONS}"; fi
 } |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
 sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" \
