@@ -96,9 +96,9 @@ it("keeps the lobby open when reload autoplay evidence is blocked", async () => 
   localStorage.setItem("chalk.display-name", "Ada");
   writeReloadRejoin(sessionStorage, marker);
   await entry("access.media_proof_rejected");
-  await expectMessage("Join call");
+  await expectMessage("Rejoin");
   expect(requests).toEqual([]);
-  const join = [...document.querySelectorAll("button")].find((button) => button.textContent === "Join call");
+  const join = [...document.querySelectorAll("button")].find((button) => button.textContent === "Rejoin");
   expect(join).toBeDefined();
   await act(async () => join?.click());
   await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));

@@ -40,11 +40,26 @@ export type PreJoinProps = {
   readonly onDisplayNameChange: (name: string) => void;
   /** The visitor pressed Join: fields lock and the preview keeps running until the call replaces this step. */
   readonly joining: boolean;
+  /** A reload is returning to the same call rather than asking for a new seat. */
+  readonly rejoin?: boolean;
   readonly onJoin: (devices: PreJoinJoinOptions) => void;
 };
 
+function joinReady(named: boolean, joining: boolean, access: string, dismissed: boolean): boolean {
+  return named && !joining && access !== "checking" && (access !== "requesting" || dismissed);
+}
+
+function joinTitle(spaceName: string | undefined, rejoin: boolean): string {
+  if (rejoin) return "Rejoin the call";
+  return spaceName ?? "Join the call";
+}
+
+function joinLabel(rejoin: boolean): string {
+  return rejoin ? "Rejoin" : "Join call";
+}
+
 /** The step before the call: see yourself, hear yourself, press Join. */
-export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin }: PreJoinProps) {
+export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, rejoin = false, onJoin }: PreJoinProps) {
   const devices = usePreJoinDevices();
   const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
@@ -52,7 +67,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const reason: AccessReason | null = dismissed || joining ? null : access === "blocked" ? "blocked" : access === "ask" || access === "requesting" ? "ask" : null;
   const named = displayName.trim() !== "";
   // A visitor who dismissed the card while the browser prompt is still open can join with devices off.
-  const ready = named && !joining && access !== "checking" && (access !== "requesting" || dismissed);
+  const ready = joinReady(named, joining, access, dismissed);
   // Join is disabled while the browser's permission is read, so it takes focus the first time it can: Enter then joins.
   const joinButton = useRef<HTMLButtonElement>(null);
   const focusedJoin = useRef(false);
@@ -69,7 +84,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   };
   const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
 
-  const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
+  const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{joinTitle(spaceName, rejoin)}</h1>;
   const preview = (
     <>
       <ShellStyles />
@@ -107,7 +122,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
               Joining…
             </>
           ) : (
-            "Join call"
+            joinLabel(rejoin)
           )}
         </button>
         <p role="status" style={{ minHeight: "var(--space-5)" }} className="text-center text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">

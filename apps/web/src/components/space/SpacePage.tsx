@@ -371,6 +371,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               warmCall();
             }}
             joining={current.phase !== "idle"}
+            rejoin={Boolean(reloadMarker)}
             onJoin={(devices: PreJoinJoinOptions) => start({ ...devices, displayName }, true)}
           />
         ) : (
