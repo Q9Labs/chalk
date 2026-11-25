@@ -9,10 +9,66 @@ const VERSION = "openrouter-mai-2-urdu.v1";
 const DEVANAGARI = /\p{Script=Devanagari}[\p{Script=Devanagari}\p{M}]*/gu;
 // Microsoft documents these MAI-Transcribe-2 codes. Chalk also accepts legacy Whisper codes.
 const MAI_LANGUAGES: ReadonlySet<string> = new Set([
-  "af", "ar", "as", "az", "bg", "bn", "bs", "ca", "cs", "da", "de", "el", "en", "es", "et",
-  "fa", "fi", "fil", "fr", "gl", "gu", "he", "hi", "hu", "hy", "id", "is", "it", "ja", "kk",
-  "kn", "ko", "lt", "lv", "mk", "ml", "mr", "ms", "nb", "ne", "nl", "or", "pa", "pl", "pt",
-  "ro", "ru", "sk", "sl", "sv", "sw", "ta", "te", "th", "tr", "uk", "ur", "vi", "yue", "zh",
+  "af",
+  "ar",
+  "as",
+  "az",
+  "bg",
+  "bn",
+  "bs",
+  "ca",
+  "cs",
+  "da",
+  "de",
+  "el",
+  "en",
+  "es",
+  "et",
+  "fa",
+  "fi",
+  "fil",
+  "fr",
+  "gl",
+  "gu",
+  "he",
+  "hi",
+  "hu",
+  "hy",
+  "id",
+  "is",
+  "it",
+  "ja",
+  "kk",
+  "kn",
+  "ko",
+  "lt",
+  "lv",
+  "mk",
+  "ml",
+  "mr",
+  "ms",
+  "nb",
+  "ne",
+  "nl",
+  "or",
+  "pa",
+  "pl",
+  "pt",
+  "ro",
+  "ru",
+  "sk",
+  "sl",
+  "sv",
+  "sw",
+  "ta",
+  "te",
+  "th",
+  "tr",
+  "uk",
+  "ur",
+  "vi",
+  "yue",
+  "zh",
 ]);
 
 interface Options {
@@ -88,9 +144,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     });
     if (parsed.text.trim() && !parsed.words?.length) throw providerSchemaError("MAI omitted requested word timestamps", "words", "nonempty timed words for speech", undefined);
     const timed = keepUntimedSegmentText(parsed);
-    const converted = fixedLanguage === undefined || fixedLanguage === "ur"
-      ? await this.convertScript(timed, request.signal)
-      : { result: timed, cost: 0 };
+    const converted = fixedLanguage === undefined || fixedLanguage === "ur" ? await this.convertScript(timed, request.signal) : { result: timed, cost: 0 };
     const toSource = <Timed extends { startSeconds: number; endSeconds: number }>(item: Timed): Timed => ({ ...item, startSeconds: batch.sourceSeconds(item.startSeconds, "start"), endSeconds: batch.sourceSeconds(item.endSeconds, "end") });
     const { words } = converted.result;
     return {

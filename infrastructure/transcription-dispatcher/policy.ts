@@ -84,12 +84,8 @@ export function dispatcherPolicy(raw: Plan, input: DispatcherInputs, operation: 
     ];
     inputs = ["release_id", "artifact_s3_key", "artifact_s3_object_version", "config_digest"];
     if (operation === "release") {
-      functionEdits.push(
-        set(["code", "sha256"], input.artifact_sha256_base64),
-        set(["environment", "CHALK_RELEASE_MANIFEST_DIGEST"], input.release_manifest_digest),
-        set(["environment", "DEEPINFRA_CORPUS_DIGEST"], input.deepinfra_corpus_digest),
-        set(["tags", "chalk_release_manifest_digest"], input.release_manifest_digest),
-      );
+      functionEdits.push(set(["code", "sha256"], input.artifact_sha256_base64), set(["environment", "CHALK_RELEASE_MANIFEST_DIGEST"], input.release_manifest_digest), set(["tags", "chalk_release_manifest_digest"], input.release_manifest_digest));
+      if (input.deepinfra_enabled) functionEdits.push(set(["environment", "DEEPINFRA_CORPUS_DIGEST"], input.deepinfra_corpus_digest));
       edits.set("Reconcile", [set(["state"], input.environment_name === "production" ? "ENABLED" : "DISABLED")]);
       inputs = [...inputs, "release_manifest_digest", "artifact_s3_bucket", "artifact_sha256", "artifact_sha256_base64", "scheduler_state", "deepinfra_corpus_digest"];
     }

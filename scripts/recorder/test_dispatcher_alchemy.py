@@ -1,13 +1,38 @@
 """Read-only seeded-output retention; plan policy tests live beside the TS policy."""
 import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from zipfile import ZipFile
 import alchemy_dispatcher
 from alchemy_dispatcher import read_inputs
+from dispatcher_binding import release_environment
 
 class DispatcherAlchemyTests(unittest.TestCase):
+    def test_only_mai_only_zip_requires_openrouter_to_deploy(self):
+        environment = {}
+        provider = mock.Mock()
+        provider.aws.return_value = {"Environment": {"Variables": environment}}
+        inputs = {"function_name": "test-dispatcher"}
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "dispatcher.zip"
+            with ZipFile(archive, "w") as package:
+                package.writestr("package.json", "{}")
+            self.assertEqual(release_environment(provider, inputs, archive), environment)
+
+            with ZipFile(archive, "w") as package:
+                package.writestr("package.json", '{"chalkRequiresOpenRouter":true}')
+            with self.assertRaisesRegex(ValueError, "requires the OpenRouter SSM binding"):
+                release_environment(provider, inputs, archive)
+            inputs.update(codeswitch_provider="mai", openrouter_token_parameter_arn="test-arn")
+            environment["OPENROUTER_TOKEN_PARAMETER_ARN"] = "other-arn"
+            with self.assertRaisesRegex(ValueError, "requires the OpenRouter SSM binding"):
+                release_environment(provider, inputs, archive)
+            environment["OPENROUTER_TOKEN_PARAMETER_ARN"] = "test-arn"
+            self.assertEqual(release_environment(provider, inputs, archive), environment)
+
     def test_pin_retention_reads_seeded_outputs_without_node_or_mutation(self):
         inputs = {'environment_name': 'nightly', 'function_name': 'chalk-nightly-transcription-dispatcher'}
         class AWSBoundary:

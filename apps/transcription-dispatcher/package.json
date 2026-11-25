@@ -23,5 +23,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "chalkRequiresOpenRouter": true
 }

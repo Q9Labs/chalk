@@ -8,6 +8,7 @@ import re
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
+from zipfile import ZipFile
 
 from release_core import digest, require, validate_config
 from alchemy_dispatcher import read_inputs, run_plan
@@ -34,6 +35,26 @@ def dispatcher_inputs(provider, config):
         require(inputs['control_api_audience'] == 'chalk-nightly-control-api', 'nightly dispatcher audience mismatch')
         require(inputs['scheduler_name'] == 'chalk-nightly-transcription-reconcile' and inputs['scheduler_group_name'] == 'chalk-nightly', 'nightly dispatcher scheduler mismatch')
     return inputs
+
+
+def release_environment(provider, inputs, zip_path):
+    function = provider.aws("lambda", "get-function-configuration", "--function-name", inputs["function_name"])
+    environment = function["Environment"]["Variables"]
+    with ZipFile(zip_path) as archive:
+        requires_openrouter = json.loads(archive.read("package.json")).get("chalkRequiresOpenRouter") is True
+    if requires_openrouter:
+        arn = inputs.get("openrouter_token_parameter_arn")
+        require(inputs.get("codeswitch_provider") == "mai" and arn and environment.get("OPENROUTER_TOKEN_PARAMETER_ARN") == arn,
+                "dispatcher requires the OpenRouter SSM binding; configure MAI before the media release")
+    return environment
+
+
+def release_config_digest(environment, inputs):
+    environment = {**environment, "CHALK_RELEASE_ID": inputs["release_id"], "CHALK_RELEASE_MANIFEST_DIGEST": inputs["release_manifest_digest"]}
+    if inputs["deepinfra_enabled"]:
+        environment["DEEPINFRA_CORPUS_DIGEST"] = inputs["deepinfra_corpus_digest"]
+    environment.pop("CHALK_CONFIG_DIGEST", None)
+    return "sha256:" + digest(json.dumps(environment, sort_keys=True, separators=(",", ":")))
 
 
 def verify_dispatcher(provider, config, release):

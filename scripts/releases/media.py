@@ -18,7 +18,7 @@ import importlib.util
 _recorder_spec = importlib.util.spec_from_file_location("recorder_archive_release", ROOT / "scripts/recorder/release.py")
 recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
-from dispatcher_binding import dispatcher_inputs, binding_target, verify_dispatcher
+from dispatcher_binding import dispatcher_inputs, binding_target, release_config_digest, release_environment, verify_dispatcher
 from alchemy_dispatcher import run_plan
 from github_release import GitHub, payload, retain, retained
 
@@ -29,7 +29,7 @@ INPUTS = {
     'dispatcher_configuration': ('infrastructure/transcription-dispatcher/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.
-SUPPORTED_DISPATCHER_CONFIGURATION = '905e49999c7694db393da6cabd15745f236824bdc08b730aeacc3aea09b2560c'
+SUPPORTED_DISPATCHER_CONFIGURATION = 'c3607def13b9aac2f03fc51f6615331425b638f2edb552722c80c12d488bc804'
 
 
 def fingerprint(member):
@@ -252,11 +252,7 @@ def deploy_dispatcher(args):
         provider.aws('s3api', 'get-object', '--bucket', archive['bucket'], '--key', archive['key'], '--version-id', archive['version_id'], zip_path)
         require(digest(zip_path.read_bytes()) == archive['sha256'], 'dispatcher ZIP readback mismatch')
         current_inputs = dispatcher_inputs(provider, config['dispatcher'])
-        environment = provider.aws('lambda', 'get-function-configuration', '--function-name', config['dispatcher']['function_name'])['Environment']['Variables']
-        openrouter_arn = current_inputs.get('openrouter_token_parameter_arn')
-        require(current_inputs.get('codeswitch_provider') == 'mai' and openrouter_arn
-                and environment.get('OPENROUTER_TOKEN_PARAMETER_ARN') == openrouter_arn,
-                'dispatcher requires the OpenRouter SSM binding; configure MAI before the media release')
+        environment = release_environment(provider, current_inputs, zip_path)
         release = binding_target(manifest)
         # The module requires the current API identity in the object key. Copy exact bytes, never rebuild.
         key = f'transcription-dispatcher/{release}/{archive["sha256"]}.zip'
@@ -284,9 +280,7 @@ def deploy_dispatcher(args):
                       artifact_s3_bucket=bucket, artifact_s3_key=key, artifact_s3_object_version=version,
                       artifact_sha256=archive['sha256'], artifact_sha256_base64=base64.b64encode(bytes.fromhex(archive['sha256'])).decode(),
                       scheduler_state='ENABLED', deepinfra_corpus_digest=archive['corpus_digest'])}
-        environment.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
-        environment.pop('CHALK_CONFIG_DIGEST', None)
-        inputs['config_digest'] = 'sha256:' + digest(json.dumps(environment, sort_keys=True, separators=(',', ':')))
+        inputs['config_digest'] = release_config_digest(environment, inputs)
         run_plan(provider, inputs, 'release', apply=True)
         proof = verify_dispatcher(provider, config['dispatcher'], release)
         schedule = provider.aws('scheduler', 'get-schedule', '--name', config['dispatcher']['scheduler_name'], '--group-name', config['dispatcher']['scheduler_group'])
