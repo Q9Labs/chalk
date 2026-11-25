@@ -11,6 +11,22 @@ const remembered = (name, theme) => `(() => {
   document.cookie = "chalk_theme=${theme}; path=/";
 })()`;
 
+
+async function noGesture(page, expression) {
+  const cdp = await page.context().newCDPSession(page);
+  const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, userGesture: false });
+  await cdp.detach().catch(() => undefined);
+  if (result.exceptionDetails) throw new Error(`strict page evaluation failed: ${result.exceptionDetails.text}`);
+  return result.result.value;
+}
+
+const lobbyEvidence = `(() => {
+  const input = document.querySelector("#join-display-name");
+  const button = [...document.querySelectorAll("button")].find((element) => element.textContent === "Join call");
+  const box = button?.getBoundingClientRect();
+  return { input: input?.value ?? null, joining: Boolean(button), tile: Boolean(document.querySelector('[aria-label^="Video tile for "]')), x: box ? box.x + box.width / 2 : null, y: box ? box.y + box.height / 2 : null, active: navigator.userActivation.hasBeenActive };
+})()`;
+
 await runJourney("autoplay-lobby", async ({ step, person, startCall, control, shot }) => {
   const host = await person("AutoplayHost", 1, { permission: "granted" });
   const strict = await person("StrictGuest", 2, { permission: "granted", autoplayPolicy: "document-user-activation-required", initScript: remembered("StrictGuest", "dark") });
@@ -30,17 +46,19 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
   for (const [who, label] of [[strict, "desktop-dark"], [strictMobile, "mobile-light"], [strictDesktopLight, "desktop-light"], [strictMobileDark, "mobile-dark"]]) {
     await step(`${who.name} with remembered devices and no gesture is offered the lobby`, async () => {
       await who.page.goto(link);
-      const input = who.page.getByLabel("Your name", { exact: true });
-      await input.waitFor({ timeout: 15_000 });
-      if ((await input.inputValue()) !== who.name) throw new Error(`remembered name was not filled for ${who.name}`);
-      await who.page.getByRole("button", { name: "Join call", exact: true }).waitFor({ timeout: 15_000 });
-      if (await who.page.getByRole("button", { name: `Video tile for ${who.name}`, exact: true }).isVisible().catch(() => false)) throw new Error(`${who.name} auto-joined despite blocked autoplay`);
+      await who.page.waitForSelector("#join-display-name", { timeout: 15_000 });
+      const evidence = await noGesture(who.page, lobbyEvidence);
+      if (evidence.input !== who.name) throw new Error(`remembered name was not filled for ${who.name}: ${evidence.input}`);
+      if (!evidence.joining) throw new Error(`${who.name} did not get the Join call lobby`);
+      if (evidence.tile) throw new Error(`${who.name} auto-joined despite blocked autoplay`);
+      if (evidence.active) throw new Error(`${who.name} already had browser activation before Join`);
+      who.joinPoint = evidence;
       await shot(who, `lobby-${label}`);
     });
   }
 
   await step("one Join click enters the strict guest and makes the host audible with no fallback toast", async () => {
-    await strict.page.getByRole("button", { name: "Join call", exact: true }).click();
+    await strict.page.mouse.click(strict.joinPoint.x, strict.joinPoint.y);
     await strict.page.getByRole("button", { name: `Video tile for ${strict.name}`, exact: true }).waitFor({ timeout: 60_000 });
     const deadline = Date.now() + waitMs;
     let level = 0;
@@ -61,7 +79,7 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
   });
 
   await step("the second strict visitor can join through the same lobby", async () => {
-    await strictMobile.page.getByRole("button", { name: "Join call", exact: true }).click();
+    await strictMobile.page.touchscreen.tap(strictMobile.joinPoint.x, strictMobile.joinPoint.y);
     await strictMobile.page.getByRole("button", { name: `Video tile for ${strictMobile.name}`, exact: true }).waitFor({ timeout: 60_000 });
   });
 });
