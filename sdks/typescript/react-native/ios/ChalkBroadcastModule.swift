@@ -82,10 +82,8 @@ final class ChalkBroadcastModule: NSObject {
         reject("NotSupportedError", "This build can't share the screen. It needs a physical device and Chalk's broadcast extension.", nil)
         return
       }
-      if pending != nil {
-        reject("InvalidStateError", "A screen share is already being started.", nil)
-        return
-      }
+      // A second Share screen tap means the first picker went away without telling us.
+      fail()
       guard let window = keyWindow() else {
         reject("InvalidStateError", "Chalk must be in the front to share the screen.", nil)
         return
