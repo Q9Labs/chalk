@@ -1922,6 +1922,7 @@ export class SFUClient implements ClientMediaPlane {
       },
       CONNECTION_TIMEOUT_MS,
       "Timed out waiting for the Chalk SFU peer connection",
+      "ice_connection_failed",
     );
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {

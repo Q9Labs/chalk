@@ -14,6 +14,7 @@ export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
 node_table() { jq -r "$@" "$sfu_table"; }
 control_port="$(node_table .ports.control)"
 media_port="$(node_table .ports.media)"
+media_tcp_port="$(node_table .ports.mediaTcp)"
 udp_buffer="$(node_table .udpBufferBytes)"
 
 # SFU_FROM_CI is set by a release, which has no 1Password, doctl or person to trust a new host key.

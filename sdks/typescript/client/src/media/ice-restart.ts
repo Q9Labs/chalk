@@ -123,6 +123,7 @@ export class IceRestartController {
       },
       ICE_RESTART_BUDGET_MS,
       "The ICE restart did not reconnect in time",
+      "ice_connection_failed",
     );
   }
   async #exchangeOffer(connection: RTCPeerConnection, owner: IceRestartOwner, origin: TransportOffer, current: () => boolean): Promise<void> {

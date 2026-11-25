@@ -124,14 +124,28 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	media := newMediaConn(conn)
 	mux := webrtc.NewICEUDPMux(nil, media)
 	var tcpMux ice.TCPMux
-	if cfg.TCPAddr != "" {
-		listener, err := net.Listen("tcp4", cfg.TCPAddr)
-		if err != nil {
-			_ = mux.Close()
-			_ = conn.Close()
-			return nil, fmt.Errorf("listen on TCP %q: %w", cfg.TCPAddr, err)
+	if len(cfg.TCPAddrs) > 0 {
+		muxes := make([]ice.TCPMux, 0, len(cfg.TCPAddrs))
+		closeMuxes := func() {
+			for _, started := range muxes {
+				_ = started.Close()
+			}
 		}
-		tcpMux = webrtc.NewICETCPMux(nil, listener, iceTCPReadBuffer)
+		for _, address := range cfg.TCPAddrs {
+			listener, err := net.Listen("tcp4", address)
+			if err != nil {
+				closeMuxes()
+				_ = mux.Close()
+				_ = conn.Close()
+				return nil, fmt.Errorf("listen on TCP %q: %w", address, err)
+			}
+			muxes = append(muxes, webrtc.NewICETCPMux(nil, listener, iceTCPReadBuffer))
+		}
+		if len(muxes) == 1 {
+			tcpMux = muxes[0]
+		} else {
+			tcpMux = ice.NewMultiTCPMuxDefault(muxes...)
+		}
 	}
 	peers, err := newPeerFactory(cfg, mux, tcpMux)
 	if err != nil {

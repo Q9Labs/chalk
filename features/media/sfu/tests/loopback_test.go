@@ -268,6 +268,11 @@ func (p *publication) stop() { p.stopSending(); p.senders.Wait() }
 // sending known RTP on both, as the SDK does.
 func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope, configure ...func(*webrtc.SettingEngine)) *publication {
 	t.Helper()
+	return publishKnownMediaWithAnswer(t, svc, conn, scope, nil, configure...)
+}
+
+func publishKnownMediaWithAnswer(t *testing.T, svc *service, conn string, scope protocol.Scope, answerSDP func(string) string, configure ...func(*webrtc.SettingEngine)) *publication {
+	t.Helper()
 	alice := newPeer(t, configure...)
 	audio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "mic", scope.ParticipantID)
 	if err != nil {
@@ -301,7 +306,11 @@ func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.S
 	if pushed.SessionDescription == nil || pushed.SessionDescription.Type != "answer" || len(pushed.Tracks) != 2 || len(pushed.TrackErrors) != 0 {
 		t.Fatalf("push response: %+v", pushed)
 	}
-	if err := alice.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
+	sdp := pushed.SessionDescription.SDP
+	if answerSDP != nil {
+		sdp = answerSDP(sdp)
+	}
+	if err := alice.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: sdp}); err != nil {
 		t.Fatal(err)
 	}
 

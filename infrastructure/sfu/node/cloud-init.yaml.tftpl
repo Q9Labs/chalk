@@ -15,6 +15,9 @@ write_files:
       # The pacers send in bursts; a full send buffer drops outgoing media.
       net.core.wmem_max = ${udp_buffer}
       net.core.wmem_default = ${udp_buffer}
+      # ICE-TCP listens on 443 from the rootless container. This opens only 443 in addition
+      # to the already-unprivileged high ports; ports below 443 stay privileged.
+      net.ipv4.ip_unprivileged_port_start = 443
   - path: /etc/ssh/sshd_config.d/90-chalk-sfu.conf
     content: |
       PasswordAuthentication no
@@ -29,6 +32,7 @@ runcmd:
   - ufw default allow outgoing
   - ufw allow ${media_port}/udp
   - ufw allow ${media_port}/tcp
+  - ufw allow ${media_tcp_port}/tcp
 %{ for address in control_addresses ~}
   - ufw allow proto tcp from ${address} to any port ${control_port}
 %{ endfor ~}

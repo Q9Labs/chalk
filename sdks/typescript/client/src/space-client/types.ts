@@ -85,6 +85,8 @@ export type ClientFailure = {
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
   /** Set when Chalk's own media signalling answered with a refusal (HTTP 4xx): the failure is ours, not the person's network. */
   readonly mediaHttpStatus?: number;
+  /** Set when media startup timed out or failed while ICE was connecting. */
+  readonly mediaIceFailure?: true;
   /** Set when a chat file upload failed: where it broke, and the storage HTTP status when storage answered. */
   readonly uploadFailure?: { readonly kind: import("../chat-files/types").ChatUploadFailureKind; readonly httpStatus?: number };
 };

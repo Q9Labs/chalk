@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
-import { ConnectionLifecycleFailure, mediaRefusalField } from "../connection/lifecycle-failure";
+import { ConnectionLifecycleFailure, mediaIceFailureField, mediaRefusalField } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
@@ -93,6 +93,7 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
     ...(permissionBlock ? { permissionBlock } : {}),
     ...(cause.sync ? { sync: cause.sync } : {}),
     ...(cause instanceof ConnectionLifecycleFailure ? mediaRefusalField(cause.cause) : {}),
+    ...(cause instanceof ConnectionLifecycleFailure ? mediaIceFailureField(cause.cause) : {}),
   });
 }
 
@@ -129,6 +130,7 @@ export function failureFromError(error: SpaceClientError): ClientFailure {
     ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}),
     ...(error.sync ? { sync: error.sync } : {}),
     ...(error.mediaHttpStatus === undefined ? {} : { mediaHttpStatus: error.mediaHttpStatus }),
+    ...(error.mediaIceFailure ? { mediaIceFailure: true } : {}),
     ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}),
   });
 }

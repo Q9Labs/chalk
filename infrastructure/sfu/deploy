@@ -93,7 +93,7 @@ else
   # another way (host bits set, a /32) is not taken for a new source and its
   # existing rule removed. New rules go in before stale ones come out, so this SSH
   # session stays allowed.
-  remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
+  remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port} ${media_tcp_port}" <<'RECONCILE'
 set -euo pipefail
 python3 - "$1" "$2" <<'PY'
 import base64, ipaddress, re, subprocess, sys
@@ -126,9 +126,10 @@ for key in sorted(have.keys() - want):
         ufw("delete", *existing.split())
         print("host firewall: removed", existing)
 PY
-# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
-# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
+# Media over TCP listens on the UDP port number and on 443. First boot opened only UDP, so a node
+# made before ICE-TCP gets its TCP rules here; ufw skips a rule that exists.
 ufw allow "$3"/tcp > /dev/null
+ufw allow "$4"/tcp > /dev/null
 RECONCILE
 fi
 [[ "$mode" == --firewall-only ]] && exit 0
@@ -139,7 +140,7 @@ otlp_files=(otlp-headers otlp-log-headers)
 sfu_check_otlp_tokens "$dir" "${otlp_files[@]}"
 
 # A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
-remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
+remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\nnet.ipv4.ip_unprivileged_port_start = 443\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
 
 # The node's size picks its settings from the SFU's node table (packet budget, steal limit, memory),
 # and the node reads the budget and steal limit itself from SFU_NODE_SIZE and SFU_ENVIRONMENT.
@@ -202,7 +203,7 @@ if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
   exit 2
 fi
 {
-  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__MEDIA_TCP_PORT__|${media_tcp_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
     -e "s|__UDP_BUFFER__|${udp_buffer}|" -e "s|__NODE_SIZE__|${node_size}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
     -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
     "${node_dir}/sfu.env.in"

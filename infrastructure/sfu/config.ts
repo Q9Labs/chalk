@@ -14,7 +14,7 @@ const schema = Schema.Struct({
   ssh_addresses: Schema.optional(Schema.Array(Schema.String)),
 });
 const size = Schema.Struct({ vcpus: Schema.Number, packetBudget: Schema.Number, goMemLimit: Schema.String, containerMemory: Schema.String, capture: Schema.Struct({ memory: Schema.String, goMemLimit: Schema.String, cpus: Schema.String }) });
-const table = Schema.Struct({ ports: Schema.Struct({ control: Schema.Number, media: Schema.Number }), udpBufferBytes: Schema.Number, sizes: Schema.Record(Schema.String, size) });
+const table = Schema.Struct({ ports: Schema.Struct({ control: Schema.Number, media: Schema.Number, mediaTcp: Schema.Number }), udpBufferBytes: Schema.Number, sizes: Schema.Record(Schema.String, size) });
 export const nodeTable = Schema.decodeUnknownSync(Schema.fromJsonString(table))(await readFile(new URL("../../features/media/sfu/internal/config/node.json", import.meta.url), "utf8"));
 
 export const cidr = (value: string): boolean => {
@@ -46,7 +46,8 @@ export const renderCloudInit = async (config: Pick<SfuConfig, "control_addresses
     .replace(/%\{ for address in (control_addresses|ssh_addresses) ~\}\n([\s\S]*?)%\{ endfor ~\}\n/g, (_match: string, list: string, body: string) => (list === "control_addresses" ? config.control_addresses : config.ssh_addresses).map((address) => body.replaceAll("${address}", address)).join(""))
     .replaceAll("${udp_buffer}", String(nodeTable.udpBufferBytes))
     .replaceAll("${control_port}", String(nodeTable.ports.control))
-    .replaceAll("${media_port}", String(nodeTable.ports.media));
+    .replaceAll("${media_port}", String(nodeTable.ports.media))
+    .replaceAll("${media_tcp_port}", String(nodeTable.ports.mediaTcp));
 };
 
 export const firewallConfig = (config: Pick<SfuConfig, "control_addresses" | "ssh_addresses">, name: string, dropletId: number): DigitalOcean.FirewallProps => {
@@ -58,6 +59,7 @@ export const firewallConfig = (config: Pick<SfuConfig, "control_addresses" | "ss
     inboundRules: [
       { protocol: "udp", ports: port(nodeTable.ports.media), addresses: all },
       { protocol: "tcp", ports: port(nodeTable.ports.media), addresses: all },
+      { protocol: "tcp", ports: port(nodeTable.ports.mediaTcp), addresses: all },
       { protocol: "tcp", ports: port(nodeTable.ports.control), addresses: [...config.control_addresses] },
       { protocol: "tcp", ports: "22", addresses: [...config.ssh_addresses] },
       { protocol: "icmp", ports: "0", addresses: all },

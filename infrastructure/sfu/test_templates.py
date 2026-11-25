@@ -20,7 +20,7 @@ class CloudInitParity(unittest.TestCase):
                 config = {'environment': 'staging', 'control_addresses': control, 'ssh_addresses': ssh}
                 path = Path(directory, 'config.json')
                 path.write_text(json.dumps(config))
-                values = {'control_addresses': control, 'ssh_addresses': ssh, 'control_port': TABLE['ports']['control'], 'media_port': TABLE['ports']['media'], 'udp_buffer': TABLE['udpBufferBytes']}
+                values = {'control_addresses': control, 'ssh_addresses': ssh, 'control_port': TABLE['ports']['control'], 'media_port': TABLE['ports']['media'], 'media_tcp_port': TABLE['ports']['mediaTcp'], 'udp_buffer': TABLE['udpBufferBytes']}
                 expression = 'jsonencode(templatefile(' + json.dumps(str(INFRA / 'node/cloud-init.yaml.tftpl')) + ', ' + json.dumps(values) + '))'
                 original = subprocess.check_output(['tofu', '-chdir=' + directory, 'console', '-no-color'], input=expression.encode())
                 expected = json.loads(json.loads(original))
@@ -67,6 +67,7 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual(rendered.count(str(EIGHT_MIB)), 4, 'the receive and send buffers, each with a max and a default')
         self.assertEqual(TABLE['udpBufferBytes'], EIGHT_MIB)
         self.assertIn(f"ufw allow {TABLE['ports']['media']}/udp", rendered)
+        self.assertIn(f"ufw allow {TABLE['ports']['mediaTcp']}/tcp", rendered)
         self.assertIn(f"ufw allow proto tcp from 203.0.113.5/32 to any port {TABLE['ports']['control']}", rendered)
         self.assertIn('ufw allow proto tcp from 198.51.100.7/32 to any port 22', rendered)
 
@@ -115,7 +116,7 @@ class DeployBranchesTest(DeployHarness):
         env_file = installed['.config/chalk-sfu/sfu.env']
         self.assertEqual(env_file.count(f'={EIGHT_MIB}'), 2, env_file)
         self.assertIn(f'net.core.wmem_max = {EIGHT_MIB}', self.read('ssh-calls'))
-        self.assertIn(f"SFU_TCP_ADDR=:{TABLE['ports']['media']}", env_file)
+        self.assertIn(f"SFU_TCP_ADDRS=:{TABLE['ports']['media']},:{TABLE['ports']['mediaTcp']}", env_file)
         self.assertNotIn('__', env_file)
         self.assertIn(f"{TABLE['ports']['control']} {TABLE['ports']['media']}", self.read('ssh-calls'))
         self.assertEqual('SFU_PACKET_BUDGET=1000' in env_file, environment == 'bench')

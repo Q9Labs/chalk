@@ -21,3 +21,8 @@ export function mediaRefusalField(cause: unknown): { readonly mediaHttpStatus?: 
   const { status, retryableConnection } = cause.options;
   return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 403 && !retryableConnection ? { mediaHttpStatus: status } : {};
 }
+
+/** Whether media startup timed out or failed in ICE, as a failure field. The failure detail uses it to tell a network block from a media-signalling fault. */
+export function mediaIceFailureField(cause: unknown): { readonly mediaIceFailure?: true } {
+  return cause instanceof SFUError && cause.code === "ice_connection_failed" ? { mediaIceFailure: true } : {};
+}
