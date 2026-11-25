@@ -9,7 +9,7 @@ Use `createChalkServerClient` from `@q9labsai/chalk-client/server` on your backe
 Create an endpoint with a Tenant-scoped API key carrying `webhooks:write`. Supply a fresh idempotency key for each new mutation and reuse it when retrying that same request:
 
 ```ts
-const endpoint = await client.webhookEndpoints.create(
+const endpoint = await chalk.webhookEndpoints.create(
   {
     apiVersion: 1,
     enabled: true,
