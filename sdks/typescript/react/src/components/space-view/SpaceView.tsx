@@ -5,7 +5,7 @@ import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDevic
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
@@ -169,11 +169,6 @@ export function SpaceView({
   const mediaRequest = media.incomingRequests[0];
   const offline = useOffline();
   const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
-  const [audioPlaybackNoticeDismissed, setAudioPlaybackNoticeDismissed] = useState(false);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Reset manual dismissal only when playback evidence leaves the blocked state.
-  useEffect(() => {
-    if (!media.audioPlayback.blocked) setAudioPlaybackNoticeDismissed(false);
-  }, [media.audioPlayback.blocked]);
   const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
@@ -303,7 +298,7 @@ export function SpaceView({
     ...(connectionPhase.kind === "reconnected" ? [reconnectedToast(connectionPhase.awayMs)] : []),
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
     ...microphoneNotice.toasts,
-    ...(media.audioPlayback.blocked && !audioPlaybackNoticeDismissed ? [{ id: "audio-playback-blocked", duration: Infinity, message: "Your browser paused the sound. Click anywhere to hear the class." }] : []),
+    ...(media.audioPlayback.blocked ? [{ id: "audio-playback-blocked", duration: Infinity, dismissible: false, message: "Your browser paused the sound. Click anywhere to hear the class." }] : []),
   ];
   const dismissToast = (id: string) => {
     if (id.startsWith("time-limit-")) dismissLimitWarning();
@@ -311,7 +306,6 @@ export function SpaceView({
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
     else if (id === microphoneNotice.id) microphoneNotice.dismiss();
     else if (id === mediaNotice.id) mediaNotice.dismiss();
-    else if (id === "audio-playback-blocked") setAudioPlaybackNoticeDismissed(true);
     else if (id.startsWith("board-")) dismissBoardToast(id);
     else callToasts.dismiss(id);
   };

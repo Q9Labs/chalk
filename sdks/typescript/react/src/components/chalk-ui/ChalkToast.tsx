@@ -9,12 +9,14 @@ export interface ChalkToastProps {
   readonly icon?: ReactNode;
   readonly type?: "info" | "success" | "warning" | "error";
   readonly duration?: number;
+  /** Infinite notices normally offer manual dismissal; state-derived notices can instead leave only when their state clears. */
+  readonly dismissible?: boolean;
   readonly action?: { readonly label: string; readonly onClick: () => void };
   /** Enables live announcements. Pass false for an already-announced notice; a replacement message can enable the same mounted toast later. */
   readonly announce?: boolean;
   readonly onDismiss: () => void;
 }
-export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
+export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, dismissible = true, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const identity = noticeIdentity({ message, announcementText, announcementKey, type });
@@ -44,7 +46,7 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
           {action.label}
         </button>
       ) : null}
-      {duration === Infinity ? (
+      {duration === Infinity && dismissible ? (
         <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setLifetime({ identity, exiting: true })}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
