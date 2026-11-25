@@ -34,6 +34,7 @@ export type ParticipantTileProps = {
 
 type TileModel = {
   readonly name: string;
+  readonly agent: boolean;
   readonly isSelf: boolean;
   readonly muted: boolean;
   readonly handRaised: boolean;
@@ -53,6 +54,7 @@ function selectTile(id: string) {
     const track = isSelf ? (local.camera.state === "enabled" ? local.camera.track : null) : participant?.media.camera === "active" ? (remote.find((media) => media.participantId === id && media.source === "camera")?.track ?? null) : null;
     return {
       name: participant?.displayName ?? snapshot.self.displayName ?? "",
+      agent: participant?.identityKind === "agent",
       isSelf,
       muted: isSelf ? local.microphone.state !== "enabled" : participant?.media.microphone !== "active",
       handRaised: isSelf ? snapshot.self.handRaised : (participant?.handRaised ?? false),
@@ -95,7 +97,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
+      <NameTag agent={tile.agent} following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );

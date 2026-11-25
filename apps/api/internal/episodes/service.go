@@ -20,6 +20,7 @@ var (
 	ErrInvalidParticipantGeneration       = errors.New("invalid episode participant generation")
 	ErrInvalidParticipantName             = errors.New("invalid episode participant name")
 	ErrInvalidIdentityMode                = errors.New("invalid episode participant identity mode")
+	ErrIdentityKindConflict               = errors.New("episode participant identity kind conflicts with the registered identity")
 	ErrInvalidAdmissionPolicy             = errors.New("invalid episode admission policy")
 	ErrInvalidRole                        = errors.New("invalid episode participant role")
 	ErrInvalidRoleCapabilities            = errors.New("invalid episode role capabilities")
@@ -233,9 +234,14 @@ func (r Request) Payload() json.RawMessage {
 
 type AdmissionMode string
 
+type IdentityKind string
+
 const (
 	AdmissionPolicy AdmissionMode = "policy"
 	AdmissionDirect AdmissionMode = "direct"
+
+	IdentityKindUser  IdentityKind = "user"
+	IdentityKindAgent IdentityKind = "agent"
 )
 
 type AdmitParticipantInput struct {
@@ -249,6 +255,7 @@ type AdmitParticipantInput struct {
 	Role               string
 	IdentityID         utilities.ID
 	IdentityExternalID string
+	IdentityKind       IdentityKind
 	Request            Request
 }
 

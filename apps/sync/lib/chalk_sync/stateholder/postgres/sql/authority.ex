@@ -26,13 +26,26 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Authority do
 
   def lock_participant do
     """
-    select generation, status, role, capabilities, identity_id
+    select
+      participants.generation,
+      participants.status,
+      participants.role,
+      participants.capabilities,
+      participants.identity_id,
+      (case
+        when identities.id is not null then identities.kind
+        when participants.account_id is not null or participants.role = 'owner' then 'user'
+        else 'guest'
+      end)::text
     from participants
+    left join identities
+      on identities.tenant_id = participants.tenant_id
+      and identities.id = participants.identity_id
     where participants.tenant_id = $1
       and participants.space_id = $2
       and participants.episode_id = $3
       and participants.id = $4
-    for update
+    for update of participants
     """
   end
 end

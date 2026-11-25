@@ -34,6 +34,7 @@ defmodule ChalkSync.Transport.Socket.State do
       entry_confirmation: Map.get(opts, :entry_confirmation, false),
       participant_self_identity: Map.get(opts, :participant_self_identity, false),
       media_off_reason: Map.get(opts, :media_off_reason, false),
+      participant_details: Map.get(opts, :participant_details, false),
       screen_annotation: Map.get(opts, :screen_annotation, false),
       screen_annotation_burn_in: Map.get(opts, :screen_annotation_burn_in, false),
       annotation: nil,

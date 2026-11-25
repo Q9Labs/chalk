@@ -40,3 +40,19 @@ it("lists the people and leaves the call-wide host controls to the call menu", (
   expect(text).not.toContain("Mute everyone");
   expect(document.querySelector("[aria-label='People']")).not.toBeNull();
 });
+
+it("marks agent participants in the people list", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const base = createSnapshot([]);
+  const agent = { ...person("agent"), identityKind: "agent" as const };
+  const client = createPreviewClient({ ...base, self: { ...base.self, participantId: "me" }, participants: { roster: [person("me"), agent], admissionQueue: [], admissionPolicy: "open" } });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() =>
+    root.render(
+      <SpaceClientContext.Provider value={client}>
+        <ParticipantsPanel />
+      </SpaceClientContext.Provider>,
+    ),
+  );
+  expect(document.querySelectorAll("[aria-label='AI participant']")).toHaveLength(1);
+});

@@ -45,7 +45,9 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
     valid_display_name?(participant.display_name) and is_boolean(participant.hand_raised) and
       valid_role?(participant.role) and
       is_integer(participant.admission_revision) and
-      participant.admission_revision > 0
+      participant.admission_revision > 0 and
+      (not Map.has_key?(participant, :identity_kind) or
+         participant.identity_kind in ["user", "agent", "guest"])
   end
 
   defp valid_admission_request_entry?({id, request}) do
@@ -58,7 +60,11 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
   def decode_participants(participants, role_capabilities) do
     Enum.reduce_while(participants, {:ok, %{}}, fn encoded, {:ok, result} ->
       with true <- is_map(encoded),
-           :ok <- exact_keys(encoded, participant_keys()),
+           :ok <-
+             exact_keys(encoded, participant_keys() ++ present_keys(encoded, ["identity_kind"])),
+           true <-
+             is_nil(encoded["identity_kind"]) or
+               encoded["identity_kind"] in ["user", "agent", "guest"],
            participant_id when is_binary(participant_id) <- encoded["participant_id"],
            display_name when is_binary(display_name) <- encoded["display_name"],
            true <- valid_display_name?(display_name),
@@ -71,12 +77,16 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
            admission_revision when is_integer(admission_revision) and admission_revision > 0 <-
              encoded["admission_revision"],
            false <- Map.has_key?(result, participant_id) do
-        participant = %{
-          display_name: display_name,
-          hand_raised: hand_raised,
-          role: role,
-          admission_revision: admission_revision
-        }
+        participant =
+          %{
+            display_name: display_name,
+            hand_raised: hand_raised,
+            role: role,
+            admission_revision: admission_revision,
+            identity_kind: encoded["identity_kind"]
+          }
+          |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+          |> Map.new()
 
         {:cont, {:ok, Map.put(result, participant_id, participant)}}
       else
@@ -170,6 +180,8 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
         Enum.all?(values, &(&1 in @capabilities))
 
   defp valid_capabilities?(_values), do: false
+
+  def present_keys(map, keys), do: Enum.filter(keys, &Map.has_key?(map, &1))
 
   def exact_keys(map, keys),
     do:

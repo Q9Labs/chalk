@@ -7,6 +7,7 @@ import { useSpaceClient } from "../../context/space-client-context";
 import { Icon } from "../../icons/Icon";
 import { usePressAnimation } from "../../motion/press";
 import { useCan, useParticipants, useSelf } from "../../hooks/space-hooks";
+import { AIBadge } from "../../primitives/AIBadge";
 import { ChalkText } from "../../primitives/ChalkText";
 import { IconButton } from "../../primitives/IconButton";
 import { Menu, MenuItem } from "../../primitives/Menu";
@@ -192,6 +193,7 @@ const HandRow = memo(function HandRow({ participant, order, isSelf }: { readonly
           </ChalkText>
         ) : null}
       </ChalkText>
+      {participant.identityKind === "agent" ? <AIBadge testID={`people.hand.ai.${participant.participantId}`} /> : null}
     </View>
   );
 });
@@ -254,6 +256,7 @@ const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, can
           </ChalkText>
         ) : null}
       </ChalkText>
+      {participant.identityKind === "agent" ? <AIBadge testID={`people.ai.${participant.participantId}`} /> : null}
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />

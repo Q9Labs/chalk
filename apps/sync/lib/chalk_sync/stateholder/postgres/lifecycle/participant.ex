@@ -75,8 +75,14 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
     params = Scope.episode(episode) ++ [Scope.uuid(intent.participant_id)]
 
     case Postgrex.query!(connection, AuthoritySQL.lock_participant(), params).rows do
-      [[generation, status, role, capabilities, _identity_id]] ->
-        %{generation: generation, status: status, role: role, capabilities: capabilities}
+      [[generation, status, role, capabilities, _identity_id, identity_kind]] ->
+        %{
+          generation: generation,
+          status: status,
+          role: role,
+          capabilities: capabilities,
+          identity_kind: identity_kind
+        }
 
       [] ->
         Postgrex.rollback(connection, {:error, :participant_not_found})
@@ -158,6 +164,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
     payload
     |> Map.put("role", participant.role)
     |> Map.put("admission_revision", state.revision + 1)
+    |> Map.put("identity_kind", participant.identity_kind)
   end
 
   def lifecycle_payload(intent, _participant, _state), do: intent.payload

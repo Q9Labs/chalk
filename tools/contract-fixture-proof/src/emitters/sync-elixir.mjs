@@ -276,7 +276,7 @@ function renderElixir(contract) {
     "  defp valid_snapshot?(_snapshot), do: false",
     "",
     '  defp valid_participant?(%{"participant_id" => id, "display_name" => name, "hand_raised" => raised, "admission_revision" => admission_revision, "role" => role, "capabilities" => capabilities} = participant, role_capabilities) do',
-    '    exact_keys?(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"]) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role)',
+    '    exact_keys?(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"] ++ Enum.filter(["identity_kind"], &Map.has_key?(participant, &1))) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role) and (not Map.has_key?(participant, "identity_kind") or participant["identity_kind"] in ["user", "agent", "guest"])',
     "  end",
     "  defp valid_participant?(_participant, _role_capabilities), do: false",
     "",
@@ -463,10 +463,16 @@ function renderElixirOperationPayloads(operations) {
 function renderElixirEventPayloads(events) {
   return events.flatMap((event) => {
     const fields = Object.entries(event.payload).map(([name, field]) => [snakeCase(name), field]);
-    const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
-    const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
-    return [`  defp valid_event_payload?(${JSON.stringify(event.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
+    const required = fields.filter(([, field]) => !field.optional);
+    const optional = fields.filter(([, field]) => field.optional);
+    const pattern = required.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
+    const requiredKeys = required.map(([name]) => name);
+    const optionalKeys = optional.map(([name]) => name);
+    const keysExpression = optionalKeys.length === 0 ? renderElixirValue(requiredKeys) : `${renderElixirValue(requiredKeys)} ++ Enum.filter(${renderElixirValue(optionalKeys)}, &Map.has_key?(payload, &1))`;
+    const requiredChecks = required.map(([name, field]) => renderElixirFieldCheck(field, name));
+    const optionalChecks = optional.map(([name, field]) => `(not Map.has_key?(payload, ${JSON.stringify(name)}) or ${renderElixirFieldCheck(field, `payload[${JSON.stringify(name)}]`)})`);
+    const checks = [...requiredChecks, ...optionalChecks].join(" and ");
+    return [`  defp valid_event_payload?(${JSON.stringify(event.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${keysExpression}) and ${checks}`, "  end", ""];
   });
 }
 

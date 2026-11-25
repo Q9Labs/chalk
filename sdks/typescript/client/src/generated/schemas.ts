@@ -126,6 +126,7 @@ export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
     admission: Schema.optional(Schema.Literals(["policy", "direct"])),
     identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
     identity_id: Schema.optional(UUIDSchema),
+    identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.String.check(Schema.isMinLength(1)),
     participant_id: Schema.optional(ParticipantIdSchema),
@@ -4853,6 +4854,25 @@ export const EpisodeNotFoundErrorSchema = EpisodeNotFoundErrorWireSchema.pipe(
   }),
 );
 
+export class IdentityKindConflictError extends Schema.TaggedErrorClass<IdentityKindConflictError>()("IdentityKindConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindConflictErrorSchema = IdentityKindConflictErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class McpOauthConnectionNotFoundError extends Schema.TaggedErrorClass<McpOauthConnectionNotFoundError>()("McpOauthConnectionNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("mcp_oauth.connection_not_found"),
@@ -6855,6 +6875,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
+  IdentityKindConflictErrorSchema,
   MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,

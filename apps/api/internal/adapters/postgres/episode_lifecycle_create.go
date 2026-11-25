@@ -190,12 +190,15 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 				return fmt.Errorf("allocate admission identity: %w", err)
 			}
 			identity, err := queries.ResolveAdmissionIdentity(ctx, sqlc.ResolveAdmissionIdentityParams{
-				ID: uuid(identityID), TenantID: uuid(input.TenantID), ExternalID: input.IdentityExternalID, DisplayName: input.Name,
+				ID: uuid(identityID), TenantID: uuid(input.TenantID), Kind: string(input.IdentityKind), ExternalID: input.IdentityExternalID, DisplayName: input.Name,
 			})
 			if err != nil {
 				return fmt.Errorf("resolve admission identity: %w", err)
 			}
-			input.IdentityID = utilities.IDFromBytes(identity.Bytes)
+			if identity.Kind != string(input.IdentityKind) {
+				return episodes.ErrIdentityKindConflict
+			}
+			input.IdentityID = utilities.IDFromBytes(identity.ID.Bytes)
 		}
 		payload := input.Request.Payload()
 		if input.Admission != episodes.AdmissionDirect {

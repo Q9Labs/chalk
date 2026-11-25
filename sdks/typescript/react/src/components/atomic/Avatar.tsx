@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Facehash } from "@q9labsai/facehash/react";
+import { AIBadge } from "./AIBadge";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe } from "../../utils/colorGenerator";
 import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -13,6 +14,8 @@ export interface AvatarProps {
   style?: React.CSSProperties;
   gradientPreference?: ParticipantGradientPreference;
   generated?: boolean;
+  /** Mark this person as an admitted AI participant in compact avatar stacks. */
+  showAIBadge?: boolean;
   /** Disable autonomous avatar motion for deterministic presentation captures. */
   animated?: boolean;
   /** Stable identity for deterministic Chalk chrome across projection seeks. */
@@ -47,7 +50,7 @@ const statusColorMap = {
   offline: "var(--chalk-muted-text)",
 };
 
-export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true, animated = true }: AvatarProps) => {
+export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true, showAIBadge = false, animated = true }: AvatarProps) => {
   const [image, setImage] = useState({ src, name, generated, failed: false });
   if (image.src !== src || image.name !== name || image.generated !== generated) setImage({ src, name, generated, failed: false });
   const hasUploadedImage = Boolean(src) && !image.failed;
@@ -69,6 +72,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
           {avatarRecipe.initials}
         </div>
       )}
+      {showAIBadge ? <AIBadge className="absolute -bottom-1 -right-1 ring-2 ring-[var(--chalk-surface)]" /> : null}
       {status && (
         <span
           className="absolute bottom-0 right-0 block rounded-full ring-2 ring-[var(--chalk-surface)]"

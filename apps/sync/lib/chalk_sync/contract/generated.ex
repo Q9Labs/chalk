@@ -1013,7 +1013,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
-    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
+    flags = Enum.filter(["entry_confirmation","participant_details","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
         &Map.has_key?(frame, &1))
     base = base ++ flags
     valid_flags = Enum.all?(flags, &(frame[&1] == true))
@@ -1092,10 +1092,12 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       "hand_raised" => raised, "admission_revision" => admission_revision, "role" => role,
       "capabilities" => capabilities} = participant, role_capabilities) do
     exact_keys?(participant, ["participant_id", "display_name", "hand_raised",
-        "admission_revision", "role", "capabilities"]) and valid_uuid?(id) and
-        bounded_string?(name, 1, 256) and is_boolean(raised) and
-        valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and
-        capabilities == Map.get(role_capabilities, role)
+        "admission_revision", "role", "capabilities"] ++ Enum.filter(["identity_kind"],
+        &Map.has_key?(participant, &1))) and valid_uuid?(id) and bounded_string?(name, 1,
+        256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and
+        bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role) and
+        (not Map.has_key?(participant, "identity_kind") or
+        participant["identity_kind"] in ["user", "agent", "guest"])
   end
   defp valid_participant?(_participant, _role_capabilities), do: false
 
@@ -1166,9 +1168,16 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "display_name",
   "role",
   "admission_revision"
-]) and valid_uuid?(participant_id) and bounded_string?(display_name, 1, 256) and
-    bounded_string?(role, 1, 64) and role != "" and role == String.trim(role) and
-    valid_positive_integer?(admission_revision)
+] ++ Enum.filter([
+  "identity_kind"
+], &Map.has_key?(payload, &1))) and valid_uuid?(participant_id) and bounded_string?(display_name,
+    1, 256) and bounded_string?(role, 1, 64) and role != "" and role == String.trim(role) and
+    valid_positive_integer?(admission_revision) and (not Map.has_key?(payload,
+    "identity_kind") or payload["identity_kind"] in [
+  "user",
+  "agent",
+  "guest"
+])
   end
 
   defp valid_event_payload?("participant_left", %{"participant_id" => participant_id,

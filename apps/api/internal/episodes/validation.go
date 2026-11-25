@@ -100,6 +100,15 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	if input.IdentityExternalID != "" && (!input.IdentityID.IsZero() || !utf8.ValidString(input.IdentityExternalID) || len(input.IdentityExternalID) > 256 || strings.TrimSpace(input.IdentityExternalID) != input.IdentityExternalID) {
 		return ErrInvalidIdentityMode
 	}
+	if input.IdentityKind == "" {
+		input.IdentityKind = IdentityKindUser
+	}
+	if input.IdentityKind != IdentityKindUser && input.IdentityKind != IdentityKindAgent {
+		return ErrInvalidIdentityMode
+	}
+	if input.IdentityKind == IdentityKindAgent && input.IdentityExternalID == "" {
+		return ErrInvalidIdentityMode
+	}
 
 	role, err := utilities.RequiredString(input.Role)
 	if err != nil || !utf8.ValidString(role) || len(role) > 128 {
@@ -122,6 +131,11 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	if fingerprintAdmission == AdmissionPolicy {
 		fingerprintAdmission = ""
 	}
+	// Keep user admissions compatible with fingerprints written before the kind existed.
+	fingerprintIdentityKind := input.IdentityKind
+	if fingerprintIdentityKind == IdentityKindUser {
+		fingerprintIdentityKind = ""
+	}
 	input.Request.Fingerprint = lifecycleFingerprint(struct {
 		Admission          AdmissionMode   `json:"admission,omitempty"`
 		TenantID           string          `json:"tenant_id"`
@@ -134,12 +148,13 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		Role               string          `json:"role"`
 		IdentityID         string          `json:"identity_id"`
 		IdentityExternalID string          `json:"identity_external_id,omitempty"`
+		IdentityKind       IdentityKind    `json:"identity_kind,omitempty"`
 		Payload            json.RawMessage `json:"payload"`
 	}{
 		Admission: fingerprintAdmission,
 		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
 		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name,
-		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), IdentityExternalID: input.IdentityExternalID, Payload: payload,
+		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), IdentityExternalID: input.IdentityExternalID, IdentityKind: fingerprintIdentityKind, Payload: payload,
 	})
 	return nil
 }

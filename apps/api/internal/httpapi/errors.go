@@ -58,6 +58,7 @@ var (
 	apiErrorParticipantNotActive          = APIError{Status: http.StatusConflict, Code: "participant.not_active", Message: "Participant is not active"}
 	apiErrorParticipantGenerationMismatch = APIError{Status: http.StatusConflict, Code: "participant.generation_mismatch", Message: "Participant generation does not match"}
 	apiErrorIdempotencyConflict           = APIError{Status: http.StatusConflict, Code: "request.idempotency_conflict", Message: "Idempotency key was already used for another request"}
+	apiErrorIdentityKindConflict          = APIError{Status: http.StatusConflict, Code: "identity.kind_conflict", Message: "Identity kind conflicts with the registered identity"}
 	apiErrorEpisodeCapacityExceeded       = APIError{Status: http.StatusConflict, Code: "episode.capacity_exceeded", Message: "Episode capacity is exhausted"}
 	apiErrorMediaPlaneUnavailable         = APIError{Status: http.StatusServiceUnavailable, Code: "media.unavailable", Message: "Media plane is unavailable"}
 	apiErrorMediaClientUnsupported        = APIError{Status: http.StatusConflict, Code: "media.client_unsupported", Message: "This call needs a newer version of Chalk. Update the app and try again."}

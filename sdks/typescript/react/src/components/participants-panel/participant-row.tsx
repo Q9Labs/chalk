@@ -5,7 +5,7 @@ import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { Crown01Icon } from "../../utils/icons";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { preloadable } from "../../internal/preloadable";
-import { Avatar } from "../atomic";
+import { AIBadge, Avatar } from "../atomic";
 import { useNarrowCall } from "../../internal/call-width";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
@@ -140,6 +140,7 @@ export function ParticipantRow({
               </bdi>
             </button>
           )}
+          {participant.identityKind === "agent" && !isEditing ? <AIBadge /> : null}
           {participant.isLocal && !isEditing ? <span className="call-person-you">(You)</span> : null}
           {participant.isHost && !isEditing ? (
             <span className="call-person-host" role="img" aria-label="Host" title="Host">

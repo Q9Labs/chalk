@@ -3,10 +3,12 @@ import { StyleSheet, View } from "react-native";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
 import { fixed, fontFamilies, type, space, corners } from "../theme/tokens";
+import { AIBadge } from "./AIBadge";
 import { ChalkText } from "./ChalkText";
 
 export type NameTagProps = {
   readonly name: string;
+  readonly agent?: boolean;
   readonly muted?: boolean;
   readonly following?: boolean;
   readonly pinned?: boolean;
@@ -21,7 +23,7 @@ export type NameTagProps = {
 };
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
-export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
+export const NameTag = memo(function NameTag({ name, agent = false, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
   const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
@@ -31,6 +33,7 @@ export const NameTag = memo(function NameTag({ name, muted = false, pinned = fal
         <ChalkText color={fixed.overlayText} numberOfLines={1} style={styles.name} variant="label">
           {name}
         </ChalkText>
+        {agent ? <AIBadge /> : null}
         {following ? (
           <ChalkText color={fixed.overlayText} variant="label">
             following

@@ -1509,6 +1509,8 @@ export interface components {
       admission?: "policy" | "direct";
       identity_external_id?: string;
       identity_id?: components["schemas"]["UUID"];
+      /** @enum {string} */
+      identity_kind?: "user" | "agent";
       metadata?:
         | {
             [key: string]: unknown;

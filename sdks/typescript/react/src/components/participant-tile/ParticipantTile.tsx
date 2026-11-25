@@ -6,6 +6,7 @@ import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
+import { AIBadge } from "../atomic/AIBadge";
 import { Avatar } from "../atomic/Avatar";
 import { TileOptionsSlot, tileActions } from "./TileOptions";
 import { TileShell } from "./TileShell";
@@ -20,6 +21,7 @@ export interface ParticipantTileProps {
   participant: {
     id: string;
     displayName: string;
+    identityKind?: "user" | "agent" | "guest";
     deviceHint?: string;
     isLocal?: boolean;
     isSpeaking?: boolean;
@@ -174,6 +176,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                   <span dir="auto" data-part="tile-short-name" className="hidden h-full min-w-0 max-w-full shrink-0 truncate [unicode-bidi:plaintext]">
                     {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
                   </span>
+                  {participant.identityKind === "agent" ? <AIBadge /> : null}
                 </>
               )}
               {participant.deviceHint ? (

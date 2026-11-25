@@ -4,6 +4,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
 import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 import { timings } from "../motion/motion";
+import { AIBadge } from "../primitives/AIBadge";
 import { easings, identityColors } from "../theme/tokens";
 
 export type FaceAvatarProps = {
@@ -15,6 +16,8 @@ export type FaceAvatarProps = {
   readonly level?: SharedValue<number>;
   /** Eyes drift on their own every 1.8 s, as on the mockup's touch devices. Off for small avatars. */
   readonly lookAround?: boolean;
+  /** Mark this person as an admitted AI participant in compact avatar stacks. */
+  readonly showAIBadge?: boolean;
   readonly testID?: string;
 };
 
@@ -32,7 +35,7 @@ const CLOSED = 0.05;
  * level, and turns to the front for a moment when touched. All motion runs on the UI thread and
  * stops with reduced motion. Decorative: the parent names the person.
  */
-export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle", level, lookAround = false, testID }: FaceAvatarProps): React.JSX.Element {
+export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle", level, lookAround = false, showAIBadge = false, testID }: FaceAvatarProps): React.JSX.Element {
   const reduceMotion = useReducedMotion();
   const scene = useMemo(() => createFacehashScene({ name, colorsLength: identityColors.length, intensity3d: INTENSITY[style] }), [name, style]);
   const background = getColor(identityColors, scene.data.colorIndex);
@@ -136,12 +139,18 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
           </Animated.View>
         </Animated.View>
       </Animated.View>
+      {showAIBadge ? (
+        <View pointerEvents="none" style={styles.aiBadge}>
+          <AIBadge />
+        </View>
+      ) : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   circle: { overflow: "hidden" },
+  aiBadge: { position: "absolute", right: 0, bottom: 0 },
   // The initial sits on y = 70 with a 26-unit font, so its baseline is near y = 79.
   mouthOrigin: { transformOrigin: "50% 79%" },
 });

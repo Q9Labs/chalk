@@ -10,6 +10,7 @@ import { buildStageItems, type StageItem } from "../stage/stage-items";
 export interface Participant {
   id: string;
   displayName: string;
+  identityKind?: "user" | "agent" | "guest";
   deviceHint?: string;
   isLocal?: boolean;
   /** A different seat belonging to the local person. */

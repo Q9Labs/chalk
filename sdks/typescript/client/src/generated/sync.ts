@@ -374,6 +374,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return isObject(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
+function exactObjectWithOptional(value: unknown, requiredKeys: readonly string[], optionalKeys: readonly string[]): value is Record<string, unknown> {
+  return isObject(value) && requiredKeys.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => requiredKeys.includes(key) || optionalKeys.includes(key));
+}
 const syncCorrelationKeys = ["journey_id", "traceparent", "tracestate"] as const;
 function completeSyncCorrelation(value: unknown): boolean {
   return isObject(value) && syncCorrelationKeys.every((key) => Object.hasOwn(value, key));
@@ -409,6 +412,9 @@ function serverExactKeys(keys: readonly string[]) {
 }
 function exactKeys(keys: readonly string[]) {
   return Schema.makeFilter((value) => (exactObject(value, keys) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }));
+}
+function exactKeysWithOptional(requiredKeys: readonly string[], optionalKeys: readonly string[]) {
+  return Schema.makeFilter((value) => (exactObjectWithOptional(value, requiredKeys, optionalKeys) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }));
 }
 function uniqueStrings(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string") && new Set(value).size === value.length;
@@ -545,7 +551,7 @@ function strictSnapshot(value: unknown): boolean {
     !isObject(value.role_capabilities) ||
     (value.recording !== null && !exactObject(value.recording, ["recording_id", "status", "failure_code"])) ||
     !Array.isArray(value.participants) ||
-    !value.participants.every((participant) => exactObject(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"])) ||
+    !value.participants.every((participant) => exactObjectWithOptional(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind"])) ||
     !Array.isArray(value.admission_requests) ||
     !value.admission_requests.every((request) => exactObject(request, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]))
   )
@@ -573,39 +579,39 @@ function strictEvent(value: Record<string, unknown>): boolean {
   const common = ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"];
   switch (value.name) {
     case "participant_joined":
-      return exactObject(value.payload, ["participant_id", "display_name", "role", "admission_revision"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "display_name", "role", "admission_revision"], ["identity_kind"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "participant_left":
-      return exactObject(value.payload, ["participant_id", "reason"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "reason"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "episode_started":
-      return exactObject(value.payload, ["episode_id"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
+      return exactObjectWithOptional(value.payload, ["episode_id"], []) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "episode_ended":
-      return exactObject(value.payload, ["reason"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["reason"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "hand_raised":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "hand_lowered":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "participant_display_name_changed":
-      return exactObject(value.payload, ["participant_id", "display_name"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "display_name"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "admission_policy_changed":
-      return exactObject(value.payload, ["policy"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["policy"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "role_assigned":
-      return exactObject(value.payload, ["participant_id", "role"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "role"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "deadline_changed":
-      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["deadline_at_ms", "deadline_generation"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "admission_requested":
-      return exactObject(value.payload, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
+      return exactObjectWithOptional(value.payload, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"], []) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "admission_denied":
-      return exactObject(value.payload, ["admission_request_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["admission_request_id"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "admission_expired":
-      return exactObject(value.payload, ["admission_request_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["admission_request_id"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_microphone_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_camera_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_screen_share_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "recording_status_changed":
-      return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObjectWithOptional(value.payload, ["recording_id", "status", "failure_code"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     default:
       return false;
   }
@@ -639,7 +645,7 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
-  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "screen_annotation", "screen_annotation_burn_in"].filter((key) => Object.hasOwn(value, key));
+  const flags = ["entry_confirmation", "participant_details", "media_off_reason", "connection_quality", "screen_annotation", "screen_annotation_burn_in"].filter((key) => Object.hasOwn(value, key));
   if (flags.some((key) => value[key] !== true)) return false;
   if (value.screen_annotation_burn_in === true && value.screen_annotation !== true) return false;
   const fields = [...base, ...flags, ...(extensionValid ? ["extensions"] : []), ...["entry_generation", "participant_identity_id"].filter((key) => Object.hasOwn(value, key))];
@@ -804,12 +810,13 @@ export const ParticipantSchema = Schema.Struct({
   display_name: boundedUtf8String(256, 1),
   hand_raised: Schema.Boolean,
   admission_revision: PositiveIntegerSchema,
-  role: RoleSchema,
+  role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))),
+  identity_kind: Schema.optional(Schema.Union([Schema.Literal("user"), Schema.Literal("agent"), Schema.Literal("guest")])),
   capabilities: Schema.Array(CapabilitySchema).check(
     Schema.isMaxLength(23),
     Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique capabilities" })),
   ),
-}).check(exactKeys(["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"]));
+}).check(exactKeysWithOptional(["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"], ["identity_kind"]));
 export const AdmissionRequestSchema = Schema.Struct({ admission_request_id: UuidSchema, participant_id: UuidSchema, display_name: boundedUtf8String(256, 1), role: RoleSchema, expires_at_ms: PositiveIntegerSchema }).check(
   exactKeys(["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]),
 );
@@ -973,6 +980,7 @@ const ParticipantJoinedLifecycleIntentIdEventVariantSchema = Schema.Struct({
     participant_id: UuidSchema,
     display_name: boundedUtf8String(256, 1),
     role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))),
+    identity_kind: Schema.optional(Schema.Union([Schema.Literal("user"), Schema.Literal("agent"), Schema.Literal("guest")])),
     admission_revision: PositiveIntegerSchema,
   }),
   lifecycle_intent_id: UuidSchema,
@@ -1304,6 +1312,7 @@ const WelcomeBase = {
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  participant_details: Schema.optionalKey(Schema.Literal(true)),
   media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   connection_quality: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation: Schema.optionalKey(Schema.Literal(true)),

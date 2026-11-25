@@ -22,7 +22,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
         payload
       ) do
     with {:ok, admission} <- lock_reserved_admission_for_external(connection, episode, external),
-         true <- payload == admission_join_payload(admission, state),
+         participant = Authority.lock_participant(connection, episode, admission.participant_id),
+         true <- payload == admission_join_payload(admission, state, participant),
          {:ok, intent} <- lock_admission_join_intent(connection, episode, admission),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, :participant_joined, payload) do
@@ -94,13 +95,16 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
     end
   end
 
-  def admission_join_payload(admission, state) do
+  def admission_join_payload(admission, state, participant) do
     %{
       "participant_id" => admission.participant_id,
       "display_name" => admission.display_name,
       "role" => admission.role,
-      "admission_revision" => state.revision + 1
+      "admission_revision" => state.revision + 1,
+      "identity_kind" => participant && participant.identity_kind
     }
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
   end
 
   defp lock_admission_join_intent(connection, episode, admission) do
