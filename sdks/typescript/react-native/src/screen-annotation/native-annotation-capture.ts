@@ -2,6 +2,7 @@ import { screenAnnotationFor, type ScreenAnnotationFrameSize, type SpaceClient }
 import { mediaDevices } from "@cloudflare/react-native-webrtc";
 import { Alert, DeviceEventEmitter, NativeModules, Platform } from "react-native";
 import { captureAndroidScreen } from "../media/android-screen-capture";
+import { startIOSScreenBroadcast } from "../media/native-screen-share";
 import { releaseNativeTrack } from "../media/native-release-track";
 import { observeIOSScreenDimensions } from "./ios-screen-dimensions";
 
@@ -30,7 +31,8 @@ async function askForOverlayPermission(overlay: AndroidAnnotationOverlay): Promi
 
 export function createNativeAnnotationCapture() {
   const overlay = Platform.OS === "android" ? (NativeModules.ChalkAnnotationOverlay as AndroidAnnotationOverlay | undefined) : undefined;
-  const dimensionObservers = new WeakMap<MediaStreamTrack, () => void>();
+  /** iOS only: stops the dimension observer and frees the WebRTC stream that `getDisplayMedia` allocated around the track. */
+  const iosCleanups = new WeakMap<MediaStreamTrack, () => void>();
   const witnesses = new WeakMap<MediaStreamTrack, ScreenAnnotationFrameSize>();
   let share: MediaStreamTrack | undefined;
   let space: SpaceClient | undefined;
@@ -63,10 +65,17 @@ export function createNativeAnnotationCapture() {
         }
       }
       if (Platform.OS === "ios") {
+        await startIOSScreenBroadcast();
         const stream = await mediaDevices.getDisplayMedia();
         const nativeStream = stream as unknown as MediaStream;
         const track = nativeStream.getVideoTracks()[0];
-        if (track) dimensionObservers.set(track, observeIOSScreenDimensions(track, stream.toURL()));
+        if (track) {
+          const stopObserving = observeIOSScreenDimensions(track, stream.toURL());
+          iosCleanups.set(track, () => {
+            stopObserving();
+            stream.release(false);
+          });
+        }
         return nativeStream;
       }
       const stream = await captureAndroidScreen();
@@ -80,10 +89,10 @@ export function createNativeAnnotationCapture() {
         share = undefined;
         overlay?.stop(track.id);
       }
-      dimensionObservers.get(track)?.();
-      dimensionObservers.delete(track);
       witnesses.delete(track);
       releaseNativeTrack(track);
+      iosCleanups.get(track)?.();
+      iosCleanups.delete(track);
     },
     attach(client: SpaceClient): () => void {
       if (!overlay) return () => {};

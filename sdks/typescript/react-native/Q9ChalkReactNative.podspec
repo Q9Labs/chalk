@@ -5,7 +5,7 @@ package = JSON.parse(File.read(File.join(__dir__, "package.json")))
 Pod::Spec.new do |spec|
   spec.name = "Q9ChalkReactNative"
   spec.version = package["version"]
-  spec.summary = "Native iOS support for Chalk React Native CallKit and PiP."
+  spec.summary = "Native iOS support for Chalk React Native CallKit, PiP and screen sharing."
   spec.homepage = "https://github.com/Q9Labs/chalk"
   spec.license = package["license"] || "UNLICENSED"
   spec.authors = { "Q9Labs" => "opensource@q9labs.ai" }
@@ -18,7 +18,7 @@ Pod::Spec.new do |spec|
   }
   spec.requires_arc = true
   spec.swift_version = "5.0"
-  spec.frameworks = ["AVFoundation", "AVKit", "CallKit"]
+  spec.frameworks = ["AVFoundation", "AVKit", "CallKit", "ReplayKit"]
   spec.pod_target_xcconfig = {
     "DEFINES_MODULE" => "YES",
     "SWIFT_COMPILATION_MODE" => "wholemodule"

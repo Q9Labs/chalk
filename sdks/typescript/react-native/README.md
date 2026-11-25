@@ -68,6 +68,20 @@ export function ResumableCall({ client, resumed, saveResume, onLeave, onRejoin }
 
 Clear the stored call once you read it, so a later launch doesn't rejoin.
 
+### Screen sharing
+
+More offers Share screen to anyone allowed to publish a screen, on Android and on a physical iPhone or iPad.
+
+Android needs nothing extra: the SDK's manifest declares the MediaProjection service.
+
+iOS can only share the screen through a ReplayKit broadcast upload extension, which the app ships as a second target. The extension must do three things:
+
+1. Join an app group that the app also joins.
+2. Post the Darwin notification `<extension bundle id>.started` from `broadcastStarted`, so the call knows the broadcast began.
+3. Send each frame as JPEG over the `rtc_SSFD` socket in that group's container, in the framing `@cloudflare/react-native-webrtc` reads.
+
+Chalk's own extension (`apps/mobile/ios/ChalkScreenShare/SampleHandler.swift`) does all three and is a working reference. The app's Info.plist names both with `RTCScreenSharingExtension` (the extension's bundle id) and `RTCAppGroupIdentifier`. Without them, or on a simulator, Share screen stays hidden.
+
 ## Before the call lets you in
 
 `ChalkArrival` draws the screens before `Chalk` joins, for a call that asks the host first. Render it in place of `Chalk` while the arrival is pending (`state="knocking"`), after the host denies it (`"refused"`), or when the call is full (`"full"`). Render `Chalk` once the person is let in.

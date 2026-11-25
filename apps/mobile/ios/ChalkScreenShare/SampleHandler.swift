@@ -23,6 +23,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
     sender.connect(to: container.appendingPathComponent(screenShareSocketName).path) { [weak self] error in
       self?.finishBroadcastWithError(error)
     }
+    // Chalk's picker waits for this before it opens the capture socket.
+    if let bundleId = Bundle.main.bundleIdentifier {
+      CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        CFNotificationName("\(bundleId).started" as CFString),
+        nil,
+        nil,
+        true
+      )
+    }
   }
 
   override func broadcastFinished() {
@@ -79,14 +89,16 @@ private final class ScreenFrameEncoder: @unchecked Sendable {
         attachmentModeOut: nil
       ) as? NSNumber
     )?.uintValue ?? 0
-    let header = """
-      HTTP/1.1 200 OK\r
-      Content-Length: \(jpeg.count)\r
-      Buffer-Width: \(width)\r
-      Buffer-Height: \(height)\r
-      Buffer-Orientation: \(orientation)\r
-      \r
-      """
+    // WebRTC's reader waits for the blank line that ends the headers, so every line ends in CRLF.
+    let header = [
+      "HTTP/1.1 200 OK",
+      "Content-Length: \(jpeg.count)",
+      "Buffer-Width: \(width)",
+      "Buffer-Height: \(height)",
+      "Buffer-Orientation: \(orientation)",
+      "",
+      "",
+    ].joined(separator: "\r\n")
     guard var message = header.data(using: String.Encoding.utf8) else { return nil }
     message.append(jpeg)
     return message
@@ -94,7 +106,11 @@ private final class ScreenFrameEncoder: @unchecked Sendable {
 }
 
 private final class ScreenShareSocketSender: @unchecked Sendable {
+  /// A broadcast started from Control Center, or after Chalk gave up waiting, has no capture
+  /// socket to join. End it rather than leave the screen recording with nobody watching.
+  private static let connectionDeadline: TimeInterval = 10
   private let queue = DispatchQueue(label: "ai.q9labs.chalk.screen-share.socket")
+  private var deadline = Date.distantFuture
   private var descriptor: Int32 = -1
   private var stopped = false
   private var failure: (@Sendable (Error) -> Void)?
@@ -104,6 +120,7 @@ private final class ScreenShareSocketSender: @unchecked Sendable {
       guard let self else { return }
       stopped = false
       failure = onFailure
+      deadline = Date().addingTimeInterval(Self.connectionDeadline)
       attemptConnection(path: path)
     }
   }
@@ -128,7 +145,7 @@ private final class ScreenShareSocketSender: @unchecked Sendable {
       }
       if !result {
         closeDescriptor()
-        failure?(screenShareError("The Chalk screen-share connection closed."))
+        failure?(screenShareError("Chalk stopped sharing your screen."))
       }
     }
   }
@@ -147,6 +164,9 @@ private final class ScreenShareSocketSender: @unchecked Sendable {
       failure?(screenShareError("The Chalk screen-share socket could not be created."))
       return
     }
+    // Chalk closing its end must fail the next send, not raise SIGPIPE and kill the extension.
+    var noSignal: Int32 = 1
+    setsockopt(socketDescriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
 
     var address = sockaddr_un()
     address.sun_family = sa_family_t(AF_UNIX)
@@ -168,6 +188,10 @@ private final class ScreenShareSocketSender: @unchecked Sendable {
     }
     guard status == 0 else {
       Darwin.close(socketDescriptor)
+      guard Date() < deadline else {
+        failure?(screenShareError("Start sharing your screen from a Chalk call."))
+        return
+      }
       queue.asyncAfter(deadline: .now() + .milliseconds(100)) { [weak self] in
         self?.attemptConnection(path: path)
       }

@@ -12,6 +12,7 @@ const nativeEvents = vi.hoisted((): string[] => []);
 const ios = vi.hoisted(() => ({
   listener: undefined as ((event: { key: string; width: number; height: number }) => void) | undefined,
   platform: { OS: "android" },
+  broadcast: "starts" as "starts" | "cancelled",
 }));
 const frameSize = { width: 1080, height: 2400 };
 
@@ -20,8 +21,9 @@ vi.mock("@cloudflare/react-native-webrtc", async () => {
   return {
     mediaDevices: {
       getDisplayMedia: async () => {
+        nativeEvents.push("webrtc display capture");
         const track = new FakeTrack("screen", "video");
-        return { getVideoTracks: () => [track], toURL: () => "replay-kit" };
+        return { getVideoTracks: () => [track], toURL: () => "replay-kit", release: () => nativeEvents.push("release display stream") };
       },
     },
     MediaStreamTrack: class extends FakeTrack {
@@ -55,6 +57,13 @@ vi.mock("react-native", () => ({
   Alert: { alert: () => nativeEvents.push("permission prompt") },
   DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
   NativeModules: {
+    ChalkBroadcastModule: {
+      available: true,
+      start: async () => {
+        nativeEvents.push("broadcast picker");
+        if (ios.broadcast === "cancelled") throw Object.assign(new Error("Screen sharing was cancelled."), { code: "NotAllowedError" });
+      },
+    },
     ChalkAnnotationFrames: {
       observe(key: string, streamUrl: string) {
         expect(streamUrl).toBe("replay-kit");
@@ -90,6 +99,22 @@ vi.mock("react-native", () => ({
 beforeEach(() => {
   nativeEvents.length = 0;
   ios.platform.OS = "android";
+  ios.broadcast = "starts";
+});
+
+it("waits on iOS for the broadcast picker to start the extension before it opens WebRTC capture", async () => {
+  ios.platform.OS = "ios";
+  const capture = createNativeAnnotationCapture();
+  await capture.getDisplayMedia();
+  expect(nativeEvents).toEqual(["broadcast picker", "webrtc display capture"]);
+});
+
+it("reports a dismissed iOS broadcast picker as a declined capture and opens no WebRTC capture", async () => {
+  ios.platform.OS = "ios";
+  ios.broadcast = "cancelled";
+  const capture = createNativeAnnotationCapture();
+  await expect(capture.getDisplayMedia()).rejects.toMatchObject({ name: "NotAllowedError" });
+  expect(nativeEvents).toEqual(["broadcast picker"]);
 });
 
 it.each([
@@ -176,7 +201,7 @@ it.each([
 
     capture.releaseTrack(track!);
     expect(track?.readyState).toBe("ended");
-    expect(nativeEvents).toEqual(isIOS ? [] : enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
+    expect(nativeEvents).toEqual(isIOS ? ["broadcast picker", "webrtc display capture", "release display stream"] : enabled ? ["permission check", "screen capture", "protect controls", "probe overlay", "release capture"] : ["screen capture", "release capture"]);
   } finally {
     detach();
     annotation.dispose();
