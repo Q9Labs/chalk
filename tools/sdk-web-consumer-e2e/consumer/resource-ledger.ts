@@ -59,6 +59,10 @@ export const fixtureMediaDevices: FixtureMediaDevices = {
   releaseTrack: (track) => track.stop(),
 };
 
+export async function resumeAudioContexts(): Promise<void> {
+  await Promise.all([...tracks].map((track) => audioContexts.get(track)?.resume()));
+}
+
 export function registerSocket(socket: WebSocket): WebSocket {
   sockets.add(socket);
   socket.addEventListener("close", () => sockets.delete(socket), { once: true });

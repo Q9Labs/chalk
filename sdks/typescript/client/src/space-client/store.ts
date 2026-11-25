@@ -18,6 +18,7 @@ const EMPTY = empty({
     remote: empty([]),
     screenShare: empty({ source: "screen", state: "unavailable", track: null, hasAudio: false }),
     incomingRequests: empty([]),
+    audioPlayback: empty({ blocked: false }),
   }),
   chat: empty({ status: "idle", messages: empty([]), pendingSends: empty([]), readReceipts: empty([]), unreadCount: 0, pagination: empty({ cursor: null, hasOlder: false, historyTruncated: false }), lastError: null }),
   reactions: empty({ active: empty([]) }),

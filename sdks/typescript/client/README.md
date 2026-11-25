@@ -120,6 +120,36 @@ await client.offline.send(); // or client.offline.discard()
 
 Held actions survive a browser reload for up to 24 hours and restore only for the same tenant, Space, Episode, participant and generation. Restored actions ask for a decision unless a policy was set explicitly. Expired or mismatched actions are dropped, and `snapshot.offline.notice` says why. Native apps pass `offlineActionsStorage` to `createSpaceClient`: a synchronous `getItem`/`setItem`/`removeItem` adapter (for example, hydrated MMKV). Without storage, actions stay in memory. Stored actions are retired before dispatch, so a crash in that small interval can lose an action but never replays it.
 
+### Browser audio playback
+
+Remote audio is played by elements owned by the embedding UI. Register each element when attaching a remote audio track, and report the settled result of every `play()` call. Register each `AudioContext` that plays call sound. Chalk then keeps `snapshot.media.audioPlayback.blocked` true only when a real autoplay refusal (`NotAllowedError`) or a suspended context has blocked output.
+
+```ts
+declare const track: MediaStreamTrack;
+declare const audioContext: AudioContext;
+declare function showEnableSoundButton(): void;
+
+const element = new Audio();
+element.srcObject = new MediaStream([track]);
+const observation = client.media.observeAudioElement(track, element);
+element.play().then(
+  () => observation.played(undefined),
+  (cause) => observation.played(cause),
+);
+
+const contextObservation = client.media.observeAudioContext(audioContext);
+
+if (client.getSnapshot().media.audioPlayback.blocked) showEnableSoundButton();
+// In the button or page gesture handler:
+await client.media.resumeAudioPlayback();
+
+// When the element or context is discarded:
+observation.detach();
+contextObservation.detach();
+```
+
+Call `resumeAudioPlayback()` from a click, tap, or key press. It retries every output currently marked blocked and resolves after those attempts; the snapshot is the source of truth for whether sound is still blocked. Playback errors other than `NotAllowedError` never mark output blocked.
+
 ## Events and failures
 
 Use `on` for discrete events and snapshots for current state.

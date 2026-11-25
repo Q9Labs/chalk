@@ -77,14 +77,69 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     options.onCommand?.(command, nextSnapshot);
   };
 
+  type PlaybackEntry = { blocked: boolean; readonly element?: HTMLAudioElement; readonly context?: AudioContext };
+  const playbackEntries = new Set<PlaybackEntry>();
+  const syncAudioPlayback = (): void => {
+    const blocked = [...playbackEntries].some((entry) => entry.blocked);
+    updateSnapshot((current) => (current.media.audioPlayback.blocked === blocked ? current : { ...current, media: { ...current.media, audioPlayback: { blocked } } }));
+  };
   const dispose = (): void => {
+    playbackEntries.clear();
     cameraPreviewClient?.dispose();
     listeners.clear();
     callEventHandlers.clear();
   };
   const client = {
     media: {
-      observeAudioElement: () => ({ played: () => {}, detach: () => {} }),
+      observeAudioElement: (_track: MediaStreamTrack, element: HTMLAudioElement) => {
+        const entry: PlaybackEntry = { blocked: false, element };
+        playbackEntries.add(entry);
+        return {
+          played: (result: unknown) => {
+            if (!playbackEntries.has(entry)) return;
+            if (result === undefined) entry.blocked = false;
+            else if (typeof result === "object" && result !== null && "name" in result && result.name === "NotAllowedError" && element.paused) entry.blocked = true;
+            else return;
+            syncAudioPlayback();
+          },
+          detach: () => {
+            if (!playbackEntries.delete(entry)) return;
+            syncAudioPlayback();
+          },
+        };
+      },
+      observeAudioContext: (context: AudioContext) => {
+        const entry: PlaybackEntry = { blocked: context.state === "suspended", context };
+        playbackEntries.add(entry);
+        const update = () => {
+          entry.blocked = context.state === "suspended";
+          syncAudioPlayback();
+        };
+        context.addEventListener("statechange", update);
+        syncAudioPlayback();
+        return {
+          detach: () => {
+            context.removeEventListener("statechange", update);
+            if (!playbackEntries.delete(entry)) return;
+            syncAudioPlayback();
+          },
+        };
+      },
+      resumeAudioPlayback: async () => {
+        await Promise.allSettled(
+          [...playbackEntries].map(async (entry) => {
+            if (!entry.blocked) return;
+            try {
+              if (entry.element) await entry.element.play();
+              else if (entry.context?.state === "suspended") await entry.context.resume();
+              entry.blocked = false;
+            } catch {
+              entry.blocked = true;
+            }
+          }),
+        );
+        syncAudioPlayback();
+      },
       captureCameraPreview: async () => {
         const current = snapshot.media.local.camera.track;
         if (snapshot.media.local.camera.state === "enabled" && current?.enabled && current.readyState === "live") return { track: current, release: () => {} };
@@ -214,6 +269,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
       remote: [],
       screenShare: { source: "screen", state: "disabled", track: null },
       incomingRequests: [],
+      audioPlayback: { blocked: false },
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },

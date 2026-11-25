@@ -465,7 +465,7 @@ export function SpaceView({
               }
               mediaOutput={
                 <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-(--elevation-toast)">
-                  <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
+                  <AudioOutput />
                 </div>
               }
               overlays={

@@ -54,7 +54,14 @@ function publishedScreenId(screen: MediaSlice["local"]["screen"], snapshot: Conn
 export function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && structurallyEqual(left.remote, right.remote) && structurallyEqual(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
+  return (
+    sameScreenShare(left.screenShare, right.screenShare) &&
+    structurallyEqual(left.remote, right.remote) &&
+    structurallyEqual(left.incomingRequests, right.incomingRequests) &&
+    left.audioPlayback.blocked === right.audioPlayback.blocked &&
+    left.callStats === right.callStats &&
+    sameLink(left.link, right.link)
+  );
 }
 function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean {
   return left?.tier === right?.tier && left?.reason === right?.reason;

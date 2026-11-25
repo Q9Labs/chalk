@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { ToastLayeringFixture } from "./toast-layering";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
-import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone, peerStates } from "./resource-ledger";
+import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone, peerStates, resumeAudioContexts } from "./resource-ledger";
 import { bindFixtureSyncClient, FixtureSyncClient } from "./sync-client";
 
 type Harness = {
@@ -31,6 +31,7 @@ type Harness = {
   readonly accessReasons: () => readonly string[];
   readonly agreementSnapshot: () => SpaceSnapshot;
   readonly interruptMicrophone: typeof interruptMicrophone;
+  readonly resumeAudioContexts: typeof resumeAudioContexts;
   readonly connectionHistory: () => readonly string[];
   readonly connectionErrorHistory: () => readonly string[];
   readonly previewCommandContract?: PreviewClientCommand;
@@ -44,7 +45,8 @@ declare global {
 
 const accessReasons: string[] = [];
 const socketBaseURL = location.origin.replace(/^http/u, "ws");
-const fixtureUser = new URL(location.href).searchParams.get("fixtureUser");
+const pageParameters = new URL(location.href).searchParams;
+const fixtureUser = pageParameters.get("fixtureUser");
 const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
   createSpaceClientForPlatform(options, {
     apiBaseUrl: location.origin,
@@ -92,6 +94,7 @@ function installHarness(nextClient: SpaceClient): void {
     connectionErrorHistory: () => errors,
     agreementSnapshot: () => nextClient.getSnapshot(),
     interruptMicrophone,
+    resumeAudioContexts,
     join: () => joinFromHarness(nextClient),
     leave: nextClient.leave,
     dispose: () => nextClient.dispose(),
@@ -155,12 +158,13 @@ function settleJoin(connection: HarnessConnection, resolveJoin: () => void, reje
 }
 
 installHarness(client);
+if (pageParameters.get("autojoin") === "1") void client.join({ microphone: false, camera: false });
 
 createRoot(document.getElementById("root")!).render(
   new URL(location.href).searchParams.get("fixture") === "toast-layering" ? (
     <ToastLayeringFixture />
   ) : (
-    <Chalk client={client} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />
+    <Chalk client={client} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" theme={{ colorScheme: pageParameters.get("theme") === "light" ? "light" : "dark" }} features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />
   ),
 );
 
@@ -171,6 +175,7 @@ function publicSnapshot(snapshot: SpaceSnapshot) {
     participants: snapshot.participants.roster.map((participant) => participant.participantId),
     localMedia: Object.fromEntries(Object.entries(snapshot.media.local).map(([source, media]) => [source, { state: media.state, readyState: media.track?.readyState ?? null }])),
     remoteMedia: snapshot.media.remote.map((media) => ({ participantId: media.participantId, source: media.source, readyState: media.track.readyState })),
+    audioPlayback: snapshot.media.audioPlayback,
     reactions: snapshot.reactions.active,
     chat: snapshot.chat,
     incomingMediaRequests: snapshot.media.incomingRequests,

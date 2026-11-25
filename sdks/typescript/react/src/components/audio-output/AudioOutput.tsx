@@ -7,10 +7,11 @@
  * Usage: Place once in your space component, passing all remote participants.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { toAudioParticipants } from "../../selectors/space-selectors";
 import { useParticipantVolumeContext } from "../participants-panel/participant-volume-context";
+import { ChalkButton } from "../chalk-ui/ChalkButton";
 
 export interface AudioParticipant {
   id: string;
@@ -41,7 +42,7 @@ type SinkAwareAudioElement = HTMLAudioElement & {
   sinkId?: string;
 };
 
-export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume, resumeAudioLabel = "Resume audio" }: AudioOutputProps) {
+export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume, resumeAudioLabel = "Tap to turn on sound" }: AudioOutputProps) {
   const client = useSpaceClient();
   const media = useMedia();
   const self = useSelf();
@@ -73,23 +74,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   const detachObservation = (element: HTMLMediaElement) => {
     observationsRef.current.get(element)?.detach();
     observationsRef.current.delete(element);
-  };
-
-  // When autoplay is blocked (common on iOS/Safari until user gesture), we need to
-  // retry play() on the next interaction. Without this, audio can stay silent.
-  const pendingAutoplayRetryRef = useRef<Set<HTMLMediaElement>>(new Set());
-  const [needsAutoplayUnlock, setNeedsAutoplayUnlock] = useState(false);
-  const resumeAudioRef = useRef<(() => Promise<void>) | null>(null);
-
-  const markAutoplayBlocked = (el: HTMLMediaElement) => {
-    pendingAutoplayRetryRef.current.add(el);
-    // Setting true repeatedly is fine; avoids stale-closure edge cases.
-    setNeedsAutoplayUnlock(true);
-  };
-
-  const clearAutoplayRetryForElement = (el: HTMLMediaElement) => {
-    pendingAutoplayRetryRef.current.delete(el);
-    if (pendingAutoplayRetryRef.current.size === 0) setNeedsAutoplayUnlock(false);
   };
 
   const applyAudioOutputDevice = useCallback(
@@ -140,65 +124,24 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
 
   const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own autoplay gesture listeners until playback is unblocked.
   useEffect(() => {
-    if (!needsAutoplayUnlock) return;
-    if (typeof window === "undefined") return;
-
-    let inFlight = false;
-
-    const tryUnlock = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try {
-        const els = Array.from(pendingAutoplayRetryRef.current);
-        if (els.length === 0) {
-          setNeedsAutoplayUnlock(false);
-          return;
-        }
-
-        // Retry play() for any elements that previously failed due to autoplay.
-        const results = await Promise.allSettled(els.map((el) => el.play()));
-        pendingAutoplayRetryRef.current.clear();
-        for (const [i, r] of results.entries()) {
-          const el = els[i];
-          if (!el) continue;
-          observationsRef.current.get(el)?.played(r.status === "fulfilled" ? undefined : r.reason);
-          if (r.status === "rejected") pendingAutoplayRetryRef.current.add(el);
-        }
-
-        if (pendingAutoplayRetryRef.current.size === 0) {
-          setNeedsAutoplayUnlock(false);
-        }
-      } finally {
-        inFlight = false;
-      }
+    if (!media.audioPlayback.blocked || typeof window === "undefined") return;
+    const resume = () => {
+      void client.media.resumeAudioPlayback().catch(() => undefined);
     };
-
-    resumeAudioRef.current = tryUnlock;
-    const handler = () => {
-      void tryUnlock();
-    };
-
     const opts: AddEventListenerOptions = { capture: true, passive: true };
-    for (const ev of unlockEvents) {
-      window.addEventListener(ev, handler, opts);
-    }
-
-    // If the browser already considers the page activated, try immediately.
+    for (const event of unlockEvents) window.addEventListener(event, resume, opts);
     try {
-      const ua = navigator?.userActivation;
-      if (ua?.isActive || ua?.hasBeenActive) void tryUnlock();
+      const activation = navigator?.userActivation;
+      if (activation?.isActive || activation?.hasBeenActive) resume();
     } catch {
-      // ignore
+      // A browser without userActivation still receives the gesture listeners above.
     }
-
     return () => {
-      for (const ev of unlockEvents) {
-        window.removeEventListener(ev, handler, opts);
-      }
+      for (const event of unlockEvents) window.removeEventListener(event, resume, opts);
     };
-  }, [needsAutoplayUnlock, unlockEvents]);
+  }, [client, media.audioPlayback.blocked, unlockEvents]);
 
   // Attach/update audio elements - NO cleanup on re-render to prevent audio breaks
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
@@ -241,16 +184,14 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         observationsRef.current.set(audioEl, observation);
 
         // Handle autoplay restrictions
-        const attachedElement = audioEl;
         audioEl
           .play()
           .then(() => {
             observation.played(undefined);
-            clearAutoplayRetryForElement(attachedElement);
           })
           .catch((cause: unknown) => {
             observation.played(cause);
-            if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(id) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
+            // The client records a real NotAllowedError as blocked playback; other play failures stay out of that state.
           });
       }
     }
@@ -263,7 +204,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
-        clearAutoplayRetryForElement(audioEl);
         audioElements.delete(id);
       }
     }
@@ -279,7 +219,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
-        clearAutoplayRetryForElement(audioEl);
       }
       audioElements.clear();
     };
@@ -300,7 +239,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
           detachObservation(audioEl);
           audioEl.srcObject = null;
           audioEl.pause();
-          clearAutoplayRetryForElement(audioEl);
           audioElementsRef.current.delete(id);
         }
       };
@@ -358,16 +296,14 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         audioEl.srcObject = stream;
         const observation = client.media.observeAudioElement(screenShareAudioTrack, audioEl);
         observationsRef.current.set(audioEl, observation);
-        const attachedElement = audioEl;
         audioEl
           .play()
           .then(() => {
             observation.played(undefined);
-            clearAutoplayRetryForElement(attachedElement);
           })
           .catch((cause: unknown) => {
             observation.played(cause);
-            if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(ssKey) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
+            // The client records a real NotAllowedError as blocked playback; other play failures stay out of that state.
           });
       }
     }
@@ -379,7 +315,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
-        clearAutoplayRetryForElement(audioEl);
         audioElements.delete(key);
       }
     }
@@ -394,18 +329,17 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
-        clearAutoplayRetryForElement(audioEl);
       }
       audioElements.clear();
     };
   }, []);
 
-  if (!needsAutoplayUnlock) return null;
+  if (!media.audioPlayback.blocked) return null;
   return (
-    <div className="absolute inset-x-0 top-4 z-50 flex justify-center" role="status">
-      <button type="button" className="min-h-11 rounded-full bg-[var(--chalk-app-text)] px-4 text-sm text-[var(--chalk-app-canvas)] shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => void resumeAudioRef.current?.()}>
+    <div className="absolute inset-x-0 top-4 z-50 flex justify-center" role="status" aria-live="polite">
+      <ChalkButton variant="solid" className="min-h-11 shadow-(--elevation-toast)" onClick={() => void client.media.resumeAudioPlayback().catch(() => undefined)}>
         {resumeAudioLabel}
-      </button>
+      </ChalkButton>
     </div>
   );
 }

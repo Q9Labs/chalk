@@ -19,6 +19,7 @@ import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions, SpaceSnapshot } from "./types";
+import { AudioPlayback, type AudioContextObservation, type AudioElementObservation } from "./audio-playback";
 const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
@@ -107,7 +108,9 @@ type CameraState =
   | { readonly status: "capturing"; readonly owner: CameraOwner }
   | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
 export type MediaControllerEffects = {
-  readonly observeAudioElement: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
+  readonly observeAudioElement: (track: MediaStreamTrack, element: HTMLAudioElement) => AudioElementObservation;
+  readonly observeAudioContext: (context: AudioContext) => AudioContextObservation;
+  readonly resumeAudioPlayback: () => ClientEffect<void>;
   readonly configure: (
     intent: Readonly<{
       microphone?: boolean;
@@ -192,6 +195,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribePorts: (() => void) | null = null;
   #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
+  readonly #playback: AudioPlayback;
   #microphoneMutedByOtherDevice = false;
   #ownMicrophoneOff = false;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: ScopedFork<Clock.Clock>) {
@@ -212,6 +216,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (this.#ports) this.#pausePublication(this.#ports, source, revision, "projection_mismatch");
       },
     });
+    this.#playback = new AudioPlayback({
+      observeElement: (track, element) => this.#ports?.media.observeAudioElement?.(track, element) ?? { played: () => {}, detach: () => {} },
+      changed: () => this.#publish(),
+    });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
     this.#unsubscribeScreenEnded = connection.subscribeScreenEnded(() => this.#handleScreenEnded());
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
@@ -225,7 +233,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.microphone !== undefined) this.#recordIntent("microphone", intent.microphone);
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
-  observeAudioElement = (track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } => this.#ports?.media.observeAudioElement?.(track, element) ?? { played: () => {}, detach: () => {} };
+  observeAudioElement = (track: MediaStreamTrack, element: HTMLAudioElement): AudioElementObservation => this.#playback.observeElement(track, element);
+  observeAudioContext = (context: AudioContext): AudioContextObservation => this.#playback.observeAudioContext(context);
+  resumeAudioPlayback = (): ClientEffect<void> => foreign(() => this.#playback.resume()).pipe(Effect.mapError(normalizeMediaError));
   consumeOwnMicrophoneOff = (): boolean => {
     const own = this.#ownMicrophoneOff;
     this.#ownMicrophoneOff = false;
@@ -393,6 +403,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribeScreenEnded = null;
     this.#unsubscribePorts = null;
     this.#ports = null;
+    this.#playback.dispose();
     this.#resetObservations();
     this.#clearTracks();
     this.#clearRequests();
@@ -1735,6 +1746,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       remote,
       screenShare: screenShareMedia(local.screen, snapshot, this.#screenShareHasAudio(snapshot), this.#syncLive ? this.#ports?.sync : undefined),
       incomingRequests: this.#requests,
+      audioPlayback: this.#playback.snapshot,
       callStats: snapshot?.callStats,
       link,
     });
