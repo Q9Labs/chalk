@@ -5,6 +5,8 @@ import type { CallNetwork } from "./call-network";
 export interface CallHostControls {
   /** How many other people are unmuted, and the way to mute them all. */
   readonly muteEveryone?: { readonly unmutedCount: number; readonly onMute: () => Promise<void> };
+  /** Focus allowance control for holders of focus.manage. */
+  readonly focusAllowance?: { readonly active: boolean; readonly onAllow: (minutes: number) => Promise<void>; readonly onEnd: () => Promise<void> };
 }
 
 export interface SpaceHeaderProps {

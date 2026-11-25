@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { ChalkButton } from "../chalk-ui";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { RowIcon } from "./RowIcon";
+import { FOCUS_COPY } from "../focus/focus-copy";
 import type { CallHostControls } from "./space-header-contract";
 
 const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
@@ -9,6 +10,7 @@ const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}
 /** The host-only rows, with the hairline above them. A menu without host controls gets nothing. */
 export function HostControlRows({ controls }: { readonly controls?: CallHostControls }) {
   const muteEveryone = controls?.muteEveryone;
+  const focusAllowance = controls?.focusAllowance;
   const [confirming, setConfirming] = useState(false);
   const [muting, setMuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
     }
   };
 
-  if (!muteEveryone) return null;
+  if (!muteEveryone && !focusAllowance) return null;
 
   return (
     <>
@@ -70,6 +72,32 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
               <ChalkButton variant="solid" disabled={muting} onClick={() => void muteAll()}>
                 {muting ? "Muting…" : `Mute ${people(unmuted)}`}
               </ChalkButton>
+            </div>
+          </div>
+        </>
+      ) : null}
+      {focusAllowance ? (
+        <>
+          <div className="chalk-shell-detail-helper" style={{ paddingTop: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <span>
+                <b style={{ color: "var(--chalk-text)" }}>{FOCUS_COPY.allowOtherTabs}</b>
+                <br />
+                {FOCUS_COPY.allowOtherTabsHelp}
+              </span>
+              {focusAllowance.active ? <span className="chalk-shell-detail-value">{FOCUS_COPY.allowanceOn}</span> : null}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              {[5, 10, 20].map((minutes) => (
+                <ChalkButton key={minutes} disabled={focusAllowance.active} onClick={() => void focusAllowance.onAllow(minutes)}>
+                  {minutes} min
+                </ChalkButton>
+              ))}
+              {focusAllowance.active ? (
+                <ChalkButton variant="solid" onClick={() => void focusAllowance.onEnd()}>
+                  {FOCUS_COPY.endAllow}
+                </ChalkButton>
+              ) : null}
             </div>
           </div>
         </>

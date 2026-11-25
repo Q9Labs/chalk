@@ -10,11 +10,21 @@ export function useHostControls({ roster, admissionQueue }: ParticipantsSlice, s
   const client = useSpaceClient();
   const canManageAdmission = useCan("manageAdmission");
   const canMuteOthers = useCan("muteOthers");
+  const canManageFocus = useCan("focus.manage");
   const unmuted = roster.filter((person) => person.participantId !== selfId && person.media.microphone === "active");
   const muteEveryone = canMuteOthers && roster.length > 1 ? { unmutedCount: unmuted.length, onMute: () => Promise.all(unmuted.map((person) => client.participants.mute(person.participantId))).then(() => undefined) } : undefined;
+  const self = roster.find((person) => person.participantId === selfId);
+  const focusAllowance = canManageFocus
+    ? {
+        active: self?.focus?.allowed === true,
+        onAllow: (minutes: number) => client.focus.allowOtherTabs(minutes),
+        onEnd: () => client.focus.endAllow(),
+      }
+    : undefined;
+  const hostControls = muteEveryone || focusAllowance ? { ...(muteEveryone ? { muteEveryone } : {}), ...(focusAllowance ? { focusAllowance } : {}) } : undefined;
   const hostHeader: Pick<SpaceHeaderProps, "knockCount" | "hostControls"> = {
     knockCount: canManageAdmission ? admissionQueue.length : 0,
-    hostControls: muteEveryone ? { muteEveryone } : undefined,
+    hostControls,
   };
   return { canManageAdmission, hostHeader };
 }

@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import type { TileAction } from "../participant-tile/TileOptions";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { UserGroupIcon } from "../../utils/icons";
 import { ChalkBadge, ChalkEmptyState } from "../chalk-ui";
@@ -29,6 +30,8 @@ export interface Participant {
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
   focus?: TileFocus;
+  /** Extra actions in this tile's own menu, such as Focus step-away controls. */
+  focusActions?: readonly TileAction[];
   handRaiseOrder?: number;
   screenShareHasAudio?: boolean;
   screenShareAspect?: number;

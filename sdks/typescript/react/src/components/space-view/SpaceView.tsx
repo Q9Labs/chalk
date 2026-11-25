@@ -37,6 +37,8 @@ import { useBoardNotices } from "./useBoardNotices";
 import { useCallCountdown } from "./useCallCountdown";
 import { useAnnotationHelperInstall } from "../screen-annotation/use-annotation-helper-install";
 import { useHostControls } from "./useHostControls";
+import { FocusNotice, FocusOwnStatus } from "../focus/FocusOwnStatus";
+import { FOCUS_COPY } from "../focus/focus-copy";
 import { useCallToasts } from "../toast-stack/useCallToasts";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
@@ -209,14 +211,29 @@ export function SpaceView({
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
   const seenConnected = useSeenConnected(participantsSlice.roster);
+  const selfFocus = participantsSlice.roster.find((person) => person.participantId === self.participantId)?.focus;
+  const focusFailure = (cause: unknown) => onCommandError(cause instanceof Error ? cause.message : "The Focus action couldn't be completed.");
+  const stepAwayActions = selfFocus?.steppedAway
+    ? [{ label: FOCUS_COPY.imBack, run: () => void client.focus.return().catch(focusFailure) }]
+    : (
+        [
+          ["reading", FOCUS_COPY.reasons.reading],
+          ["notes", FOCUS_COPY.reasons.notes],
+          ["break", FOCUS_COPY.reasons.break],
+        ] as const
+      ).map(([reason, label]) => ({
+        label: `${FOCUS_COPY.stepAway} · ${label}`,
+        run: () => void client.focus.stepAway(reason).catch(focusFailure),
+      }));
   const tiles = useMemo(
     () =>
       toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map(({ isReconnecting, ...tile }) => ({
         ...tile,
         ...(isReconnecting && seenConnected.has(tile.id) ? { isReconnecting } : {}),
+        ...(tile.isLocal && selfFocus ? { focusActions: stepAwayActions } : {}),
         screenShareHasAudio: tile.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === tile.id)?.media.screenShareHasAudio,
       })),
-    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
+    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName, selfFocus, stepAwayActions],
   );
   const buttons: ControlBarButtonName[] = [
     "mic",
@@ -358,7 +375,13 @@ export function SpaceView({
                 isRecording: recording.current?.status === "recording",
                 layout: headerLayout,
                 onLayoutChange: updateLayout,
-                notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
+                notices:
+                  selfFocus || folded.length ? (
+                    <>
+                      {selfFocus ? <FocusOwnStatus focus={selfFocus} /> : null}
+                      {folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : null}
+                    </>
+                  ) : undefined,
               }}
               stage={
                 <SpaceStage
@@ -471,6 +494,7 @@ export function SpaceView({
               overlays={
                 <>
                   <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />
+                  <FocusNotice focus={selfFocus} space={spaceName} />
                   {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
                     <Suspense fallback={null}>
                       <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />

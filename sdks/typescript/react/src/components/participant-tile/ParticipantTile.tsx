@@ -15,6 +15,7 @@ import { useFramesFrozen, useFrozenFrame } from "./useFrozenFrame";
 import { TileReconnecting, TileSignal } from "./TileConnection";
 import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
 import { useTrueFor } from "../../internal/useTrueFor";
+import { FOCUS_COPY } from "../focus/focus-copy";
 
 export interface ParticipantTileProps {
   participant: {
@@ -34,6 +35,7 @@ export interface ParticipantTileProps {
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
     focus?: import("../participant-grid/ParticipantGrid").TileFocus;
+    focusActions?: readonly import("./TileOptions").TileAction[];
     handRaiseOrder?: number;
     /** 0 means unknown; 1–2 show a poor-connection badge. */
     connectionQuality?: 0 | 1 | 2 | 3 | 4;
@@ -124,7 +126,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const followLabel = following ? "Stop following" : "Follow";
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
-  const actions = tileActions({ label: actionLabel, run: onClick }, { label: followLabel, run: onFollow });
+  const actions = [...(participant.focusActions ?? []), ...tileActions({ label: actionLabel, run: onClick }, { label: followLabel, run: onFollow })];
   // On a phone a tap on the tile opens its options, so no tile carries its own "..." button.
   const tapForOptions = phone && actions.length > 0;
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -255,14 +257,18 @@ function FocusChip({ focus }: { readonly focus?: import("../participant-grid/Par
   }, [state]);
   if (!focus) return null;
   let label: string | null = null;
-  if (focus.steppedAway) label = `Stepped away · ${(focus.steppedAway[0] ?? "").toUpperCase()}${focus.steppedAway.slice(1)}`;
-  else if (focus.allowed && state !== "active") label = "Allowed";
+  if (focus.steppedAway) label = `${FOCUS_COPY.steppedAway} · ${FOCUS_COPY.reasons[focus.steppedAway]}`;
+  else if (focus.allowed && state !== "active") label = FOCUS_COPY.allowed;
   else if (state === "background") {
     const elapsed = Math.max(0, Math.floor((now - sinceRef.current) / 1000));
-    label = `Not focused ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
-  } else if (state === "inactive") label = focus.windowed ? "Split View" : "Other window";
+    label = `${FOCUS_COPY.notFocused} ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  } else if (state === "inactive") label = focus.windowed ? FOCUS_COPY.splitView : FOCUS_COPY.otherWindow;
   if (!label) return null;
-  return <span role="status" data-part="tile-focus" className="pointer-events-none absolute left-2 top-2 z-30 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs font-medium text-[var(--chalk-overlay-warning)]">{label}</span>;
+  return (
+    <span role="status" data-part="tile-focus" className="pointer-events-none absolute left-2 top-2 z-30 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs font-medium text-[var(--chalk-overlay-warning)]">
+      {label}
+    </span>
+  );
 }
 
 ParticipantTile.displayName = "ParticipantTile";

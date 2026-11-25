@@ -1,3 +1,4 @@
+import { FOCUS_COPY } from "../focus/focus-copy";
 import { deviceHint } from "../../selectors/device-hint";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
@@ -179,7 +180,7 @@ export const ParticipantsPanelSurface = React.memo(
               {groups.you.map((person) => row(person))}
               {labelled && groups.hands.length ? <PeopleLabel text="Raised hands" count={groups.hands.length} /> : null}
               {groups.hands.map((person) => row(person))}
-              {labelled && groups.notFocused.length ? <PeopleLabel text="Not focused" count={groups.notFocused.length} /> : null}
+              {labelled && groups.notFocused.length ? <PeopleLabel text={FOCUS_COPY.notFocused} count={groups.notFocused.length} /> : null}
               {groups.notFocused.map((person) => row(person))}
               {labelled && groups.others.length ? <PeopleLabel text="In the call" count={groups.others.length} /> : null}
               {groups.others.map((person) => row(person))}
@@ -193,10 +194,10 @@ export const ParticipantsPanelSurface = React.memo(
 
 function focusLabel(focus: import("@q9labsai/chalk-client").ParticipantFocus | undefined): string | undefined {
   if (!focus) return undefined;
-  if (focus.steppedAway) return `Stepped away · ${(focus.steppedAway[0] ?? "").toUpperCase()}${focus.steppedAway.slice(1)}`;
-  if (focus.allowed && focus.appState !== "active") return "Allowed";
-  if (focus.appState === "background") return "Not focused";
-  if (focus.appState === "inactive") return focus.windowed ? "Split View" : "Other window";
+  if (focus.steppedAway) return `${FOCUS_COPY.steppedAway} · ${FOCUS_COPY.reasons[focus.steppedAway]}`;
+  if (focus.allowed && focus.appState !== "active") return FOCUS_COPY.allowed;
+  if (focus.appState === "background") return FOCUS_COPY.notFocused;
+  if (focus.appState === "inactive") return focus.windowed ? FOCUS_COPY.splitView : FOCUS_COPY.otherWindow;
   return undefined;
 }
 
