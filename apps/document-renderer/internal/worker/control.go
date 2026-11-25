@@ -162,6 +162,12 @@ func (c ControlClient) request(ctx context.Context, method, path string, body []
 	return response.StatusCode, responseBody, err
 }
 
+// SignedHeaders exposes the production signer for cross-module interoperability
+// tests. Runtime requests continue to use the unexported sign path.
+func (c ControlClient) SignedHeaders(method, path string, body []byte) map[string]string {
+	return c.sign(method, path, body)
+}
+
 func (c ControlClient) sign(method, path string, body []byte) map[string]string {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonceBytes := make([]byte, 16)
