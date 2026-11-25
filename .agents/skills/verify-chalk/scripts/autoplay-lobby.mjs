@@ -78,8 +78,8 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
       if (level <= 0) await strict.page.waitForTimeout(250);
     }
     if (level <= 0) throw new Error("Join click did not produce audible remote audio");
-    const toast = strict.page.getByText("Your browser paused the sound. Click anywhere to hear the class.", { exact: true });
-    if (await toast.isVisible().catch(() => false)) throw new Error("fallback toast appeared after Join enabled sound");
+    const toast = strict.page.locator('[data-part="toast"]', { hasText: "Your browser paused the sound. Click anywhere to hear the class." });
+    if ((await toast.count()) !== 0) throw new Error("fallback toast appeared after Join enabled sound");
     return { audioLevel: level };
   });
 
