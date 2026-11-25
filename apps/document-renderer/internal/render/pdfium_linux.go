@@ -55,16 +55,16 @@ func PDFInventoryFromBytes(data []byte) (PDFInventory, string, error) {
 	}
 	inventory := PDFInventory{PageCount: count, Pages: make([]PDFPage, 0, count)}
 	for index := 0; index < count; index++ {
-		widthPoints := float64(C.FPDF_GetPageWidth(document, C.int(index)))
-		heightPoints := float64(C.FPDF_GetPageHeight(document, C.int(index)))
-		if widthPoints <= 0 || heightPoints <= 0 {
-			C.FPDF_CloseDocument(document)
-			return PDFInventory{}, "corrupt", fmt.Errorf("pdf page %d has invalid dimensions", index+1)
+		page := C.FPDF_LoadPage(document, C.int(index))
+		if page == nil {
+			return PDFInventory{}, "corrupt", fmt.Errorf("pdf page %d unavailable", index+1)
 		}
-		rotation := 0
-		if page := C.FPDF_LoadPage(document, C.int(index)); page != nil {
-			rotation = int(C.FPDFPage_GetRotation(page))
-			C.FPDF_ClosePage(page)
+		widthPoints := float64(C.FPDF_GetPageWidth(page))
+		heightPoints := float64(C.FPDF_GetPageHeight(page))
+		rotation := int(C.FPDFPage_GetRotation(page))
+		C.FPDF_ClosePage(page)
+		if widthPoints <= 0 || heightPoints <= 0 {
+			return PDFInventory{}, "corrupt", fmt.Errorf("pdf page %d has invalid dimensions", index+1)
 		}
 		displayWidth, displayHeight := widthPoints, heightPoints
 		if rotation == 1 || rotation == 3 {
