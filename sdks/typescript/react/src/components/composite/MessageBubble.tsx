@@ -275,7 +275,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                       </span>
                       <span>
                         <b dir="auto">{file.fileName}</b>
-                        <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
+                        <small>{image ? "Loading preview…" : formatFileSize(file.byteLength)}</small>
                       </span>
                     </button>
                   );
@@ -394,3 +394,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
   },
 );
 MessageBubble.displayName = "MessageBubble";
+
+function formatFileSize(byteLength: number): string {
+  if (byteLength < 1024 * 1024) return `${Math.max(1, Math.round(byteLength / 1024))} KB`;
+  return `${(byteLength / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+}
