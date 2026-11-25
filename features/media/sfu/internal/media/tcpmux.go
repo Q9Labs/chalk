@@ -40,8 +40,5 @@ func listenTCPMux(addresses []string, log *slog.Logger) (ice.TCPMux, error) {
 		return muxes[0], nil
 	}
 	mux := ice.NewMultiTCPMuxDefault(muxes...)
-	if len(bindErrors) == 0 {
-		return mux, nil
-	}
 	return mux, nil
 }
