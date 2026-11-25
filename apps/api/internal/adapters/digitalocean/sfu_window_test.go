@@ -248,7 +248,6 @@ func TestObserveFailsClosedOnDuplicatesAndWrongOwnership(t *testing.T) {
 		"wrong region":         func(d map[string]any) { d["region"] = map[string]any{"slug": "nyc3"} },
 		"wrong vpc":            func(d map[string]any) { d["vpc_uuid"] = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
 		"no vpc":               func(d map[string]any) { delete(d, "vpc_uuid") },
-		"wrong image":          func(d map[string]any) { d["image"] = map[string]any{"id": 1} },
 		"case variant name":    func(d map[string]any) { d["name"] = strings.ToUpper(testWindowName) },
 		"private public ip":    publicIP("10.0.0.9"),
 		"loopback public ip":   publicIP("127.0.0.1"),
@@ -448,7 +447,6 @@ func TestCreateAmbiguityIsAlwaysPotentiallyCommittedAndNeverRetried(t *testing.T
 			w.Header().Set("Retry-After", "30")
 			http.Error(w, "slow", http.StatusTooManyRequests)
 		},
-		"unprocessable": func(w http.ResponseWriter, r *http.Request) { http.Error(w, "no", http.StatusUnprocessableEntity) },
 		"redirect": func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, trap.server.URL+"/v2/droplets", http.StatusTemporaryRedirect)
 		},
@@ -476,8 +474,8 @@ func TestCreateAmbiguityIsAlwaysPotentiallyCommittedAndNeverRetried(t *testing.T
 	for name, respond := range cases {
 		fake := newFakeDigitalOcean(t, post(respond))
 		err := fake.adapter().Create(context.Background(), testWindowName)
-		if !errors.Is(err, ErrSFUWindowCreateUnknown) {
-			t.Errorf("%s: err = %v, want ErrSFUWindowCreateUnknown", name, err)
+		if err == nil || errors.Is(err, ErrSFUWindowCreateUnknown) == (name == "rate limited") {
+			t.Errorf("%s: unexpected classification: %v", name, err)
 		}
 		if fake.count(http.MethodPost) != 1 {
 			t.Errorf("%s: %d POSTs, want exactly 1 (no retry)", name, fake.count(http.MethodPost))
@@ -492,8 +490,19 @@ func TestCreateAmbiguityIsAlwaysPotentiallyCommittedAndNeverRetried(t *testing.T
 
 	limited := newFakeDigitalOcean(t, post(cases["rate limited"]))
 	var rateLimit *SFUWindowRateLimitError
-	if err := limited.adapter().Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || !rateLimit.RetryAt.After(time.Now()) {
+	adapter := limited.adapter()
+	if err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || !rateLimit.RetryAt.After(time.Now()) {
 		t.Fatalf("rate limit not surfaced: %v", err)
+	}
+	before := len(limited.requests)
+	if err := adapter.Create(context.Background(), testWindowName); !errors.As(err, &rateLimit) || len(limited.requests) != before {
+		t.Fatalf("retried despite provider deadline: %v", err)
+	}
+	rejected := newFakeDigitalOcean(t, post(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}))
+	if err := rejected.adapter().Create(context.Background(), testWindowName); err == nil || errors.Is(err, ErrSFUWindowCreateUnknown) {
+		t.Fatalf("422 was not a definitive rejection: %v", err)
 	}
 }
 
@@ -571,7 +580,7 @@ func TestDestroyReadsBackByIDThenDeletesByIDOnly(t *testing.T) {
 }
 
 func TestDestroyMissingDropletIsIdempotent(t *testing.T) {
-	fake := newFakeDigitalOcean(t, routes(nil, nil))
+	fake := newFakeDigitalOcean(t, routes(nil, []map[string]any{goodFirewall()}))
 	if err := fake.adapter().Destroy(context.Background(), testWindowName, 4242); err != nil || fake.count(http.MethodDelete) != 0 {
 		t.Fatalf("read-back 404: err=%v deletes=%d", err, fake.count(http.MethodDelete))
 	}
@@ -586,6 +595,22 @@ func TestDestroyMissingDropletIsIdempotent(t *testing.T) {
 	})
 	if err := fake.adapter().Destroy(context.Background(), testWindowName, 4242); err != nil {
 		t.Fatalf("delete 404: %v", err)
+	}
+}
+
+func TestWrongAccountCannotConfirmAbsence(t *testing.T) {
+	fake := newFakeDigitalOcean(t, routes(nil, nil))
+	if gone, err := fake.adapter().Gone(t.Context(), testWindowName, 4242); gone || !errors.Is(err, ErrSFUWindowFirewall) {
+		t.Fatalf("gone=%t err=%v, want unconfirmed with missing firewall", gone, err)
+	}
+}
+
+func TestObserveFindsOutdatedLaunchWithoutAdmittingItsImage(t *testing.T) {
+	droplet := windowDroplet(func(value map[string]any) { value["image"] = map[string]any{"id": 5} })
+	fake := newFakeDigitalOcean(t, routes([]map[string]any{droplet}, nil))
+	observed, found, err := fake.adapter().Observe(t.Context(), testWindowName)
+	if err != nil || !found || !observed.Outdated || observed.ID != 4242 {
+		t.Fatalf("outdated launch was not recoverable: %+v %t %v", observed, found, err)
 	}
 }
 

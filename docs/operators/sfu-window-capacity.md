@@ -34,7 +34,7 @@ database owner password. The Chalk API has no DigitalOcean credentials.
 | --- | --- |
 | `CHALK_SFU_WINDOW_ENVIRONMENT` | `nightly` or `production`, matching the database, provider account, and certificates |
 | `CHALK_SFU_WINDOW_MODE` | `scale` for normal operation or `retire` for rollback |
-| `CHALK_SFU_WINDOW_DATABASE_URL` | Direct controller DB connection |
+| `CHALK_SFU_WINDOW_DATABASE_URL` | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints |
 | `CHALK_SFU_APPLICATION_ID` | Same pool identity as in the API |
 | `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API |
 | `CHALK_SFU_WINDOW_PROVIDER_TOKEN` | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets |
@@ -85,5 +85,6 @@ operator investigation; silence does not prove emptiness.
 At the supplied $0.0268 per 2 vCPU node-hour, four extra nodes for four hours
 plus 25 minutes each day for 31 days cost about $14.68. This excludes standing
 nodes, image storage, transfer, and time waiting for a live Episode to finish.
-The default budget stops new creates at approximately $24.12 of tracked
-node-hours; it does not forcibly end a live Episode to cap the bill.
+The default budget stops new creates before approximately $24.12 of tracked node-hours. At the
+budget it retires excess capacity after the last bound Episode ends; it does
+not interrupt an Episode to cap the bill.

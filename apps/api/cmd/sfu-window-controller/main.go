@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
@@ -40,6 +42,14 @@ func run(ctx context.Context) error {
 	db, err := pgx.ParseConfig(os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL"))
 	if err != nil || os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL") == "" {
 		return errors.New("set CHALK_SFU_WINDOW_DATABASE_URL to a direct database connection")
+	}
+	if !verifiedDatabaseEndpoint(&pgconn.FallbackConfig{Host: db.Host, TLSConfig: db.TLSConfig}) {
+		return errors.New("SFU window database requires verify-full TLS for remote connections")
+	}
+	for _, fallback := range db.Fallbacks {
+		if !verifiedDatabaseEndpoint(fallback) {
+			return errors.New("SFU window database requires verify-full TLS for remote fallbacks")
+		}
 	}
 	db.ConnectTimeout = 5 * time.Second
 	db.RuntimeParams["application_name"] = "chalk-sfu-window-controller"
@@ -82,6 +92,14 @@ func run(ctx context.Context) error {
 		case <-tick.C:
 		}
 	}
+}
+
+func verifiedDatabaseEndpoint(endpoint *pgconn.FallbackConfig) bool {
+	if network, _ := pgconn.NetworkAddress(endpoint.Host, endpoint.Port); network == "unix" {
+		return true
+	}
+	address, _ := netip.ParseAddr(endpoint.Host)
+	return address.IsLoopback() || endpoint.TLSConfig != nil && !endpoint.TLSConfig.InsecureSkipVerify
 }
 
 func loadRuntime() (windowProvider, chalksfu.WindowControl, sfufleet.Policy, error) {
