@@ -20,6 +20,9 @@ const (
 type Principal struct {
 	Kind      PrincipalKind
 	ServiceID string
+	// Dashboard reports that the authenticated service is the first-party
+	// control-plane service. It is meaningful only when Kind is PrincipalService.
+	Dashboard bool
 	UserID    utilities.ID
 	TenantID  utilities.ID
 	SessionID utilities.ID

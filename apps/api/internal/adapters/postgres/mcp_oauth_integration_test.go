@@ -29,9 +29,11 @@ import (
 )
 
 const (
-	oauthTestService  = "oauth-test-dashboard"
-	oauthTestSecret   = "oauth-test-service-secret"
-	oauthTestRedirect = "https://claude.ai/api/mcp/auth_callback"
+	oauthTestService        = "oauth-test-dashboard"
+	oauthTestSecret         = "oauth-test-service-secret"
+	oauthOtherService       = "oauth-test-other-service"
+	oauthOtherServiceSecret = "oauth-other-service-secret"
+	oauthTestRedirect       = "https://claude.ai/api/mcp/auth_callback"
 )
 
 type oauthClock struct {
@@ -119,11 +121,14 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 	documents := oauthDocuments{}
 	oauth := mcpauth.NewService(NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: issuer, ConsentURL: "https://dashboard.example.test/dashboard/connect", Now: clock.Now}).WithMetadataFetcher(documents)
 	options := httpapi.Options{
-		OAuth:            oauth,
-		TenantAuthz:      authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
-		Tenants:          tenants.NewService(NewTenantRepository(q)),
-		Spaces:           spaces.NewService(NewSpaceRepository(q, pool)),
-		ServicePrincipal: authentication.ServiceCredential{ID: oauthTestService, Secrets: []string{oauthTestSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}},
+		OAuth:       oauth,
+		TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
+		Tenants:     tenants.NewService(NewTenantRepository(q)),
+		Spaces:      spaces.NewService(NewSpaceRepository(q, pool)),
+		ServicePrincipals: []authentication.ServiceCredential{
+			{ID: oauthTestService, Secrets: []string{oauthTestSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}, Dashboard: true},
+			{ID: oauthOtherService, Secrets: []string{oauthOtherServiceSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}},
+		},
 	}
 	options.RateLimit.DisableAuthenticated = true
 	options.MCP = httpapi.NewMCPHandler(options)
@@ -529,6 +534,21 @@ func TestMCPOAuthRejectsUnsafeRedirects(t *testing.T) {
 	query := h.authorizeQuery("unknown-client", oauthTestRedirect, pkce, nil)
 	if response, _ := h.do(http.MethodGet, "/oauth/authorize?"+query.Encode(), nil, ""); response.Header.Get("Location") != "" {
 		t.Errorf("unknown client was redirected to %q", response.Header.Get("Location"))
+	}
+}
+
+func TestMCPOAuthConsentStaysWithDashboardService(t *testing.T) {
+	h := newOAuthHarness(t)
+	headers := map[string]string{"Authorization": "Bearer " + oauthOtherServiceSecret, "Content-Type": "application/json"}
+	for _, path := range []string{"/v1/mcp-oauth/requests/inspect", "/v1/mcp-oauth/requests/approve", "/v1/mcp-oauth/requests/deny"} {
+		body := `{"request":"unknown"}`
+		if strings.HasSuffix(path, "/approve") {
+			body = `{"request":"unknown","tenant_id":"` + h.tenantA.String() + `","scope":"chalk:read"}`
+		}
+		response, responseBody := h.do(http.MethodPost, path, headers, body)
+		if response.StatusCode != http.StatusForbidden {
+			t.Fatalf("%s with a non-dashboard service: %d %s, want 403", path, response.StatusCode, responseBody)
+		}
 	}
 }
 

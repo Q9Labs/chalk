@@ -85,13 +85,13 @@ func mcpOAuthConnectionEndpoints(service MCPOAuthService, authorizer TenantAutho
 
 // requireDashboardService accepts only the dashboard's service credential. It
 // vouches for a signed-in person and for the tenant that person owns, so no
-// tenant API key or other caller may decide a consent request.
+// tenant API key, integration service or other caller may decide a consent request.
 func requireDashboardService(ctx context.Context, scope authentication.Scope) (authentication.Principal, error) {
 	principal, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		return authentication.Principal{}, apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalService || !principal.HasScope(scope) {
+	if principal.Kind != authentication.PrincipalService || !principal.Dashboard || !principal.HasScope(scope) {
 		return authentication.Principal{}, apiErrorForbidden
 	}
 	return principal, nil

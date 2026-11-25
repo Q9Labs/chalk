@@ -79,18 +79,28 @@ func writeServiceUnavailable(w http.ResponseWriter) {
 	writeAPIError(w, apiErrorServiceUnavailable)
 }
 
-func acceptServiceCredential(credential authentication.ServiceCredential) func(http.Handler) http.Handler {
+func acceptServiceCredentials(credentials []authentication.ServiceCredential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, ok := bearerToken(r.Header.Get("Authorization"))
 			matched := 0
-			if ok && credential.ID != "" {
-				for _, secret := range credential.Secrets {
-					matched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+			var matchedCredential authentication.ServiceCredential
+			if ok {
+				for _, credential := range credentials {
+					credentialMatched := 0
+					if credential.ID != "" {
+						for _, secret := range credential.Secrets {
+							credentialMatched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+						}
+					}
+					if credentialMatched == 1 {
+						matched++
+						matchedCredential = credential
+					}
 				}
 			}
 			if matched == 1 {
-				principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: credential.ID, Scopes: credential.Scopes}
+				principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: matchedCredential.ID, Dashboard: matchedCredential.Dashboard, Scopes: matchedCredential.Scopes}
 				r = r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal))
 			}
 			next.ServeHTTP(w, r)

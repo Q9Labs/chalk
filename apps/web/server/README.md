@@ -42,9 +42,9 @@ On the Orb machine, run `node apps/web/tests/dashboard/local-dev-browser.mjs <pu
 
 ## Runtime bindings
 
-`config.ts` validates the bindings and is the list. Set them per Pages environment and never expose credentials through `VITE_*`. `DASHBOARD_SERVICE_TOKEN` must equal one of the engine's `CHALK_API_SERVICE_SECRETS`; Pages never uses a System token. The fixture provider is local and test only.
+`config.ts` validates the bindings and is the list. Set them per Pages environment and never expose credentials through `VITE_*`. `DASHBOARD_SERVICE_TOKEN` must equal one of the engine secrets for the dashboard-marked service principal (the legacy `CHALK_API_SERVICE_SECRETS` entry or its `CHALK_API_SERVICE_PRINCIPALS` equivalent); Pages never uses a System token. The fixture provider is local and test only.
 
-The engine needs this service principal:
+The legacy engine settings need this service principal:
 
 ```
 CHALK_API_SERVICE_ID=<stable dashboard service id>

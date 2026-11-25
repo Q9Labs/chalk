@@ -17,6 +17,7 @@ const (
 	APIServiceID          = "CHALK_API_SERVICE_ID"
 	APIServiceSecrets     = "CHALK_API_SERVICE_SECRETS"
 	APIServiceScopes      = "CHALK_API_SERVICE_SCOPES"
+	APIServicePrincipals  = "CHALK_API_SERVICE_PRINCIPALS"
 
 	OAuthIssuer            = "CHALK_OAUTH_ISSUER"
 	OAuthConsentURL        = "CHALK_OAUTH_CONSENT_URL"
@@ -29,7 +30,7 @@ type APIConfig struct {
 	Address                        string
 	CORSAllowedOrigins             []string
 	LocalSystemToken               string
-	ServicePrincipal               authentication.ServiceCredential
+	ServicePrincipals              []authentication.ServiceCredential
 	OAuth                          OAuthConfig
 
 	TrustedProxyCIDRs []string

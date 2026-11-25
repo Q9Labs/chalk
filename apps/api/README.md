@@ -16,7 +16,15 @@ The API reads its settings from environment variables. Find the variables, defau
 
 **Direct door.** `CHALK_API_DIRECT_URL` is advertised as `directSignalingUrl` in Chalk SFU join grants (see `docs/operators/direct-sync-path.md`). Leaving it empty turns the direct door off for new joins without a web deploy.
 
-**Service principal.** `CHALK_API_SERVICE_ID`, `CHALK_API_SERVICE_SECRETS` and `CHALK_API_SERVICE_SCOPES` are all set or all unset. To rotate a secret, add the new one, deploy callers, then remove the old one; keep the ID unchanged. The service is never System. It owns Tenants it creates (repeated `POST /v1/tenants` with the same `external_id` returns the existing Tenant unchanged), sees only those, and with `tenants:write` may PATCH only `cors_allowed_origins`. Services cannot create or rotate API keys that carry `tenants:write`.
+**Service principals.** Chalk operators grant trusted backend services only through configuration; no API route registers one. The legacy `CHALK_API_SERVICE_ID`, `CHALK_API_SERVICE_SECRETS` and `CHALK_API_SERVICE_SCOPES` are all set or all unset and keep working unchanged; they configure the first-party dashboard service. Register additional services, or a fresh all-list configuration, in `CHALK_API_SERVICE_PRINCIPALS`, a JSON array whose entries have `id`, `secrets`, `scopes` and optional `dashboard`:
+
+```sh
+CHALK_API_SERVICE_PRINCIPALS='[{"id":"service-b","secrets":["<current-secret>","<next-secret>"],"scopes":["tenants:read","tenants:write"]}]'
+```
+
+To rotate a secret, add the new one, deploy callers, then remove the old one; keep the service ID unchanged. Legacy and JSON configuration may be combined. Startup rejects duplicate service IDs, a secret shared by two service IDs, and more than one `dashboard: true`; the legacy service is already the dashboard service, so a combined entry must not mark another one. Only the dashboard service may decide MCP OAuth consent.
+
+A service is never System. It owns Tenants it creates (repeated `POST /v1/tenants` with the same `external_id` returns the existing Tenant unchanged), sees only those, and `external_id` is unique within each service rather than across services. With `tenants:write` it may PATCH only `cors_allowed_origins`. Services cannot create or rotate API keys that carry `tenants:write`.
 
 **Media.** The Chalk SFU is the only media plane. The public `media_plane` field accepts `chalk_sfu`; retired values return `400 space.invalid_media_plane`. SDKs that do not declare `chalk_sfu` receive `409 media.client_unsupported`. Enable and configure the fleet with the `CHALK_SFU_*` settings. When new Episodes are paused or the fleet has no room, the request fails without allocating media. Live Episodes keep their stored bindings.
 
