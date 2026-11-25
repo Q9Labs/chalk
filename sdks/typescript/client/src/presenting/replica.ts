@@ -71,7 +71,7 @@ export class PresentingReplica {
   }
 
   #command(command: Wire["Command"]): Promise<PresentingCommandResult> {
-    if (!this.#live) return Promise.resolve(unavailable);
+    if (!this.#live || this.#snapshot.status === "unavailable") return Promise.resolve(unavailable);
     const operationId = uuidV7(Date.now());
     const wire = encodePresentingFrame({ type: "presenting_command", operation_id: operationId, command });
     return new Promise((resolve) => {
