@@ -78,6 +78,8 @@ remote test -f /var/lib/chalk-sfu-bootstrapped
 
 if [[ -n "${SFU_FROM_CI:-}" ]]; then
   echo "==> release run: the host firewall stays as the last operator run set it"
+elif [[ -n "${SFU_SKIP_CLOUD_FIREWALL:-}" && "$environment" == bench ]]; then
+  echo "==> scoped bench token: keeping first boot's host firewall without reading a cloud firewall"
 else
   echo "==> matching the host firewall to the cloud firewall"
   sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '

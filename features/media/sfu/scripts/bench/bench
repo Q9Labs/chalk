@@ -213,8 +213,13 @@ up() {
   for extra in ${control_addresses//,/ }; do
     control_rule+=",address:${extra}"
   done
-  doctl compute firewall create --name "$firewall" --droplet-ids "$droplet_ids" --inbound-rules "${inbound} ${control_rule}" \
-    --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" >/dev/null
+  if doctl compute firewall create --name "$firewall" --droplet-ids "$droplet_ids" --inbound-rules "${inbound} ${control_rule}" \
+    --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" >/dev/null 2>"${dir}/firewall.err"; then
+    :
+  else
+    echo "warning: could not create the cloud firewall ($(tail -1 "${dir}/firewall.err")); the ephemeral bench relies on the node's matching ufw" >&2
+    export SFU_SKIP_CLOUD_FIREWALL=1
+  fi
 
   local id budget address prefix nodes_value="" incarnations=()
   for spec in "${nodes[@]}"; do
