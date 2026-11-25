@@ -234,14 +234,25 @@ func renderIsolatedPDFPage(ctx context.Context, executable, sourcePath string, p
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
 	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	command := exec.CommandContext(childCtx, executable, args...)
 	environment := []string{"RENDER_CHILD_MODE=" + mode}
 	if libraryPath := os.Getenv("LD_LIBRARY_PATH"); libraryPath != "" {
 		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
 	}
-	command.Env = environment
-	configureIsolatedChild(command)
-	output, err := command.CombinedOutput()
+	newCommand := func(namespaces bool) *exec.Cmd {
+		command := exec.CommandContext(childCtx, executable, args...)
+		command.Env = environment
+		if namespaces {
+			configureIsolatedChild(command)
+		} else {
+			configureIsolatedChildWithoutNamespaces(command)
+		}
+		return command
+	}
+	output, err := newCommand(isolatedNamespacesEnabled()).CombinedOutput()
+	if err != nil && childCtx.Err() == nil && isolatedNamespaceError(err) {
+		disableIsolatedNamespaces()
+		output, err = newCommand(false).CombinedOutput()
+	}
 	if childCtx.Err() == context.DeadlineExceeded {
 		return fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -29,5 +30,17 @@ func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 			t.Skipf("qemu-user cannot create the Linux network namespace: %v", err)
 		}
 		t.Fatalf("isolated child: %v", err)
+	}
+}
+
+func TestIsolatedNamespaceErrorDetection(t *testing.T) {
+	if !isolatedNamespaceError(&os.PathError{Op: "fork/exec", Path: "/tmp/renderer", Err: syscall.EPERM}) {
+		t.Fatal("expected EPERM fork failure to trigger the namespace fallback")
+	}
+	if !isolatedNamespaceError(&os.PathError{Op: "fork/exec", Path: "/tmp/renderer", Err: syscall.EINVAL}) {
+		t.Fatal("expected EINVAL fork failure to trigger the namespace fallback")
+	}
+	if isolatedNamespaceError(os.ErrNotExist) {
+		t.Fatal("unrelated process errors must not disable namespace isolation")
 	}
 }
