@@ -53,6 +53,13 @@ class WindowBootTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.boot.node_size(TABLE, 3)
 
+    def test_the_image_manifest_selects_a_premium_size_and_the_node_must_match_it(self):
+        name, size = self.boot.node_size(TABLE, 2, 's-2vcpu-2gb-amd')
+        self.assertEqual((name, size['vcpus']), ('s-2vcpu-2gb-amd', 2))
+        for requested in ('s-4vcpu-8gb', 's-8vcpu-16gb'):
+            with self.subTest(requested=requested), self.assertRaises(SystemExit):
+                self.boot.node_size(TABLE, 2, requested)
+
     def test_an_unfilled_placeholder_is_an_error(self):
         self.assertEqual(self.boot.render('a=__X__', {'X': '1'}), 'a=1')
         with self.assertRaises(SystemExit):

@@ -229,8 +229,8 @@ build() {
   render_templates "${work}/templates" "$revision" "$image_id"
   local not_after
   not_after="$("$openssl" x509 -in "${dir}/window-server.crt" -noout -enddate | sed 's/^notAfter=//')"
-  jq -n --arg environment "$environment" --arg revision "$revision" --arg image_id "$image_id" --arg not_after "$not_after" \
-    '{schema: "chalk_sfu_window_image.v1", environment: $environment, revision: $revision, image_id: $image_id, certificate_not_after: $not_after}' \
+  jq -n --arg environment "$environment" --arg revision "$revision" --arg image_id "$image_id" --arg not_after "$not_after" --arg size "$size" \
+    '{schema: "chalk_sfu_window_image.v1", environment: $environment, revision: $revision, image_id: $image_id, certificate_not_after: $not_after, size: $size}' \
     >"${work}/templates/window-image.json"
   remote "install -d -m 0755 /etc/chalk-sfu"
   local file

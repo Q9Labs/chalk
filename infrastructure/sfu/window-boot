@@ -4,7 +4,8 @@
 The snapshot holds the SFU image, the environment's server certificate as rootless Podman secrets and two
 templates, so it carries no address and no per-node setting. This script finds what only the running Droplet
 knows: its own public IPv4 address (from DigitalOcean's metadata service, which hands out no secret) and its
-measured node size (from the vCPU count and the SFU's node table). It renders the settings and the unit and
+measured node size (the size written into the image manifest, falling back to the base size for the
+vCPU count on older images). It renders the settings and the unit and
 starts the node. Any doubt is a failure and the node stays down: a node that announced a wrong address would
 look healthy and fail every call.
 """
@@ -50,10 +51,25 @@ def public_ipv4(fetch=None, attempts=60, pause=2.0, sleep=None):
     raise SystemExit(f'no usable public IPv4 address from the metadata service ({last})')
 
 
-def node_size(table, vcpus):
-    """The measured size with this many vCPUs, as the deploy picks it, or an error."""
-    for name, size in table['sizes'].items():
-        if size['vcpus'] == vcpus:
+def node_size(table, vcpus, requested=None):
+    """The measured size for this node, as the deploy picks it, or an error.
+
+    Images built after several sizes shared a vCPU count carry their builder's size in the
+    manifest. Older images do not; for those, keep the deploy's long-standing fallback to the
+    non-premium base size with this vCPU count.
+    """
+    if requested:
+        size = table['sizes'].get(requested)
+        if size is None:
+            raise SystemExit(f'image size {requested} is not in the measured node table')
+        if size['vcpus'] != vcpus:
+            raise SystemExit(f'image size {requested} is a {size["vcpus"]}-vCPU size, but the node has {vcpus}')
+        return requested, size
+    matches = [(name, size) for name, size in table['sizes'].items() if size['vcpus'] == vcpus]
+    if len(matches) == 1:
+        return matches[0]
+    for name, size in matches:
+        if not (name.endswith('-amd') or name.endswith('-intel')):
             return name, size
     raise SystemExit(f'no measured node size for {vcpus} vCPUs; load-test the size and add it to node.json')
 
@@ -85,7 +101,7 @@ def local_addresses():
 def main():
     manifest = json.loads((CONFIG / 'window-image.json').read_text())
     table = json.loads((CONFIG / 'node.json').read_text())
-    size_name, size = node_size(table, len(os.sched_getaffinity(0)))
+    size_name, size = node_size(table, len(os.sched_getaffinity(0)), manifest.get('size'))
     address = public_ipv4()
     try:
         # The public address sits on the Droplet's own interface. A mismatch is logged, not fatal: a reserved
