@@ -298,7 +298,7 @@ verify() {
       *) die "$usage" ;;
     esac
   done
-  need doctl jq openssl curl
+  need doctl jq openssl curl nc
   doctl account get >/dev/null || die "doctl is not signed in"
   environment_values "$environment"
   dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
@@ -322,10 +322,10 @@ verify() {
     --inbound-rules "protocol:tcp,ports:22,address:${operator} protocol:tcp,ports:${control_port},address:${operator} protocol:tcp,ports:${media_port},address:${operator}" \
     --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" |
     jq -r '.[0].id')"
-  # The user data holds no secret. A controller sends its own; this one only lets this machine reach the control port.
-  printf '#cloud-config\nruncmd:\n  - ufw allow proto tcp from %s to any port %s\n' "$operator" "$control_port" >"${work}/user-data.yaml"
+  # The verification source must be allowed by the image's existing host
+  # firewall; modifying it here would not test what the controller will boot.
   doctl compute droplet create "${tag_prefix}-verify-${snapshot_id}" --region "$region" --size "$size" --image "$snapshot_id" \
-    --tag-name "$tag" --user-data-file "${work}/user-data.yaml" --wait --output json >"${work}/droplet.json"
+    --tag-name "$tag" --wait --output json >"${work}/droplet.json"
   clone_id="$(jq -r '.[0].id' "${work}/droplet.json")"
   local address ready=""
   address="$(droplet_address "${work}/droplet.json")"
@@ -341,8 +341,8 @@ verify() {
   [[ "$(jq -r --arg revision "$revision" --argjson buffer "$udp_buffer" \
     '.revision == $revision and .draining == false and .allocations == 0 and .host.udpReceiveBufferBytes >= $buffer and .host.udpSendBufferBytes >= $buffer' <<<"$ready")" == true ]] \
     || die "the clone's node reports ${ready}; want revision ${revision}, no calls and 8 MiB buffers"
-  (exec 3<>"/dev/tcp/${address}/${media_port}") 2>/dev/null || die "the media port ${media_port}/tcp is closed on the clone"
-  if (exec 3<>"/dev/tcp/${address}/22") 2>/dev/null; then die "port 22 answers on the clone; SSH must be off"; fi
+  nc -z -w 5 "$address" "$media_port" || die "the media port ${media_port}/tcp is closed on the clone"
+  if nc -z -w 5 "$address" 22; then die "port 22 answers on the clone; SSH must be off"; fi
   echo "verified snapshot ${snapshot_id}: revision ${revision} ready, certificate accepted, SSH closed"
   echo "not proved here: the announced address (readyz does not show it) and a real call; run the canary against the first node from this image"
 }

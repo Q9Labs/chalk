@@ -33,7 +33,8 @@ const liveTimeoutMs = 120_000;
 const usage = [
   "usage: class-window.mjs plan [--classes N] [--participants N] [--node-size S] [--hours H] [--shards N] [--share-duty F]",
   "       class-window.mjs run --environment <nightly|staging> --confirm <same> --expect-api-host <host> --window-start <ISO>",
-  "                            --first-class N --classes N [--participants N] [--share-duty F] [--hold-minutes N] [--out DIR]",
+  "                            --first-class N --classes N [--participants N] [--share-duty F] [--hold-minutes N]",
+  "                            [--overrun-class N --overrun-minutes N] [--out DIR]",
 ].join("\n");
 
 const fail = (message) => {
@@ -56,7 +57,9 @@ const { positionals, values } = parseArgs({
     "expect-api-host": { type: "string" },
     "window-start": { type: "string" },
     "first-class": { type: "string", default: "0" },
-    "hold-minutes": { type: "string", default: "60" },
+    "hold-minutes": { type: "string", default: "10" },
+    "overrun-class": { type: "string" },
+    "overrun-minutes": { type: "string", default: "4" },
     out: { type: "string" },
   },
 });
@@ -93,24 +96,33 @@ async function runWindow() {
   if (!values["window-start"] || Number.isNaN(Date.parse(values["window-start"]))) fail("--window-start must be an ISO time");
   const windowIso = values["window-start"];
   const windowStart = Date.parse(windowIso);
+  const lead = windowStart - Date.now();
+  if (lead < 3 * 60_000 || lead > 25 * 60_000) fail("the shared start must be 3 to 25 minutes away");
   const classes = whole(values.classes ?? "0", "--classes");
   if (classes < 1) fail("--classes must be at least 1");
   const firstClass = whole(values["first-class"], "--first-class");
   const holdMs = whole(values["hold-minutes"], "--hold-minutes") * 60_000;
+  if (holdMs <= rampMs + shareStartupMs) fail("--hold-minutes must leave time to sample media after the ramp");
+  const overrunClass = values["overrun-class"] === undefined ? -1 : whole(values["overrun-class"], "--overrun-class");
+  const overrunMs = overrunClass < 0 ? 0 : whole(values["overrun-minutes"], "--overrun-minutes") * 60_000;
+  if (lead + holdMs + overrunMs > 50 * 60_000) fail("finish within the proof key's lifetime (at most 50 minutes from now)");
   const participants = whole(values.participants, "--participants");
   const shareDuty = Number(values["share-duty"]);
   if (!(shareDuty >= 0 && shareDuty <= 1)) fail("--share-duty must be between 0 and 1");
   const out = resolve(values.out ?? `.private/class-window/${windowIso.replace(/[:.]/g, "-")}`);
 
   const { loadConfig, createRun, errorEvidence, save, publicFailure, waitFor } = await import("./runtime.mjs");
-  const { cleanupRun, sweepStaleRuns } = await import("./cleanup.mjs");
-  const { prepareIntegration, createSpace, openEpisodeInSpace, episodeEnd } = await import("./proofs.mjs");
+  const { cleanupRun } = await import("./cleanup.mjs");
+  const { prepareIntegration, createProofKey, createSpace, openEpisodeInSpace, episodeEnd } = await import("./proofs.mjs");
   const { launchGuests, stats } = await import("./media.mjs");
   const { manualPolicy } = await import("./space-fixture.mjs");
 
   await mkdir(out, { recursive: true, mode: 0o700 });
+  if (!process.env.CHALK_PROOF_API_URL) fail("set CHALK_PROOF_API_URL to the disposable stack");
+  const configuredOrigin = new URL(process.env.CHALK_PROOF_API_URL);
+  if (configuredOrigin.hostname === "api.chalkmeet.com") fail("this proof does not run against the production API");
+  if (configuredOrigin.host !== values["expect-api-host"]) fail("the configured API host is not --expect-api-host");
   const config = await loadConfig({ capabilities: false });
-  if (new URL(config.api_url).host !== values["expect-api-host"]) fail("the configured API host is not --expect-api-host");
 
   const controller = new AbortController();
   const signal = controller.signal;
@@ -119,7 +131,6 @@ async function runWindow() {
   let origin;
   const verdicts = [];
   try {
-    await sweepStaleRuns(config);
     origin = (await prepareIntegration(shardRun, false)).origin;
     const settled = await Promise.allSettled(Array.from({ length: classes }, (_, offset) => runClass(firstClass + offset)));
     settled.forEach((result, offset) => {
@@ -136,23 +147,39 @@ async function runWindow() {
   async function runClass(index) {
     const directory = resolve(out, `class-${index}`);
     const run = await createRun(config, directory, signal, `${shardRunId}-k${index}`);
+    let booking;
     try {
+      await createProofKey(run);
+      const space = await createSpace(run, manualPolicy, { reuse: false });
+      booking = `${run.tenantPath}/spaces/${space.id}/scheduled-episodes/${randomUUID()}`;
+      const scheduledEnd = windowStart + holdMs;
+      await run.apiRequest("PUT", booking, {
+        starts_at: new Date(windowStart).toISOString(),
+        expected_ends_at: new Date(scheduledEnd).toISOString(),
+        expected_participants: Array.from({ length: participants }, (_, guest) => ({ name: `Guest ${guest + 1}` })),
+      });
+      if (Date.now() >= windowStart - prepareMs) throw new Error("booking completed too late to prove prewarm");
+      await save(resolve(directory, "booking.json"), { bookedAt: new Date().toISOString(), scheduledEnd: new Date(scheduledEnd).toISOString() });
       await until(windowStart - prepareMs, signal);
-      const space = await createSpace(run, manualPolicy);
+      const openingStarted = performance.now();
       const { episode } = await openEpisodeInSpace(run, space);
+      const openEpisodeMs = Math.round(performance.now() - openingStarted);
       const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
       const guests = await launchGuests(run, space, episode, null, origin, false, participants, { deferJoin: true });
       await until(windowStart, signal);
+      const joiningStarted = performance.now();
       await Promise.all(
         guests.pages.map((page, guest) =>
           page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: config.api_url, name: `Class ${index} guest ${guest + 1}` }),
         ),
       );
       await waitFor(`class ${index} live`, () => allLive(guests.pages, participants), liveTimeoutMs, 2000, signal);
-      const samples = await hold(guests.pages, resolve(directory, "samples.jsonl"));
+      const mediaLiveMs = Math.round(performance.now() - joiningStarted);
+      const classEnd = scheduledEnd + (index === overrunClass ? overrunMs : 0);
+      const samples = await hold(guests.pages, resolve(directory, "samples.jsonl"), classEnd);
       ending.useSDK(guests.pages[0]);
       await ending.end();
-      const result = { class: index, ...judgeClass({ samples, participants, rampMs, shareStartupMs }) };
+      const result = { class: index, openEpisodeMs, mediaLiveMs, ...judgeClass({ samples, participants, rampMs, shareStartupMs }) };
       await save(resolve(directory, "verdict.json"), result);
       return result;
     } catch (error) {
@@ -160,17 +187,18 @@ async function runWindow() {
       await save(resolve(directory, "error.json"), errorEvidence(error)).catch(() => {});
       return { class: index, pass: false, reason: "class-failed" };
     } finally {
+      if (booking) await run.apiRequest("DELETE", booking).catch((error) => publicFailure(`class ${index} cancel`, error));
       await cleanupRun(run).catch((error) => publicFailure(`class ${index} cleanup`, error));
     }
   }
 
   // Sample every guest's inbound video once per interval, and share the sharer's screen in stretches after the ramp.
   // Each sample is appended as it is taken, so a crash keeps the evidence so far.
-  async function hold(pages, file) {
+  async function hold(pages, file, end) {
     const samples = [];
     let shareOn = false;
     let shareStartedAt = null;
-    for (let at = windowStart; at < windowStart + holdMs; at += sampleMs) {
+    for (let at = windowStart; at < end; at += sampleMs) {
       await until(at, signal);
       const offset = at - windowStart;
       const wanted = offset >= rampMs && (offset - rampMs) % sharePeriodMs < shareDuty * sharePeriodMs;

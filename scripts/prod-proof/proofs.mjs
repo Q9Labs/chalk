@@ -42,9 +42,9 @@ export async function prepareIntegration(run, webhooks) {
   return receiver;
 }
 // Use a configured Space or create one. Either must admit new Chalk SFU Episodes.
-export async function createSpace(run, policy = manualPolicy) {
+export async function createSpace(run, policy = manualPolicy, { reuse = true } = {}) {
   const pinName = pinnedSpaceVariable(policy);
-  const existing = await pinnedSpace(run, policy, pinName);
+  const existing = reuse ? await pinnedSpace(run, policy, pinName) : undefined;
   if (existing) {
     checkSpacePlane(existing);
     checkSpacePolicy(existing, policy);
