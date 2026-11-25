@@ -146,6 +146,22 @@ it("sends set_presentation before opening locally for a non-host drawer", async 
   await wire.transport.stopSceneSubscription();
 });
 
+it("opens an already presented board locally without replacing the presenter", async () => {
+  const events: string[] = [];
+  const snapshot = pickedDrawerSnapshot();
+  const presented = {
+    getSnapshot: () => ({
+      ...snapshot,
+      whiteboard: {
+        ...snapshot.whiteboard,
+        engine: { ...snapshot.whiteboard.engine, presenting: true, presenterId: "30000000-0000-4000-8000-000000000003" },
+      },
+    }),
+  };
+  await presentNativeBoard(presented, stage(events), transport(events));
+  expect(events).toEqual(["start", "open:true", "content"]);
+});
+
 it("does not open locally when presenting fails", async () => {
   const events: string[] = [];
   await expect(presentNativeBoard(client(), stage(events), transport(events, true))).rejects.toThrow("presentation rejected");
