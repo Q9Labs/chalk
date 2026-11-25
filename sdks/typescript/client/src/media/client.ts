@@ -77,6 +77,7 @@ export class SFUClient implements ClientMediaPlane {
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
+  readonly #cameraSimulcast: boolean;
   readonly #replaceMediaConnection: ((observedConnectionId: string) => Promise<SFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
@@ -187,6 +188,7 @@ export class SFUClient implements ClientMediaPlane {
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
+    this.#cameraSimulcast = options.cameraSimulcast ?? true;
     this.#videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now(), options.unreportedVideoTileWaitMs ?? UNREPORTED_TILE_WAIT_MS);
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
@@ -1114,7 +1116,7 @@ export class SFUClient implements ClientMediaPlane {
     return publication;
   }
   #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): RTCRtpTransceiver {
-    if (state.source !== "camera" || firefoxCameraSimulcastUnsupported()) return connection.addTransceiver(state.track, { direction: "sendonly" });
+    if (state.source !== "camera" || !this.#cameraSimulcast || firefoxCameraSimulcastUnsupported()) return connection.addTransceiver(state.track, { direction: "sendonly" });
     // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
     // Match a single-stream camera's temporal mode so h does not spend
     // its constrained uplink budget on extra temporal-layer overhead.
