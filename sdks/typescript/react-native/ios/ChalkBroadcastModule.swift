@@ -25,6 +25,8 @@ final class ChalkBroadcastModule: NSObject {
   private let extensionId = Bundle.main.object(forInfoDictionaryKey: "RTCScreenSharingExtension") as? String
   private let appGroup = Bundle.main.object(forInfoDictionaryKey: "RTCAppGroupIdentifier") as? String
   private var pending: Pending?
+  /// On iPad the picker opens as a popover from its button, so the button must sit in a window.
+  private var picker: RPSystemBroadcastPickerView?
   private var resignedWhilePending = false
   private var observers: [NSObjectProtocol] = []
 
@@ -84,19 +86,35 @@ final class ChalkBroadcastModule: NSObject {
         reject("InvalidStateError", "A screen share is already being started.", nil)
         return
       }
-      let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+      guard let window = keyWindow() else {
+        reject("InvalidStateError", "Chalk must be in the front to share the screen.", nil)
+        return
+      }
+      let bounds = window.bounds
+      let picker = RPSystemBroadcastPickerView(frame: CGRect(x: bounds.midX - 22, y: bounds.maxY - 88, width: 44, height: 44))
       picker.preferredExtension = extensionId
       picker.showsMicrophoneButton = false
+      picker.alpha = 0.011
+      picker.isAccessibilityElement = false
+      window.addSubview(picker)
       guard let button = picker.subviews.compactMap({ $0 as? UIButton }).first else {
+        picker.removeFromSuperview()
         reject("NotSupportedError", "The iOS broadcast picker is unavailable.", nil)
         return
       }
+      self.picker = picker
       let timeout = DispatchWorkItem { [weak self] in self?.fail() }
       pending = Pending(resolve: resolve, reject: reject, timeout: timeout)
       resignedWhilePending = false
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.startTimeout, execute: timeout)
       button.sendActions(for: .touchUpInside)
     }
+  }
+
+  private func keyWindow() -> UIWindow? {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let windows = scenes.filter { $0.activationState == .foregroundActive }.flatMap(\.windows)
+    return windows.first(where: \.isKeyWindow) ?? windows.first
   }
 
   private func broadcastStarted() {
@@ -121,6 +139,8 @@ final class ChalkBroadcastModule: NSObject {
   private func take() -> Pending? {
     guard let current = pending else { return nil }
     current.timeout.cancel()
+    picker?.removeFromSuperview()
+    picker = nil
     pending = nil
     resignedWhilePending = false
     return current
