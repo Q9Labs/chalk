@@ -37,7 +37,7 @@ type Reconciler struct {
 func NewReconciler(policy Policy, store Store, provider Provider, control Control) (*Reconciler, error) {
 	capacity := policy.Capacity
 	if policy.Application == "" || capacity.SlotsPerNode < 2 || capacity.SlotsPerNode > 5 ||
-		capacity.StandingSlots < 0 || capacity.StandingSlots > 10 ||
+		capacity.StandingSlots < 0 || capacity.StandingSlots > 40 ||
 		capacity.SpareSlots < 1 || capacity.SpareSlots > capacity.SlotsPerNode ||
 		capacity.MaxNodes < 1 || capacity.MaxNodes > 6 ||
 		policy.MonthlyNodeTime < minimumNodeTime || policy.MonthlyNodeTime > 930*time.Hour ||
