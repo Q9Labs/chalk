@@ -36,8 +36,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ github.event.workflow_run.id || inputs.source_run }}
         run: |
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=1" \
-            --jq ".[0] | select(.payload.proof_run_id == \"$SOURCE_RUN\" and .payload.proof_result == \"passed\") | .sha")
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&per_page=100" \
+            --jq "[.[] | select(.task == \"nightly-cut\")][0] | select(.payload.proof_run_id == \"$SOURCE_RUN\" and .payload.proof_result == \"passed\") | .sha")
           if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'verified=true' >> "$GITHUB_OUTPUT"
             echo "sha=$sha" >> "$GITHUB_OUTPUT"
