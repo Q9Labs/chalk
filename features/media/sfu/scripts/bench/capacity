@@ -52,10 +52,20 @@ up() {
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
   stamp="$(date -u +%m%d%H%M)"
   trap 'echo "capacity: up failed, deleting what was created" >&2; down || true' ERR
+  local create_pids=() create_pid create_failed=0
   for role in ${generator_roles}; do
-    doctl compute droplet create "chalk-sfu-bench-${stamp}-gen-${role}" --region "$region" --size "$generator_size" \
-      --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json | \
-      jq 'if type == "array" then . else [.] end' >"${state}/generator-${role}.json"
+    (
+      doctl compute droplet create "chalk-sfu-bench-${stamp}-gen-${role}" --region "$region" --size "$generator_size" \
+        --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json | \
+        jq 'if type == "array" then . else [.] end' >"${state}/generator-${role}.json"
+    ) &
+    create_pids+=("$!")
+  done
+  for create_pid in "${create_pids[@]}"; do
+    wait "$create_pid" || create_failed=1
+  done
+  [[ "$create_failed" == 0 ]]
+  for role in ${generator_roles}; do
     echo "generator ${role}: Droplet $(jq -r '.[0].id' "${state}/generator-${role}.json") (${generator_size})"
   done
   local control="" role_address
