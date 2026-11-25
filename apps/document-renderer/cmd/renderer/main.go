@@ -29,13 +29,17 @@ type invocationEvent struct {
 }
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if err := worker.MakeProcessNonDumpable(); err != nil {
+		logger.Error("renderer process protection failed", "error", err)
+		os.Exit(1)
+	}
 	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
 		os.Exit(render.RunChild(mode, os.Args[1:]))
 	}
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if benchmarkFile := os.Getenv("RENDER_BENCHMARK_FILE"); benchmarkFile != "" {
 		if err := runBenchmark(benchmarkFile); err != nil {
 			logger.Error("benchmark failed", "error", err)
