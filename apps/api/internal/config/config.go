@@ -110,7 +110,7 @@ func (cfg *Config) loadCredentials(environment string) error {
 	if environment != DefaultEnvironment && cfg.API.LocalSystemToken != "" {
 		return fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
 	}
-	cfg.API.ServicePrincipal, err = loadServicePrincipal(cfg.API.LocalSystemToken)
+	cfg.API.ServicePrincipals, cfg.API.DashboardServiceID, err = loadServicePrincipals(cfg.API.LocalSystemToken)
 	if err != nil {
 		return err
 	}

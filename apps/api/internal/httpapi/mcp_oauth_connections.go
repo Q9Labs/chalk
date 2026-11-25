@@ -73,11 +73,11 @@ type mcpConnectionIDsRequest struct {
 	ConnectionID utilities.ID
 }
 
-func mcpOAuthConnectionEndpoints(service MCPOAuthService, authorizer TenantAuthorizer) []RouteEndpoint {
+func mcpOAuthConnectionEndpoints(service MCPOAuthService, authorizer TenantAuthorizer, dashboardServiceID string) []RouteEndpoint {
 	return []RouteEndpoint{
-		inspectMCPConsentEndpoint(service),
-		approveMCPConsentEndpoint(service, authorizer),
-		denyMCPConsentEndpoint(service),
+		inspectMCPConsentEndpoint(service, dashboardServiceID),
+		approveMCPConsentEndpoint(service, authorizer, dashboardServiceID),
+		denyMCPConsentEndpoint(service, dashboardServiceID),
 		listMCPConnectionsEndpoint(service, authorizer),
 		revokeMCPConnectionEndpoint(service, authorizer),
 	}
@@ -86,20 +86,20 @@ func mcpOAuthConnectionEndpoints(service MCPOAuthService, authorizer TenantAutho
 // requireDashboardService accepts only the dashboard's service credential. It
 // vouches for a signed-in person and for the tenant that person owns, so no
 // tenant API key or other caller may decide a consent request.
-func requireDashboardService(ctx context.Context, scope authentication.Scope) (authentication.Principal, error) {
+func requireDashboardService(ctx context.Context, dashboardServiceID string, scope authentication.Scope) (authentication.Principal, error) {
 	principal, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		return authentication.Principal{}, apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalService || !principal.HasScope(scope) {
+	if principal.Kind != authentication.PrincipalService || dashboardServiceID == "" || principal.ServiceID != dashboardServiceID || !principal.HasScope(scope) {
 		return authentication.Principal{}, apiErrorForbidden
 	}
 	return principal, nil
 }
 
-func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentResponse] {
+func inspectMCPConsentEndpoint(service MCPOAuthService, dashboardServiceID string) Endpoint[mcpConsentLookupBody, mcpConsentResponse] {
 	return Post("/v1/mcp-oauth/requests/inspect", "inspectMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentResponse, error) {
-		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsRead); err != nil {
+		if _, err := requireDashboardService(ctx, dashboardServiceID, authentication.ScopeTenantsRead); err != nil {
 			return mcpConsentResponse{}, err
 		}
 		pending, err := service.ConsentRequest(ctx, request.Request)
@@ -116,9 +116,9 @@ func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLooku
 		ErrorRules(mcpOAuthRules)
 }
 
-func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConsentApproveBody, mcpConsentRedirectResponse] {
+func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthorizer, dashboardServiceID string) Endpoint[mcpConsentApproveBody, mcpConsentRedirectResponse] {
 	return Post("/v1/mcp-oauth/requests/approve", "approveMCPConsentRequest", decodeJSONBody[mcpConsentApproveBody], func(ctx context.Context, request mcpConsentApproveBody) (mcpConsentRedirectResponse, error) {
-		principal, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite)
+		principal, err := requireDashboardService(ctx, dashboardServiceID, authentication.ScopeTenantsWrite)
 		if err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
@@ -144,9 +144,9 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 		ErrorRules(mcpOAuthRules)
 }
 
-func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentRedirectResponse] {
+func denyMCPConsentEndpoint(service MCPOAuthService, dashboardServiceID string) Endpoint[mcpConsentLookupBody, mcpConsentRedirectResponse] {
 	return Post("/v1/mcp-oauth/requests/deny", "denyMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentRedirectResponse, error) {
-		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite); err != nil {
+		if _, err := requireDashboardService(ctx, dashboardServiceID, authentication.ScopeTenantsWrite); err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
 		redirect, err := service.Deny(ctx, request.Request)
