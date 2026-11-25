@@ -899,6 +899,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/lobby": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get participant lobby */
+    get: operations["getParticipantLobby"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
     parameters: {
       query?: never;
@@ -1522,6 +1539,7 @@ export interface components {
         | boolean
         | null;
       name: string;
+      notice?: string;
       participant_id?: components["schemas"]["ParticipantId"];
       role: string;
     };
@@ -1863,6 +1881,11 @@ export interface components {
       space_invite_token: string;
     };
     EntrancePreparation: {
+      participants?: {
+        display_name: string;
+        identity_kind: string;
+        notice?: string | null;
+      }[];
       prepared: boolean;
     };
     Episode: {
@@ -2159,12 +2182,20 @@ export interface components {
         generation: number;
         id: components["schemas"]["ParticipantId"];
         identity_id?: components["schemas"]["UUID"] | null;
+        notice?: string | null;
         role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;
         tenant_id: components["schemas"]["TenantId"];
       };
       sync_token?: string;
+    };
+    ParticipantLobby: {
+      participants: {
+        display_name: string;
+        identity_kind: string;
+        notice?: string | null;
+      }[];
     };
     ParticipantRemoval: {
       external_operation: {
@@ -2184,6 +2215,7 @@ export interface components {
         generation: number;
         id: components["schemas"]["UUID"];
         identity_id?: components["schemas"]["UUID"] | null;
+        notice?: string | null;
         role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;
@@ -9007,6 +9039,106 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getParticipantLobby: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantLobby"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

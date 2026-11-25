@@ -1,6 +1,6 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
-import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type ChalkPublicClient, type JoinOptions, type PublicSpaceArrival } from "@q9labsai/chalk-client";
+import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type ChalkPublicClient, type JoinOptions, type LobbyParticipant, type PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
@@ -57,6 +57,8 @@ export function SpacePage(props: SpacePageProps = {}) {
 function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const client = useMemo(() => createPublicInviteClient(), []);
+  const routeInviteToken = inviteCode ?? readSpaceInviteToken(globalThis.location?.hash ?? "");
+  const [lobbyParticipants, setLobbyParticipants] = useState<readonly LobbyParticipant[]>([]);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
@@ -97,6 +99,21 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const reportExpired = useReportCredentialExpired(ended?.reportExpiresAt ?? liveReportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), session?.reloadMarker().tenantId ?? ended?.tenantId);
   const active = useRef(true);
+  useEffect(() => {
+    if (!routeInviteToken) return;
+    let cancelled = false;
+    void client.prepareSpaceEntrance(routeInviteToken).then(
+      (preparation) => {
+        if (!cancelled) setLobbyParticipants(preparation.participants);
+      },
+      () => {
+        if (!cancelled) setLobbyParticipants([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, routeInviteToken]);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ ...(entranceSettings ?? devicesOff), displayName }), [displayName, entranceSettings]);
   useEffect(() => {
     active.current = true;
@@ -344,6 +361,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             message={current.failure?.message ?? `Asking to join ${current.waiting.spaceName ?? "the call"}`}
             detail={current.failure ? undefined : "The host will let you in."}
             joiningAs={current.failure ? undefined : displayName.trim()}
+            participants={lobbyParticipants}
             action={{ label: "Cancel", onClick: () => void cancel(), disabled: current.cancelling }}
           />
         );
@@ -362,6 +380,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               warmCall();
             }}
             joining={current.phase !== "idle"}
+            participants={lobbyParticipants}
             onJoin={(devices: PreJoinJoinOptions) => start({ ...devices, displayName }, true)}
           />
         ) : (

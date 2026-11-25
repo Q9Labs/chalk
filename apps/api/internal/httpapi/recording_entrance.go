@@ -17,6 +17,7 @@ type RecordingEntrancePreparer interface {
 
 type EntranceInviteResolver interface {
 	ResolveInviteToken(context.Context, string) (publicinvites.Invite, publicinvites.Token, error)
+	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]publicinvites.LobbyParticipant, error)
 }
 
 type entranceInviteBody struct {
@@ -24,7 +25,8 @@ type entranceInviteBody struct {
 }
 
 type entrancePreparationResponse struct {
-	Prepared bool `json:"prepared"`
+	Prepared     bool                       `json:"prepared"`
+	Participants []lobbyParticipantResponse `json:"participants,omitempty"`
 }
 
 func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, entrancePreparationResponse] {
@@ -55,7 +57,16 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 		if err != nil {
 			return entrancePreparationResponse{}, err
 		}
-		return prepareEntrance(ctx, preparer, invite.TenantID, invite.SpaceID)
+		preparation, err := prepareEntrance(ctx, preparer, invite.TenantID, invite.SpaceID)
+		if err != nil {
+			return preparation, err
+		}
+		participants, err := invites.ListLobbyParticipants(ctx, invite.TenantID, invite.SpaceID)
+		if err != nil {
+			return preparation, err
+		}
+		preparation.Participants = newPublicLobbyParticipantResponse(participants)
+		return preparation, nil
 	}).Needs(invites).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
 		RequestBody("EntranceInvite", entranceInviteBody{}).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(apiErrorInvalidPublicInviteToken, apiErrorPublicInviteUnavailable, apiErrorSpaceNotFound, apiErrorServiceUnavailable, apiErrorInternal, apiErrorRateLimited).
@@ -71,4 +82,25 @@ func prepareEntrance(ctx context.Context, preparer RecordingEntrancePreparer, te
 		slog.WarnContext(ctx, "Capture Entrance preparation failed", "event", "recording.entrance.failed")
 	}
 	return entrancePreparationResponse{Prepared: prepared}, err
+}
+
+type lobbyParticipantResponse struct {
+	DisplayName  string  `json:"display_name"`
+	IdentityKind string  `json:"identity_kind"`
+	Notice       *string `json:"notice,omitempty"`
+}
+
+func newPublicLobbyParticipantResponse(participants []publicinvites.LobbyParticipant) []lobbyParticipantResponse {
+	result := make([]lobbyParticipantResponse, 0, len(participants))
+	for _, participant := range participants {
+		result = append(result, lobbyParticipantResponse{DisplayName: participant.DisplayName, IdentityKind: participant.IdentityKind, Notice: agentNotice(participant.IdentityKind, participant.Notice)})
+	}
+	return result
+}
+
+func agentNotice(kind, notice string) *string {
+	if kind != "agent" || notice == "" {
+		return nil
+	}
+	return &notice
 }

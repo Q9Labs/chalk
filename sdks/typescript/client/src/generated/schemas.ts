@@ -4,6 +4,7 @@ import { Schema, SchemaGetter } from "effect";
 
 export const ChalkCodePointLimits = {
   "AdmitEpisodeParticipantRequest.description": 80,
+  "AdmitEpisodeParticipantRequest.notice": 120,
   "CreateSpaceRequest.name": 120,
   "CreateTenantRequest.external_id": 512,
   "ProblemReportRequest.description": 1000,
@@ -131,6 +132,7 @@ export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
     identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.String.check(Schema.isMinLength(1)),
+    notice: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
     participant_id: Schema.optional(ParticipantIdSchema),
     role: Schema.String.check(Schema.isMinLength(1)),
   }))();
@@ -553,6 +555,15 @@ export type EntranceInvite = typeof EntranceInviteSchema.Type;
 
 export const EntrancePreparationSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
+    participants: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          display_name: Schema.String,
+          identity_kind: Schema.String,
+          notice: Schema.optional(Schema.NullOr(Schema.String)),
+        }),
+      ),
+    ),
     prepared: Schema.Boolean,
   }))();
 export type EntrancePreparation = typeof EntrancePreparationSchema.Type;
@@ -930,6 +941,7 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
       generation: Schema.Number,
       id: ParticipantIdSchema,
       identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+      notice: Schema.optional(Schema.NullOr(Schema.String)),
       role: Schema.String,
       space_id: SpaceIdSchema,
       status: Schema.String,
@@ -938,6 +950,18 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
     sync_token: Schema.optional(Schema.String),
   }))();
 export type ParticipantLifecycle = typeof ParticipantLifecycleSchema.Type;
+
+export const ParticipantLobbySchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    participants: Schema.Array(
+      Schema.Struct({
+        display_name: Schema.String,
+        identity_kind: Schema.String,
+        notice: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  }))();
+export type ParticipantLobby = typeof ParticipantLobbySchema.Type;
 
 export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -958,6 +982,7 @@ export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
       generation: Schema.Number,
       id: UUIDSchema,
       identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+      notice: Schema.optional(Schema.NullOr(Schema.String)),
       role: Schema.String,
       space_id: SpaceIdSchema,
       status: Schema.String,
@@ -3096,6 +3121,26 @@ export const GetParticipantEpisodeStatus429ResponseHeadersSchema = /* @__PURE__ 
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
+
+export const GetParticipantLobbyPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetParticipantLobbyPathParams = typeof GetParticipantLobbyPathParamsSchema.Type;
+
+export const GetParticipantLobbyResponseSchema = /* @__PURE__ */ (() => ParticipantLobbySchema)();
+export type GetParticipantLobbyResponse = typeof GetParticipantLobbyResponseSchema.Type;
+
+export const GetParticipantLobby429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetParticipantLobby429ResponseHeaders = typeof GetParticipantLobby429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -5504,6 +5549,25 @@ export const ParticipantNotFoundErrorSchema = ParticipantNotFoundErrorWireSchema
   }),
 );
 
+export class ParticipantNoticeForbiddenError extends Schema.TaggedErrorClass<ParticipantNoticeForbiddenError>()("ParticipantNoticeForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.notice_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantNoticeForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.notice_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantNoticeForbiddenErrorSchema = ParticipantNoticeForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantNoticeForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantNoticeForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RecordingArtifactNotFoundError extends Schema.TaggedErrorClass<RecordingArtifactNotFoundError>()("RecordingArtifactNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("recording_artifact.not_found"),
@@ -6923,6 +6987,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   MediaUnavailableErrorSchema,
   ParticipantDescriptionForbiddenErrorSchema,
   ParticipantInvalidIdErrorSchema,
+  ParticipantNoticeForbiddenErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -7376,6 +7441,21 @@ export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatusErrorSchema.Type;
+
+export const GetParticipantLobbyErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotActiveErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetParticipantLobbyError = typeof GetParticipantLobbyErrorSchema.Type;
 
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
@@ -8244,6 +8324,7 @@ export const ChalkOperationPolicies = {
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeTalkTime: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getParticipantLobby: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getScheduledEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

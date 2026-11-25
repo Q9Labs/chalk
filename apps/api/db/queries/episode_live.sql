@@ -59,3 +59,26 @@ insert into identities (id, tenant_id, kind, external_id, display_name)
 values (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(kind), sqlc.arg(external_id), sqlc.arg(display_name))
 on conflict (tenant_id, external_id) do update set external_id = excluded.external_id
 returning id, kind;
+
+-- name: ListSpaceLobbyParticipants :many
+select participants.id,
+       coalesce(participants.name, '') as display_name,
+       (case
+         when identities.id is not null then identities.kind
+         when participants.account_id is not null or participants.role = 'owner' then 'user'
+         else 'guest'
+       end)::text as identity_kind,
+       participants.notice
+from episodes
+join participants
+  on participants.tenant_id = episodes.tenant_id
+ and participants.space_id = episodes.space_id
+ and participants.episode_id = episodes.id
+left join identities
+  on identities.tenant_id = participants.tenant_id
+ and identities.id = participants.identity_id
+where episodes.tenant_id = sqlc.arg(tenant_id)
+  and episodes.space_id = sqlc.arg(space_id)
+  and episodes.status in ('active', 'ending')
+  and participants.status in ('joining', 'active')
+order by participants.created_at, participants.id;

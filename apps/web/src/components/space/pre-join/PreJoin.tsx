@@ -1,4 +1,4 @@
-import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { LobbyNotice, usePreJoinDevices, type LobbyParticipant, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
@@ -41,10 +41,11 @@ export type PreJoinProps = {
   /** The visitor pressed Join: fields lock and the preview keeps running until the call replaces this step. */
   readonly joining: boolean;
   readonly onJoin: (devices: PreJoinJoinOptions) => void;
+  readonly participants?: readonly LobbyParticipant[];
 };
 
 /** The step before the call: see yourself, hear yourself, press Join. */
-export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin }: PreJoinProps) {
+export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin, participants = [] }: PreJoinProps) {
   const devices = usePreJoinDevices();
   const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
@@ -87,6 +88,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         if (ready) onJoin(devices.commit());
       }}
     >
+      <LobbyNotice participants={participants} />
       <label htmlFor="join-display-name" className="text-(length:--type-body-sm) font-semibold">
         Your name
       </label>

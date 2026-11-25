@@ -4,7 +4,7 @@ import { MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "../urls.js";
 import { makeChalkEffectClient } from "../effect-client.js";
 import { ChalkPublicApi } from "../generated/public-http-api.js";
 import type { PublicSpaceArrival as GeneratedPublicSpaceArrival, PublicSpaceCreated as GeneratedPublicSpaceCreated } from "../generated/schemas.js";
-import type { ArriveBySpacePublicInviteInput, ChalkPublicClient, ChalkPublicClientOptions, ChalkPublicIdempotencyOptions, CreatePublicSpaceInput, PublicArrivalOptions, PublicArrivalReference, PublicLeaveOptions, PublicRefreshAccessInput, PublicSpaceArrival, PublicSpaceCreated } from "./types.js";
+import type { ArriveBySpacePublicInviteInput, ChalkPublicClient, ChalkPublicClientOptions, ChalkPublicIdempotencyOptions, CreatePublicSpaceInput, LobbyParticipant, PublicArrivalOptions, PublicArrivalReference, PublicLeaveOptions, PublicRefreshAccessInput, PublicSpaceArrival, PublicSpaceCreated, SpaceEntrancePreparation } from "./types.js";
 export function createChalkPublicClient(options: ChalkPublicClientOptions): ChalkPublicClient {
   const baseClientOptions = {
     baseUrl: options.baseUrl,
@@ -74,9 +74,19 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
     );
   };
   return {
-    prepareSpaceEntrance: async (spaceInviteToken) => {
+    prepareSpaceEntrance: async (spaceInviteToken): Promise<SpaceEntrancePreparation> => {
       const client = await Effect.runPromise(createClient(undefined));
-      await Effect.runPromise(client.spaces.preparePublicSpaceEntrance({ payload: { space_invite_token: required(spaceInviteToken, "spaceInviteToken") } }));
+      const response = await Effect.runPromise(client.spaces.preparePublicSpaceEntrance({ payload: { space_invite_token: required(spaceInviteToken, "spaceInviteToken") } }));
+      return {
+        prepared: response.prepared,
+        participants: (response.participants ?? []).map(
+          (participant): LobbyParticipant => ({
+            displayName: participant.display_name,
+            identityKind: participant.identity_kind as LobbyParticipant["identityKind"],
+            ...(participant.notice ? { notice: participant.notice } : {}),
+          }),
+        ),
+      };
     },
     arrive: arriveBySpacePublicInvite,
     arriveBySpacePublicInvite,

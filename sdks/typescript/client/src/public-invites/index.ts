@@ -18,6 +18,7 @@ export type {
   ArriveBySpacePublicInvite,
   GetSpacePublicInviteArrival,
   LeaveSpacePublicInviteArrival,
+  LobbyParticipant,
   PublicArrivalOptions,
   PublicArrivalReference,
   PublicRefreshAccessInput,
@@ -26,6 +27,7 @@ export type {
   PublicSpaceArrivalAccess,
   PublicSpaceCreated,
   RefreshSpacePublicInviteAccess,
+  SpaceEntrancePreparation,
 } from "./types.js";
 
 export { AccessMediaProofRejectedError, ArrivalInvalidHandleError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "../generated/schemas.js";

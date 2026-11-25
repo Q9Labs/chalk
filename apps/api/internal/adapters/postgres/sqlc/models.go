@@ -303,6 +303,7 @@ type Participant struct {
 	ID                        pgtype.UUID        `json:"id"`
 	Name                      pgtype.Text        `json:"name"`
 	Description               pgtype.Text        `json:"description"`
+	Notice                    pgtype.Text        `json:"notice"`
 	Metadata                  []byte             `json:"metadata"`
 	Capabilities              []string           `json:"capabilities"`
 	TenantID                  pgtype.UUID        `json:"tenant_id"`

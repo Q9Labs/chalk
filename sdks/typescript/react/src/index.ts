@@ -49,6 +49,8 @@ export type {
 } from "./components/chalk-ui";
 
 export { CallLimbo } from "./components/call-limbo/CallLimbo";
+export { LobbyNotice } from "./components/lobby/LobbyNotice";
+export type { LobbyNoticeProps, LobbyParticipant } from "./components/lobby/LobbyNotice";
 export type { CallLimboProps } from "./components/call-limbo/CallLimbo";
 
 export { ChalkPopover, ChalkSegmentedControl, ChalkCopyButton, ChalkSheet, ChalkToast, ChalkMenuLabel, ChalkTooltip } from "./components/chalk-ui";

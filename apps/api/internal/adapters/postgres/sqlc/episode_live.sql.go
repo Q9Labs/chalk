@@ -24,7 +24,7 @@ insert into participants (
        and episode_id = $8
        and account_id = $9), 'joining'
 )
-returning id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+returning id, name, description, notice, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type CreateDashboardLifecycleParticipantParams struct {
@@ -56,6 +56,7 @@ func (q *Queries) CreateDashboardLifecycleParticipant(ctx context.Context, arg C
 		&i.ID,
 		&i.Name,
 		&i.Description,
+		&i.Notice,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
@@ -110,6 +111,67 @@ func (q *Queries) GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEp
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listSpaceLobbyParticipants = `-- name: ListSpaceLobbyParticipants :many
+select participants.id,
+       coalesce(participants.name, '') as display_name,
+       (case
+         when identities.id is not null then identities.kind
+         when participants.account_id is not null or participants.role = 'owner' then 'user'
+         else 'guest'
+       end)::text as identity_kind,
+       participants.notice
+from episodes
+join participants
+  on participants.tenant_id = episodes.tenant_id
+ and participants.space_id = episodes.space_id
+ and participants.episode_id = episodes.id
+left join identities
+  on identities.tenant_id = participants.tenant_id
+ and identities.id = participants.identity_id
+where episodes.tenant_id = $1
+  and episodes.space_id = $2
+  and episodes.status in ('active', 'ending')
+  and participants.status in ('joining', 'active')
+order by participants.created_at, participants.id
+`
+
+type ListSpaceLobbyParticipantsParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SpaceID  pgtype.UUID `json:"space_id"`
+}
+
+type ListSpaceLobbyParticipantsRow struct {
+	ID           pgtype.UUID `json:"id"`
+	DisplayName  string      `json:"display_name"`
+	IdentityKind string      `json:"identity_kind"`
+	Notice       pgtype.Text `json:"notice"`
+}
+
+func (q *Queries) ListSpaceLobbyParticipants(ctx context.Context, arg ListSpaceLobbyParticipantsParams) ([]ListSpaceLobbyParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listSpaceLobbyParticipants, arg.TenantID, arg.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpaceLobbyParticipantsRow
+	for rows.Next() {
+		var i ListSpaceLobbyParticipantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.IdentityKind,
+			&i.Notice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockDashboardJoinIntentForUpdate = `-- name: LockDashboardJoinIntentForUpdate :one
@@ -169,7 +231,7 @@ func (q *Queries) LockDashboardJoinIntentForUpdate(ctx context.Context, arg Lock
 }
 
 const lockDashboardParticipantForUpdate = `-- name: LockDashboardParticipantForUpdate :one
-select id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+select id, name, description, notice, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 from participants
 where tenant_id = $1
   and space_id = $2
@@ -198,6 +260,7 @@ func (q *Queries) LockDashboardParticipantForUpdate(ctx context.Context, arg Loc
 		&i.ID,
 		&i.Name,
 		&i.Description,
+		&i.Notice,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,

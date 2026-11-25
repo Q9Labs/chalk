@@ -104,6 +104,12 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		}
 	}
 
+	if input.Notice != "" {
+		if !utf8.ValidString(input.Notice) || utf8.RuneCountInString(input.Notice) > 120 || strings.TrimSpace(input.Notice) != input.Notice || strings.IndexFunc(input.Notice, unicode.IsControl) >= 0 {
+			return ErrInvalidParticipantNotice
+		}
+	}
+
 	if input.IdentityExternalID != "" && (!input.IdentityID.IsZero() || !utf8.ValidString(input.IdentityExternalID) || len(input.IdentityExternalID) > 256 || strings.TrimSpace(input.IdentityExternalID) != input.IdentityExternalID) {
 		return ErrInvalidIdentityMode
 	}
@@ -152,6 +158,7 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		IntentName         string          `json:"intent_name"`
 		Name               string          `json:"name"`
 		Description        string          `json:"description,omitempty"`
+		Notice             string          `json:"notice,omitempty"`
 		Metadata           json.RawMessage `json:"metadata"`
 		Role               string          `json:"role"`
 		IdentityID         string          `json:"identity_id"`
@@ -161,7 +168,7 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	}{
 		Admission: fingerprintAdmission,
 		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
-		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name, Description: input.Description,
+		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name, Description: input.Description, Notice: input.Notice,
 		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), IdentityExternalID: input.IdentityExternalID, IdentityKind: fingerprintIdentityKind, Payload: payload,
 	})
 	return nil

@@ -567,6 +567,7 @@ create table participants (
     id uuid primary key,
     name text,
     description text,
+    notice text,
     metadata jsonb,
     capabilities text[] not null,
     tenant_id uuid not null references tenants(id),

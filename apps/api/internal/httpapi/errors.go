@@ -61,6 +61,7 @@ var (
 	apiErrorIdentityKindConflict            = APIError{Status: http.StatusConflict, Code: "identity.kind_conflict", Message: "Identity kind conflicts with the registered identity"}
 	apiErrorIdentityKindForbidden           = APIError{Status: http.StatusForbidden, Code: "identity.kind_forbidden", Message: "Only a backend credential may admit an agent participant"}
 	apiErrorParticipantDescriptionForbidden = APIError{Status: http.StatusForbidden, Code: "participant.description_forbidden", Message: "Only a backend credential may set a participant description"}
+	apiErrorParticipantNoticeForbidden      = APIError{Status: http.StatusForbidden, Code: "participant.notice_forbidden", Message: "Only a backend credential may set a participant lobby notice"}
 	apiErrorEpisodeCapacityExceeded         = APIError{Status: http.StatusConflict, Code: "episode.capacity_exceeded", Message: "Episode capacity is exhausted"}
 	apiErrorMediaPlaneUnavailable           = APIError{Status: http.StatusServiceUnavailable, Code: "media.unavailable", Message: "Media plane is unavailable"}
 	apiErrorMediaClientUnsupported          = APIError{Status: http.StatusConflict, Code: "media.client_unsupported", Message: "This call needs a newer version of Chalk. Update the app and try again."}

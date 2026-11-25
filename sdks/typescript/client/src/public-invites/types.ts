@@ -26,6 +26,16 @@ export type ChalkPublicClientOptions = {
 export type ChalkPublicIdempotencyOptions = {
   readonly idempotencyKey?: string;
 };
+
+export type LobbyParticipant = {
+  readonly displayName: string;
+  readonly identityKind: "user" | "agent" | "guest";
+  readonly notice?: string;
+};
+export type SpaceEntrancePreparation = {
+  readonly prepared: boolean;
+  readonly participants: readonly LobbyParticipant[];
+};
 export type CreatePublicSpaceInput = {
   readonly displayName: string;
 };
@@ -63,7 +73,7 @@ export type GetSpacePublicInviteArrival = (reference: PublicArrivalReference | s
 export type RefreshSpacePublicInviteAccess = (input: PublicRefreshAccessInput | string, options?: PublicArrivalOptions) => Promise<AccessGrant>;
 export type LeaveSpacePublicInviteArrival = (reference: PublicArrivalReference | string, options?: PublicLeaveOptions) => Promise<void>;
 export type ChalkPublicClient = {
-  readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<void>;
+  readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<SpaceEntrancePreparation>;
   readonly arrive: ArriveBySpacePublicInvite;
   readonly arriveBySpacePublicInvite: ArriveBySpacePublicInvite;
   readonly create: CreatePublicSpace;

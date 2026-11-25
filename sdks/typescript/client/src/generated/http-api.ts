@@ -206,6 +206,25 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getParticipantLobby", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/lobby", {
+      params: S.GetParticipantLobbyPathParamsSchema,
+      success: S.GetParticipantLobbyResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getProblemReportAvailability", "/v1/tenants/:tenant_id/problem-reports/availability", {
       params: S.GetProblemReportAvailabilityPathParamsSchema,
       success: S.GetProblemReportAvailabilityResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -828,6 +847,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.IdentityKindForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ParticipantDescriptionForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ParticipantNoticeForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),

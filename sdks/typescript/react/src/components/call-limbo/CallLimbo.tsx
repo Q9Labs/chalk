@@ -8,12 +8,15 @@ import { ChalkButton } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { cn } from "../../utils/cn";
+import { LobbyNotice, type LobbyParticipant } from "../lobby/LobbyNotice";
 
 export interface CallLimboProps {
   readonly spaceName?: string;
   readonly message: string;
   readonly detail?: string;
   readonly recorded?: boolean;
+  /** Privacy-limited people already in the call, shown before the joiner enters. */
+  readonly participants?: readonly LobbyParticipant[];
   /** Who the guest will appear as, shown under the detail line while they wait. */
   readonly joiningAs?: string;
   /** A neutral symbol for a request that ended, so declined and expired look different from waiting before they are read. */
@@ -34,7 +37,7 @@ export interface CallLimboProps {
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, secondaryAction, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, secondaryAction, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, participants = [], blocking = true, className }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -123,6 +126,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, seconda
             </span>
           </span>
         ) : null}
+        <LobbyNotice participants={participants} />
         <RecordedNotice recorded={recorded} />
         {stacked === "waiting" ? (
           <span aria-hidden="true" className="mt-3 flex gap-1.5">
