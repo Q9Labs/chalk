@@ -97,11 +97,31 @@ func (h *scheduledEpisodeHarness) call(method string, tenant, space, booking uti
 	h.router.ServeHTTP(response, httptest.NewRequest(method, path, strings.NewReader(body)))
 	var decoded map[string]any
 	if response.Body.Len() > 0 {
-		if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
+		decoder := json.NewDecoder(response.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&decoded); err != nil {
 			h.t.Fatalf("%s %s: body %q: %v", method, path, response.Body.String(), err)
 		}
 	}
 	return response.Code, decoded
+}
+
+func TestScheduledEpisodePreservesMetadataAndRejectsInvalidJSONB(t *testing.T) {
+	h := newScheduledEpisodeHarness(t)
+	tenant, space := h.seedTenantAndSpace()
+	h.keyFor(tenant, authentication.ScopeEpisodesRead, authentication.ScopeEpisodesWrite)
+	booking := accountTenantIntegrationID(t)
+	const times = `{"starts_at":"2027-03-02T09:00:00Z","expected_ends_at":"2027-03-02T09:45:00Z",`
+	const metadata = `"metadata":{"reservation":9007199254740993}}`
+	put := h.expect(http.MethodPut, tenant, space, booking, times+metadata, http.StatusOK, "")
+	get := h.expect(http.MethodGet, tenant, space, booking, "", http.StatusOK, "")
+	for _, response := range []map[string]any{put, get} {
+		if got := response["metadata"].(map[string]any)["reservation"]; got != json.Number("9007199254740993") {
+			t.Fatalf("the API changed the metadata identifier: %v", got)
+		}
+	}
+	h.expect(http.MethodPut, tenant, space, booking, times+`"metadata":{"invalid":"\u0000"}}`, http.StatusBadRequest, "scheduled_episode.invalid_metadata")
+	h.expect(http.MethodPut, tenant, space, booking, times+`"metadata":{"invalid":1e999999}}`, http.StatusBadRequest, "scheduled_episode.invalid_metadata")
 }
 
 func errorCode(body map[string]any) string {

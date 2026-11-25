@@ -1043,16 +1043,18 @@ export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
 
 export const PutScheduledEpisodeRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
-    expected_ends_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-    expected_participants: Schema.Array(
-      Schema.Struct({
-        identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
-        name: Schema.String.check(Schema.isMinLength(1)),
-        role: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      }),
+    expected_ends_at: DateTimeStringSchema,
+    expected_participants: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+          name: Schema.String.check(Schema.isMinLength(1)),
+          role: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        }),
+      ),
     ),
     metadata: Schema.optional(Schema.Unknown),
-    starts_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    starts_at: DateTimeStringSchema,
   }))();
 export type PutScheduledEpisodeRequest = typeof PutScheduledEpisodeRequestSchema.Type;
 

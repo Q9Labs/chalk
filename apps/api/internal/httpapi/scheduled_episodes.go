@@ -46,9 +46,9 @@ type expectedParticipantBody struct {
 
 // putScheduledEpisodeRequest is the whole expectation: whatever it leaves out is cleared, not kept.
 type putScheduledEpisodeRequest struct {
-	StartsAt             *time.Time                `json:"starts_at"`
-	ExpectedEndsAt       *time.Time                `json:"expected_ends_at"`
-	ExpectedParticipants []expectedParticipantBody `json:"expected_participants"`
+	StartsAt             time.Time                 `json:"starts_at"`
+	ExpectedEndsAt       time.Time                 `json:"expected_ends_at"`
+	ExpectedParticipants []expectedParticipantBody `json:"expected_participants,omitempty"`
 	Metadata             utilities.OptionalJSON    `json:"metadata"`
 }
 
@@ -162,7 +162,7 @@ func decodePutScheduledEpisodeRequest(r *http.Request) (putScheduledEpisodeEndpo
 	if err != nil {
 		return putScheduledEpisodeEndpointRequest{}, err
 	}
-	if body.StartsAt == nil || body.ExpectedEndsAt == nil {
+	if body.StartsAt.IsZero() || body.ExpectedEndsAt.IsZero() {
 		return putScheduledEpisodeEndpointRequest{}, apiErrorInvalidScheduledSchedule
 	}
 	return putScheduledEpisodeEndpointRequest{scheduledEpisodeRef: ref, Body: body}, nil
@@ -176,8 +176,8 @@ func (body putScheduledEpisodeRequest) toInput(ref scheduledEpisodeRef) schedule
 	return scheduledepisodes.PutInput{
 		TenantID: ref.TenantID, SpaceID: ref.SpaceID, ID: ref.ScheduledEpisodeID,
 		Expectation: scheduledepisodes.Expectation{
-			StartsAt:             *body.StartsAt,
-			ExpectedEndsAt:       *body.ExpectedEndsAt,
+			StartsAt:             body.StartsAt,
+			ExpectedEndsAt:       body.ExpectedEndsAt,
 			ExpectedParticipants: participants,
 			Metadata:             body.Metadata.Value,
 		},
@@ -197,7 +197,7 @@ func newScheduledEpisodeResponse(scheduled scheduledepisodes.ScheduledEpisode) s
 		StartsAt:             utilities.FormatTimestamp(scheduled.StartsAt),
 		ExpectedEndsAt:       utilities.FormatTimestamp(scheduled.ExpectedEndsAt),
 		ExpectedParticipants: participants,
-		Metadata:             rawJSONValue(scheduled.Metadata),
+		Metadata:             scheduled.Metadata,
 		CancelledAt:          optionalTimestampString(scheduled.CancelledAt),
 		CreatedAt:            utilities.FormatTimestamp(scheduled.CreatedAt),
 		UpdatedAt:            utilities.FormatTimestamp(scheduled.UpdatedAt),
