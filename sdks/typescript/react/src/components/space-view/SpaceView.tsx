@@ -440,17 +440,17 @@ export function SpaceView({
                     }}
                   />
                   {dropActive ? (
-                    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center rounded-[inherit] bg-black/45 p-6">
-                      <div className="rounded-3xl border-2 border-dashed border-white/60 bg-[var(--chalk-overlay-strong)] px-8 py-6 text-center text-[var(--chalk-on-overlay)] shadow-xl">
+                    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center rounded-[inherit] bg-[var(--chalk-overlay-scrim-soft)] p-6">
+                      <div className="rounded-3xl border-2 border-dashed border-[var(--chalk-overlay-line-strong)] bg-[var(--chalk-overlay-strong)] px-8 py-6 text-center text-[var(--chalk-on-overlay)] shadow-xl">
                         <div className="text-lg font-semibold">{activePanel === "chat" ? "Drop files to send" : "Drop a file to present"}</div>
                         <div className="mt-1 text-sm opacity-75">{activePanel === "chat" ? "Up to 5 files, 25 MB each" : "PDF or image, up to 25 MB"}</div>
                       </div>
                     </div>
                   ) : null}
                   {presentOpen ? (
-                    <div className="absolute bottom-24 left-1/2 z-50 w-72 -translate-x-1/2 rounded-2xl bg-[var(--chalk-overlay-strong)] p-3 text-[var(--chalk-on-overlay)] shadow-xl outline outline-1 outline-white/10 backdrop-blur" role="dialog" aria-label="Present a file or link">
+                    <div className="absolute bottom-24 left-1/2 z-50 w-72 -translate-x-1/2 rounded-2xl bg-[var(--chalk-overlay-strong)] p-3 text-[var(--chalk-on-overlay)] shadow-xl outline outline-1 outline-[var(--chalk-overlay-hairline)] backdrop-blur" role="dialog" aria-label="Present a file or link">
                       <div className="px-2 pb-2 text-sm font-medium">Present a file or link</div>
-                      <button type="button" className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/12 px-4 py-3 text-sm font-medium hover:bg-white/20 disabled:opacity-50" disabled={presentBusy} onClick={() => void choosePresentFiles()}>
+                      <button type="button" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--chalk-overlay-hover-fill)] px-4 py-3 text-sm font-medium hover:bg-[var(--chalk-overlay-active-fill)] disabled:opacity-50" disabled={presentBusy} onClick={() => void choosePresentFiles()}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                         </svg>

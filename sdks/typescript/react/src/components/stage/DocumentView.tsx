@@ -8,9 +8,9 @@ import type { Participant } from "../participant-grid/ParticipantGrid";
 import { StageIcon } from "./StageIcon";
 import type { StageDocument } from "./stage-items";
 
-const button = "flex h-9 min-w-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[var(--chalk-on-overlay)] transition hover:bg-white/10 disabled:opacity-40";
-const toolbar = "pointer-events-auto flex items-center rounded-full bg-[var(--chalk-overlay-strong)] p-1 text-sm text-[var(--chalk-on-overlay)] shadow-lg outline outline-1 outline-white/10 backdrop-blur";
-const separator = "mx-0.5 h-5 w-px shrink-0 bg-white/15";
+const button = "flex h-9 min-w-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[var(--chalk-on-overlay)] transition hover:bg-[var(--chalk-overlay-hover-fill)] disabled:opacity-40";
+const toolbar = "pointer-events-auto flex items-center rounded-full bg-[var(--chalk-overlay-strong)] p-1 text-sm text-[var(--chalk-on-overlay)] shadow-lg outline outline-1 outline-[var(--chalk-overlay-hairline)] backdrop-blur";
+const separator = "mx-0.5 h-5 w-px shrink-0 bg-[var(--chalk-overlay-track)]";
 
 export interface DocumentViewProps {
   readonly document: StageDocument;
@@ -72,16 +72,16 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   return (
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] text-[var(--chalk-on-overlay)]" data-document-viewer data-document-id={document.documentId}>
       {thumbnails && ready ? (
-        <div className="z-10 flex w-[136px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-white/10 bg-black/25 p-2">
+        <div className="z-10 flex w-[136px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-[var(--chalk-overlay-hairline)] bg-[var(--chalk-overlay-scrim-faint)] p-2">
           {pages.map((candidate) => (
             <button
               key={candidate.page}
               type="button"
               onClick={() => (mine ? turn(candidate.page) : setOwnPage(candidate.page))}
               aria-current={candidate.page === page ? "page" : undefined}
-              className={cn("rounded-md border p-1", candidate.page === page ? "border-white" : "border-white/15 opacity-75 hover:opacity-100")}
+              className={cn("rounded-md border p-1", candidate.page === page ? "border-[var(--chalk-on-overlay)]" : "border-[var(--chalk-overlay-hairline)] opacity-75 hover:opacity-100")}
             >
-              {candidate.thumbnailUrl ? <img src={candidate.thumbnailUrl} alt="" className="aspect-[8.5/11] w-full rounded-sm object-contain bg-white" /> : <div className="grid aspect-[8.5/11] place-items-center bg-white/10 text-xs">{candidate.page}</div>}
+              {candidate.thumbnailUrl ? <img src={candidate.thumbnailUrl} alt="" className="aspect-[8.5/11] w-full rounded-sm object-contain bg-[var(--chalk-on-overlay)]" /> : <div className="grid aspect-[8.5/11] place-items-center bg-[var(--chalk-overlay-hover-fill)] text-xs">{candidate.page}</div>}
             </button>
           ))}
         </div>
@@ -89,20 +89,20 @@ export function DocumentView({ document, people, primary, interactive }: Documen
       <div className="relative flex min-w-0 flex-1 flex-col">
         <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-4">
           {manifest?.status === "preparing" || !manifest ? (
-            <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-black/45 p-4 shadow-lg">
-              <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-red-500 text-[10px] font-bold text-white">PDF</span>
+            <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-4 shadow-lg">
+              <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-[10px] font-bold text-[var(--chalk-on-overlay)]">PDF</span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   Preparing {fileName}
                   {preparedPercent !== null ? ` · ${preparedPercent}%` : ""}
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
-                  <div className="h-full rounded-full bg-white/70" style={{ width: `${preparedPercent ?? 35}%` }} />
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--chalk-overlay-track)]">
+                  <div className="h-full rounded-full bg-[var(--chalk-overlay-track-fill)]" style={{ width: `${preparedPercent ?? 35}%` }} />
                 </div>
               </div>
             </div>
           ) : manifest.status === "failed" ? (
-            <div role="alert" className="rounded-2xl bg-black/45 p-5 text-sm">
+            <div role="alert" className="rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-5 text-sm">
               This document could not be prepared.
             </div>
           ) : pageInfo?.imageUrl ? (
@@ -114,7 +114,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
               style={zoom === 100 ? undefined : { width: `${zoom}%` }}
             />
           ) : (
-            <div role="status" className="rounded-xl bg-black/40 px-4 py-3 text-sm">
+            <div role="status" className="rounded-xl bg-[var(--chalk-overlay-scrim-soft)] px-4 py-3 text-sm">
               Page {page} is still being prepared
             </div>
           )}
@@ -127,7 +127,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
         <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--chalk-overlay-strong)] py-1.5 pl-3 pr-1.5 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
           {following ? (
             <span className="flex items-center gap-1.5 pr-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" aria-hidden="true" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--chalk-accent)]" aria-hidden="true" />
               Following {presenterFirst} · page {document.page}
             </span>
           ) : (
@@ -136,7 +136,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
                 <StageIcon name="info" size={13} />
                 You're on page {page}
               </span>
-              <button type="button" className="rounded-full bg-white px-2.5 py-1 font-medium text-black hover:bg-white/85" onClick={() => setOwnPage(null)}>
+              <button type="button" className="rounded-full bg-[var(--chalk-on-overlay)] px-2.5 py-1 font-medium text-[var(--chalk-overlay-inverse)] hover:opacity-85" onClick={() => setOwnPage(null)}>
                 Back to {presenterFirst}'s page
               </button>
             </>
@@ -175,7 +175,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
             </button>
             </>
             ) : null}
-            {downloadUrl && ready ? (
+            {!mine && downloadUrl && ready ? (
               <a className={cn(button, "px-3")} href={downloadUrl} download={fileName} aria-label="Download document">
                 <StageIcon name="download" size={16} />
                 Download
@@ -184,7 +184,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
             {mine || self.can("stopScreenOthers") ? (
               <>
               <span className={separator} aria-hidden="true" />
-              <button type="button" className={cn(button, "px-3 text-red-400 hover:bg-white/10 hover:text-red-300")} onClick={() => void client.presenting.stop(document.documentId)}>
+              <button type="button" className={cn(button, "px-3 text-[var(--chalk-overlay-danger)] hover:bg-[var(--chalk-overlay-hover-fill)] hover:opacity-80")} onClick={() => void client.presenting.stop(document.documentId)}>
                 <StageIcon name="close" size={14} />
                 Stop showing
               </button>

@@ -178,6 +178,8 @@ Colors that stay the same in both themes, because they sit on video or stand for
 | `overlay-warning`, `overlay-danger` | `#E2BD3A`, `#FF6B6B`                                                                                                  | Raised-hand and weak-signal marks, and the mic-off mark, on an overlay |
 | `hand`                              | `#DCB740` with `#16140C` text                                                                                         | Raised-hand order badge and the active Raise hand row                  |
 | `scrim`                             | `rgba(0,0,0,0.55)`; phone sheets in the light theme use `rgba(0,0,0,0.38)`; the photo viewer uses `rgba(8,8,10,0.94)` | Behind phone sheets, small dialogs, and the photo viewer               |
+| Overlay alpha details               | `overlay-hairline` `rgba(255,255,255,0.12)`, `overlay-line-strong` `0.6`, `overlay-hover-fill` `0.1`, `overlay-active-fill` `0.2`, `overlay-track` `0.15`, `overlay-track-fill` `0.7`, `overlay-scrim-soft` `rgba(0,0,0,0.45)`, `overlay-scrim-faint` `rgba(0,0,0,0.25)`, `overlay-inverse` `#000` | Hairlines, hover fills, progress tracks, and light scrims for chrome floating over arbitrary imagery, such as the document viewer |
+
 | Identity colors                     | `#315F72`, `#5C6650`, `#6B5B4F`, `#64576B`, `#49645D`, `#665D42`, `#4D5D73`, `#6D5158`                                | Avatar background, chosen by a hash of the person's name               |
 | File types                          | PDF `#C42B2B`, Word `#2F5FB3`, Excel `#1E7A46`, PowerPoint `#B8481E`, other `#5C5D65`                                 | Badge behind the white type label on a file card                       |
 

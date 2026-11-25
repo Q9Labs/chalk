@@ -1,5 +1,5 @@
 import { ScreenAnnotationFixture } from "./screen-annotation";
-import { BesideScreenShareState, PreparingState, PresenterState, ViewerBrowsingState, ViewerFollowingState } from "./presenting";
+import { BesideScreenShareState, PreparingState, PresenterState, PresenterZoomedState, ViewerBrowsingState, ViewerFollowingState } from "./presenting";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -48,7 +48,7 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "presenting-popover", title: "Presenting: dock popover", actions: [{ click: "Present" }, { wait: 400 }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "presenting-presenter", title: "Presenting: presenter view", render: () => <PresenterState /> },
   { id: "presenting-presenter-thumbnails", title: "Presenting: presenter with thumbnails", actions: [{ click: "Toggle page thumbnails" }, { wait: 300 }], render: () => <PresenterState /> },
-  { id: "presenting-presenter-zoomed", title: "Presenting: presenter zoomed", actions: [{ click: "Zoom in" }, { click: "Zoom in" }, { wait: 300 }], render: () => <PresenterState /> },
+  { id: "presenting-presenter-zoomed", title: "Presenting: presenter zoomed", render: () => <PresenterZoomedState /> },
   { id: "presenting-presenter-chat", title: "Presenting: presenter with chat", actions: [openChat, { wait: 400 }], render: () => <PresenterState /> },
   { id: "presenting-viewer-following", title: "Presenting: viewer following", render: () => <ViewerFollowingState /> },
   { id: "presenting-viewer-browsing", title: "Presenting: viewer browsing ahead", actions: [{ click: "Next page" }, { click: "Next page" }], render: () => <ViewerBrowsingState /> },

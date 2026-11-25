@@ -120,7 +120,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
             mediaVisible
             media={
               <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Suspense fallback={<div className="grid h-full place-items-center bg-[var(--chalk-app-tile-base)] text-sm text-white/70">Opening document</div>}>
+                <Suspense fallback={<div className="grid h-full place-items-center bg-[var(--chalk-app-tile-base)] text-sm text-[var(--chalk-on-overlay)] opacity-70">Opening document</div>}>
                   <DocumentView document={item.document} people={tiles} primary={context.primary} interactive={context.active} />
                 </Suspense>
               </div>

@@ -1,29 +1,39 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { Live } from "./live";
 import { liveSnapshot, PEOPLE, type Person } from "./fixtures";
+import page01 from "./presenting-pages/page-01.webp";
+import page02 from "./presenting-pages/page-02.webp";
+import page03 from "./presenting-pages/page-03.webp";
+import page04 from "./presenting-pages/page-04.webp";
+import page05 from "./presenting-pages/page-05.webp";
+import page06 from "./presenting-pages/page-06.webp";
+import page07 from "./presenting-pages/page-07.webp";
+import page08 from "./presenting-pages/page-08.webp";
+import page09 from "./presenting-pages/page-09.webp";
+import page10 from "./presenting-pages/page-10.webp";
+import page11 from "./presenting-pages/page-11.webp";
+import page12 from "./presenting-pages/page-12.webp";
 
 const nora: Person = PEOPLE[0]!;
 
-/** A letterboxed SVG page so the fixture Document viewer has real page pixels without a renderer. */
-function pageImage(page: number, accent: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="850" height="1100" viewBox="0 0 850 1100"><rect width="850" height="1100" fill="#ffffff"/><rect x="80" y="90" width="420" height="34" rx="6" fill="${accent}"/><rect x="80" y="170" width="690" height="14" rx="7" fill="#d7dce3"/><rect x="80" y="200" width="640" height="14" rx="7" fill="#e2e6ec"/><rect x="80" y="230" width="690" height="14" rx="7" fill="#d7dce3"/><rect x="80" y="300" width="300" height="180" rx="10" fill="${accent}" opacity="0.24"/><rect x="420" y="300" width="350" height="180" rx="10" fill="#eef1f5"/><rect x="80" y="530" width="690" height="12" rx="6" fill="#e2e6ec"/><rect x="80" y="556" width="620" height="12" rx="6" fill="#e2e6ec"/><rect x="80" y="582" width="670" height="12" rx="6" fill="#e2e6ec"/><text x="80" y="1020" font-family="sans-serif" font-size="28" fill="#98a1ad">${page}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
+// Real rendered pages from the prototype's sample worksheet, so fixture shots read as a document.
+const RENDERED_PAGES = [page01, page02, page03, page04, page05, page06, page07, page08, page09, page10, page11, page12];
 
-function pages(count: number, accent: string) {
+function pages(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     page: index + 1,
     width: 850,
     height: 1100,
     status: "ready" as const,
-    imageUrl: pageImage(index + 1, accent),
-    thumbnailUrl: pageImage(index + 1, accent),
+    imageUrl: RENDERED_PAGES[index % RENDERED_PAGES.length]!,
+    thumbnailUrl: RENDERED_PAGES[index % RENDERED_PAGES.length]!,
   }));
 }
 
 type PresentingFixtureOptions = {
   readonly presenter: "self" | "nora";
   readonly page?: number;
+  readonly zoom?: number;
   readonly status?: "preparing" | "ready";
   readonly screenShare?: boolean;
 };
@@ -41,15 +51,15 @@ function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
     presenting: {
       status: "ready",
       revision: 3,
-      documents: [{ documentId, presenterId, page: options.page ?? 3, zoom: 100, startedAtMs: Date.now() - 60_000 }],
+      documents: [{ documentId, presenterId, page: options.page ?? 3, zoom: options.zoom ?? 100, startedAtMs: Date.now() - 60_000 }],
       manifests: {
         [documentId]: {
           documentId,
           attachmentId: "attachment-1",
-          fileName: "product-plan.pdf",
+          fileName: "Algebra worksheet.pdf",
           status,
           pageCount: status === "ready" ? pageCount : undefined,
-          pages: status === "ready" ? pages(pageCount, "#4f6bd8") : [],
+          pages: status === "ready" ? pages(pageCount) : [],
         },
       },
     },
@@ -66,6 +76,10 @@ export function ViewerFollowingState() {
 
 export function ViewerBrowsingState() {
   return <Live snapshot={presentingSnapshot({ presenter: "nora", page: 3 })} />;
+}
+
+export function PresenterZoomedState() {
+  return <Live snapshot={presentingSnapshot({ presenter: "self", page: 3, zoom: 175 })} />;
 }
 
 export function PreparingState() {
