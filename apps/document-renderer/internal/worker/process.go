@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,10 +26,14 @@ const (
 )
 
 func Process(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment) error {
+	downloadStarted := time.Now()
 	source, err := download(ctx, assignment.SourceURL, assignment.SourceSizeBytes+1, assignment.SourceSHA256)
 	if err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, 0, "source_download", time.Since(downloadStarted), "bytes", len(source))
+	jobStarted := time.Now()
+	defer func() { stageLog(ctx, assignment, 0, "job_total", time.Since(jobStarted)) }()
 	switch assignment.Kind {
 	case "inventory":
 		err = processInventory(ctx, control, assignment, source)
@@ -68,9 +73,11 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 		return err
 	}
 	inventoryPrefix := renderedPrefix(sourcePath, 0, 0)
+	inventoryStarted := time.Now()
 	if err := runIsolatedChild(ctx, executable, "inventory", sourcePath, inventoryPrefix, assignment.MIMEType); err != nil {
 		return renderFailure{code: classifyIsolatedFailure(err), err: err}
 	}
+	logChildTiming(ctx, assignment, 0, "inventory", inventoryPrefix, time.Since(inventoryStarted))
 	pageSpecs, err := readInventory(inventoryPrefix)
 	if err != nil {
 		return err
@@ -78,16 +85,20 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	if len(pageSpecs) > 300 {
 		return renderFailure{code: "too_many_pages", err: fmt.Errorf("document has %d pages", len(pageSpecs))}
 	}
+	renderStarted := time.Now()
 	bitmap, width, height, err := renderIsolatedEagerPage(ctx, executable, sourcePath, assignment.MIMEType, 1)
 	if err != nil {
 		return renderFailure{code: classifyIsolatedFailure(err), err: err}
 	}
-	if err := uploadEagerRenditions(ctx, assignment.Uploads[0], bitmap, width, height); err != nil {
+	logChildTiming(ctx, assignment, 1, "page", renderedPrefix(sourcePath, 1, standardEdge), time.Since(renderStarted))
+	if err := uploadEagerRenditions(ctx, assignment, assignment.Uploads[0], bitmap, width, height); err != nil {
 		return err
 	}
+	controlStarted := time.Now()
 	if err := control.CompleteInventory(ctx, assignment, pageSpecs); err != nil {
 		return fmt.Errorf("complete inventory: %w", err)
 	}
+	stageLog(ctx, assignment, 0, "inventory_complete_control", time.Since(controlStarted))
 	return nil
 }
 
@@ -114,16 +125,18 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 			defer wait.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+			renderStarted := time.Now()
 			if err := renderIsolatedPDFPage(ctx, executable, sourcePath, target.Page, standardEdge); err != nil {
 				errorsChannel <- err
 				return
 			}
+			logChildTiming(ctx, assignment, target.Page, "page", renderedPrefix(sourcePath, target.Page, standardEdge), time.Since(renderStarted))
 			bitmap, width, height, err := readRenderedPage(sourcePath, target.Page, standardEdge)
 			if err != nil {
 				errorsChannel <- err
 				return
 			}
-			if err := uploadEagerRenditions(ctx, target, bitmap, width, height); err != nil {
+			if err := uploadEagerRenditions(ctx, assignment, target, bitmap, width, height); err != nil {
 				errorsChannel <- err
 				return
 			}
@@ -139,9 +152,11 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 			return err
 		}
 	}
+	controlStarted := time.Now()
 	if err := control.Complete(ctx, assignment); err != nil {
 		return fmt.Errorf("complete page job: %w", err)
 	}
+	stageLog(ctx, assignment, 0, "complete_control", time.Since(controlStarted))
 	return nil
 }
 
@@ -162,24 +177,34 @@ func processZoom(ctx context.Context, control controlplane.ControlClient, assign
 	if err != nil {
 		return err
 	}
+	renderStarted := time.Now()
 	bitmap, width, height, err = renderIsolatedBitmap(ctx, executable, sourcePath, assignment.MIMEType, target.Page, zoomEdge)
 	if err != nil {
 		return renderFailure{code: classifyIsolatedFailure(err), err: err}
 	}
+	logChildTiming(ctx, assignment, target.Page, "page", renderedPrefix(sourcePath, target.Page, zoomEdge), time.Since(renderStarted))
+	resizeStarted := time.Now()
 	bitmap, width, height, err = render.ResizeBGRA(bitmap, width, height, zoomEdge)
 	if err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, target.Page, "resize", time.Since(resizeStarted), "target_edge", zoomEdge)
+	encodeStarted := time.Now()
 	encoded, err := render.EncodeWebP(bitmap, width, height, webPQuality)
 	if err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, target.Page, "webp_encode", time.Since(encodeStarted), "target_edge", zoomEdge, "bytes", len(encoded), "quality", webPQuality)
+	uploadStarted := time.Now()
 	if err := upload(ctx, target.Zoom, encoded); err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, target.Page, "upload", time.Since(uploadStarted), "object", "zoom", "bytes", len(encoded))
+	controlStarted := time.Now()
 	if err := control.CompleteZoom(ctx, assignment, target.Page); err != nil {
 		return fmt.Errorf("complete zoom render: %w", err)
 	}
+	stageLog(ctx, assignment, target.Page, "zoom_complete_control", time.Since(controlStarted))
 	return nil
 }
 
@@ -201,7 +226,7 @@ func renderIsolatedBitmap(ctx context.Context, executable, sourcePath, mimeType 
 	return readRenderedPage(sourcePath, 1, 0)
 }
 
-func uploadEagerRenditions(ctx context.Context, target controlplane.PageUploads, bitmap []byte, width, height int) error {
+func uploadEagerRenditions(ctx context.Context, assignment controlplane.Assignment, target controlplane.PageUploads, bitmap []byte, width, height int) error {
 	standard, standardWidth, standardHeight, err := render.ResizeBGRA(bitmap, width, height, standardEdge)
 	if err != nil {
 		return err
@@ -210,18 +235,27 @@ func uploadEagerRenditions(ctx context.Context, target controlplane.PageUploads,
 	if err != nil {
 		return err
 	}
+	standardEncodeStarted := time.Now()
 	standardWebP, err := render.EncodeWebP(standard, standardWidth, standardHeight, webPQuality)
 	if err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, target.Page, "webp_encode", time.Since(standardEncodeStarted), "target_edge", standardEdge, "object", "image")
+	thumbnailEncodeStarted := time.Now()
 	thumbnailWebP, err := render.EncodeWebP(thumbnail, thumbnailWidth, thumbnailHeight, webPQuality)
 	if err != nil {
 		return err
 	}
+	stageLog(ctx, assignment, target.Page, "webp_encode", time.Since(thumbnailEncodeStarted), "target_edge", thumbnailEdge, "object", "thumbnail")
+	imageUploadStarted := time.Now()
 	if err := upload(ctx, target.Image, standardWebP); err != nil {
 		return err
 	}
-	return upload(ctx, target.Thumbnail, thumbnailWebP)
+	stageLog(ctx, assignment, target.Page, "upload", time.Since(imageUploadStarted), "object", "image", "bytes", len(standardWebP))
+	thumbnailUploadStarted := time.Now()
+	err = upload(ctx, target.Thumbnail, thumbnailWebP)
+	stageLog(ctx, assignment, target.Page, "upload", time.Since(thumbnailUploadStarted), "object", "thumbnail", "bytes", len(thumbnailWebP))
+	return err
 }
 
 func renderIsolatedPDFPage(ctx context.Context, executable, sourcePath string, page, target int) error {
@@ -312,7 +346,49 @@ func readRenderedPage(sourcePath string, page, target int) ([]byte, int, int, er
 	}
 	_ = os.Remove(prefix + ".raw")
 	_ = os.Remove(prefix + ".json")
+	_ = os.Remove(prefix + ".timing")
 	return bitmap, metadata.Width, metadata.Height, nil
+}
+
+func stageLog(ctx context.Context, assignment controlplane.Assignment, page int, stage string, duration time.Duration, attrs ...any) {
+	fields := []any{"event", "presenting.render.stage", "job_id", assignment.JobID, "document_id", assignment.DocumentID, "kind", assignment.Kind, "attempt", assignment.Attempt, "page", page, "stage", stage, "duration_ms", duration.Milliseconds()}
+	fields = append(fields, attrs...)
+	slog.Default().InfoContext(ctx, "presenting render stage", fields...)
+}
+
+func logChildTiming(ctx context.Context, assignment controlplane.Assignment, page int, mode, prefix string, wall time.Duration) {
+	stageLog(ctx, assignment, page, mode+"_child_total", wall)
+	encoded, err := os.ReadFile(prefix + ".timing")
+	if err != nil {
+		return
+	}
+	var timing render.ChildTiming
+	if json.Unmarshal(encoded, &timing) != nil {
+		return
+	}
+	spawn := wall - time.Duration(timing.TotalMs)*time.Millisecond
+	if spawn < 0 {
+		spawn = 0
+	}
+	stageLog(ctx, assignment, page, "child_spawn", spawn, "mode", mode)
+	if timing.InputReadMs > 0 {
+		stageLog(ctx, assignment, page, "child_input_read", time.Duration(timing.InputReadMs)*time.Millisecond)
+	}
+	if timing.DocumentOpenMs > 0 {
+		stageLog(ctx, assignment, page, "document_open", time.Duration(timing.DocumentOpenMs)*time.Millisecond)
+	}
+	if timing.InventoryMs > 0 {
+		stageLog(ctx, assignment, page, "inventory", time.Duration(timing.InventoryMs)*time.Millisecond)
+	}
+	if timing.PageLoadMs > 0 {
+		stageLog(ctx, assignment, page, "page_load", time.Duration(timing.PageLoadMs)*time.Millisecond)
+	}
+	if timing.BitmapRenderMs > 0 {
+		stageLog(ctx, assignment, page, "render_bitmap", time.Duration(timing.BitmapRenderMs)*time.Millisecond)
+	}
+	if timing.BitmapWriteMs > 0 {
+		stageLog(ctx, assignment, page, "bitmap_write", time.Duration(timing.BitmapWriteMs)*time.Millisecond)
+	}
 }
 
 func renderedPrefix(sourcePath string, page, target int) string {

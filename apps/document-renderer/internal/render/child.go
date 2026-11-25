@@ -10,6 +10,7 @@ import (
 	_ "image/png"
 	"os"
 	"strconv"
+	"time"
 
 	_ "golang.org/x/image/webp"
 )
@@ -49,17 +50,22 @@ func RunPageChild(args []string) int {
 }
 
 func runInventoryChild(args []string) int {
+	started := time.Now()
+	var timing ChildTiming
 	if len(args) != 3 {
 		fmt.Fprintln(os.Stderr, "inventory child expects input, output prefix and mime type")
 		return 2
 	}
+	readStarted := time.Now()
 	input, err := os.ReadFile(args[0])
+	timing.InputReadMs = time.Since(readStarted).Milliseconds()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	if args[2] == "application/pdf" {
-		inventory, _, err := PDFInventoryFromBytes(input)
+		inventory, pdfTiming, _, err := PDFInventoryFromBytesTimed(input)
+		mergeTiming(&timing, pdfTiming)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -82,15 +88,21 @@ func runInventoryChild(args []string) int {
 			return 1
 		}
 	}
+	timing.TotalMs = time.Since(started).Milliseconds()
+	writeTiming(args[1], timing)
 	return 0
 }
 
 func runPageChild(args []string) int {
+	started := time.Now()
+	var timing ChildTiming
 	if len(args) != 4 {
 		fmt.Fprintln(os.Stderr, "render page child expects input, output prefix, page and target edge")
 		return 2
 	}
+	readStarted := time.Now()
 	input, err := os.ReadFile(args[0])
+	timing.InputReadMs = time.Since(readStarted).Milliseconds()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -105,12 +117,18 @@ func runPageChild(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	bitmap, width, height, _, err := RenderPDFPage(input, page, target)
+	bitmap, width, height, pdfTiming, _, err := RenderPDFPageTimed(input, page, target)
+	mergeTiming(&timing, pdfTiming)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	return writeBitmap(args[1], bitmap, width, height)
+	writeStarted := time.Now()
+	result := writeBitmap(args[1], bitmap, width, height)
+	timing.BitmapWriteMs = time.Since(writeStarted).Milliseconds()
+	timing.TotalMs = time.Since(started).Milliseconds()
+	writeTiming(args[1], timing)
+	return result
 }
 
 func runImageChild(args []string) int {
@@ -193,4 +211,18 @@ func writeJSON(path string, value any) bool {
 		return false
 	}
 	return true
+}
+
+func mergeTiming(target *ChildTiming, source ChildTiming) {
+	target.DocumentOpenMs += source.DocumentOpenMs
+	target.InventoryMs += source.InventoryMs
+	target.PageLoadMs += source.PageLoadMs
+	target.BitmapRenderMs += source.BitmapRenderMs
+}
+
+func writeTiming(prefix string, timing ChildTiming) {
+	encoded, err := json.Marshal(timing)
+	if err == nil {
+		_ = os.WriteFile(prefix+".timing", encoded, 0o600)
+	}
 }
