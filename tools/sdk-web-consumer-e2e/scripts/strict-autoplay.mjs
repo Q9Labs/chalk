@@ -129,4 +129,3 @@ async function waitForNoGesture(cdp, expression, timeoutMs, label) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 }
-

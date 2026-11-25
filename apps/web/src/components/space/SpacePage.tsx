@@ -1,5 +1,6 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { browserAllowsMediaAutoplay } from "./browser-autoplay";
+import { entranceAutoplayDecision } from "./entrance-autoplay";
 import { useTheme } from "../../lib/theme-context";
 import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type JoinOptions } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
@@ -10,7 +11,7 @@ import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
-import { arriveAtSpace, arrivalEvent, leaveArrival, reArrive } from "./arrival";
+import { arriveAtSpace, arrivalEvent, leaveArrival, reArrive, resumeReloadOutcome } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
 import { FailedEntry } from "./FailedEntry";
@@ -83,8 +84,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   // A visitor who already chose devices in this browser skips the device step and joins with that choice.
   const [rememberedDevices] = useState(() => readRememberedDevices());
   const [autoplayAllowed] = useState(browserAllowsMediaAutoplay);
-  const resumeAutomatically = Boolean(reloadMarker) && autoplayAllowed;
-  const rememberedAutoArrival = Boolean(automaticName && rememberedDevices && autoplayAllowed);
+  const autoplayEntry = entranceAutoplayDecision({ autoplayAllowed, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
+  const resumeAutomatically = autoplayEntry === "resume";
+  const rememberedAutoArrival = autoplayEntry === "arrive";
   const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: resumeAutomatically, stepOpen: !resumeAutomatically && !rememberedAutoArrival }));
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
@@ -169,11 +171,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (!active.current || !send({ type: "rejoinReleased", attempt })) return;
           attempt = latest.current.attempt;
         }
-        if (reloadMarker) {
-          const admission = await resumePublicSpace(client, reloadMarker, slug);
-          settle(attempt, { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } });
-          return;
-        }
+        if (reloadMarker) return settle(attempt, await resumeReloadOutcome(client, reloadMarker, slug));
         const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken });
         try {
           await navigatePublicSpace(arrived.canonicalSlug, arrived.inviteLink);

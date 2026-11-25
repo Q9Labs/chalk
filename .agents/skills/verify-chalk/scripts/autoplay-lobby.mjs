@@ -12,7 +12,6 @@ const remembered = (name, theme) => `(() => {
   document.cookie = "chalk_theme=${theme}; path=/";
 })()`;
 
-
 async function noGesture(page, expression) {
   const cdp = await page.context().newCDPSession(page);
   const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, userGesture: false });
@@ -20,7 +19,6 @@ async function noGesture(page, expression) {
   if (result.exceptionDetails) throw new Error(`strict page evaluation failed: ${result.exceptionDetails.text}`);
   return result.result.value;
 }
-
 
 async function waitForNoGesture(page, expression, timeoutMs, label) {
   const deadline = Date.now() + timeoutMs;
@@ -54,7 +52,12 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
     await host.page.getByRole("button", { name: "Mute microphone", exact: true }).waitFor({ timeout: 15_000 });
   });
 
-  for (const [who, label] of [[strict, "desktop-dark"], [strictMobile, "mobile-light"], [strictDesktopLight, "desktop-light"], [strictMobileDark, "mobile-dark"]]) {
+  for (const [who, label] of [
+    [strict, "desktop-dark"],
+    [strictMobile, "mobile-light"],
+    [strictDesktopLight, "desktop-light"],
+    [strictMobileDark, "mobile-dark"],
+  ]) {
     await step(`${who.name} with remembered devices and no gesture is offered the lobby`, async () => {
       await who.page.goto(link);
       await waitForNoGesture(who.page, `Boolean(document.querySelector("#join-display-name"))`, 15_000, `${who.name} lobby`);
@@ -86,7 +89,13 @@ await runJourney("autoplay-lobby", async ({ step, person, startCall, control, sh
   await step("a returning visitor whose browser allows autoplay still auto-joins without the lobby", async () => {
     await allowed.page.goto(link);
     await allowed.page.getByRole("button", { name: `Video tile for ${allowed.name}`, exact: true }).waitFor({ timeout: 60_000 });
-    if (await allowed.page.getByLabel("Your name", { exact: true }).isVisible().catch(() => false)) throw new Error("autoplay-capable returning visitor saw the lobby");
+    if (
+      await allowed.page
+        .getByLabel("Your name", { exact: true })
+        .isVisible()
+        .catch(() => false)
+    )
+      throw new Error("autoplay-capable returning visitor saw the lobby");
   });
 
   await step("the second strict visitor can join through the same lobby", async () => {
