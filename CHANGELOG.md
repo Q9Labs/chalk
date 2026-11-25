@@ -2,6 +2,10 @@
 
 ## 6.1.0
 
+### Screen sharing
+
+- iPhone and iPad can share their screen. `@q9labsai/chalk-react-native` shows Share screen in the More sheet on iOS as it does on Android, opens the system broadcast picker with the app's broadcast extension, and publishes once the broadcast starts. A dismissed picker fails like a declined Android or browser picker. Apps need a ReplayKit broadcast upload extension that posts the Darwin notification `<extension bundle id>.started` from `broadcastStarted`, and must set `RTCScreenSharingExtension` and `RTCAppGroupIdentifier` in Info.plist. Without those keys, or on a simulator, the row stays hidden.
+
 ### Screen annotation
 
 - `@q9labsai/chalk-client` negotiates annotation with Sync for the active screen share. Turning annotation off during a call withdraws ink and disables drawing without interrupting the share.

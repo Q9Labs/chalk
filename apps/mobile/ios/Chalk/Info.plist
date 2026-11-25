@@ -69,7 +69,9 @@
     <string>Allow $(PRODUCT_NAME) to access the files</string>
     <key>RCTNewArchEnabled</key>
     <true/>
-    <key>RTCAppScreenSharingExtension</key>
+    <key>RTCAppGroupIdentifier</key>
+    <string>group.ai.q9labs.chalk.mobile</string>
+    <key>RTCScreenSharingExtension</key>
     <string>ai.q9labs.chalk.mobile.screenshare</string>
     <key>UIAppFonts</key>
     <array>

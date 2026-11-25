@@ -83,7 +83,9 @@ export default {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a call.",
         NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a call.",
-        RTCAppScreenSharingExtension: release.apple.screen_share_bundle_id,
+        // @cloudflare/react-native-webrtc reads these two: the broadcast picker preselects the extension, and the capturer listens on a socket in the shared app group.
+        RTCAppGroupIdentifier: "group.ai.q9labs.chalk.mobile",
+        RTCScreenSharingExtension: release.apple.screen_share_bundle_id,
         UIBackgroundModes: ["audio", "voip"],
       },
     },

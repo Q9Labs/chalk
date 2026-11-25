@@ -2,6 +2,7 @@ import { screenAnnotationFor, type ScreenAnnotationFrameSize, type SpaceClient }
 import { mediaDevices } from "@cloudflare/react-native-webrtc";
 import { Alert, DeviceEventEmitter, NativeModules, Platform } from "react-native";
 import { captureAndroidScreen } from "../media/android-screen-capture";
+import { startIOSScreenBroadcast } from "../media/native-screen-share";
 import { releaseNativeTrack } from "../media/native-release-track";
 import { observeIOSScreenDimensions } from "./ios-screen-dimensions";
 
@@ -63,6 +64,7 @@ export function createNativeAnnotationCapture() {
         }
       }
       if (Platform.OS === "ios") {
+        await startIOSScreenBroadcast();
         const stream = await mediaDevices.getDisplayMedia();
         const nativeStream = stream as unknown as MediaStream;
         const track = nativeStream.getVideoTracks()[0];
