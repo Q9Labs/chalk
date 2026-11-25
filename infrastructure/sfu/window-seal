@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Runs as root on the window image builder, over SSH, as the last step before the Droplet is powered off
+# and snapshotted:
+#
+#   bash window-seal <revision> <builder address> <ssh source cidr>
+#
+# It removes the builder's way in and every trace of the builder, then checks the result. It leaves the
+# SFU image, the server certificate's Podman secrets, the templates and the boot unit. Each clone gets its
+# own identity at first boot: cloud-init runs again, and window-boot writes the address and settings.
+set -euo pipefail
+
+revision="${1:?usage: window-seal <revision> <builder address> <ssh source cidr>}"
+builder="${2:?}"
+ssh_source="${3:?}"
+sfu_home=/home/chalk-sfu
+cd "$sfu_home"
+
+as_sfu() {
+  local uid
+  uid="$(id -u chalk-sfu)"
+  runuser -u chalk-sfu -- env -i HOME="$sfu_home" PATH=/usr/bin:/bin XDG_RUNTIME_DIR="/run/user/${uid}" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@"
+}
+# The node has Python and no jq: json_field <file> <key>... prints one value.
+json_field() {
+  python3 -c 'import json, sys; value = json.load(open(sys.argv[1])); [value := value[key] for key in sys.argv[2:]]; print(value)' "$@"
+}
+fail() {
+  echo "window-seal: $*" >&2
+  exit 1
+}
+
+# The smoke test ran the node on the builder's address; none of that state may survive.
+systemctl --user -M chalk-sfu@ stop chalk-sfu.service 2>/dev/null || true
+systemctl stop chalk-sfu-window.service 2>/dev/null || true
+rm -f "${sfu_home}/.config/chalk-sfu/sfu.env" "${sfu_home}/.config/containers/systemd/chalk-sfu.container"
+systemctl --user -M chalk-sfu@ daemon-reload
+as_sfu podman container prune --force >/dev/null
+as_sfu podman image prune --force >/dev/null
+
+# Nothing that opened this session stays: no key, no host key, no SSH daemon, no firewall rule.
+rm -rf /root/.ssh /home/*/.ssh
+rm -f /etc/ssh/ssh_host_*
+ufw delete allow proto tcp from "$ssh_source" to any port 22 >/dev/null
+systemctl mask ssh.service ssh.socket >/dev/null 2>&1
+
+# The next boot is a new instance: cloud-init, the machine ID and the logs start over. The builder's
+# user data holds a throwaway SSH host key, so cloud-init's copy of it goes too, and so does the network
+# config that names the builder's address; a clone's own is written at its first boot.
+cloud-init clean --logs --machine-id
+rm -rf /var/lib/cloud/instance /var/lib/cloud/instances /var/lib/cloud/data
+rm -f /etc/netplan/50-cloud-init.yaml
+apt-get clean
+rm -rf /var/lib/apt/lists/* /root/.cache /tmp/* /var/tmp/*
+rm -f /root/.bash_history
+find /var/log -type f -not -path '/var/log/journal/*' -exec truncate -s0 {} +
+
+# The check: what a clone must have, and what no clone may have.
+secrets="$(as_sfu podman secret ls --format '{{.Name}}' | sort | paste -sd, -)"
+[[ "$secrets" == chalk-sfu-client-ca,chalk-sfu-server-cert,chalk-sfu-server-key ]] || fail "podman secrets are ${secrets}"
+images="$(as_sfu podman images --format '{{.ID}}' | sort -u | wc -l)"
+[[ "$images" == 1 ]] || fail "want exactly one image, found ${images}"
+label="$(as_sfu podman image inspect --format '{{index .Labels "org.opencontainers.image.revision"}}' "chalk-sfu:${revision}")"
+[[ "$label" == "$revision" ]] || fail "the image is revision ${label}, want ${revision}"
+for file in sfu.env.template chalk-sfu.container.template node.json window-image.json; do
+  [[ -s "/etc/chalk-sfu/${file}" ]] || fail "/etc/chalk-sfu/${file} is missing"
+done
+[[ "$(json_field /etc/chalk-sfu/window-image.json revision)" == "$revision" ]] || fail "the manifest names another revision"
+systemctl is-enabled chalk-sfu-window.service >/dev/null || fail "the boot unit is not enabled"
+[[ "$(systemctl is-enabled ssh.service ssh.socket 2>/dev/null | sort -u)" == masked ]] || fail "SSH is not masked"
+ufw status | grep -q '^Status: active' || fail "the host firewall is not active"
+if ufw status | awk '$1 ~ /^22(\/|$)/ { found = 1 } END { exit !found }'; then fail "a firewall rule still names port 22"; fi
+ufw status | grep -q "$(json_field /etc/chalk-sfu/node.json ports media)/udp" || fail "the media port is not open"
+
+leftovers="$(
+  {
+    find / -xdev \( -name authorized_keys -o -name 'known_hosts*' -o -name 'ssh_host_*' -o -name 'operator.*' -o -name 'otlp-*' -o -name '*.pem' \) \
+      -not -path '/usr/share/*' -not -path '/etc/ssl/*' -not -path '/usr/lib/*' -not -path '/snap/*' -not -path "${sfu_home}/.local/share/containers/*" 2>/dev/null
+    grep -rIl -e 'BEGIN [A-Z ]*PRIVATE KEY' -e "$builder" /etc /root /home /usr/local /var/lib /var/log \
+      --exclude-dir=containers --exclude-dir=ssl 2>/dev/null || [[ $? -eq 1 ]]
+  } | sort -u
+)"
+[[ -z "$leftovers" ]] || fail "the builder left traces in: ${leftovers//$'\n'/ }"
+
+# The journal holds this session and the smoke test, with their addresses. Writers lose only their deleted file.
+rm -rf /var/log/journal/*
+sync
+fstrim -a >/dev/null 2>&1 || true
+echo "sealed: chalk-sfu ${revision}"

@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+# Publishes and checks the DigitalOcean snapshot that window nodes boot from. A window node is a Chalk SFU
+# that exists only around a scheduled class. The runtime controller creates it from the snapshot ID and does
+# nothing else to it: no deploy, no SSH, no trust on first use.
+#
+#   window-image build <staging|production> --revision <sha> --control-addresses <cidr,...> [--region sgp1] [--size s-2vcpu-2gb] [--keep-builder]
+#   window-image verify <staging|production> <snapshot id> [--region sgp1] [--size s-2vcpu-2gb] [--revision <sha>]
+#   window-image templates <directory> <staging|production> <revision> <image id>
+#
+# build makes a clean Ubuntu 24.04 builder with the production cloud-init, loads the SFU image built at the
+# pinned revision into its rootless Podman, installs the environment's window server certificate as Podman
+# secrets, runs the node once through the same boot unit a clone uses, seals the builder, powers it off,
+# snapshots it and deletes it. verify boots a clone from the snapshot with the user data a controller would
+# send and checks the node answers. Neither command deploys to production or changes any running node; the
+# snapshot becomes the fleet's image only when an operator puts its ID in the controller's settings.
+#
+# The snapshot holds the SFU image, the server certificate and key and the CA, and nothing else that opens a door:
+# no SSH key, no host key, no operator certificate, no metrics token and no cloud token. The certificate comes
+# from `certs <env> window-server`, a key of its own so a leaked snapshot never exposes a static node's identity.
+# The builder's SSH host key is a throwaway one the script generates and puts in the builder's user data, so the
+# first connection is checked against a key the script knows and no trust is given on first use. That key leaves
+# with the builder.
+set -euo pipefail
+
+usage="usage: window-image build <staging|production> --revision <sha> --control-addresses <cidr,...> [--region R] [--size S] [--keep-builder]
+       window-image verify <staging|production> <snapshot id> [--region R] [--size S] [--revision <sha>]"
+command="${1:?$usage}"
+shift
+
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+tag_prefix=chalk-sfu-window
+openssl="${OPENSSL:-openssl}"
+
+die() {
+  echo "window-image: $*" >&2
+  exit 1
+}
+
+# environment_values sets the identity and the SFU environment as deploy does.
+environment_values() {
+  case "$1" in
+    staging) spiffe_environment=nightly sfu_environment=staging ;;
+    production) spiffe_environment=production sfu_environment=production ;;
+    *) die "$usage" ;;
+  esac
+  identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
+}
+
+# render_templates <directory> <revision> <image id> writes the two templates a snapshot carries. What only a
+# running Droplet knows stays a placeholder for window-boot: the announce address, the node size and its memory.
+# The unit has no [Install] section, so only window-boot starts the node, after it has written the settings.
+render_templates() {
+  local out="$1" revision="$2" image_id="$3"
+  sed -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" -e "s|__UDP_BUFFER__|${udp_buffer}|" \
+    -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__||" \
+    "${node_dir}/sfu.env.in" >"${out}/sfu.env.template"
+  sed -e "s|__IMAGE__|${image_id}|" \
+    -e "s|^__OTLP_HEADERS_SECRET__\$|# Metrics export is off: a window image carries no ingest token.|" \
+    -e "s|^__OTLP_LOG_HEADERS_SECRET__\$|# Log export is off: a window image carries no ingest token.|" \
+    -e '/^\[Install\]$/,$d' "${node_dir}/chalk-sfu.container.in" >"${out}/chalk-sfu.container.template"
+}
+
+host_cidr() {
+  local address="${1%/32}"
+  [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "want one IPv4 address, got: $1"
+  echo "${address}/32"
+}
+
+# operator_cidr is this machine's public IPv4 as a /32, the one source the builder and a verify clone accept.
+operator_cidr() {
+  host_cidr "${WINDOW_IMAGE_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}"
+}
+
+# render_cloud_init renders node/cloud-init.yaml.tftpl the way OpenTofu does, for its two loops. The ports and the
+# UDP buffer come from the node table. It is the production bootstrap, unchanged.
+render_cloud_init() {
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
+    /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
+    /^%\{ endfor ~\}$/ {
+      count = split(list, addresses, ",")
+      for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
+      looping = 0; next
+    }
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
+  ' "${node_dir}/node/cloud-init.yaml.tftpl"
+}
+
+need() {
+  local tool
+  for tool in "$@"; do
+    command -v "$tool" >/dev/null || die "${tool} is not installed"
+  done
+}
+
+# Save the ID from create before waiting for the address, so a failed wait still cleans up by ID.
+droplet_address() {
+  local id="$1" body="$2" address attempt
+  for ((attempt=0; attempt<60; attempt++)); do
+    if address="$(jq -er '.[0].networks.v4[]? | select(.type == "public") | .ip_address' "$body")"; then
+      printf '%s\n' "$address"
+      return
+    fi
+    sleep 5
+    doctl compute droplet get "$id" --output json >"$body" || return 1
+  done
+  die "Droplet ${id} did not get a public IPv4 address"
+}
+
+# Checks the window server certificate before a builder is paid for: it verifies against the environment's CA,
+# names chalk-sfu, matches its key and lives long enough that the image is worth publishing.
+check_certificate() {
+  local cert="${dir}/window-server.crt" key="${dir}/window-server.key" ca="${dir}/ca.crt"
+  [[ -f "$cert" && -f "$key" && -f "$ca" ]] || die "missing ${dir}/window-server.crt, window-server.key or ca.crt; run: certs ${environment} window-server"
+  "$openssl" verify -CAfile "$ca" -purpose sslserver -verify_hostname chalk-sfu "$cert" >/dev/null 2>&1 \
+    || die "${cert} does not verify against ${ca} as the certificate of chalk-sfu"
+  [[ "$("$openssl" x509 -in "$cert" -noout -pubkey)" == "$("$openssl" pkey -in "$key" -pubout)" ]] || die "${key} is not the key of ${cert}"
+  "$openssl" x509 -in "$cert" -noout -checkend $((90 * 86400)) >/dev/null \
+    || die "${cert} expires within 90 days, too soon for an image; run: certs ${environment} window-server"
+}
+
+# A fresh builder has an SSH host key the script made, so ssh checks it strictly from the first connection.
+builder_ssh_options() {
+  ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$1" -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=10 -i "$SFU_SSH_KEY")
+}
+
+build() {
+  local revision="" control="" region=sgp1 size=s-2vcpu-2gb keep=false
+  while (($# > 0)); do
+    case "$1" in
+      --revision) revision="${2:?$usage}"; shift 2 ;;
+      --control-addresses) control="${2:?$usage}"; shift 2 ;;
+      --region) region="${2:?$usage}"; shift 2 ;;
+      --size) size="${2:?$usage}"; shift 2 ;;
+      --keep-builder) keep=true; shift ;;
+      *) die "$usage" ;;
+    esac
+  done
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die "--revision wants the full 40-character commit SHA the image is pinned to"
+  [[ -n "$control" ]] || die "--control-addresses wants the API host's public addresses, the only sources the node's firewall lets reach the control port"
+  local address
+  for address in ${control//,/ }; do
+    [[ "$address" =~ ^[0-9a-fA-F:.]+/[0-9]{1,3}$ ]] || die "control address ${address} is not a CIDR"
+  done
+  [[ "$(node_table --arg size "$size" '.sizes[$size] != null')" == true ]] || die "size ${size} is not a measured size in ${sfu_table}"
+  need doctl docker jq openssl ssh ssh-keygen curl git awk
+  doctl account get >/dev/null || die "doctl is not signed in"
+  [[ -r "$SFU_SSH_KEY" ]] || die "no readable SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY to the operator key"
+
+  environment_values "$environment"
+  dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
+  check_certificate
+  # The image is the revision named here, built from a clean checkout of it, and a commit the project has accepted.
+  [[ "$(git -C "$sfu_root" rev-parse HEAD)" == "$revision" ]] || die "the checkout is not at ${revision}; check it out, since the image is built from it"
+  [[ -z "$(git -C "$sfu_root" status --porcelain -- .)" ]] || die "features/media/sfu has uncommitted changes; the image must match ${revision}"
+  git -C "$sfu_root" fetch --quiet origin master
+  git -C "$sfu_root" merge-base --is-ancestor "$revision" origin/master || die "${revision} is not on origin/master"
+
+  local key_id
+  key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
+  [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
+  local operator
+  operator="$(operator_cidr)"
+  local name stamp
+  stamp="$(date -u +%Y%m%d%H%M)"
+  name="${tag_prefix}-${environment}-${revision:0:12}-${stamp}"
+
+  echo "==> building chalk-sfu at ${revision}"
+  docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+    --file "${node_dir}/Dockerfile" --tag "chalk-sfu:${revision}" --load "$sfu_root" >/dev/null
+
+  work="$(mktemp -d)"
+  chmod 700 "$work"
+  builder_id="" builder="" tunnel="" keep_builder=$keep
+  trap build_cleanup EXIT
+
+  local builder_name="${tag_prefix}-builder-${revision:0:12}"
+  echo "==> creating ${builder_name} in ${region}"
+  ssh-keygen -q -t ed25519 -N '' -C window-builder-host -f "${work}/host"
+  {
+    render_cloud_init "$control" "$operator"
+    echo "ssh_keys:"
+    echo "  ed25519_private: |"
+    sed 's/^/    /' "${work}/host"
+    echo "  ed25519_public: $(cut -d' ' -f1,2 "${work}/host.pub")"
+  } >"${work}/user-data.yaml"
+  if ! doctl compute droplet create "$builder_name" --region "$region" --size "$size" --image ubuntu-24-04-x64 \
+    --ssh-keys "$key_id" --tag-name "${tag_prefix}-builder" --user-data-file "${work}/user-data.yaml" --output json >"${work}/droplet.json" ||
+    ! builder_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' "${work}/droplet.json")"; then
+    die "could not confirm creation of ${builder_name}; check the provider and delete it by ID if present"
+  fi
+  builder="$(droplet_address "$builder_id" "${work}/droplet.json")"
+  printf '%s %s\n' "$builder" "$(cut -d' ' -f1,2 "${work}/host.pub")" >"${work}/known_hosts"
+  builder_ssh_options "${work}/known_hosts"
+  remote() { ssh "${ssh_options[@]}" "root@${builder}" "$@"; }
+  as_sfu() {
+    remote "cd /home/chalk-sfu && uid=\$(id -u chalk-sfu) && runuser -u chalk-sfu -- env -i HOME=/home/chalk-sfu PATH=/usr/bin:/bin \
+      XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus $*"
+  }
+
+  echo "==> waiting for the builder's bootstrap"
+  local probe status
+  for _ in $(seq 90); do
+    status=0
+    probe="$(remote test -f /var/lib/chalk-sfu-bootstrapped 2>&1)" || status=$?
+    [[ $status -eq 0 ]] && break
+    # Until cloud-init has installed the pinned host key, ssh refuses the builder; that is not a reason to trust it.
+    if grep -q -E 'Permission denied|Load key|no such identity' <<<"$probe"; then
+      die "ssh cannot authenticate to the builder with ${SFU_SSH_KEY}: ${probe}"
+    fi
+    sleep 10
+  done
+  remote test -f /var/lib/chalk-sfu-bootstrapped || die "the builder never finished its bootstrap"
+
+  echo "==> loading the image"
+  docker save "chalk-sfu:${revision}" | as_sfu podman load --quiet >/dev/null
+  local image_id loaded
+  image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-sfu:${revision}")"
+  loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$image_id")"
+  [[ "$loaded" == "$revision" ]] || die "builder image ${image_id} is revision ${loaded}, want ${revision}"
+
+  echo "==> installing the certificate, the templates and the boot unit"
+  as_sfu mkdir -p .config/chalk-sfu .config/containers/systemd
+  local pair
+  for pair in server-cert:window-server.crt server-key:window-server.key client-ca:ca.crt; do
+    as_sfu podman secret create "chalk-sfu-${pair%%:*}" - <"${dir}/${pair#*:}" >/dev/null
+  done
+  mkdir "${work}/templates"
+  render_templates "${work}/templates" "$revision" "$image_id"
+  local not_after
+  not_after="$("$openssl" x509 -in "${dir}/window-server.crt" -noout -enddate | sed 's/^notAfter=//')"
+  jq -n --arg environment "$environment" --arg revision "$revision" --arg image_id "$image_id" --arg not_after "$not_after" \
+    '{schema: "chalk_sfu_window_image.v1", environment: $environment, revision: $revision, image_id: $image_id, certificate_not_after: $not_after}' \
+    >"${work}/templates/window-image.json"
+  remote "install -d -m 0755 /etc/chalk-sfu"
+  local file
+  for file in sfu.env.template chalk-sfu.container.template window-image.json; do
+    remote "cat > /etc/chalk-sfu/${file}" <"${work}/templates/${file}"
+  done
+  remote "cat > /etc/chalk-sfu/node.json" <"$sfu_table"
+  remote "cat > /usr/local/sbin/chalk-sfu-window-boot && chmod 0755 /usr/local/sbin/chalk-sfu-window-boot" <"${node_dir}/window-boot"
+  remote "cat > /etc/systemd/system/chalk-sfu-window.service && systemctl daemon-reload && systemctl enable chalk-sfu-window.service >/dev/null 2>&1" \
+    <"${node_dir}/window-boot.service"
+
+  echo "==> starting the node through the boot unit a clone uses"
+  remote systemctl start chalk-sfu-window.service ||
+    { remote journalctl -u chalk-sfu-window.service -n 30 --no-pager >&2 || true; die "the boot unit failed on the builder"; }
+  local packet_budget
+  packet_budget="$(node_table --arg size "$size" '.sizes[$size].packetBudget')"
+  remote "grep -qx 'SFU_ANNOUNCE_IPS=${builder}' /home/chalk-sfu/.config/chalk-sfu/sfu.env" ||
+    die "the boot unit did not announce the builder's own address ${builder}"
+  sfu_operator_cert "$environment"
+  local port=$((20000 + RANDOM % 20000)) ready=""
+  sfu_tunnel "$port" "$builder"
+  sfu_wait_port "$port" || die "no SSH tunnel to the builder"
+  for _ in $(seq 30); do
+    ready="$(sfu_curl "$dir" 127.0.0.1 "$port" --fail --max-time 3 "https://chalk-sfu:${port}/readyz")" && break
+    ready=""
+    sleep 2
+  done
+  [[ -n "$ready" ]] || die "the node did not become ready on the builder"
+  kill "$tunnel" 2>/dev/null || true
+  tunnel=""
+  [[ "$(jq -r --arg revision "$revision" --argjson budget "$packet_budget" --argjson buffer "$udp_buffer" \
+    '.revision == $revision and .draining == false and .allocations == 0 and .packetBudget == $budget and .host.udpReceiveBufferBytes >= $buffer and .host.udpSendBufferBytes >= $buffer' <<<"$ready")" == true ]] \
+    || die "the builder's node reports ${ready}; want revision ${revision}, packet budget ${packet_budget} and 8 MiB buffers"
+
+  echo "==> sealing the builder"
+  remote "umask 077 && cat > /run/window-seal && bash /run/window-seal '${revision}' '${builder}' '${operator}'" <"${node_dir}/window-seal"
+
+  echo "==> snapshotting ${name}"
+  doctl compute droplet-action power-off "$builder_id" --wait >/dev/null
+  doctl compute droplet-action snapshot "$builder_id" --snapshot-name "$name" --wait >/dev/null
+  local snapshot_id
+  snapshot_id="$(doctl compute snapshot list --resource droplet --output json | jq -r --arg name "$name" '[.[] | select(.name == $name)] | if length == 1 then .[0].id else empty end')"
+  [[ -n "$snapshot_id" ]] || die "no single snapshot named ${name}; check the DigitalOcean account"
+  jq -n --arg id "$snapshot_id" --arg name "$name" --arg region "$region" --arg size "$size" \
+    --slurpfile manifest "${work}/templates/window-image.json" \
+    '$manifest[0] + {snapshot_id: $id, snapshot_name: $name, region: $region, builder_size: $size}' >"${dir}/window-image-${snapshot_id}.json"
+  chmod 600 "${dir}/window-image-${snapshot_id}.json"
+  echo "snapshot ${snapshot_id} (${name}) in ${region}, record ${dir}/window-image-${snapshot_id}.json"
+  echo "next: window-image verify ${environment} ${snapshot_id} --region ${region}"
+}
+
+# build_cleanup deletes the builder, which has the throwaway key and a billing meter, unless --keep-builder.
+build_cleanup() {
+  local code=$?
+  trap - EXIT
+  [[ -z "$tunnel" ]] || kill "$tunnel" 2>/dev/null || true
+  if [[ -n "$builder_id" ]]; then
+    if $keep_builder; then
+      echo "window-image: builder ${builder_id} kept at ${builder}; delete it: doctl compute droplet delete -f ${builder_id}" >&2
+    elif ! doctl compute droplet delete -f "$builder_id" >/dev/null; then
+      echo "window-image: could not delete builder ${builder_id}; delete it: doctl compute droplet delete -f ${builder_id}" >&2
+      code=1
+    fi
+  fi
+  rm -rf "$work"
+  exit "$code"
+}
+
+verify() {
+  local snapshot_id="${1:?$usage}" region=sgp1 size=s-2vcpu-2gb revision=""
+  shift
+  while (($# > 0)); do
+    case "$1" in
+      --region) region="${2:?$usage}"; shift 2 ;;
+      --size) size="${2:?$usage}"; shift 2 ;;
+      --revision) revision="${2:?$usage}"; shift 2 ;;
+      *) die "$usage" ;;
+    esac
+  done
+  need doctl jq openssl curl nc
+  doctl account get >/dev/null || die "doctl is not signed in"
+  environment_values "$environment"
+  dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
+  [[ -n "$revision" ]] || revision="$(jq -r .revision "${dir}/window-image-${snapshot_id}.json" 2>/dev/null)" ||
+    die "no ${dir}/window-image-${snapshot_id}.json; pass --revision"
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die "no revision for snapshot ${snapshot_id}; pass --revision"
+  [[ "$(doctl compute snapshot get "$snapshot_id" --output json | jq -r '.[0].name | startswith("'"${tag_prefix}-${environment}-"'")')" == true ]] ||
+    die "snapshot ${snapshot_id} is not a ${environment} window image"
+
+  local operator tag="${tag_prefix}-verify-${environment}-$$"
+  operator="$(operator_cidr)"
+  work="$(mktemp -d)"
+  chmod 700 "$work"
+  clone_id="" firewall_id="" clone_name=""
+  trap verify_cleanup EXIT
+
+  # The firewall targets a tag, so the clone is covered from the moment it exists. The only source is this machine.
+  echo "==> creating a clone of ${snapshot_id}"
+  doctl compute tag create "$tag" >/dev/null
+  firewall_id="$(doctl compute firewall create --name "$tag" --tag-names "$tag" --output json \
+    --inbound-rules "protocol:tcp,ports:22,address:${operator} protocol:tcp,ports:${control_port},address:${operator} protocol:tcp,ports:${media_port},address:${operator}" \
+    --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" |
+    jq -er '.[0].id | select(type == "string" and length > 0)')"
+  # The verification source must be allowed by the image's existing host
+  # firewall; modifying it here would not test what the controller will boot.
+  clone_name="$tag"
+  doctl compute droplet create "$clone_name" --region "$region" --size "$size" --image "$snapshot_id" \
+    --tag-name "$tag" --output json >"${work}/droplet.json"
+  clone_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' "${work}/droplet.json")"
+  local address ready=""
+  address="$(droplet_address "$clone_id" "${work}/droplet.json")"
+  sfu_operator_cert "$environment"
+
+  echo "==> waiting for the clone's node"
+  for _ in $(seq 90); do
+    ready="$(sfu_curl "$dir" "$address" "$control_port" --fail --max-time 5 "https://chalk-sfu:${control_port}/readyz")" && break
+    ready=""
+    sleep 5
+  done
+  [[ -n "$ready" ]] || die "the clone's node never answered /readyz with the environment's certificate"
+  [[ "$(jq -r --arg revision "$revision" --argjson buffer "$udp_buffer" \
+    '.revision == $revision and .draining == false and .allocations == 0 and .host.udpReceiveBufferBytes >= $buffer and .host.udpSendBufferBytes >= $buffer' <<<"$ready")" == true ]] \
+    || die "the clone's node reports ${ready}; want revision ${revision}, no calls and 8 MiB buffers"
+  nc -z -w 5 "$address" "$media_port" || die "the media port ${media_port}/tcp is closed on the clone"
+  if nc -z -w 5 "$address" 22; then die "port 22 answers on the clone; SSH must be off"; fi
+  echo "verified snapshot ${snapshot_id}: revision ${revision} ready, certificate accepted, SSH closed"
+  echo "not proved here: the announced address (readyz does not show it) and a real call; run the canary against the first node from this image"
+}
+
+verify_cleanup() {
+  local code=$?
+  trap - EXIT
+  if [[ -n "$clone_name" && -z "$clone_id" ]]; then
+    echo "window-image: create result unknown; find ${clone_name} and delete by ID if present; retain firewall ${firewall_id} until confirmed gone" >&2
+    code=1
+  elif [[ -n "$clone_id" ]] && ! doctl compute droplet delete -f "$clone_id" >/dev/null; then
+    echo "window-image: could not delete ${clone_id}; delete it: doctl compute droplet delete -f ${clone_id}" >&2
+    echo "window-image: leaving firewall ${firewall_id} in place until the clone is gone" >&2
+    code=1
+  elif [[ -n "$firewall_id" ]] && ! doctl compute firewall delete -f "$firewall_id" >/dev/null; then
+    echo "window-image: could not delete firewall ${firewall_id}; delete it: doctl compute firewall delete -f ${firewall_id}" >&2
+    code=1
+  fi
+  rm -rf "$work"
+  exit "$code"
+}
+
+case "$command" in
+  build | verify)
+    environment="${1:?$usage}"
+    shift
+    environment_values "$environment"
+    "$command" "$@"
+    ;;
+  templates)
+    out="${1:?$usage}" environment="${2:?$usage}" revision="${3:?$usage}" image_id="${4:?$usage}"
+    environment_values "$environment"
+    render_templates "$out" "$revision" "$image_id"
+    ;;
+  *) die "$usage" ;;
+esac

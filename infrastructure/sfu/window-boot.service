@@ -1,0 +1,17 @@
+[Unit]
+Description=Start the Chalk SFU on this Droplet's public address
+Wants=network-online.target
+After=network-online.target ufw.service
+ConditionPathExists=/etc/chalk-sfu/window-image.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/chalk-sfu-window-boot
+# A failure leaves the node down. Retrying covers a metadata service that is slow after boot.
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

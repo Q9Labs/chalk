@@ -3,6 +3,8 @@
 #
 #   certs <staging|production|bench> ca        create the service CA once; its key goes to 1Password
 #   certs <staging|production> server          the SFU's server certificate (DNS chalk-sfu), 180 days
+#   certs <staging|production> window-server  the same certificate under its own key, for a window node snapshot (window-image); the key
+#                                              leaves with the snapshot, so it never serves the static nodes, 180 days
 #   certs <staging|production> api <key> <crt> the API's identity for its existing key and names, 365 days
 #   certs <staging|production> operator [days] a client certificate with the API identity, one day unless told; the release
 #                                              keeps one in the GitHub environment (see ci-secret)
@@ -20,7 +22,7 @@
 # 1Password, because scripts/bench deletes the whole directory with the fleet.
 set -euo pipefail
 
-usage="usage: certs <staging|production|bench> <ca|server|api|operator|capture-ca|capture-worker|capture-worker-check>"
+usage="usage: certs <staging|production|bench> <ca|server|window-server|api|operator|capture-ca|capture-worker|capture-worker-check>"
 environment="${1:?$usage}"
 command="${2:?$usage}"
 case "$environment" in
@@ -147,13 +149,13 @@ case "$command" in
       || { echo "${dir}/capture-worker.key is not the key of ${cert}" >&2; exit 1; }
     echo "worker ${worker_id} for SFU node ${node}: $("$openssl" x509 -in "$cert" -noout -enddate)"
     ;;
-  server)
-    new_key "${work}/server.key"
-    "$openssl" req -new -key "${work}/server.key" -subj "/CN=chalk-sfu" -out "${work}/server.csr"
+  server | window-server)
+    new_key "${work}/${command}.key"
+    "$openssl" req -new -key "${work}/${command}.key" -subj "/CN=chalk-sfu" -out "${work}/${command}.csr"
     printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
-      "extendedKeyUsage=serverAuth" "subjectAltName=DNS:chalk-sfu" >"${work}/server.ext"
-    sign "${work}/server.csr" "${work}/server.ext" 180 "${work}/server.crt"
-    install_pair server
+      "extendedKeyUsage=serverAuth" "subjectAltName=DNS:chalk-sfu" >"${work}/${command}.ext"
+    sign "${work}/${command}.csr" "${work}/${command}.ext" 180 "${work}/${command}.crt"
+    install_pair "$command"
     ;;
   api)
     key="${3:?usage: certs <env> api <the API key file> <the API current certificate>}"
