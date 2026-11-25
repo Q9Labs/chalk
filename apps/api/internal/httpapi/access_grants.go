@@ -140,6 +140,21 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 			}
+			resumed := false
+			if !replaceMediaConnection {
+				stage = "media_connection"
+				var resumeErr error
+				join, resumeErr = resumeAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
+				switch {
+				case errors.Is(resumeErr, mediaplane.ErrConnectionNotFound):
+					// A closed SFU session does not revoke admission: the token holder gets a fresh connection, keyed like an expired token.
+					replaceMediaConnection = true
+				case resumeErr != nil:
+					return accessGrantResponse{}, resumeErr
+				default:
+					resumed = true
+				}
+			}
 			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
 			if replayReplacement {
 				subject = previous
@@ -204,7 +219,7 @@ func issueAccessGrantEndpoint(
 				if err == nil {
 					subject, err = accessGrantSubjectForJoin(request, join)
 				}
-			} else {
+			} else if !resumed {
 				join, err = resumeAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
 			}
 			if err != nil {
