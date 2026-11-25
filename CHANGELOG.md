@@ -6,6 +6,10 @@
 
 - iPhone and iPad can share their screen. `@q9labsai/chalk-react-native` shows Share screen in the More sheet on iOS as it does on Android, opens the system broadcast picker with the app's broadcast extension, and publishes once the broadcast starts. A dismissed picker fails like a declined Android or browser picker. Apps need a ReplayKit broadcast upload extension that posts the Darwin notification `<extension bundle id>.started` from `broadcastStarted`, and must set `RTCScreenSharingExtension` and `RTCAppGroupIdentifier` in Info.plist. Without those keys, or on a simulator, the row stays hidden.
 
+### Scheduled Episodes
+
+- The API adds `putScheduledEpisode`, `getScheduledEpisode` and `cancelScheduledEpisode` under `/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}`, so a scheduler can record when an Episode is expected and who is expected. A Scheduled Episode never starts or ends an Episode and grants no access. Apply the `scheduled_episodes` migration before deploying the API. The generated clients gain the three operations and no new scope.
+
 ### Screen annotation
 
 - `@q9labsai/chalk-client` negotiates annotation with Sync for the active screen share. Turning annotation off during a call withdraws ink and disables drawing without interrupting the share.

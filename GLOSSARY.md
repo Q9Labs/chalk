@@ -88,6 +88,23 @@ One bounded run of live activity inside a Space. The dashboard calls it a sessio
 - After end: frozen forever. Nothing on an ended Episode changes.
 - Not a snapshot of the Space itself; an Episode contains its own config snapshot.
 
+### Scheduled Episode
+
+The plan for a future Episode in a Space: when it is expected to run and who
+is expected. It is an expectation, not an Episode.
+
+- Identity: a UUID the caller assigns, unique within its Space. The caller owns
+  the id and it never changes. A Scheduled Episode never becomes an Episode and
+  never gets an Episode id.
+- Owns: an expected start and end, a list of expected participants, and caller
+  metadata. A write replaces all of it.
+- Lifecycle: stands until cancelled, and a cancelled one stays cancelled. The
+  clock changes nothing: nothing starts, ends, expires or is rejected because a
+  time passed.
+- Not a grant: naming someone as expected gives them no access to the Space or
+  any Episode, and it changes no Space configuration. Overlapping Scheduled
+  Episodes are allowed, and the one-live-Episode rule is untouched.
+
 ### Participant
 
 The sole roster noun: anyone or anything present in a live Episode,

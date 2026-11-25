@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
+	"github.com/q9labs/chalk/apps/api/internal/scheduledepisodes"
 )
 
 func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Server, error) {
@@ -30,6 +31,7 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	}
 	w.options.MediaPublications = w.mediaPublicationService
 	w.options.ProblemReports = problemreports.NewService(postgres.NewProblemReportRepository(w.pool), reportSender)
+	w.options.ScheduledEpisodes = scheduledepisodes.NewService(postgres.NewScheduledEpisodeRepository(w.pool))
 	w.options.RecorderFleetEnvironment = w.cfg.Observability.Environment
 	w.options.EpisodeTalkTime = newEpisodeTalkTime(w.cfg.Capabilities.Transcription, w.episodeService, postgres.NewEpisodeTalkTimeRepository(w.queries), w.recordingStorage)
 

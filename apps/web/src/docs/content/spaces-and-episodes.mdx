@@ -11,6 +11,7 @@ Joining always targets the Space. If no Episode is live and the joining identity
 - An Episode can end explicitly, naturally after the last leave and its linger window, or at its deadline.
 - `endEpisode()` and `extendEpisode(minutes)` are capability-gated client commands. An extension moves the deadline, and it stops at the Space's maximum counted from the start of the Episode. Past that, the extension is rejected. A Recording follows the extended deadline.
 - Every ended Episode records why: `maximum_duration`, `ended_by_participant`, `tenant_recovery` or `linger_expired`. The React and React Native SDKs warn at 10, 5 and 1 minute before the deadline and show the reason on the end screen. Other clients can use `callCountdown`, `callLimitMessage` and `callEndNotice` from `@q9labsai/chalk-client`.
+- A **Scheduled Episode** is a plan for a future Episode: an expected time and expected participants that your system records through the API. It is not an Episode. It starts nothing, ends nothing and admits no one, and the one-live-Episode rule is unchanged. See [Schedule an Episode](/docs/public-api#schedule-an-episode).
 - After an Episode ends, it is frozen. Its attendance and artifacts do not change.
 
 ```ts

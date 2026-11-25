@@ -34,6 +34,9 @@ type Querier interface {
 	CanWriteWhiteboardFile(ctx context.Context, arg CanWriteWhiteboardFileParams) (bool, error)
 	CancelArtifactJob(ctx context.Context, arg CancelArtifactJobParams) (ArtifactJob, error)
 	CancelRecordingPreparation(ctx context.Context, arg CancelRecordingPreparationParams) (CancelRecordingPreparationRow, error)
+	// Cancels a booking, or records a tombstone for an id that was never written. Cancelling again keeps
+	// the first cancelled_at.
+	CancelScheduledEpisode(ctx context.Context, arg CancelScheduledEpisodeParams) error
 	CancelWebhookDeliveriesForOldTarget(ctx context.Context, arg CancelWebhookDeliveriesForOldTargetParams) (int64, error)
 	CancelWebhookEndpointDeliveries(ctx context.Context, arg CancelWebhookEndpointDeliveriesParams) (int64, error)
 	ClaimArtifactJob(ctx context.Context, arg ClaimArtifactJobParams) (ArtifactJob, error)
@@ -225,6 +228,7 @@ type Querier interface {
 	GetRecordingTranscriptionPreparationCommit(ctx context.Context, arg GetRecordingTranscriptionPreparationCommitParams) (pgtype.UUID, error)
 	GetRecordingTranscriptionSource(ctx context.Context, arg GetRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	GetRecordingTranscriptionSourceChunk(ctx context.Context, arg GetRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
+	GetScheduledEpisode(ctx context.Context, arg GetScheduledEpisodeParams) (ScheduledEpisode, error)
 	GetSpaceCreateRequest(ctx context.Context, arg GetSpaceCreateRequestParams) (SpaceCreateRequest, error)
 	GetSpacePublicAdmissionRequest(ctx context.Context, arg GetSpacePublicAdmissionRequestParams) (GetSpacePublicAdmissionRequestRow, error)
 	GetSpacePublicAdmissionRequestForArrival(ctx context.Context, arg GetSpacePublicAdmissionRequestForArrivalParams) (GetSpacePublicAdmissionRequestForArrivalRow, error)
@@ -330,6 +334,8 @@ type Querier interface {
 	ListTranscriptChunks(ctx context.Context, arg ListTranscriptChunksParams) ([]TranscriptChunk, error)
 	ListTranscriptionChunkJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
 	ListTranscriptionFinalizerJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
+	// The operational lookahead: bookings that are not cancelled and start in [window_start, window_end), earliest first.
+	ListUpcomingScheduledEpisodes(ctx context.Context, arg ListUpcomingScheduledEpisodesParams) ([]ScheduledEpisode, error)
 	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]ListWebhookDeliveriesRow, error)
 	ListWebhookDeliveryAttempts(ctx context.Context, arg ListWebhookDeliveryAttemptsParams) ([]WebhookDeliveryAttempt, error)
 	ListWebhookEndpoints(ctx context.Context, arg ListWebhookEndpointsParams) ([]ListWebhookEndpointsRow, error)
@@ -372,6 +378,8 @@ type Querier interface {
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
 	LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error)
 	LockRecordingTranscriptionSource(ctx context.Context, arg LockRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
+	// The Space a booking belongs to, locked against archive and restore until the transaction ends.
+	LockScheduledEpisodeSpace(ctx context.Context, arg LockScheduledEpisodeSpaceParams) (pgtype.Timestamptz, error)
 	LockSpacePublicAdmissionRequest(ctx context.Context, arg LockSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
 	LockSpacePublicArrival(ctx context.Context, arrivalHandle pgtype.UUID) (SpacePublicArrival, error)
 	LockSpacePublicArrivalByIdempotency(ctx context.Context, arg LockSpacePublicArrivalByIdempotencyParams) (SpacePublicArrival, error)
@@ -417,6 +425,9 @@ type Querier interface {
 	PollHelperDeviceRequest(ctx context.Context, pollHash []byte) (HelperDeviceRequest, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
+	// Replaces the expectation of a booking that is not cancelled. A cancelled booking is left alone and
+	// no row comes back. A replay that changes nothing keeps updated_at.
+	PutScheduledEpisode(ctx context.Context, arg PutScheduledEpisodeParams) (ScheduledEpisode, error)
 	ReadHelperDevices(ctx context.Context, tenantID pgtype.UUID) ([]ReadHelperDevicesRow, error)
 	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error

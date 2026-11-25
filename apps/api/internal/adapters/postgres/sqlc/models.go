@@ -1106,6 +1106,19 @@ type RecordingTranscriptionSourceChunk struct {
 	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
+type ScheduledEpisode struct {
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SpaceID              pgtype.UUID        `json:"space_id"`
+	ID                   pgtype.UUID        `json:"id"`
+	StartsAt             pgtype.Timestamptz `json:"starts_at"`
+	ExpectedEndsAt       pgtype.Timestamptz `json:"expected_ends_at"`
+	ExpectedParticipants []byte             `json:"expected_participants"`
+	Metadata             []byte             `json:"metadata"`
+	CancelledAt          pgtype.Timestamptz `json:"cancelled_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ScreenAnnotationSetting struct {
 	Singleton bool `json:"singleton"`
 	Enabled   bool `json:"enabled"`
