@@ -86,8 +86,9 @@ operator investigation; silence does not prove emptiness.
    waits for no live Episode binding and two empty observations on the same
    boot, then deletes by verified provider ID. Do not roll back to an API that
    only knows standing nodes while any live Episode is bound to a window node.
-   The schema can stay in place for a binary rollback. Stop the controller
-   after retirement before running a migration down.
+   Stop the controller after retirement and leave the additive schema in
+   place when rolling back the binaries. Production migrations are
+   forward-only; follow the [incident runbook](incident.md).
 
 At the supplied $0.0268 per 2 vCPU node-hour, four extra nodes for four hours
 plus 25 minutes each day for 31 days cost about $14.68. This excludes standing
