@@ -41,7 +41,23 @@ import {
   VIEWER_LAYER_BATCH_SIZE,
   VIEWER_LAYER_UPDATE_INTERVAL_MS,
 } from "./sfu-limits";
-import { PAGE_VISIBILITY_EVENTS, activeOfferedMids, bundleTagOf, connectionIsClosed, connectionIsLive, createLocalOffer, observeConnectionState, pageIsHidden, pictureInPictureTracks, requireTransceiverMid, safeStopTrack, safeStopTransceiver, transceiverOf, waitForConnectionLive, withDeadline } from "./peer-connection";
+import {
+  PAGE_VISIBILITY_EVENTS,
+  activeOfferedMids,
+  bundleTagOf,
+  connectionIsClosed,
+  connectionIsLive,
+  createLocalOffer,
+  observeConnectionState,
+  pageIsHidden,
+  pictureInPictureTracks,
+  requireTransceiverMid,
+  safeStopTrack,
+  safeStopTransceiver,
+  transceiverOf,
+  waitForConnectionLive,
+  withDeadline,
+} from "./peer-connection";
 import { createCallStatsCollector, type CallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { SFUError } from "./types";
