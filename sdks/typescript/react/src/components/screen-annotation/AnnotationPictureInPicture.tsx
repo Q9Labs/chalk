@@ -28,7 +28,7 @@ function styleWindow(view: Window): void {
   view.document.head.appendChild(sheet);
 }
 
-export function AnnotationPictureInPicture({ inTab, hints = false, ...props }: PictureProps & { readonly inTab: boolean; readonly hints?: boolean }): React.JSX.Element {
+export function AnnotationPictureInPicture({ inTab, helperAvailable, hints = false, ...props }: PictureProps & { readonly inTab: boolean; readonly helperAvailable: boolean; readonly hints?: boolean }): React.JSX.Element | null {
   const [popup, setPopup] = useState<Window | null>(null);
   const [opening, setOpening] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -46,7 +46,10 @@ export function AnnotationPictureInPicture({ inTab, hints = false, ...props }: P
     [],
   );
 
-  if (typeof window === "undefined" || !hasDocumentPiP(window)) return <span className="chalk-ann-status">{inTab ? "Marks are visible in this tab" : "Share a tab to see marks in this call"}</span>;
+  if (typeof window === "undefined" || !hasDocumentPiP(window)) {
+    if (!inTab && helperAvailable) return null;
+    return <span className="chalk-ann-status">{inTab ? "Marks are visible in this tab" : "Marks aren’t visible on this device"}</span>;
+  }
   const pip = window.documentPictureInPicture;
   const open = async () => {
     if (current.current) {

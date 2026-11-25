@@ -339,7 +339,7 @@
     {
       "id": "gate:board-local",
       "owner": "Web",
-      "catches": "A board proof of tests/board.e2e.ts that fails in a browser against the local stack, such as the desktop teacher and phone follower zoom assertion of the nightly cut.",
+      "catches": "Live collaboration failures in the local web stack: board drawing and zoom, or a missing Chalk Helper offer when a host or guest shares a screen.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,

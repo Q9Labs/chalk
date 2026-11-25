@@ -1,6 +1,7 @@
 import type { ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "@q9labsai/chalk-react";
 import { HelperConflict, delay, localRequest, readJson } from "./screen-annotation-helper-bridge";
-import { calibrateMonitor, calibrateWindow, chromiumWindowId, probeSchema } from "./screen-annotation-helper-calibration";
+import { calibrateMonitor, calibrateWindow, probeSchema } from "./screen-annotation-helper-calibration";
+import { chromiumWindowId, classifyHelperCapture } from "./screen-annotation-helper-capture";
 
 export function liveProjection({
   track,
@@ -15,10 +16,7 @@ export function liveProjection({
   readonly attachmentSecret: string;
   readonly signal: AbortSignal;
 }) {
-  const settings = track?.getSettings();
-  const chromium = /(?:Chrome|Chromium)\//.test(navigator.userAgent);
-  const monitor = chromium && share.surface === "monitor" && settings?.displaySurface === "monitor" && Boolean(settings.width && settings.height);
-  const windowId = chromium && share.surface === "window" && settings?.displaySurface === "window" && track ? chromiumWindowId(track.label) : undefined;
+  const { settings, monitor, windowId } = classifyHelperCapture(share.surface, track, navigator.userAgent);
   let verifiedWindowSize: { width: number; height: number } | undefined;
   let calibrated = false;
   const sourceLabel = track?.label;

@@ -159,7 +159,7 @@ function OwnerCallSurface({
         tenantId,
         accountId,
         mediaProof: owner.reportCredential,
-        screenShare: () => client.getSnapshot().media.screenShare,
+        client,
       }),
     [baseURL, tenantId, accountId, owner, client],
   );

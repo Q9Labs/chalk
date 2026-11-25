@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-engine.sh http     the dashboard against the real API, Sync and Pages runtime (about 1 minute of tests)
 # check-engine.sh refresh  the owner call across the real five-minute media-access lifetime (about 5 minutes of waiting)
-# check-engine.sh board    the two board proofs of tests/board.e2e.ts that need no proof API key, in a browser (about 3 minutes)
+# check-engine.sh board    board and screen annotation proofs in real local calls, without a proof API key
 # The Gate runs them as three lanes so a pull request waits only for the ones its inputs select.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
@@ -36,10 +36,10 @@ case "$proof" in
     bash apps/web/tests/dashboard/real-engine.sh node apps/web/tests/dashboard/owner-refresh.mjs
     ;;
   board)
-    # The board proofs of tests/board.e2e.ts that need no proof API key, against the same local stack. The web engine and the
-    # fixture browser each need their own Chromium.
+    # The web engine and the fixture browser each need their own Chromium.
     node scripts/ensure-playwright-browsers.mjs sdk chromium
     node scripts/ensure-playwright-browsers.mjs engine chromium
+    export DASHBOARD_ENGINE_DEADLINE_SECONDS=360
     bash apps/web/tests/dashboard/real-engine.sh node scripts/web-proof/board-local.mjs
     ;;
   *)

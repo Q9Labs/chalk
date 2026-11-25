@@ -6,10 +6,7 @@ export function useAnnotationHelperInstall(annotation?: Pick<ScreenAnnotationOpt
   const client = url ? annotation?.client : undefined;
   const active = useSyncExternalStore(
     (listener) => client?.subscribe(listener) ?? (() => {}),
-    () => {
-      const snapshot = client?.getSnapshot();
-      return snapshot?.status === "ready" && snapshot.state !== null;
-    },
+    () => client?.getSnapshot().status === "ready",
     () => false,
   );
   return active ? url : undefined;
