@@ -27,6 +27,8 @@ type goneSessionPlane struct {
 	accessgrants.Issuer
 	gone    map[string]bool
 	created int
+	// overlap runs while a replacement is being created, as a second identical request would.
+	overlap func()
 }
 
 func (*goneSessionPlane) AuthorizeTenant(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
@@ -51,6 +53,9 @@ func (*goneSessionPlane) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 }
 
 func (f *goneSessionPlane) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
+	if f.overlap != nil {
+		f.overlap()
+	}
 	f.created++
 	return mediaplane.Join{Provider: mediaplane.ProviderChalkSFU, ClientPayload: map[string]any{"connectionId": fmt.Sprintf("sfu-new-%d", f.created)}}, nil
 }
@@ -99,6 +104,9 @@ func (r *goneSessionRepository) ReplaceParticipantMediaConnection(ctx context.Co
 }
 
 func (r *goneSessionRepository) ReserveParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, reservation string, _ [32]byte) error {
+	if r.connection == reservation {
+		return accessgrants.ErrRefreshPending
+	}
 	return r.ReplaceParticipantMediaConnection(ctx, key, generation, previous, reservation)
 }
 
@@ -181,6 +189,12 @@ func TestAccessGrantResumeOfAGoneSFUSessionIsReplacedLikeAnExpiredToken(t *testi
 	}
 
 	stale := tokenFor("sfu-gone")
+	plane.overlap = func() {
+		plane.overlap = nil
+		if _, err := resume(stale); err == nil || episodeLifecycleRules.apiError(err).Code != "participant.media_replacement_pending" {
+			t.Errorf("an identical resume while the replacement is in flight must be retryable pending: %v", err)
+		}
+	}
 	first, err := resume(stale)
 	if err != nil {
 		t.Fatalf("resume of a gone SFU session: %v", err)
