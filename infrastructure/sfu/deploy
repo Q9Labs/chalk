@@ -382,11 +382,11 @@ echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferE
 ((sent >= udp_buffer)) || { echo "the send buffer is below ${udp_buffer} bytes; check net.core.wmem_max" >&2; exit 1; }
 
 echo "==> checking public ICE-TCP reachability"
-tcp_probe_ports=("$media_port")
-[[ "$media_tcp_supported" == true ]] && tcp_probe_ports+=("$media_tcp_port")
-for tcp_port in "${tcp_probe_ports[@]}"; do
-  sfu_check_tcp_public "$host" "$tcp_port" || { echo "public TCP ${tcp_port} does not reach ${host}; check the cloud and host firewalls" >&2; exit 1; }
-done
+sfu_check_tcp_public "$host" "$media_port" || { echo "public TCP ${media_port} does not reach ${host}; check the cloud and host firewalls" >&2; exit 1; }
+# TCP 443 is an extra path for networks that block everything else; until the cloud firewalls allow it (issue #1640), report it without failing the release.
+if [[ "$media_tcp_supported" == true ]] && ! sfu_check_tcp_public "$host" "$media_tcp_port"; then
+  echo "warning: public TCP ${media_tcp_port} does not reach ${host}; restricted networks fall back to relay or fail; check the cloud and host firewalls" >&2
+fi
 
 if $capture_on; then
   echo "==> starting the capture worker"
