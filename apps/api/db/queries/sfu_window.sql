@@ -4,6 +4,11 @@ from sfu_window_nodes
 where application_id = $1 and phase in ('serving', 'draining', 'deleting') and control_address is not null
 order by created_at, id;
 
+-- name: IsSFUWindowNodeGone :one
+select exists (
+    select 1 from sfu_window_nodes where id = $1 and application_id = $2 and deleted_at is not null
+) as gone;
+
 -- name: ListSFUWindowNodes :many
 select *
 from sfu_window_nodes
@@ -30,7 +35,7 @@ where id = sqlc.arg(id) and phase = sqlc.arg(from_phase);
 select not exists (
     select 1 from episodes
     where status in ('active', 'ending')
-      and config_snapshot -> 'media_plane_binding' ->> 'provider' = 'chalk_sfu'
+      and config_snapshot -> 'media_plane_binding' ->> 'provider' = sqlc.arg(provider)::text
       and config_snapshot -> 'media_plane_binding' ->> 'node' = sqlc.arg(node_id)::text
 ) as unbound;
 
@@ -52,7 +57,7 @@ select episode.tenant_id, episode.space_id, episode.started_at,
        and participant.status in ('joining', 'active', 'leaving'))::integer as participants
 from episodes episode
 where episode.status in ('active', 'ending')
-  and episode.config_snapshot -> 'media_plane_binding' ->> 'provider' = 'chalk_sfu'
+  and episode.config_snapshot -> 'media_plane_binding' ->> 'provider' = sqlc.arg(provider)::text
   and episode.config_snapshot -> 'media_plane_binding' ->> 'adapter_fingerprint' = sqlc.arg(fingerprint)::text;
 
 -- name: ForgetSFUWindowIntent :execrows

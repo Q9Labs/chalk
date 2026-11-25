@@ -63,19 +63,19 @@ func TestSFUWindowDrainFencesBindings(t *testing.T) {
 	}()
 	mustExec(pool, "insert into tenants(id, name) values ($1, 'Window fixture')", tenant.Bytes())
 	for _, id := range [][16]byte{space.Bytes(), secondSpace.Bytes()} {
-		mustExec(pool, "insert into spaces(id, tenant_id, name, slug, media_plane) values ($1, $2, 'Window', $1::uuid::text, 'chalk_sfu')", id, tenant.Bytes())
+		mustExec(pool, "insert into spaces(id, tenant_id, name, slug, media_plane) values ($1, $2, 'Window', $1::uuid::text, $3)", id, tenant.Bytes(), mediaplane.ProviderChalkSFU.SettingName())
 	}
 	mustExec(pool, "insert into sfu_window_nodes(id, application_id, provider_id, control_address, phase) values ($1, 'fence-test', $2, '192.0.2.1', 'serving')",
 		node, time.Now().UnixNano())
 
 	bindingSQL := `insert into episodes(id, tenant_id, space_id, status, config_snapshot)
-		values ($1, $2, $3, 'active', jsonb_build_object('media_plane_binding', jsonb_build_object('provider', 'chalk_sfu', 'node', $4::text)))`
+		values ($1, $2, $3, 'active', jsonb_build_object('media_plane_binding', jsonb_build_object('provider', $5::text, 'node', $4::text)))`
 	create, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer create.Rollback(context.Background())
-	mustExec(create, bindingSQL, episode.Bytes(), tenant.Bytes(), space.Bytes(), node)
+	mustExec(create, bindingSQL, episode.Bytes(), tenant.Bytes(), space.Bytes(), node, mediaplane.ProviderChalkSFU.SettingName())
 
 	drain, err := pool.Begin(ctx)
 	if err != nil {
@@ -100,7 +100,7 @@ func TestSFUWindowDrainFencesBindings(t *testing.T) {
 		t.Fatalf("draining node still binds a live Episode: unbound = %v, err = %v", unbound, err)
 	}
 	secondEpisode := accountTenantIntegrationID(t)
-	if _, err := pool.Exec(ctx, bindingSQL, secondEpisode.Bytes(), tenant.Bytes(), secondSpace.Bytes(), node); !errors.Is(mapSFUWindowBindingError(err), mediaplane.ErrPlacementRefused) {
+	if _, err := pool.Exec(ctx, bindingSQL, secondEpisode.Bytes(), tenant.Bytes(), secondSpace.Bytes(), node, mediaplane.ProviderChalkSFU.SettingName()); !errors.Is(mapSFUWindowBindingError(err), mediaplane.ErrPlacementRefused) {
 		t.Fatalf("new Episode could bind a draining node: %v", err)
 	}
 	if _, err := pool.Exec(ctx, "update episodes set status = 'ending' where id = $1", episode.Bytes()); err != nil {

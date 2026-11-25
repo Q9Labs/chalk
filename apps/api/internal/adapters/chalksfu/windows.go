@@ -14,7 +14,10 @@ import (
 
 const windowControlPort = 8443
 
-type WindowDirectory func(context.Context) ([]sfufleet.Route, error)
+type WindowDirectory struct {
+	List func(context.Context) ([]sfufleet.Route, error)
+	Gone func(context.Context, string) (bool, error)
+}
 
 type windowAdapter struct {
 	sfufleet.Route
@@ -24,16 +27,16 @@ type windowAdapter struct {
 
 // LoadWindowNodes configures the directory before the fleet starts probing.
 func (f *Fleet) LoadWindowNodes(directory WindowDirectory) {
-	f.loadWindows = directory
+	f.windowDirectory = directory
 }
 
 func (f *Fleet) refreshWindows(ctx context.Context) {
-	if f.loadWindows == nil {
+	if f.windowDirectory.List == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	entries, err := f.loadWindows(ctx)
+	entries, err := f.windowDirectory.List(ctx)
 	if err == nil {
 		err = f.replaceWindows(entries)
 	}
@@ -43,6 +46,19 @@ func (f *Fleet) refreshWindows(ctx context.Context) {
 		f.log.WarnContext(ctx, "chalk sfu window directory unavailable", "err", err)
 	}
 	f.directoryFailed = err != nil
+}
+
+// A missing directory entry is not a loss signal: the replica may not have
+// polled since placement. Only the journal can confirm a removed window node.
+func (f *Fleet) windowGone(ctx context.Context, node string) bool {
+	if !mediaplane.IsWindowNode(node) || f.windowDirectory.Gone == nil {
+		return false
+	}
+	if _, err := f.Node(node); err == nil {
+		return false
+	}
+	gone, err := f.windowDirectory.Gone(ctx, node)
+	return err == nil && gone
 }
 
 func (f *Fleet) replaceWindows(entries []sfufleet.Route) error {

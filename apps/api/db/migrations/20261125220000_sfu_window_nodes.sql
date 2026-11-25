@@ -25,8 +25,7 @@ declare
     binding jsonb := new.config_snapshot -> 'media_plane_binding';
     target text := binding ->> 'node';
 begin
-    if new.status = 'ended' or binding ->> 'provider' is distinct from 'chalk_sfu'
-        or target is null or target not like 'window-sfu-%' then
+    if new.status = 'ended' or target is null or target not like 'window-sfu-%' then
         return new;
     end if;
 

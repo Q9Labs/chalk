@@ -70,6 +70,45 @@ func TestWindowReconcilerStopsCreatingAtBudget(t *testing.T) {
 	}
 }
 
+func TestWindowReconcilerReplacesConfirmedMissingNodeAtCapacity(t *testing.T) {
+	for _, phase := range []Phase{Starting, Serving, Draining} {
+		t.Run(string(phase), func(t *testing.T) {
+			f := newWindowFixture(t)
+			f.reconciler.policy.Capacity.MaxNodes = 1
+			f.state.Demand.LiveSlots = 9
+			f.state.Nodes = []Node{{ID: "window-node", ProviderID: 123, Phase: phase, CreatedAt: f.state.ObservedAt}}
+			if phase != Starting {
+				f.state.Nodes[0].Address = netip.MustParseAddr("192.0.2.9")
+			}
+			f.healthErr = errors.New("node is unreachable")
+			f.bound = phase != Starting
+			f.missing = 123
+			if _, err := f.reconciler.Reconcile(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if node := f.state.Nodes[0]; node.Phase != Deleted || f.destroyed != 0 {
+				t.Fatalf("node=%+v destroyed=%d, want absence recorded without a delete", node, f.destroyed)
+			}
+			if _, err := f.reconciler.Reconcile(t.Context()); err != nil || f.creates != 1 {
+				t.Fatalf("replacement creates=%d err=%v", f.creates, err)
+			}
+		})
+	}
+}
+
+func TestWindowReconcilerFencesAnIncompatibleNodeWithoutDrainingLiveMedia(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Demand.LiveSlots = 9
+	f.state.Nodes = []Node{{ID: "window-node", ProviderID: 123, Address: netip.MustParseAddr("192.0.2.9"), Phase: Serving, CreatedAt: f.state.ObservedAt}}
+	f.bound = true
+	f.health = Health{Incompatible: true, Incarnation: "old-image"}
+	f.reconciler.policy.Capacity.MaxNodes = 1
+	f.reconcile(t, Draining, Draining)
+	if f.health.Draining {
+		t.Fatal("an image mismatch drained a live Episode")
+	}
+}
+
 type windowFixture struct {
 	reconciler *Reconciler
 	state      Snapshot
@@ -80,6 +119,7 @@ type windowFixture struct {
 	createErr  error
 	creates    int
 	destroyed  int64
+	missing    int64
 }
 
 func newWindowFixture(t *testing.T) *windowFixture {
@@ -115,7 +155,7 @@ func (f *windowFixture) reconcile(t *testing.T, phases ...Phase) {
 
 func (f *windowFixture) Load(context.Context, string, time.Duration, int) (Snapshot, error) {
 	state := f.state
-	state.Nodes = slices.Clone(state.Nodes)
+	state.Nodes = slices.DeleteFunc(slices.Clone(state.Nodes), func(node Node) bool { return node.Phase == Deleted })
 	return state, nil
 }
 
@@ -167,5 +207,5 @@ func (p fakeWindowProvider) Destroy(_ context.Context, _ string, id int64) error
 }
 
 func (p fakeWindowProvider) Gone(_ context.Context, _ string, id int64) (bool, error) {
-	return id == p.f.destroyed, nil
+	return id == p.f.destroyed || id == p.f.missing, nil
 }

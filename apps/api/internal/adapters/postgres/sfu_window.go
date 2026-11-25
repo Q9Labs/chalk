@@ -49,7 +49,9 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
-	live, err := s.queries.ListSFULiveDemand(ctx, fingerprint)
+	live, err := s.queries.ListSFULiveDemand(ctx, sqlc.ListSFULiveDemandParams{
+		Provider: mediaplane.ProviderChalkSFU.SettingName(), Fingerprint: fingerprint,
+	})
 	if err != nil {
 		return sfufleet.Snapshot{}, err
 	}
@@ -80,6 +82,9 @@ func (s SFUWindowStore) Load(ctx context.Context, application string, lookahead 
 	}
 	for i := len(planned) - 1; i >= 0; i-- {
 		booking := planned[i]
+		if !mediaplane.TenantMediaEnabled(booking.MediaPlaneProviderConfig) {
+			continue
+		}
 		start, end := booking.StartsAt.Time, booking.ExpectedEndsAt.Time
 		key := spaceKey{booking.TenantID.Bytes, booking.SpaceID.Bytes}
 		covered := 0
@@ -130,7 +135,9 @@ func (s SFUWindowStore) Save(ctx context.Context, id string, from sfufleet.Phase
 }
 
 func (s SFUWindowStore) Unbound(ctx context.Context, id string) (bool, error) {
-	return s.queries.IsSFUWindowNodeUnbound(ctx, id)
+	return s.queries.IsSFUWindowNodeUnbound(ctx, sqlc.IsSFUWindowNodeUnboundParams{
+		Provider: mediaplane.ProviderChalkSFU.SettingName(), NodeID: id,
+	})
 }
 
 func (s SFUWindowStore) ForgetIntent(ctx context.Context, id string) error {
