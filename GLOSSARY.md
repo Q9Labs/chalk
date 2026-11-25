@@ -159,6 +159,26 @@ role; customers may name their own roles anything, including "host". UI
 renders from capabilities and never infers authority from role names.
 Permission is reserved for OS and browser device grants.
 
+### Stage and Stage item
+
+The **Stage** is the live visual surface of an Episode: the arranged people and
+shared content everyone can see. A **Stage item** is one thing on that surface:
+a Participant tile, a screen share, the Board, or a Document. Stage items are
+live projections, not durable content resources.
+
+### Presenting, Document, Presenter, and Follow
+
+**Presenting** is the act of putting a file on the Stage for everyone in the
+Episode; the dock action is **Present**. A **Document** is the Stage item kind
+for that presented file, shown as rendered pages. A Document is not a screen
+share: it uses no video track and does not consume screen-share concurrency.
+Never call a Document a "presentation"; a Recording presentation is unrelated.
+
+The **Presenter** is the Participant leading a Document and driving its shared
+page and zoom. Viewers **Follow** when their visible page stays in step with
+the Presenter; they may browse independently and then return to the Presenter's
+page.
+
 ### Artifact
 
 What an Episode leaves behind: a **Recording** (captured media) and a
