@@ -24,7 +24,8 @@ defmodule ChalkSync.Live.Episode do
     :media_projection,
     :presence_projection,
     :connection_qualities,
-    :app_states
+    :app_states,
+    :focus_webhooks
   ]
   defstruct [
     :episode,
@@ -39,7 +40,8 @@ defmodule ChalkSync.Live.Episode do
     :media_projection,
     :presence_projection,
     :connection_qualities,
-    :app_states
+    :app_states,
+    :focus_webhooks
   ]
 
   @type t :: %__MODULE__{}
@@ -59,7 +61,8 @@ defmodule ChalkSync.Live.Episode do
       media_projection: nil,
       presence_projection: nil,
       connection_qualities: %{},
-      app_states: %{}
+      app_states: %{},
+      focus_webhooks: %{}
     }
   end
 
@@ -107,7 +110,8 @@ defmodule ChalkSync.Live.Episode do
           | connections: connections,
             requests: requests,
             connection_qualities: Map.delete(state.connection_qualities, socket),
-            app_states: close_app_state(state, socket)
+            app_states: close_app_state(state, socket),
+            focus_webhooks: drop_socket_focus_webhooks(state.focus_webhooks, socket)
         }
     end
   end
@@ -154,8 +158,9 @@ defmodule ChalkSync.Live.Episode do
         if (current && current.state == app_state) and current.windowed == windowed do
           {:ok, state, []}
         else
-          close_reported_app_state(state, authority, current, now_ms)
+          close_reported_app_state(state, socket, authority, current, now_ms)
           report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
+          Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)
 
           Projections.presence_snapshot(%{
             state
@@ -171,7 +176,14 @@ defmodule ChalkSync.Live.Episode do
         app_states
 
       {{current, app_states}, authority} when is_map(current) and is_map(authority) ->
-        close_reported_app_state(state, authority, current, System.system_time(:millisecond))
+        close_reported_app_state(
+          state,
+          socket,
+          authority,
+          current,
+          System.system_time(:millisecond)
+        )
+
         app_states
 
       {_result, _authority} ->
@@ -179,19 +191,37 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
-  defp close_reported_app_state(_state, _authority, nil, _ended_at_ms), do: :ok
+  defp close_reported_app_state(_state, _socket, _authority, nil, _ended_at_ms), do: :ok
 
-  defp close_reported_app_state(state, authority, current, ended_at_ms) do
+  @doc """
+  Emits the live Focus webhook once a reported state has actually held for ten seconds.
+  Timer messages for replaced or disconnected reports are stale and do nothing.
+  """
+  @spec emit_held_focus(t(), pid(), integer()) :: t()
+  def emit_held_focus(%__MODULE__{} = state, socket, started_at_ms) do
+    with current when is_map(current) <- Map.get(state.app_states, socket),
+         true <- current.started_at_ms == started_at_ms,
+         authority when is_map(authority) <- Map.get(state.connections, socket),
+         false <- Map.has_key?(state.focus_webhooks, {socket, started_at_ms}),
+         true <- System.system_time(:millisecond) - started_at_ms >= 10_000 do
+      produce_focus_changed(state, authority, current)
+
+      %{
+        state
+        | focus_webhooks: Map.put(state.focus_webhooks, {socket, started_at_ms}, true)
+      }
+    else
+      _ -> state
+    end
+  end
+
+  defp close_reported_app_state(state, socket, authority, current, ended_at_ms) do
     if ended_at_ms - current.started_at_ms >= 10_000 do
-      WebhookProducer.produce_focus_changed(state.episode, %{
-        id: authority.participant_id,
-        identity_id: Map.get(authority, :identity_id),
-        space_id: state.episode.space_id,
-        episode_id: state.episode.episode_id,
-        app_state: current.state,
-        windowed: current.windowed,
-        since: DateTime.from_unix!(current.started_at_ms, :millisecond)
-      })
+      # The timer normally emits while the state is live. This close-time fallback covers a
+      # coordinator that did not run long enough to receive that timer, without double-sending.
+      unless Map.has_key?(state.focus_webhooks, {socket, current.started_at_ms}) do
+        produce_focus_changed(state, authority, current)
+      end
     end
 
     ChalkSync.Stateholder.Postgres.Focus.close_interval(
@@ -202,6 +232,27 @@ defmodule ChalkSync.Live.Episode do
       current.started_at_ms,
       ended_at_ms
     )
+  end
+
+  defp produce_focus_changed(state, authority, current) do
+    WebhookProducer.produce_focus_changed(state.episode, %{
+      id: authority.participant_id,
+      identity_id: Map.get(authority, :identity_id),
+      space_id: state.episode.space_id,
+      episode_id: state.episode.episode_id,
+      app_state: current.state,
+      windowed: current.windowed,
+      since: DateTime.from_unix!(current.started_at_ms, :millisecond)
+    })
+  end
+
+  defp drop_socket_focus_webhooks(webhooks, socket) do
+    keys =
+      webhooks
+      |> Enum.filter(fn {{candidate, _started_at}, true} -> candidate == socket end)
+      |> Enum.map(fn {key, true} -> key end)
+
+    Map.drop(webhooks, keys)
   end
 
   @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}

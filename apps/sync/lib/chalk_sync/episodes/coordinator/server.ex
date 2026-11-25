@@ -223,6 +223,10 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
     |> reschedule(:expire_live_requests, @queue_check_interval_ms)
   end
 
+  def handle_info({:focus_state_held, socket, started_at_ms}, state) do
+    {:noreply, %{state | live: LiveEpisode.emit_held_focus(state.live, socket, started_at_ms)}}
+  end
+
   def handle_info(:reconcile_live, state),
     do:
       state
