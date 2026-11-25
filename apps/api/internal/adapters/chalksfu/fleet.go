@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 const (
@@ -47,20 +48,26 @@ var ErrUnknownNode = errors.New("chalk sfu node is not configured")
 // Episode is placed on one node and its binding records it, so every later call
 // for that Episode, cleanup included, goes to that node.
 type Fleet struct {
-	applicationID string
-	nodes         []*Adapter
-	standbys      map[string]bool // node IDs with the standby role
-	standbyBudget int             // packets/s a standby admits for new Episodes
-	log           *slog.Logger
+	applicationID   string
+	nodes           []*Adapter
+	standbys        map[string]bool // node IDs with the standby role
+	standbyBudget   int             // packets/s a standby admits for new Episodes
+	log             *slog.Logger
+	windowDirectory WindowDirectory
+	config          runtimeconfig.ChalkSFUConfig
+	client          *http.Client
 
-	mu          sync.Mutex
-	loads       map[string]nodeLoad
-	seen        map[string]sighting    // when each node last answered a probe; a failed probe leaves it alone
-	verdicts    map[string]verdict     // what each node's last answer said about its wire protocol; a failed probe leaves it alone
-	inflight    map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
-	probed      bool                   // a probe round has finished, so a node without a load record has none
-	firstRound  time.Time              // when the first probe round finished
-	holdSeconds int                    // how long a recovery's reservation waits for rejoins; zero means recoveryHoldSeconds
+	mu              sync.Mutex
+	windows         []windowAdapter
+	placementOrder  []*Adapter
+	directoryFailed bool
+	loads           map[string]nodeLoad
+	seen            map[string]sighting    // when each node last answered a probe; a failed probe leaves it alone
+	verdicts        map[string]verdict     // what each node's last answer said about its wire protocol; a failed probe leaves it alone
+	inflight        map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
+	probed          bool                   // a probe round has finished, so a node without a load record has none
+	firstRound      time.Time              // when the first probe round finished
+	holdSeconds     int                    // how long a recovery's reservation waits for rejoins; zero means recoveryHoldSeconds
 }
 
 // sighting is a node's last answered probe. Unlike its load record, which a failed probe
@@ -102,10 +109,6 @@ type nodeLoad struct {
 	at time.Time
 }
 
-// fits reports whether the room left holds one more new Episode after the in-flight
-// ones, which the probe may not include yet.
-func (l nodeLoad) fits(inflight int) bool { return l.room >= (inflight+1)*l.episode }
-
 // NodeHealth is what a node's last answered probe said about its drain.
 type NodeHealth struct {
 	// Draining means the node refuses new Episodes and keeps its live ones.
@@ -133,12 +136,17 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 		standbys:      map[string]bool{},
 		standbyBudget: config.StandbyPacketBudget,
 		log:           log,
+		config:        config,
+		client:        client,
 		loads:         map[string]nodeLoad{},
 		seen:          map[string]sighting{},
 		verdicts:      map[string]verdict{},
 		inflight:      map[string][]time.Time{},
 	}
 	for _, node := range config.Nodes {
+		if mediaplane.IsWindowNode(node.ID) {
+			return nil, fmt.Errorf("%w: standing SFU node uses the window node prefix", ErrMissingConfig)
+		}
 		adapter, err := newAdapter(config, node, client)
 		if err != nil {
 			return nil, err
@@ -148,6 +156,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 			fleet.standbys[node.ID] = true
 		}
 	}
+	fleet.rebuildPlacement()
 	if err := fleet.observeReadiness(otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu")); err != nil {
 		return nil, err
 	}
@@ -192,10 +201,10 @@ func (f *Fleet) ApplicationID() string { return f.applicationID }
 
 // Node returns the adapter of the node an Episode is bound to.
 func (f *Fleet) Node(id string) (*Adapter, error) {
-	for _, node := range f.nodes {
-		if node.node == id {
-			return node, nil
-		}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if node := f.nodeLocked(id); node != nil {
+		return node, nil
 	}
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
 }
@@ -218,85 +227,6 @@ func (f *Fleet) Allocation(id, incarnation string, generation int64) (*Adapter, 
 // an answer from another boot than the incarnation.
 func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (captureplane.CapturePlane, error) {
 	return f.Allocation(id, incarnation, generation)
-}
-
-// Place picks the node for a new Episode. Primaries are tried first, in
-// configuration order, and a standby only when no primary can take it (silent,
-// draining, host-guard closed or out of budget). Only a node whose last answer showed a wire
-// protocol of at least minNodeProtocol is eligible, so no Episode is bound to a node that is old
-// or has not answered yet. A node qualifies when that holds, its last probe is fresh and ready,
-// and it has packet budget left for a new Episode, after the Episodes this process placed there
-// in the last inflightTTL, so concurrent creations do not all pin to the last slot, even across
-// a probe that does not show them yet. A standby counts only the degraded budget it is configured
-// with. The first qualifying node wins and room is true. The placement then records the node,
-// its boot incarnation from that probe and whether it is a primary or a standby.
-//
-// A node whose protocol is below minNodeProtocol, or that has not yet answered a probe, never
-// takes a new Episode. When no node qualifies, every node would refuse the Episode, so room is
-// false, no node is named, and the caller refuses the Episode.
-// The reason says why: a node that takes new Episodes was full, else a node's host guard refused
-// them (spare budget or not), else every answering node was draining, else
-// overflow_node_protocol_too_old when some node is known to be old, else overflow_node_unavailable.
-//
-// It reads the last probes and does no I/O, because Episode creation calls it inside a database
-// transaction.
-func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var answering, full, guarded, tooOld bool // a compatible node answered; one was full; one's host guard refused; some node is known to be old
-	for _, standby := range []bool{false, true} {
-		for _, node := range f.nodes {
-			if f.standbys[node.node] != standby {
-				continue
-			}
-			switch f.verdicts[node.node] {
-			case verdictTooOld:
-				tooOld = true
-				continue
-			case verdictUnknown:
-				continue
-			}
-			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness {
-				continue
-			}
-			answering = true
-			switch {
-			case load.Draining:
-			case load.hostGuard:
-				guarded = true
-			case !load.fits(len(f.inflightOn(node.node))):
-				full = true
-			default:
-				f.inflight[node.node] = append(f.inflight[node.node], time.Now())
-				reason := mediaplane.PlacementPrimary
-				if standby {
-					reason = mediaplane.PlacementStandby
-				}
-				return mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: reason}, true
-			}
-		}
-	}
-	none := mediaplane.Placement{Reason: mediaplane.PlacementOverflowNodeUnavailable}
-	switch {
-	case full:
-		none.Reason = mediaplane.PlacementOverflowNoRoom
-	case guarded:
-		none.Reason = mediaplane.PlacementOverflowHostGuard
-	case answering:
-		none.Reason = mediaplane.PlacementOverflowDraining
-	case tooOld:
-		none.Reason = mediaplane.PlacementOverflowNodeProtocol
-	}
-	return none, false
-}
-
-// inflightOn returns the Episodes placed on a node less than inflightTTL ago and
-// forgets older ones. It holds f.mu.
-func (f *Fleet) inflightOn(node string) []time.Time {
-	live := slices.DeleteFunc(f.inflight[node], func(at time.Time) bool { return time.Since(at) > inflightTTL })
-	f.inflight[node] = live
-	return live
 }
 
 // Watch probes every node's readiness until ctx ends.
@@ -329,8 +259,15 @@ func (f *Fleet) Health(node string) (NodeHealth, bool) {
 // answer loses its load record and with it its place in placement. A draining
 // node keeps a record that says so, and it too is out of placement.
 func (f *Fleet) Probe(ctx context.Context) {
+	f.refreshWindows(ctx)
+	f.mu.Lock()
+	nodes := append([]*Adapter(nil), f.nodes...)
+	for _, window := range f.windows {
+		nodes = append(nodes, window.adapter)
+	}
+	f.mu.Unlock()
 	var wg sync.WaitGroup
-	for _, node := range f.nodes {
+	for _, node := range nodes {
 		wg.Go(func() { f.probeNode(ctx, node) })
 	}
 	wg.Wait()
@@ -349,6 +286,9 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 	ready, err := node.ready(probeCtx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.nodeLocked(node.node) != node {
+		return
+	}
 	before, known := f.loads[node.node]
 	if err != nil {
 		// A missed probe keeps the last sample: it stays usable until probeFreshness

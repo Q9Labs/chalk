@@ -239,9 +239,8 @@ func TestUpcomingScheduledEpisodesLookahead(t *testing.T) {
 	h.expect(http.MethodDelete, tenant, space, accountTenantIntegrationID(t), "", http.StatusNoContent, "")
 
 	window := sqlc.ListUpcomingScheduledEpisodesParams{
-		WindowStart: pgtype.Timestamptz{Time: time.Date(2090, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+		WindowStart: pgtype.Timestamptz{Time: time.Date(2090, 1, 1, 10, 30, 0, 0, time.UTC), Valid: true},
 		WindowEnd:   pgtype.Timestamptz{Time: time.Date(2090, 1, 5, 0, 0, 0, 0, time.UTC), Valid: true},
-		RowLimit:    10,
 	}
 	rows, err := sqlc.New(h.pool).ListUpcomingScheduledEpisodes(context.Background(), window)
 	if err != nil {
@@ -260,8 +259,8 @@ func TestUpcomingScheduledEpisodesLookahead(t *testing.T) {
 	if _, err := tx.Exec(context.Background(), `set local enable_seqscan = off`); err != nil {
 		t.Fatal(err)
 	}
-	explain, err := tx.Query(context.Background(), `explain select * from scheduled_episodes where cancelled_at is null and starts_at >= $1 and starts_at < $2 order by starts_at, tenant_id, space_id, id limit $3`,
-		window.WindowStart, window.WindowEnd, window.RowLimit)
+	explain, err := tx.Query(context.Background(), `explain select * from scheduled_episodes where cancelled_at is null and starts_at > $1::timestamptz - interval '7 days' and starts_at < $2 and expected_ends_at > $1 order by starts_at, tenant_id, space_id, id`,
+		window.WindowStart, window.WindowEnd)
 	if err != nil {
 		t.Fatal(err)
 	}

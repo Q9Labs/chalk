@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
@@ -150,7 +151,13 @@ func newClient(config runtimeconfig.ChalkSFUConfig) (*http.Client, error) {
 		MaxIdleConnsPerHost: 8,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	return &http.Client{Transport: transport, Timeout: config.RequestTimeout}, nil
+	return &http.Client{
+		Transport: transport,
+		Timeout:   config.RequestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, nil
 }
 
 func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFUNode, client *http.Client) (*Adapter, error) {
@@ -275,33 +282,6 @@ func recordFailure(ctx context.Context, attributes []attribute.KeyValue) {
 
 func statusClass(status int) string {
 	return strconv.Itoa(status/100) + "xx"
-}
-
-// ready reads the node's readiness: its packet budget and the part live Episodes
-// reserve. A draining node answers 503 with its state, which is a ready result
-// with Draining set. Any other reply but 200 is not ready.
-func (a *Adapter) ready(ctx context.Context) (protocol.ReadyResponse, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath(protocol.RouteReady).String(), nil)
-	if err != nil {
-		return protocol.ReadyResponse{}, err
-	}
-	request.Header.Set("Accept", "application/json")
-	reply, err := a.client.Do(request)
-	if err != nil {
-		return protocol.ReadyResponse{}, err
-	}
-	defer reply.Body.Close()
-	if reply.StatusCode != http.StatusOK && reply.StatusCode != http.StatusServiceUnavailable {
-		return protocol.ReadyResponse{}, fmt.Errorf("readiness status %d", reply.StatusCode)
-	}
-	var ready protocol.ReadyResponse
-	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&ready); err != nil {
-		return protocol.ReadyResponse{}, fmt.Errorf("decode readiness (status %d): %w", reply.StatusCode, err)
-	}
-	if reply.StatusCode == http.StatusServiceUnavailable && !ready.Draining {
-		return protocol.ReadyResponse{}, fmt.Errorf("readiness status %d", reply.StatusCode)
-	}
-	return ready, nil
 }
 
 func (a *Adapter) send(ctx context.Context, endpoint string, body []byte) (int, []byte, error) {

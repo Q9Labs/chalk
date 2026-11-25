@@ -1124,6 +1124,19 @@ type ScreenAnnotationSetting struct {
 	Enabled   bool `json:"enabled"`
 }
 
+type SfuWindowNode struct {
+	ID                 string             `json:"id"`
+	ApplicationID      string             `json:"application_id"`
+	ProviderFirewallID pgtype.UUID        `json:"provider_firewall_id"`
+	ProviderID         pgtype.Int8        `json:"provider_id"`
+	ControlAddress     *netip.Addr        `json:"control_address"`
+	Phase              string             `json:"phase"`
+	EmptySince         pgtype.Timestamptz `json:"empty_since"`
+	EmptyIncarnation   pgtype.Text        `json:"empty_incarnation"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Space struct {
 	ID                            pgtype.UUID        `json:"id"`
 	Name                          string             `json:"name"`

@@ -67,7 +67,7 @@ func (r EpisodeLifecycleRepository) transaction(ctx context.Context, work func(*
 	}
 
 	if err := work(sqlc.New(tx), tx); err != nil {
-		return err
+		return mapSFUWindowBindingError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit lifecycle transaction: %w", err)

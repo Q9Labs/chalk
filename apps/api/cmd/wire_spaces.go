@@ -8,6 +8,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -18,6 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/sfufleet"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -60,6 +62,15 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 		if err != nil {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
+		application := w.chalkSFU.ApplicationID()
+		w.chalkSFU.LoadWindowNodes(chalksfu.WindowDirectory{
+			List: func(ctx context.Context) ([]sfufleet.Route, error) {
+				return postgres.ListSFUWindowRoutes(ctx, w.queries, application)
+			},
+			Gone: func(ctx context.Context, node string) (bool, error) {
+				return w.queries.IsSFUWindowNodeGone(ctx, sqlc.IsSFUWindowNodeGoneParams{ID: node, ApplicationID: application})
+			},
+		})
 	}
 	w.ownCapture = w.chalkSFU != nil && w.cfg.ChalkSFU.CaptureEnabled
 	w.mediaPlaneTelemetry = observability.NewMediaPlaneResolutionTelemetry(w.logger)

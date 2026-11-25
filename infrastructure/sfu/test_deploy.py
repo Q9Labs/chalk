@@ -6,6 +6,8 @@ import time
 import unittest
 from pathlib import Path
 
+from deploy_harness import TABLE
+
 DEPLOY = Path(__file__).with_name('deploy')
 
 
@@ -172,7 +174,7 @@ class CaptureSecretsTest(unittest.TestCase):
             secrets = root / 'secrets'
             secrets.mkdir()
             rule = {'protocol': 'tcp', 'sources': {'addresses': ['192.0.2.0/24']}}
-            firewall = json.dumps([{'name': 'chalk-sfu-bench', 'inbound_rules': [{**rule, 'ports': '8443'}, {**rule, 'ports': '22'}]}])
+            firewall = json.dumps([{'name': 'chalk-sfu-bench', 'inbound_rules': [{**rule, 'ports': str(TABLE['ports']['control'])}, {**rule, 'ports': '22'}]}])
             # The fake node answers what deploy reads and keeps each Podman secret it is given; the run ends at daemon-reload.
             ssh = f"""cmd="$*"
 case "$cmd" in

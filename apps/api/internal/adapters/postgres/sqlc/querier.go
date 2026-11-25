@@ -157,6 +157,7 @@ type Querier interface {
 	FindMCPOAuthGrantByToken(ctx context.Context, tokenHash string) (FindMCPOAuthGrantByTokenRow, error)
 	FindServiceTenantID(ctx context.Context, arg FindServiceTenantIDParams) (pgtype.UUID, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
+	ForgetSFUWindowIntent(ctx context.Context, id string) (int64, error)
 	GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	GetActiveAPIKeyByPrefix(ctx context.Context, keyPrefix string) (GetActiveAPIKeyByPrefixRow, error)
 	GetAdmissionDecisionOperationName(ctx context.Context, arg GetAdmissionDecisionOperationNameParams) (string, error)
@@ -285,6 +286,8 @@ type Querier interface {
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error)
+	IsSFUWindowNodeGone(ctx context.Context, arg IsSFUWindowNodeGoneParams) (bool, error)
+	IsSFUWindowNodeUnbound(ctx context.Context, arg IsSFUWindowNodeUnboundParams) (bool, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
 	// Separate pending expiry from admitted cleanup. The lateral lookup starts
 	// cleanup at current active seats, never at retained admitted-request history.
@@ -317,6 +320,9 @@ type Querier interface {
 	// itself, and Sync marks the superseded one failed with participant_inactive and
 	// makes the Participant active again.
 	ListRenewableSourceGrants(ctx context.Context, arg ListRenewableSourceGrantsParams) ([]ListRenewableSourceGrantsRow, error)
+	ListRoutableSFUWindowNodes(ctx context.Context, applicationID string) ([]ListRoutableSFUWindowNodesRow, error)
+	ListSFULiveDemand(ctx context.Context, arg ListSFULiveDemandParams) ([]ListSFULiveDemandRow, error)
+	ListSFUWindowNodes(ctx context.Context, applicationID string) ([]SfuWindowNode, error)
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
@@ -334,8 +340,7 @@ type Querier interface {
 	ListTranscriptChunks(ctx context.Context, arg ListTranscriptChunksParams) ([]TranscriptChunk, error)
 	ListTranscriptionChunkJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
 	ListTranscriptionFinalizerJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
-	// The operational lookahead: bookings that are not cancelled and start in [window_start, window_end), earliest first.
-	ListUpcomingScheduledEpisodes(ctx context.Context, arg ListUpcomingScheduledEpisodesParams) ([]ScheduledEpisode, error)
+	ListUpcomingScheduledEpisodes(ctx context.Context, arg ListUpcomingScheduledEpisodesParams) ([]ListUpcomingScheduledEpisodesRow, error)
 	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]ListWebhookDeliveriesRow, error)
 	ListWebhookDeliveryAttempts(ctx context.Context, arg ListWebhookDeliveryAttemptsParams) ([]WebhookDeliveryAttempt, error)
 	ListWebhookEndpoints(ctx context.Context, arg ListWebhookEndpointsParams) ([]ListWebhookEndpointsRow, error)
@@ -430,6 +435,7 @@ type Querier interface {
 	PutScheduledEpisode(ctx context.Context, arg PutScheduledEpisodeParams) (ScheduledEpisode, error)
 	ReadHelperDevices(ctx context.Context, tenantID pgtype.UUID) ([]ReadHelperDevicesRow, error)
 	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
+	ReadSFUWindowNodeSeconds(ctx context.Context, arg ReadSFUWindowNodeSecondsParams) (int64, error)
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingColocatedWorkerObservation(ctx context.Context, arg RecordRecordingColocatedWorkerObservationParams) (RecordRecordingColocatedWorkerObservationRow, error)
@@ -468,6 +474,7 @@ type Querier interface {
 	ReserveRecordingCaptureProviderCall(ctx context.Context) (pgtype.Timestamptz, error)
 	ReserveRecordingFleetBootstrap(ctx context.Context, arg ReserveRecordingFleetBootstrapParams) (RecordingFleetNode, error)
 	ReserveRecordingRenderObject(ctx context.Context, arg ReserveRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
+	ReserveSFUWindowNode(ctx context.Context, arg ReserveSFUWindowNodeParams) (int64, error)
 	ReserveSpaceCreateRequest(ctx context.Context, arg ReserveSpaceCreateRequestParams) (SpaceCreateRequest, error)
 	ReserveWhiteboardFile(ctx context.Context, arg ReserveWhiteboardFileParams) (ReserveWhiteboardFileRow, error)
 	ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (pgtype.UUID, error)
@@ -493,6 +500,7 @@ type Querier interface {
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
+	SetSFUWindowNodePhase(ctx context.Context, arg SetSFUWindowNodePhaseParams) (int64, error)
 	StartHelperDeviceRequest(ctx context.Context, arg StartHelperDeviceRequestParams) error
 	// The participant row implies a live tenant (participants.tenant_id references tenants). The key
 	// share lock keeps the row from being deleted until the admission commits.

@@ -6,9 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"log/slog"
 	"time"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
@@ -80,51 +81,6 @@ func RecordMoved(ctx context.Context, reason LossReason) { RecordRecovery(ctx, r
 // errStaleIncarnation means a node answered for another boot than the binding's.
 var errStaleIncarnation = errors.New("chalk sfu answered for a replaced node incarnation")
 
-// Lost reports whether the allocation an Episode is bound to is gone, from the last probes
-// and without I/O. A node that has not answered within the freshness window is silent; one
-// failed probe is not enough, because the window runs from the last answer. A
-// node that answers with another boot incarnation than the binding's has restarted, and a
-// restarted node holds nothing of the Episode. A draining node is not lost: it keeps its
-// live Episodes. Before the first probe round nothing is known, and a binding or probe
-// without an incarnation cannot show a restart.
-func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.probed {
-		return "", false
-	}
-	// A node that never answered counts from the end of the first probe round, so a freshly
-	// started API does not call every node silent before it has asked.
-	seen, answered := f.seen[allocation.Node]
-	last := seen.at
-	if !answered {
-		last = f.firstRound
-	}
-	switch {
-	case time.Since(last) > probeFreshness:
-		return LossSilent, true
-	case allocation.Incarnation != "" && seen.incarnation != "" && seen.incarnation != allocation.Incarnation:
-		return LossRestarted, true
-	}
-	return "", false
-}
-
-// Confirm is Lost with one fresh probe before it reports a restart. A replica's last probe can
-// predate a restart that another replica already recovered from, and then the binding's
-// incarnation is the newer one; asking the node settles which side is stale, so a healthy
-// allocation is never recovered a second time.
-func (f *Fleet) Confirm(ctx context.Context, allocation mediaplane.Allocation) (LossReason, bool) {
-	reason, lost := f.Lost(allocation)
-	if !lost || reason != LossRestarted {
-		return reason, lost
-	}
-	if node, err := f.Node(allocation.Node); err == nil {
-		f.probeNode(ctx, node)
-	}
-	return f.Lost(allocation)
-}
-
-// candidate is a node a recovery may reserve on.
 type candidate struct {
 	adapter *Adapter
 	standby bool
@@ -140,17 +96,12 @@ func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var candidates []candidate
-	for _, standby := range []bool{false, true} {
-		for _, node := range f.nodes {
-			if f.standbys[node.node] != standby {
-				continue
-			}
-			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness || load.Draining || f.verdicts[node.node] != verdictCompatible {
-				continue
-			}
-			candidates = append(candidates, candidate{adapter: node, standby: standby})
+	for _, node := range f.placementOrder {
+		load, probed := f.loads[node.node]
+		if !probed || !f.readyFor(node.node, load, time.Now()) {
+			continue
 		}
+		candidates = append(candidates, candidate{adapter: node, standby: f.standbys[node.node]})
 	}
 	return candidates
 }
@@ -338,6 +289,10 @@ var retirements, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapt
 func (f *Fleet) RetireAllocation(ctx context.Context, old mediaplane.Allocation, tenantID, episodeID string, generation int64) (settled bool, err error) {
 	adapter, err := f.Node(old.Node)
 	if err != nil {
+		if mediaplane.IsWindowNode(old.Node) && !f.windowGone(ctx, old.Node) {
+			recordRetirement(ctx, retirePending)
+			return false, err
+		}
 		recordRetirement(ctx, retireGone)
 		return true, nil // a node removed from the configuration has no process to clean
 	}
