@@ -75,16 +75,16 @@ The response carries `id`, `tenant_id`, `space_id`, `status` (`scheduled` or `ca
 
 Errors:
 
-| Status | Code | Meaning |
-| --- | --- | --- |
-| 400 | `scheduled_episode.invalid_id` | The booking id is not a UUID. |
-| 400 | `scheduled_episode.invalid_schedule` | A time is missing, the end is not after the start, or the plan is longer than 7 days. |
-| 400 | `scheduled_episode.invalid_expected_participants` | A participant is missing a name, repeats an identity, or exceeds a limit. |
-| 400 | `scheduled_episode.invalid_metadata` | Metadata is not a JSON object or is too large. |
-| 404 | `space.not_found` | The Space does not exist in this Tenant. |
-| 404 | `scheduled_episode.not_found` | `GET` found no booking with that id. |
-| 409 | `scheduled_episode.cancelled` | `PUT` named a booking that was cancelled. |
-| 409 | `scheduled_episode.space_archived` | `PUT` named an archived Space. |
+| Status | Code                                              | Meaning                                                                               |
+| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 400    | `scheduled_episode.invalid_id`                    | The booking id is not a UUID.                                                         |
+| 400    | `scheduled_episode.invalid_schedule`              | A time is missing, the end is not after the start, or the plan is longer than 7 days. |
+| 400    | `scheduled_episode.invalid_expected_participants` | A participant is missing a name, repeats an identity, or exceeds a limit.             |
+| 400    | `scheduled_episode.invalid_metadata`              | Metadata is not a JSON object or is too large.                                        |
+| 404    | `space.not_found`                                 | The Space does not exist in this Tenant.                                              |
+| 404    | `scheduled_episode.not_found`                     | `GET` found no booking with that id.                                                  |
+| 409    | `scheduled_episode.cancelled`                     | `PUT` named a booking that was cancelled.                                             |
+| 409    | `scheduled_episode.space_archived`                | `PUT` named an archived Space.                                                        |
 
 **Duplicate and stale delivery.** `PUT` is safe to retry. Sending the same plan again returns the stored booking and leaves `updated_at` alone. Sending a different plan replaces the stored one, and the last write to arrive wins. Chalk keeps no revision number, so a caller that can deliver out of order must serialize its writes for one booking, and treat the booking id as permanent.
 

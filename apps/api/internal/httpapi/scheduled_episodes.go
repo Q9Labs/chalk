@@ -88,7 +88,7 @@ func scheduledEpisodeEndpoints(service ScheduledEpisodeService, authorizer Tenan
 const scheduledEpisodePath = "/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}"
 
 func putScheduledEpisodeEndpoint(service ScheduledEpisodeService, authorizer TenantAuthorizer) Endpoint[putScheduledEpisodeEndpointRequest, scheduledEpisodeResponse] {
-	return Put(scheduledEpisodePath, "putScheduledEpisode", decodePutScheduledEpisodeRequest, func(ctx context.Context, request putScheduledEpisodeEndpointRequest) (scheduledEpisodeResponse, error) {
+	return newEndpoint(http.MethodPut, scheduledEpisodePath, "putScheduledEpisode", decodePutScheduledEpisodeRequest, func(ctx context.Context, request putScheduledEpisodeEndpointRequest) (scheduledEpisodeResponse, error) {
 		saved, err := service.Put(ctx, request.Body.toInput(request.scheduledEpisodeRef))
 		if err != nil {
 			return scheduledEpisodeResponse{}, err
