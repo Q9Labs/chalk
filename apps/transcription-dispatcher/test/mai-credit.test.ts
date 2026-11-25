@@ -32,6 +32,14 @@ describe("MAI language hints", () => {
     [{ mode: "auto" }, undefined],
   ];
 
+  it("sends a quiet but nonzero track instead of marking it silent", async () => {
+    const quietAudio = new Uint8Array(readFileSync(new URL("./fixtures/mai-quiet.flac", import.meta.url)));
+    const fetchImpl: typeof fetch = async () => Response.json({ text: "", segments: [], usage: { cost: 0.0001 } });
+    const provider = new MaiTranscribeProvider({ fetch: fetchImpl, token: "token", policy });
+    const result = await provider.transcribe({ audio: quietAudio, contentType: "audio/flac", chunkId: "quiet", transcriptLanguage: { mode: "fixed", language: "en" } });
+    expect(result.providerReportedCostUsd).toBe(0.0001);
+  });
+
   it.each(cases)("transcribes %j and records usage.cost", async (transcriptLanguage, hint) => {
     const text = hint === "hi" ? "नमस्ते" : "hello";
     const requests: URL[] = [];

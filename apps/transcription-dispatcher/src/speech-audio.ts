@@ -64,6 +64,8 @@ function speechBatches(pcm: Float32Array): SpeechBatch[] {
     if (previous && start - previous.end < RATE) previous.end = end;
     else runs.push({ start, end });
   }
+  // Low level alone does not prove silence. Let MAI hear an all-quiet track with a signal.
+  if (!runs.length && pcm.some((sample) => sample !== 0)) runs.push({ start: 0, end: pcm.length });
   const batches: SpeechBatch[] = [];
   let spans: Span[] = [];
   let packed = 0;

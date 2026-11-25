@@ -15,23 +15,25 @@ class DispatcherAlchemyTests(unittest.TestCase):
         environment = {}
         provider = mock.Mock()
         provider.aws.return_value = {"Environment": {"Variables": environment}}
-        inputs = {"function_name": "test-dispatcher"}
+        inputs = {"function_name": "test-dispatcher", "deepinfra_enabled": True}
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "dispatcher.zip"
             with ZipFile(archive, "w") as package:
                 package.writestr("package.json", "{}")
-            self.assertEqual(release_environment(provider, inputs, archive), environment)
+            with self.assertRaisesRegex(ValueError, "legacy DeepInfra ZIP needs its approved corpus digest"):
+                release_environment(provider, inputs, archive, "")
+            self.assertEqual(release_environment(provider, inputs, archive, "a" * 64), environment)
 
             with ZipFile(archive, "w") as package:
                 package.writestr("package.json", '{"chalkRequiresOpenRouter":true}')
             with self.assertRaisesRegex(ValueError, "requires the OpenRouter SSM binding"):
-                release_environment(provider, inputs, archive)
+                release_environment(provider, inputs, archive, "")
             inputs.update(codeswitch_provider="mai", openrouter_token_parameter_arn="test-arn")
             environment["OPENROUTER_TOKEN_PARAMETER_ARN"] = "other-arn"
             with self.assertRaisesRegex(ValueError, "requires the OpenRouter SSM binding"):
-                release_environment(provider, inputs, archive)
+                release_environment(provider, inputs, archive, "")
             environment["OPENROUTER_TOKEN_PARAMETER_ARN"] = "test-arn"
-            self.assertEqual(release_environment(provider, inputs, archive), environment)
+            self.assertEqual(release_environment(provider, inputs, archive, ""), environment)
 
     def test_pin_retention_reads_seeded_outputs_without_node_or_mutation(self):
         inputs = {'environment_name': 'nightly', 'function_name': 'chalk-nightly-transcription-dispatcher'}

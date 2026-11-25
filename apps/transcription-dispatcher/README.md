@@ -26,7 +26,9 @@ Other codes still use MAI without a hint; those languages are not guaranteed.
 MAI receives only retained speech: silence below -45 dB lasting at least one
 second is removed, 150 ms of context is kept, and each WAV request sends at
 most 60 seconds. The dispatcher restores source timings before normalizing cues.
-A silent source completes with zero cost. Missing word timings for nonempty
+A completely silent source makes no request. If the entire track is below the
+gate but contains a signal, MAI receives it rather than losing quiet speech.
+Missing word timings for nonempty
 speech or missing OpenRouter `usage.cost` fail response validation. For Auto
 and fixed Urdu, the adapter sends only Devanagari tokens to GPT-4.1 Mini for
 Urdu-script transliteration and includes that request's cost. Both calls request

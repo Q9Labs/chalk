@@ -37,7 +37,7 @@ def dispatcher_inputs(provider, config):
     return inputs
 
 
-def release_environment(provider, inputs, zip_path):
+def release_environment(provider, inputs, zip_path, corpus_digest):
     function = provider.aws("lambda", "get-function-configuration", "--function-name", inputs["function_name"])
     environment = function["Environment"]["Variables"]
     with ZipFile(zip_path) as archive:
@@ -46,6 +46,8 @@ def release_environment(provider, inputs, zip_path):
         arn = inputs.get("openrouter_token_parameter_arn")
         require(inputs.get("codeswitch_provider") == "mai" and arn and environment.get("OPENROUTER_TOKEN_PARAMETER_ARN") == arn,
                 "dispatcher requires the OpenRouter SSM binding; configure MAI before the media release")
+    elif inputs["deepinfra_enabled"]:
+        require(corpus_digest, "a legacy DeepInfra ZIP needs its approved corpus digest")
     return environment
 
 
