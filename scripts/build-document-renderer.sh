@@ -32,10 +32,10 @@ if [[ "$actual" != "$PDFIUM_SHA256" ]]; then
   exit 1
 fi
 tar -xzf "$archive" -C "$WORK/pdfium"
-rm -rf "$APP/vendor/pdfium"
-mkdir -p "$APP/vendor/pdfium/include" "$APP/vendor/pdfium/lib"
-cp -R "$WORK/pdfium/include/." "$APP/vendor/pdfium/include/"
-cp "$WORK/pdfium/lib/libpdfium.so" "$APP/vendor/pdfium/lib/"
+rm -rf "$APP/native/pdfium"
+mkdir -p "$APP/native/pdfium/include" "$APP/native/pdfium/lib"
+cp -R "$WORK/pdfium/include/." "$APP/native/pdfium/include/"
+cp "$WORK/pdfium/lib/libpdfium.so" "$APP/native/pdfium/lib/"
 (
   cd "$APP"
   CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="$RENDERER_CGO_LDFLAGS" go build -trimpath -ldflags='-s -w -buildid=' -o "$WORK/bootstrap" ./cmd/renderer

@@ -133,7 +133,6 @@ func (s Service) invoke(ctx context.Context, input InvokeInput) {
 		input.JourneyID = journeyID
 	}
 	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
-		input.Traceparent = span.TraceID().String() + "-" + span.SpanID().String()
 		input.Traceparent = "00-" + span.TraceID().String() + "-" + span.SpanID().String() + "-" + span.TraceFlags().String()
 		input.Tracestate = span.TraceState().String()
 	}

@@ -30,7 +30,7 @@ const (
 func Process(ctx context.Context, control ControlClient, assignment Assignment) error {
 	source, err := download(ctx, assignment.SourceURL, assignment.SourceSizeBytes+1, assignment.SourceSHA256)
 	if err != nil {
-		return finishFailure(ctx, control, assignment, "source_unavailable", err)
+		return err
 	}
 	switch assignment.Kind {
 	case "inventory":
@@ -47,7 +47,7 @@ func Process(ctx context.Context, control ControlClient, assignment Assignment) 
 		if errors.As(err, &failure) {
 			return finishFailure(ctx, control, assignment, failure.code, failure.err)
 		}
-		return finishFailure(ctx, control, assignment, "render_failed", err)
+		return err
 	}
 	return nil
 }

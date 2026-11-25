@@ -3,8 +3,8 @@
 package render
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../vendor/pdfium/include
-#cgo LDFLAGS: -L${SRCDIR}/../../vendor/pdfium/lib -lpdfium
+#cgo CFLAGS: -I${SRCDIR}/../../native/pdfium/include
+#cgo LDFLAGS: -L${SRCDIR}/../../native/pdfium/lib -lpdfium
 #include <stdlib.h>
 #include <string.h>
 #include <fpdfview.h>
