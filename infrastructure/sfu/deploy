@@ -26,7 +26,7 @@
 # complete from the GitHub environment, the operator certificate is not issued, the host firewall is not
 # reconciled and an unknown host key is refused. SFU_SOURCE_ROOT builds the node from another
 # checkout's features/media/sfu, so the release builds the commit it ships with this checkout's tooling.
-# `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
+# `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS. SFU_NODE_SIZE may name the node size explicitly when several measured sizes share a vCPU count.
 set -euo pipefail
 
 usage="usage: deploy <staging|production|bench> <node address> [--force|--firewall-only]"
@@ -148,8 +148,19 @@ if [[ -n "${SFU_PACKET_BUDGET:-}" && "$environment" != bench ]]; then
   exit 2
 fi
 vcpus="$(remote nproc)"
-node_size="$(node_table --argjson vcpus "$vcpus" '.sizes | to_entries[] | select(.value.vcpus == $vcpus) | .key')"
-[[ -n "$node_size" ]] || { echo "no measured node size for ${vcpus} vCPUs; load-test the size and add it to ${sfu_table}" >&2; exit 1; }
+if [[ -n "${SFU_NODE_SIZE:-}" ]]; then
+  node_size="$SFU_NODE_SIZE"
+  table_vcpus="$(node_table --arg size "$node_size" '.sizes[$size].vcpus // empty')"
+  [[ -n "$table_vcpus" ]] || { echo "SFU_NODE_SIZE ${node_size} is not in ${sfu_table}" >&2; exit 1; }
+  [[ "$table_vcpus" == "$vcpus" ]] || { echo "SFU_NODE_SIZE ${node_size} is a ${table_vcpus}-vCPU size, but the node has ${vcpus}" >&2; exit 1; }
+else
+  # Several premium sizes share a vCPU count with their base size. Without an explicit
+  # SFU_NODE_SIZE, keep the long-standing behavior of selecting the non-premium base size.
+  node_size="$(node_table --argjson vcpus "$vcpus" '.sizes | to_entries | map(select(.value.vcpus == $vcpus)) as $matches |
+    if ($matches | length) == 1 then $matches[0].key
+    else ($matches | map(select(.key | test("-(amd|intel)$") | not)) | .[0].key // "") end')"
+  [[ -n "$node_size" ]] || { echo "no measured node size for ${vcpus} vCPUs; load-test the size and add it to ${sfu_table}" >&2; exit 1; }
+fi
 gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].goMemLimit')"
 memory_limit="$(node_table --arg size "$node_size" '.sizes[$size].containerMemory')"
 

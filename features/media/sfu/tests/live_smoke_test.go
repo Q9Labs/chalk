@@ -41,15 +41,15 @@ const (
 
 // liveLoad is the shape of a live run.
 type liveLoad struct {
-	classes, classOffset, participants, cameras int
-	smallTiles                                  int    // classes larger than this ask for l, except one featured Participant's cameras
-	cameraKbps                                  [2]int // h and l
-	shareDuty                                   float64
-	sharePeriod, hold, step, every              time.Duration
-	samples                                     string
-	result, nodeCPU                             string // the result file to write, and the node's 10 s CPU capture to read
-	expectBudget                                int    // the packet budget the node must report, 0 for any
-	short                                       bool
+	classes, classOffset, participants, cameras, captures int
+	smallTiles                                            int    // classes larger than this ask for l, except one featured Participant's cameras
+	cameraKbps                                            [2]int // h and l
+	shareDuty                                             float64
+	sharePeriod, hold, step, every                        time.Duration
+	samples                                               string
+	result, nodeCPU                                       string // the result file to write, and the node's 10 s CPU capture to read
+	expectBudget                                          int    // the packet budget the node must report, 0 for any
+	short                                                 bool
 }
 
 // shareOn is how long one share stretch lasts.
@@ -61,7 +61,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 	t.Helper()
 	// The defaults are the staging soak in docs/plans/sfu-capacity-calibration.md: three classes of three
 	// Participants with two cameras each, held for five hours, sampled every ten seconds.
-	load := liveLoad{classes: 3, participants: 3, cameras: 2, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
+	load := liveLoad{classes: 3, participants: 3, cameras: 2, captures: 0, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
 		sharePeriod: 4 * time.Minute, hold: soakHold, every: 10 * time.Second, expectBudget: stagingBudget,
 		samples: os.Getenv("SFU_LIVE_SAMPLES"), result: os.Getenv("SFU_LIVE_RESULT"), nodeCPU: os.Getenv("SFU_LIVE_NODE_CPU")}
 	if os.Getenv("SFU_LIVE_SHORT") != "" {
@@ -72,7 +72,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		target any
 	}{
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
-		{"SFU_LIVE_CLASS_OFFSET", &load.classOffset},
+		{"SFU_LIVE_CAPTURES", &load.captures}, {"SFU_LIVE_CLASS_OFFSET", &load.classOffset},
 		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
 		{"SFU_LIVE_EXPECT_BUDGET", &load.expectBudget},
@@ -198,6 +198,7 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_CLASS_OFFSET  first class index for disjoint generator subsets (default 0)
 //	SFU_LIVE_PARTICIPANTS  Participants per class (default 3)
 //	SFU_LIVE_CAMERAS       cameras per Participant (default 2)
+//	SFU_LIVE_CAPTURES      recording capture sessions per class, each pulling every publication (default 0)
 //	SFU_LIVE_SMALL_TILES   in a class of more Participants than this, every viewer asks for the
 //	                       low layer of all cameras but the next Participant's, as the SDK does
 //	                       for tiles of 400 px or less (default 0, which asks for the top layer)
@@ -425,8 +426,10 @@ func without(classes []*liveClass, gone *liveClass) []*liveClass {
 // liveClass is one Episode of the run.
 type liveClass struct {
 	episode   string
+	cameras   int
 	people    []*participant
 	receivers []*liveReceiver
+	captures  []*liveCapture
 	// shareEpoch rises at every share start and stop, so a viewer can tell a
 	// pause from a stall.
 	shareEpoch atomic.Int64
@@ -440,10 +443,22 @@ type liveClass struct {
 // shutdown ends the class's share goroutine and closes its peers, so its publishers stop
 // writing: a write on a closed peer fails and ends its loop.
 func (c *liveClass) shutdown() {
-	c.stop()
+	if c.stop != nil {
+		c.stop()
+	}
 	for _, person := range c.people {
 		_ = person.peer.pc.Close()
 	}
+	for _, capture := range c.captures {
+		_ = capture.peer.pc.Close()
+	}
+}
+
+// liveCapture is one recording capture session of the class. It publishes nothing and pulls
+// every microphone, camera and screen, as the recorder's TrackLayerAuto capture does.
+type liveCapture struct {
+	*participant
+	receiver *liveReceiver
 }
 
 // sharingSince is when the current share stretch began, or the zero time while the screen is paused.
@@ -478,7 +493,7 @@ func (c *liveClass) endStretch(now time.Time) {
 // returns the node's refusal when admission turns a Participant away.
 func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) (*liveClass, string) {
 	t.Helper()
-	class := &liveClass{episode: fmt.Sprintf("live-smoke-%d-%d", run, index)}
+	class := &liveClass{episode: fmt.Sprintf("live-smoke-%d-%d", run, index), cameras: load.cameras}
 	t.Cleanup(func() {
 		_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
 	})
@@ -529,7 +544,59 @@ func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) 
 			person.pull(t, svc, batch)
 		}
 	}
+	for captureIndex := range load.captures {
+		capture, refused := joinCapture(t, svc, load, class, index, captureIndex)
+		if refused != "" {
+			class.shutdown()
+			_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
+			return class, refused
+		}
+		class.captures = append(class.captures, capture)
+	}
 	return class, ""
+}
+
+// joinCapture adds one recorder-shaped capture session to a class whose Participants are already
+// publishing. It asks for no simulcast layer, matching the recorder's TrackLayerAuto: the node
+// picks the best active layer and never lowers the capture for congestion.
+func joinCapture(t *testing.T, svc *service, load liveLoad, class *liveClass, classIndex, captureIndex int) (*liveCapture, string) {
+	t.Helper()
+	through := newLinkOn(t, "0.0.0.0:0")
+	p := &participant{name: fmt.Sprintf("c%dcapture%d", classIndex, captureIndex), link: through,
+		scope: protocol.Scope{TenantID: liveTenant, EpisodeID: class.episode, ParticipantID: fmt.Sprintf("capture:%d", captureIndex), Generation: 1}}
+	p.peer = newMediaPeer(t, through, true)
+	receiver := receiveLive(p.peer, class)
+	var created protocol.CreateSessionResponse
+	request := protocol.CreateSessionRequest{OperationID: op(), Scope: p.scope, Kind: protocol.SessionKindCapture}
+	if status, code := svc.call(t, "/v1/sessions", request, &created); status >= 300 {
+		_ = p.peer.pc.Close()
+		var ready protocol.ReadyResponse
+		_ = get(svc, "/readyz", &ready)
+		return nil, fmt.Sprintf("class %d capture %d create: %d %s (admission %q, steal %.1f%%, queue p95 %.1f ms)",
+			classIndex, captureIndex, status, code, ready.Host.AdmissionReason, *cmp.Or(ready.Host.StealPercent, new(float64)), ready.Host.QueueDelayP95Ms)
+	}
+	p.conn = created.ConnectionID
+	var tracks []protocol.Track
+	for _, other := range class.people {
+		tracks = append(tracks, captureRemote(other, micName))
+		for camera := range load.cameras {
+			tracks = append(tracks, captureRemote(other, cameraTrack(camera)))
+		}
+		if other.screen != nil {
+			tracks = append(tracks, captureRemote(other, screenName))
+		}
+	}
+	for batch := range slices.Chunk(tracks, protocol.MaxTracksPerRequest) {
+		if err := p.pullTracks(t, svc, batch); err != nil {
+			_ = p.peer.pc.Close()
+			return nil, fmt.Sprintf("class %d capture %d pull: %v", classIndex, captureIndex, err)
+		}
+	}
+	return &liveCapture{participant: p, receiver: receiver}, ""
+}
+
+func captureRemote(publisher *participant, name string) protocol.Track {
+	return protocol.Track{Location: protocol.LocationRemote, SessionID: publisher.conn, TrackName: name}
 }
 
 // shareInStretches turns the sharer's screen on and off so it is on for the
@@ -578,6 +645,16 @@ func (c *liveClass) flowing() bool {
 			return false
 		}
 		if sharing && index > 0 && !receiver.sawScreen() {
+			return false
+		}
+	}
+	video := len(c.people) * c.cameras
+	if c.people[0].screen != nil {
+		video++
+	}
+	for _, capture := range c.captures {
+		audio, seenVideo := capture.receiver.flowingMedia()
+		if audio < len(c.people) || seenVideo < video {
 			return false
 		}
 	}
@@ -683,6 +760,23 @@ func (r *liveReceiver) screens() []*liveTrack {
 		}
 	}
 	return found
+}
+
+// flowingMedia counts the microphones and video tracks that have carried media. A capture
+// uses it to prove that every recording input actually arrived, not only that signaling completed.
+func (r *liveReceiver) flowingMedia() (audio, video int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, track := range r.tracks {
+		if track.kind == "audio" {
+			if track.frames["audio"] > 0 {
+				audio++
+			}
+		} else if track.frames["h"]+track.frames["l"]+track.frames["screen"] > 0 {
+			video++
+		}
+	}
+	return audio, video
 }
 
 // sawScreen reports whether a screen frame arrived.
@@ -929,51 +1023,56 @@ func takeSample(svc *service, classes []*liveClass, cpu *hostCPU) liveSample {
 	node := nodeTotals{Paused: map[string]int{}, Forwarded: map[string]int{}}
 	peers := peerTotals{Frames: map[string]int64{}}
 	var audioTracks, videoTracks int
+	accumulate := func(conn string, scope protocol.Scope, receiver *liveReceiver, viewer bool) {
+		var inspected protocol.InspectResponse
+		if err := post(svc, "/v1/sessions/"+conn+"/inspect", protocol.InspectRequest{Scope: scope}, &inspected); err != nil {
+			node.InspectErrors++
+		} else {
+			node.add(inspected)
+		}
+		since := receiver.class.sharingSince()
+		receiver.mu.Lock()
+		if viewer {
+			// Every viewer, including a recording capture, is meant to have a screen track in each share stretch.
+			peers.ScreenStalls += receiver.missedScreens
+			if len(receiver.screens()) == 0 && !since.IsZero() && now.Sub(since) > liveShareStartup {
+				peers.ScreenStalls++
+				peers.LongestStallMs = max(peers.LongestStallMs, now.Sub(since).Milliseconds())
+			}
+		}
+		for _, track := range receiver.tracks {
+			stalls, longest := track.stallsAt(now, since)
+			for layer, frames := range track.frames {
+				peers.Frames[layer] += frames
+			}
+			peers.Switches += track.switches
+			if track.kind == "audio" {
+				peers.AudioStalls += stalls
+				peers.AudioJitterMs += track.jitter * 1000
+				peers.MaxAudioJitterMs = max(peers.MaxAudioJitterMs, track.jitter*1000)
+				audioTracks++
+			} else {
+				if track.kind == "screen" {
+					peers.ScreenStalls += stalls
+				} else {
+					peers.VideoStalls += stalls
+				}
+				peers.VideoJitterMs += track.jitter * 1000
+				videoTracks++
+			}
+			peers.LongestStallMs = max(peers.LongestStallMs, longest.Milliseconds())
+			expected, received := track.totals()
+			peers.Expected += expected
+			peers.Received += received
+		}
+		receiver.mu.Unlock()
+	}
 	for _, class := range classes {
 		for index, person := range class.people {
-			var inspected protocol.InspectResponse
-			if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
-				node.InspectErrors++
-			} else {
-				node.add(inspected)
-			}
-			receiver := class.receivers[index]
-			since := class.sharingSince()
-			receiver.mu.Lock()
-			if index > 0 {
-				// Every viewer is meant to have a screen track in each share stretch.
-				peers.ScreenStalls += receiver.missedScreens
-				if len(receiver.screens()) == 0 && !since.IsZero() && now.Sub(since) > liveShareStartup {
-					peers.ScreenStalls++
-					peers.LongestStallMs = max(peers.LongestStallMs, now.Sub(since).Milliseconds())
-				}
-			}
-			for _, track := range receiver.tracks {
-				stalls, longest := track.stallsAt(now, since)
-				for layer, frames := range track.frames {
-					peers.Frames[layer] += frames
-				}
-				peers.Switches += track.switches
-				if track.kind == "audio" {
-					peers.AudioStalls += stalls
-					peers.AudioJitterMs += track.jitter * 1000
-					peers.MaxAudioJitterMs = max(peers.MaxAudioJitterMs, track.jitter*1000)
-					audioTracks++
-				} else {
-					if track.kind == "screen" {
-						peers.ScreenStalls += stalls
-					} else {
-						peers.VideoStalls += stalls
-					}
-					peers.VideoJitterMs += track.jitter * 1000
-					videoTracks++
-				}
-				peers.LongestStallMs = max(peers.LongestStallMs, longest.Milliseconds())
-				expected, received := track.totals()
-				peers.Expected += expected
-				peers.Received += received
-			}
-			receiver.mu.Unlock()
+			accumulate(person.conn, person.scope, class.receivers[index], index > 0)
+		}
+		for _, capture := range class.captures {
+			accumulate(capture.conn, capture.scope, capture.receiver, true)
 		}
 	}
 	if audioTracks > 0 {

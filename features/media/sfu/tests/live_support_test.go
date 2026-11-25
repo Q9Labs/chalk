@@ -198,20 +198,34 @@ func sendMic(ctx context.Context, track *webrtc.TrackLocalStaticRTP, sent *atomi
 // pull subscribes the participant to the given remote tracks and answers the SFU's offer.
 func (p *participant) pull(t *testing.T, svc *service, tracks []protocol.Track) {
 	t.Helper()
+	if err := p.pullTracks(t, svc, tracks); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// pullTracks is pull with the failure returned, so a capacity step-up can stop at the class
+// whose capture no longer fits instead of failing the whole run before it reports its samples.
+func (p *participant) pullTracks(t *testing.T, svc *service, tracks []protocol.Track) error {
+	t.Helper()
 	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+p.conn+"/tracks", protocol.TracksRequest{OperationID: op(), Scope: p.scope, Tracks: tracks}, &pulled)
+	if status, code := svc.call(t, "/v1/sessions/"+p.conn+"/tracks", protocol.TracksRequest{OperationID: op(), Scope: p.scope, Tracks: tracks}, &pulled); status >= 300 {
+		return fmt.Errorf("%s pull: HTTP %d %s", p.name, status, code)
+	}
 	if pulled.SessionDescription == nil || len(pulled.TrackErrors) != 0 {
-		t.Fatalf("%s pull response: %+v", p.name, pulled)
+		return fmt.Errorf("%s pull response: %+v", p.name, pulled)
 	}
 	if err := p.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
+		return fmt.Errorf("%s set the SFU's offer: %w", p.name, err)
 	}
 	answer, err := p.peer.pc.CreateAnswer(nil)
 	if err != nil {
-		t.Fatal(err)
+		return fmt.Errorf("%s answer the SFU's offer: %w", p.name, err)
 	}
 	answerSDP := p.peer.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+p.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: p.scope, SessionDescription: answerSDP}, nil)
+	if status, code := svc.call(t, "/v1/sessions/"+p.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: p.scope, SessionDescription: answerSDP}, nil); status >= 300 {
+		return fmt.Errorf("%s renegotiate: HTTP %d %s", p.name, status, code)
+	}
+	return nil
 }
 
 func remote(publisher *participant, name string) protocol.Track {

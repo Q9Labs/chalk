@@ -26,8 +26,9 @@
 # Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
 # for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
 # control, and BENCH_SSH_ADDRESSES also reaches SSH (a jump host that survives this machine's address changing).
-# BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets, which default to the node
-# table's (internal/config/node.json), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings.
+# BENCH_PRIMARY_SIZE and BENCH_STANDBY_SIZE replace the Droplet sizes, BENCH_PRIMARY_BUDGET and
+# BENCH_STANDBY_BUDGET replace the packet budgets, which default to the node table's
+# (internal/config/node.json), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings.
 # SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
 set -euo pipefail
 
@@ -42,9 +43,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../../../../infrastructure/sfu/lib.sh"
 dir="${CHALK_SFU_PRIVATE_DIR}/bench"
 # role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first. A size's
 # budget is the one the node table gives it, so a bench node admits what production would.
+primary_size=${BENCH_PRIMARY_SIZE:-s-2vcpu-2gb}
+standby_size=${BENCH_STANDBY_SIZE:-s-1vcpu-1gb}
 nodes=(
-  "primary sgp1-a s-2vcpu-2gb ${BENCH_PRIMARY_BUDGET:-$(node_table '.sizes["s-2vcpu-2gb"].packetBudget')}"
-  "standby sgp1-b s-1vcpu-1gb ${BENCH_STANDBY_BUDGET:-$(node_table '.sizes["s-1vcpu-1gb"].packetBudget')}"
+  "primary sgp1-a ${primary_size} ${BENCH_PRIMARY_BUDGET:-$(node_table --arg size "$primary_size" '.sizes[$size].packetBudget')}"
+  "standby sgp1-b ${standby_size} ${BENCH_STANDBY_BUDGET:-$(node_table --arg size "$standby_size" '.sizes[$size].packetBudget')}"
 )
 
 die() {
@@ -157,7 +160,7 @@ up() {
   for command in doctl jq openssl curl ssh docker awk; do
     command -v "$command" >/dev/null || die "${command} is not installed"
   done
-  doctl account get >/dev/null || die "doctl is not signed in"
+  doctl compute droplet list --format ID --no-header >/dev/null || die "doctl cannot list Droplets; check DIGITALOCEAN_TOKEN"
   [[ -f "$SFU_SSH_KEY" ]] || die "no SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY"
   [[ "$(tagged | fleet_of | jq length)" == 0 ]] || die "a fleet already exists; run: bench down"
   [[ "$(doctl compute firewall list --output json | jq --arg name "$firewall" '[.[] | select(.name == $name)] | length')" == 0 ]] ||
@@ -217,7 +220,7 @@ up() {
     read -r role id slug budget <<<"$spec"
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
-    SFU_PACKET_BUDGET="$budget" "${node_dir}/deploy" bench "$address" | sed "s/^/[${role}] /"
+    SFU_NODE_SIZE="$slug" SFU_PACKET_BUDGET="$budget" "${node_dir}/deploy" bench "$address" | sed "s/^/[${role}] /"
     prefix=""
     if [[ "$role" == standby ]]; then prefix="standby:"; fi
     nodes_value+="${nodes_value:+,}${prefix}${id}=https://${address}:${control_port}"

@@ -1,10 +1,157 @@
 {
-  "ports": { "control": 8443, "media": 50000 },
+  "ports": {
+    "control": 8443,
+    "media": 50000
+  },
   "udpBufferBytes": 8388608,
   "defaultSize": "s-1vcpu-1gb",
   "sizes": {
-    "s-1vcpu-1gb": { "vcpus": 1, "packetBudget": 22000, "goMemLimit": "384MiB", "containerMemory": "700m", "capture": { "memory": "192m", "goMemLimit": "160MiB", "cpus": "0.25" } },
-    "s-2vcpu-2gb": { "vcpus": 2, "packetBudget": 36000, "goMemLimit": "768MiB", "containerMemory": "1400m", "capture": { "memory": "384m", "goMemLimit": "320MiB", "cpus": "0.5" } }
+    "s-1vcpu-1gb": {
+      "vcpus": 1,
+      "packetBudget": 22000,
+      "goMemLimit": "384MiB",
+      "containerMemory": "700m",
+      "capture": {
+        "memory": "192m",
+        "goMemLimit": "160MiB",
+        "cpus": "0.25"
+      }
+    },
+    "s-2vcpu-2gb": {
+      "vcpus": 2,
+      "packetBudget": 36000,
+      "goMemLimit": "768MiB",
+      "containerMemory": "1400m",
+      "capture": {
+        "memory": "384m",
+        "goMemLimit": "320MiB",
+        "cpus": "0.5"
+      }
+    },
+    "s-2vcpu-4gb": {
+      "vcpus": 2,
+      "packetBudget": 45000,
+      "goMemLimit": "1536MiB",
+      "containerMemory": "2800m",
+      "capture": {
+        "memory": "768m",
+        "goMemLimit": "640MiB",
+        "cpus": "1.0"
+      }
+    },
+    "s-2vcpu-4gb-amd": {
+      "vcpus": 2,
+      "packetBudget": 45000,
+      "goMemLimit": "1536MiB",
+      "containerMemory": "2800m",
+      "capture": {
+        "memory": "768m",
+        "goMemLimit": "640MiB",
+        "cpus": "1.0"
+      }
+    },
+    "s-2vcpu-4gb-intel": {
+      "vcpus": 2,
+      "packetBudget": 45000,
+      "goMemLimit": "1536MiB",
+      "containerMemory": "2800m",
+      "capture": {
+        "memory": "768m",
+        "goMemLimit": "640MiB",
+        "cpus": "1.0"
+      }
+    },
+    "s-2vcpu-2gb-amd": {
+      "vcpus": 2,
+      "packetBudget": 40000,
+      "goMemLimit": "768MiB",
+      "containerMemory": "1400m",
+      "capture": {
+        "memory": "384m",
+        "goMemLimit": "320MiB",
+        "cpus": "0.5"
+      }
+    },
+    "s-2vcpu-2gb-intel": {
+      "vcpus": 2,
+      "packetBudget": 40000,
+      "goMemLimit": "768MiB",
+      "containerMemory": "1400m",
+      "capture": {
+        "memory": "384m",
+        "goMemLimit": "320MiB",
+        "cpus": "0.5"
+      }
+    },
+    "s-4vcpu-8gb": {
+      "vcpus": 4,
+      "packetBudget": 90000,
+      "goMemLimit": "3GiB",
+      "containerMemory": "5600m",
+      "capture": {
+        "memory": "1536m",
+        "goMemLimit": "1280MiB",
+        "cpus": "2.0"
+      }
+    },
+    "s-4vcpu-8gb-amd": {
+      "vcpus": 4,
+      "packetBudget": 90000,
+      "goMemLimit": "3GiB",
+      "containerMemory": "5600m",
+      "capture": {
+        "memory": "1536m",
+        "goMemLimit": "1280MiB",
+        "cpus": "2.0"
+      }
+    },
+    "s-4vcpu-8gb-intel": {
+      "vcpus": 4,
+      "packetBudget": 90000,
+      "goMemLimit": "3GiB",
+      "containerMemory": "5600m",
+      "capture": {
+        "memory": "1536m",
+        "goMemLimit": "1280MiB",
+        "cpus": "2.0"
+      }
+    },
+    "s-8vcpu-16gb": {
+      "vcpus": 8,
+      "packetBudget": 180000,
+      "goMemLimit": "6GiB",
+      "containerMemory": "11200m",
+      "capture": {
+        "memory": "3072m",
+        "goMemLimit": "2560MiB",
+        "cpus": "4.0"
+      }
+    },
+    "s-8vcpu-16gb-amd": {
+      "vcpus": 8,
+      "packetBudget": 180000,
+      "goMemLimit": "6GiB",
+      "containerMemory": "11200m",
+      "capture": {
+        "memory": "3072m",
+        "goMemLimit": "2560MiB",
+        "cpus": "4.0"
+      }
+    },
+    "s-8vcpu-16gb-intel": {
+      "vcpus": 8,
+      "packetBudget": 180000,
+      "goMemLimit": "6GiB",
+      "containerMemory": "11200m",
+      "capture": {
+        "memory": "3072m",
+        "goMemLimit": "2560MiB",
+        "cpus": "4.0"
+      }
+    }
   },
-  "stealPercent": { "production": 40, "other": 25 }
+  "stealPercent": {
+    "production": 40,
+    "other": 25
+  }
 }

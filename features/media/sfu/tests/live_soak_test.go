@@ -179,7 +179,7 @@ func judgeSoak(e soakEvidence) soakResult {
 	if want := e.load.expectBudget; want > 0 && e.last.Ready != nil && e.last.Ready.PacketBudget != want {
 		failures = append(failures, fmt.Sprintf("the node's packet budget is %d, the soak is for %d", e.last.Ready.PacketBudget, want))
 	}
-	if want := e.load.classes * e.load.participants; e.last.Ready != nil && e.last.Ready.Sessions < want {
+	if want := e.load.classes * (e.load.participants + e.load.captures); e.last.Ready != nil && e.last.Ready.Sessions < want {
 		failures = append(failures, fmt.Sprintf("the node holds %d sessions at the end, want %d", e.last.Ready.Sessions, want))
 	}
 	if len(e.nodeCPU) > 0 {
@@ -221,10 +221,11 @@ func writeSoakResult(t *testing.T, path string, result soakResult) {
 func TestLiveHarnessHoldsAClassOnALoopbackNode(t *testing.T) {
 	svc := startService(t, newAuthority(t, "live-harness"), func(cfg *config.Config) {
 		cfg.MaxSessions = 16
+		cfg.MaxCaptureSubscriptions = 16
 		cfg.Guard.MaxStealPercent, cfg.Guard.MaxBusyPercent = 100, 100
 	})
 	result := filepath.Join(t.TempDir(), "result.json")
-	load := liveLoad{classes: 1, participants: 3, cameras: 2, cameraKbps: [2]int{800, 200}, shareDuty: 0.65, sharePeriod: 4 * time.Minute,
+	load := liveLoad{classes: 1, participants: 3, cameras: 2, captures: 1, cameraKbps: [2]int{800, 200}, shareDuty: 0.65, sharePeriod: 4 * time.Minute,
 		hold: 8 * time.Second, every: 2 * time.Second, result: result, short: true}
 	runLiveClasses(t, svc, load)
 
@@ -236,8 +237,8 @@ func TestLiveHarnessHoldsAClassOnALoopbackNode(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Pass || got.Mode != "short" || got.Sessions != 3 || got.Peers.Expected == 0 {
-		t.Fatalf("result = %+v, want a passing short run with 3 sessions and received media", got)
+	if !got.Pass || got.Mode != "short" || got.Sessions != 4 || got.Peers.Expected == 0 {
+		t.Fatalf("result = %+v, want a passing short run with 4 sessions (3 Participants plus one capture) and received media", got)
 	}
 }
 

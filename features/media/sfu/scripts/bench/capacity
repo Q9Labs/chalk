@@ -5,7 +5,8 @@
 #   capacity up                    create two generators, then the bench pair (primary s-2vcpu-2gb at 36000,
 #                                  standby s-1vcpu-1gb at 22000), and copy the live test and certificates
 #   capacity run <primary|standby> <name> [VAR=value ...]
-#                                  run TestLiveSmokeClasses against that node while sampling its host, then
+#                                  run TestLiveSmokeClasses against that node while sampling its host (SFU_LIVE_CAPTURES
+#                                  defaults to 1 here, because fleet sizing is for recorded classes), then
 #                                  fetch the logs into $CAPACITY_OUT/<name>-<role>/ (SFU_LIVE_* settings go in VAR=value)
 #   capacity summarize <dir>       print one run's numbers as JSON: pps in and out, CPU, steal, RSS, repair, stalls
 #   capacity down                  delete the generators and the bench pair, then list what is left
@@ -85,6 +86,9 @@ run() {
   shift 2
   [[ "$role" == primary || "$role" == standby ]] || die "role is primary or standby"
   local generator node dest settings=("$@")
+  local capture_setting=false setting
+  for setting in "${settings[@]}"; do [[ "$setting" == SFU_LIVE_CAPTURES=* ]] && capture_setting=true; done
+  $capture_setting || settings=(SFU_LIVE_CAPTURES=1 "${settings[@]}")
   generator="$(address_of "${state}/generator-${role}.json")"
   node="$(node_address "$role")"
   dest="${out}/${name}-${role}"
