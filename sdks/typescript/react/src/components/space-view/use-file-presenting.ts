@@ -60,7 +60,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
   );
 
   const choosePresentFiles = useCallback(async () => {
-    if (!live || presentBusy) return;
+    if (presentBusy) return;
     if (pickChatFiles) {
       try {
         await presentChosenFiles(await pickChatFiles());
@@ -70,7 +70,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
     } else {
       presentInputRef.current?.click();
     }
-  }, [live, notify, pickChatFiles, presentBusy, presentChosenFiles]);
+  }, [notify, pickChatFiles, presentBusy, presentChosenFiles]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Window file drops belong either to the open chat composer or directly to the Stage; remove the routing listeners with the call.
   useEffect(() => {

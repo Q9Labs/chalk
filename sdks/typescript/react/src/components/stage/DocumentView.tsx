@@ -70,7 +70,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   }, [manifest, pages]);
 
   const toolbarRef = React.useRef<HTMLDivElement>(null);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [measurement] Lift the call's notice stack above the floating document toolbar the way the reaction tray lifts it above itself; the property is removed when the toolbar unmounts.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [measurement] Lift the call's notice stack above the floating document toolbar the way the reaction tray lifts it above itself; re-measured whenever the stage rearranges so viewers and presenters stay covered in every layout, and removed when the toolbar unmounts.
   useEffect(() => {
     if (!primary || !interactive) return;
     const bar = toolbarRef.current;
@@ -80,15 +80,20 @@ export function DocumentView({ document, people, primary, interactive }: Documen
     const place = () => {
       if (!(notices.offsetParent instanceof HTMLElement)) return;
       const baseline = notices.offsetParent.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(notices).bottom);
-      frame.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - bar.getBoundingClientRect().top + 12)}px`);
+      const lift = `${Math.max(0, baseline - bar.getBoundingClientRect().top + 12)}px`;
+      if (frame.style.getPropertyValue("--chalk-reaction-toast-lift") !== lift) frame.style.setProperty("--chalk-reaction-toast-lift", lift);
     };
     place();
+    const observer = new ResizeObserver(place);
+    observer.observe(bar);
+    if (frame instanceof HTMLElement) observer.observe(frame);
     window.addEventListener("resize", place);
     return () => {
       window.removeEventListener("resize", place);
+      observer.disconnect();
       frame.style.removeProperty("--chalk-reaction-toast-lift");
     };
-  }, [primary, interactive]);
+  });
 
   const pageContent = pageInfo?.imageUrl ? (
     <img
