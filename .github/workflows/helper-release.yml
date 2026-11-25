@@ -114,7 +114,11 @@ jobs:
           npx --yes "$TAURI_CLI" build --ci --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/macos.json" -- --locked
           bundle=src-tauri/target/universal-apple-darwin/release/bundle
           app="$bundle/macos/Chalk Helper.app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/chalk-helper"
+          architectures=" $(lipo -archs "$app/Contents/MacOS/chalk-helper") "
+          if [[ $architectures != *" arm64 "* || $architectures != *" x86_64 "* ]]; then
+            echo "::error::The macOS Helper must contain arm64 and x86_64 slices; found:$architectures"
+            exit 1
+          fi
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv --verbose=4 "$app" > "$RUNNER_TEMP/helper-codesign.txt" 2>&1
           if ! grep -Fxq "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/helper-codesign.txt" ||
