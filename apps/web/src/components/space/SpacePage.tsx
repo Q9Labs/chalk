@@ -188,7 +188,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         setCallName(arrived.spaceName);
         settle(attempt, await arrivalEvent(client, arrived.arrival, arrived, (arrivalHandle) => reArrive(client, arrivalHandle, normalizedDisplayName, inviteToken)));
       })().catch((cause: unknown) => {
-        if (active.current) send({ type: "failed", attempt, failure: entryFailure(cause) });
+        if (active.current) send({ type: "failed", attempt, failure: reloadResumeMarker ? resumeFailure(cause) : entryFailure(cause) });
       });
     },
     [client, defaultJoinOptions, inviteCode, latest, navigatePublicSpace, reloadMarker, send, settle, slug],

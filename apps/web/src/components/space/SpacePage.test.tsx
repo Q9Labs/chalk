@@ -103,8 +103,8 @@ it("keeps the lobby open when reload autoplay evidence is blocked", async () => 
   await act(async () => join?.click());
   await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));
   expect(requests).not.toContain("fresh");
-  await expectMessage("Ask again");
-  const joinFresh = [...document.querySelectorAll("button")].find((button) => button.textContent === "Ask again");
+  await expectMessage("Join as a new participant");
+  const joinFresh = [...document.querySelectorAll("button")].find((button) => button.textContent === "Join as a new participant");
   await act(async () => joinFresh?.click());
   await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
 });
