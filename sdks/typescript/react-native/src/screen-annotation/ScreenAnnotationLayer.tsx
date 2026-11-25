@@ -259,18 +259,7 @@ function MatchedLayer({ actions, boardSave, canSave, client, controls, people, p
   return (
     <>
       {video(rect, sampling ? onPresented : undefined, state.layer.burned_in)}
-      <AnnotationCanvas
-        ref={canvas}
-        rendererUrl={rendererUrl}
-        onReady={setCanvasReady}
-        onFailure={(reason) => reportError?.(reason === "load" ? "Screen annotations are unavailable because the renderer could not load." : "Screen annotations are unavailable because the renderer stopped.")}
-        onHit={onHit}
-        onBakedInk={onBakedInk}
-        scene={scene}
-        nowMs={nowMs}
-        localTouch={localTouch}
-        presence={layerPresence}
-      />
+      <AnnotationCanvas ref={canvas} rendererUrl={rendererUrl} onReady={setCanvasReady} onFailure={(reason) => console.warn(`chalk.annotation_renderer_terminal reason=${reason}`)} onHit={onHit} onBakedInk={onBakedInk} scene={scene} nowMs={nowMs} localTouch={localTouch} presence={layerPresence} />
       {open && allowed ? <View accessible={false} style={StyleSheet.absoluteFill} testID="annotation.surface" onStartShouldSetResponder={() => true} onResponderStart={input.onStart} onResponderMove={input.onMove} onResponderEnd={input.onEnd} onResponderTerminate={input.cancel} /> : null}
       {controls ? (
         controls(tray)
