@@ -3,6 +3,7 @@ package tests
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -43,4 +44,38 @@ func TestAStandingLeaseDoesNotHoldADrain(t *testing.T) {
 	if status, ready := svc.ready(t); status != http.StatusServiceUnavailable || ready.DrainState != drained {
 		t.Fatalf("draining node: status %d state %+v, want 503 with %+v", status, ready.DrainState, drained)
 	}
+}
+
+func TestDrainRequiresTheMatchingIncarnationWhenSpecified(t *testing.T) {
+	svc := startService(t, newAuthority(t, "chalk test CA"))
+	_, ready := svc.ready(t)
+	if !ready.DrainIfMatch {
+		t.Fatal("readiness did not advertise the drain precondition")
+	}
+	setDrain := func(route, incarnation string, want int) {
+		t.Helper()
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, svc.baseURL+route, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("If-Match", strconv.Quote(incarnation))
+		response, err := svc.client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != want {
+			t.Fatalf("%s: got %d, want %d", route, response.StatusCode, want)
+		}
+	}
+	setDrain(protocol.RouteDrainFenced, "different-boot", http.StatusPreconditionFailed)
+	if _, after := svc.ready(t); after.Draining {
+		t.Fatal("wrong incarnation drained the node")
+	}
+	setDrain(protocol.RouteDrainFenced, ready.NodeIncarnation, http.StatusOK)
+	setDrain(protocol.RouteUndrainFenced, "different-boot", http.StatusPreconditionFailed)
+	if _, after := svc.ready(t); !after.Draining {
+		t.Fatal("wrong incarnation undrained the node")
+	}
+	setDrain(protocol.RouteUndrainFenced, ready.NodeIncarnation, http.StatusOK)
 }

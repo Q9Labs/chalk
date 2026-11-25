@@ -16,8 +16,8 @@ where application_id = $1 and deleted_at is null
 order by created_at, id;
 
 -- name: ReserveSFUWindowNode :execrows
-insert into sfu_window_nodes (id, application_id)
-select sqlc.arg(id), sqlc.arg(application_id)
+insert into sfu_window_nodes (id, application_id, provider_firewall_id)
+select sqlc.arg(id), sqlc.arg(application_id), sqlc.arg(provider_firewall_id)
 where (select count(*) from sfu_window_nodes
        where application_id = sqlc.arg(application_id) and deleted_at is null) < sqlc.arg(max_nodes)::bigint;
 

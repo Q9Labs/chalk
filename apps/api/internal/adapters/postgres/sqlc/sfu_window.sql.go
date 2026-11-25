@@ -147,7 +147,7 @@ func (q *Queries) ListSFULiveDemand(ctx context.Context, arg ListSFULiveDemandPa
 }
 
 const listSFUWindowNodes = `-- name: ListSFUWindowNodes :many
-select id, application_id, provider_id, control_address, phase, empty_since, empty_incarnation, created_at, deleted_at
+select id, application_id, provider_firewall_id, provider_id, control_address, phase, empty_since, empty_incarnation, created_at, deleted_at
 from sfu_window_nodes
 where application_id = $1 and deleted_at is null
 order by created_at, id
@@ -165,6 +165,7 @@ func (q *Queries) ListSFUWindowNodes(ctx context.Context, applicationID string) 
 		if err := rows.Scan(
 			&i.ID,
 			&i.ApplicationID,
+			&i.ProviderFirewallID,
 			&i.ProviderID,
 			&i.ControlAddress,
 			&i.Phase,
@@ -208,20 +209,26 @@ func (q *Queries) ReadSFUWindowNodeSeconds(ctx context.Context, arg ReadSFUWindo
 }
 
 const reserveSFUWindowNode = `-- name: ReserveSFUWindowNode :execrows
-insert into sfu_window_nodes (id, application_id)
-select $1, $2
+insert into sfu_window_nodes (id, application_id, provider_firewall_id)
+select $1, $2, $3
 where (select count(*) from sfu_window_nodes
-       where application_id = $2 and deleted_at is null) < $3::bigint
+       where application_id = $2 and deleted_at is null) < $4::bigint
 `
 
 type ReserveSFUWindowNodeParams struct {
-	ID            string `json:"id"`
-	ApplicationID string `json:"application_id"`
-	MaxNodes      int64  `json:"max_nodes"`
+	ID                 string      `json:"id"`
+	ApplicationID      string      `json:"application_id"`
+	ProviderFirewallID pgtype.UUID `json:"provider_firewall_id"`
+	MaxNodes           int64       `json:"max_nodes"`
 }
 
 func (q *Queries) ReserveSFUWindowNode(ctx context.Context, arg ReserveSFUWindowNodeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reserveSFUWindowNode, arg.ID, arg.ApplicationID, arg.MaxNodes)
+	result, err := q.db.Exec(ctx, reserveSFUWindowNode,
+		arg.ID,
+		arg.ApplicationID,
+		arg.ProviderFirewallID,
+		arg.MaxNodes,
+	)
 	if err != nil {
 		return 0, err
 	}

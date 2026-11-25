@@ -80,22 +80,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 			problems = errors.Join(problems, r.advanceStart(ctx, node, state.ObservedAt))
 		case Serving:
 			result.Serving++
-			health, err := r.control.Observe(ctx, node.Address)
+			health, found, err := r.observeNode(ctx, node)
+			if err == nil && !found {
+				// A confirmed absence needs no drain. Keep the existing Episode
+				// binding intact so it can use the ordinary recovery path.
+				return result, errors.Join(problems, r.transition(ctx, node, Deleted))
+			}
 			if err == nil && health.Incompatible {
 				return result, errors.Join(problems, r.transition(ctx, node, Draining))
 			}
 			if err == nil && health.Admission && !health.Draining {
 				result.Online++
 				healthy[node.ID] = true
-			}
-			if err != nil {
-				gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
-				if providerErr == nil && gone {
-					// A provider-confirmed absence needs no drain. Keep the
-					// Episode's binding intact but return the paid pool slot.
-					return result, errors.Join(problems, r.transition(ctx, node, Deleted))
-				}
-				err = errors.Join(err, providerErr)
 			}
 			problems = errors.Join(problems, err)
 		case Draining:
@@ -152,25 +148,31 @@ func (r *Reconciler) create(ctx context.Context) error {
 	// DO has no idempotency key on create. Never send a second create for this
 	// name, even if the first response timed out. Observation adopts it by
 	// exact name and owner tag. An unresolved intent stays charged to the cap.
-	pending, err := r.provider.Create(ctx, id)
+	providerID, pending, err := r.provider.Create(ctx, id)
 	if !pending {
-		err = errors.Join(err, r.store.ForgetIntent(ctx, id))
+		return errors.Join(err, r.store.ForgetIntent(ctx, id))
+	}
+	if providerID > 0 {
+		return errors.Join(err, r.store.Save(ctx, id, Starting, Node{ID: id, ProviderID: providerID, Phase: Starting}))
 	}
 	return err
 }
 
 func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time) error {
 	if node.ProviderID == 0 || !node.Address.IsValid() {
-		droplet, found, err := r.provider.Observe(ctx, node.ID)
+		var droplet Droplet
+		var found bool
+		var err error
+		if node.ProviderID == 0 {
+			droplet, found, err = r.provider.Observe(ctx, node.ID)
+		} else {
+			droplet, found, err = r.provider.Inspect(ctx, node.ID, node.ProviderID)
+		}
 		if err != nil {
 			return err
 		}
 		if !found {
-			if node.ProviderID != 0 {
-				gone, err := r.provider.Gone(ctx, node.ID, node.ProviderID)
-				if err != nil || !gone {
-					return err
-				}
+			if node.ProviderID != 0 && now.Sub(node.CreatedAt) >= minimumUptime {
 				return r.transition(ctx, node, Deleted)
 			}
 			if now.Sub(node.CreatedAt) >= bootstrapLimit {
@@ -200,7 +202,10 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 	if !node.Address.IsValid() {
 		return nil
 	}
-	health, err := r.control.Observe(ctx, node.Address)
+	health, found, err := r.observeNode(ctx, node)
+	if err == nil && !found {
+		return r.transition(ctx, node, Deleted)
+	}
 	if err != nil || !health.Admission || health.Draining || health.Allocations != 0 || health.CleanupDebt != 0 {
 		return err
 	}
@@ -208,17 +213,16 @@ func (r *Reconciler) advanceStart(ctx context.Context, node Node, now time.Time)
 }
 
 func (r *Reconciler) advanceDrain(ctx context.Context, node Node, now time.Time, needCapacity bool) (bool, error) {
-	health, err := r.control.Observe(ctx, node.Address)
+	health, found, err := r.observeNode(ctx, node)
+	if err == nil && !found {
+		return false, r.transition(ctx, node, Deleted)
+	}
 	if err != nil {
-		gone, providerErr := r.provider.Gone(ctx, node.ID, node.ProviderID)
-		if providerErr == nil && gone {
-			return false, r.transition(ctx, node, Deleted)
-		}
-		return false, errors.Join(err, providerErr, r.clearEmpty(ctx, node))
+		return false, errors.Join(err, r.clearEmpty(ctx, node))
 	}
 	if needCapacity && health.Admission {
 		if health.Draining {
-			if err := r.control.SetDrain(ctx, node.Address, false); err != nil {
+			if err := r.setDrain(ctx, node, health, false); err != nil {
 				return false, err
 			}
 		}
@@ -233,7 +237,7 @@ func (r *Reconciler) advanceDrain(ctx context.Context, node Node, now time.Time,
 		return false, errors.Join(err, r.clearEmpty(ctx, node))
 	}
 	if !health.Draining {
-		return false, errors.Join(r.clearEmpty(ctx, node), r.control.SetDrain(ctx, node.Address, true))
+		return false, errors.Join(r.clearEmpty(ctx, node), r.setDrain(ctx, node, health, true))
 	}
 	if health.Allocations != 0 || health.CleanupDebt != 0 || health.Incarnation == "" {
 		return false, r.clearEmpty(ctx, node)
@@ -274,8 +278,8 @@ func (r *Reconciler) delete(ctx context.Context, node Node) error {
 	if err := r.provider.Destroy(ctx, node.ID, node.ProviderID); err != nil {
 		return err
 	}
-	gone, err := r.provider.Gone(ctx, node.ID, node.ProviderID)
-	if err != nil || !gone {
+	_, found, err := r.provider.Inspect(ctx, node.ID, node.ProviderID)
+	if err != nil || found {
 		return err
 	}
 	return r.transition(ctx, node, Deleted)

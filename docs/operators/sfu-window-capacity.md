@@ -30,19 +30,23 @@ The database role needs read access to the schedules, Spaces, Episodes, and
 Participants, and read/write access to `sfu_window_nodes`. It does not need the
 database owner password. The Chalk API has no DigitalOcean credentials.
 
-| Setting | Value |
-| --- | --- |
-| `CHALK_SFU_WINDOW_ENVIRONMENT` | `nightly` or `production`, matching the database, provider account, and certificates |
-| `CHALK_SFU_WINDOW_MODE` | `scale` for normal operation or `retire` for rollback |
-| `CHALK_SFU_WINDOW_DATABASE_URL` | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints |
-| `CHALK_SFU_APPLICATION_ID` | Same pool identity as in the API |
-| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API |
-| `CHALK_SFU_WINDOW_PROVIDER_TOKEN` | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets |
-| `CHALK_SFU_WINDOW_SNAPSHOT_ID`, `CHALK_SFU_WINDOW_REVISION` | Ready-to-boot 2 vCPU snapshot and the exact SFU SHA it runs |
-| `CHALK_SFU_WINDOW_REGION`, `CHALK_SFU_WINDOW_VPC_UUID` | Window pool region and VPC |
-| `CHALK_SFU_WINDOW_FIREWALL_ID` | ID of the pre-created firewall targeting the environment's window firewall tag |
-| `CHALK_SFU_WINDOW_STANDING_SLOTS` | Verified standing capacity, accounting for the API's standby packet ceiling |
-| `CHALK_SFU_WINDOW_BUDGET_NODE_HOURS` | Rolling 31-day create budget, default 900 node-hours |
+| Setting                                                                                                 | Value                                                                                                      |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `CHALK_SFU_WINDOW_ENVIRONMENT`                                                                          | `nightly` or `production`, matching the database, provider account, and certificates                       |
+| `CHALK_SFU_WINDOW_MODE`                                                                                 | `scale` for normal operation or `retire` for rollback                                                      |
+| `CHALK_SFU_WINDOW_DATABASE_URL`                                                                         | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints                            |
+| `CHALK_SFU_APPLICATION_ID`                                                                              | Same pool identity as in the API                                                                           |
+| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API                                                                  |
+| `CHALK_SFU_WINDOW_PROVIDER_TOKEN`                                                                       | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets |
+| `CHALK_SFU_WINDOW_SNAPSHOT_ID`, `CHALK_SFU_WINDOW_REVISION`                                             | Ready-to-boot 2 vCPU snapshot and the exact SFU SHA it runs                                                |
+| `CHALK_SFU_WINDOW_REGION`, `CHALK_SFU_WINDOW_VPC_UUID`                                                  | Window pool region and VPC                                                                                 |
+| `CHALK_SFU_WINDOW_FIREWALL_ID`                                                                          | ID of the pre-created firewall targeting the environment's window firewall tag                             |
+| `CHALK_SFU_WINDOW_STANDING_SLOTS`                                                                       | Verified standing capacity, accounting for the API's standby packet ceiling                                |
+| `CHALK_SFU_WINDOW_BUDGET_NODE_HOURS`                                                                    | Rolling 31-day create budget, default 900 node-hours                                                       |
+
+The journal records the firewall ID with each launch. Retire all nodes using
+the old firewall before changing that ID. A replacement snapshot must support
+the drain incarnation precondition reported by `/readyz`.
 
 Use `chalk-sfu-window-<environment>` and
 `chalk-sfu-window-<environment>-firewall` only for the controller's nodes. Attach

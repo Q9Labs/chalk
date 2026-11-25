@@ -55,10 +55,10 @@ type Droplet struct {
 }
 
 type Provider interface {
-	Create(context.Context, string) (possiblyCreated bool, err error)
+	Create(context.Context, string) (providerID int64, possiblyCreated bool, err error)
 	Observe(context.Context, string) (Droplet, bool, error)
+	Inspect(context.Context, string, int64) (Droplet, bool, error)
 	Destroy(context.Context, string, int64) error
-	Gone(context.Context, string, int64) (bool, error)
 }
 
 type Health struct {
@@ -72,5 +72,5 @@ type Health struct {
 
 type Control interface {
 	Observe(context.Context, netip.Addr) (Health, error)
-	SetDrain(context.Context, netip.Addr, bool) error
+	SetDrain(context.Context, netip.Addr, string, bool) error
 }

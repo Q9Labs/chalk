@@ -76,7 +76,7 @@ func TestWindowReconcilerReplacesConfirmedMissingNodeAtCapacity(t *testing.T) {
 			f := newWindowFixture(t)
 			f.reconciler.policy.Capacity.MaxNodes = 1
 			f.state.Demand.LiveSlots = 9
-			f.state.Nodes = []Node{{ID: "window-node", ProviderID: 123, Phase: phase, CreatedAt: f.state.ObservedAt}}
+			f.state.Nodes = []Node{{ID: "window-node", ProviderID: 123, Phase: phase, CreatedAt: f.state.ObservedAt.Add(-minimumUptime)}}
 			if phase != Starting {
 				f.state.Nodes[0].Address = netip.MustParseAddr("192.0.2.9")
 			}
@@ -109,6 +109,31 @@ func TestWindowReconcilerFencesAnIncompatibleNodeWithoutDrainingLiveMedia(t *tes
 	}
 }
 
+func TestWindowReconcilerDoesNotDrainARecycledControlAddress(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Nodes = []Node{{ID: "window-node", ProviderID: 123, Address: netip.MustParseAddr("192.0.2.9"), Phase: Draining}}
+	f.droplet = Droplet{ID: 123, Active: true, Address: netip.MustParseAddr("192.0.2.11")}
+	f.health = Health{Incompatible: true, Incarnation: "another-node"}
+	if _, err := f.reconciler.Reconcile(t.Context()); err == nil || f.health.Draining || f.destroyed != 0 {
+		t.Fatalf("err=%v draining=%v delete=%v; expected address mismatch only", err, f.health.Draining, f.destroyed)
+	}
+}
+
+func TestWindowReconcilerRemembersAnAcceptedCreateBeforeFirstObservation(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Demand.LiveSlots = 9
+	f.createID = 123
+	f.reconciler.policy.Capacity.MaxNodes = 1
+	f.reconcile(t, Starting)
+	if id := f.state.Nodes[0].ProviderID; id != 123 {
+		t.Fatalf("provider ID=%d, want 123", id)
+	}
+	f.missing = 123
+	f.reconcile(t, Starting)
+	f.state.ObservedAt = f.state.ObservedAt.Add(minimumUptime)
+	f.reconcile(t, Deleted)
+}
+
 type windowFixture struct {
 	reconciler *Reconciler
 	state      Snapshot
@@ -117,6 +142,7 @@ type windowFixture struct {
 	bound      bool
 	droplet    Droplet
 	createErr  error
+	createID   int64
 	creates    int
 	destroyed  int64
 	missing    int64
@@ -167,6 +193,7 @@ func (f *windowFixture) Reserve(_ context.Context, _, id string, _ int) error {
 func (f *windowFixture) Save(_ context.Context, id string, from Phase, node Node) error {
 	for i, existing := range f.state.Nodes {
 		if existing.ID == id && existing.Phase == from {
+			node.CreatedAt = existing.CreatedAt
 			f.state.Nodes[i] = node
 			return nil
 		}
@@ -185,16 +212,19 @@ func (f *windowFixture) Observe(context.Context, netip.Addr) (Health, error) {
 	return f.health, f.healthErr
 }
 
-func (f *windowFixture) SetDrain(_ context.Context, _ netip.Addr, drain bool) error {
+func (f *windowFixture) SetDrain(_ context.Context, _ netip.Addr, incarnation string, drain bool) error {
+	if incarnation != f.health.Incarnation {
+		return errors.New("wrong node incarnation")
+	}
 	f.health.Draining = drain
 	return nil
 }
 
 type fakeWindowProvider struct{ f *windowFixture }
 
-func (p fakeWindowProvider) Create(context.Context, string) (bool, error) {
+func (p fakeWindowProvider) Create(context.Context, string) (int64, bool, error) {
 	p.f.creates++
-	return true, p.f.createErr
+	return p.f.createID, true, p.f.createErr
 }
 
 func (p fakeWindowProvider) Observe(context.Context, string) (Droplet, bool, error) {
@@ -206,6 +236,17 @@ func (p fakeWindowProvider) Destroy(_ context.Context, _ string, id int64) error
 	return nil
 }
 
-func (p fakeWindowProvider) Gone(_ context.Context, _ string, id int64) (bool, error) {
-	return id == p.f.destroyed || id == p.f.missing, nil
+func (p fakeWindowProvider) Inspect(_ context.Context, name string, id int64) (Droplet, bool, error) {
+	if id == p.f.destroyed || id == p.f.missing {
+		return Droplet{}, false, nil
+	}
+	if p.f.droplet.ID == id {
+		return p.f.droplet, true, nil
+	}
+	for _, node := range p.f.state.Nodes {
+		if node.ID == name && node.ProviderID == id {
+			return Droplet{ID: id, Address: node.Address, Active: node.Address.IsValid()}, true, nil
+		}
+	}
+	return Droplet{}, false, errors.New("unrecognized provider ID")
 }

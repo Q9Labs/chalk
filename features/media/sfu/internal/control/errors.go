@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	errForbidden = errors.New("client certificate lacks the expected service identity")
-	errTooLarge  = errors.New("request body too large")
+	errForbidden        = errors.New("client certificate lacks the expected service identity")
+	errTooLarge         = errors.New("request body too large")
+	errDrainIncarnation = errors.New("drain request does not match this node incarnation")
 )
 
 // hasIdentity reports whether the verified client certificate names the expected service.
@@ -48,6 +49,7 @@ func classify(err error) problem {
 	}{
 		{errForbidden, problem{http.StatusForbidden, protocol.CodeForbidden}},
 		{errTooLarge, problem{http.StatusRequestEntityTooLarge, protocol.CodeInvalidRequest}},
+		{errDrainIncarnation, problem{http.StatusPreconditionFailed, protocol.CodeOperationConflict}},
 		{media.ErrInvalidRequest, problem{http.StatusBadRequest, protocol.CodeInvalidRequest}},
 		{media.ErrSessionGone, problem{http.StatusNotFound, protocol.CodeSessionGone}},
 		{media.ErrNegotiationBusy, problem{http.StatusConflict, protocol.CodeNegotiationBusy}},
