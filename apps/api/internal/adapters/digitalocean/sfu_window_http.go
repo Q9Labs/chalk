@@ -25,40 +25,49 @@ func (a *SFUWindow) send(ctx context.Context, method, path string, query url.Val
 		return &digitalOceanHTTPStatusError{status: http.StatusTooManyRequests, err: &SFUWindowRateLimitError{RetryAt: retryAt}}
 	}
 	endpoint := a.baseURL.ResolveReference(&url.URL{Path: path, RawQuery: query.Encode()})
+	request, err := sfuWindowRequest(ctx, method, endpoint.String(), input, a.token)
+	if err != nil {
+		return err
+	}
+	response, err := a.client.Do(request)
+	if err != nil {
+		return sfuWindowTransportError(ctx, method, path)
+	}
+	defer response.Body.Close()
+	return a.handleResponse(response, output, expectedStatus)
+}
+
+func sfuWindowRequest(ctx context.Context, method, endpoint string, input any, token string) (*http.Request, error) {
 	var body io.Reader
 	if input != nil {
 		encoded, err := json.Marshal(input)
 		if err != nil {
-			return ErrSFUWindowInvalid
+			return nil, ErrSFUWindowInvalid
 		}
 		body = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), body)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
-		return ErrSFUWindowInvalid
+		return nil, ErrSFUWindowInvalid
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", "Bearer "+a.token)
+	request.Header.Set("Authorization", "Bearer "+token)
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := a.client.Do(request)
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return fmt.Errorf("%w: %s: %w", ErrSFUWindowProvider, method, ctxErr)
-		}
-		return fmt.Errorf("%w: %s %s", ErrSFUWindowProvider, method, path)
+	return request, nil
+}
+
+func sfuWindowTransportError(ctx context.Context, method, path string) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("%w: %s: %w", ErrSFUWindowProvider, method, ctxErr)
 	}
-	defer response.Body.Close()
+	return fmt.Errorf("%w: %s %s", ErrSFUWindowProvider, method, path)
+}
+
+func (a *SFUWindow) handleResponse(response *http.Response, output any, expectedStatus int) error {
 	if response.StatusCode == http.StatusTooManyRequests {
-		now := time.Now()
-		deadline := retryDeadline(response.Header, now)
-		if deadline.IsZero() {
-			deadline = now.Add(time.Minute)
-		}
-		retry := &SFUWindowRateLimitError{RetryAt: deadline}
-		a.retryAt.Store(retry.RetryAt.UnixNano())
-		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: status 429: %w", ErrSFUWindowProvider, retry)}
+		return a.rateLimitResponse(response)
 	}
 	switch {
 	case response.StatusCode == http.StatusNotFound:
@@ -68,7 +77,22 @@ func (a *SFUWindow) send(ctx context.Context, method, path string, query url.Val
 	case output == nil:
 		return nil
 	}
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maximumResponseBytes+1))
+	return decodeSFUWindowResponse(response.Body, output)
+}
+
+func (a *SFUWindow) rateLimitResponse(response *http.Response) error {
+	now := time.Now()
+	deadline := retryDeadline(response.Header, now)
+	if deadline.IsZero() {
+		deadline = now.Add(time.Minute)
+	}
+	retry := &SFUWindowRateLimitError{RetryAt: deadline}
+	a.retryAt.Store(retry.RetryAt.UnixNano())
+	return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: status 429: %w", ErrSFUWindowProvider, retry)}
+}
+
+func decodeSFUWindowResponse(body io.Reader, output any) error {
+	payload, err := io.ReadAll(io.LimitReader(body, maximumResponseBytes+1))
 	if err != nil || len(payload) > maximumResponseBytes {
 		return fmt.Errorf("%w: unreadable or oversized response", ErrSFUWindowProvider)
 	}
