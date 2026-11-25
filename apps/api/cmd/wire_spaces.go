@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/sfufleet"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -60,6 +61,9 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 		if err != nil {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
+		w.chalkSFU.LoadWindowNodes(func(ctx context.Context) ([]sfufleet.Route, error) {
+			return postgres.ListSFUWindowRoutes(ctx, w.queries, w.chalkSFU.ApplicationID())
+		})
 	}
 	w.ownCapture = w.chalkSFU != nil && w.cfg.ChalkSFU.CaptureEnabled
 	w.mediaPlaneTelemetry = observability.NewMediaPlaneResolutionTelemetry(w.logger)

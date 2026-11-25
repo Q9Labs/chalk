@@ -100,7 +100,7 @@ with moved as (
 select count(*) from moved`,
 		uuid(tenantID), uuid(episodeID), encoded, from, next.Generation, nodes, incarnations).Scan(&moved)
 	if err != nil {
-		return mediaplane.Binding{}, fmt.Errorf("move Episode media plane binding: %w", err)
+		return mediaplane.Binding{}, fmt.Errorf("move Episode media plane binding: %w", mapSFUWindowBindingError(err))
 	}
 	if moved == 1 {
 		return next, nil

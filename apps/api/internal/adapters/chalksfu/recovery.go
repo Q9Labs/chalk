@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/sfufleet"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -93,12 +95,19 @@ func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
 	if !f.probed {
 		return "", false
 	}
-	// A node that never answered counts from the end of the first probe round, so a freshly
-	// started API does not call every node silent before it has asked.
+	// A new replica may see a binding before it has loaded that window node.
+	// Lack of a directory entry is not evidence that the running SFU was lost.
 	seen, answered := f.seen[allocation.Node]
 	last := seen.at
 	if !answered {
 		last = f.firstRound
+		if mediaplane.IsWindowNode(allocation.Node) {
+			index := slices.IndexFunc(f.windows, func(window windowAdapter) bool { return window.ID == allocation.Node })
+			if index < 0 {
+				return "", false
+			}
+			last = f.windows[index].addedAt
+		}
 	}
 	switch {
 	case time.Since(last) > probeFreshness:
@@ -140,17 +149,12 @@ func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var candidates []candidate
-	for _, standby := range []bool{false, true} {
-		for _, node := range f.nodes {
-			if f.standbys[node.node] != standby {
-				continue
-			}
-			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness || load.Draining || f.verdicts[node.node] != verdictCompatible {
-				continue
-			}
-			candidates = append(candidates, candidate{adapter: node, standby: standby})
+	for _, node := range f.placementOrder {
+		load, probed := f.loads[node.node]
+		if !probed || !f.readyFor(node.node, load, time.Now()) {
+			continue
 		}
+		candidates = append(candidates, candidate{adapter: node, standby: f.standbys[node.node]})
 	}
 	return candidates
 }
@@ -338,6 +342,13 @@ var retirements, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapt
 func (f *Fleet) RetireAllocation(ctx context.Context, old mediaplane.Allocation, tenantID, episodeID string, generation int64) (settled bool, err error) {
 	adapter, err := f.Node(old.Node)
 	if err != nil {
+		if mediaplane.IsWindowNode(old.Node) && f.loadWindows != nil {
+			nodes, readErr := f.loadWindows(ctx)
+			if readErr != nil || slices.ContainsFunc(nodes, func(node sfufleet.Route) bool { return node.ID == old.Node }) {
+				recordRetirement(ctx, retirePending)
+				return false, err
+			}
+		}
 		recordRetirement(ctx, retireGone)
 		return true, nil // a node removed from the configuration has no process to clean
 	}
