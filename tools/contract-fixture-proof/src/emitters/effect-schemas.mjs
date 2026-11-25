@@ -309,7 +309,9 @@ function collectOperationSchemas(document) {
         schemas.push({ name: `${operationName}RequestBody`, schema: requestBody });
       }
       if (responseBody) {
-        schemas.push({ name: `${operationName}Response`, schema: responseBody });
+        const responseName = `${operationName}Response`;
+        const componentTarget = typeof responseBody.$ref === "string" ? responseBody.$ref.split("/").at(-1) : undefined;
+        if (!(componentTarget === responseName && document.components?.schemas?.[componentTarget])) schemas.push({ name: responseName, schema: responseBody });
       }
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         const headers = response?.headers ?? {};

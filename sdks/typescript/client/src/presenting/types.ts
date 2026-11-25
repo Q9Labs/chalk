@@ -23,7 +23,7 @@ export type PresentingDocumentManifest = {
   readonly attachmentId: string;
   readonly fileName: string;
   readonly status: "preparing" | "ready" | "failed";
-  readonly failure?: string;
+  readonly failure?: { readonly code: string; readonly message: string };
   readonly pageCount?: number;
   readonly pages: readonly PresentingDocumentPage[];
 };

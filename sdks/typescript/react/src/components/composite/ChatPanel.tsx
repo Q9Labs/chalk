@@ -16,6 +16,8 @@ export type { ChatMessage } from "./chat-types";
 
 export interface ChatPanelProps {
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
+  /** Files dropped on the call while chat is open. The key changes for each drop. */
+  readonly droppedFiles?: { readonly key: number; readonly files: readonly ChatUploadFile[] };
   readonly onRetryMessage?: (id: string) => Promise<void>;
   readonly onClose?: () => void;
   readonly disabled?: boolean;
@@ -42,6 +44,7 @@ export interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly onSendMessage?: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
   readonly onUploadAttachment?: (file: ChatUploadFile) => Promise<ChatAttachment>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
+  readonly onOpenAttachmentOnStage?: (attachment: ChatAttachment) => Promise<void>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
   readonly onLoadOlder?: () => Promise<void>;
   readonly hasOlder?: boolean;
@@ -63,7 +66,9 @@ export const ChatPanelSurface = React.memo(
     onReact,
     onUploadAttachment,
     pickChatFiles,
+    droppedFiles,
     onResolveAttachmentUrl,
+    onOpenAttachmentOnStage,
     onMarkRead,
     onRetryMessage,
     onLoadOlder,
@@ -233,6 +238,11 @@ export const ChatPanelSurface = React.memo(
       setComposerError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Route a committed window drop into the composer once; the changing key is the drop identity.
+    useEffect(() => {
+      if (droppedFiles) selectFiles(droppedFiles.files);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [droppedFiles?.key]);
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {
@@ -335,6 +345,7 @@ export const ChatPanelSurface = React.memo(
                         readBy={readBy}
                         participantNames={participantNames}
                         onResolveAttachmentUrl={onResolveAttachmentUrl}
+                        onOpenAttachmentOnStage={onOpenAttachmentOnStage}
                       />
                     </div>
                   );
@@ -466,6 +477,10 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
         const attachment = [...chat.messages, ...chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
         if (!attachment) throw new Error("The chat attachment is no longer available.");
         return client.chat.files.resolveUrl(attachment);
+      }}
+      onOpenAttachmentOnStage={async (attachment) => {
+        const result = await client.presenting.present(attachment.attachmentId);
+        if (result.kind !== "accepted") throw new Error("The file could not be opened on stage.");
       }}
       onMarkRead={(sequence) => {
         const message = chat.messages.find((candidate) => candidate.sequence === sequence);

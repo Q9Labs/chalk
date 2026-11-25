@@ -740,6 +740,14 @@ const styles = `.call-card-tabs {
 .call-attachments.image-1 .call-photo img { height: auto; min-height: 150px; max-height: 320px; }
 .call-attachments.image-3 .call-photo:nth-child(3) { grid-column: span 2; aspect-ratio: 2; }
 .call-photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: var(--chalk-scrim); color: var(--chalk-on-overlay); font-size: var(--type-title-sm); font-weight: 600; }
+
+.call-file-wrap { position: relative; display: block; }
+.call-file-wrap .call-file { width: 100%; }
+.call-file-actions { position: absolute; right: 6px; top: 6px; display: none; gap: 4px; }
+.call-file-wrap:hover .call-file-actions, .call-file-wrap:focus-within .call-file-actions { display: flex; }
+.call-file-actions button { border-radius: var(--corner-pill); background: var(--chalk-overlay-strong); color: var(--chalk-on-overlay); padding: 5px 9px; font-size: var(--type-caption); font-weight: 600; box-shadow: var(--chalk-shadow); }
+.call-file-actions button:hover { background: var(--chalk-on-overlay); color: var(--chalk-overlay); }
+
 .call-file > span:not(.call-file-type) {
   flex: 1;
   min-width: 0;

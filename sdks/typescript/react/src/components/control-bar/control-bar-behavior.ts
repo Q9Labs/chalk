@@ -16,7 +16,7 @@ import type { DeviceKind } from "../device-access/model";
 
 export type { MediaDevice } from "./control-bar-devices";
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "presenting" | "leave";
 
 export interface ControlBarSurfaceProps {
   layout?: "focus" | "grid";
@@ -74,6 +74,10 @@ export interface ControlBarSurfaceProps {
   onToggleParticipants?: () => void;
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
+  /** Opens the Present file picker. */
+  onPresent?: () => void;
+  /** One of this person's Documents is on the Stage. */
+  isPresenting?: boolean;
   onOpenReactions?: () => void;
   /** The reactions tray is open; the button reports it with aria-expanded. */
   reactionsOpen?: boolean;
@@ -104,6 +108,8 @@ export interface ControlBarProps {
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly isWhiteboardOpen?: boolean;
+  readonly onPresent?: () => void;
+  readonly isPresenting?: boolean;
   readonly onOpenReactions?: () => void;
   readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;
@@ -117,7 +123,7 @@ export interface ControlBarProps {
   readonly className?: string;
 }
 
-export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
+export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "presenting", "handraise", "leave", "participants", "chat", "reactions"];
 
 interface ControlBarSurfaceBehaviorOptions {
   readonly density: "comfortable" | "compact";
@@ -259,6 +265,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     if (button === "reactions") return canSendReaction;
     if (button === "handraise") return canRaiseHand;
     if (button === "whiteboard") return canDrawWhiteboard;
+    if (button === "presenting") return canPublishScreen;
     if (button === "record") return canManageRecording;
     return true;
   });

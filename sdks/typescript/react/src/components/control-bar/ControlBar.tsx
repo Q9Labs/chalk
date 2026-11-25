@@ -139,6 +139,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
+      {has("presenting") && (props.onPresent || props.displayOnly) ? iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting) : null}
       {has("record") && (props.onToggleRecording || props.displayOnly) ? (
         <span className="chalk-shell-record chalk-shell-desktop" data-pending={props.isRecordingPending || undefined}>
           {iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}

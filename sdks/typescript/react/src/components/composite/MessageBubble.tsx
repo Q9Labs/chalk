@@ -32,6 +32,7 @@ export interface MessageBubbleProps {
   readBy?: readonly ChatReadReceipt[];
   participantNames?: Readonly<Record<string, string>>;
   onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
+  onOpenAttachmentOnStage?: (attachment: ChatAttachment) => Promise<void>;
   reactions?: NonNullable<ChatMessage["reactions"]>;
   localParticipantId?: string;
   onReact?: (emoji: ChatReactionInput["emoji"], on: boolean) => Promise<unknown>;
@@ -58,6 +59,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     readBy = [],
     participantNames = {},
     onResolveAttachmentUrl,
+    onOpenAttachmentOnStage,
     reactions = [],
     localParticipantId,
     onReact,
@@ -268,16 +270,26 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                         {imageFiles.length > 4 && imageFiles.indexOf(file) === 3 ? <span className="call-photo-more">+{imageFiles.length - 4}</span> : null}
                       </button>
                     );
+                  const presentable = file.mimeType === "application/pdf" || file.mimeType.startsWith("image/");
                   return (
-                    <button type="button" className="call-file" key={file.attachmentId} disabled={!onResolveAttachmentUrl || image} aria-label={`Download ${file.fileName}`} onClick={() => void openFile(file)}>
-                      <span className="call-file-type" data-extension={file.fileName.split(".").at(-1)?.toLowerCase()}>
-                        {file.fileName.split(".").at(-1)?.toUpperCase()}
-                      </span>
-                      <span>
-                        <b dir="auto">{file.fileName}</b>
-                        <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
-                      </span>
-                    </button>
+                    <span className="call-file-wrap" key={file.attachmentId}>
+                      <button type="button" className="call-file" disabled={!onResolveAttachmentUrl || image} aria-label={`Download ${file.fileName}`} onClick={() => void openFile(file)}>
+                        <span className="call-file-type" data-extension={file.fileName.split(".").at(-1)?.toLowerCase()}>
+                          {file.fileName.split(".").at(-1)?.toUpperCase()}
+                        </span>
+                        <span>
+                          <b dir="auto">{file.fileName}</b>
+                          <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
+                        </span>
+                      </button>
+                      {presentable && onOpenAttachmentOnStage ? (
+                        <span className="call-file-actions">
+                          <button type="button" onClick={() => void onOpenAttachmentOnStage(file)}>
+                            Open on stage
+                          </button>
+                        </span>
+                      ) : null}
+                    </span>
                   );
                 })}
               </div>

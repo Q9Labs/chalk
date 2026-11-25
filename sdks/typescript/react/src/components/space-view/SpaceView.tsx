@@ -5,8 +5,8 @@ import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDevic
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, usePresenting, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -41,6 +41,7 @@ import { useCallToasts } from "../toast-stack/useCallToasts";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { presentFiles, presentingFileProblem } from "../stage/presenting-files";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext } from "@q9labsai/chalk-whiteboard/react";
@@ -191,6 +192,13 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const presenting = usePresenting();
+  const [presentOpen, setPresentOpen] = useState(false);
+  const [presentBusy, setPresentBusy] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const [chatDrop, setChatDrop] = useState<{ readonly key: number; readonly files: readonly File[] }>();
+  const presentInputRef = useRef<HTMLInputElement>(null);
+  const dropDepth = useRef(0);
   // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
   if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
@@ -222,6 +230,7 @@ export function SpaceView({
     "mic",
     "video",
     ...(feature("screenShare") && canPublishScreen ? ["screenshare" as const] : []),
+    ...(canPublishScreen ? ["presenting" as const] : []),
     ...(feature("recording") && canManageRecording ? ["record" as const] : []),
     ...(feature("participants") ? ["participants" as const] : []),
     ...(feature("chat") ? ["chat" as const] : []),
@@ -260,6 +269,88 @@ export function SpaceView({
     },
     [deviceAccess],
   );
+  const reportPresentingResult = useCallback(
+    (result: Awaited<ReturnType<typeof presentFiles>>) => {
+      if (result.presented) callToasts.notify({ type: "info", message: `Showing ${result.presented} to everyone.` });
+      for (const failure of result.failures) {
+        const message = failure.reason === "too_big" ? `${failure.fileName} is over 25 MB.` : failure.reason === "unsupported" ? `${failure.fileName} can't be presented or sent in chat.` : `${failure.fileName} could not be presented.`;
+        callToasts.notify({ type: "error", duration: Infinity, message });
+      }
+      if (result.chatted > 0) {
+        callToasts.notify({
+          type: "info",
+          message: result.presented ? `The first file is on stage; ${result.chatted === 1 ? "the other file" : `${result.chatted} other files`} went to chat.` : `${result.chatted === 1 ? "File" : "Files"} sent to chat.`,
+          action: feature("chat") ? { label: "Open chat", onClick: () => setActivePanel("chat") } : undefined,
+        });
+      }
+    },
+    [callToasts, feature],
+  );
+  const presentChosenFiles = useCallback(
+    async (files: readonly File[]) => {
+      if (!files.length || presentBusy) return;
+      setPresentBusy(true);
+      setPresentOpen(false);
+      try {
+        const unsupported = files.map((file) => ({ file, problem: presentingFileProblem(file) })).find(({ problem }) => problem === "too_big" || (problem === "unsupported" && files.length === 1));
+        if (unsupported?.problem === "too_big") callToasts.notify({ type: "error", duration: Infinity, message: `${unsupported.file.name} is over 25 MB.` });
+        else if (unsupported?.problem === "unsupported" && files.length === 1) callToasts.notify({ type: "error", duration: Infinity, message: `${unsupported.file.name} can't be presented.` });
+        reportPresentingResult(await presentFiles(files, client));
+      } finally {
+        setPresentBusy(false);
+      }
+    },
+    [callToasts, client, presentBusy, reportPresentingResult],
+  );
+  const choosePresentFiles = useCallback(async () => {
+    if (connection.status !== "live" || presentBusy) return;
+    if (pickChatFiles) {
+      try {
+        await presentChosenFiles([...(await pickChatFiles())] as File[]);
+      } catch {
+        callToasts.notify({ type: "error", duration: Infinity, message: "Could not read the selected file." });
+      }
+    } else {
+      presentInputRef.current?.click();
+    }
+  }, [callToasts, connection.status, pickChatFiles, presentBusy, presentChosenFiles]);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Window file drops belong either to the open chat composer or directly to the Stage; remove the routing listeners with the call.
+  useEffect(() => {
+    const enter = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      dropDepth.current += 1;
+      setDropActive(true);
+    };
+    const over = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    const leave = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      dropDepth.current = Math.max(0, dropDepth.current - 1);
+      if (dropDepth.current === 0) setDropActive(false);
+    };
+    const drop = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      dropDepth.current = 0;
+      setDropActive(false);
+      const files = [...event.dataTransfer.files];
+      if (!files.length || connection.status !== "live") return;
+      if (activePanel === "chat" && feature("chat")) setChatDrop({ key: Date.now(), files });
+      else void presentChosenFiles(files);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, [activePanel, connection.status, feature, presentChosenFiles]);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
@@ -401,6 +492,8 @@ export function SpaceView({
                     onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                     onToggleWhiteboard={onToggleWhiteboard}
                     isWhiteboardOpen={whiteboard?.isOpen}
+                    onPresent={() => setPresentOpen((open) => !open)}
+                    isPresenting={presenting.documents.some((document) => document.presenterId === self.participantId)}
                     onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                     reactionsOpen={isReactionPickerOpen}
                     onCommandError={onCommandError}
@@ -411,6 +504,37 @@ export function SpaceView({
               }
               stageOverlay={
                 <>
+                  <input
+                    ref={presentInputRef}
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+                    onChange={(event) => {
+                      const files = [...(event.target.files ?? [])];
+                      event.target.value = "";
+                      void presentChosenFiles(files);
+                    }}
+                  />
+                  {dropActive ? (
+                    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center rounded-[inherit] bg-black/45 p-6">
+                      <div className="rounded-3xl border-2 border-dashed border-white/60 bg-[var(--chalk-overlay-strong)] px-8 py-6 text-center text-[var(--chalk-on-overlay)] shadow-xl">
+                        <div className="text-lg font-semibold">{activePanel === "chat" ? "Drop files to send" : "Drop a file to present"}</div>
+                        <div className="mt-1 text-sm opacity-75">{activePanel === "chat" ? "Up to 5 files, 25 MB each" : "PDF or image, up to 25 MB"}</div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {presentOpen ? (
+                    <div className="absolute bottom-24 left-1/2 z-50 w-72 -translate-x-1/2 rounded-2xl bg-[var(--chalk-overlay-strong)] p-3 text-[var(--chalk-on-overlay)] shadow-xl outline outline-1 outline-white/10 backdrop-blur" role="dialog" aria-label="Present a file">
+                      <div className="px-2 pb-2 text-sm font-medium">Present a file</div>
+                      <button type="button" className="w-full rounded-xl bg-white/12 px-4 py-3 text-left text-sm font-medium hover:bg-white/20 disabled:opacity-50" disabled={presentBusy} onClick={() => void choosePresentFiles()}>
+                        {presentBusy ? "Preparing…" : "Choose a file"}
+                      </button>
+                      <div className="px-2 pt-2 text-xs opacity-70">or drop a PDF or image on the call</div>
+                    </div>
+                  ) : null}
                   {feature("reactions") ? <ReactionsOverlay /> : null}
                   {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
                   {feature("reactions") && canSendReaction && connection.status === "live" ? (
@@ -430,7 +554,7 @@ export function SpaceView({
               }
               sidebar={
                 <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
-                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={chatDrop} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {
