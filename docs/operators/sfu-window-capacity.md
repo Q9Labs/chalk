@@ -53,8 +53,10 @@ the drain incarnation precondition reported by `/readyz`.
 Use `chalk-sfu-window-<environment>` and
 `chalk-sfu-window-<environment>-firewall` only for the controller's nodes. Attach
 the pre-created firewall only to the latter tag. Allow the API/controller's
-source addresses to TCP 8443 and the SFU's public media port to clients. The
-controller does not open SSH. Keep standing nodes in the release bundle and in
+source addresses to TCP 8443 and the SFU's public media ports (UDP 50000, TCP 50000
+and TCP 443) to clients. The controller does not open SSH.
+
+Keep standing nodes in the release bundle and in
 `CHALK_ALERT_SFU_READY_URLS`. Do not put window nodes in either or in
 `CHALK_SFU_NODES`: the API reads their routing from Postgres, not from a startup
 environment variable. The standing readiness alert is not a window-capacity

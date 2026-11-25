@@ -216,6 +216,8 @@ export class SFUError extends Error {
       readonly status?: number;
       readonly retryableConnection?: boolean;
       readonly providerCode?: string;
+      /** The ICE state observed when a peer-connection wait expired. */
+      readonly iceConnectionState?: RTCIceConnectionState;
     } = {},
   ) {
     super(message);

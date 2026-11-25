@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func TestWindowReconcilerAcceptsProductionStandingCapacity(t *testing.T) {
+	f := &windowFixture{state: Snapshot{ObservedAt: time.Now()}}
+	if _, err := NewReconciler(Policy{
+		Application: "test", Capacity: Capacity{StandingSlots: 26, SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6},
+		MonthlyNodeTime: 900 * time.Hour,
+	}, f, fakeWindowProvider{f}, f); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewReconciler(Policy{
+		Application: "test", Capacity: Capacity{StandingSlots: 41, SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6},
+		MonthlyNodeTime: 900 * time.Hour,
+	}, f, fakeWindowProvider{f}, f); err == nil {
+		t.Fatal("accepted standing capacity above the controller bound")
+	}
+}
+
 func TestWindowReconcilerKeepsLiveBindingsAndConfirmsDrain(t *testing.T) {
 	f := newWindowFixture(t)
 	address := netip.MustParseAddr("192.0.2.9")

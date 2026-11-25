@@ -138,8 +138,8 @@ func loadRuntime() (windowProvider, chalksfu.WindowControl, sfufleet.Policy, err
 		return provider, control, policy, err
 	}
 	slots, err := readNumber("CHALK_SFU_WINDOW_STANDING_SLOTS", 0)
-	if err != nil || slots < 1 || slots > 10 {
-		return provider, control, policy, errors.New("set CHALK_SFU_WINDOW_STANDING_SLOTS to measured standing capacity (1 to 10 class slots)")
+	if err != nil || slots < 1 || slots > 40 {
+		return provider, control, policy, errors.New("set CHALK_SFU_WINDOW_STANDING_SLOTS to measured standing capacity (1 to 40 class slots)")
 	}
 	policy.Capacity = sfufleet.Capacity{StandingSlots: int(slots), SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6}
 	hours, err := readNumber("CHALK_SFU_WINDOW_BUDGET_NODE_HOURS", 900)
