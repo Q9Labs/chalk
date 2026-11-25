@@ -26,9 +26,11 @@ from `apps/api/cmd/sfu-window-controller` for the same API release as the
 database. Supply the environment below from the host's encrypted secret store.
 Use a direct connection to the environment's own database, not a
 transaction-pooled endpoint: the controller holds a session advisory lock.
-The database role needs read access to the schedules, Spaces, Episodes, and
-Participants, and read/write access to `sfu_window_nodes`. It does not need the
-database owner password. The Chalk API has no DigitalOcean credentials.
+Grant the controller role `SELECT` on `scheduled_episodes`, `spaces`,
+`episodes`, and `participants`, and on the `id` and
+`media_plane_provider_config` columns of `tenants`. Give it `SELECT`, `INSERT`,
+`UPDATE`, and `DELETE` on `sfu_window_nodes`. It does not need the database
+owner password. The Chalk API has no DigitalOcean credentials.
 
 | Setting                                                                                                 | Value                                                                                                      |
 | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -84,7 +86,8 @@ operator investigation; silence does not prove emptiness.
    waits for no live Episode binding and two empty observations on the same
    boot, then deletes by verified provider ID. Do not roll back to an API that
    only knows standing nodes while any live Episode is bound to a window node.
-   The schema can stay in place for a binary rollback.
+   The schema can stay in place for a binary rollback. Stop the controller
+   after retirement before running a migration down.
 
 At the supplied $0.0268 per 2 vCPU node-hour, four extra nodes for four hours
 plus 25 minutes each day for 31 days cost about $14.68. This excludes standing
