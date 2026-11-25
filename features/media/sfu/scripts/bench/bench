@@ -144,7 +144,8 @@ read_ready() { sfu_curl "$dir" "$1" "$control_port" --fail --max-time 5 "https:/
 create_node() {
   local role="$1" slug="$2" key_id="$3" user_data="$4"
   doctl compute droplet create "${name_prefix}-${role}" --region "$region" --size "$slug" --image ubuntu-24-04-x64 \
-    --ssh-keys "$key_id" --tag-name "$tag" --user-data-file "$user_data" --wait --output json >"${dir}/${role}.json"
+    --ssh-keys "$key_id" --tag-name "$tag" --user-data-file "$user_data" --wait --output json | \
+    jq 'if type == "array" then . else [.] end' >"${dir}/${role}.json"
 }
 
 abandon_up() {

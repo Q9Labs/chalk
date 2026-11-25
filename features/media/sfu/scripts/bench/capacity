@@ -50,7 +50,8 @@ up() {
   trap 'echo "capacity: up failed, deleting what was created" >&2; down || true' ERR
   for role in primary standby; do
     doctl compute droplet create "chalk-sfu-bench-${stamp}-gen-${role}" --region "$region" --size "$generator_size" \
-      --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json >"${state}/generator-${role}.json"
+      --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json | \
+      jq 'if type == "array" then . else [.] end' >"${state}/generator-${role}.json"
     echo "generator ${role}: Droplet $(jq -r '.[0].id' "${state}/generator-${role}.json") (${generator_size})"
   done
   local control="" role_address
