@@ -36,10 +36,7 @@ test("the newest cut that passed its proof is current", () => {
 });
 
 test("a newer host proof does not hide the current passing cut", () => {
-  const deployments = [
-    { task: "nightly-host-proof", sha: "aaa", payload: {} },
-    deployment("aaa", "100", "passed"),
-  ];
+  const deployments = [{ task: "nightly-host-proof", sha: "aaa", payload: {} }, deployment("aaa", "100", "passed")];
   const bin = mkdtempSync(join(tmpdir(), "current-cut-"));
   writeFileSync(join(bin, "gh"), `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify(deployments)}\nJSON\n`);
   chmodSync(join(bin, "gh"), 0o755);
