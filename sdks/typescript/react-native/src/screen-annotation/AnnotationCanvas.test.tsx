@@ -57,10 +57,10 @@ const scene = {
   revision: 1,
 };
 
-function renderCanvas(ready: boolean[] = []): ReactTestRenderer {
+function renderCanvas(ready: boolean[] = [], failures: string[] = []): ReactTestRenderer {
   let renderer: ReactTestRenderer | undefined;
   act(() => {
-    renderer = create(<AnnotationCanvas rendererUrl={rendererUrl} scene={scene} presence={[]} nowMs={0} onReady={(value) => ready.push(value)} onHit={() => undefined} onBakedInk={() => undefined} />);
+    renderer = create(<AnnotationCanvas rendererUrl={rendererUrl} scene={scene} presence={[]} nowMs={0} onReady={(value) => ready.push(value)} onHit={() => undefined} onBakedInk={() => undefined} onFailure={(reason) => failures.push(reason)} />);
   });
   if (!renderer) throw new Error("The annotation canvas did not render");
   return renderer;
@@ -83,7 +83,8 @@ it("grants the renderer directory and keeps WebView error chrome empty", () => {
 
 it("retries a failed renderer once, then removes the annotation overlay", () => {
   const ready: boolean[] = [];
-  const renderer = renderCanvas(ready);
+  const failures: string[] = [];
+  const renderer = renderCanvas(ready, failures);
   expect(webview.mounts).toEqual(["mount"]);
 
   act(() => webview.props.at(-1)?.onMessage?.({ nativeEvent: { data: "annotation-loaded" } }));
@@ -97,4 +98,5 @@ it("retries a failed renderer once, then removes the annotation overlay", () => 
   expect(webview.mounts).toEqual(["mount", "unmount", "mount", "unmount"]);
   expect(renderer.toJSON()).toBeNull();
   expect(ready).toEqual([true, false, false]);
+  expect(failures).toEqual(["load"]);
 });
