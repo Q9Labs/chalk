@@ -133,8 +133,8 @@ defmodule ChalkSync.Transport.Socket.Presenting do
 
   defp wire_state(%{revision: revision, documents: documents}) do
     %{
-      revision: revision,
-      documents:
+      "revision" => revision,
+      "documents" =>
         Enum.map(documents, fn document ->
           %{
             "document_id" => document.document_id,
