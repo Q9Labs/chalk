@@ -163,7 +163,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-(--space-1-5) overflow-hidden">
               {showName && (
-                <>
+                <span className="inline-flex h-full min-w-0 max-w-full items-center gap-x-(--space-1-5)">
                   <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full items-center [unicode-bidi:plaintext]" title={participant.displayName}>
                     <span className="min-w-0 truncate">{participant.displayName}</span>
                     {participant.isLocal && participant.displayName !== "You" && (
@@ -177,7 +177,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                     {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
                   </span>
                   {participant.identityKind === "agent" ? <AIBadge /> : null}
-                </>
+                </span>
               )}
               {participant.deviceHint ? (
                 <span data-part="tile-device" className="contents text-(length:--type-caption)">
