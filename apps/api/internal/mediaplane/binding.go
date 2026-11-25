@@ -175,6 +175,12 @@ func (binding Binding) Moved(placement Placement) (Binding, error) {
 	return moved, nil
 }
 
+const WindowNodePrefix = "window-sfu-"
+
+func IsWindowNode(node string) bool {
+	return strings.HasPrefix(node, WindowNodePrefix)
+}
+
 // ValidNodeID reports whether a node ID is 1 to 64 lowercase letters, digits or '-',
 // starting with a letter. Node IDs are stable names, not host addresses.
 func ValidNodeID(node string) bool {
