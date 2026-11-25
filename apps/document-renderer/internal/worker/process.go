@@ -26,14 +26,14 @@ const (
 )
 
 func Process(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment) error {
+	jobStarted := time.Now()
+	defer func() { stageLog(ctx, assignment, 0, "job_total", time.Since(jobStarted)) }()
 	downloadStarted := time.Now()
 	source, err := download(ctx, assignment.SourceURL, assignment.SourceSizeBytes+1, assignment.SourceSHA256)
 	if err != nil {
 		return err
 	}
 	stageLog(ctx, assignment, 0, "source_download", time.Since(downloadStarted), "bytes", len(source))
-	jobStarted := time.Now()
-	defer func() { stageLog(ctx, assignment, 0, "job_total", time.Since(jobStarted)) }()
 	switch assignment.Kind {
 	case "inventory":
 		err = processInventory(ctx, control, assignment, source)
@@ -247,15 +247,28 @@ func uploadEagerRenditions(ctx context.Context, assignment controlplane.Assignme
 		return err
 	}
 	stageLog(ctx, assignment, target.Page, "webp_encode", time.Since(thumbnailEncodeStarted), "target_edge", thumbnailEdge, "object", "thumbnail")
-	imageUploadStarted := time.Now()
-	if err := upload(ctx, target.Image, standardWebP); err != nil {
-		return err
+	uploadStarted := time.Now()
+	type uploadResult struct {
+		object string
+		bytes  int
+		err    error
 	}
-	stageLog(ctx, assignment, target.Page, "upload", time.Since(imageUploadStarted), "object", "image", "bytes", len(standardWebP))
-	thumbnailUploadStarted := time.Now()
-	err = upload(ctx, target.Thumbnail, thumbnailWebP)
-	stageLog(ctx, assignment, target.Page, "upload", time.Since(thumbnailUploadStarted), "object", "thumbnail", "bytes", len(thumbnailWebP))
-	return err
+	results := make(chan uploadResult, 2)
+	go func() {
+		results <- uploadResult{object: "image", bytes: len(standardWebP), err: upload(ctx, target.Image, standardWebP)}
+	}()
+	go func() {
+		results <- uploadResult{object: "thumbnail", bytes: len(thumbnailWebP), err: upload(ctx, target.Thumbnail, thumbnailWebP)}
+	}()
+	var firstErr error
+	for range 2 {
+		result := <-results
+		if result.err != nil && firstErr == nil {
+			firstErr = result.err
+		}
+	}
+	stageLog(ctx, assignment, target.Page, "upload", time.Since(uploadStarted), "object", "image+thumbnail", "bytes", len(standardWebP)+len(thumbnailWebP))
+	return firstErr
 }
 
 func renderIsolatedPDFPage(ctx context.Context, executable, sourcePath string, page, target int) error {
