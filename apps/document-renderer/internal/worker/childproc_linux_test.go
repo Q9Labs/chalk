@@ -5,6 +5,7 @@ package worker
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,9 @@ func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := runIsolatedChild(ctx, executable, "selftest"); err != nil {
+		if os.Getenv("RENDER_TEST_QEMU") == "1" && strings.Contains(err.Error(), "invalid argument") {
+			t.Skipf("qemu-user cannot create the Linux network namespace: %v", err)
+		}
 		t.Fatalf("isolated child: %v", err)
 	}
 }

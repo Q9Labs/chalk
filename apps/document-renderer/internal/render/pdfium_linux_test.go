@@ -19,10 +19,10 @@ func fixture(t *testing.T, name string) []byte {
 
 func TestPDFInventoryFixtures(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		pages     int
-		landscape bool
-		mixed     bool
+		name    string
+		pages   int
+		rotated bool
+		mixed   bool
 	}{
 		{"normal.pdf", 2, false, false},
 		{"image-only.pdf", 1, false, false},
@@ -41,8 +41,8 @@ func TestPDFInventoryFixtures(t *testing.T) {
 			if first.Width < 1 || first.Width > 1600 || first.Height < 1 || first.Height > 1600 {
 				t.Fatalf("invalid first dimensions %+v", first)
 			}
-			if tc.landscape && first.Width <= first.Height {
-				t.Fatalf("rotated page did not render as landscape: %+v", first)
+			if tc.rotated && first.Rotation != 1 {
+				t.Fatalf("rotated fixture rotation = %+v", first)
 			}
 			if tc.mixed && inventory.Pages[0].Width == inventory.Pages[1].Width && inventory.Pages[0].Height == inventory.Pages[1].Height {
 				t.Fatalf("mixed fixture dimensions collapsed: %+v", inventory.Pages)
