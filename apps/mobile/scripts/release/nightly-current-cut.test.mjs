@@ -71,7 +71,8 @@ test("a failed deployment lookup fails instead of silently skipping the upload",
     },
     encoding: "utf8",
   });
-  assert.notEqual(result.status, 0);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 22);
 });
 
 test("a newer cut that failed its proof does not make the build stale", () => {
