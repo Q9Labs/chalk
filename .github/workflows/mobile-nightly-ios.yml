@@ -28,6 +28,9 @@ jobs:
     environment: production-signing
     timeout-minutes: 120
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
       # A scheduled cut ships the newest green commit, which can be older than the run's head_sha, so the revision to
       # build is the one the passing cut recorded. Anything but the current passing cut is skipped.
       - name: Find the revision of the current passing cut
@@ -36,8 +39,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ github.event.workflow_run.id || inputs.source_run }}
         run: |
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=1" \
-            --jq ".[0] | select(.payload.proof_run_id == \"$SOURCE_RUN\" and .payload.proof_result == \"passed\") | .sha")
+          source apps/mobile/scripts/release/nightly-current-cut.sh
+          sha=$(current_cut_sha_for_run)
           if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'verified=true' >> "$GITHUB_OUTPUT"
             echo "sha=$sha" >> "$GITHUB_OUTPUT"
