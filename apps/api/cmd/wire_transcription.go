@@ -10,6 +10,7 @@ import (
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -59,14 +60,11 @@ func (w *apiWiring) wireTranscription() error {
 	}
 
 	if w.cfg.Capabilities.Presenting {
-		if w.redisClient == nil {
-			return errors.New("presenting workload auth requires Redis")
+		capabilitySigner, err := presenting.NewCapabilitySigner(w.cfg.Presenting.CapabilitySecret)
+		if err != nil {
+			return fmt.Errorf("configure presenting render capability verification: %w", err)
 		}
-		nonces := redisadapter.NewWorkloadNonceStore(w.redisClient)
-		w.options.PresentingWorkloadAuthorizer = httpapi.NewHMACWorkloadAuthorizer(httpapi.HMACWorkloadAuthorizerConfig{
-			Secret: []byte(w.cfg.Presenting.WorkloadAuthSecret), Environment: w.cfg.Observability.Environment,
-			ReleaseID: w.cfg.Observability.Version, Audience: w.cfg.Presenting.ControlAudience, Nonces: nonces,
-		})
+		w.options.PresentingCapabilityAuthorizer = httpapi.NewHMACPresentingCapabilityAuthorizer(capabilitySigner)
 	}
 
 	// Keep worker control behind the internal workload boundary.

@@ -129,11 +129,12 @@ type RenderFailure struct {
 }
 
 type InvokeInput struct {
-	JobID       utilities.ID
-	Synchronous bool
-	JourneyID   utilities.ID
-	Traceparent string
-	Tracestate  string
+	JobID       utilities.ID `json:"jobId"`
+	Capability  string       `json:"capability"`
+	Synchronous bool         `json:"-"`
+	JourneyID   utilities.ID `json:"journeyId"`
+	Traceparent string       `json:"traceparent"`
+	Tracestate  string       `json:"tracestate"`
 }
 
 type RendererInvoker interface {
@@ -147,7 +148,7 @@ type Repository interface {
 	AuthorizedDocument(context.Context, Subject, utilities.ID) (Document, error)
 	ListPages(context.Context, Document) ([]Page, error)
 	AuthorizedPage(context.Context, Subject, utilities.ID, int) (Document, Page, error)
-	ClaimRenderJob(context.Context, utilities.ID, time.Time, time.Time, utilities.ID, string) (RenderAssignment, error)
+	ClaimRenderJob(context.Context, utilities.ID, int, time.Time, time.Time, utilities.ID, string) (RenderAssignment, error)
 	HeartbeatRenderJob(context.Context, RenderLease, time.Time) error
 	CompleteInventory(context.Context, InventoryReport, int) ([]RenderJob, error)
 	MarkPageReady(context.Context, RenderLease, int) error
@@ -155,6 +156,7 @@ type Repository interface {
 	FailRenderJob(context.Context, RenderLease, RenderFailure) error
 	CompleteZoom(context.Context, RenderLease) error
 	EnsureZoomJob(context.Context, Document, int, time.Time) (RenderJob, bool, error)
+	ListStaleRenderJobs(context.Context, time.Time, int) ([]RenderJob, error)
 	ListExpiredDocuments(context.Context, time.Time, time.Time, int) ([]Document, error)
 	ListDocumentObjectKeys(context.Context, Document) ([]string, error)
 	DeleteDocument(context.Context, Document) error
@@ -170,12 +172,18 @@ type Service struct {
 	repository Repository
 	objects    ObjectStore
 	invoker    RendererInvoker
+	capability CapabilitySigner
 	available  func(context.Context) bool
 	now        func() time.Time
 }
 
 func NewService(repository Repository, objects ObjectStore, invoker RendererInvoker) Service {
 	return Service{repository: repository, objects: objects, invoker: invoker, now: time.Now}
+}
+
+func (s Service) WithCapabilitySigner(signer CapabilitySigner) Service {
+	s.capability = signer
+	return s
 }
 
 func (s Service) WithAvailability(available func(context.Context) bool) Service {

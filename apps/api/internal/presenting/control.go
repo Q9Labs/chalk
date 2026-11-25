@@ -42,7 +42,7 @@ type ControlAssignment struct {
 	Uploads         []PageUploads `json:"uploads"`
 }
 
-func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAssignment, bool, error) {
+func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (ControlAssignment, bool, error) {
 	if s.repository == nil || s.objects == nil || !s.isAvailable(ctx) {
 		return ControlAssignment{}, false, ErrRenderUnavailable
 	}
@@ -51,9 +51,12 @@ func (s Service) ClaimRender(ctx context.Context, jobID utilities.ID) (ControlAs
 	if err != nil {
 		return ControlAssignment{}, false, fmt.Errorf("generate presenting render lease: %w", err)
 	}
-	claimed, err := s.repository.ClaimRenderJob(ctx, jobID, now, now.Add(RenderLeaseDuration), token, "document-renderer")
+	claimed, err := s.repository.ClaimRenderJob(ctx, capability.JobID, capability.Attempt, now, now.Add(RenderLeaseDuration), token, "document-renderer")
 	if err != nil {
 		return ControlAssignment{}, false, err
+	}
+	if claimed.Job.TenantID != capability.TenantID || claimed.Job.SpaceID != capability.SpaceID || claimed.Job.DocumentID != capability.DocumentID || claimed.Job.Kind != capability.Kind || claimed.Job.PageStart != capability.PageStart || claimed.Job.PageEnd != capability.PageEnd || claimed.Job.Attempt != capability.Attempt {
+		return ControlAssignment{}, false, ErrLeaseLost
 	}
 	leaseExpiry := claimed.Job.LeaseExpiry
 	if leaseExpiry.IsZero() {
@@ -134,13 +137,35 @@ func (s Service) HeartbeatRender(ctx context.Context, lease RenderLease) error {
 	return s.repository.HeartbeatRenderJob(ctx, lease, s.now().UTC().Add(RenderLeaseDuration))
 }
 
+func (s Service) ReconcileRenderJobs(ctx context.Context, limit int) (int, int, error) {
+	if s.repository == nil || s.invoker == nil || !s.isAvailable(ctx) {
+		return 0, 0, ErrRenderUnavailable
+	}
+	jobs, err := s.repository.ListStaleRenderJobs(ctx, s.now().UTC(), limit)
+	if err != nil {
+		return 0, 0, err
+	}
+	invoked := 0
+	var first error
+	for _, job := range jobs {
+		if err := s.invokeJob(ctx, job, false); err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		invoked++
+	}
+	return len(jobs), invoked, first
+}
+
 func (s Service) CompleteInventory(ctx context.Context, report InventoryReport) error {
 	jobs, err := s.repository.CompleteInventory(ctx, report, RenderJobPageRange)
 	if err != nil {
 		return err
 	}
 	for _, job := range jobs {
-		s.invoke(ctx, InvokeInput{JobID: job.JobID})
+		_ = s.invokeJob(ctx, job, false)
 	}
 	return nil
 }

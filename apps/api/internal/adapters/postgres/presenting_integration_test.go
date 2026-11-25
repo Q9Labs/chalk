@@ -124,7 +124,7 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 	}
 	now := time.Now().UTC()
 	token, _ := utilities.NewID()
-	claimed, err := repository.ClaimRenderJob(ctx, inventoryJobID, now, now.Add(time.Minute), token, "document-renderer")
+	claimed, err := repository.ClaimRenderJob(ctx, inventoryJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
 	if err != nil {
 		t.Fatalf("claim inventory job: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestPresentingRenderFencingAndCompletionIdempotencyIntegration(t *testing.T
 	}
 	pageToken, _ := utilities.NewID()
 	claimNow := time.Now().UTC()
-	pageClaim, err := repository.ClaimRenderJob(ctx, jobs[0].JobID, claimNow, claimNow.Add(time.Minute), pageToken, "document-renderer")
+	pageClaim, err := repository.ClaimRenderJob(ctx, jobs[0].JobID, 1, claimNow, claimNow.Add(time.Minute), pageToken, "document-renderer")
 	if err != nil {
 		t.Fatalf("claim page job: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestPresentingOnePageRenderLifecycleIntegration(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	token, _ := utilities.NewID()
-	claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, now, now.Add(time.Minute), token, "document-renderer")
+	claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
 	if err != nil {
 		t.Fatalf("claim inventory job: %v", err)
 	}

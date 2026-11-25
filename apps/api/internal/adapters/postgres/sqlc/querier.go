@@ -347,6 +347,7 @@ type Querier interface {
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
+	ListStalePresentingRenderJobs(ctx context.Context, arg ListStalePresentingRenderJobsParams) ([]ListStalePresentingRenderJobsRow, error)
 	ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetryEpisodeRowsParams) ([]TelemetrySource, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)

@@ -42,7 +42,8 @@ candidate as (
         and job.available_at <= $4
         and (job.status = 'queued' or job.lease_expires_at <= $4)
         and job.attempt_count < job.attempt_limit
-        and ($5::uuid is null or job.job_id = $5::uuid)
+        and job.attempt_count + 1 = $5
+        and ($6::uuid is null or job.job_id = $6::uuid)
         and document.status <> 'failed'
     order by job.available_at, job.created_at, job.job_id
     for update of job skip locked
@@ -60,11 +61,12 @@ returning job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind, jo
 `
 
 type ClaimPresentingRenderJobParams struct {
-	LeaseToken     pgtype.UUID        `json:"lease_token"`
-	LeaseOwner     pgtype.Text        `json:"lease_owner"`
-	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
-	NowAt          pgtype.Timestamptz `json:"now_at"`
-	JobID          pgtype.UUID        `json:"job_id"`
+	LeaseToken      pgtype.UUID        `json:"lease_token"`
+	LeaseOwner      pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt  pgtype.Timestamptz `json:"lease_expires_at"`
+	NowAt           pgtype.Timestamptz `json:"now_at"`
+	ExpectedAttempt int32              `json:"expected_attempt"`
+	JobID           pgtype.UUID        `json:"job_id"`
 }
 
 func (q *Queries) ClaimPresentingRenderJob(ctx context.Context, arg ClaimPresentingRenderJobParams) (PresentingRenderJob, error) {
@@ -73,6 +75,7 @@ func (q *Queries) ClaimPresentingRenderJob(ctx context.Context, arg ClaimPresent
 		arg.LeaseOwner,
 		arg.LeaseExpiresAt,
 		arg.NowAt,
+		arg.ExpectedAttempt,
 		arg.JobID,
 	)
 	var i PresentingRenderJob
@@ -1135,6 +1138,78 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 			return nil, err
 		}
 		items = append(items, page)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStalePresentingRenderJobs = `-- name: ListStalePresentingRenderJobs :many
+select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
+       job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
+       job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at
+from presenting_render_jobs job
+where job.status in ('queued', 'leased')
+  and job.attempt_count < job.attempt_limit
+  and (
+    (job.status = 'queued' and job.available_at <= $1)
+    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < $1)
+  )
+order by job.available_at asc, job.created_at asc
+limit $2
+`
+
+type ListStalePresentingRenderJobsParams struct {
+	NowAt      pgtype.Timestamptz `json:"now_at"`
+	BatchLimit int32              `json:"batch_limit"`
+}
+
+type ListStalePresentingRenderJobsRow struct {
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SpaceID        pgtype.UUID        `json:"space_id"`
+	DocumentID     pgtype.UUID        `json:"document_id"`
+	JobID          pgtype.UUID        `json:"job_id"`
+	Kind           string             `json:"kind"`
+	PageStart      int32              `json:"page_start"`
+	PageEnd        int32              `json:"page_end"`
+	Status         string             `json:"status"`
+	AttemptCount   int32              `json:"attempt_count"`
+	AttemptLimit   int32              `json:"attempt_limit"`
+	LeaseToken     pgtype.UUID        `json:"lease_token"`
+	LeaseOwner     pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	AvailableAt    pgtype.Timestamptz `json:"available_at"`
+}
+
+func (q *Queries) ListStalePresentingRenderJobs(ctx context.Context, arg ListStalePresentingRenderJobsParams) ([]ListStalePresentingRenderJobsRow, error) {
+	rows, err := q.db.Query(ctx, listStalePresentingRenderJobs, arg.NowAt, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStalePresentingRenderJobsRow
+	for rows.Next() {
+		var i ListStalePresentingRenderJobsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SpaceID,
+			&i.DocumentID,
+			&i.JobID,
+			&i.Kind,
+			&i.PageStart,
+			&i.PageEnd,
+			&i.Status,
+			&i.AttemptCount,
+			&i.AttemptLimit,
+			&i.LeaseToken,
+			&i.LeaseOwner,
+			&i.LeaseExpiresAt,
+			&i.AvailableAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

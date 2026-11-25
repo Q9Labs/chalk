@@ -45,14 +45,14 @@ type presentingFailureBody struct {
 }
 
 func mountPresentingWorkerRoutes(r chi.Router, service interface {
-	ClaimRender(context.Context, utilities.ID) (presenting.ControlAssignment, bool, error)
+	ClaimRender(context.Context, presenting.RenderCapability) (presenting.ControlAssignment, bool, error)
 	HeartbeatRender(context.Context, presenting.RenderLease) error
 	CompleteInventory(context.Context, presenting.InventoryReport) error
 	MarkPageReady(context.Context, presenting.RenderLease, int) error
 	CompleteRender(context.Context, presenting.RenderLease) error
 	FailRender(context.Context, presenting.RenderLease, presenting.RenderFailure) error
 	CompleteZoomRender(context.Context, presenting.RenderLease) error
-}, authorizer WorkloadAuthorizer) {
+}, authorizer PresentingCapabilityAuthorizer) {
 	if service == nil || authorizer == nil {
 		return
 	}
@@ -67,12 +67,29 @@ func mountPresentingWorkerRoutes(r chi.Router, service interface {
 	})
 }
 
+func authorizePresentingCapability(w http.ResponseWriter, r *http.Request, auth PresentingCapabilityAuthorizer) (presenting.RenderCapability, bool) {
+	capability, err := auth.AuthorizePresentingRenderCapability(r)
+	if err != nil {
+		writePresentingCapabilityUnauthorized(w, err)
+		return presenting.RenderCapability{}, false
+	}
+	return capability, true
+}
+
+func capabilityMatchesLease(capability presenting.RenderCapability, lease presenting.RenderLease) bool {
+	return capability.MatchesLease(lease)
+}
+
+func writeCapabilityLeaseMismatch(w http.ResponseWriter) {
+	writeError(w, http.StatusForbidden, "presenting.capability_mismatch", "Render capability does not match this job lease")
+}
+
 func presentingClaimHandler(service interface {
-	ClaimRender(context.Context, utilities.ID) (presenting.ControlAssignment, bool, error)
-}, auth WorkloadAuthorizer) http.HandlerFunc {
+	ClaimRender(context.Context, presenting.RenderCapability) (presenting.ControlAssignment, bool, error)
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.AuthorizeWorkload(r.Context(), r, presentingWorkloadRole); err != nil {
-			writeWorkloadUnauthorized(w, r, err)
+		capability, ok := authorizePresentingCapability(w, r, auth)
+		if !ok {
 			return
 		}
 		var body presentingClaimBody
@@ -80,16 +97,12 @@ func presentingClaimHandler(service interface {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid request body")
 			return
 		}
-		jobID := utilities.ID{}
-		if body.JobID != "" {
-			parsed, err := utilities.ParseID(body.JobID)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid job id")
-				return
-			}
-			jobID = parsed
+		jobID, err := utilities.ParseID(body.JobID)
+		if err != nil || jobID != capability.JobID {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid job id")
+			return
 		}
-		assignment, found, err := service.ClaimRender(r.Context(), jobID)
+		assignment, found, err := service.ClaimRender(r.Context(), capability)
 		if err != nil {
 			writePresentingWorkerError(w, err)
 			return
@@ -104,37 +117,45 @@ func presentingClaimHandler(service interface {
 
 func presentingHeartbeatHandler(service interface {
 	HeartbeatRender(context.Context, presenting.RenderLease) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
-	return presentingLeaseHandler(service, auth, func(ctx context.Context, lease presenting.RenderLease) error {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
+	return presentingLeaseHandler(service, auth, "", func(ctx context.Context, lease presenting.RenderLease) error {
 		return service.HeartbeatRender(ctx, lease)
 	})
 }
 
 func presentingCompleteHandler(service interface {
 	CompleteRender(context.Context, presenting.RenderLease) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
-	return presentingLeaseHandler(service, auth, func(ctx context.Context, lease presenting.RenderLease) error {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
+	return presentingLeaseHandler(service, auth, "", func(ctx context.Context, lease presenting.RenderLease) error {
 		return service.CompleteRender(ctx, lease)
 	})
 }
 
 func presentingZoomCompleteHandler(service interface {
 	CompleteZoomRender(context.Context, presenting.RenderLease) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
-	return presentingLeaseHandler(service, auth, func(ctx context.Context, lease presenting.RenderLease) error {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
+	return presentingLeaseHandler(service, auth, "zoom", func(ctx context.Context, lease presenting.RenderLease) error {
 		return service.CompleteZoomRender(ctx, lease)
 	})
 }
 
-func presentingLeaseHandler(service any, auth WorkloadAuthorizer, complete func(context.Context, presenting.RenderLease) error) http.HandlerFunc {
+func presentingLeaseHandler(service any, auth PresentingCapabilityAuthorizer, kind string, complete func(context.Context, presenting.RenderLease) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.AuthorizeWorkload(r.Context(), r, presentingWorkloadRole); err != nil {
-			writeWorkloadUnauthorized(w, r, err)
+		capability, ok := authorizePresentingCapability(w, r, auth)
+		if !ok {
+			return
+		}
+		if kind != "" && capability.Kind != kind {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		lease, err := decodePresentingLease(r)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease")
+			return
+		}
+		if !capabilityMatchesLease(capability, lease) || (kind == "zoom" && lease.Page != capability.PageStart) {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		if err := complete(r.Context(), lease); err != nil {
@@ -147,10 +168,14 @@ func presentingLeaseHandler(service any, auth WorkloadAuthorizer, complete func(
 
 func presentingInventoryHandler(service interface {
 	CompleteInventory(context.Context, presenting.InventoryReport) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.AuthorizeWorkload(r.Context(), r, presentingWorkloadRole); err != nil {
-			writeWorkloadUnauthorized(w, r, err)
+		capability, ok := authorizePresentingCapability(w, r, auth)
+		if !ok {
+			return
+		}
+		if capability.Kind != "inventory" {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		var body presentingInventoryBody
@@ -161,6 +186,10 @@ func presentingInventoryHandler(service interface {
 		lease, err := presentingLease(body.presentingWorkerLeaseBody)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease")
+			return
+		}
+		if !capabilityMatchesLease(capability, lease) {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		pages := make([]presenting.PageSpec, 0, len(body.Pages))
@@ -177,10 +206,14 @@ func presentingInventoryHandler(service interface {
 
 func presentingPageReadyHandler(service interface {
 	MarkPageReady(context.Context, presenting.RenderLease, int) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.AuthorizeWorkload(r.Context(), r, presentingWorkloadRole); err != nil {
-			writeWorkloadUnauthorized(w, r, err)
+		capability, ok := authorizePresentingCapability(w, r, auth)
+		if !ok {
+			return
+		}
+		if capability.Kind != "inventory" && capability.Kind != "pages" {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		var body presentingPageReadyBody
@@ -193,6 +226,10 @@ func presentingPageReadyHandler(service interface {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease")
 			return
 		}
+		if !capabilityMatchesLease(capability, lease) || body.Page < capability.PageStart || body.Page > capability.PageEnd {
+			writeCapabilityLeaseMismatch(w)
+			return
+		}
 		if err := service.MarkPageReady(r.Context(), lease, body.Page); err != nil {
 			writePresentingWorkerError(w, err)
 			return
@@ -203,10 +240,10 @@ func presentingPageReadyHandler(service interface {
 
 func presentingFailHandler(service interface {
 	FailRender(context.Context, presenting.RenderLease, presenting.RenderFailure) error
-}, auth WorkloadAuthorizer) http.HandlerFunc {
+}, auth PresentingCapabilityAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.AuthorizeWorkload(r.Context(), r, presentingWorkloadRole); err != nil {
-			writeWorkloadUnauthorized(w, r, err)
+		capability, ok := authorizePresentingCapability(w, r, auth)
+		if !ok {
 			return
 		}
 		var body presentingFailureBody
@@ -217,6 +254,10 @@ func presentingFailHandler(service interface {
 		lease, err := presentingLease(body.presentingWorkerLeaseBody)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease")
+			return
+		}
+		if !capabilityMatchesLease(capability, lease) {
+			writeCapabilityLeaseMismatch(w)
 			return
 		}
 		if err := service.FailRender(r.Context(), lease, presenting.RenderFailure{Code: body.Code, Message: body.Message}); err != nil {

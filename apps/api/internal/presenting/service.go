@@ -32,7 +32,7 @@ func (s Service) Create(ctx context.Context, subject Subject, attachmentID utili
 	if document.InventoryJobID.IsZero() {
 		return Document{}, fmt.Errorf("presenting document was created without an inventory job")
 	}
-	s.invoke(ctx, InvokeInput{JobID: document.InventoryJobID})
+	_ = s.invokeJob(ctx, RenderJob{Kind: "inventory", PageStart: 1, PageEnd: 1, RenderLease: RenderLease{TenantID: document.TenantID, SpaceID: document.SpaceID, DocumentID: document.DocumentID, JobID: document.InventoryJobID}}, false)
 	return document, nil
 }
 
@@ -81,7 +81,7 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 		if s.invoker == nil {
 			return "", time.Time{}, ErrRenderUnavailable
 		}
-		if err := s.invoker.Invoke(ctx, InvokeInput{JobID: job.JobID, Synchronous: true}); err != nil {
+		if err := s.invokeJob(ctx, job, true); err != nil {
 			return "", time.Time{}, fmt.Errorf("invoke presenting zoom renderer: %w", err)
 		}
 		_, page, err = s.repository.AuthorizedPage(ctx, subject, documentID, pageNumber)
@@ -118,10 +118,15 @@ func (s Service) signPage(ctx context.Context, document Document, page *Page) er
 	return nil
 }
 
-func (s Service) invoke(ctx context.Context, input InvokeInput) {
+func (s Service) invokeJob(ctx context.Context, job RenderJob, synchronous bool) error {
 	if s.invoker == nil {
-		return
+		return nil
 	}
+	capability, err := s.capability.Issue(job)
+	if err != nil {
+		return err
+	}
+	input := InvokeInput{JobID: job.JobID, Capability: capability, Synchronous: synchronous}
 	if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
 		input.JourneyID = journeyID
 	}
@@ -129,8 +134,5 @@ func (s Service) invoke(ctx context.Context, input InvokeInput) {
 		input.Traceparent = "00-" + span.TraceID().String() + "-" + span.SpanID().String() + "-" + span.TraceFlags().String()
 		input.Tracestate = span.TraceState().String()
 	}
-	if err := s.invoker.Invoke(ctx, input); err != nil {
-		// The durable job remains queued; the renderer reconcile schedule is the backstop.
-		_ = err
-	}
+	return s.invoker.Invoke(ctx, input)
 }

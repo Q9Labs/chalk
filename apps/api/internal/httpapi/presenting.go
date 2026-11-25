@@ -25,7 +25,7 @@ type PresentingService interface {
 	Create(context.Context, presenting.Subject, utilities.ID) (presenting.Document, error)
 	Manifest(context.Context, presenting.Subject, utilities.ID) (presenting.Document, []presenting.Page, error)
 	Zoom(context.Context, presenting.Subject, utilities.ID, int) (string, time.Time, error)
-	ClaimRender(context.Context, utilities.ID) (presenting.ControlAssignment, bool, error)
+	ClaimRender(context.Context, presenting.RenderCapability) (presenting.ControlAssignment, bool, error)
 	HeartbeatRender(context.Context, presenting.RenderLease) error
 	CompleteInventory(context.Context, presenting.InventoryReport) error
 	MarkPageReady(context.Context, presenting.RenderLease, int) error

@@ -16,8 +16,7 @@ const (
 	TranscriptionWorkloadAuthSecret     = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
 	TranscriptionControlAudience        = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction     = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
-	PresentingWorkloadAuthSecret        = "CHALK_PRESENTING_WORKLOAD_AUTH_SECRET"
-	PresentingControlAudience           = "CHALK_PRESENTING_CONTROL_AUDIENCE"
+	PresentingCapabilitySecret          = "CHALK_PRESENTING_CAPABILITY_SECRET"
 	PresentingRendererFunction          = "CHALK_PRESENTING_RENDERER_FUNCTION_NAME"
 	PresentingRendererEndpoint          = "CHALK_PRESENTING_RENDERER_ENDPOINT"
 	RecordingKMSKeyID                   = "CHALK_RECORDING_KMS_KEY_ID"
@@ -42,10 +41,9 @@ type TranscriptionConfig struct {
 }
 
 type PresentingConfig struct {
-	WorkloadAuthSecret string
-	ControlAudience    string
-	RendererFunction   string
-	RendererEndpoint   string
+	CapabilitySecret string
+	RendererFunction string
+	RendererEndpoint string
 }
 
 func (cfg *Config) loadTimeouts() error {
@@ -90,10 +88,9 @@ func (cfg *Config) loadStorage() error {
 		}
 	}
 	cfg.Presenting = PresentingConfig{
-		WorkloadAuthSecret: envOrDefault(PresentingWorkloadAuthSecret, ""),
-		ControlAudience:    envOrDefault(PresentingControlAudience, DefaultTranscriptionControlAudience),
-		RendererFunction:   envOrDefault(PresentingRendererFunction, ""),
-		RendererEndpoint:   envOrDefault(PresentingRendererEndpoint, ""),
+		CapabilitySecret: envOrDefault(PresentingCapabilitySecret, ""),
+		RendererFunction: envOrDefault(PresentingRendererFunction, ""),
+		RendererEndpoint: envOrDefault(PresentingRendererEndpoint, ""),
 	}
 	if cfg.Capabilities.Presenting && !presentingConfigComplete(cfg.Presenting, cfg.SyncToken, cfg.R2) {
 		cfg.Capabilities.Presenting = false
@@ -130,7 +127,7 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 }
 
 func presentingConfigComplete(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config) bool {
-	return len(presenting.WorkloadAuthSecret) >= 32 &&
+	return len(presenting.CapabilitySecret) >= 32 &&
 		(strings.TrimSpace(presenting.RendererFunction) != "" || strings.TrimSpace(presenting.RendererEndpoint) != "") &&
 		len(syncToken.PrivateKey) != 0 &&
 		validateR2Config(r2, PresentingEnabled) == nil

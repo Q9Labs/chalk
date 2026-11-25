@@ -202,6 +202,20 @@ insert into presenting_render_jobs (
 on conflict do nothing
 returning tenant_id, space_id, document_id, job_id, kind, page_start, page_end, status, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, available_at, error_code, error_message, completed_at, created_at, updated_at;
 
+-- name: ListStalePresentingRenderJobs :many
+select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
+       job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
+       job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at
+from presenting_render_jobs job
+where job.status in ('queued', 'leased')
+  and job.attempt_count < job.attempt_limit
+  and (
+    (job.status = 'queued' and job.available_at <= sqlc.arg(now_at))
+    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < sqlc.arg(now_at))
+  )
+order by job.available_at asc, job.created_at asc
+limit sqlc.arg(batch_limit);
+
 -- name: ClaimPresentingRenderJob :one
 with expired as (
     update presenting_render_jobs job
@@ -233,6 +247,7 @@ candidate as (
         and job.available_at <= sqlc.arg(now_at)
         and (job.status = 'queued' or job.lease_expires_at <= sqlc.arg(now_at))
         and job.attempt_count < job.attempt_limit
+        and job.attempt_count + 1 = sqlc.arg(expected_attempt)
         and (sqlc.narg(job_id)::uuid is null or job.job_id = sqlc.narg(job_id)::uuid)
         and document.status <> 'failed'
     order by job.available_at, job.created_at, job.job_id

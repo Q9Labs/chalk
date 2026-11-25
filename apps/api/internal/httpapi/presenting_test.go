@@ -79,7 +79,7 @@ func (p *presentingRouteProbe) Zoom(context.Context, presenting.Subject, utiliti
 	p.calls++
 	return "https://example.invalid/zoom", time.Now(), p.err
 }
-func (p *presentingRouteProbe) ClaimRender(context.Context, utilities.ID) (presenting.ControlAssignment, bool, error) {
+func (p *presentingRouteProbe) ClaimRender(context.Context, presenting.RenderCapability) (presenting.ControlAssignment, bool, error) {
 	panic("unused")
 }
 func (p *presentingRouteProbe) HeartbeatRender(context.Context, presenting.RenderLease) error {

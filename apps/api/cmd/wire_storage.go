@@ -34,9 +34,6 @@ func (w *apiWiring) wireStorage() error {
 			w.options.ChatParticipants = w.syncParticipantVerifier
 		}
 		if w.cfg.Capabilities.Presenting {
-			if w.redisClient == nil {
-				return fmt.Errorf("presenting workload auth requires Redis")
-			}
 			var invoker presenting.RendererInvoker
 			if strings.TrimSpace(w.cfg.Presenting.RendererEndpoint) != "" {
 				invoker = presenting.NewHTTPInvoker(w.cfg.Presenting.RendererEndpoint)
@@ -50,8 +47,13 @@ func (w *apiWiring) wireStorage() error {
 			if w.syncParticipantVerifierConfigured {
 				presentingRepository := postgres.NewPresentingRepository(w.pool)
 				w.presentingCleanupScheduler = objectcleanup.NewScheduler(presenting.NewCleanupWorker(presentingRepository, storage), 0, w.logger)
-				service := presenting.NewService(presentingRepository, storage, invoker).WithAvailability(postgres.PresentingSettings{Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting}.Enabled)
+				capabilitySigner, err := presenting.NewCapabilitySigner(w.cfg.Presenting.CapabilitySecret)
+				if err != nil {
+					return fmt.Errorf("configure presenting render capabilities: %w", err)
+				}
+				service := presenting.NewService(presentingRepository, storage, invoker).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting}.Enabled)
 				w.options.Presenting = service
+				w.presentingReconcileScheduler = objectcleanup.NewScheduler(presenting.NewReconcileWorker(service), presenting.ReconcileInterval, w.logger)
 			}
 		}
 		if w.cfg.Capabilities.WhiteboardFiles {

@@ -147,14 +147,14 @@ func (r PresentingRepository) AuthorizedPage(ctx context.Context, subject presen
 	return document, presentingPage(row.DocumentID, row.Page, row.Width, row.Height, row.Status, row.ZoomReadyAt, row.ImageKey, row.ThumbnailKey, row.ZoomKey), nil
 }
 
-func (r PresentingRepository) ClaimRenderJob(ctx context.Context, jobID utilities.ID, now, leaseUntil time.Time, token utilities.ID, owner string) (presenting.RenderAssignment, error) {
+func (r PresentingRepository) ClaimRenderJob(ctx context.Context, jobID utilities.ID, expectedAttempt int, now, leaseUntil time.Time, token utilities.ID, owner string) (presenting.RenderAssignment, error) {
 	optionalJob := pgtype.UUID{Valid: !jobID.IsZero()}
 	if optionalJob.Valid {
 		optionalJob.Bytes = jobID.Bytes()
 	}
 	job, err := r.queries.ClaimPresentingRenderJob(ctx, sqlc.ClaimPresentingRenderJobParams{
 		LeaseToken: uuid(token), LeaseOwner: pgtype.Text{String: owner, Valid: true}, LeaseExpiresAt: pgtype.Timestamptz{Time: leaseUntil, Valid: true},
-		NowAt: pgtype.Timestamptz{Time: now, Valid: true}, JobID: optionalJob,
+		ExpectedAttempt: int32(expectedAttempt), NowAt: pgtype.Timestamptz{Time: now, Valid: true}, JobID: optionalJob,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return presenting.RenderAssignment{}, presenting.ErrNoRenderJob
@@ -445,6 +445,28 @@ func presentingPage(documentID pgtype.UUID, page, width, height int32, status st
 		DocumentID: utilities.IDFromBytes(documentID.Bytes), Page: int(page), Width: int(width), Height: int(height), Status: status, ZoomReady: zoomReady.Valid,
 		ImageKey: imageKey.String, ThumbnailKey: thumbnailKey.String, ZoomKey: zoomKey.String,
 	}
+}
+
+func (r PresentingRepository) ListStaleRenderJobs(ctx context.Context, now time.Time, limit int) ([]presenting.RenderJob, error) {
+	rows, err := r.queries.ListStalePresentingRenderJobs(ctx, sqlc.ListStalePresentingRenderJobsParams{NowAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true}, BatchLimit: int32(limit)})
+	if err != nil {
+		return nil, fmt.Errorf("list stale presenting render jobs: %w", err)
+	}
+	jobs := make([]presenting.RenderJob, 0, len(rows))
+	for _, row := range rows {
+		lease := presenting.RenderLease{TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), DocumentID: utilities.IDFromBytes(row.DocumentID.Bytes), JobID: utilities.IDFromBytes(row.JobID.Bytes), Attempt: int(row.AttemptCount)}
+		if row.LeaseToken.Valid {
+			lease.LeaseToken = utilities.IDFromBytes(row.LeaseToken.Bytes)
+		}
+		if row.LeaseOwner.Valid {
+			lease.LeaseOwner = row.LeaseOwner.String
+		}
+		if row.LeaseExpiresAt.Valid {
+			lease.LeaseExpiry = row.LeaseExpiresAt.Time
+		}
+		jobs = append(jobs, presenting.RenderJob{RenderLease: lease, Kind: row.Kind, PageStart: int(row.PageStart), PageEnd: int(row.PageEnd)})
+	}
+	return jobs, nil
 }
 
 func presentingJob(row sqlc.PresentingRenderJob) presenting.RenderJob {

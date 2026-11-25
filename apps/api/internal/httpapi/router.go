@@ -117,16 +117,16 @@ type Options struct {
 	FinalizerWorker        TranscriptFinalizerWorkerService
 	FinalizerAuthority     FinalizerAuthority
 
-	Webhooks                     WebhookService
-	ChatAttachments              ChatAttachmentService
-	ChatParticipants             ChatParticipantVerifier
-	Presenting                   PresentingService
-	PresentingWorkloadAuthorizer WorkloadAuthorizer
-	WhiteboardFiles              WhiteboardFileService
-	WhiteboardParticipants       WhiteboardParticipantVerifier
-	PublicInvites                PublicInviteService
-	ProblemReports               ProblemReportService
-	ScheduledEpisodes            ScheduledEpisodeService
+	Webhooks                       WebhookService
+	ChatAttachments                ChatAttachmentService
+	ChatParticipants               ChatParticipantVerifier
+	Presenting                     PresentingService
+	PresentingCapabilityAuthorizer PresentingCapabilityAuthorizer
+	WhiteboardFiles                WhiteboardFileService
+	WhiteboardParticipants         WhiteboardParticipantVerifier
+	PublicInvites                  PublicInviteService
+	ProblemReports                 ProblemReportService
+	ScheduledEpisodes              ScheduledEpisodeService
 }
 
 func NewRouter(options Options) http.Handler {

@@ -9,14 +9,14 @@ import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
 import { environment, providers, state } from "../platform/config.ts";
 import { alarmProvider } from "../providers/aws-dispatcher-alarm.ts";
-import { logGroupProvider, scheduleProvider } from "../providers/aws-run-owned.ts";
+import { logGroupProvider } from "../providers/aws-run-owned.ts";
 import { VersionedFunction, functionProvider } from "../providers/aws-versioned-function.ts";
 import { parseInputs, requireInput } from "./config.ts";
 import { resourceProps } from "./resources.ts";
 
 export const stackName = "document-renderer";
 import * as Layer from "effect/Layer";
-export const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers), scheduleProvider(providers));
+export const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers));
 const storedInputs = (value: unknown) => {
   const output = Schema.decodeUnknownSync(Schema.Struct({ renderer_inputs: Schema.Redacted(Schema.Unknown) }))(value);
   return parseInputs(Redacted.value(output.renderer_inputs));
@@ -36,13 +36,8 @@ export default Alchemy.Stack(
     const aws = yield* AWSEnvironment.current;
     const props = resourceProps(input, aws.accountId, aws.region);
     yield* AWS.Logs.LogGroup("Logs", props.log);
-    const failure = yield* AWS.SQS.Queue("AsyncFailure", props.asyncFailure);
-    const dlq = yield* AWS.SQS.Queue("SchedulerDlq", props.schedulerDlq);
     const execution = yield* AWS.IAM.Role("ExecutionRole", props.executionRole);
-    const fn = yield* VersionedFunction("Function", { ...props.fn, role: execution.roleArn, eventInvokeConfig: { ...props.fn.eventInvokeConfig, onFailure: failure.queueArn } });
-    const scheduler = yield* AWS.IAM.Role("SchedulerRole", props.schedulerRole);
-    const schedule = yield* AWS.Scheduler.Schedule("Reconcile", { ...props.schedule, target: { ...props.schedule.target, Arn: fn.functionArn, RoleArn: scheduler.roleArn, DeadLetterConfig: { Arn: dlq.queueArn } } });
-    yield* AWS.Lambda.Permission("SchedulerPermission", { ...props.schedulerPermission, functionName: fn.functionName, sourceArn: schedule.scheduleArn });
+    const fn = yield* VersionedFunction("Function", { ...props.fn, role: execution.roleArn });
     if (props.controlPermission) yield* AWS.Lambda.Permission("ControlApiPermission", { ...props.controlPermission, functionName: fn.functionName });
     for (const [name, alarm] of Object.entries(props.alarms)) yield* AWS.CloudWatch.Alarm(name, alarm);
     return props.outputs;

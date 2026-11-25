@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/worker"
@@ -23,6 +21,7 @@ import (
 type invocationEvent struct {
 	Source      string `json:"source"`
 	JobID       string `json:"jobId"`
+	Capability  string `json:"capability"`
 	JourneyID   string `json:"journeyId"`
 	Traceparent string `json:"traceparent"`
 	Tracestate  string `json:"tracestate"`
@@ -31,8 +30,7 @@ type invocationEvent struct {
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if err := worker.MakeProcessNonDumpable(); err != nil {
-		logger.Error("renderer process protection failed", "error", err)
-		os.Exit(1)
+		logger.Warn("renderer process protection unavailable", "error", err)
 	}
 	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
 		os.Exit(render.RunChild(mode, os.Args[1:]))
@@ -67,35 +65,12 @@ func main() {
 	}
 }
 
-func configureControl(ctx context.Context) (controlplane.ControlClient, error) {
-	secret := os.Getenv("CHALK_PRESENTING_WORKLOAD_AUTH_SECRET")
-	if secret == "" {
-		parameterARN := os.Getenv("CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN")
-		if parameterARN == "" {
-			return controlplane.ControlClient{}, fmt.Errorf("missing presenting workload auth secret or parameter ARN")
-		}
-		config, err := awsconfig.LoadDefaultConfig(ctx)
-		if err != nil {
-			return controlplane.ControlClient{}, err
-		}
-		withDecryption := true
-		output, err := ssm.NewFromConfig(config).GetParameter(ctx, &ssm.GetParameterInput{Name: &parameterARN, WithDecryption: &withDecryption})
-		if err != nil {
-			return controlplane.ControlClient{}, fmt.Errorf("read presenting workload auth parameter: %w", err)
-		}
-		if output.Parameter == nil || output.Parameter.Value == nil {
-			return controlplane.ControlClient{}, fmt.Errorf("presenting workload auth parameter is empty")
-		}
-		secret = *output.Parameter.Value
-	}
+func configureControl(context.Context) (controlplane.ControlClient, error) {
 	baseURL := os.Getenv("CONTROL_API_BASE_URL")
-	audience := envOr("CONTROL_API_AUDIENCE", "chalk-control-api")
-	environment := envOr("CONTROL_API_ENVIRONMENT", envOr("CHALK_ENVIRONMENT", envOr("ENVIRONMENT", "staging")))
-	releaseID := envOr("CONTROL_API_RELEASE_ID", envOr("CHALK_RELEASE_ID", "unknown"))
-	if baseURL == "" || len(secret) < 32 {
-		return controlplane.ControlClient{}, fmt.Errorf("renderer control configuration is incomplete")
+	if baseURL == "" {
+		return controlplane.ControlClient{}, fmt.Errorf("missing presenting control API base URL")
 	}
-	return controlplane.NewControlClient(baseURL, secret, environment, releaseID, audience), nil
+	return controlplane.NewControlClient(baseURL), nil
 }
 
 func envOr(name, fallback string) string {
@@ -121,7 +96,8 @@ func runLocalRenderer(address string, control controlplane.ControlClient, logger
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 			defer cancel()
 			if err := processOne(ctx, control, event); err != nil {
-				logger.Error("local render invocation failed", "error", err)
+				logger.Error("local render invocation failed; exiting to recycle renderer state", "error", err)
+				os.Exit(1)
 			}
 		}()
 		w.WriteHeader(http.StatusAccepted)
@@ -168,20 +144,25 @@ func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logge
 		} else {
 			payload, _ := json.Marshal(map[string]string{"errorMessage": processErr.Error()})
 			postRuntimeResult(client, base+"/invocation/"+requestID+"/error", payload, logger)
-			logger.Error("render invocation failed", "error", processErr)
+			logger.Error("render invocation failed; recycling execution environment", "error", processErr)
+			os.Exit(1)
 		}
 	}
 }
 
 func processOne(ctx context.Context, control controlplane.ControlClient, event invocationEvent) error {
-	assignment, err := control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate).Claim(ctx, event.JobID)
+	if event.Capability == "" {
+		return fmt.Errorf("render invocation is missing its job capability")
+	}
+	control = control.WithCapability(event.Capability).WithJourney(event.JourneyID, event.Traceparent, event.Tracestate)
+	assignment, err := control.Claim(ctx, event.JobID)
 	if err != nil {
 		return err
 	}
 	if assignment == nil {
 		return nil
 	}
-	if err := worker.Process(ctx, control.WithJourney(event.JourneyID, event.Traceparent, event.Tracestate), *assignment); err != nil {
+	if err := worker.Process(ctx, control, *assignment); err != nil {
 		return fmt.Errorf("render job %s: %w", assignment.JobID, err)
 	}
 	return nil

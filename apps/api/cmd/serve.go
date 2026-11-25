@@ -26,6 +26,7 @@ type serverResults struct {
 	deadlineScheduler      <-chan error
 	recordingMaintenance   <-chan error
 	presentingCleanup      <-chan error
+	presentingReconcile    <-chan error
 	whiteboardCleanup      <-chan error
 	chatCleanup            <-chan error
 	recordingSourceCleanup <-chan error
@@ -78,6 +79,10 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 	if w.presentingCleanupScheduler != nil {
 		presentingCleanupErr = startWorker(signalCtx, w.presentingCleanupScheduler.Run)
 	}
+	var presentingReconcileErr <-chan error
+	if w.presentingReconcileScheduler != nil {
+		presentingReconcileErr = startWorker(signalCtx, w.presentingReconcileScheduler.Run)
+	}
 
 	if w.chatCleanupScheduler != nil {
 		chatCleanupErr = startWorker(signalCtx, w.chatCleanupScheduler.Run)
@@ -115,7 +120,7 @@ func (w *apiWiring) startServersAndWorkers(signalCtx context.Context, server *ht
 	return serverResults{
 		server: serverErr, providerBridge: providerBridgeErr,
 		dispatcher: dispatcherErr, deadlineScheduler: deadlineSchedulerErr, recordingMaintenance: recordingMaintenanceErr,
-		presentingCleanup: presentingCleanupErr, whiteboardCleanup: whiteboardCleanupErr, chatCleanup: chatCleanupErr,
+		presentingCleanup: presentingCleanupErr, presentingReconcile: presentingReconcileErr, whiteboardCleanup: whiteboardCleanupErr, chatCleanup: chatCleanupErr,
 		recordingSourceCleanup: recordingSourceCleanupErr, publicInviteLifecycle: publicInviteLifecycleErr,
 	}, nil
 }
@@ -146,6 +151,9 @@ func (w *apiWiring) awaitShutdown(signalCtx context.Context, stop context.Cancel
 		runErr = err
 		results.recordingMaintenance = nil
 
+	case err := <-results.presentingReconcile:
+		runErr = err
+		results.presentingReconcile = nil
 	case err := <-results.whiteboardCleanup:
 		runErr = err
 		results.whiteboardCleanup = nil

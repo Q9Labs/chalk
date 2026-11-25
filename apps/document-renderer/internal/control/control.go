@@ -3,16 +3,10 @@ package control
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -49,20 +43,25 @@ type Assignment struct {
 	Uploads         []PageUploads `json:"uploads"`
 }
 
+// ControlClient carries only the opaque per-job capability received in the
+// invocation event. It has no ambient signing secret and cannot authorize work
+// for any other job.
 type ControlClient struct {
 	baseURL     string
-	secret      string
-	environment string
-	releaseID   string
-	audience    string
+	capability  string
 	httpClient  *http.Client
 	journeyID   string
 	traceparent string
 	tracestate  string
 }
 
-func NewControlClient(baseURL, secret, environment, releaseID, audience string) ControlClient {
-	return ControlClient{baseURL: strings.TrimRight(baseURL, "/"), secret: secret, environment: environment, releaseID: releaseID, audience: audience, httpClient: &http.Client{Timeout: 20 * time.Second}}
+func NewControlClient(baseURL string) ControlClient {
+	return ControlClient{baseURL: strings.TrimRight(baseURL, "/"), httpClient: &http.Client{Timeout: 20 * time.Second}}
+}
+
+func (c ControlClient) WithCapability(capability string) ControlClient {
+	c.capability = capability
+	return c
 }
 
 func (c ControlClient) Claim(ctx context.Context, jobID string) (*Assignment, error) {
@@ -149,10 +148,17 @@ func (c ControlClient) request(ctx context.Context, method, path string, body []
 	if err != nil {
 		return 0, nil, err
 	}
-	for name, value := range c.sign(method, path, body) {
-		request.Header.Set(name, value)
-	}
 	request.Header.Set("content-type", "application/json")
+	request.Header.Set("x-chalk-render-capability", c.capability)
+	if c.journeyID != "" {
+		request.Header.Set("x-chalk-journey-id", c.journeyID)
+	}
+	if c.traceparent != "" {
+		request.Header.Set("traceparent", c.traceparent)
+	}
+	if c.tracestate != "" {
+		request.Header.Set("tracestate", c.tracestate)
+	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return 0, nil, err
@@ -160,35 +166,4 @@ func (c ControlClient) request(ctx context.Context, method, path string, body []
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	return response.StatusCode, responseBody, err
-}
-
-// SignedHeaders exposes the production signer for cross-module interoperability
-// tests. Runtime requests continue to use the unexported sign path.
-func (c ControlClient) SignedHeaders(method, path string, body []byte) map[string]string {
-	return c.sign(method, path, body)
-}
-
-func (c ControlClient) sign(method, path string, body []byte) map[string]string {
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	nonceBytes := make([]byte, 16)
-	_, _ = rand.Read(nonceBytes)
-	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
-	digest := sha256.Sum256(body)
-	bodySHA := hex.EncodeToString(digest[:])
-	canonical := strings.Join([]string{strings.ToUpper(method), path, bodySHA, timestamp, nonce, c.environment, c.releaseID, "document-renderer", c.journeyID, c.traceparent, c.tracestate, c.audience}, "\n")
-	mac := hmac.New(sha256.New, []byte(c.secret))
-	_, _ = mac.Write([]byte(canonical))
-	return map[string]string{
-		"authorization":                "Chalk-Workload-HMAC " + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)),
-		"x-chalk-workload-timestamp":   timestamp,
-		"x-chalk-workload-nonce":       nonce,
-		"x-chalk-workload-environment": c.environment,
-		"x-chalk-workload-release":     c.releaseID,
-		"x-chalk-workload-role":        "document-renderer",
-		"x-chalk-workload-audience":    c.audience,
-		"x-chalk-workload-body-sha256": bodySHA,
-		"x-chalk-journey-id":           c.journeyID,
-		"traceparent":                  c.traceparent,
-		"tracestate":                   c.tracestate,
-	}
 }

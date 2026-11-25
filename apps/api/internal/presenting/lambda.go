@@ -45,7 +45,7 @@ func (i LambdaInvoker) Invoke(ctx context.Context, input InvokeInput) error {
 	if i.client == nil || input.JobID.IsZero() {
 		return errors.New("presenting renderer invocation unavailable")
 	}
-	payload, err := json.Marshal(map[string]string{"source": "presenting", "jobId": input.JobID.String(), "traceparent": input.Traceparent, "tracestate": input.Tracestate})
+	payload, err := json.Marshal(map[string]string{"source": "presenting", "jobId": input.JobID.String(), "capability": input.Capability, "traceparent": input.Traceparent, "tracestate": input.Tracestate})
 	if err != nil {
 		return fmt.Errorf("encode presenting renderer invocation: %w", err)
 	}

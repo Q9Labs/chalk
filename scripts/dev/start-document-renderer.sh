@@ -27,8 +27,5 @@ CGO_ENABLED=1 go build -buildvcs=false -o /tmp/chalk-document-renderer ./cmd/ren
 API_PORT="${CHALK_API_ADDR##*:}"
 export LD_LIBRARY_PATH="$NATIVE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CONTROL_API_BASE_URL="http://127.0.0.1:$API_PORT"
-export CONTROL_API_AUDIENCE="${CHALK_PRESENTING_CONTROL_AUDIENCE:-chalk-control-api}"
-export CHALK_ENVIRONMENT="${CHALK_API_ENV:-local}"
-export CHALK_RELEASE_ID="${CHALK_API_VERSION:-dev}"
 export RENDERER_LOCAL_ADDR=127.0.0.1:8093
 exec /tmp/chalk-document-renderer
