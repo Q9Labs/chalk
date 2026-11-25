@@ -119,6 +119,7 @@ type Options struct {
 	Webhooks               WebhookService
 	ChatAttachments        ChatAttachmentService
 	ChatParticipants       ChatParticipantVerifier
+	Presenting             PresentingService
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService

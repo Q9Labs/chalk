@@ -60,7 +60,7 @@ func v1RouteGroups(options Options) []routeGroup {
 			middleware: []func(http.Handler) http.Handler{requireParticipantMedia(options.ParticipantMediaVerify, options.ParticipantMediaActive)},
 			endpoints:  []RouteEndpoint{helperPairTicketEndpoint(options.HelperAccess, options.CORS.AllowedOrigins), sfuSignalEndpoint(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications)},
 		},
-		{endpoints: append(chatAttachmentEndpoints(options.ChatAttachments, options.ChatParticipants), whiteboardFileEndpoints(options.WhiteboardFiles, options.WhiteboardParticipants)...)},
+		{endpoints: append(append(chatAttachmentEndpoints(options.ChatAttachments, options.ChatParticipants), whiteboardFileEndpoints(options.WhiteboardFiles, options.WhiteboardParticipants)...), presentingEndpoints(options.Presenting, options.ChatParticipants)...)},
 	}
 }
 
