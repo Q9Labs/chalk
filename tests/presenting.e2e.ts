@@ -47,7 +47,7 @@ test("one person presents a PDF and it lands on both stages", async () => {
     const present = a.getByRole("button", { name: "Present", exact: true });
     await present.waitFor();
     await present.click();
-    const chooser = a.getByRole("dialog", { name: "Present a file", exact: true });
+    const chooser = a.getByRole("dialog", { name: "Present a file or link", exact: true });
     await chooser.waitFor();
 
     const [fileChooser] = await Promise.all([a.waitForEvent("filechooser"), chooser.getByRole("button", { name: /Choose a file|Preparing/ }).click()]);

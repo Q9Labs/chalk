@@ -102,8 +102,10 @@ const GLYPHS = {
   ),
   present: (
     <>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <path d="M14 2v6h6M12 18v-7M9.5 13.5L12 11l2.5 2.5" />
+      <path d="M2 3h20" />
+      <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+      <path d="m9 21 3-3" />
+      <path d="m15 21-3-3" />
     </>
   ),
   shareOff: (
