@@ -255,7 +255,7 @@ function FocusChip({ focus }: { readonly focus?: import("../participant-grid/Par
   }, [state]);
   if (!focus) return null;
   let label: string | null = null;
-  if (focus.steppedAway) label = `Stepped away · ${focus.steppedAway[0].toUpperCase()}${focus.steppedAway.slice(1)}`;
+  if (focus.steppedAway) label = `Stepped away · ${(focus.steppedAway[0] ?? "").toUpperCase()}${focus.steppedAway.slice(1)}`;
   else if (focus.allowed && state !== "active") label = "Allowed";
   else if (state === "background") {
     const elapsed = Math.max(0, Math.floor((now - sinceRef.current) / 1000));

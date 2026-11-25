@@ -193,7 +193,7 @@ export const ParticipantsPanelSurface = React.memo(
 
 function focusLabel(focus: import("@q9labsai/chalk-client").ParticipantFocus | undefined): string | undefined {
   if (!focus) return undefined;
-  if (focus.steppedAway) return `Stepped away · ${focus.steppedAway[0].toUpperCase()}${focus.steppedAway.slice(1)}`;
+  if (focus.steppedAway) return `Stepped away · ${(focus.steppedAway[0] ?? "").toUpperCase()}${focus.steppedAway.slice(1)}`;
   if (focus.allowed && focus.appState !== "active") return "Allowed";
   if (focus.appState === "background") return "Not focused";
   if (focus.appState === "inactive") return focus.windowed ? "Split View" : "Other window";
