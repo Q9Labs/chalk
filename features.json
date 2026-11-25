@@ -282,6 +282,7 @@
         "apps/web/src/lib/screen-annotation-helper-bridge.ts",
         "apps/web/src/lib/screen-annotation-helper-calibration.test.ts",
         "apps/web/src/lib/screen-annotation-helper-calibration.ts",
+        "apps/web/src/lib/screen-annotation-helper-capture.ts",
         "apps/web/src/lib/screen-annotation-helper-consent.ts",
         "apps/web/src/lib/screen-annotation-helper-projection.ts",
         "apps/web/src/lib/screen-annotation-helper.test.ts",

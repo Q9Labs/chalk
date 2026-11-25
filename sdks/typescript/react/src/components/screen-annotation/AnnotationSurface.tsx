@@ -180,13 +180,13 @@ function AnnotationDock({
   const dockRef = useRef<HTMLDivElement>(null);
   const { client, state } = presentation;
   const { feedback, busy, command, saveFrame, downloadFrame } = exportActions;
-  const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
+  const { canPopOut, helperAvailable, showPreviewHint } = sharerPreviewOptions(capture, helper);
   const showOwnClear = state.marks.some((mark) => mark.author.participant_id === actorId);
   const access = { client, state, actorId, people, grants, command: (action: ScreenAnnotationCommand) => void command(action) };
   return (
     <div ref={dockRef} data-part="screen-annotation-controls" className="chalk-ann-dock" data-local={isLocal ? "" : undefined} data-stack={isLocal && layout.edge === "bottom" ? "top" : undefined}>
       <AnnotationStyles />
-      {isLocal && !canPopOut && !helper?.installUrl ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
+      {isLocal && showPreviewHint ? <p className="chalk-ann-chip">Share a tab or window for a marks preview.</p> : null}
       <AnnotationFeedback feedback={feedback} />
       {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} /> : null}
       {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
@@ -195,7 +195,7 @@ function AnnotationDock({
         <AnnotationSharerControl dockRef={dockRef} layout={layout} onLayout={setLayout}>
           {annotate}
           <AnnotationAccess {...access} side={layout.edge === "bottom" ? "top" : "bottom"} hints />
-          {canPopOut ? <AnnotationPictureInPicture {...presentation} track={track} inTab={safePreview} helperAvailable={Boolean(helper?.installUrl)} hints /> : null}
+          {canPopOut ? <AnnotationPictureInPicture {...presentation} track={track} inTab={safePreview} helperAvailable={helperAvailable} hints /> : null}
         </AnnotationSharerControl>
       ) : (
         <div className="chalk-ann-bar">
@@ -206,6 +206,12 @@ function AnnotationDock({
       )}
     </div>
   );
+}
+
+function sharerPreviewOptions(capture: ScreenShareCapture | undefined, helper: ScreenAnnotationHelper | undefined) {
+  const canPopOut = capture?.surface === "browser" || capture?.surface === "window";
+  const helperAvailable = Boolean(helper?.installUrl);
+  return { canPopOut, helperAvailable, showPreviewHint: !canPopOut && !helperAvailable };
 }
 
 function AnnotationFeedback({ feedback }: { readonly feedback: ReturnType<typeof useAnnotationActions>["feedback"] }) {

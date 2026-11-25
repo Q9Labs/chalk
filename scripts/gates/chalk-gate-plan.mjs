@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { commandBatches } from "./command-batches.mjs";
+import { collaborationProofPaths } from "./collaboration-proof-paths.mjs";
 import { releaseContractRoots } from "./release-contract-paths.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -423,13 +424,7 @@ export function createGatePlan(files, options = {}) {
     ? full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web/server", "apps/web/src/lib/dashboard", "apps/web/src/components/dashboard", "apps/web/tests/dashboard", "apps/api/internal/accessgrants", "scripts/gates/with-postgres.sh"]))
     : dashboardEngine;
   // The board and annotation proofs drive the web build on the local stack. Include their test and engine inputs as well as shipped web inputs.
-  const boardLocal = narrow
-    ? full ||
-      affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") ||
-      nonDocumentationFiles.some((file) =>
-        startsWithAny(file, ["tests/board.e2e.ts", "e2e.config.ts", "apps/web/tests/screen-annotation.e2e.ts", "apps/web/e2e.annotation.config.ts", "scripts/web-proof", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "scripts/gates/with-postgres.sh"]),
-      )
-    : dashboardEngine;
+  const boardLocal = narrow ? full || affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") || nonDocumentationFiles.some((file) => startsWithAny(file, collaborationProofPaths)) : dashboardEngine;
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   // What the call-states page imports (traced from apps/web/src/call-states/main.tsx through vite.aliases.ts) plus the harness that drives it.

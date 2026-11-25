@@ -91,3 +91,44 @@ export function remoteVideoFrames() {
   const video = tile?.querySelector("video");
   return video && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
 }
+
+export async function installAnnotationCaptureFixture(context, participant) {
+  await context.addInitScript(webMediaFixture(participant, { permission: "granted" }));
+  await context.addInitScript(() => {
+    function captureSurface(options) {
+      return options?.video?.displaySurface === "monitor" ? "monitor" : "window";
+    }
+
+    function setCaptureSettings(track, canvas, surface) {
+      const settings = track.getSettings.bind(track);
+      if (surface === "window") {
+        const windowLabel = localStorage.getItem("fixture-opaque-window") === "1" ? "window:1:0:s" : "window:1:0";
+        Object.defineProperty(track, "label", { value: windowLabel });
+      }
+      track.getSettings = () => ({ ...settings(), displaySurface: surface, width: canvas.width, height: canvas.height });
+    }
+    navigator.mediaDevices.getDisplayMedia = async (options) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      const paint = canvas.getContext("2d");
+      if (!paint) throw new Error("Could not paint fake screen capture");
+      const stream = canvas.captureStream(10);
+      const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error("Fake screen capture did not produce a video track");
+      setCaptureSettings(track, canvas, captureSurface(options));
+      let frame = 0;
+      const render = () => {
+        if (track.readyState !== "live") return;
+        paint.fillStyle = "#2b3e5e";
+        paint.fillRect(0, 0, canvas.width, canvas.height);
+        paint.fillStyle = "white";
+        paint.font = "48px sans-serif";
+        paint.fillText(`Shared window · ${frame++}`, 80, 110);
+        setTimeout(render, 100);
+      };
+      render();
+      return stream;
+    };
+  });
+}

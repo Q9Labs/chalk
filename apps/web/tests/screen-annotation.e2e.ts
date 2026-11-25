@@ -1,8 +1,8 @@
 import { expect, type Screen } from "e2e";
 import { test, type Browser } from "@e2e-dev/web";
-import { chromium, devices, type BrowserContext, type Page } from "playwright";
+import { chromium, devices, type Page } from "playwright";
 import { join } from "node:path";
-import { webMediaFixture } from "../../../scripts/web-proof/media.mjs";
+import { installAnnotationCaptureFixture } from "../../../scripts/web-proof/media.mjs";
 import { showCallControls } from "./call-controls.mjs";
 import { startAndJoinCall } from "./dashboard/call-steps.mjs";
 
@@ -135,40 +135,6 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
   await expect(browser.locator('[data-part="annotation-helper-offer"]')).not.toBeVisible();
 });
 
-async function fakeWindowCapture(context: BrowserContext, participant: number) {
-  await context.addInitScript(webMediaFixture(participant, { permission: "granted" }));
-  await context.addInitScript(() => {
-    navigator.mediaDevices.getDisplayMedia = async (options) => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 1280;
-      canvas.height = 720;
-      const paint = canvas.getContext("2d");
-      if (!paint) throw new Error("Could not paint fake screen capture");
-      const stream = canvas.captureStream(10);
-      const track = stream.getVideoTracks()[0];
-      if (!track) throw new Error("Fake screen capture did not produce a video track");
-      const settings = track.getSettings.bind(track);
-      const requested = options?.video;
-      const isMonitor = typeof requested === "object" && requested.displaySurface === "monitor";
-      const windowLabel = localStorage.getItem("fixture-opaque-window") === "1" ? "window:1:0:s" : "window:1:0";
-      if (!isMonitor) Object.defineProperty(track, "label", { value: windowLabel });
-      track.getSettings = () => ({ ...settings(), displaySurface: isMonitor ? "monitor" : "window", width: canvas.width, height: canvas.height });
-      let frame = 0;
-      const render = () => {
-        if (track.readyState !== "live") return;
-        paint.fillStyle = "#2b3e5e";
-        paint.fillRect(0, 0, canvas.width, canvas.height);
-        paint.fillStyle = "white";
-        paint.font = "48px sans-serif";
-        paint.fillText(`Shared window · ${frame++}`, 80, 110);
-        setTimeout(render, 100);
-      };
-      render();
-      return stream;
-    };
-  });
-}
-
 async function joinGuest(host: Page, page: Page, invite: string, name: string) {
   await page.goto(invite);
   await page.getByLabel("Your name", { exact: true }).fill(name);
@@ -216,7 +182,7 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     // Desktop layout and a capture fixture force the mobile exclusion to use device
     // identity rather than a narrow viewport or an absent capture API.
     const mobileContext = await browser.newContext({ ...devices["iPhone 15"], viewport: { width: 1440, height: 960 } });
-    await Promise.all([hostContext, guestContext, mobileContext].map((context, index) => fakeWindowCapture(context, index)));
+    await Promise.all([hostContext, guestContext, mobileContext].map((context, index) => installAnnotationCaptureFixture(context, index)));
     // Same live media path, without the Chromium-only Document PiP API.
     await guestContext.addInitScript(() => Object.defineProperty(window, "documentPictureInPicture", { value: undefined }));
     const [host, guest, mobile] = await Promise.all([hostContext.newPage(), guestContext.newPage(), mobileContext.newPage()]);
