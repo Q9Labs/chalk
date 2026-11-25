@@ -56,6 +56,12 @@ func TestLoadServicePrincipals(t *testing.T) {
 		{"local System secret", additional, serviceSecret},
 		{"short secret", strings.Replace(additional, serviceSecret, "short", 1), ""},
 		{"secret with whitespace", strings.Replace(additional, serviceSecret, serviceSecret+" ", 1), ""},
+		{"secret with Unicode whitespace", strings.Replace(additional, serviceSecret, serviceSecret+"\u00a0", 1), ""},
+		{"secret padded to match another", additional[:len(additional)-1] + "," + strings.Replace(strings.Replace(additional[1:], "service-b", "service-c", 1), serviceSecret, "\u2003"+serviceSecret, 1), ""},
+		{"case-variant field", strings.Replace(additional, `"id"`, `"ID"`, 1), ""},
+		{"duplicate field", strings.Replace(additional, `"id":"service-b"`, `"id":"service-b","id":"service-c"`, 1), ""},
+		{"case-variant duplicate field", strings.Replace(additional, `"id":"service-b"`, `"id":"service-b","Id":"service-c"`, 1), ""},
+		{"entry is not an object", `[null]`, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv(APIServicePrincipals, test.json)

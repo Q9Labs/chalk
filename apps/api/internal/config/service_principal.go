@@ -1,10 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
@@ -26,11 +29,9 @@ func loadServicePrincipals(systemToken string) ([]authentication.ServiceCredenti
 		return credentials, dashboard.ID, nil
 	}
 
-	var additional []authentication.ServiceCredential
-	decoder := json.NewDecoder(strings.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if !utf8.ValidString(raw) || decoder.Decode(&additional) != nil || additional == nil || decoder.Decode(new(json.RawMessage)) != io.EOF {
-		return nil, "", fmt.Errorf("%s must be a JSON array of objects with id, secrets and scopes", APIServicePrincipals)
+	additional, err := decodeServiceCredentials(raw)
+	if err != nil {
+		return nil, "", fmt.Errorf("%s must be a JSON array of objects with exactly the fields id, secrets and scopes", APIServicePrincipals)
 	}
 	ids := make(map[string]bool)
 	secretOwners := make(map[string]string)
@@ -46,6 +47,52 @@ func loadServicePrincipals(systemToken string) ([]authentication.ServiceCredenti
 		}
 	}
 	return append(credentials, additional...), dashboard.ID, nil
+}
+
+var errInvalidServiceCredentials = errors.New("invalid service credentials")
+
+func decodeServiceCredentials(raw string) ([]authentication.ServiceCredential, error) {
+	var entries []json.RawMessage
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	if !utf8.ValidString(raw) || decoder.Decode(&entries) != nil || entries == nil || decoder.Decode(new(json.RawMessage)) != io.EOF {
+		return nil, errInvalidServiceCredentials
+	}
+	credentials := make([]authentication.ServiceCredential, 0, len(entries))
+	for _, entry := range entries {
+		credential, err := decodeServiceCredential(entry)
+		if err != nil {
+			return nil, err
+		}
+		credentials = append(credentials, credential)
+	}
+	return credentials, nil
+}
+
+// encoding/json matches field names case-insensitively and lets a repeated
+// key overwrite an earlier one, so "id" and "ID" in one object could bind one
+// service's secrets to another service's ID. Check the keys exactly first.
+func decodeServiceCredential(entry json.RawMessage) (authentication.ServiceCredential, error) {
+	decoder := json.NewDecoder(bytes.NewReader(entry))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return authentication.ServiceCredential{}, errInvalidServiceCredentials
+	}
+	seen := make(map[string]bool, 3)
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || seen[key] || (key != "id" && key != "secrets" && key != "scopes") {
+			return authentication.ServiceCredential{}, errInvalidServiceCredentials
+		}
+		seen[key] = true
+		if err := decoder.Decode(new(json.RawMessage)); err != nil {
+			return authentication.ServiceCredential{}, errInvalidServiceCredentials
+		}
+	}
+	var credential authentication.ServiceCredential
+	if err := json.Unmarshal(entry, &credential); err != nil {
+		return authentication.ServiceCredential{}, errInvalidServiceCredentials
+	}
+	return credential, nil
 }
 
 func validateServiceCredential(credential authentication.ServiceCredential, systemToken string, ids map[string]bool, secretOwners map[string]string) error {
@@ -70,8 +117,10 @@ func validateServiceCredential(credential authentication.ServiceCredential, syst
 	return nil
 }
 
+// Bearer parsing trims Unicode whitespace, so a secret containing any would be
+// compared against a different string than the one presented.
 func validServiceSecret(secret, systemToken string) bool {
-	return utf8.ValidString(secret) && utf8.RuneCountInString(secret) >= 32 && !apikeys.LooksLikeRawKey(secret) && secret != systemToken && !strings.ContainsAny(secret, " \t\r\n")
+	return utf8.ValidString(secret) && utf8.RuneCountInString(secret) >= 32 && !apikeys.LooksLikeRawKey(secret) && secret != systemToken && strings.IndexFunc(secret, unicode.IsSpace) < 0
 }
 
 func loadServicePrincipal(systemToken string) (authentication.ServiceCredential, error) {

@@ -123,6 +123,30 @@ func TestServicePrincipalTenantIsolation(t *testing.T) {
 			do(t, test.method, test.path, secretB, test.body, http.StatusForbidden)
 		})
 	}
+	t.Run("scopes limit a service on its own Tenant", func(t *testing.T) {
+		const readOnlyA = "test-service-a-read-only"
+		readOnly := options
+		readOnly.ServicePrincipals = []authentication.ServiceCredential{{ID: serviceA, Secrets: []string{readOnlyA}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead}}}
+		readOnlyRouter := httpapi.NewRouter(readOnly)
+		for _, test := range []struct {
+			name, method, path, body string
+			status                   int
+		}{
+			{"read", http.MethodGet, aPath, "", http.StatusOK},
+			{"update", http.MethodPatch, aPath, `{"cors_allowed_origins":["https://example.test"]}`, http.StatusForbidden},
+			{"mint API key", http.MethodPost, aPath + "/api-keys", `{"name":"Service key","scopes":["tenants:read"],"expires_at":"` + expires + `"}`, http.StatusForbidden},
+		} {
+			request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			request.Header.Set("Authorization", "Bearer "+readOnlyA)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Idempotency-Key", "service-read-only-0001")
+			response := httptest.NewRecorder()
+			readOnlyRouter.ServeHTTP(response, request)
+			if response.Code != test.status {
+				t.Errorf("read-only %s: status=%d, want %d", test.name, response.Code, test.status)
+			}
+		}
+	})
 	t.Run("unknown secret", func(t *testing.T) {
 		do(t, http.MethodGet, aPath, "test-service-unknown-secret", "", http.StatusUnauthorized)
 	})
