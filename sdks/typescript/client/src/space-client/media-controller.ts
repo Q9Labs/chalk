@@ -19,7 +19,8 @@ import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions, SpaceSnapshot } from "./types";
-import { AudioPlayback, type AudioContextObservation, type AudioElementObservation } from "./audio-playback";
+import { createMediaAudioPlayback, type MediaAudioPlaybackEffects } from "./media-audio-playback";
+import type { CameraOwner, CameraState } from "./camera-state";
 const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
@@ -98,19 +99,7 @@ type CaptureRollback = {
   readonly source: MediaSource;
   readonly track: MediaStreamTrack | null;
 };
-type CameraOwner = {
-  readonly result: Deferred.Deferred<MediaStreamTrack, unknown>;
-  readonly cancel: () => void;
-  references: number;
-};
-type CameraState =
-  | { readonly status: "idle" | "ended" }
-  | { readonly status: "capturing"; readonly owner: CameraOwner }
-  | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
-export type MediaControllerEffects = {
-  readonly observeAudioElement: (track: MediaStreamTrack, element: HTMLAudioElement) => AudioElementObservation;
-  readonly observeAudioContext: (context: AudioContext) => AudioContextObservation;
-  readonly resumeAudioPlayback: () => ClientEffect<void>;
+export type MediaControllerEffects = MediaAudioPlaybackEffects & {
   readonly configure: (
     intent: Readonly<{
       microphone?: boolean;
@@ -195,7 +184,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribePorts: (() => void) | null = null;
   #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
-  readonly #playback: AudioPlayback;
+  readonly #playback = createMediaAudioPlayback(
+    () => this.#ports?.media,
+    () => this.#publish(),
+  );
   #microphoneMutedByOtherDevice = false;
   #ownMicrophoneOff = false;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: ScopedFork<Clock.Clock>) {
@@ -216,10 +208,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (this.#ports) this.#pausePublication(this.#ports, source, revision, "projection_mismatch");
       },
     });
-    this.#playback = new AudioPlayback({
-      observeElement: (track, element) => this.#ports?.media.observeAudioElement?.(track, element) ?? { played: () => {}, detach: () => {} },
-      changed: () => this.#publish(),
-    });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
     this.#unsubscribeScreenEnded = connection.subscribeScreenEnded(() => this.#handleScreenEnded());
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
@@ -233,9 +221,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.microphone !== undefined) this.#recordIntent("microphone", intent.microphone);
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
-  observeAudioElement = (track: MediaStreamTrack, element: HTMLAudioElement): AudioElementObservation => this.#playback.observeElement(track, element);
-  observeAudioContext = (context: AudioContext): AudioContextObservation => this.#playback.observeAudioContext(context);
-  resumeAudioPlayback = (): ClientEffect<void> => foreign(() => this.#playback.resume()).pipe(Effect.mapError(normalizeMediaError));
+  observeAudioElement = this.#playback.observeAudioElement;
+  observeAudioContext = this.#playback.observeAudioContext;
+  resumeAudioPlayback = this.#playback.resumeAudioPlayback;
   consumeOwnMicrophoneOff = (): boolean => {
     const own = this.#ownMicrophoneOff;
     this.#ownMicrophoneOff = false;

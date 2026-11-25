@@ -2,7 +2,7 @@ import { checkDocExamples } from "./docs-examples.mjs";
 import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { proveAgreementMatrix } from "./agreement.mjs";
-import { installAgreementProbe } from "../../../scripts/web-proof/agreement.mjs";
+import { verifyStrictAutoplayUnlock } from "./strict-autoplay.mjs";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createRequire } from "node:module";
@@ -95,10 +95,10 @@ try {
           if (!arguments_.has("--agreement-only")) {
             await proveToastLayering(browser, baseURL);
             if (browserName === "chromium") {
-              if (arguments_.has("--autoplay-only")) await verifyStrictAutoplayUnlock(baseURL, executablePath);
+              if (arguments_.has("--autoplay-only")) await verifyStrictAutoplayUnlock(baseURL, executablePath, { chromium, invoke, waitForState });
               else {
                 await runChromiumMatrix(browser, baseURL, tenantAPIKey);
-                await verifyStrictAutoplayUnlock(baseURL, executablePath);
+                await verifyStrictAutoplayUnlock(baseURL, executablePath, { chromium, invoke, waitForState });
               }
             } else await runLaunchSmoke(browser, browserName, baseURL);
           }
@@ -150,129 +150,6 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
     await verifyServerState(baseURL, secretMarker);
   } finally {
     await Promise.all([alice.context.close(), bob.context.close()]);
-  }
-}
-
-async function verifyStrictAutoplayUnlock(baseURL, executablePath) {
-  process.stdout.write("[autoplay] launching Chromium with document-user-activation-required\n");
-  const strictBrowser = await chromium.launch({ headless: true, args: ["--autoplay-policy=document-user-activation-required"], ...(executablePath ? { executablePath } : {}) });
-  const sender = await openStrictParticipant(strictBrowser, baseURL, "carol", "dark", false);
-  const receivers = [
-    { key: "desktop-dark", participant: "dan", width: 1440, height: 900, theme: "dark" },
-    { key: "mobile-dark", participant: "erin", width: 390, height: 760, theme: "dark" },
-    { key: "desktop-light", participant: "finn", width: 1440, height: 900, theme: "light" },
-    { key: "mobile-light", participant: "gail", width: 390, height: 760, theme: "light" },
-  ];
-  for (const receiver of receivers) {
-    receiver.session = await openStrictParticipant(strictBrowser, baseURL, receiver.participant, receiver.theme, true);
-    await receiver.session.page.setViewportSize({ width: receiver.width, height: receiver.height });
-    receiver.cdp = receiver.session.cdp;
-  }
-  try {
-    // The sender's synthetic microphone is produced through an AudioContext, so
-    // activate only that page. Receivers auto-join on load and are inspected only
-    // through userGesture:false CDP evaluation until the real proof click.
-    await sender.page.mouse.click(5, 5);
-    await invoke(sender.page, "join");
-    await waitForState(sender.page, "live");
-    // Chalk auto-joins the sender before the test can click, so resume its fixture
-    // capture context after that real activation.
-    await invoke(sender.page, "resumeAudioContexts");
-    for (const receiver of receivers) await waitForStrictPrompt(receiver);
-    await captureStrictScreenshots(receivers);
-
-    await proveStrictGesture(receivers[0]);
-  } finally {
-    const sessions = [sender, ...receivers.map(({ session }) => session)].filter(Boolean);
-    await Promise.allSettled(sessions.map(({ page }) => invoke(page, "leave")));
-    await Promise.allSettled(sessions.map(({ page }) => invoke(page, "dispose")));
-    await Promise.allSettled(sessions.map(({ context }) => context.close()));
-    await strictBrowser.close();
-  }
-}
-
-async function proveStrictGesture(receiver) {
-  const proof = receiver;
-  const beforeClick = await evaluateNoGesture(proof.cdp, `window.__agreementAudio.filter((audio) => audio.srcObject).map((audio) => ({ paused: audio.paused, muted: audio.muted }))`);
-  if (!beforeClick.some((audio) => audio.paused)) throw new TypeError(`Strict-autoplay receiver had no paused remote audio before the gesture: ${JSON.stringify(beforeClick)}`);
-  const promptBox = await evaluateNoGesture(
-    proof.cdp,
-    `(() => { const button = [...document.querySelectorAll("button")].find((element) => element.textContent === "Tap to turn on sound"); if (!button) return null; const box = button.getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 }; })()`,
-  );
-  if (!promptBox) throw new TypeError("Strict-autoplay prompt disappeared before the proof click");
-  await proof.session.page.mouse.click(promptBox.x, promptBox.y);
-  await waitForNoGesture(proof.cdp, `window.__chalk.snapshot().audioPlayback.blocked === false`, 10_000, "desktop-dark unblocked state");
-  await waitForNoGesture(proof.cdp, `window.__agreementAudio.some((audio) => audio.srcObject && !audio.paused && !audio.muted)`, 10_000, "desktop-dark playing element");
-  await waitForNoGesture(proof.cdp, `!document.body.textContent.includes("Tap to turn on sound")`, 10_000, "desktop-dark prompt removal");
-  const energy = await evaluateNoGesture(
-    proof.cdp,
-    `(async () => {
-    const audio = window.__agreementAudio.findLast((element) => element.dataset.participantId === "carol" && element.srcObject && !element.paused && !element.muted);
-    if (!audio) return 0;
-    const context = new AudioContext();
-    await context.resume();
-    const source = context.createMediaStreamSource(audio.srcObject);
-    const analyser = context.createAnalyser();
-    source.connect(analyser);
-    const samples = new Float32Array(analyser.fftSize);
-    let energy = 0;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      analyser.getFloatTimeDomainData(samples);
-      energy = Math.max(energy, samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
-    }
-    source.disconnect();
-    await context.close();
-    return energy;
-  })()`,
-  );
-  if (energy <= 0.00001) throw new TypeError(`Strict-autoplay receiver recovered no microphone energy after the gesture: ${energy}`);
-  process.stdout.write(`[autoplay] strict gesture recovery passed; microphone energy ${energy}\n`);
-}
-
-async function waitForStrictPrompt(receiver) {
-  await waitForNoGesture(receiver.cdp, `document.body.textContent.includes("Tap to turn on sound")`, 10_000, `${receiver.key} prompt`);
-  const blocked = await evaluateNoGesture(receiver.cdp, `window.__chalk.snapshot().audioPlayback.blocked`);
-  if (blocked !== true) throw new TypeError(`${receiver.key} showed the prompt without the client blocked state`);
-}
-
-async function captureStrictScreenshots(receivers) {
-  if (!process.env.CHALK_E2E_ARTIFACTS) return;
-  await mkdir(process.env.CHALK_E2E_ARTIFACTS, { recursive: true });
-  for (const receiver of receivers) await receiver.session.page.screenshot({ path: join(process.env.CHALK_E2E_ARTIFACTS, `autoplay-${receiver.key}.png`) });
-}
-
-async function openStrictParticipant(browser, baseURL, participant, theme, autojoin) {
-  const context = await browser.newContext();
-  await context.addInitScript(installAgreementProbe);
-  const page = await context.newPage();
-  const cdp = await context.newCDPSession(page);
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error));
-  await page.goto(`${baseURL}/?fixtureUser=${participant}&theme=${theme}${autojoin ? "&autojoin=1" : ""}`);
-  await waitForNoGesture(cdp, `Boolean(window.__chalk)`, 10_000, `${participant} harness`);
-  if (errors.length) throw errors[0];
-  return { context, page, cdp };
-}
-
-async function evaluateNoGesture(cdp, expression) {
-  const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, userGesture: false });
-  if (result.exceptionDetails) throw new TypeError(`Strict-autoplay evaluation failed: ${result.exceptionDetails.text}`);
-  return result.result.value;
-}
-
-async function waitForNoGesture(cdp, expression, timeoutMs, label) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    if (await evaluateNoGesture(cdp, expression)) return;
-    if (Date.now() > deadline) {
-      const state = await evaluateNoGesture(
-        cdp,
-        `({ text: document.body.textContent, activation: { isActive: navigator.userActivation.isActive, hasBeenActive: navigator.userActivation.hasBeenActive }, playback: window.__chalk?.snapshot().audioPlayback, remote: window.__chalk?.snapshot().remoteMedia, audio: window.__agreementAudio?.map((element) => ({ participant: element.dataset.participantId, paused: element.paused, hasStream: Boolean(element.srcObject) })) })`,
-      ).catch((error) => String(error));
-      throw new TypeError(`Timed out waiting for ${label}: ${JSON.stringify(state)}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
 
@@ -334,15 +211,15 @@ async function verifyPairJoined(alice, bob) {
   await Promise.all([waitForState(alice, "live"), waitForState(bob, "live")]);
   await Promise.all([
     waitFor(alice, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantId === "bob" && item.source === "camera" && item.readyState === "live")),
-    waitFor(bob, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantId === "carol" && item.source === "camera" && item.readyState === "live")),
+    waitFor(bob, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "camera" && item.readyState === "live")),
   ]);
 }
 
 async function verifyScreenShare(alice, bob) {
   await invoke(alice, "startScreenShare");
-  await waitFor(bob, (snapshot) => snapshot.remoteMedia.some((item) => item.participantId === "carol" && item.source === "screen" && item.readyState === "live"));
+  await waitFor(bob, (snapshot) => snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "screen" && item.readyState === "live"));
   await invoke(alice, "stopScreenShare");
-  await waitFor(bob, (snapshot) => !snapshot.remoteMedia.some((item) => item.participantId === "carol" && item.source === "screen"));
+  await waitFor(bob, (snapshot) => !snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "screen"));
 }
 
 async function verifyRecovery(alice, bob, baseURL) {
