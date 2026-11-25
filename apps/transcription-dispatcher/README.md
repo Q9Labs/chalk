@@ -1,8 +1,8 @@
 # Transcription dispatcher
 
-The private Node 22 Lambda package for scale-to-zero transcription. It claims fenced jobs through the recorder control API, reads only job-scoped R2 URLs, invokes one provider at a time, and conditionally writes one normalized `transcript.v1` JSON document. Provider responses, audio, display names, URLs, object keys and tokens are never logged or persisted.
+The private Node 22 Lambda package for scale-to-zero transcription. It claims fenced jobs through the recorder control API, reads only job-scoped R2 URLs, calls OpenRouter for speech, and conditionally writes one normalized `transcript.v1` JSON document. Provider responses, audio, display names, URLs, object keys and tokens are never logged or persisted.
 
-The package fails closed unless the environment supplies provider policy bounds, the privacy gate and qualification evidence for each enabled provider (the package's `src/config.ts` lists them). DeepInfra is omitted entirely when `DEEPINFRA_ENABLED=false`.
+The package fails closed unless the environment supplies the OpenRouter and workload credentials, provider bounds, and an accepted privacy gate. See [runtime configuration](src/config.ts).
 
 Check it with `pnpm --dir apps/transcription-dispatcher run check-types` and `run test`. The tests use injected fetch, control and provider boundaries, so they prove no live provider qualification, quota, DPA or production credentials. Release scripts are in `scripts/transcription-dispatcher/README.md`.
 
