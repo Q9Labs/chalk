@@ -19,7 +19,7 @@
     },
     "s-2vcpu-2gb": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "768MiB",
       "containerMemory": "1400m",
       "capture": {
@@ -30,7 +30,7 @@
     },
     "s-2vcpu-2gb-amd": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "768MiB",
       "containerMemory": "1400m",
       "capture": {
@@ -41,7 +41,7 @@
     },
     "s-2vcpu-2gb-intel": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "768MiB",
       "containerMemory": "1400m",
       "capture": {
@@ -52,7 +52,7 @@
     },
     "s-2vcpu-4gb": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "1536MiB",
       "containerMemory": "2800m",
       "capture": {
@@ -63,7 +63,7 @@
     },
     "s-2vcpu-4gb-amd": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "1536MiB",
       "containerMemory": "2800m",
       "capture": {
@@ -74,7 +74,7 @@
     },
     "s-2vcpu-4gb-intel": {
       "vcpus": 2,
-      "packetBudget": 46650,
+      "packetBudget": 37320,
       "goMemLimit": "1536MiB",
       "containerMemory": "2800m",
       "capture": {
@@ -85,7 +85,7 @@
     },
     "s-4vcpu-8gb": {
       "vcpus": 4,
-      "packetBudget": 93300,
+      "packetBudget": 83970,
       "goMemLimit": "3GiB",
       "containerMemory": "5600m",
       "capture": {
@@ -96,7 +96,7 @@
     },
     "s-4vcpu-8gb-amd": {
       "vcpus": 4,
-      "packetBudget": 93300,
+      "packetBudget": 83970,
       "goMemLimit": "3GiB",
       "containerMemory": "5600m",
       "capture": {
@@ -107,7 +107,7 @@
     },
     "s-4vcpu-8gb-intel": {
       "vcpus": 4,
-      "packetBudget": 93300,
+      "packetBudget": 83970,
       "goMemLimit": "3GiB",
       "containerMemory": "5600m",
       "capture": {

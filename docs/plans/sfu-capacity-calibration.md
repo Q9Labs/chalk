@@ -30,14 +30,22 @@ Failures worth remembering:
 
 The bench re-measured capacity with the recorder capture shape included: three participants, one
 screen share, and one capture session pulling every microphone, camera and screen. One such class
-reserves 9,330 packets/s (7,170 unrecorded plus 2,160 of capture pulls) and costs about 12% of one
-vCPU in SFU forwarding, measured on three sizes. The sizing model above is unchanged; applying it to
-the measured cost gives 2.5 recorded classes per vCPU: `s-2vcpu-2gb` admits 5 recorded classes at
-46,650, `s-4vcpu-8gb` 10 at 93,300 and `s-8vcpu-16gb` 19 at 177,270, the last capped by measurement
-below the model's 20. Note what the old budget meant in practice: 36,000 never admitted a fourth
-recorded class (4 x 9,330 = 37,320), so an all-recorded node carried 3, not the assumed 4. Clean-bench
-ceilings without steal run higher - 8+ on 2 vCPUs, 13 proven on 4, 19 on 8 - but those counts sit in
-the burst-stall zone this document sizes against. Evidence and analysis: the 2026-11-25 droplet-size
+reserves 9,330 packets/s (7,170 unrecorded plus 2,160 of capture pulls). Forwarding cost is not
+linear in class count: fixed node overhead dominates at low counts (1 class reads 22% of a vCPU on a
+2 vCPU node) while the marginal class at high count costs less, so the sizing model is applied to
+measured per-level totals, not a per-vCPU rate. The steal-hardened admission lines measured on three
+sizes (and reproduced within 1-2% across independent benches): `s-2vcpu-2gb` admits 4 recorded
+classes at 37,320 (30% own CPU, 62% utilization-of-available at 52% steal), `s-4vcpu-8gb` 9 at
+83,970 (exactly the 65% target), `s-8vcpu-16gb` 19 at 177,270 - the last capped by measurement, not
+the model, because the bench never proved 20 clean. Note what the old budget meant in practice:
+36,000 never admitted a fourth recorded class (4 x 9,330 = 37,320), so an all-recorded node carried
+3, not the assumed 4; raising the small-node budget to 37,320 makes admission consistent with the
+window controller's hard-coded SlotsPerNode of 4. Clean-bench ceilings without steal run far higher -
+8 proven on 2 vCPUs, 16 proven on the premium AMD variant of the same shape, 13 proven on 4 vCPUs,
+19 on 8 - but those counts sit at 78-138% utilization-of-available in a worst-case burst, squarely
+in the stall zone this document sizes against. The clearest demonstration came from the bench
+itself: a 2 vCPU node holding 12 classes at 62-66% own CPU stalled inside a 10-second host steal
+burst of 7-18%, exactly when utilization-of-available crossed the 75% onset. Evidence and analysis: the 2026-11-25 droplet-size
 frontier bench report; the capture worker's own decode/encode CPU is outside the SFU measurement.
 
 ## Not proved

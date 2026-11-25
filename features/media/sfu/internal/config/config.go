@@ -135,9 +135,11 @@ type Guard struct {
 // classes as keep the node's own CPU under about 65% of what its vCPUs deliver at the worst steal
 // seen (52% over 10 s). A 3-person, 2-camera class reserves 7170 packets/s unrecorded and 9330 with
 // a recorder capture pulling every track; measured SFU forwarding costs about 12% of one vCPU per
-// recorded class, so the steal-hardened line is 2.5 recorded classes per vCPU: 46650 admits 5 on
-// 2 vCPUs, 93300 10 on 4 and 177270 19 on 8, the last capped by measurement below the model's 20
-// (docs/plans/sfu-capacity-calibration.md).
+// recorded class at high occupancy. Per-class cost is not linear: fixed node overhead dominates at
+// low counts, so the steal-hardened admission line is measured per size, not derived per vCPU —
+// 37320 admits 4 recorded classes on 2 vCPUs (62% utilization-of-available at worst-case steal),
+// 83970 9 on 4 (65%, the target line) and 177270 19 on 8, the last capped by measurement below the
+// model because the bench never proved 20 clean (docs/plans/sfu-capacity-calibration.md).
 // Production closes admission to new Episodes at 40% steal; the other environments keep 25 so the
 // guard stays easy to exercise there.
 //
