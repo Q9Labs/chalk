@@ -1,5 +1,5 @@
-import type { ActiveReaction, ChatMessage, ChatSendInput, Reaction, SpaceSnapshot } from "@q9labsai/chalk-client";
-import { applyRosterCommand } from "./preview-roster-commands";
+import type { ActiveReaction, ChatMessage, ChatReactionInput, ChatSendInput, Reaction, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { applyRosterCommand, type PreviewRosterCommand } from "./preview-roster-commands";
 import type { PreviewClientCommand } from "./preview-client";
 
 export function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientCommand): SpaceSnapshot {
@@ -22,32 +22,33 @@ export function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewCli
           },
         },
       };
-    case "setMicrophoneEnabled":
-      return updateLocalMedia(snapshot, "microphone", command.enabled);
-    case "setCameraEnabled":
-      return updateLocalMedia(snapshot, "camera", command.enabled);
-    case "reactToMessage": {
-      const participantId = snapshot.self.participantId;
-      if (!participantId) return snapshot;
-      const messages = snapshot.chat.messages.map((message) => {
-        if (message.messageId !== command.input.messageId) return message;
-        const reactions = message.reactions ?? [];
-        const existing = reactions.find((reaction) => reaction.emoji === command.input.emoji);
-        const ids = existing?.participantIds ?? [];
-        if (ids.includes(participantId) === command.input.on) return message;
-        const participantIds = command.input.on ? [...ids, participantId] : ids.filter((id) => id !== participantId);
-        const next = reactions.filter((reaction) => reaction.emoji !== command.input.emoji);
-        if (participantIds.length) next.push({ emoji: command.input.emoji, count: participantIds.length, participantIds });
-        return { ...message, reactions: next, reactionRevision: String(BigInt(message.reactionRevision ?? "0") + 1n) };
-      });
-      return { ...snapshot, chat: { ...snapshot.chat, messages } };
-    }
-    case "setScreenShareEnabled":
-      return updateScreenShare(snapshot, command.enabled);
+    case "reactToMessage":
+      return reactToPreviewMessage(snapshot, command.input);
     case "startRecording":
       return { ...snapshot, recording: { current: { recordingId: command.recordingId, status: "recording", failureCode: null } } };
     case "stopRecording":
       return snapshot.recording.current ? { ...snapshot, recording: { current: { ...snapshot.recording.current, status: "stopped" } } } : snapshot;
+    case "renameSelf":
+      return { ...snapshot, self: { ...snapshot.self, displayName: command.displayName } };
+    case "sendChat":
+      return addPendingChat(snapshot, command.input);
+    case "markChatRead":
+      return { ...snapshot, chat: { ...snapshot.chat, unreadCount: 0 } };
+    default:
+      return applyPreviewMediaCommand(snapshot, command);
+  }
+}
+
+type PreviewMediaCommand = Extract<PreviewClientCommand, { readonly type: "setMicrophoneEnabled" | "setCameraEnabled" | "setScreenShareEnabled" | "selectMicrophone" | "selectCamera" | "selectSpeaker" | "acceptRequest" | "declineRequest" | "raiseHand" | "lowerHand" | "sendReaction" }>;
+
+function applyPreviewMediaCommand(snapshot: SpaceSnapshot, command: PreviewMediaCommand | PreviewRosterCommand): SpaceSnapshot {
+  switch (command.type) {
+    case "setMicrophoneEnabled":
+      return updateLocalMedia(snapshot, "microphone", command.enabled);
+    case "setCameraEnabled":
+      return updateLocalMedia(snapshot, "camera", command.enabled);
+    case "setScreenShareEnabled":
+      return updateScreenShare(snapshot, command.enabled);
     case "selectMicrophone":
       return { ...snapshot, media: { ...snapshot.media, selection: { ...snapshot.media.selection, microphone: command.deviceId } } };
     case "selectCamera":
@@ -61,17 +62,28 @@ export function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewCli
     case "raiseHand":
     case "lowerHand":
       return { ...snapshot, self: { ...snapshot.self, handRaised: command.type === "raiseHand" } };
-    case "renameSelf":
-      return { ...snapshot, self: { ...snapshot.self, displayName: command.displayName } };
     case "sendReaction":
       return { ...snapshot, reactions: { active: [...snapshot.reactions.active, createPreviewReaction(snapshot, command.reaction)] } };
-    case "sendChat":
-      return addPendingChat(snapshot, command.input);
-    case "markChatRead":
-      return { ...snapshot, chat: { ...snapshot.chat, unreadCount: 0 } };
     default:
       return applyRosterCommand(snapshot, command);
   }
+}
+
+function reactToPreviewMessage(snapshot: SpaceSnapshot, input: ChatReactionInput): SpaceSnapshot {
+  const participantId = snapshot.self.participantId;
+  if (!participantId) return snapshot;
+  const messages = snapshot.chat.messages.map((message) => {
+    if (message.messageId !== input.messageId) return message;
+    const reactions = message.reactions ?? [];
+    const existing = reactions.find((reaction) => reaction.emoji === input.emoji);
+    const ids = existing?.participantIds ?? [];
+    if (ids.includes(participantId) === input.on) return message;
+    const participantIds = input.on ? [...ids, participantId] : ids.filter((id) => id !== participantId);
+    const next = reactions.filter((reaction) => reaction.emoji !== input.emoji);
+    if (participantIds.length) next.push({ emoji: input.emoji, count: participantIds.length, participantIds });
+    return { ...message, reactions: next, reactionRevision: String(BigInt(message.reactionRevision ?? "0") + 1n) };
+  });
+  return { ...snapshot, chat: { ...snapshot.chat, messages } };
 }
 
 function updateLocalMedia(snapshot: SpaceSnapshot, source: "microphone" | "camera", enabled: boolean): SpaceSnapshot {
