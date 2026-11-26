@@ -1,16 +1,16 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
-import { browserAllowsMediaAutoplay } from "./browser-autoplay";
+import { browserAllowsAutomaticEntry } from "./browser-autoplay";
 import { entranceAutoplayDecision } from "./entrance-autoplay";
 import { useTheme } from "../../lib/theme-context";
 import { arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, preconnect, readReloadRejoin, readSpaceInviteToken, type JoinOptions } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
-import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
+import type { ReportProblem } from "../../lib/send-problem-report";
 import { arriveAtSpace, arrivalEvent, leaveArrival, reArrive, resumeReloadOutcome } from "./arrival";
 import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, resumeFailure } from "./entry-failure";
@@ -60,7 +60,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const { mode } = useTheme();
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
+  const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string; reportExpiresAt: number | undefined } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
   const [reloadMarker] = useState(() => {
     const routeKey = slug ?? inviteCode;
@@ -83,9 +83,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   });
   // A visitor who already chose devices in this browser skips the device step and joins with that choice.
   const [rememberedDevices] = useState(() => readRememberedDevices());
-  const [autoplayAllowed] = useState(browserAllowsMediaAutoplay);
-  const automated = globalThis.navigator?.webdriver === true;
-  const autoplayEntry = entranceAutoplayDecision({ autoplayAllowed, automated, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
+  const [automaticEntry] = useState(browserAllowsAutomaticEntry);
+  const autoplayEntry = entranceAutoplayDecision({ automaticEntry, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
   const resumeAutomatically = autoplayEntry === "resume";
   const rememberedAutoArrival = autoplayEntry === "arrive";
   const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: resumeAutomatically, stepOpen: !resumeAutomatically && !rememberedAutoArrival }));
@@ -97,12 +96,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const nameEdited = useRef(false);
   const [callSurface, setCallSurface] = useState<typeof CallSurface | null>(null);
   const session = entrance.phase === "admitted" ? entrance.joined.session : undefined;
-  const subscribeReportAccess = useCallback((listener: () => void) => session?.subscribe(listener) ?? (() => undefined), [session]);
-  const reportAccessExpiry = useCallback(() => session?.mediaExpiresAt(), [session]);
-  const liveReportExpiresAt = useSyncExternalStore(subscribeReportAccess, reportAccessExpiry, reportAccessExpiry);
   const ended = entrance.phase === "ended" ? entrance.call : undefined;
-  const reportExpired = useReportCredentialExpired(ended?.reportExpiresAt ?? liveReportExpiresAt);
-  const reportsAvailable = useProblemReports(publicAPIBaseURL(), session?.reloadMarker().tenantId ?? ended?.tenantId);
   const active = useRef(true);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ ...(entranceSettings ?? devicesOff), displayName }), [displayName, entranceSettings]);
   useEffect(() => {
@@ -291,17 +285,14 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const renderSurface = () => {
     if (entrance.phase === "ended" && callSurface) {
       const { call, rejoining, failure, attempt } = entrance;
-      const { StatusSurface, statusFailure } = callSurface;
+      const { EndedStatusSurface } = callSurface;
       return (
         <main className="relative h-full">
-          <StatusSurface
-            phase={call.phase}
-            episodeEndReason={call.endReason}
+          <EndedStatusSurface
+            call={call}
             endAction={call.offerSignUp ? { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") } : undefined}
-            callName={call.callName}
-            {...statusFailure(call.failure)}
             theme={{ colorScheme: mode }}
-            onReportProblem={reportsAvailable && call.reportProblem && !reportExpired ? () => setReportOpen(true) : undefined}
+            onOpenReportProblem={() => setReportOpen(true)}
             rejoinDisabled={rejoining}
             onRejoin={() => start(settings)}
             onHome={() => {
@@ -324,10 +315,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       return (
         <LocalSpace
           admission={entrance.joined}
-          reportsAvailable={reportsAvailable}
-          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
-          onOpenReportProblem={(send, diagnostics) => {
-            setReportDialog({ send, diagnostics });
+          onOpenReportProblem={(send, diagnostics, reportExpiresAt) => {
+            setReportDialog({ send, diagnostics, reportExpiresAt });
             setReportOpen(true);
           }}
           displayName={settings.displayName}
@@ -387,8 +376,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     <div ref={reportFocusScope} className="contents">
       {renderSurface()}
       {sendReport && callSurface ? (
-        <callSurface.ReportProblemDialog
-          unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
+        <callSurface.SpaceReportProblemDialog
+          tenantId={ended?.tenantId ?? session?.reloadMarker().tenantId}
+          reportExpiresAt={ended?.reportExpiresAt ?? reportDialog?.reportExpiresAt}
           diagnostics={ended ? callSurface.reportDiagnostics(ended.callName ?? "Call", { status: ended.phase, lastError: ended.failure }) : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}

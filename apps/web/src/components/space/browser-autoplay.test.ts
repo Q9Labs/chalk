@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { browserAllowsMediaAutoplay } from "./browser-autoplay";
+import { browserAllowsAutomaticEntry } from "./browser-autoplay";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,7 +13,7 @@ it("treats an audio probe construction failure as sound blocked", () => {
     },
   );
 
-  expect(browserAllowsMediaAutoplay()).toBe(false);
+  expect(browserAllowsAutomaticEntry()).toBe(false);
 });
 
 it("uses the probe context state and ignores a close rejection", () => {
@@ -27,5 +27,12 @@ it("uses the probe context state and ignores a close rejection", () => {
     },
   );
 
-  expect(browserAllowsMediaAutoplay()).toBe(true);
+  expect(browserAllowsAutomaticEntry()).toBe(true);
+});
+
+it("keeps unattended entry for an automated browser even when sound is blocked", () => {
+  vi.stubGlobal("navigator", { webdriver: true });
+  vi.stubGlobal("AudioContext", undefined);
+
+  expect(browserAllowsAutomaticEntry()).toBe(true);
 });
