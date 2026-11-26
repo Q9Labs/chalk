@@ -130,7 +130,13 @@ test("container artifact reads stay internal without changing browser download U
   assert.equal(internal.hostname, "127.0.0.1");
   assert.equal(internal.port, String(config.ports.web));
   const args = containerArguments(config, "api", { image: "test", env });
-  assert.ok(args.includes(`type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts`));
+  // The API container's artifact server writes local object bytes and rendered pages through this bind mount.
+  const writableMount = `type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts`;
+  assert.deepEqual(
+    args.filter((argument) => argument.includes("target=/dashboard-artifacts")),
+    [writableMount],
+    "the local artifact server requires a writable dashboard artifact mount",
+  );
   for (let index = 0; index < args.length; index++) if (args[index] === "--publish") assert.ok(args[index + 1].startsWith("127.0.0.1:"));
   assert.equal(internal.pathname, "/__local-dashboard-artifacts");
   const remote = containerEnvironment(config, "api", { CHALK_R2_ENDPOINT: "https://artifacts.example.test" });
