@@ -2,7 +2,7 @@ import { checkDocExamples } from "./docs-examples.mjs";
 import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { proveAgreementMatrix } from "./agreement.mjs";
-import { verifyStrictAutoplayUnlock } from "./strict-autoplay.mjs";
+import { runChromiumEntry } from "./chromium-entry.mjs";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createRequire } from "node:module";
@@ -94,13 +94,7 @@ try {
         try {
           if (!arguments_.has("--agreement-only")) {
             await proveToastLayering(browser, baseURL);
-            if (browserName === "chromium") {
-              if (arguments_.has("--autoplay-only")) await verifyStrictAutoplayUnlock(baseURL, executablePath, { chromium, invoke, waitForState });
-              else {
-                await runChromiumMatrix(browser, baseURL, tenantAPIKey);
-                await verifyStrictAutoplayUnlock(baseURL, executablePath, { chromium, invoke, waitForState });
-              }
-            } else await runLaunchSmoke(browser, browserName, baseURL);
+            if (browserName === "chromium") await runChromiumEntry(browser, baseURL, tenantAPIKey, { autoplayOnly: arguments_.has("--autoplay-only"), runMatrix: runChromiumMatrix, executablePath, autoplayHelpers: { chromium, invoke, waitForState } }); else await runLaunchSmoke(browser, browserName, baseURL);
           }
           if (browserName !== "firefox") {
             process.stdout.write(`[agreement] browser=${browserName}${browserName === "webkit" ? " profile=iPad Pro 11" : ""}\n`);
@@ -319,14 +313,12 @@ async function runLaunchSmoke(browser, browserName, baseURL) {
   }
 }
 
-async function openParticipant(browser, baseURL, participant, agreementProbe = false, theme) {
+async function openParticipant(browser, baseURL, participant) {
   const context = await browser.newContext();
-  if (agreementProbe) await context.addInitScript(installAgreementProbe);
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error));
   await page.goto(`${baseURL}/test/login?user=${participant}`);
-  if (theme) await page.goto(`${baseURL}/?theme=${theme}`);
   await page.waitForFunction(() => Boolean(window.__chalk));
   if (errors.length) throw errors[0];
   return { context, page };
