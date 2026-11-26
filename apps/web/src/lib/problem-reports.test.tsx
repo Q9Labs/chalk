@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { useReportCredentialExpired } from "./problem-reports";
+import { useProblemReports, useReportCredentialExpired } from "./problem-reports";
 
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(async () => {
@@ -30,4 +30,27 @@ it("follows renewed report access after an earlier expiry", async () => {
   expect(document.body.textContent).toBe("true");
   await act(async () => root?.render(<Probe expiresAt={Date.now() + 60_000} />));
   expect(document.body.textContent).toBe("false");
+});
+
+function AvailabilityProbe({ enabled }: { readonly enabled: boolean }) {
+  useProblemReports("https://api.test", "tenant", enabled);
+  return null;
+}
+
+it("releases the report availability probe while the dialog is closed", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fetchMock = vi.fn(async () => Response.json({ available: true }));
+  vi.stubGlobal("fetch", fetchMock);
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+
+  await act(async () => root?.render(<AvailabilityProbe enabled={false} />));
+  expect(fetchMock).toHaveBeenCalledTimes(0);
+  await act(async () => root?.render(<AvailabilityProbe enabled={true} />));
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  await act(async () => root?.render(<AvailabilityProbe enabled={false} />));
+  window.dispatchEvent(new Event("online"));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });

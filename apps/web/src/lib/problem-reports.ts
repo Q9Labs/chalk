@@ -25,11 +25,11 @@ export function useReportCredentialExpired(expiresAt: number | undefined) {
  * Whether the call should offer "Report a problem". It stays true until the server answers that reports are
  * off, so a slow or failed probe never hides the item. A failed probe retries, and a send that fails shows its own error.
  */
-export function useProblemReports(baseURL: string, tenantId: string | undefined) {
+export function useProblemReports(baseURL: string, tenantId: string | undefined, enabled = true) {
   const [refused, setRefused] = useState(false);
   useEffect(() => {
     setRefused(false);
-    if (!tenantId) return;
+    if (!enabled || !tenantId) return;
     const controller = new AbortController();
     let failures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -69,6 +69,6 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       clearTimeout(timer);
       window.removeEventListener("online", online);
     };
-  }, [baseURL, tenantId]);
+  }, [baseURL, tenantId, enabled]);
   return !refused;
 }
