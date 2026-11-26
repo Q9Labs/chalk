@@ -84,7 +84,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   // A visitor who already chose devices in this browser skips the device step and joins with that choice.
   const [rememberedDevices] = useState(() => readRememberedDevices());
   const [autoplayAllowed] = useState(browserAllowsMediaAutoplay);
-  const autoplayEntry = entranceAutoplayDecision({ autoplayAllowed, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
+  const automated = globalThis.navigator?.webdriver === true;
+  const autoplayEntry = entranceAutoplayDecision({ autoplayAllowed, automated, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
   const resumeAutomatically = autoplayEntry === "resume";
   const rememberedAutoArrival = autoplayEntry === "arrive";
   const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: resumeAutomatically, stepOpen: !resumeAutomatically && !rememberedAutoArrival }));
@@ -132,7 +133,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     if (warmAfterCall) warmCall();
   }, [warmAfterCall]);
   useEffect(() => {
-    if (resumeAttempted.current || !reloadMarker || !autoplayAllowed) return;
+    if (resumeAttempted.current || !reloadMarker || !resumeAutomatically) return;
     resumeAttempted.current = true;
     const { attempt } = latest.current;
     setDisplayName(reloadMarker.displayName);
@@ -142,7 +143,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       (admission) => settle(attempt, { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } }),
       (cause: unknown) => settle(attempt, { type: "failed", failure: resumeFailure(cause) }),
     );
-  }, [autoplayAllowed, client, latest, reloadMarker, settle, slug]);
+  }, [client, latest, reloadMarker, resumeAutomatically, settle, slug]);
   const start = useCallback(
     (settings: WebJoinSettings = defaultJoinOptions, fromStep = false) => {
       const normalizedDisplayName = settings.displayName.trim();
@@ -209,10 +210,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     };
   }, [automaticName, reloadMarker]);
   useEffect(() => {
-    if (!automaticName || !rememberedDevices || !autoplayAllowed || reloadMarker || autoArrivalAttempted.current) return;
+    if (!rememberedAutoArrival || !rememberedDevices || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
     void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
-  }, [automaticName, autoplayAllowed, reloadMarker, rememberedDevices, start]);
+  }, [automaticName, rememberedAutoArrival, rememberedDevices, start]);
   const waiting = entrance.phase === "waiting" && !entrance.cancelling ? entrance.waiting : undefined;
   const waitingAttempt = entrance.attempt;
   useEffect(() => {

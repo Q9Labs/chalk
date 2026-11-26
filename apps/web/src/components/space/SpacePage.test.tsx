@@ -109,6 +109,24 @@ it("keeps the lobby open when reload autoplay evidence is blocked", async () => 
   await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
 });
 
+it("resumes a reload in an automated browser when autoplay evidence is blocked", async () => {
+  Object.defineProperty(globalThis.navigator, "webdriver", { configurable: true, value: true });
+  try {
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        readonly state = "suspended";
+        async close() {}
+      },
+    );
+    writeReloadRejoin(sessionStorage, marker);
+    await entry("access.media_proof_rejected");
+    await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));
+  } finally {
+    Reflect.deleteProperty(globalThis.navigator, "webdriver");
+  }
+});
+
 async function expectMessage(message: string) {
   await vi.waitFor(async () => {
     await act(async () => undefined);

@@ -7,6 +7,7 @@ import { incomingAudioLevel } from "../../../../scripts/web-proof/media.mjs";
 const waitMs = 30_000;
 const pollMs = 250;
 const remembered = (name, theme) => `(() => {
+  Object.defineProperty(navigator, "webdriver", { get: () => false });
   localStorage.setItem("chalk.display-name", ${JSON.stringify(name)});
   localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
   document.cookie = "chalk_theme=${theme}; path=/";
