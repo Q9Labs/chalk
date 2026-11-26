@@ -99,7 +99,7 @@ func TestResetWritableTempReturnsUndeletableEntryFailure(t *testing.T) {
 	if err := os.WriteFile(protectedPath, []byte("tenant bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	removeFailure := errors.New("simulated undeletable job file")
+	removeFailure := os.ErrPermission
 	err := resetWritableTempRemoving(root, func(path string) error {
 		if path == protectedPath {
 			return removeFailure
