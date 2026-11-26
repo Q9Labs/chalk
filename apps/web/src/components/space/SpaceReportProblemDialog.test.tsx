@@ -28,6 +28,7 @@ function inputText(element: HTMLTextAreaElement, value: string) {
 }
 
 function reportSession(participantGeneration: number): PublicSpaceAdmission["session"] {
+  const expiresAt = Date.now() + 60_000;
   return {
     getAccess: async () => {
       throw new Error("not used");
@@ -37,7 +38,7 @@ function reportSession(participantGeneration: number): PublicSpaceAdmission["ses
     },
     subscribe: () => () => undefined,
     mediaProof: () => "proof",
-    mediaExpiresAt: () => Date.now() + 60_000,
+    mediaExpiresAt: () => expiresAt,
     reloadMarker: () => ({ episodeId: "episode", participantId: "participant", participantGeneration, mediaProof: "proof", arrivalHandle: "arrival", tenantId: "tenant" }),
     leave: async () => undefined,
   };
@@ -61,6 +62,24 @@ it("drops an unsent report draft when a new admission opens the dialog", async (
   await act(async () => root?.render(dialog(1, false)));
   await act(async () => root?.render(dialog(2, true)));
   expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
+});
+
+it("keeps an unsent report draft when the live call ends", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("fetch", async () => Response.json({ available: true }));
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  const focusScope = { current: document.body };
+  const dialog = (session: PublicSpaceAdmission["session"] | undefined, reportKey?: string) => (
+    <SpaceReportProblemDialog tenantId="tenant" reportExpiresAt={undefined} reportSession={session} reportKey={reportKey} diagnostics="" focusScope={focusScope} open={true} onClose={() => undefined} onReportProblem={async () => undefined} colorScheme="light" />
+  );
+
+  await act(async () => root?.render(dialog(reportSession(1))));
+  await vi.waitFor(() => expect(document.querySelector("textarea")).not.toBeNull());
+  await act(async () => inputText(document.querySelector("textarea") as HTMLTextAreaElement, "draft"));
+  await act(async () => root?.render(dialog(undefined, "participant:1")));
+  expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("draft");
 });
 
 it("uses the live session expiry instead of a stale opening expiry", async () => {

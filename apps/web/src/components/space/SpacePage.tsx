@@ -380,6 +380,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           tenantId={ended?.tenantId ?? session?.reloadMarker().tenantId}
           reportExpiresAt={ended?.reportExpiresAt}
           reportSession={session}
+          reportKey={ended?.reportKey}
           diagnostics={ended ? callSurface.reportDiagnostics(ended.callName ?? "Call", { status: ended.phase, lastError: ended.failure }) : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}

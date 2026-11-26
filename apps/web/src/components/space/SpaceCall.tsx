@@ -76,6 +76,7 @@ export function LocalSpace({
         endReason: client.getSnapshot().connection.episodeEndReason,
         reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }), telemetry: client.telemetry }),
         reportExpiresAt: session.mediaExpiresAt(),
+        reportKey: reportSessionKey(session.reloadMarker()),
       });
     },
     [client, onEnded, release, credential.apiBaseURL, tenantId, session, offerSignUp, spaceName],
@@ -200,11 +201,13 @@ export function SpaceReportProblemDialog({
   tenantId,
   reportExpiresAt,
   reportSession,
+  reportKey: endedReportKey,
   ...props
 }: Omit<ComponentProps<typeof ReportProblemDialog>, "unavailableReason"> & {
   readonly tenantId: string | undefined;
   readonly reportExpiresAt: number | undefined;
   readonly reportSession?: PublicSpaceAdmission["session"];
+  readonly reportKey?: string;
 }) {
   const subscribeReportSession = useCallback((listener: () => void) => reportSession?.subscribe(listener) ?? (() => undefined), [reportSession]);
   const liveReportExpiresAt = useSyncExternalStore(
@@ -215,6 +218,10 @@ export function SpaceReportProblemDialog({
   const reportExpired = useReportCredentialExpired(reportSession ? liveReportExpiresAt : reportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), tenantId, props.open);
   const reportIdentity = reportSession?.reloadMarker();
-  const reportKey = reportIdentity ? `${reportIdentity.participantId}:${reportIdentity.participantGeneration}` : "ended";
-  return <ReportProblemDialog key={reportKey} {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
+  const dialogKey = reportIdentity ? reportSessionKey(reportIdentity) : (endedReportKey ?? "ended");
+  return <ReportProblemDialog key={dialogKey} {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
+}
+
+function reportSessionKey(marker: ReturnType<PublicSpaceAdmission["session"]["reloadMarker"]>): string {
+  return `${marker.participantId}:${marker.participantGeneration}`;
 }
