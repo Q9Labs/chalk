@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -278,6 +279,11 @@ func renderIsolatedPDFPage(ctx context.Context, executable, sourcePath string, p
 	return runIsolatedChild(ctx, executable, "page", sourcePath, prefix, strconv.Itoa(page), strconv.Itoa(target))
 }
 
+type isolatedChildCompromiseError struct{ err error }
+
+func (e isolatedChildCompromiseError) Error() string { return e.err.Error() }
+func (e isolatedChildCompromiseError) Unwrap() error { return e.err }
+
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
 	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -285,33 +291,37 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 	if libraryPath := os.Getenv("LD_LIBRARY_PATH"); libraryPath != "" {
 		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
 	}
-	newCommand := func(namespaces bool) *exec.Cmd {
-		command := exec.CommandContext(childCtx, executable, args...)
-		command.Env = environment
-		if namespaces {
-			configureIsolatedChild(command)
-		} else {
-			configureIsolatedChildWithoutNamespaces(command)
+	command := exec.Command(executable, args...)
+	command.Env = environment
+	configureIsolatedChild(command)
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("start isolated %s render sandbox: %w", mode, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	var err error
+	select {
+	case err = <-done:
+	case <-childCtx.Done():
+		killIsolatedChildProcessGroup(command)
+		<-done
+		if childCtx.Err() == context.DeadlineExceeded {
+			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
 		}
-		return command
-	}
-	output, err := newCommand(isolatedNamespacesEnabled()).CombinedOutput()
-	if err != nil && childCtx.Err() == nil && isolatedNamespaceError(err) {
-		disableIsolatedNamespaces()
-		output, err = newCommand(false).CombinedOutput()
-	}
-	if childCtx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)
+		return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
 	}
 	if err != nil {
-		message := strings.TrimSpace(string(output))
+		message := strings.TrimSpace(output.String())
 		if len(message) > 160 {
 			message = message[:160]
 		}
 		if message == "" {
-			return fmt.Errorf("isolated %s render failed: %w", mode, err)
+			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %w", mode, err)}
 		}
-		return fmt.Errorf("isolated %s render failed: %s", mode, message)
+		return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %s", mode, message)}
 	}
 	return nil
 }
@@ -424,6 +434,10 @@ func writeSource(source []byte) (string, func(), error) {
 func finishFailure(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, code string, cause error) error {
 	if reportErr := control.Fail(ctx, assignment, code, cause.Error()); reportErr != nil {
 		return fmt.Errorf("report render failure (%v): %w", cause, reportErr)
+	}
+	var compromise isolatedChildCompromiseError
+	if errors.As(cause, &compromise) {
+		return fmt.Errorf("isolated parser failure reported; recycling renderer process: %w", cause)
 	}
 	return nil
 }
