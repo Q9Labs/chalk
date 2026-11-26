@@ -23,9 +23,11 @@ const (
 	EventRecordingStarted    EventName = "recording.started"
 	EventRecordingCompleted  EventName = "recording.completed"
 	EventRecordingFailed     EventName = "recording.failed"
+	EventRecordingDeleted    EventName = "recording.deleted"
 	EventTranscriptStarted   EventName = "transcript.started"
 	EventTranscriptCompleted EventName = "transcript.completed"
 	EventTranscriptFailed    EventName = "transcript.failed"
+	EventTranscriptDeleted   EventName = "transcript.deleted"
 	// EventEndpointTest is sent on request to one endpoint. No endpoint subscribes to it.
 	EventEndpointTest EventName = "endpoint.test"
 )
@@ -34,8 +36,8 @@ const (
 // API documents them.
 var subscribable = []EventName{
 	EventEpisodeEnded, EventEpisodeStarted, EventParticipantJoined, EventParticipantLeft,
-	EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed,
-	EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed,
+	EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed, EventRecordingDeleted,
+	EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed, EventTranscriptDeleted,
 	EventSpaceArchived, EventSpaceCreated, EventSpaceRestored, EventSpaceUpdated,
 }
 

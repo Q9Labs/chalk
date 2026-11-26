@@ -24,11 +24,16 @@ var (
 		Scope:       authentication.ScopeRecordingsRead,
 		MinimumRole: memberships.RoleObserver,
 	}
+	deleteRecordingsPermission = authorization.TenantPermission{
+		Scope:       authentication.ScopeRecordingsDelete,
+		MinimumRole: memberships.RoleCollaborator,
+	}
 )
 
 type RecordingService interface {
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (recordings.Recording, error)
 	List(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error)
+	Delete(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, deletedBy string) error
 }
 
 type RecordingDownloadService interface {
@@ -138,6 +143,7 @@ func recordingEndpoints(service RecordingService, exports RecordingExportService
 		getRecordingEndpoint(service, exports, authorizer),
 		requestRecordingExportEndpoint(service, exports, authorizer),
 		createRecordingDownloadURLEndpoint(service, exports, downloads, authorizer),
+		deleteRecordingEndpoint(service, authorizer),
 	}
 }
 
@@ -215,6 +221,36 @@ func getRecordingEndpoint(service RecordingService, artifacts RecordingExportSer
 		Responds(http.StatusOK, "Recording", recordingResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound)...).
 		ErrorRules(recordingRules)
+}
+
+func deleteRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[getRecordingRequest, struct{}] {
+	return Delete("/v1/tenants/{tenant_id}/recordings/{recording_id}", "deleteRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (struct{}, error) {
+		if err := service.Delete(ctx, request.TenantID, request.RecordingID, recordingDeleteActor(ctx)); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, nil
+	}).Description("Permanently deletes one recording and every transcript derived from it. The operation is idempotent. It deletes recording-owned exports, renditions and transcript objects; outstanding signed download URLs stop resolving when their object is deleted because object storage cannot revoke a signed URL before expiry. A recording with active capture, export or transcription work is rejected with recording.delete_conflict instead of being cancelled. Only a tombstone with the deleting credential and deletion time remains.").Needs(service).Permission(authorizer, deleteRecordingsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RespondsNoBody(http.StatusNoContent).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingDeleteConflict, apiErrorRateLimited)...).ErrorRules(recordingRules, objectStorageRules)
+}
+
+func recordingDeleteActor(ctx context.Context) string {
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return "unknown"
+	}
+	switch principal.Kind {
+	case authentication.PrincipalUser:
+		return "user:" + principal.UserID.String()
+	case authentication.PrincipalAPIKey:
+		return "api_key:" + principal.APIKeyID.String()
+	case authentication.PrincipalOAuth:
+		return "oauth:" + principal.GrantID.String()
+	case authentication.PrincipalService:
+		return "service:" + principal.ServiceID
+	case authentication.PrincipalSystem:
+		return "system"
+	default:
+		return "unknown"
+	}
 }
 
 func createRecordingDownloadURLEndpoint(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
@@ -337,6 +373,8 @@ var recordingRules = errorRules{
 	ruleFor(apiErrorInvalidTenantID, recordings.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidRecordingID, recordings.ErrInvalidRecordingID),
 	ruleFor(apiErrorRecordingNotFound, recordings.ErrRecordingNotFound),
+	ruleFor(apiErrorRecordingDeleteConflict, recordings.ErrRecordingDeleteConflict),
+	ruleFor(apiErrorServiceUnavailable, recordings.ErrRecordingDeleteStorage),
 	ruleFor(apiErrorInvalidTenantID, recordingpipeline.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidRecordingID, recordingpipeline.ErrInvalidRecordingID),
 	ruleFor(apiErrorRecordingNotFound, recordingpipeline.ErrPipelineNotFound),

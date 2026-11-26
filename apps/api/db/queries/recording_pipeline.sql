@@ -536,6 +536,7 @@ with candidate as (
       and pipelines.recording_id = sqlc.arg(recording_id)
       and pipelines.tenant_id = sqlc.arg(tenant_id)
       and recordings.tenant_id = sqlc.arg(tenant_id)
+      and recordings.status <> 'deleted'
     for update of pipelines for share of tenants
 ), existing as (
     select jobs.*

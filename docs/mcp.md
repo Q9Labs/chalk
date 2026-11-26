@@ -108,7 +108,7 @@ worker process, never into the model's context. See
 
 Some things are deliberately not exposed: muting everyone (a Sync socket command,
 not a REST path), live media signalling, tenant creation and listing, membership
-removal, Recording deletion and transcript search.
+removal and transcript search.
 
 ## Production check
 

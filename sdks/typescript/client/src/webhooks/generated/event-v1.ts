@@ -61,6 +61,9 @@ export const webhookEventSchemaV1 = {
       $ref: "#/$defs/recordingFailed",
     },
     {
+      $ref: "#/$defs/recordingDeleted",
+    },
+    {
       $ref: "#/$defs/transcriptStarted",
     },
     {
@@ -68,6 +71,9 @@ export const webhookEventSchemaV1 = {
     },
     {
       $ref: "#/$defs/transcriptFailed",
+    },
+    {
+      $ref: "#/$defs/transcriptDeleted",
     },
     {
       $ref: "#/$defs/endpointTest",
@@ -220,7 +226,7 @@ export const webhookEventSchemaV1 = {
     },
     recordingObject: {
       type: "object",
-      required: ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      required: ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "deleted_at", "failure", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/recordingID",
@@ -232,7 +238,7 @@ export const webhookEventSchemaV1 = {
           $ref: "#/$defs/uuid",
         },
         status: {
-          enum: ["started", "completed", "failed"],
+          enum: ["started", "completed", "failed", "deleted"],
         },
         started_at: {
           $ref: "#/$defs/timestamp",
@@ -241,6 +247,9 @@ export const webhookEventSchemaV1 = {
           $ref: "#/$defs/nullableTimestamp",
         },
         failed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        deleted_at: {
           $ref: "#/$defs/nullableTimestamp",
         },
         failure: {
@@ -257,7 +266,7 @@ export const webhookEventSchemaV1 = {
     },
     transcriptObject: {
       type: "object",
-      required: ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      required: ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "deleted_at", "failure", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
@@ -272,7 +281,7 @@ export const webhookEventSchemaV1 = {
           $ref: "#/$defs/uuid",
         },
         status: {
-          enum: ["started", "completed", "failed"],
+          enum: ["started", "completed", "failed", "deleted"],
         },
         languages: {
           type: "array",
@@ -288,6 +297,9 @@ export const webhookEventSchemaV1 = {
           $ref: "#/$defs/nullableTimestamp",
         },
         failed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        deleted_at: {
           $ref: "#/$defs/nullableTimestamp",
         },
         failure: {
@@ -564,6 +576,9 @@ export const webhookEventSchemaV1 = {
                     failed_at: {
                       type: "null",
                     },
+                    deleted_at: {
+                      type: "null",
+                    },
                     failure: {
                       type: "null",
                     },
@@ -596,6 +611,9 @@ export const webhookEventSchemaV1 = {
                       $ref: "#/$defs/timestamp",
                     },
                     failed_at: {
+                      type: "null",
+                    },
+                    deleted_at: {
                       type: "null",
                     },
                     failure: {
@@ -632,8 +650,48 @@ export const webhookEventSchemaV1 = {
                     failed_at: {
                       $ref: "#/$defs/timestamp",
                     },
+                    deleted_at: {
+                      type: "null",
+                    },
                     failure: {
                       type: "object",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    recordingDeleted: {
+      properties: {
+        event: {
+          const: "recording.deleted",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/recordingData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "deleted",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    deleted_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failure: {
+                      type: "null",
                     },
                   },
                 },
@@ -664,6 +722,9 @@ export const webhookEventSchemaV1 = {
                       type: "null",
                     },
                     failed_at: {
+                      type: "null",
+                    },
+                    deleted_at: {
                       type: "null",
                     },
                     failure: {
@@ -700,6 +761,9 @@ export const webhookEventSchemaV1 = {
                     failed_at: {
                       type: "null",
                     },
+                    deleted_at: {
+                      type: "null",
+                    },
                     failure: {
                       type: "null",
                     },
@@ -734,8 +798,48 @@ export const webhookEventSchemaV1 = {
                     failed_at: {
                       $ref: "#/$defs/timestamp",
                     },
+                    deleted_at: {
+                      type: "null",
+                    },
                     failure: {
                       type: "object",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    transcriptDeleted: {
+      properties: {
+        event: {
+          const: "transcript.deleted",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/transcriptData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "deleted",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    deleted_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failure: {
+                      type: "null",
                     },
                   },
                 },
@@ -784,9 +888,11 @@ export const knownWebhookEventNamesV1 = [
   "recording.started",
   "recording.completed",
   "recording.failed",
+  "recording.deleted",
   "transcript.started",
   "transcript.completed",
   "transcript.failed",
+  "transcript.deleted",
   "endpoint.test",
 ] as const;
 export type KnownWebhookEventNameV1 = (typeof knownWebhookEventNamesV1)[number];

@@ -80,6 +80,8 @@ type Querier interface {
 	CompleteWhiteboardFileCleanup(ctx context.Context, arg CompleteWhiteboardFileCleanupParams) (int64, error)
 	ConsumeMCPOAuthCode(ctx context.Context, arg ConsumeMCPOAuthCodeParams) (ConsumeMCPOAuthCodeRow, error)
 	ConsumeMCPOAuthRefreshToken(ctx context.Context, arg ConsumeMCPOAuthRefreshTokenParams) (ConsumeMCPOAuthRefreshTokenRow, error)
+	CountActiveArtifactJobsForDelete(ctx context.Context, arg CountActiveArtifactJobsForDeleteParams) (int32, error)
+	CountActiveRecordingJobsForDelete(ctx context.Context, arg CountActiveRecordingJobsForDeleteParams) (int32, error)
 	// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
 	CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
@@ -331,6 +333,7 @@ type Querier interface {
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
 	ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error)
 	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]ListTenantMembershipsRow, error)
+	ListTenantRecordingDeleteObjectKeys(ctx context.Context, arg ListTenantRecordingDeleteObjectKeysParams) ([]ListTenantRecordingDeleteObjectKeysRow, error)
 	ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error)
 	ListTenantSpaceRecordings(ctx context.Context, arg ListTenantSpaceRecordingsParams) ([]Recording, error)
 	ListTenantSpaces(ctx context.Context, arg ListTenantSpacesParams) ([]Space, error)
@@ -380,6 +383,7 @@ type Querier interface {
 	// apply to a UNION.
 	LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error)
 	LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error
+	LockRecordingPipelineForDelete(ctx context.Context, arg LockRecordingPipelineForDeleteParams) (RecordingPipeline, error)
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
 	LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error)
 	LockRecordingTranscriptionSource(ctx context.Context, arg LockRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
@@ -404,6 +408,7 @@ type Querier interface {
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaLimits(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error)
+	LockTenantRecordingForDelete(ctx context.Context, arg LockTenantRecordingForDeleteParams) (Recording, error)
 	// Serialize admission and policy changes without blocking the previous API's
 	// arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
 	LockTenantSpaceForAdmission(ctx context.Context, arg LockTenantSpaceForAdmissionParams) (Space, error)
@@ -419,6 +424,7 @@ type Querier interface {
 	MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkLifecycleParticipantLeavingParams) (Participant, error)
 	MarkMediaPlaneChangesEmitted(ctx context.Context, dollar_1 []int64) error
 	MarkRecordingCaptureCommandAmbiguous(ctx context.Context, commandID int64) (RecordingCaptureCommand, error)
+	MarkRecordingTranscriptionSourceDeleted(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedParams) error
 	MarkRecordingTranscriptionSourceDeletedIfClean(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedIfCleanParams) (RecordingTranscriptionSource, error)
 	MarkRecordingTranscriptionSourceExpired(ctx context.Context, arg MarkRecordingTranscriptionSourceExpiredParams) (RecordingTranscriptionSource, error)
 	MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkTenantExternalEpisodeEndingParams) (Episode, error)
@@ -505,6 +511,8 @@ type Querier interface {
 	// The participant row implies a live tenant (participants.tenant_id references tenants). The key
 	// share lock keeps the row from being deleted until the admission commits.
 	TelemetryParticipantLive(ctx context.Context, arg TelemetryParticipantLiveParams) ([]pgtype.UUID, error)
+	TombstoneRecordingTranscripts(ctx context.Context, arg TombstoneRecordingTranscriptsParams) ([]Transcription, error)
+	TombstoneTenantRecording(ctx context.Context, arg TombstoneTenantRecordingParams) (Recording, error)
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)

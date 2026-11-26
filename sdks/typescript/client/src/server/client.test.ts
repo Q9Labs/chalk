@@ -32,3 +32,18 @@ describe("issueAccess", () => {
     expect(grant.media.provider).toBe("chalk_sfu");
   });
 });
+
+describe("recordings.delete", () => {
+  it("deletes the tenant recording path", async () => {
+    let request: { method?: string; url?: string } = {};
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      request = { method: init?.method, url: String(input) };
+      return new Response(null, { status: 204 });
+    };
+    const client = createChalkServerClient({ apiKey: "key", tenantId: "tenant-1", apiBaseURL: "https://api.test", fetch });
+
+    await client.recordings.delete("recording-1");
+
+    expect(request).toEqual({ method: "DELETE", url: "https://api.test/v1/tenants/tenant-1/recordings/recording-1" });
+  });
+});

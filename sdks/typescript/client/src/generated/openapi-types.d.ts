@@ -601,7 +601,11 @@ export interface paths {
     get: operations["getRecording"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete recording
+     * @description Permanently deletes one recording and every transcript derived from it. The operation is idempotent. It deletes recording-owned exports, renditions and transcript objects; outstanding signed download URLs stop resolving when their object is deleted because object storage cannot revoke a signed URL before expiry. A recording with active capture, export or transcription work is rejected with recording.delete_conflict instead of being cancelled. Only a tombstone with the deleting credential and deletion time remains.
+     */
+    delete: operations["deleteRecording"];
     options?: never;
     head?: never;
     patch?: never;
@@ -1841,9 +1845,11 @@ export interface components {
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
+        | "recording.deleted"
         | "transcript.started"
         | "transcript.completed"
         | "transcript.failed"
+        | "transcript.deleted"
         | "space.archived"
         | "space.created"
         | "space.restored"
@@ -3450,9 +3456,11 @@ export interface components {
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
+        | "recording.deleted"
         | "transcript.started"
         | "transcript.completed"
         | "transcript.failed"
+        | "transcript.deleted"
         | "space.archived"
         | "space.created"
         | "space.restored"
@@ -3532,9 +3540,11 @@ export interface components {
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
+        | "recording.deleted"
         | "transcript.started"
         | "transcript.completed"
         | "transcript.failed"
+        | "transcript.deleted"
         | "space.archived"
         | "space.created"
         | "space.restored"
@@ -3565,9 +3575,11 @@ export interface components {
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
+        | "recording.deleted"
         | "transcript.started"
         | "transcript.completed"
         | "transcript.failed"
+        | "transcript.deleted"
         | "space.archived"
         | "space.created"
         | "space.restored"
@@ -7080,6 +7092,102 @@ export interface operations {
       /** @description Not Found */
       404: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  deleteRecording: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        recording_id: components["schemas"]["RecordingId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {
@@ -11917,6 +12025,7 @@ export interface operations {
           | "participant.joined"
           | "participant.left"
           | "recording.completed"
+          | "recording.deleted"
           | "recording.failed"
           | "recording.started"
           | "space.archived"
@@ -11924,6 +12033,7 @@ export interface operations {
           | "space.restored"
           | "space.updated"
           | "transcript.completed"
+          | "transcript.deleted"
           | "transcript.failed"
           | "transcript.started"
         )[];

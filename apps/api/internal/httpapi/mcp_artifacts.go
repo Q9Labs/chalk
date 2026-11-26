@@ -22,6 +22,9 @@ func bindMCPArtifactTools(registry *mcptools.Registry, o Options) {
 	bindMCPEndpoint(registry, mcptools.ExportRecording, requestRecordingExportEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcptools.RecordingInput) requestRecordingExportEndpointRequest {
 		return requestRecordingExportEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)}
 	})
+	bindMCPEndpoint(registry, mcptools.DeleteRecording, deleteRecordingEndpoint(o.Recordings, o.TenantAuthz), func(b *mcpRequest, i mcptools.RecordingInput) getRecordingRequest {
+		return getRecordingRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)}
+	})
 	mcptools.Bind(registry, mcptools.InspectTranscripts, func(ctx context.Context, i mcptools.TranscriptViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		ref := transcriptDocumentRequest{TenantID: b.tenant, TranscriptID: b.optionalID(i.TranscriptID)}

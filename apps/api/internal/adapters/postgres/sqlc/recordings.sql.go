@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveArtifactJobsForDelete = `-- name: CountActiveArtifactJobsForDelete :one
+select count(*)::integer
+from artifact_jobs jobs
+where jobs.tenant_id = $1
+  and jobs.recording_id = $2
+  and state in ('pending', 'leased', 'retryable')
+`
+
+type CountActiveArtifactJobsForDeleteParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+func (q *Queries) CountActiveArtifactJobsForDelete(ctx context.Context, arg CountActiveArtifactJobsForDeleteParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveArtifactJobsForDelete, arg.TenantID, arg.RecordingID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countActiveRecordingJobsForDelete = `-- name: CountActiveRecordingJobsForDelete :one
+select count(*)::integer
+from recording_jobs jobs
+where jobs.tenant_id = $1
+  and jobs.recording_id = $2
+  and state in ('pending', 'leased', 'retryable_failure')
+`
+
+type CountActiveRecordingJobsForDeleteParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+func (q *Queries) CountActiveRecordingJobsForDelete(ctx context.Context, arg CountActiveRecordingJobsForDeleteParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveRecordingJobsForDelete, arg.TenantID, arg.RecordingID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getTenantRecording = `-- name: GetTenantRecording :one
 select
     id,
@@ -28,12 +68,15 @@ select
     metadata,
     failure_code,
     failed_at,
+    deleted_at,
+    deleted_by,
     updated_at,
     created_at
 from recordings
 where
     tenant_id = $1
     and id = $2
+    and status <> 'deleted'
 `
 
 type GetTenantRecordingParams struct {
@@ -60,10 +103,115 @@ func (q *Queries) GetTenantRecording(ctx context.Context, arg GetTenantRecording
 		&i.Metadata,
 		&i.FailureCode,
 		&i.FailedAt,
+		&i.DeletedAt,
+		&i.DeletedBy,
 		&i.UpdatedAt,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listTenantRecordingDeleteObjectKeys = `-- name: ListTenantRecordingDeleteObjectKeys :many
+with keys as (
+    select storage_key as object_key, false as shared
+    from recordings recordings
+    where recordings.tenant_id = $1 and recordings.id = $2 and storage_key is not null
+    union all
+    select object_key, false
+    from recording_artifacts objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select object_key, false
+    from recording_bundles objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select object_key, false
+    from recording_bundle_allocations objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select presentation_object_key, false
+    from recording_presentations objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select asset_manifest_object_key, false
+    from recording_presentations objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select object_key, false
+    from recording_render_object_allocations objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select manifest_key, false
+    from recording_transcription_sources objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select storage_key, false
+    from recording_transcription_source_chunks objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+    union all
+    select artifact_key, false
+    from transcriptions objects
+    where objects.tenant_id = $1 and objects.recording_id = $2 and artifact_key is not null
+    union all
+    select source_manifest_key, false
+    from transcriptions objects
+    where objects.tenant_id = $1 and objects.recording_id = $2 and source_manifest_key is not null
+    union all
+    select objects.storage_key, false
+    from transcript_chunks objects
+    join transcriptions owner on owner.id = objects.transcript_id
+    where objects.tenant_id = $1 and owner.recording_id = $2
+    union all
+    select objects.result_key, false
+    from transcript_chunks objects
+    join transcriptions owner on owner.id = objects.transcript_id
+    where objects.tenant_id = $1 and owner.recording_id = $2
+    union all
+    select objects.result_key, false
+    from transcription_chunk_results objects
+    join transcript_chunks chunks on chunks.id = objects.chunk_id
+    join transcriptions owner on owner.id = chunks.transcript_id
+    where chunks.tenant_id = $1 and owner.recording_id = $2
+    union all
+    select object_key, true
+    from recording_presentation_assets objects
+    where objects.tenant_id = $1 and objects.recording_id = $2
+)
+select object_key, bool_and(shared) as shared
+from keys
+where object_key <> ''
+group by object_key
+order by object_key
+`
+
+type ListTenantRecordingDeleteObjectKeysParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+type ListTenantRecordingDeleteObjectKeysRow struct {
+	ObjectKey pgtype.Text `json:"object_key"`
+	Shared    bool        `json:"shared"`
+}
+
+func (q *Queries) ListTenantRecordingDeleteObjectKeys(ctx context.Context, arg ListTenantRecordingDeleteObjectKeysParams) ([]ListTenantRecordingDeleteObjectKeysRow, error) {
+	rows, err := q.db.Query(ctx, listTenantRecordingDeleteObjectKeys, arg.TenantID, arg.RecordingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantRecordingDeleteObjectKeysRow
+	for rows.Next() {
+		var i ListTenantRecordingDeleteObjectKeysRow
+		if err := rows.Scan(&i.ObjectKey, &i.Shared); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTenantRecordings = `-- name: ListTenantRecordings :many
@@ -83,11 +231,14 @@ select
     metadata,
     failure_code,
     failed_at,
+    deleted_at,
+    deleted_by,
     updated_at,
     created_at
 from recordings
 where
     tenant_id = $1
+    and status <> 'deleted'
     and (
         $2::uuid is null
         or episode_id = $2::uuid
@@ -150,6 +301,8 @@ func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecord
 			&i.Metadata,
 			&i.FailureCode,
 			&i.FailedAt,
+			&i.DeletedAt,
+			&i.DeletedBy,
 			&i.UpdatedAt,
 			&i.CreatedAt,
 		); err != nil {
@@ -180,12 +333,15 @@ select
     metadata,
     failure_code,
     failed_at,
+    deleted_at,
+    deleted_by,
     updated_at,
     created_at
 from recordings
 where
     tenant_id = $1
     and space_id = $2
+    and status <> 'deleted'
     and (
         $3::uuid is null
         or episode_id = $3::uuid
@@ -244,6 +400,8 @@ func (q *Queries) ListTenantSpaceRecordings(ctx context.Context, arg ListTenantS
 			&i.Metadata,
 			&i.FailureCode,
 			&i.FailedAt,
+			&i.DeletedAt,
+			&i.DeletedBy,
 			&i.UpdatedAt,
 			&i.CreatedAt,
 		); err != nil {
@@ -255,4 +413,231 @@ func (q *Queries) ListTenantSpaceRecordings(ctx context.Context, arg ListTenantS
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRecordingPipelineForDelete = `-- name: LockRecordingPipelineForDelete :one
+select recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at, capture_completed_at, committed_at, capture_media_bundle_count, capture_gap_bundle_count, capture_track_count, capture_packet_count, capture_completeness, failure_webhook_enqueued, updated_at, created_at, capture_ready_at
+from recording_pipelines
+where tenant_id = $1
+  and recording_id = $2
+for update
+`
+
+type LockRecordingPipelineForDeleteParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+func (q *Queries) LockRecordingPipelineForDelete(ctx context.Context, arg LockRecordingPipelineForDeleteParams) (RecordingPipeline, error) {
+	row := q.db.QueryRow(ctx, lockRecordingPipelineForDelete, arg.TenantID, arg.RecordingID)
+	var i RecordingPipeline
+	err := row.Scan(
+		&i.RecordingID,
+		&i.TenantID,
+		&i.ReservationID,
+		&i.CaptureEpoch,
+		&i.State,
+		&i.StopOperationID,
+		&i.StopRequestedAt,
+		&i.CaptureCompletedAt,
+		&i.CommittedAt,
+		&i.CaptureMediaBundleCount,
+		&i.CaptureGapBundleCount,
+		&i.CaptureTrackCount,
+		&i.CapturePacketCount,
+		&i.CaptureCompleteness,
+		&i.FailureWebhookEnqueued,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.CaptureReadyAt,
+	)
+	return i, err
+}
+
+const lockTenantRecordingForDelete = `-- name: LockTenantRecordingForDelete :one
+select id, tenant_id, space_id, episode_id, status, storage_provider, storage_key, storage_content_type, storage_size, storage_checksum, duration_millis, completed_at, metadata, failure_code, failed_at, deleted_at, deleted_by, updated_at, created_at
+from recordings
+where tenant_id = $1
+  and id = $2
+for update
+`
+
+type LockTenantRecordingForDeleteParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) LockTenantRecordingForDelete(ctx context.Context, arg LockTenantRecordingForDeleteParams) (Recording, error) {
+	row := q.db.QueryRow(ctx, lockTenantRecordingForDelete, arg.TenantID, arg.ID)
+	var i Recording
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.Status,
+		&i.StorageProvider,
+		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
+		&i.Metadata,
+		&i.FailureCode,
+		&i.FailedAt,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const markRecordingTranscriptionSourceDeleted = `-- name: MarkRecordingTranscriptionSourceDeleted :exec
+update recording_transcription_sources
+set status = 'deleted',
+    lease_transcript_id = null,
+    lease_expires_at = null,
+    cleanup_due_at = now(),
+    deleted_at = coalesce(deleted_at, now()),
+    updated_at = now()
+where tenant_id = $1
+  and recording_id = $2
+  and status <> 'deleted'
+`
+
+type MarkRecordingTranscriptionSourceDeletedParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+func (q *Queries) MarkRecordingTranscriptionSourceDeleted(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedParams) error {
+	_, err := q.db.Exec(ctx, markRecordingTranscriptionSourceDeleted, arg.TenantID, arg.RecordingID)
+	return err
+}
+
+const tombstoneRecordingTranscripts = `-- name: TombstoneRecordingTranscripts :many
+update transcriptions
+set status = 'deleted',
+    deleted_at = coalesce(deleted_at, now()),
+    metadata = null,
+    artifact_key = null,
+    artifact_sha256 = null,
+    artifact_size = null,
+    artifact_content_type = null,
+    source_manifest_key = null,
+    source_manifest_sha256 = null,
+    source_manifest_size = null,
+    source_manifest_content_type = null,
+    updated_at = now()
+where tenant_id = $1
+  and recording_id = $2
+  and status <> 'deleted'
+returning transcript_language, id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
+`
+
+type TombstoneRecordingTranscriptsParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	RecordingID pgtype.UUID `json:"recording_id"`
+}
+
+func (q *Queries) TombstoneRecordingTranscripts(ctx context.Context, arg TombstoneRecordingTranscriptsParams) ([]Transcription, error) {
+	rows, err := q.db.Query(ctx, tombstoneRecordingTranscripts, arg.TenantID, arg.RecordingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transcription
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.TranscriptLanguage,
+			&i.ID,
+			&i.TenantID,
+			&i.RecordingID,
+			&i.SpaceID,
+			&i.EpisodeID,
+			&i.Status,
+			&i.Provider,
+			&i.Model,
+			&i.Languages,
+			&i.Metadata,
+			&i.ArtifactKey,
+			&i.ArtifactSha256,
+			&i.ArtifactSize,
+			&i.ArtifactContentType,
+			&i.SourceManifestKey,
+			&i.SourceManifestSha256,
+			&i.SourceManifestSize,
+			&i.SourceManifestContentType,
+			&i.Generation,
+			&i.CompletedAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.SourceExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const tombstoneTenantRecording = `-- name: TombstoneTenantRecording :one
+update recordings
+set status = 'deleted',
+    storage_key = null,
+    storage_content_type = null,
+    storage_size = null,
+    storage_checksum = null,
+    duration_millis = null,
+    completed_at = null,
+    metadata = null,
+    failure_code = null,
+    failed_at = null,
+    deleted_at = now(),
+    deleted_by = $1,
+    updated_at = now()
+where tenant_id = $2
+  and id = $3
+  and status <> 'deleted'
+returning id, tenant_id, space_id, episode_id, status, storage_provider, storage_key, storage_content_type, storage_size, storage_checksum, duration_millis, completed_at, metadata, failure_code, failed_at, deleted_at, deleted_by, updated_at, created_at
+`
+
+type TombstoneTenantRecordingParams struct {
+	DeletedBy pgtype.Text `json:"deleted_by"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	ID        pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) TombstoneTenantRecording(ctx context.Context, arg TombstoneTenantRecordingParams) (Recording, error) {
+	row := q.db.QueryRow(ctx, tombstoneTenantRecording, arg.DeletedBy, arg.TenantID, arg.ID)
+	var i Recording
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.Status,
+		&i.StorageProvider,
+		&i.StorageKey,
+		&i.StorageContentType,
+		&i.StorageSize,
+		&i.StorageChecksum,
+		&i.DurationMillis,
+		&i.CompletedAt,
+		&i.Metadata,
+		&i.FailureCode,
+		&i.FailedAt,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }

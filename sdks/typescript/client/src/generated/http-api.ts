@@ -1228,6 +1228,23 @@ const recordingsGroup = HttpApiGroup.make("recordings")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("deleteRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
+      params: S.DeleteRecordingPathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RecordingInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RecordingDeleteConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
       params: S.GetRecordingPathParamsSchema,
       success: S.GetRecordingResponseSchema.pipe(HttpApiSchema.status(200)),

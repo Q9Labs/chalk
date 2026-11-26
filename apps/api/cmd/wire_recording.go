@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
+	"github.com/q9labs/chalk/apps/api/internal/recordings"
 )
 
 func (w *apiWiring) wireRecordingAuthorities() error {
@@ -53,6 +54,10 @@ func (w *apiWiring) wireRecordingAuthorities() error {
 }
 
 func (w *apiWiring) wireRecordingServices() {
+	if w.recordingStorage != nil {
+		recordingRepository := postgres.NewRecordingRepositoryWithPool(w.queries, w.pool)
+		w.options.Recordings = recordings.NewService(recordingRepository).WithObjectDeleter(*w.recordingStorage)
+	}
 	w.recordingPipelineService = recordingpipeline.NewService(w.recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(w.pool).WithOwnCapture(w.ownCapture))
 	if w.cfg.Capabilities.Recording {
 		recordingPreparations := postgres.NewRecordingPreparationRepository(w.pool).WithAdmissionLimits(w.cfg.RecordingAdmission).WithOwnCapture(w.ownCapture)

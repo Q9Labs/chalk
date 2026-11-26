@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,7 +22,7 @@ func produceRecordingWebhook(ctx context.Context, tx pgx.Tx, tenantID, recording
 	}
 	startedAt := timestamp(row.CreatedAt)
 	var captureReadyAt *time.Time
-	if err := tx.QueryRow(ctx, `select capture_ready_at from recording_pipelines where tenant_id=$1 and recording_id=$2`, uuid(tenantID), uuid(recordingID)).Scan(&captureReadyAt); err != nil {
+	if err := tx.QueryRow(ctx, `select capture_ready_at from recording_pipelines where tenant_id=$1 and recording_id=$2`, uuid(tenantID), uuid(recordingID)).Scan(&captureReadyAt); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return webhookCommitMetric{}, fmt.Errorf("load Recording webhook origin: %w", err)
 	}
 	if captureReadyAt != nil {
@@ -34,6 +35,8 @@ func produceRecordingWebhook(ctx context.Context, tx pgx.Tx, tenantID, recording
 	case "failed":
 		snapshot.FailedAt = &occurredAt
 		snapshot.Failure = &webhooks.ArtifactFailure{Code: publicArtifactFailureCode(failureCode)}
+	case "deleted":
+		snapshot.DeletedAt = &occurredAt
 	}
 	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: webhooks.EventName("recording." + status), SemanticKey: "recording:" + recordingID.String() + ":" + status, ResourceType: "recording", ResourceID: recordingID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 		return webhooks.EncodeRecordingEvent(metadata, snapshot)
@@ -98,6 +101,8 @@ func produceTranscriptWebhook(ctx context.Context, tx pgx.Tx, row sqlc.Transcrip
 	case "failed":
 		snapshot.FailedAt = &occurredAt
 		snapshot.Failure = &webhooks.ArtifactFailure{Code: publicArtifactFailureCode(failureCode)}
+	case "deleted":
+		snapshot.DeletedAt = &occurredAt
 	}
 	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: id(row.TenantID), EventName: webhooks.EventName("transcript." + status), SemanticKey: fmt.Sprintf("transcript:%s:%d:%s", transcriptID.String(), row.Generation, status), ResourceType: "transcript", ResourceID: transcriptID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 		return webhooks.EncodeTranscriptEvent(metadata, snapshot)

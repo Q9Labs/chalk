@@ -2326,9 +2326,12 @@ create table recordings (
     metadata jsonb,
     failure_code text check (failure_code is null or octet_length(failure_code) between 1 and 128),
     failed_at timestamptz,
+    deleted_at timestamptz,
+    deleted_by text check (deleted_by is null or octet_length(deleted_by) between 1 and 256),
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    constraint recordings_failure_state_check check ((status = 'failed') = (failure_code is not null) and (failure_code is null) = (failed_at is null))
+    constraint recordings_failure_state_check check ((status = 'failed') = (failure_code is not null) and (failure_code is null) = (failed_at is null)),
+    constraint recordings_deleted_state_check check ((status = 'deleted') = (deleted_at is not null) and (deleted_at is null) = (deleted_by is null))
 );
 create index recordings_tenant_created_at_id_idx on recordings(tenant_id, created_at desc, id desc);
 create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id, episode_id, created_at desc, id desc);
@@ -3291,7 +3294,7 @@ create table webhook_endpoint_revisions (
     ),
     constraint webhook_endpoint_revisions_api_version_check check (api_version = 1),
     constraint webhook_endpoint_revisions_event_types_check check (
-        cardinality(event_types) between 1 and 14
+        cardinality(event_types) between 1 and 16
         and event_types <@ array[
             'space.created',
             'space.updated',
@@ -3304,9 +3307,11 @@ create table webhook_endpoint_revisions (
             'recording.started',
             'recording.completed',
             'recording.failed',
+            'recording.deleted',
             'transcript.started',
             'transcript.completed',
-            'transcript.failed'
+            'transcript.failed',
+            'transcript.deleted'
         ]::text[]
     )
 );
@@ -3351,9 +3356,11 @@ create table webhook_events (
         'recording.started',
         'recording.completed',
         'recording.failed',
+        'recording.deleted',
         'transcript.started',
         'transcript.completed',
         'transcript.failed',
+        'transcript.deleted',
         'endpoint.test'
     )),
     constraint webhook_events_api_version_check check (api_version = 1),

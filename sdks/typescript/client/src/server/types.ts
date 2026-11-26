@@ -287,6 +287,7 @@ export type ChalkServerClient = {
     get(recordingId: string): Promise<Recording>;
     requestExport(recordingId: string): Promise<RecordingExportRequestAcceptedResponse>;
     createDownloadURL(recordingId: string, input: CreateRecordingDownloadURLInput): Promise<RecordingDownloadURL>;
+    delete(recordingId: string): Promise<void>;
   };
   readonly publicInvites: {
     get(spaceId: string): Promise<SpacePublicInvite>;

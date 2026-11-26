@@ -525,9 +525,11 @@ export const CreateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
         "recording.started",
         "recording.completed",
         "recording.failed",
+        "recording.deleted",
         "transcript.started",
         "transcript.completed",
         "transcript.failed",
+        "transcript.deleted",
         "space.archived",
         "space.created",
         "space.restored",
@@ -2294,9 +2296,11 @@ export const UpdateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
           "recording.started",
           "recording.completed",
           "recording.failed",
+          "recording.deleted",
           "transcript.started",
           "transcript.completed",
           "transcript.failed",
+          "transcript.deleted",
           "space.archived",
           "space.created",
           "space.restored",
@@ -2385,9 +2389,11 @@ export const WebhookEndpointSchema = /* @__PURE__ */ (() =>
         "recording.started",
         "recording.completed",
         "recording.failed",
+        "recording.deleted",
         "transcript.started",
         "transcript.completed",
         "transcript.failed",
+        "transcript.deleted",
         "space.archived",
         "space.created",
         "space.restored",
@@ -2426,9 +2432,11 @@ export const WebhookEndpointWithSecretSchema = /* @__PURE__ */ (() =>
         "recording.started",
         "recording.completed",
         "recording.failed",
+        "recording.deleted",
         "transcript.started",
         "transcript.completed",
         "transcript.failed",
+        "transcript.deleted",
         "space.archived",
         "space.created",
         "space.restored",
@@ -2852,6 +2860,21 @@ export const CreateWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (()
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type CreateWebhookEndpoint429ResponseHeaders = typeof CreateWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const DeleteRecordingPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recording_id: RecordingIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type DeleteRecordingPathParams = typeof DeleteRecordingPathParamsSchema.Type;
+
+export const DeleteRecording429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type DeleteRecording429ResponseHeaders = typeof DeleteRecording429ResponseHeadersSchema.Type;
 
 export const DeleteTranscriptPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3681,6 +3704,7 @@ export const ListWebhookDeliveriesQueryParamsSchema = /* @__PURE__ */ (() =>
           "participant.joined",
           "participant.left",
           "recording.completed",
+          "recording.deleted",
           "recording.failed",
           "recording.started",
           "space.archived",
@@ -3688,6 +3712,7 @@ export const ListWebhookDeliveriesQueryParamsSchema = /* @__PURE__ */ (() =>
           "space.restored",
           "space.updated",
           "transcript.completed",
+          "transcript.deleted",
           "transcript.failed",
           "transcript.started",
         ]),
@@ -5461,6 +5486,25 @@ export const RecordingArtifactNotFoundErrorSchema = RecordingArtifactNotFoundErr
   }),
 );
 
+export class RecordingDeleteConflictError extends Schema.TaggedErrorClass<RecordingDeleteConflictError>()("RecordingDeleteConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording.delete_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingDeleteConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording.delete_conflict"),
+    message: Schema.String,
+  }),
+});
+export const RecordingDeleteConflictErrorSchema = RecordingDeleteConflictErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingDeleteConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingDeleteConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RecordingExportRetryLimitReachedError extends Schema.TaggedErrorClass<RecordingExportRetryLimitReachedError>()("RecordingExportRetryLimitReachedError", {
   error: Schema.Struct({
     code: Schema.Literal("recording.export_retry_limit_reached"),
@@ -7131,6 +7175,19 @@ export const CreateWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type CreateWebhookEndpointError = typeof CreateWebhookEndpointErrorSchema.Type;
 
+export const DeleteRecordingErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingDeleteConflictErrorSchema,
+  RecordingInvalidIdErrorSchema,
+  RecordingNotFoundErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type DeleteRecordingError = typeof DeleteRecordingErrorSchema.Type;
+
 export const DeleteTranscriptErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -8167,6 +8224,7 @@ export const ChalkOperationPolicies = {
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  deleteRecording: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   denyMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

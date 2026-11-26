@@ -3185,6 +3185,7 @@ with candidate as (
       and pipelines.recording_id = $2
       and pipelines.tenant_id = $3
       and recordings.tenant_id = $3
+      and recordings.status <> 'deleted'
     for update of pipelines for share of tenants
 ), existing as (
     select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
