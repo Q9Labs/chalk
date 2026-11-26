@@ -28,6 +28,7 @@ func TestPresentingReconcileWaitsForSourceAttachmentCommitIntegration(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = attachmentTx.Rollback(context.Background()) })
 	if _, err := attachmentTx.Exec(ctx, `select attachment_id from sync_chat_attachments where tenant_id=$1 and space_id=$2 and attachment_id=$3 for update`, uuid(fixture.tenant), uuid(fixture.space), uuid(attachmentID)); err != nil {
 		t.Fatalf("lock source attachment: %v", err)
 	}

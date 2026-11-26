@@ -72,6 +72,9 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
         attachment_state_error(rows)
 
       true ->
+        rows =
+          Enum.map(dumped_ids, fn id -> Enum.find(rows, fn [row_id | _] -> row_id == id end) end)
+
         {:ok,
          Enum.map(rows, fn [id, name, mime_type, byte_length, _status, _owner, _generation] ->
            %{
