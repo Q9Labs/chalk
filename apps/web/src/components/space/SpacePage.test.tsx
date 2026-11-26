@@ -85,6 +85,14 @@ it("joins fresh when window.open inherits a copy of the reload marker", async ()
   expect(requests).toEqual(["fresh"]);
 });
 
+it("keeps the lobby open when only a speaker was remembered on a devices-off rejoin", async () => {
+  localStorage.setItem("chalk.display-name", "Ada");
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true, speakerDeviceId: "speaker", inputsChosen: false }));
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect(requests).toEqual([]);
+});
+
 it("keeps the lobby open when reload autoplay evidence is blocked", async () => {
   vi.stubGlobal(
     "AudioContext",

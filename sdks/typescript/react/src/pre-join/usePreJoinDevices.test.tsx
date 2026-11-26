@@ -160,7 +160,7 @@ it("remembers an explicit speaker when a rejoin had no saved preferences", async
 
   await act(async () => devices().selectSpeaker("speaker"));
   devices().commit();
-  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ microphone: true, camera: true, speakerDeviceId: "speaker" });
+  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ microphone: true, camera: true, speakerDeviceId: "speaker", inputsChosen: false });
 });
 
 it("remembers a device the visitor turns back on before rejoining", async () => {

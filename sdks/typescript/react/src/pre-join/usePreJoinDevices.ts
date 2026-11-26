@@ -263,15 +263,15 @@ function initialChoice(startWithDevicesOff: boolean): RememberedDevices {
 
 function rememberCommitChoice(choice: RememberedDevices, granted: boolean, startWithDevicesOff: boolean, inputTouched: boolean, speakerTouched: boolean): void {
   if (!granted) return;
-  if (!startWithDevicesOff) return rememberDevices(choice);
+  if (!startWithDevicesOff) return rememberDevices({ ...choice, inputsChosen: true });
   if (inputTouched) {
     const savedSpeaker = readRememberedDevices()?.speakerDeviceId;
     const { speakerDeviceId: chosenSpeaker, ...inputChoice } = choice;
     const speakerDeviceId = speakerTouched ? chosenSpeaker : savedSpeaker;
-    return rememberDevices({ ...inputChoice, ...(speakerDeviceId ? { speakerDeviceId } : {}) });
+    return rememberDevices({ ...inputChoice, inputsChosen: true, ...(speakerDeviceId ? { speakerDeviceId } : {}) });
   }
   if (!speakerTouched) return;
-  const saved = readRememberedDevices() ?? { microphone: true, camera: true };
+  const saved = readRememberedDevices() ?? { microphone: true, camera: true, inputsChosen: false };
   rememberDevices({ ...saved, speakerDeviceId: choice.speakerDeviceId });
 }
 

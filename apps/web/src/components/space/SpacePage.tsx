@@ -84,7 +84,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   // A visitor who already chose devices in this browser skips the device step and joins with that choice.
   const [rememberedDevices] = useState(() => readRememberedDevices());
   const [automaticEntry] = useState(browserAllowsAutomaticEntry);
-  const autoplayEntry = entranceAutoplayDecision({ automaticEntry, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices) });
+  const autoplayEntry = entranceAutoplayDecision({ automaticEntry, reloadMarker: Boolean(reloadMarker), automaticName, rememberedDevices: Boolean(rememberedDevices && rememberedDevices.inputsChosen !== false) });
   const resumeAutomatically = autoplayEntry === "resume";
   const rememberedAutoArrival = autoplayEntry === "arrive";
   const { entrance, send, latest } = useEntrance(() => initialEntrance({ resuming: resumeAutomatically, stepOpen: !resumeAutomatically && !rememberedAutoArrival }));
