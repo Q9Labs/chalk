@@ -68,3 +68,8 @@ export function useChatAttachmentPreviews(attachments: readonly ChatAttachment[]
 
   return { resolvedUrls, failedAttachmentIds, markFailed, retry };
 }
+
+export function formatFileSize(byteLength: number): string {
+  if (byteLength < 1024 * 1024) return `${Math.max(1, Math.round(byteLength / 1024))} KB`;
+  return `${(byteLength / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+}

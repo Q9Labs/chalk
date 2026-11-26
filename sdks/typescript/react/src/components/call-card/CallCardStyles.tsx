@@ -1,3 +1,4 @@
+import { CHAT_FILE_DROP_STYLES } from "./chat-file-drop-styles";
 const styles = `.call-card-tabs {
   display: flex;
   align-items: center;
@@ -293,10 +294,7 @@ const styles = `.call-card-tabs {
   gap: var(--space-1);
   min-width: 0;
 }
-.call-message-column > :not(.call-message),
-.call-message > * {
-  max-width: 240px;
-}
+.call-message-column > :not(.call-message), .call-message > * { max-width: 240px; }
 .is-local .call-message-column {
   align-items: flex-end;
 }
@@ -893,6 +891,7 @@ const styles = `.call-card-tabs {
   place-items: center;
   flex: none;
 }
+${CHAT_FILE_DROP_STYLES}
 .call-photo-viewer {
   position: fixed;
   inset: 0;
