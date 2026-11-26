@@ -1,0 +1,132 @@
+import { expect, it } from "vitest";
+import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
+import { prepareChatAttachmentBatch } from "../composite/chat-upload-file";
+import { presentFiles, splitPresentingFiles } from "./presenting-files";
+
+function file(name: string, type = "application/pdf", byteLength = 1024): ChatUploadFile {
+  return new File([new Uint8Array(byteLength)], name, { type }) as ChatUploadFile;
+}
+
+function client(presentAccepted = true) {
+  const presented: string[] = [];
+  const sent: string[] = [];
+  const api = {
+    chat: {
+      files: {
+        upload: async (uploaded: ChatUploadFile) => ({ attachmentId: `attachment-${uploaded.name}` }),
+      },
+      send: async (input: { attachments: readonly { attachmentId: string }[] }) => {
+        sent.push(...input.attachments.map((attachment) => attachment.attachmentId));
+      },
+    },
+    presenting: {
+      present: async (attachmentId: string) => {
+        presented.push(attachmentId);
+        if (!presentAccepted) throw new Error("present failed");
+        return { kind: "accepted", revision: 1 } as const;
+      },
+    },
+  } as unknown as SpaceClient;
+  return { api, presented, sent };
+}
+
+it("presents the first presentable file when Presenting is available", async () => {
+  const { api, presented, sent } = client();
+  const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: true, chatEnabled: true });
+  expect(result).toMatchObject({ presented: "deck.pdf", chatFiles: [], failures: [] });
+  expect(presented).toEqual(["attachment-deck.pdf"]);
+  expect(sent).toEqual([]);
+});
+
+it("returns a presentable file for chat staging when Presenting is unavailable", async () => {
+  const { api, presented, sent } = client();
+  const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: false, chatEnabled: true });
+  expect(result.failures).toEqual([]);
+  expect(result.chatFiles).toHaveLength(1);
+  expect(result.presented).toBeUndefined();
+  expect(presented).toEqual([]);
+  expect(sent).toEqual([]);
+});
+
+it("does not send hidden chat when both Presenting and chat are unavailable", async () => {
+  const { api, presented, sent } = client();
+  const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: false, chatEnabled: false });
+  expect(result).toMatchObject({ chatFiles: [], failures: [{ fileName: "deck.pdf", reason: "unsupported" }] });
+  expect(presented).toEqual([]);
+  expect(sent).toEqual([]);
+});
+
+it("returns a failed Stage file for composer staging instead of sending it", async () => {
+  const { api, presented, sent } = client(false);
+  const pdf = file("deck.pdf");
+  const result = await presentFiles([pdf], api, { presentingAvailable: true, chatEnabled: true });
+  expect(result.presented).toBeUndefined();
+  expect(result.chatFiles).toEqual([pdf]);
+  expect(result.failures).toEqual([{ fileName: "deck.pdf", reason: "failed" }]);
+  expect(presented).toEqual(["attachment-deck.pdf"]);
+  expect(sent).toEqual([]);
+});
+
+it("splits a multi-file drop into one stage candidate and the remaining chat files", () => {
+  const pdf = file("deck.pdf");
+  const image = file("image.png", "image/png");
+  const text = file("notes.txt", "text/plain");
+  const split = splitPresentingFiles([pdf, image, text], { presentingAvailable: true, chatEnabled: true });
+  expect(split.stageFile).toBe(pdf);
+  expect(split.chatFiles).toEqual([image, text]);
+  expect(split.failures).toEqual([]);
+});
+
+it("puts every sendable file in the chat split when Presenting is unavailable", () => {
+  const pdf = file("deck.pdf");
+  const image = file("image.png", "image/png");
+  const split = splitPresentingFiles([pdf, image], { presentingAvailable: false, chatEnabled: true });
+  expect(split.stageFile).toBeUndefined();
+  expect(split.chatFiles).toEqual([pdf, image]);
+});
+
+it("stages only five chat files and counts the rest", () => {
+  const files = Array.from({ length: 6 }, (_, index) => file(`deck-${index}.pdf`));
+  const split = splitPresentingFiles(files, { presentingAvailable: false, chatEnabled: true });
+  expect(split.chatFiles).toEqual(files.slice(0, 5));
+  expect(split.chatOverflow).toBe(1);
+});
+
+it("keeps the failed Stage file inside the five-file composer batch", async () => {
+  const files = Array.from({ length: 6 }, (_, index) => file(`deck-${index}.pdf`));
+  const { api } = client(false);
+  const result = await presentFiles(files, api, { presentingAvailable: true, chatEnabled: true });
+  expect(result.chatFiles).toEqual(files.slice(0, 5));
+  expect(result.chatOverflow).toBe(1);
+  expect(result.failures).toEqual([{ fileName: "deck-0.pdf", reason: "failed" }]);
+});
+
+it("skips empty files instead of blocking the valid chat batch", () => {
+  const empty = file("empty.txt", "text/plain", 0);
+  const valid = file("notes.txt", "text/plain");
+  const split = splitPresentingFiles([empty, valid], { presentingAvailable: false, chatEnabled: true });
+  expect(split.chatFiles).toEqual([valid]);
+  expect(split.failures).toEqual([{ fileName: "empty.txt", reason: "empty" }]);
+});
+
+it("the composer skips empty files while accepting the valid rest", () => {
+  const empty = file("empty.txt", "text/plain", 0);
+  const valid = file("notes.txt", "text/plain");
+  const batch = prepareChatAttachmentBatch([empty, valid], 0);
+  expect(batch.accepted).toEqual([valid]);
+  expect(batch.emptyCount).toBe(1);
+  expect(batch.overflowCount).toBe(0);
+  expect(batch.invalid).toBeUndefined();
+});
+
+it("the composer accepts files up to its remaining capacity", () => {
+  const files = Array.from({ length: 4 }, (_, index) => file(`notes-${index}.txt`, "text/plain"));
+  const batch = prepareChatAttachmentBatch(files, 3);
+  expect(batch.accepted).toEqual(files.slice(0, 2));
+  expect(batch.overflowCount).toBe(2);
+});
+
+it("the composer still rejects an unsupported file before staging the batch", () => {
+  const batch = prepareChatAttachmentBatch([file("notes.txt", "text/plain"), file("archive.zip", "application/zip")], 0);
+  expect(batch.invalid?.fileName).toBe("archive.zip");
+});

@@ -11,6 +11,7 @@ import { makeReactionsController, type ReactionsControllerEffects } from "./reac
 import { makeRecordingController, type RecordingControllerEffects } from "./recording-controller";
 import { SpaceStore } from "./store";
 import { makeWhiteboardController, type WhiteboardControllerEffects } from "./whiteboard-controller";
+import { makePresentingController, type PresentingControllerEffects } from "./presenting-controller";
 export type ControllerEffects = {
   readonly media: MediaControllerEffects;
   readonly offline: OfflineActionsControllerEffects;
@@ -19,6 +20,7 @@ export type ControllerEffects = {
   readonly reactions: ReactionsControllerEffects;
   readonly recording: RecordingControllerEffects;
   readonly whiteboard: WhiteboardControllerEffects;
+  readonly presenting: PresentingControllerEffects;
 };
 /** Native controller composition: no Promise controller wrapper remains. */
 export const makeControllerEffects = (input: {
@@ -39,5 +41,6 @@ export const makeControllerEffects = (input: {
     const reactions = yield* makeReactionsController(input.connection, input.store);
     const recording = yield* makeRecordingController(input.connection, input.store);
     const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
-    return { media, offline: offlineActions, chat, participants, reactions, recording, whiteboard };
+    const presenting = yield* makePresentingController({ connection: input.connection, store: input.store, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch });
+    return { media, offline: offlineActions, chat, participants, reactions, recording, whiteboard, presenting };
   });

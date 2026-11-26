@@ -3,10 +3,9 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
-import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
-import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
+import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure } from "@q9labsai/chalk-client";
 import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, usePresenting, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -18,10 +17,7 @@ import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
-import { useChatFileDropFlow } from "./chat-file-drop";
-import { ReactionPicker } from "../composite/ReactionPicker";
-import { ReactionsOverlay } from "../composite/ReactionsOverlay";
-import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
+import { ControlBar } from "../control-bar/ControlBar";
 import { failedMediaNotice } from "../control-bar/control-bar-behavior";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { reconnectedToast } from "../connection-status/ConnectionStatus";
@@ -42,6 +38,10 @@ import { useCallToasts } from "../toast-stack/useCallToasts";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { useFilePresenting } from "./use-file-presenting";
+import { spaceViewControlBarButtons } from "./control-bar-buttons";
+import { spaceViewControlBarActions } from "./control-bar-actions";
+import { renderSpaceViewStageOverlay } from "./space-view-stage-overlay";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext } from "@q9labsai/chalk-whiteboard/react";
@@ -173,7 +173,6 @@ export function SpaceView({
   const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
-  const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
@@ -193,6 +192,7 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const presenting = usePresenting();
   // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
   if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
@@ -210,6 +210,16 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
+  const filePresenting = useFilePresenting({
+    client,
+    notify: callToasts.notify,
+    live: connection.status === "live",
+    chatOpen: activePanel === "chat",
+    chatEnabled: feature("chat"),
+    presentingAvailable: presenting.available,
+    pickChatFiles,
+    openChat: () => setActivePanel("chat"),
+  });
   const seenConnected = useSeenConnected(participantsSlice.roster);
   const tiles = useMemo(
     () =>
@@ -220,19 +230,7 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
-  const chatFileDrop = useChatFileDropFlow({ chatOpen: activePanel === "chat", chatAvailable: feature("chat") && canSendChat, onOpenChat: () => setActivePanel("chat") });
-  const buttons: ControlBarButtonName[] = [
-    "mic",
-    "video",
-    ...(feature("screenShare") && canPublishScreen ? ["screenshare" as const] : []),
-    ...(feature("recording") && canManageRecording ? ["record" as const] : []),
-    ...(feature("participants") ? ["participants" as const] : []),
-    ...(feature("chat") ? ["chat" as const] : []),
-    ...(feature("handRaise") ? ["handraise" as const] : []),
-    ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
-    ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
-    "leave",
-  ];
+  const buttons = spaceViewControlBarButtons({ features, canPublishScreen, presentingAvailable: presenting.available, canManageRecording, canSendReaction, canDrawWhiteboard });
   const headerLayout = pinnedId ? "focus" : layout;
   const updateLayout = (nextLayout: "grid" | "focus") => {
     if (nextLayout === "grid") setPinnedId(null);
@@ -324,7 +322,6 @@ export function SpaceView({
               connectionTrouble={connectionPhase.kind === "failed" ? "lost" : connectionPhase.kind === "reconnecting" ? "reconnecting" : undefined}
               colorScheme={colorScheme}
               stageBackground={stageBackground}
-              {...chatFileDrop.handlers}
               header={{
                 colorScheme,
                 onColorSchemeChange,
@@ -405,7 +402,7 @@ export function SpaceView({
                     onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                     onToggleWhiteboard={onToggleWhiteboard}
                     isWhiteboardOpen={whiteboard?.isOpen}
-                    onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+                    {...spaceViewControlBarActions({ setPresentOpen: filePresenting.setPresentOpen, setReactionPickerOpen, documents: presenting.documents, selfId: self.participantId })}
                     reactionsOpen={isReactionPickerOpen}
                     onCommandError={onCommandError}
                     onLeaveRequest={leaveCall}
@@ -413,28 +410,23 @@ export function SpaceView({
                   />
                 </DeviceAccessProvider>
               }
-              stageOverlay={
-                <>
-                  {feature("reactions") ? <ReactionsOverlay /> : null}
-                  {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
-                  {feature("reactions") && canSendReaction && connection.status === "live" ? (
-                    <div className="absolute bottom-24 left-1/2 z-44">
-                      <ReactionPicker
-                        isHandRaised={self.handRaised}
-                        onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
-                        isOpen={isReactionPickerOpen}
-                        onClose={() => setReactionPickerOpen(false)}
-                        allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
-                        onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
-                        size="compact"
-                      />
-                    </div>
-                  ) : null}
-                </>
-              }
+              stageOverlay={renderSpaceViewStageOverlay({
+                ...filePresenting,
+                presentingAvailable: presenting.available,
+                reactionsEnabled: feature("reactions"),
+                canSendReaction,
+                live: connection.status === "live",
+                handRaiseEnabled: feature("handRaise"),
+                canRaiseHand,
+                isHandRaised: self.handRaised,
+                onToggleHandRaise: () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
+                reactionPickerOpen: isReactionPickerOpen,
+                onReactionPickerClose: () => setReactionPickerOpen(false),
+                onSelectReaction: (reaction) => void runCommand(() => client.reactions.send(reaction)),
+              })}
               sidebar={
-                <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)} overlay={chatFileDrop.overlay}>
-                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} {...chatFileDrop.panelProps} /> : null}
+                <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={filePresenting.chatDrop} onDroppedFilesChange={filePresenting.updateChatDrop} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {
@@ -474,7 +466,6 @@ export function SpaceView({
               }
               overlays={
                 <>
-                  {chatFileDrop.dimmer}
                   <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />
                   {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
                     <Suspense fallback={null}>

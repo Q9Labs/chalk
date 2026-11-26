@@ -204,6 +204,9 @@ export function pageChecks(options) {
     const top = document.elementFromPoint(x, y);
     if (!top || el.contains(top) || top.contains(el)) continue;
     if (el.labels && [...el.labels].some((label) => label.contains(top))) continue;
+    // A dismiss layer is the click-to-close backdrop of an open popover. It covers the dock on purpose, so only the
+    // marked layer is exempt; any other cover still fails, and a marked layer never hides a control from another check.
+    if (top.closest("[data-ui-dismiss-layer]")) continue;
     add("control-covered", describe(el), `${describe(el)} is covered at its center by ${describe(top)}`);
   }
 

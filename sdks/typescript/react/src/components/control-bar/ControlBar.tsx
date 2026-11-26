@@ -5,33 +5,28 @@ import { isDeviceAccessFailure } from "../device-access/model";
 import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
-import { HandIcon, VolumeHighIcon } from "../../utils/icons";
+import { HandIcon } from "../../utils/icons";
 import { DevicePopover, preloadDeviceSheet } from "../device-popover/DevicePopover";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
-import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
-import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps as SurfaceBehaviorProps, type ControlBarProps as BehaviorProps, type MediaDevice } from "./control-bar-behavior";
-import { MediaGlyph, ShellIcon } from "./ShellIcon";
+import { DockDeviceRows, DockLeave } from "./DockControls";
+import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior } from "./control-bar-behavior";
+import type { ConnectedControlBarProps, ControlBarSurfaceProps as SurfaceBehaviorProps } from "./control-bar-props";
+import { ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
-export type { ControlBarButtonName } from "./control-bar-behavior";
+export type { ControlBarButtonName } from "./control-bar-props";
 
 interface HelperInstallProps {
   readonly helperInstallUrl?: string;
 }
 
 type ControlBarSurfaceProps = SurfaceBehaviorProps & HelperInstallProps;
-export type ControlBarProps = BehaviorProps & HelperInstallProps;
+export type ControlBarProps = ConnectedControlBarProps & HelperInstallProps;
 
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
-}
-
-/** The selected device's name, or the first one when none is chosen yet, for a row of the More sheet. */
-function DeviceValue({ devices, selectedDeviceId }: { readonly devices: readonly MediaDevice[]; readonly selectedDeviceId?: string }) {
-  const device = devices.find((candidate) => candidate.deviceId === selectedDeviceId) ?? devices[0];
-  return device?.label ? <span className="chalk-sheet-value">{device.label}</span> : null;
 }
 
 export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
@@ -136,6 +131,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onStart={props.onStartScreenShare}
         />
       ) : null}
+      {has("presenting") && (props.onPresent || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -151,22 +147,16 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onLayoutChange={props.onLayoutChange ?? (() => {})}
           onOpen={preloadDeviceSheet}
           devices={
-            <>
-              {has("mic") ? (
-                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setMicrophoneOpen(true)}>
-                  <VolumeHighIcon />
-                  <span className="chalk-sheet-label-text">Microphone and speaker</span>
-                  <DeviceValue devices={effectiveAudioInputDevices} selectedDeviceId={props.selectedAudioInput} />
-                </button>
-              ) : null}
-              {has("video") ? (
-                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setCameraOpen(true)}>
-                  <MediaGlyph kind="cam" slashed={false} busy={false} />
-                  <span className="chalk-sheet-label-text">Camera</span>
-                  <DeviceValue devices={effectiveVideoInputDevices} selectedDeviceId={props.selectedVideoInput} />
-                </button>
-              ) : null}
-            </>
+            <DockDeviceRows
+              showMicrophone={has("mic")}
+              showCamera={has("video")}
+              onOpenMicrophone={() => setMicrophoneOpen(true)}
+              onOpenCamera={() => setCameraOpen(true)}
+              audioInputDevices={effectiveAudioInputDevices}
+              selectedAudioInput={props.selectedAudioInput}
+              videoInputDevices={effectiveVideoInputDevices}
+              selectedVideoInput={props.selectedVideoInput}
+            />
           }
         >
           {has("video") && effectiveVideoInputDevices.length >= 2 ? (
@@ -187,6 +177,12 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
+            </button>
+          ) : null}
+          {has("presenting") && props.onPresent ? (
+            <button type="button" className="chalk-sheet-row" onClick={props.onPresent}>
+              <ShellIcon name="present" />
+              <span>{props.isPresenting ? "Presenting" : "Present"}</span>
             </button>
           ) : null}
           {has("whiteboard") ? (
@@ -216,17 +212,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           ) : null}
         </DockLayout>
       </span>
-      {showLeave ? (
-        <LeaveMenu
-          onLeave={props.onLeft}
-          onEndForEveryone={props.onEndForEveryone}
-          renderButton={(buttonProps) => (
-            <ChalkIconButton {...buttonProps} size="lg" tone="danger" className="chalk-shell-leave" aria-label="Leave call">
-              <ShellIcon name="hang" />
-            </ChalkIconButton>
-          )}
-        />
-      ) : null}
+      <DockLeave show={showLeave} onLeft={props.onLeft} onEndForEveryone={props.onEndForEveryone} />
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>
   );

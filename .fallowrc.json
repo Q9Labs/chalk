@@ -130,6 +130,8 @@
     "../../sdks/typescript/client/dist/webhooks/index.js"
   ],
   "ignoreDependencies": [
+    "@ast-grep/cli",
+    "@e2e-dev/web",
     "js-yaml",
     "openapi-typescript",
     "oxlint",

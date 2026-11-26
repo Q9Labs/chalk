@@ -130,7 +130,13 @@ test("container artifact reads stay internal without changing browser download U
   assert.equal(internal.hostname, "127.0.0.1");
   assert.equal(internal.port, String(config.ports.web));
   const args = containerArguments(config, "api", { image: "test", env });
-  assert.ok(args.includes(`type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts,readonly`));
+  // The API container's artifact server writes local object bytes and rendered pages through this bind mount.
+  const writableMount = `type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts`;
+  assert.deepEqual(
+    args.filter((argument) => argument.includes("target=/dashboard-artifacts")),
+    [writableMount],
+    "the local artifact server requires a writable dashboard artifact mount",
+  );
   for (let index = 0; index < args.length; index++) if (args[index] === "--publish") assert.ok(args[index + 1].startsWith("127.0.0.1:"));
   assert.equal(internal.pathname, "/__local-dashboard-artifacts");
   const remote = containerEnvironment(config, "api", { CHALK_R2_ENDPOINT: "https://artifacts.example.test" });
@@ -180,25 +186,13 @@ for (const signal of [undefined, "SIGINT", "SIGTERM"]) {
   });
 }
 
-async function python3Command() {
-  for (const command of ["python3", "python"]) {
-    const works = await new Promise((resolve) => {
-      const probe = spawn(command, ["-c", "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)"], { stdio: "ignore" });
-      probe.on("error", () => resolve(false));
-      probe.on("exit", (code) => resolve(code === 0));
-    });
-    if (works) return command;
-  }
-  throw new Error("No working Python 3 interpreter is on PATH for the artifact server test");
-}
-
 test("the local artifact server stores bytes and object metadata for finalize", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-artifact-server-"));
   const listener = createServer();
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
-  const python = await python3Command();
+  const python = process.platform === "win32" ? "python" : "python3";
   const child = spawn(python, ["scripts/dev/artifact-server.py", String(port), root], { stdio: "ignore" });
   try {
     const base = `http://127.0.0.1:${port}/__local-dashboard-artifacts/local-dashboard/test.pdf`;

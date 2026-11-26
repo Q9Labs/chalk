@@ -22,6 +22,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Transport.Socket.Lifecycle
   alias ChalkSync.Transport.Socket.LiveRequests
   alias ChalkSync.Transport.Socket.Outbound
+  alias ChalkSync.Transport.Socket.Presenting
   alias ChalkSync.Transport.Socket.State
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
@@ -162,6 +163,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   def handle_info(:annotation_tick, state), do: Annotation.tick(state)
   def handle_info(:annotation_changed, state), do: Annotation.changed(state)
   def handle_info(:annotation_presence_ready, state), do: Annotation.drain_presence(state)
+  def handle_info(:presenting_tick, state), do: Presenting.tick(state)
+
+  def handle_info(:presenting_changed, state),
+    do: Presenting.changed(state)
 
   def handle_info(:collaboration_drain, state), do: Collaboration.push_collaboration(state)
 
@@ -205,6 +210,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     Lifecycle.cancel_timer(state.entry_timer)
     Lifecycle.cancel_timer(state.terminal_ack_timer)
     if state.screen_annotation, do: AnnotationPresence.leave()
+    Presenting.leave(state)
     Collaboration.unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
     if is_pid(state.coordinator), do: Coordinator.unsubscribe(state.coordinator, self())
@@ -274,6 +280,9 @@ defmodule ChalkSync.Transport.SocketV1 do
        do: Collaboration.client_frame(name, input, state)
 
   defp handle_frame({:screen_annotation, frame}, state), do: Annotation.handle(frame, state)
+
+  defp handle_frame({:presenting, frame}, state),
+    do: Presenting.handle(frame, state)
 
   defp handle_frame(:ping, %{phase: :live} = state) do
     state = %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}

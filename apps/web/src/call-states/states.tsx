@@ -1,4 +1,5 @@
 import { ScreenAnnotationFixture } from "./screen-annotation";
+import { PRESENTING_STATES } from "./presenting-states";
 import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
@@ -17,7 +18,6 @@ import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
-import { ChatFileDropFixture } from "./chat-file-drop-fixture";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -45,6 +45,7 @@ const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   { id: "screen-annotation", title: "Screen annotation", render: () => <ScreenAnnotationFixture /> },
+  ...PRESENTING_STATES,
   { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
   { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
   { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },
@@ -193,7 +194,6 @@ export const CALL_STATES: readonly CallState[] = [
 
   { id: "chat-empty", title: "Chat, no messages", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "chat", title: "Chat with messages and a file", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora, akash], chat: chatMessages() })} /> },
-  { id: "chat-file-drop", title: "Chat file drop target", render: () => <ChatFileDropFixture /> },
   {
     id: "participants",
     title: "Participants panel",

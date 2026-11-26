@@ -1,6 +1,6 @@
 import React, { type SVGProps } from "react";
 
-type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen";
+type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info";
 const paths: Record<StageIconName, React.ReactNode> = {
   share: (
     <>
@@ -59,6 +59,22 @@ const paths: Record<StageIconName, React.ReactNode> = {
     <>
       <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
       <path d="M15 5l4 4" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6M9 13h6M9 17h6" />
+    </>
+  ),
+  download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
+  "chevron-left": <path d="M15 18l-6-6 6-6" />,
+  "chevron-right": <path d="M9 18l6-6-6-6" />,
+  close: <path d="M18 6L6 18M6 6l12 12" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
     </>
   ),
 };

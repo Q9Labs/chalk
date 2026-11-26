@@ -1,10 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 
-// The local artifact store is S3-compatible and only accepts signed writes from these credentials.
-export const LOCAL_ARTIFACT_ACCESS_KEY_ID = "local-dashboard";
-export const LOCAL_ARTIFACT_SECRET_ACCESS_KEY = "local-dashboard-storage-not-a-production-secret";
-
 export async function writeDashboardArtifacts(runtimeRoot, artifacts) {
   const root = resolve(runtimeRoot, "dashboard-artifacts", "__local-dashboard-artifacts");
   for (const [key, value] of Object.entries(artifacts)) {
