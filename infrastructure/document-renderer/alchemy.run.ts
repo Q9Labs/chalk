@@ -11,12 +11,13 @@ import { environment, providers, state } from "../platform/config.ts";
 import { alarmProvider } from "../providers/aws-dispatcher-alarm.ts";
 import { logGroupProvider } from "../providers/aws-run-owned.ts";
 import { VersionedFunction, functionProvider } from "../providers/aws-versioned-function.ts";
+import { RoleInlinePolicy, roleInlinePolicyProvider } from "../providers/aws-role-inline-policy.ts";
 import { parseInputs, requireInput } from "./config.ts";
 import { resourceProps } from "./resources.ts";
 
 export const stackName = "document-renderer";
 import * as Layer from "effect/Layer";
-export const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers));
+export const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), roleInlinePolicyProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers));
 const storedInputs = (value: unknown) => {
   const output = Schema.decodeUnknownSync(Schema.Struct({ renderer_inputs: Schema.Redacted(Schema.Unknown) }))(value);
   return parseInputs(Redacted.value(output.renderer_inputs));
@@ -39,6 +40,7 @@ export default Alchemy.Stack(
     const execution = yield* AWS.IAM.Role("ExecutionRole", props.executionRole);
     const fn = yield* VersionedFunction("Function", { ...props.fn, role: execution.roleArn });
     if (props.controlPermission) yield* AWS.Lambda.Permission("ControlApiPermission", { ...props.controlPermission, functionName: fn.functionName });
+    if (props.controlApiInvokePolicy) yield* RoleInlinePolicy("ControlApiInvokePolicy", props.controlApiInvokePolicy);
     for (const [name, alarm] of Object.entries(props.alarms)) yield* AWS.CloudWatch.Alarm(name, alarm);
     return props.outputs;
   }).pipe(Effect.orDie),

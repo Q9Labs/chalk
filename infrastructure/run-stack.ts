@@ -18,7 +18,7 @@ else if (operation === "table") {
   command = ["tsx", "migration/retire-nightly.ts", name ?? "", ...(stageName ? [stageName] : [])];
 } else {
   const { target, stage } = selectStack(name, stageName);
-  if (!["plan", "deploy", "destroy", "drift", "seed", "prove"].includes(operation ?? "")) throw new Error("Usage: pnpm infra <plan|deploy|destroy|drift|seed|prove> <stack> <stage>");
+  if (!["plan", "deploy", "destroy", "drift", "seed", "prove", "bootstrap"].includes(operation ?? "")) throw new Error("Usage: pnpm infra <plan|deploy|destroy|drift|seed|prove|bootstrap> <stack> <stage>");
   if (operation === "deploy") requireDeployable(target);
   if ((operation === "destroy" || operation === "prove") && stage.kind !== "ephemeral") throw new Error("Only run-owned ephemeral stages can be destroyed or proved");
   if (operation !== "seed" && args.length) throw new Error("Operations accept no overriding flags; configure private inputs through CHALK_INFRA_INPUTS");
@@ -28,15 +28,19 @@ else if (operation === "table") {
       ? ["tsx", "migration/seed.ts", target.stackName, stage.name, ...args]
       : operation === "deploy"
         ? ["tsx", "releases/deploy.ts", target.stackName, stage.name]
-        : operation === "destroy"
-          ? ["tsx", "releases/destroy-stage.ts", target.stackName, stage.name]
-          : operation === "prove"
-            ? ["tsx", "releases/prove-dispatcher.ts", stage.name]
-            : operation === "plan" && target.stackName === "transcription-dispatcher"
-              ? ["tsx", "releases/driver.ts", "plan", stage.name]
-              : operation === "drift"
-                ? ["tsx", "platform/drift.ts", entryFile(target), stage.name]
-                : ["alchemy", operation ?? "", "--config", entryFile(target), "--stage", stage.name, "--no-input"];
+        : operation === "bootstrap"
+          ? ["tsx", "releases/bootstrap-renderer.ts", target.stackName, stage.name]
+          : operation === "destroy"
+            ? ["tsx", "releases/destroy-stage.ts", target.stackName, stage.name]
+            : operation === "prove"
+              ? ["tsx", "releases/prove-dispatcher.ts", stage.name]
+              : operation === "plan" && target.stackName === "transcription-dispatcher"
+                ? ["tsx", "releases/driver.ts", "plan", stage.name]
+                : operation === "plan" && target.stackName === "document-renderer"
+                  ? ["tsx", "releases/renderer-driver.ts", "plan", stage.name]
+                  : operation === "drift"
+                    ? ["tsx", "platform/drift.ts", entryFile(target), stage.name]
+                    : ["alchemy", operation ?? "", "--config", entryFile(target), "--stage", stage.name, "--no-input"];
 }
 if (command) {
   const result = spawnSync("pnpm", ["exec", ...command], { cwd, stdio: "inherit", env: { ...process.env, ...(name === "sfu" || name === "sfu-standby" ? { CHALK_SFU_STACK: name } : {}) } });

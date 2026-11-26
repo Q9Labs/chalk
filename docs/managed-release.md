@@ -4,7 +4,7 @@ Three workflows ship the managed backend and web: `Release` (`.github/workflows/
 
 ## Principles
 
-- Production never builds. Nightly builds and proves a release once. Promote ships those exact bytes: image digests, web archive, recorder archives and the dispatcher ZIP. A rebuild would ship something nobody proved.
+- Production never builds. Nightly builds and proves a release once. Promote ships those exact bytes: image digests, web archive, recorder archives and the dispatcher and document-renderer ZIPs. A rebuild would ship something nobody proved.
 - Nightly is isolated. It has its own AWS role, state, Pages project, bucket and recorder config. No nightly credential may touch production, and nightly config never points at production state.
 - Rollback comes from durable evidence, not from Actions artifacts. Before host mutation, a production deploy stores the exact manifest bytes and their SHA256 in a `production-release` GitHub deployment payload. Only a complete, healthy deploy marks it successful. Rollback verifies the hash, builds a fresh envelope from the previous source, and restores the web through Pages' native rollback.
 - Nothing is invented. A missing proof, an unreadable baseline or an expired artifact fails closed with a message that names what to do. No code path fabricates a proof result.
@@ -27,7 +27,7 @@ If the saved build baseline has expired, the cut rebuilds the saved set of enabl
 
 `enable_recorder_control` chooses whether a cut includes recorder control and media. Production ignores the input and keeps recorder control from its baseline.
 
-Recorder archives are content-addressed (`recorder/<role>/<sha256>.tar.gz`) and built on the runner without DigitalOcean credentials. A recorder host gets a short-lived download URL from the controller, so no AWS credentials live on a host. Snapshot v2 holds no hostname or CA: cloud-init installs the environment's own. The sidecar `<release_id>.media.json` binds snapshots, archives, hashes and the dispatcher ZIP identity to the release.
+Recorder archives are content-addressed (`recorder/<role>/<sha256>.tar.gz`) and built on the runner without DigitalOcean credentials. A recorder host gets a short-lived download URL from the controller, so no AWS credentials live on a host. Snapshot v2 holds no hostname or CA: cloud-init installs the environment's own. The sidecar `<release_id>.media.json` binds snapshots, archives, hashes and the dispatcher and document-renderer ZIP identities to the release. Media members written before renderer support may omit `renderer`; rollback keeps them valid, and the renderer is not moved by such a rollback.
 
 ## Promote
 
@@ -72,10 +72,10 @@ The repository is public, so its logs, artifacts and Deployment payloads are rea
 
 - Each GitHub environment needs the `CHALK_MANAGED_*` settings the workflows read. Names that identify infrastructure (the deploy role ARN, the instance id, the registry, the media bucket) are environment or repository secrets, never variables, because the repository is public and a variable prints in the step log. The deploy role's OIDC trust must name that exact environment. Creating the name does not provision infrastructure.
 - Each environment has its own recorder config at `/chalk/<environment>/release/recorder.json`. Never copy secret exclusions from another host.
-- The deploy role needs the SSM document permissions and the dispatcher module permissions (state read and write, `.tflock`, versioned ZIP read and copy, Lambda binding). It never creates roles, policies or scheduler updates. See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
+- The deploy role needs the SSM document permissions and the dispatcher module permissions. It needs the document-renderer module permissions (state read and write, `.tflock`, versioned ZIP read and copy, Lambda binding) only when the operator deliberately sets the production environment declaration `CHALK_RENDERER_RELEASE_ENABLED=true`; before that declaration the nightly media build uploads and records the renderer ZIP, Promote reuses that record and skips binding it, and no step reads renderer state, so a bootstrapped renderer keeps serving its bootstrap version. The first production rollout leaves the declaration unset until [issue #1705](https://github.com/Q9Labs/chalk/issues/1705) fixes interrupted managed renderer release recovery. The deploy role never creates roles, policies or scheduler updates; the bootstrap is an operator step outside CI. See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
 - Changes under `infrastructure/transcription-dispatcher/` are rejected by the media path. A root-input change needs a separately reviewed infrastructure migration.
-- If a deploy fails after the host is ready, `deployment_phase=dispatcher-failed` shows the host is fine and only the dispatcher binding failed. Read the partial proof, then retry. The SSM command ID in the job log finds the full error in the environment's deployment log group. Do not bypass CI to turn a failed release green. `deploy-managed-release.mjs --dry-run` diagnoses without touching a host.
-- First Promote after a media upgrade replaces production's recorder pins and dispatcher ZIP with the nightly-tested ones and keeps the previous pins for rollback. Existing workers drain through the normal fleet lifecycle.
+- If a deploy fails after the host is ready, `deployment_phase=renderer-failed` or `dispatcher-failed` shows the host is fine and only that workload binding failed. Read the partial proof, then retry. The SSM command ID in the job log finds the full error in the environment's deployment log group. Do not bypass CI to turn a failed release green. `deploy-managed-release.mjs --dry-run` diagnoses without touching a host.
+- First Promote after a media upgrade replaces production's recorder pins and dispatcher and renderer ZIPs with the nightly-tested ones and keeps the previous pins for rollback. Existing workers drain through the normal fleet lifecycle.
 
 ## Immutable web vendor assets
 

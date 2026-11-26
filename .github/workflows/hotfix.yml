@@ -74,6 +74,7 @@ jobs:
           CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || '/chalk/production/release/recorder.json' }}
           MANAGED_ENVIRONMENT: production
           BASELINE_MEDIA_SHA256: ${{ fromJSON(needs.plan.outputs.baseline).media_sha256 }}
+          CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
         run: |
           if [[ -z "$BASELINE_MEDIA_SHA256" ]]; then
             python3 scripts/releases/media.py retain_runtime --environment "$MANAGED_ENVIRONMENT" --output previous-media.json

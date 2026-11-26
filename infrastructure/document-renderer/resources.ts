@@ -56,6 +56,8 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
     log,
     fn,
     controlPermission: input.control_api_invoker_principal !== null && input.control_api_invoke_source_arn !== null ? { functionName: input.function_name, action: "lambda:InvokeFunction", principal: input.control_api_invoker_principal, sourceArn: input.control_api_invoke_source_arn } : undefined,
+    controlApiInvokePolicy:
+      input.control_api_invoker_role_name !== null ? { roleName: input.control_api_invoker_role_name, policyName: `${input.function_name}-control-api-invoke`, policy: JSON.stringify(policy([allow("InvokeDocumentRendererOnly", ["lambda:InvokeFunction"], [functionArn])])) } : undefined,
     alarms: {
       Errors: alarm("errors", "Document renderer invocation errors.", "Errors"),
       Throttles: alarm("throttles", "Reserved-concurrency throttles on the document renderer.", "Throttles"),
