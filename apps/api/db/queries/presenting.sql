@@ -219,7 +219,7 @@ failed_documents as (
         and document.space_id = expired.space_id
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
-        and document.status <> 'failed'
+        and document.status = 'preparing'
     returning document.document_id
 )
 select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,

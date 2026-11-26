@@ -388,3 +388,43 @@ func TestPresentingFinalRenderAttemptTimeoutFailsDocumentIntegration(t *testing.
 		t.Fatalf("final timeout left job=%q document=%q", jobStatus, documentStatus)
 	}
 }
+
+func TestPresentingFinalTimeoutLeavesReadyDocumentIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `update presenting_documents set status = 'ready' where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID)); err != nil {
+		t.Fatalf("mark document ready: %v", err)
+	}
+	realNow := time.Now().UTC()
+	claimNow := realNow.Add(2 * time.Second)
+	leaseUntil := realNow.Add(-time.Minute)
+	var lease presenting.RenderLease
+	for attempt := 1; attempt <= presenting.RenderAttemptLimit; attempt++ {
+		token, _ := utilities.NewID()
+		claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, attempt, claimNow, leaseUntil, token, "document-renderer")
+		if err != nil {
+			t.Fatalf("claim attempt %d: %v", attempt, err)
+		}
+		lease = claimed.Job.RenderLease
+		claimNow = claimNow.Add(time.Second)
+	}
+	if _, err := repository.ListStaleRenderJobs(ctx, claimNow, 10); err != nil {
+		t.Fatalf("list stale jobs: %v", err)
+	}
+	var jobStatus, documentStatus string
+	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
+		t.Fatalf("read job status: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
+		t.Fatalf("read document status: %v", err)
+	}
+	if jobStatus != "failed" || documentStatus != "ready" {
+		t.Fatalf("ready-document timeout left job=%q document=%q", jobStatus, documentStatus)
+	}
+}
