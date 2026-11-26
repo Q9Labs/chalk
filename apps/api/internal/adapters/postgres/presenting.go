@@ -217,7 +217,7 @@ func (r PresentingRepository) ListStaleRenderJobs(ctx context.Context, now time.
 		return nil, fmt.Errorf("begin presenting render job reconciliation: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
 	if err := reapPresentingRenderJobs(ctx, q); err != nil {
 		return nil, err
 	}

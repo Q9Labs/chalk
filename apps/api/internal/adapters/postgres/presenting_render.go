@@ -14,6 +14,9 @@ import (
 )
 
 func reapPresentingRenderJobs(ctx context.Context, q *sqlc.Queries) error {
+	if _, err := q.LockPresentingRenderSweepDocuments(ctx); err != nil {
+		return fmt.Errorf("lock presenting render sweep documents: %w", err)
+	}
 	if err := q.ExpirePresentingRenderJobs(ctx); err != nil {
 		return fmt.Errorf("expire timed-out presenting render jobs: %w", err)
 	}
@@ -33,7 +36,7 @@ func (r PresentingRepository) ClaimRenderJob(ctx context.Context, jobID utilitie
 		return presenting.RenderAssignment{}, fmt.Errorf("begin presenting render job claim: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
 	if err := reapPresentingRenderJobs(ctx, q); err != nil {
 		return presenting.RenderAssignment{}, err
 	}
@@ -87,7 +90,7 @@ func (r PresentingRepository) CompleteInventory(ctx context.Context, report pres
 		return nil, fmt.Errorf("begin presenting inventory completion: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
 	lease := report.Lease
 	if err := storeInventory(ctx, q, report); err != nil {
 		return nil, err
@@ -160,7 +163,7 @@ func (r PresentingRepository) MarkPageReady(ctx context.Context, lease presentin
 		return fmt.Errorf("begin presenting page publication: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
 	if err := publishPresentingPage(ctx, q, lease, page); err != nil {
 		return err
 	}
@@ -173,7 +176,10 @@ func (r PresentingRepository) CompleteRenderJob(ctx context.Context, lease prese
 		return fmt.Errorf("begin presenting render completion: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
+	if err := lockPresentingRenderDocument(ctx, q, lease); err != nil {
+		return err
+	}
 	if err := completePresentingJob(ctx, q, lease); err != nil {
 		return err
 	}
@@ -197,7 +203,10 @@ func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presentin
 		return fmt.Errorf("begin presenting render failure: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
+	if err := lockPresentingRenderDocument(ctx, q, lease); err != nil {
+		return err
+	}
 	var rows int64
 	if failure.Code == "infrastructure" {
 		rows, err = q.RequeuePresentingRenderJob(ctx, sqlc.RequeuePresentingRenderJobParams{
@@ -264,6 +273,13 @@ func presentingRenderUploadKey(ctx context.Context, q *sqlc.Queries, lease prese
 		return "", fmt.Errorf("read tracked presenting upload: %w", err)
 	}
 	return key, nil
+}
+
+func lockPresentingRenderDocument(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {
+	if _, err := q.LockPresentingRenderDocument(ctx, sqlc.LockPresentingRenderDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID)}); err != nil {
+		return fmt.Errorf("lock presenting render document: %w", err)
+	}
+	return nil
 }
 
 func completePresentingJob(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {

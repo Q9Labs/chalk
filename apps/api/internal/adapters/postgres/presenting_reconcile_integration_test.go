@@ -40,6 +40,15 @@ func insertFailedDocumentJob(t *testing.T, repository PresentingRepository, fixt
 		values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(jobID))
 }
 
+func insertAdditionalPresentingAttachment(t *testing.T, pool *pgxpool.Pool, fixture presentingTestFixture) utilities.ID {
+	t.Helper()
+	attachmentID, uploadID := newTestID(t), newTestID(t)
+	mustExec(t, pool, `insert into sync_chat_attachments(tenant_id,space_id,episode_id,attachment_id,participant_id,participant_generation,client_attachment_id,request_fingerprint,upload_id,object_key,original_filename,mime_type,byte_length,sha256,immutable_object_identity,status,expires_at,finalized_at)
+		values($1,$2,$3,$4,$5,1,$6,repeat('a',32)::bytea,$7,$8,'deck.pdf','application/pdf',1024,repeat('b',32)::bytea,'object-version','ready',now()+interval '1 day',now())`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(attachmentID), uuid(fixture.participant), "client-"+attachmentID.String(), uuid(uploadID), "attachment-"+attachmentID.String())
+	return attachmentID
+}
+
 func clearPresentingRenderJobsForSerialTest(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	// Reconciliation and untargeted claims are global. These integration tests
@@ -120,14 +129,24 @@ func TestPresentingReconcileSkipsExpiredSourceJobsIntegration(t *testing.T) {
 	goodFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
 	clearPresentingRenderJobsForSerialTest(t, pool)
-	if _, err := repository.CreateDocument(ctx, expiredFixture.subject, expiredFixture.attachment, newTestID(t)); err != nil {
-		t.Fatalf("create expired-source document: %v", err)
-	}
+	mustExec(t, pool, `with expired_attachments as (
+		insert into sync_chat_attachments(tenant_id,space_id,episode_id,attachment_id,participant_id,participant_generation,client_attachment_id,request_fingerprint,upload_id,object_key,original_filename,mime_type,byte_length,sha256,immutable_object_identity,status,expires_at,finalized_at)
+		select $1,$2,$3,gen_random_uuid(),$4,1,'expired-client-'||g,repeat('a',32)::bytea,gen_random_uuid(),'expired-source-'||gen_random_uuid()::text,'deck.pdf','application/pdf',1024,repeat('b',32)::bytea,'object-version','ready',now()-interval '1 minute',now()
+		from generate_series(1,50) g
+		returning tenant_id,space_id,episode_id,attachment_id,object_key
+	), expired_documents as (
+		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status)
+		select tenant_id,space_id,episode_id,gen_random_uuid(),attachment_id,$4,1,'deck.pdf','application/pdf',1024,object_key,repeat('b',32)::bytea,'preparing'
+		from expired_attachments
+		returning tenant_id,space_id,document_id
+	)
+	insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
+	select tenant_id,space_id,document_id,gen_random_uuid(),'inventory',1,1,'queued',now()-interval '1 minute'
+	from expired_documents`, uuid(expiredFixture.tenant), uuid(expiredFixture.space), uuid(expiredFixture.episode), uuid(expiredFixture.participant))
 	good, err := repository.CreateDocument(ctx, goodFixture.subject, goodFixture.attachment, newTestID(t))
 	if err != nil {
 		t.Fatalf("create good document: %v", err)
 	}
-	mustExec(t, pool, `update sync_chat_attachments set expires_at=now()-interval '1 minute' where tenant_id=$1 and space_id=$2 and attachment_id=$3`, uuid(expiredFixture.tenant), uuid(expiredFixture.space), uuid(expiredFixture.attachment))
 	invoker := &recordingRenderInvoker{}
 	signer, err := presenting.NewCapabilitySigner(strings.Repeat("s", 32))
 	if err != nil {
@@ -144,6 +163,65 @@ func TestPresentingReconcileSkipsExpiredSourceJobsIntegration(t *testing.T) {
 	invokedJobs := invoker.invoked()
 	if len(invokedJobs) != 1 || invokedJobs[0] != good.InventoryJobID {
 		t.Fatalf("expired-source invoked jobs = %+v, want only good inventory job %s", invokedJobs, good.InventoryJobID)
+	}
+	var expiredCount int
+	if err := pool.QueryRow(ctx, `select count(*) from presenting_render_jobs where tenant_id=$1 and space_id=$2 and status='failed' and error_code='source_expired'`, uuid(expiredFixture.tenant), uuid(expiredFixture.space)).Scan(&expiredCount); err != nil {
+		t.Fatalf("count expired-source jobs: %v", err)
+	}
+	if expiredCount != 50 {
+		t.Fatalf("expired-source sweep marked %d jobs; want 50", expiredCount)
+	}
+}
+
+func TestPresentingSweepAndFailRenderJobDoNotDeadlockIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	clearPresentingRenderJobsForSerialTest(t, pool)
+	for iteration := 0; iteration < 20; iteration++ {
+		attachmentID := insertAdditionalPresentingAttachment(t, pool, fixture)
+		documentID, terminalJobID, targetJobID, leaseToken := newTestID(t), newTestID(t), newTestID(t), newTestID(t)
+		mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,failure_code,failure_message,page_count)
+			values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'lock-source',repeat('b',32)::bytea,'failed','corrupt','already failed',10)`,
+			uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(documentID), uuid(attachmentID), uuid(fixture.participant))
+		mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
+			values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(terminalJobID))
+		mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
+			values($1,$2,$3,$4,'pages',2,2,'leased',1,3,$5,'document-renderer',now()+interval '1 minute',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(targetJobID), uuid(leaseToken))
+		lease := presenting.RenderLease{TenantID: fixture.tenant, SpaceID: fixture.space, DocumentID: documentID, JobID: targetJobID, Attempt: 1, LeaseToken: leaseToken, LeaseOwner: "document-renderer"}
+		start := make(chan struct{})
+		errorsCh := make(chan error, 2)
+		var workers sync.WaitGroup
+		workers.Add(2)
+		go func() {
+			defer workers.Done()
+			<-start
+			token, _ := utilities.NewID()
+			now := time.Now().UTC()
+			_, err := repository.ClaimRenderJob(ctx, terminalJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+			if errors.Is(err, presenting.ErrNoRenderJob) {
+				err = nil
+			}
+			errorsCh <- err
+		}()
+		go func() {
+			defer workers.Done()
+			<-start
+			err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "corrupt in concurrency test"})
+			if errors.Is(err, presenting.ErrLeaseLost) {
+				err = nil
+			}
+			errorsCh <- err
+		}()
+		close(start)
+		workers.Wait()
+		close(errorsCh)
+		for err := range errorsCh {
+			if err != nil {
+				t.Fatalf("concurrent sweep/fail iteration %d: %v", iteration, err)
+			}
+		}
 	}
 }
 
