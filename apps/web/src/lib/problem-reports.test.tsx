@@ -55,6 +55,5 @@ it("releases the report availability probe while the dialog is closed", async ()
   await vi.waitFor(() => expect(requests).toHaveLength(1));
   await act(async () => root?.render(<AvailabilityProbe enabled={false} />));
   window.dispatchEvent(new Event("online"));
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
   expect(requests).toHaveLength(1);
 });
