@@ -10,7 +10,9 @@ func mountWorkerRoutes(r chi.Router, options Options) {
 	mountTranscriptWorkerRoutes(r, options.TranscriptWorker, options.WorkloadAuthorizer, options.ManifestAuthority, options.ChunkAuthority, options.ResultAuthority)
 	mountTranscriptCleanupRoutes(r, options.CleanupWorker, options.WorkloadAuthorizer, options.CleanupDeleteAuthority)
 	mountTranscriptFinalizeRoutes(r, options.FinalizerWorker, options.WorkloadAuthorizer, options.FinalizerAuthority)
-	mountPresentingWorkerRoutes(r, options.Presenting, options.PresentingCapabilityAuthorizer)
+	if options.Presenting != nil && options.PresentingCapabilityAuthorizer != nil {
+		mountPresentingWorkerRoutes(r, options.Presenting, options.PresentingCapabilityAuthorizer)
+	}
 }
 
 // NewPrivateWorkerRouter composes the mTLS-only worker boundary. The public

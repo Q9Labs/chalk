@@ -71,18 +71,8 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 		return "", time.Time{}, ErrDocumentNotReady
 	}
 	if !page.ZoomReady {
-		job, created, err := s.repository.EnsureZoomJob(ctx, document, pageNumber, s.now().UTC())
-		if err != nil {
+		if err := s.renderZoom(ctx, document, pageNumber); err != nil {
 			return "", time.Time{}, err
-		}
-		if !created {
-			return "", time.Time{}, ErrZoomNotReady
-		}
-		if s.invoker == nil {
-			return "", time.Time{}, ErrRenderUnavailable
-		}
-		if err := s.invokeJob(ctx, job, true); err != nil {
-			return "", time.Time{}, fmt.Errorf("invoke presenting zoom renderer: %w", err)
 		}
 		_, page, err = s.repository.AuthorizedPage(ctx, subject, documentID, pageNumber)
 		if err != nil {
@@ -99,6 +89,24 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 		return "", time.Time{}, fmt.Errorf("sign presenting zoom page: %w", err)
 	}
 	return signed.URL, signed.ExpiresAt, nil
+}
+
+// renderZoom starts the zoom job for a page that has none and runs it synchronously. It fails when another request already holds the job.
+func (s Service) renderZoom(ctx context.Context, document Document, pageNumber int) error {
+	job, created, err := s.repository.EnsureZoomJob(ctx, document, pageNumber, s.now().UTC())
+	if err != nil {
+		return err
+	}
+	if !created {
+		return ErrZoomNotReady
+	}
+	if s.invoker == nil {
+		return ErrRenderUnavailable
+	}
+	if err := s.invokeJob(ctx, job, true); err != nil {
+		return fmt.Errorf("invoke presenting zoom renderer: %w", err)
+	}
+	return nil
 }
 
 func (s Service) signPage(ctx context.Context, document Document, page *Page) error {

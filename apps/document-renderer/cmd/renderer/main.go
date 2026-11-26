@@ -121,7 +121,7 @@ func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logge
 		response, err := client.Do(request)
 		if err != nil {
 			logger.Error("runtime invocation poll failed", "error", err)
-			time.Sleep(time.Second)
+			<-time.After(time.Second)
 			continue
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))

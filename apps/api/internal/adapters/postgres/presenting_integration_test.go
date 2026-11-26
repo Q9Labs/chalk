@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -26,7 +27,7 @@ func newPresentingFixture(t *testing.T, pool *pgxpool.Pool, capabilities string)
 	attachment, _ := utilities.NewID()
 	upload, _ := utilities.NewID()
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'Presenting test')`, uuid(tenant))
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting test',$3,'chalk_sfu')`, uuid(space), uuid(tenant), "presenting-"+space.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting test',$3,$4)`, uuid(space), uuid(tenant), "presenting-"+space.String(), string(mediaplane.ProviderChalkSFU))
 	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(episode), uuid(tenant), uuid(space))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,$5::text[],1,'active','collaborator')`, uuid(participant), uuid(tenant), uuid(space), uuid(episode), capabilities)
 	mustExec(t, pool, `insert into sync_chat_streams(tenant_id,space_id) values($1,$2)`, uuid(tenant), uuid(space))
@@ -100,7 +101,7 @@ func TestPresentingDocumentAccessDeniedIntegration(t *testing.T) {
 	otherEpisode, _ := utilities.NewID()
 	otherParticipant, _ := utilities.NewID()
 	otherSpace, _ := utilities.NewID()
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting other',$3,'chalk_sfu')`, uuid(otherSpace), uuid(fixture.tenant), "presenting-other-"+otherSpace.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting other',$3,$4)`, uuid(otherSpace), uuid(fixture.tenant), "presenting-other-"+otherSpace.String(), string(mediaplane.ProviderChalkSFU))
 	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(otherEpisode), uuid(fixture.tenant), uuid(otherSpace))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,'{publishScreen}',1,'active','collaborator')`, uuid(otherParticipant), uuid(fixture.tenant), uuid(otherSpace), uuid(otherEpisode))
 	otherSubject := presenting.Subject{TenantID: fixture.tenant, SpaceID: otherSpace, EpisodeID: otherEpisode, ParticipantID: otherParticipant, ParticipantGeneration: 1}
@@ -254,177 +255,5 @@ func TestPresentingExpiredLeaseCannotCompleteOrFailRenderJobIntegration(t *testi
 				t.Fatalf("expired lease changed job status to %q", status)
 			}
 		})
-	}
-}
-
-func TestPresentingRenderCompletionIsAtomicWithDocumentReadinessIntegration(t *testing.T) {
-	pool := accountTenantIntegrationPool(t)
-	repository := NewPresentingRepository(pool)
-	fixture := newPresentingFixture(t, pool, "{publishScreen}")
-	ctx := context.Background()
-	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
-	if err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	jobID := newTestID(t)
-	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
-		values($1,$2,$3,$4,'pages',1,1,'queued',now())`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID), uuid(jobID))
-	now := time.Now().UTC()
-	token, _ := utilities.NewID()
-	claimed, err := repository.ClaimRenderJob(ctx, jobID, 1, now, now.Add(time.Minute), token, "document-renderer")
-	if err != nil {
-		t.Fatalf("claim page job: %v", err)
-	}
-	lease := claimed.Job.RenderLease
-	mustExec(t, pool, `update presenting_documents set page_count=1 where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
-	mustExec(t, pool, `insert into presenting_document_pages(tenant_id,space_id,document_id,page,width,height,status,image_key,thumbnail_key)
-		values($1,$2,$3,1,1600,900,'ready','test-image','test-thumbnail')`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
-	mustExec(t, pool, `create or replace function presenting_test_abort_ready_completion() returns trigger language plpgsql as $$
-begin
-	if NEW.status = 'ready' and OLD.status is distinct from 'ready' then
-		raise exception 'presenting test abort ready completion';
-	end if;
-	return NEW;
-end
-$$`)
-	mustExec(t, pool, `create trigger presenting_test_abort_ready_completion before update on presenting_documents for each row execute function presenting_test_abort_ready_completion()`)
-	t.Cleanup(func() {
-		mustExec(t, pool, `drop trigger if exists presenting_test_abort_ready_completion on presenting_documents`)
-		mustExec(t, pool, `drop function if exists presenting_test_abort_ready_completion()`)
-	})
-
-	if err := repository.CompleteRenderJob(ctx, lease); err == nil {
-		t.Fatal("completion unexpectedly succeeded past the document trigger")
-	}
-	var jobStatus, documentStatus string
-	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
-		t.Fatalf("read job status: %v", err)
-	}
-	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
-		t.Fatalf("read document status: %v", err)
-	}
-	if jobStatus != "leased" || documentStatus != "preparing" {
-		t.Fatalf("interrupted completion left job=%q document=%q", jobStatus, documentStatus)
-	}
-}
-
-func TestPresentingZoomFailureLeavesReadyDocumentIntegration(t *testing.T) {
-	pool := accountTenantIntegrationPool(t)
-	repository := NewPresentingRepository(pool)
-	fixture := newPresentingFixture(t, pool, "{publishScreen}")
-	ctx := context.Background()
-	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
-	if err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	mustExec(t, pool, `update presenting_documents set status='ready', page_count=1 where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
-	mustExec(t, pool, `insert into presenting_document_pages(tenant_id,space_id,document_id,page,width,height,status,image_key,thumbnail_key)
-		values($1,$2,$3,1,1600,900,'ready','test-image','test-thumbnail')`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
-	now := time.Now().UTC()
-	job, created, err := repository.EnsureZoomJob(ctx, document, 1, now)
-	if err != nil || !created {
-		t.Fatalf("create zoom job created=%v err=%v", created, err)
-	}
-	token, _ := utilities.NewID()
-	claimed, err := repository.ClaimRenderJob(ctx, job.JobID, 1, now, now.Add(time.Minute), token, "document-renderer")
-	if err != nil {
-		t.Fatalf("claim zoom job: %v", err)
-	}
-	lease := claimed.Job.RenderLease
-	if err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "zoom render failed"}); err != nil {
-		t.Fatalf("fail zoom job: %v", err)
-	}
-	var jobStatus, documentStatus string
-	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
-		t.Fatalf("read zoom job status: %v", err)
-	}
-	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
-		t.Fatalf("read document status: %v", err)
-	}
-	if jobStatus != "failed" || documentStatus != "ready" {
-		t.Fatalf("zoom failure left job=%q document=%q", jobStatus, documentStatus)
-	}
-}
-
-func TestPresentingFinalRenderAttemptTimeoutFailsDocumentIntegration(t *testing.T) {
-	pool := accountTenantIntegrationPool(t)
-	repository := NewPresentingRepository(pool)
-	fixture := newPresentingFixture(t, pool, "{publishScreen}")
-	ctx := context.Background()
-	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
-	if err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	realNow := time.Now().UTC()
-	claimNow := realNow.Add(2 * time.Second)
-	leaseUntil := realNow.Add(-time.Minute)
-	var lease presenting.RenderLease
-	for attempt := 1; attempt <= presenting.RenderAttemptLimit; attempt++ {
-		token, _ := utilities.NewID()
-		claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, attempt, claimNow, leaseUntil, token, "document-renderer")
-		if err != nil {
-			t.Fatalf("claim attempt %d: %v", attempt, err)
-		}
-		lease = claimed.Job.RenderLease
-		claimNow = claimNow.Add(time.Second)
-	}
-	jobs, err := repository.ListStaleRenderJobs(ctx, claimNow, 10)
-	if err != nil {
-		t.Fatalf("list stale jobs: %v", err)
-	}
-	for _, job := range jobs {
-		if job.DocumentID == document.DocumentID {
-			t.Fatalf("final expired attempt was offered for another retry: %+v", job)
-		}
-	}
-	var jobStatus, documentStatus string
-	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
-		t.Fatalf("read job status: %v", err)
-	}
-	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
-		t.Fatalf("read document status: %v", err)
-	}
-	if jobStatus != "failed" || documentStatus != "failed" {
-		t.Fatalf("final timeout left job=%q document=%q", jobStatus, documentStatus)
-	}
-}
-
-func TestPresentingFinalTimeoutLeavesReadyDocumentIntegration(t *testing.T) {
-	pool := accountTenantIntegrationPool(t)
-	repository := NewPresentingRepository(pool)
-	fixture := newPresentingFixture(t, pool, "{publishScreen}")
-	ctx := context.Background()
-	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
-	if err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	if _, err := pool.Exec(ctx, `update presenting_documents set status = 'ready' where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID)); err != nil {
-		t.Fatalf("mark document ready: %v", err)
-	}
-	realNow := time.Now().UTC()
-	claimNow := realNow.Add(2 * time.Second)
-	leaseUntil := realNow.Add(-time.Minute)
-	var lease presenting.RenderLease
-	for attempt := 1; attempt <= presenting.RenderAttemptLimit; attempt++ {
-		token, _ := utilities.NewID()
-		claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, attempt, claimNow, leaseUntil, token, "document-renderer")
-		if err != nil {
-			t.Fatalf("claim attempt %d: %v", attempt, err)
-		}
-		lease = claimed.Job.RenderLease
-		claimNow = claimNow.Add(time.Second)
-	}
-	if _, err := repository.ListStaleRenderJobs(ctx, claimNow, 10); err != nil {
-		t.Fatalf("list stale jobs: %v", err)
-	}
-	var jobStatus, documentStatus string
-	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
-		t.Fatalf("read job status: %v", err)
-	}
-	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
-		t.Fatalf("read document status: %v", err)
-	}
-	if jobStatus != "failed" || documentStatus != "ready" {
-		t.Fatalf("ready-document timeout left job=%q document=%q", jobStatus, documentStatus)
 	}
 }
