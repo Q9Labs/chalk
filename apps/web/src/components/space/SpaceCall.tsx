@@ -214,5 +214,7 @@ export function SpaceReportProblemDialog({
   );
   const reportExpired = useReportCredentialExpired(reportSession ? liveReportExpiresAt : reportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), tenantId, props.open);
-  return <ReportProblemDialog {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
+  const reportIdentity = reportSession?.reloadMarker();
+  const reportKey = reportIdentity ? `${reportIdentity.participantId}:${reportIdentity.participantGeneration}` : "ended";
+  return <ReportProblemDialog key={reportKey} {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
 }
