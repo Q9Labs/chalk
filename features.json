@@ -466,7 +466,8 @@
         "scripts/gates/obs-coverage.mjs",
         "scripts/gates/obs-coverage.test.mjs",
         "sdks/typescript/client/src/obs",
-        "sdks/typescript/client/src/transport-diagnostics.ts"
+        "sdks/typescript/client/src/transport-diagnostics.ts",
+        "apps/api/internal/httpapi/telemetry_chain_helpers_test.go"
       ]
     },
     {
@@ -986,7 +987,21 @@
         "sdks/typescript/react/tsconfig.json",
         "sdks/typescript/react/vitest.config.ts",
         "tests",
-        "tools"
+        "tools",
+        "apps/api/internal/httpapi/cors_test.go"
+      ]
+    },
+    {
+      "name": "presenting",
+      "summary": "Renders a presented document into page images and serves them on the Chalk stage.",
+      "paths": [
+        "apps/api/internal/presenting",
+        "apps/api/internal/httpapi/presenting.go",
+        "apps/api/internal/httpapi/presenting_capability.go",
+        "apps/api/internal/httpapi/presenting_test.go",
+        "apps/api/internal/httpapi/presenting_worker.go",
+        "apps/api/internal/httpapi/presenting_worker_request.go",
+        "infrastructure/document-renderer"
       ]
     }
   ]
