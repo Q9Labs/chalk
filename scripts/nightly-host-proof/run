@@ -155,14 +155,14 @@ call_proof() {
 }
 
 # Delivers a release through the real SSM document and host controller and checks the controller reported it deployed and healthy.
-exclude=(--exclude-secret cloudflare-tunnel-token --exclude-secret sfu-window-controller-env)
-[ "$with_call" = false ] || exclude=(--exclude-secret sfu-window-controller-env)
 deliver() {
   local file=$1 leg=$2 id proof
-  local -a leg_exclude=("${exclude[@]}")
-  if [ "$leg" = rollback ]; then
-    leg_exclude=(--exclude-secret cloudflare-tunnel-token)
-    [ "$with_call" = false ] || leg_exclude=()
+  local -a leg_exclude=()
+  if [ "$with_call" = false ]; then
+    leg_exclude+=(--exclude-secret cloudflare-tunnel-token)
+  fi
+  if jq -e '.runtime_artifacts | has("systemd/chalk-sfu-window-controller.service")' "$file" >/dev/null 2>&1; then
+    leg_exclude+=(--exclude-secret sfu-window-controller-env)
   fi
   id=$(jq -er .release_id "$file")
   proof="${RUNNER_TEMP:-/tmp}/host-proof-$leg.json"

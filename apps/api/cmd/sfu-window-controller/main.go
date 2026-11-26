@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -52,7 +54,24 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	notifySystemdReady()
 	return reconcileContinuously(ctx, conn, reconciler)
+}
+
+func notifySystemdReady() {
+	endpoint := os.Getenv("NOTIFY_SOCKET")
+	if endpoint == "" {
+		return
+	}
+	if strings.HasPrefix(endpoint, "@") {
+		endpoint = "\x00" + endpoint[1:]
+	}
+	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: endpoint, Net: "unixgram"})
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_, _ = conn.Write([]byte("READY=1"))
 }
 
 func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {

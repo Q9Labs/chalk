@@ -99,6 +99,12 @@ sed 's|^CHALK_SFU_CA_FILE=.*|CHALK_SFU_CA_FILE=/tmp/client-ca.crt|' "$fixture/co
 check_refusal 'CHALK_SFU_CA_FILE must use the managed controller CA path'
 sed 's/^CHALK_SFU_WINDOW_STANDING_SLOTS=8$/CHALK_SFU_WINDOW_STANDING_SLOTS=41/' "$fixture/controller.valid" > "$fixture/controller.env"
 check_refusal 'CHALK_SFU_WINDOW_STANDING_SLOTS must be 1 to 40'
+cp "$fixture/controller.valid" "$fixture/controller.env"
+printf 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS=01000\n' >> "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS must be 1 to 930'
+cp "$fixture/controller.valid" "$fixture/controller.env"
+printf 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS=10\nCHALK_SFU_WINDOW_BUDGET_NODE_HOURS=20\n' >> "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS must occur at most once'
 mv "$fixture/controller.valid" "$fixture/controller.env"
 chmod 600 "$fixture/controller.env"
 echo 'PASS managed Chalk SFU runtime input contract'
