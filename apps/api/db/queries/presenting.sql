@@ -381,12 +381,18 @@ where page.tenant_id = sqlc.arg(tenant_id)
     );
 
 -- name: FailPresentingDocument :execrows
-update presenting_documents
+update presenting_documents document
 set status = 'failed', failure_code = sqlc.arg(failure_code), failure_message = sqlc.arg(failure_message), updated_at = now()
-where tenant_id = sqlc.arg(tenant_id)
-    and space_id = sqlc.arg(space_id)
-    and document_id = sqlc.arg(document_id)
-    and status <> 'failed';
+from presenting_render_jobs job
+where document.tenant_id = sqlc.arg(tenant_id)
+    and document.space_id = sqlc.arg(space_id)
+    and document.document_id = sqlc.arg(document_id)
+    and job.tenant_id = document.tenant_id
+    and job.space_id = document.space_id
+    and job.document_id = document.document_id
+    and job.job_id = sqlc.arg(job_id)
+    and job.kind in ('inventory', 'pages')
+    and document.status <> 'failed';
 
 -- name: CountPresentingReadyPages :one
 select count(*)::integer

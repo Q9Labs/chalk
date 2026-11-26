@@ -307,3 +307,41 @@ $$`)
 		t.Fatalf("interrupted completion left job=%q document=%q", jobStatus, documentStatus)
 	}
 }
+
+func TestPresentingZoomFailureLeavesReadyDocumentIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	mustExec(t, pool, `update presenting_documents set status='ready', page_count=1 where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
+	mustExec(t, pool, `insert into presenting_document_pages(tenant_id,space_id,document_id,page,width,height,status,image_key,thumbnail_key)
+		values($1,$2,$3,1,1600,900,'ready','test-image','test-thumbnail')`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
+	now := time.Now().UTC()
+	job, created, err := repository.EnsureZoomJob(ctx, document, 1, now)
+	if err != nil || !created {
+		t.Fatalf("create zoom job created=%v err=%v", created, err)
+	}
+	token, _ := utilities.NewID()
+	claimed, err := repository.ClaimRenderJob(ctx, job.JobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim zoom job: %v", err)
+	}
+	lease := claimed.Job.RenderLease
+	if err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "zoom render failed"}); err != nil {
+		t.Fatalf("fail zoom job: %v", err)
+	}
+	var jobStatus, documentStatus string
+	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
+		t.Fatalf("read zoom job status: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
+		t.Fatalf("read document status: %v", err)
+	}
+	if jobStatus != "failed" || documentStatus != "ready" {
+		t.Fatalf("zoom failure left job=%q document=%q", jobStatus, documentStatus)
+	}
+}

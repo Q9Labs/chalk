@@ -299,7 +299,7 @@ func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presentin
 	if rows != 1 {
 		return presenting.ErrLeaseLost
 	}
-	_, err = q.FailPresentingDocument(ctx, sqlc.FailPresentingDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), FailureCode: pgtype.Text{String: failure.Code, Valid: true}, FailureMessage: pgtype.Text{String: failure.Message, Valid: true}})
+	_, err = q.FailPresentingDocument(ctx, sqlc.FailPresentingDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), FailureCode: pgtype.Text{String: failure.Code, Valid: true}, FailureMessage: pgtype.Text{String: failure.Message, Valid: true}})
 	if err != nil {
 		return fmt.Errorf("fail presenting document: %w", err)
 	}

@@ -433,12 +433,18 @@ func (q *Queries) DeletePresentingDocument(ctx context.Context, arg DeletePresen
 }
 
 const failPresentingDocument = `-- name: FailPresentingDocument :execrows
-update presenting_documents
+update presenting_documents document
 set status = 'failed', failure_code = $1, failure_message = $2, updated_at = now()
-where tenant_id = $3
-    and space_id = $4
-    and document_id = $5
-    and status <> 'failed'
+from presenting_render_jobs job
+where document.tenant_id = $3
+    and document.space_id = $4
+    and document.document_id = $5
+    and job.tenant_id = document.tenant_id
+    and job.space_id = document.space_id
+    and job.document_id = document.document_id
+    and job.job_id = $6
+    and job.kind in ('inventory', 'pages')
+    and document.status <> 'failed'
 `
 
 type FailPresentingDocumentParams struct {
@@ -447,6 +453,7 @@ type FailPresentingDocumentParams struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	SpaceID        pgtype.UUID `json:"space_id"`
 	DocumentID     pgtype.UUID `json:"document_id"`
+	JobID          pgtype.UUID `json:"job_id"`
 }
 
 func (q *Queries) FailPresentingDocument(ctx context.Context, arg FailPresentingDocumentParams) (int64, error) {
@@ -456,6 +463,7 @@ func (q *Queries) FailPresentingDocument(ctx context.Context, arg FailPresenting
 		arg.TenantID,
 		arg.SpaceID,
 		arg.DocumentID,
+		arg.JobID,
 	)
 	if err != nil {
 		return 0, err
