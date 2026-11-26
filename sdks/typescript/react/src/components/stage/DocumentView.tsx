@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { PresentingDocumentManifest } from "@q9labsai/chalk-client";
+import type { ChatAttachment, PresentingDocumentManifest } from "@q9labsai/chalk-client";
 import { usePresenting, useSelf, useSpaceClient } from "../../bindings/hooks";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { DocumentPageArea, DocumentPageStrip, DocumentThumbnail } from "./DocumentPages";
@@ -16,6 +16,16 @@ export interface DocumentViewProps {
   readonly interactive: boolean;
 }
 
+export function documentSourceAttachment(manifest: PresentingDocumentManifest): ChatAttachment {
+  return { attachmentId: manifest.attachmentId, fileName: manifest.fileName, mimeType: "application/pdf", byteLength: 0 };
+}
+
+export function documentKeyTurnEvent(event: Pick<KeyboardEvent, "key" | "target" | "defaultPrevented">): boolean {
+  if (event.defaultPrevented || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return false;
+  const target = event.target;
+  return !(target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
 /** The lazy Document renderer. Sync owns the presenter's page; browsing away is local viewer state. */
 export function DocumentView({ document, people, primary, interactive }: DocumentViewProps): React.JSX.Element {
   const client = useSpaceClient();
@@ -27,6 +37,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const [ownPage, setOwnPage] = useState<number | null>(null);
   const [thumbnails, setThumbnails] = useState(false);
   const [localZoom, setLocalZoom] = useState(document.zoom);
+  const [downloadUrl, setDownloadUrl] = useState<string>();
   const pageCount = manifest?.pageCount ?? document.pageCount ?? Math.max(1, document.page);
   const page = ownPage ?? document.page;
   const ready = manifest?.status === "ready";
@@ -34,6 +45,20 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const zoom = mine ? document.zoom : localZoom;
   const fileName = manifest?.fileName ?? document.fileName ?? "Document";
   const presenterName = presenter?.displayName ?? "Presenter";
+
+  useEffect(() => {
+    if (!ready || !manifest) {
+      setDownloadUrl(undefined);
+      return;
+    }
+    let active = true;
+    void client.chat.files.resolveUrl(documentSourceAttachment(manifest)).then((url) => {
+      if (active) setDownloadUrl(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, ready, manifest?.attachmentId, fileName]);
 
   const turn = useCallback(
     (next: number) => {
@@ -56,7 +81,9 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   useEffect(() => {
     if (!mine || !primary || !interactive) return;
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.defaultPrevented || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
       event.preventDefault();
       turn(document.page + (event.key === "ArrowRight" ? 1 : -1));
     };
@@ -115,6 +142,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
       onReturn={() => setOwnPage(null)}
       onTurn={turn}
       onZoom={zoomTo}
+      downloadUrl={downloadUrl}
     />
   );
 }
@@ -135,6 +163,7 @@ interface PrimaryDocumentProps {
   readonly presenterName: string;
   readonly presenterPage: number;
   readonly toolbarRef: React.RefObject<HTMLDivElement | null>;
+  readonly downloadUrl?: string;
   readonly onThumbnails: () => void;
   readonly onReturn: () => void;
   readonly onTurn: (page: number) => void;
@@ -167,7 +196,7 @@ function PrimaryDocument(props: PrimaryDocumentProps): React.JSX.Element {
               zoom={props.zoom}
               thumbnails={props.thumbnails}
               fileName={props.fileName}
-              downloadUrl={props.pageImageUrl ?? pages.find((candidate) => candidate.imageUrl)?.imageUrl}
+              downloadUrl={props.downloadUrl}
               onThumbnails={props.onThumbnails}
               onTurn={props.onTurn}
               onZoom={props.onZoom}

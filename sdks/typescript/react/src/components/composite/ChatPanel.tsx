@@ -206,7 +206,8 @@ export const ChatPanelSurface = React.memo(
     };
     const selectFiles = (files: FileList | readonly ChatUploadFile[] | null): readonly ChatUploadFile[] => {
       if (!files) return [];
-      const batch = prepareChatAttachmentBatch(files, stagedFiles.length);
+      const incoming = [...files].filter((file) => !stagedFiles.includes(file));
+      const batch = prepareChatAttachmentBatch(incoming, stagedFiles.length);
       if (batch.invalid) {
         setComposerError(`${batch.invalid.fileName} is not a supported chat attachment.`);
         if (fileInputRef.current) fileInputRef.current.value = "";

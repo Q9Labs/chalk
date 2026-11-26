@@ -23,6 +23,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
   const [chatDrop, setChatDrop] = useState<{ readonly key: number; readonly files: readonly ChatUploadFile[] }>();
   const presentInputRef = useRef<HTMLInputElement>(null);
   const dropDepth = useRef(0);
+  const dropKey = useRef(0);
 
   const reportPresentingResult = useCallback(
     (result: Awaited<ReturnType<typeof presentFiles>>) => {
@@ -58,7 +59,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
         reportPresentingResult(result);
         if (result.chatFiles.length) {
           openChat();
-          setChatDrop({ key: Date.now(), files: result.chatFiles });
+          setChatDrop((current) => ({ key: ++dropKey.current, files: [...(current?.files ?? []), ...result.chatFiles] }));
         }
       } finally {
         setPresentBusy(false);
@@ -103,7 +104,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       setDropActive(false);
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!files.length || !live) return;
-      if (chatOpen && chatEnabled) setChatDrop({ key: Date.now(), files });
+      if (chatOpen && chatEnabled) setChatDrop((current) => ({ key: ++dropKey.current, files: [...(current?.files ?? []), ...files] }));
       else if (presentingAvailable || chatEnabled) void presentChosenFiles(files);
     };
     window.addEventListener("dragenter", enter);

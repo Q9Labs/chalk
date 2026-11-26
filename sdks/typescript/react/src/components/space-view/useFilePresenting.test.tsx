@@ -223,3 +223,24 @@ it("opens chat and stages five PDFs when Presenting is unavailable", async () =>
   expect(hook()?.chatDrop?.files).toEqual(files.slice(0, 5));
   expect(notices).toContain("Only the first 5 files were staged; 1 file could not be added.");
 });
+
+it("retains files from two drops when chat reopens", async () => {
+  const { hook } = mount(
+    true,
+    () => {},
+    () => {},
+    false,
+  );
+  const one = new File([new Uint8Array(8)], "one.pdf", { type: "application/pdf" });
+  const two = new File([new Uint8Array(8)], "two.pdf", { type: "application/pdf" });
+  for (const file of [one, two]) {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [file] } });
+    await act(async () => {
+      window.dispatchEvent(event);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+  expect(hook()?.chatDrop?.files).toEqual([one, two]);
+});
