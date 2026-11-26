@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
 import origins from "./origins.json";
 export function getApiBaseURL(): string {
+  if (__DEV__) return "http://127.0.0.1:3070";
   const configured: unknown = Constants.expoConfig?.extra?.apiBaseURL;
   return resolveAppRuntimeUrl({
     configuredUrl: supportedApiBaseURL(configured) ? configured.trim() : undefined,
@@ -11,7 +12,7 @@ export function getApiBaseURL(): string {
   });
 }
 export function configuredOrbHost(): string | undefined {
-  if (Constants.expoConfig?.extra?.buildProfile !== "orb") return undefined;
+  if (Constants.expoConfig?.extra?.buildProfile !== "orb" && !__DEV__) return undefined;
   return new URL(getApiBaseURL()).hostname;
 }
 

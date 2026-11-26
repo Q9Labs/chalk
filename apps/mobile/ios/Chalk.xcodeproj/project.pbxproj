@@ -15,15 +15,15 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		54F978A64DA9F441EF09506F /* libPods-ChalkScreenShare.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E5E2632839486D4488B2187 /* libPods-ChalkScreenShare.a */; };
 		6378BDE637F28F8DF474F61A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */; };
+		8F1ED402EB24405EA675322C /* Figtree-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76533C78F08040EFBD24185C /* Figtree-Medium.ttf */; };
+		98322BD98A914EB7A2DBF346 /* Figtree-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */; };
 		99CA4E3AB044AE01EF4F2987 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */; };
+		BA2AD7240F9D4582AD7F92CE /* Figtree-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 610AE609B48347409357EBCE /* Figtree-Regular.ttf */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		C06F3BFA93E64265A698B31F /* ChalkRuntimeInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */; };
-		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		BA2AD7240F9D4582AD7F92CE /* Figtree-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 610AE609B48347409357EBCE /* Figtree-Regular.ttf */; };
-		8F1ED402EB24405EA675322C /* Figtree-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76533C78F08040EFBD24185C /* Figtree-Medium.ttf */; };
 		C500990A133C43A9A390418E /* Figtree-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */; };
-		98322BD98A914EB7A2DBF346 /* Figtree-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */; };
 		F0B036E655570A44D6DF87CA /* AnnotationPiPTests.m in Sources */ = {isa = PBXBuildFile; fileRef = EB97C8C29E06EB7F8D89E8FA /* AnnotationPiPTests.m */; };
+		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,29 +63,29 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Chalk/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Chalk/Info.plist; sourceTree = "<group>"; };
 		15646C4B52DFD62E30B19B24 /* ChalkScreenShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChalkScreenShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		15E9DE5FFF516EE72BF2A2AF /* ChalkTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChalkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		30A04B99D09526B02C0B1AB2 /* Pods-ChalkScreenShare.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChalkScreenShare.release.xcconfig"; path = "Target Support Files/Pods-ChalkScreenShare/Pods-ChalkScreenShare.release.xcconfig"; sourceTree = "<group>"; };
 		3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Chalk/ChalkRuntimeInfo.m; sourceTree = "<group>"; };
 		3FD4C2F7B7F8C647198F1508 /* Pods-ChalkScreenShare.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChalkScreenShare.debug.xcconfig"; path = "Target Support Files/Pods-ChalkScreenShare/Pods-ChalkScreenShare.debug.xcconfig"; sourceTree = "<group>"; };
 		530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = Chalk/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		610AE609B48347409357EBCE /* Figtree-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Regular.ttf"; path = "../assets/fonts/Figtree-Regular.ttf"; sourceTree = "<group>"; };
 		6778B8516BBA733018016AFC /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = ChalkScreenShare/Info.plist; sourceTree = "<group>"; };
 		6CB5E7BA33E7A1A74E4AB9AA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-SemiBold.ttf"; path = "../assets/fonts/Figtree-SemiBold.ttf"; sourceTree = "<group>"; };
 		6F2A335583B0883B92A90539 /* libPods-Chalk.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Chalk.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		76533C78F08040EFBD24185C /* Figtree-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Medium.ttf"; path = "../assets/fonts/Figtree-Medium.ttf"; sourceTree = "<group>"; };
 		86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Chalk/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		9E5E2632839486D4488B2187 /* libPods-ChalkScreenShare.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-ChalkScreenShare.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0608382B6C2163B98B7F57C /* SampleHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SampleHandler.swift; path = ChalkScreenShare/SampleHandler.swift; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Chalk/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Bold.ttf"; path = "../assets/fonts/Figtree-Bold.ttf"; sourceTree = "<group>"; };
 		D5DA032C7E0F3707825267CB /* Pods-Chalk.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Chalk.debug.xcconfig"; path = "Target Support Files/Pods-Chalk/Pods-Chalk.debug.xcconfig"; sourceTree = "<group>"; };
 		D6380DA08C282E9D0CE39038 /* ChalkScreenShare.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ChalkScreenShare.entitlements; path = ChalkScreenShare/ChalkScreenShare.entitlements; sourceTree = "<group>"; };
+		EB97C8C29E06EB7F8D89E8FA /* AnnotationPiPTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = AnnotationPiPTests.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Chalk/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Chalk-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Chalk-Bridging-Header.h"; path = "Chalk/Chalk-Bridging-Header.h"; sourceTree = "<group>"; };
-		610AE609B48347409357EBCE /* Figtree-Regular.ttf */ = {isa = PBXFileReference; name = "Figtree-Regular.ttf"; path = "../assets/fonts/Figtree-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		76533C78F08040EFBD24185C /* Figtree-Medium.ttf */ = {isa = PBXFileReference; name = "Figtree-Medium.ttf"; path = "../assets/fonts/Figtree-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */ = {isa = PBXFileReference; name = "Figtree-SemiBold.ttf"; path = "../assets/fonts/Figtree-SemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */ = {isa = PBXFileReference; name = "Figtree-Bold.ttf"; path = "../assets/fonts/Figtree-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		15E9DE5FFF516EE72BF2A2AF /* ChalkTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChalkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		EB97C8C29E06EB7F8D89E8FA /* AnnotationPiPTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = AnnotationPiPTests.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +148,18 @@
 				86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */,
 			);
 			name = Chalk;
+			sourceTree = "<group>";
+		};
+		795C0B65E3A540589CE0D13C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				610AE609B48347409357EBCE /* Figtree-Regular.ttf */,
+				76533C78F08040EFBD24185C /* Figtree-Medium.ttf */,
+				6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */,
+				C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */,
+			);
+			name = Resources;
+			path = "";
 			sourceTree = "<group>";
 		};
 		7D392F3AE84E1B79B9C1CED1 /* ExpoModulesProviders */ = {
@@ -231,18 +243,6 @@
 			path = Chalk/Supporting;
 			sourceTree = "<group>";
 		};
-		795C0B65E3A540589CE0D13C /* Resources */ = {
-			isa = "PBXGroup";
-			children = (
-				610AE609B48347409357EBCE /* Figtree-Regular.ttf */,
-				76533C78F08040EFBD24185C /* Figtree-Medium.ttf */,
-				6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */,
-				C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */,
-			);
-			name = Resources;
-			sourceTree = "<group>";
-			path = "";
-		};
 		D4E62952601B9CCADE53A8B5 /* ChalkTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -279,24 +279,6 @@
 			productReference = 13B07F961A680F5B00A75B9A /* Chalk.app */;
 			productType = "com.apple.product-type.application";
 		};
-		BDAD30BEBD770AD3D0368FFA /* ChalkScreenShare */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 8411FDA9A937C8639F015525 /* Build configuration list for PBXNativeTarget "ChalkScreenShare" */;
-			buildPhases = (
-				51DD4B704C692ABFBE79E4A0 /* [CP] Check Pods Manifest.lock */,
-				70EC678E035EEE4D5A5D2B91 /* Sources */,
-				456D7E59CBD6351F7D58FCDC /* Frameworks */,
-				B0FD54A1D2979E7C827460CF /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = ChalkScreenShare;
-			productName = ChalkScreenShare;
-			productReference = 15646C4B52DFD62E30B19B24 /* ChalkScreenShare.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		9ABD15280AFC4E3BB9133CBC /* ChalkTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D690BF22F47F590427B9EB0E /* Build configuration list for PBXNativeTarget "ChalkTests" */;
@@ -314,6 +296,24 @@
 			productName = ChalkTests;
 			productReference = 15E9DE5FFF516EE72BF2A2AF /* ChalkTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BDAD30BEBD770AD3D0368FFA /* ChalkScreenShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8411FDA9A937C8639F015525 /* Build configuration list for PBXNativeTarget "ChalkScreenShare" */;
+			buildPhases = (
+				51DD4B704C692ABFBE79E4A0 /* [CP] Check Pods Manifest.lock */,
+				70EC678E035EEE4D5A5D2B91 /* Sources */,
+				456D7E59CBD6351F7D58FCDC /* Frameworks */,
+				B0FD54A1D2979E7C827460CF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChalkScreenShare;
+			productName = ChalkScreenShare;
+			productReference = 15646C4B52DFD62E30B19B24 /* ChalkScreenShare.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -383,14 +383,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B0FD54A1D2979E7C827460CF /* Resources */ = {
+		1D18CCE5254ADC55CED427AB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		1D18CCE5254ADC55CED427AB /* Resources */ = {
+		B0FD54A1D2979E7C827460CF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -496,6 +496,7 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/Q9ChalkReactNative/ChalkWhiteboard.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/Q9ChalkReactNative/ChalkAnnotation.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNCAsyncStorage/RNCAsyncStorage_resources.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
@@ -507,6 +508,7 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ChalkWhiteboard.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ChalkAnnotation.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNCAsyncStorage_resources.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
@@ -692,6 +694,23 @@
 			};
 			name = Release;
 		};
+		827127B7915F790D9FD478DA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../sdks/typescript/react-native/ios";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chalk.app/Chalk";
+			};
+			name = Debug;
+		};
 		83CBBA201A601CBA00E9B192 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -749,7 +768,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_supports-color@10.2.2__@types+react@19.2.18_react@19.2.7_supports-color@10.2.2/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
@@ -806,11 +825,28 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_supports-color@10.2.2__@types+react@19.2.18_react@19.2.7_supports-color@10.2.2/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		960CB249146D332032259D6E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../sdks/typescript/react-native/ios";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chalk.app/Chalk";
 			};
 			name = Release;
 		};
@@ -842,38 +878,6 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
-		};
-		827127B7915F790D9FD478DA /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_ARC = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../sdks/typescript/react-native/ios";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chalk.app/Chalk";
-			};
-			name = Debug;
-		};
-		960CB249146D332032259D6E /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_ARC = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../sdks/typescript/react-native/ios";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chalk.app/Chalk";
-			};
-			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
