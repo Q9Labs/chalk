@@ -204,7 +204,10 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 			case waitErr = <-waitDone:
 			case <-time.After(2 * time.Second):
 			}
-			<-readerDone
+			select {
+			case <-readerDone:
+			case <-time.After(200 * time.Millisecond):
+			}
 			if childCtx.Err() == context.DeadlineExceeded {
 				return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
 			}
