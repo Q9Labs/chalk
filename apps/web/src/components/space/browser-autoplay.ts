@@ -2,7 +2,7 @@
 export function browserAllowsMediaAutoplay(): boolean {
   const navigatorWithPolicy = globalThis.navigator as Navigator & { readonly getAutoplayPolicy?: (type: "mediaelement") => string };
   const policy = navigatorWithPolicy.getAutoplayPolicy?.("mediaelement");
-  if (typeof policy === "string") return policy === "allowed";
+  if (policy) return policy === "allowed";
   const Context = globalThis.AudioContext;
   if (!Context) return false;
   try {
