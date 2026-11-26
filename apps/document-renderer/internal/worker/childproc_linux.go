@@ -21,8 +21,10 @@ func configureIsolatedChild(command *exec.Cmd, namespaces bool) {
 	command.SysProcAttr = attributes
 }
 
+var appArmorUserNamespaceRestrictionPath = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
+
 func isolatedNamespacesAvailable() bool {
-	encoded, err := os.ReadFile("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
+	encoded, err := os.ReadFile(appArmorUserNamespaceRestrictionPath)
 	return err != nil || strings.TrimSpace(string(encoded)) != "1"
 }
 
