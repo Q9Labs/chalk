@@ -138,10 +138,10 @@ it("retries every blocked output on every gesture when an earlier play stalls", 
   later.played(notAllowed());
   const second = playback.resume();
   const third = playback.resume();
+  expect(laterElement.paused).toBe(false);
 
   for (const finish of finishes.splice(0)) finish();
   await Promise.allSettled([first, second, third]);
-  expect(laterElement.paused).toBe(false);
   expect(playback.snapshot.blocked).toBe(false);
   stalled.detach();
   later.detach();
