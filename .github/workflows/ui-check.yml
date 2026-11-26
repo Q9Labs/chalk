@@ -160,8 +160,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          # A report for a commit that is no longer the head would overwrite the newer run's comment, so it is dropped.
+          current="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '.head.sha')"
+          if [[ "${current}" != "${SHA}" ]]; then
+            echo "Pull request head moved to ${current}; not posting the report for ${SHA}."
+            exit 0
+          fi
           mkdir -p ui-check-report
           if [[ ! -f ui-check-report/comment.md ]]; then
             printf '<!-- chalk-ui-check -->\n## UI check: did not finish\n\nThe walk stopped before it wrote a report. See the run log.\n' > ui-check-report/comment.md
