@@ -124,6 +124,15 @@ defmodule ChalkSync.Presenting.RepositoryTest do
     assert {:ok, %{documents: []}} = Repository.read(ctx.host)
   end
 
+  test "present rejects a document whose rendering failed", ctx do
+    failed_document = attachment(ctx, UUID.generate(), "failed")
+
+    assert {:error, "invalid_target"} =
+             Repository.command(ctx.host, frame("present", failed_document))
+
+    assert {:ok, %{documents: []}} = Repository.read(ctx.host)
+  end
+
   test "expired operation receipts are swept and fresh receipts stay", ctx do
     first = frame("present", attachment(ctx))
     second = frame("present", attachment(ctx))
@@ -167,7 +176,7 @@ defmodule ChalkSync.Presenting.RepositoryTest do
     assert {:error, :invalid_presenting_frame} = ProtocolV1.decode(JSON.encode!(invalid))
   end
 
-  defp attachment(ctx, document \\ UUID.generate()) do
+  defp attachment(ctx, document \\ UUID.generate(), status \\ "preparing") do
     identity = ctx.host
 
     Postgrex.query!(
@@ -176,11 +185,11 @@ defmodule ChalkSync.Presenting.RepositoryTest do
       insert into presenting_documents (
         tenant_id, space_id, episode_id, document_id, attachment_id,
         created_by_participant_id, created_by_participant_generation,
-        file_name, mime_type, byte_length, source_object_key, source_sha256, status
+        file_name, mime_type, byte_length, source_object_key, source_sha256, status, failure_code
       ) values (
         $1, $2, $3, $4, $5,
         $6, $7,
-        'document.pdf', 'application/pdf', 1024, $8, $9, 'preparing'
+        'document.pdf', 'application/pdf', 1024, $8, $9, $10, case when $10 = 'failed' then 'render_failed' else null end
       )
       """,
       [
@@ -192,7 +201,8 @@ defmodule ChalkSync.Presenting.RepositoryTest do
         UUID.dump!(identity.participant_id),
         identity.participant_generation,
         "presenting-test/#{document}",
-        <<1::256>>
+        <<1::256>>,
+        status
       ]
     )
 

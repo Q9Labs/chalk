@@ -6,7 +6,7 @@ function file(name: string, type = "application/pdf"): ChatUploadFile {
   return new File([new Uint8Array(1024)], name, { type }) as ChatUploadFile;
 }
 
-function client() {
+function client(presentAccepted = true) {
   const presented: string[] = [];
   const sent: string[] = [];
   const api = {
@@ -21,6 +21,7 @@ function client() {
     presenting: {
       present: async (attachmentId: string) => {
         presented.push(attachmentId);
+        if (!presentAccepted) throw new Error("present failed");
         return { kind: "accepted", revision: 1 } as const;
       },
     },
@@ -31,25 +32,37 @@ function client() {
 it("presents the first presentable file when Presenting is available", async () => {
   const { api, presented, sent } = client();
   const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: true, chatEnabled: true });
-  expect(result).toMatchObject({ presented: "deck.pdf", chatted: 0, failures: [] });
+  expect(result).toMatchObject({ presented: "deck.pdf", chatFiles: [], failures: [] });
   expect(presented).toEqual(["attachment-deck.pdf"]);
   expect(sent).toEqual([]);
 });
 
-it("sends a presentable file to chat when Presenting is unavailable", async () => {
+it("returns a presentable file for chat staging when Presenting is unavailable", async () => {
   const { api, presented, sent } = client();
   const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: false, chatEnabled: true });
-  expect(result).toMatchObject({ chatted: 1, failures: [] });
+  expect(result.failures).toEqual([]);
+  expect(result.chatFiles).toHaveLength(1);
   expect(result.presented).toBeUndefined();
   expect(presented).toEqual([]);
-  expect(sent).toEqual(["attachment-deck.pdf"]);
+  expect(sent).toEqual([]);
 });
 
 it("does not send hidden chat when both Presenting and chat are unavailable", async () => {
   const { api, presented, sent } = client();
   const result = await presentFiles([file("deck.pdf")], api, { presentingAvailable: false, chatEnabled: false });
-  expect(result).toMatchObject({ chatted: 0, failures: [{ fileName: "deck.pdf", reason: "unsupported" }] });
+  expect(result).toMatchObject({ chatFiles: [], failures: [{ fileName: "deck.pdf", reason: "unsupported" }] });
   expect(presented).toEqual([]);
+  expect(sent).toEqual([]);
+});
+
+it("returns a failed Stage file for composer staging instead of sending it", async () => {
+  const { api, presented, sent } = client(false);
+  const pdf = file("deck.pdf");
+  const result = await presentFiles([pdf], api, { presentingAvailable: true, chatEnabled: true });
+  expect(result.presented).toBeUndefined();
+  expect(result.chatFiles).toEqual([pdf]);
+  expect(result.failures).toEqual([{ fileName: "deck.pdf", reason: "failed" }]);
+  expect(presented).toEqual(["attachment-deck.pdf"]);
   expect(sent).toEqual([]);
 });
 

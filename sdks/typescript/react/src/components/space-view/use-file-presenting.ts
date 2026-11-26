@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
-import { presentFiles, presentingFileProblem, splitPresentingFiles } from "../stage/presenting-files";
-import { describeChatUploadFile } from "../composite/chat-upload-file";
+import { presentFiles } from "../stage/presenting-files";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
 
@@ -29,18 +28,18 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
     (result: Awaited<ReturnType<typeof presentFiles>>) => {
       if (result.presented) notify({ type: "info", message: `Showing ${result.presented} to everyone.` });
       for (const failure of result.failures) {
-        const message = failure.reason === "too_big" ? `${failure.fileName} is over 25 MB.` : failure.reason === "unsupported" ? `${failure.fileName} can't be presented or sent in chat.` : `${failure.fileName} could not be presented.`;
+        const message =
+          failure.reason === "too_big"
+            ? `${failure.fileName} is over 25 MB.`
+            : failure.reason === "unsupported"
+              ? `${failure.fileName} can't be presented or sent in chat.`
+              : chatEnabled
+                ? `${failure.fileName} could not be presented; it is waiting in chat.`
+                : `${failure.fileName} could not be presented.`;
         notify({ type: "error", duration: Infinity, message });
       }
-      if (result.chatted > 0) {
-        notify({
-          type: "info",
-          message: result.presented ? `The first file is on stage; ${result.chatted === 1 ? "the other file" : `${result.chatted} other files`} went to chat.` : `${result.chatted === 1 ? "File" : "Files"} sent to chat.`,
-          action: chatEnabled ? { label: "Open chat", onClick: openChat } : undefined,
-        });
-      }
     },
-    [chatEnabled, notify, openChat],
+    [chatEnabled, notify],
   );
 
   const presentChosenFiles = useCallback(
@@ -49,15 +48,17 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       setPresentBusy(true);
       setPresentOpen(false);
       try {
-        const unsupported = files.map((file) => ({ file, problem: presentingFileProblem(file) })).find(({ problem }) => problem === "too_big" || (problem === "unsupported" && files.length === 1));
-        if (unsupported?.problem === "too_big") notify({ type: "error", duration: Infinity, message: `${describeChatUploadFile(unsupported.file).fileName} is over 25 MB.` });
-        else if (unsupported?.problem === "unsupported" && files.length === 1) notify({ type: "error", duration: Infinity, message: `${describeChatUploadFile(unsupported.file).fileName} can't be presented.` });
-        reportPresentingResult(await presentFiles(files, client, { presentingAvailable, chatEnabled }));
+        const result = await presentFiles(files, client, { presentingAvailable, chatEnabled });
+        reportPresentingResult(result);
+        if (result.chatFiles.length) {
+          openChat();
+          setChatDrop({ key: Date.now(), files: result.chatFiles });
+        }
       } finally {
         setPresentBusy(false);
       }
     },
-    [chatEnabled, client, notify, presentBusy, presentingAvailable, reportPresentingResult],
+    [chatEnabled, client, notify, openChat, presentBusy, presentingAvailable, reportPresentingResult],
   );
 
   const choosePresentFiles = useCallback(async () => {
@@ -97,18 +98,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!files.length || !live) return;
       if (chatOpen && chatEnabled) setChatDrop({ key: Date.now(), files });
-      else if (presentingAvailable || chatEnabled) {
-        const split = splitPresentingFiles(files, { presentingAvailable, chatEnabled });
-        if (split.stageFile) void presentChosenFiles([split.stageFile]);
-        if (split.chatFiles.length) {
-          openChat();
-          setChatDrop({ key: Date.now(), files: split.chatFiles });
-        }
-        for (const failure of split.failures) {
-          const description = failure.reason === "too_big" ? `${failure.fileName} is over 25 MB.` : `${failure.fileName} can't be presented or sent in chat.`;
-          notify({ type: "error", duration: Infinity, message: description });
-        }
-      }
+      else if (presentingAvailable || chatEnabled) void presentChosenFiles(files);
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragover", over);

@@ -47,7 +47,7 @@ function renderFilePresentingOverlay({ presentInputRef, dropActive, dropTarget, 
         <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center rounded-[inherit] bg-[var(--chalk-overlay-scrim-soft)] p-6">
           <div className="rounded-3xl border-2 border-dashed border-[var(--chalk-overlay-line-strong)] bg-[var(--chalk-overlay-strong)] px-8 py-6 text-center text-[var(--chalk-on-overlay)] shadow-xl">
             <div className="text-lg font-semibold">{dropTarget === "chat" ? "Drop files for chat" : "Drop a file to present"}</div>
-            <div className="mt-1 text-sm opacity-75">{dropTarget === "chat" ? "Up to 5 files, 25 MB each" : "PDF or image, up to 25 MB"}</div>
+            <div className="mt-1 text-sm opacity-75">{dropTarget === "chat" ? "Up to 5 files, 25 MB each" : "First PDF or image goes on stage; the rest wait in chat"}</div>
           </div>
         </div>
       ) : null}

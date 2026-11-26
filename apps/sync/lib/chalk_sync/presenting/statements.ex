@@ -65,6 +65,7 @@ defmodule ChalkSync.Presenting.Statements do
     """
     select document_id from presenting_documents
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and document_id = $4
+      and status in ('preparing', 'ready')
     """
   end
 

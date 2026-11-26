@@ -17,7 +17,7 @@ function mount(live: boolean, openChat: () => void = () => {}) {
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() => root.render(<Probe />));
-  return { hook: () => api };
+  return { client, hook: () => api };
 }
 
 it("opens the file picker even while the connection is not live", async () => {
@@ -49,9 +49,10 @@ it("opens the file picker when live", async () => {
 
 it("stages every remaining dropped file in the chat composer instead of sending it", async () => {
   let chatOpens = 0;
-  const { hook } = mount(true, () => {
+  const { client, hook } = mount(true, () => {
     chatOpens += 1;
   });
+  vi.spyOn(client.presenting, "present").mockResolvedValue({ kind: "accepted", revision: 1 });
   const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
   const image = new File([new Uint8Array(8)], "image.png", { type: "image/png" });
   const text = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" });
@@ -64,4 +65,21 @@ it("stages every remaining dropped file in the chat composer instead of sending 
 
   expect(chatOpens).toBe(1);
   expect(hook()?.chatDrop?.files).toEqual([image, text]);
+});
+
+it("stages the dropped PDF in the composer when presenting it fails", async () => {
+  const openChat = vi.fn();
+  const { hook } = mount(true, openChat);
+  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });
+
+  await act(async () => {
+    window.dispatchEvent(event);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(openChat).toHaveBeenCalled();
+  expect(hook()?.chatDrop?.files).toEqual([pdf]);
 });

@@ -6,7 +6,7 @@ export const PRESENTABLE_MIME_TYPES = new Set(["application/pdf", "image/png", "
 export type PresentingFileFailure = { readonly fileName: string; readonly reason: "unsupported" | "too_big" | "failed" };
 export type PresentingFileResult = {
   readonly presented?: string;
-  readonly chatted: number;
+  readonly chatFiles: readonly ChatUploadFile[];
   readonly failures: readonly PresentingFileFailure[];
 };
 
@@ -45,10 +45,11 @@ export function splitPresentingFiles(files: readonly ChatUploadFile[], options: 
   return { stageFile, chatFiles, failures };
 }
 
-/** Uploads the first presentable file to the renderer and puts it on the Stage when Presenting is available; other sendable files go to chat. */
+/** Attempts the Stage candidate and returns every sendable file that must be staged in the composer instead of sent. */
 export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): Promise<PresentingFileResult> {
-  const { stageFile, chatFiles, failures: splitFailures } = splitPresentingFiles(files, options);
+  const { stageFile, chatFiles: splitChatFiles, failures: splitFailures } = splitPresentingFiles(files, options);
   const failures: PresentingFileFailure[] = [...splitFailures];
+  const chatFiles = [...splitChatFiles];
   let presented: string | undefined;
   if (stageFile) {
     try {
@@ -59,24 +60,7 @@ export async function presentFiles(files: readonly ChatUploadFile[], client: Spa
     } catch {
       failures.push({ fileName: describeChatUploadFile(stageFile).fileName, reason: "failed" });
     }
+    if (!presented && options.chatEnabled !== false) chatFiles.unshift(stageFile);
   }
-  let chatted = 0;
-  const attachments = [];
-  for (const file of chatFiles) {
-    try {
-      attachments.push(await client.chat.files.upload(file));
-      chatted += 1;
-    } catch {
-      failures.push({ fileName: describeChatUploadFile(file).fileName, reason: "failed" });
-    }
-  }
-  if (attachments.length) {
-    try {
-      await client.chat.send({ text: "", attachments });
-    } catch {
-      for (const file of chatFiles) failures.push({ fileName: describeChatUploadFile(file).fileName, reason: "failed" });
-      chatted = 0;
-    }
-  }
-  return { presented, chatted, failures };
+  return { presented, chatFiles, failures };
 }
