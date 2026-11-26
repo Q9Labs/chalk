@@ -62,6 +62,7 @@ defmodule ChalkSync.Transport.Socket.Presenting do
       end
 
     response = receipt(result)
+    observe_receipt(response)
     timestamps = if length(recent) < 12, do: [now | recent], else: recent
 
     push(%{state | presenting_commands: timestamps}, [
@@ -72,6 +73,14 @@ defmodule ChalkSync.Transport.Socket.Presenting do
       }
     ])
   end
+
+  # One event per rejection, tagged with its reason. The reasons are fixed code literals, so the event carries no file names, document IDs or user data.
+  @doc false
+  def observe_receipt(%{"kind" => "rejected", "reason" => reason}) do
+    :telemetry.execute([:chalk, :sync, :presenting, :rejection], %{count: 1}, %{reason: reason})
+  end
+
+  def observe_receipt(_receipt), do: :ok
 
   defp receipt({:ok, result}), do: result
 
