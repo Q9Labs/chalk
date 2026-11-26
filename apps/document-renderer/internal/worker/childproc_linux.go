@@ -3,38 +3,37 @@
 package worker
 
 import (
-	"errors"
 	"os"
 	"os/exec"
-	"sync/atomic"
 	"syscall"
 )
 
-func configureIsolatedChild(command *exec.Cmd) {
+func configureIsolatedChild(command *exec.Cmd, namespaces bool) {
 	uid, gid := os.Getuid(), os.Getgid()
-	command.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid:                    true,
-		Unshareflags:               syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
-		UidMappings:                []syscall.SysProcIDMap{{ContainerID: uid, HostID: uid, Size: 1}},
-		GidMappings:                []syscall.SysProcIDMap{{ContainerID: gid, HostID: gid, Size: 1}},
-		GidMappingsEnableSetgroups: false,
+	attributes := &syscall.SysProcAttr{Setpgid: true}
+	if namespaces {
+		attributes.Unshareflags = syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET
+		attributes.UidMappings = []syscall.SysProcIDMap{{ContainerID: uid, HostID: uid, Size: 1}}
+		attributes.GidMappings = []syscall.SysProcIDMap{{ContainerID: gid, HostID: gid, Size: 1}}
+		attributes.GidMappingsEnableSetgroups = false
 	}
+	command.SysProcAttr = attributes
 }
 
-func configureIsolatedChildWithoutNamespaces(command *exec.Cmd) {
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+func isolatedChildProcessGroupID(pid int) int {
+	pgid, err := syscall.Getpgid(pid)
+	if err == nil {
+		return pgid
+	}
+	return pid
 }
 
-func isolatedNamespaceError(err error) bool {
-	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EINVAL)
-}
-
-var namespaceIsolationDisabled atomic.Bool
-
-func isolatedNamespacesEnabled() bool {
-	return !namespaceIsolationDisabled.Load()
-}
-
-func disableIsolatedNamespaces() {
-	namespaceIsolationDisabled.Store(true)
+func killIsolatedChildProcessGroup(pgid int, process *os.Process) {
+	if pgid > 0 {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		return
+	}
+	if process != nil {
+		_ = process.Kill()
+	}
 }

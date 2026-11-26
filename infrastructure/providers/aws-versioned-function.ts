@@ -172,7 +172,12 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
     Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
   yield* lambda.putFunctionConcurrency({ FunctionName: news.functionName, ReservedConcurrentExecutions: news.reservedConcurrency });
-  yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, ...(news.eventInvokeConfig.onFailure ? { DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } } : {}) });
+  yield* lambda.putFunctionEventInvokeConfig({
+    FunctionName: news.functionName,
+    MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge,
+    MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts,
+    ...(news.eventInvokeConfig.onFailure ? { DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } } : {}),
+  });
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
   if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -36,6 +37,18 @@ func init() {
 	if os.Getenv("RENDER_CHILD_MODE") == "selftest" {
 		os.Exit(0)
 	}
+	if os.Getenv("RENDER_CHILD_MODE") == "grouptest" {
+		child := exec.Command("/bin/sh", "-c", "sleep 30")
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			os.Exit(11)
+		}
+		if err := os.WriteFile(os.Args[1], []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+			os.Exit(12)
+		}
+		os.Exit(0)
+	}
 }
 
 func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
@@ -54,15 +67,59 @@ func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 	}
 }
 
-func TestIsolatedNamespaceErrorDetection(t *testing.T) {
-	if !isolatedNamespaceError(&os.PathError{Op: "fork/exec", Path: "/tmp/renderer", Err: syscall.EPERM}) {
-		t.Fatal("expected EPERM fork failure to trigger the namespace fallback")
+func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
+	command := exec.Command("/bin/sh")
+	configureIsolatedChild(command, true)
+	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
+		t.Fatal("isolated child is not placed in its own process group")
 	}
-	if !isolatedNamespaceError(&os.PathError{Op: "fork/exec", Path: "/tmp/renderer", Err: syscall.EINVAL}) {
-		t.Fatal("expected EINVAL fork failure to trigger the namespace fallback")
+	required := uintptr(syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET)
+	if command.SysProcAttr.Unshareflags&required != required {
+		t.Fatalf("isolated child namespace flags %#x do not include user and network namespaces", command.SysProcAttr.Unshareflags)
 	}
-	if isolatedNamespaceError(os.ErrNotExist) {
-		t.Fatal("unrelated process errors must not disable namespace isolation")
+	lambdaCommand := exec.Command("/bin/sh")
+	configureIsolatedChild(lambdaCommand, false)
+	if lambdaCommand.SysProcAttr == nil || !lambdaCommand.SysProcAttr.Setpgid || lambdaCommand.SysProcAttr.Unshareflags != 0 {
+		t.Fatalf("Lambda child attributes = %+v; want process group without namespaces", lambdaCommand.SysProcAttr)
+	}
+}
+
+func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	err = runIsolatedChild(ctx, executable, "grouptest", pidFile)
+	if err == nil || !strings.Contains(err.Error(), "wall-clock") {
+		t.Fatalf("timeout error = %v", err)
+	}
+	encoded, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("read grandchild pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(encoded)))
+	if err != nil {
+		t.Fatalf("grandchild pid %q: %v", encoded, err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		if os.IsNotExist(readErr) {
+			return
+		}
+		if readErr == nil {
+			fields := strings.Fields(string(stat))
+			if len(fields) > 2 && fields[2] == "Z" {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("grandchild %d survived process-group kill", pid)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

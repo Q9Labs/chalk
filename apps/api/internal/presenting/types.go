@@ -15,7 +15,7 @@ const (
 	PageEdgePixels       = 1600
 	ThumbnailEdgePixels  = 240
 	ZoomEdgePixels       = 3200
-	RenderJobPageRange   = 25
+	RenderJobPageRange   = 4
 	RenderLeaseDuration  = 4 * time.Minute
 	RenderAttemptLimit   = 4
 	PageURLLifetime      = 2 * time.Minute

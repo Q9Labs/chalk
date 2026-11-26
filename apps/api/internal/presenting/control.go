@@ -3,6 +3,7 @@ package presenting
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
@@ -55,24 +56,23 @@ func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (
 	if err != nil {
 		return ControlAssignment{}, false, err
 	}
-	if !claimedJobMatchesCapability(claimed.Job, capability) {
+	if !capabilityMatchesJob(capability, claimed.Job) {
 		return ControlAssignment{}, false, ErrLeaseLost
 	}
-	leaseExpiry := claimed.Job.LeaseExpiry
-	if leaseExpiry.IsZero() {
-		leaseExpiry = now.Add(RenderLeaseDuration)
-	}
-	ttl := time.Until(leaseExpiry)
+	leaseExpiry, ttl := claimedLease(claimed.Job, now)
 	if ttl <= 0 {
 		return ControlAssignment{}, false, ErrNoRenderJob
 	}
-	tracked := renderUploadsForClaim(claimed)
-	if err := s.repository.TrackRenderUploads(ctx, tracked); err != nil {
+	if err := s.repository.TrackRenderUploads(ctx, renderUploads(claimed)); err != nil {
 		return ControlAssignment{}, false, err
 	}
 	source, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: claimed.Document.SourceKey, ExpiresIn: ttl})
 	if err != nil {
 		return ControlAssignment{}, false, fmt.Errorf("sign presenting source: %w", err)
+	}
+	uploads, err := s.signPageUploads(ctx, claimed, ttl)
+	if err != nil {
+		return ControlAssignment{}, false, err
 	}
 	assignment := ControlAssignment{
 		JobID: claimed.Job.JobID.String(), TenantID: claimed.Job.TenantID.String(), SpaceID: claimed.Job.SpaceID.String(), DocumentID: claimed.Document.DocumentID.String(), Kind: claimed.Job.Kind,
@@ -81,43 +81,50 @@ func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (
 		FileName: claimed.Document.FileName, MIMEType: claimed.Document.MIMEType,
 		SourceURL: source.URL, SourceExpiresAt: source.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		SourceSHA256: fmt.Sprintf("%x", claimed.Document.SourceSHA256), SourceSizeBytes: claimed.Document.ByteLength,
+		Uploads: uploads,
 	}
-	uploads, err := s.signRenderUploads(ctx, claimed, ttl)
-	if err != nil {
-		return ControlAssignment{}, false, err
-	}
-	assignment.Uploads = uploads
 	return assignment, true, nil
 }
 
-func claimedJobMatchesCapability(job RenderJob, capability RenderCapability) bool {
+func capabilityMatchesJob(capability RenderCapability, job RenderJob) bool {
 	return job.TenantID == capability.TenantID && job.SpaceID == capability.SpaceID && job.DocumentID == capability.DocumentID && job.Kind == capability.Kind && job.PageStart == capability.PageStart && job.PageEnd == capability.PageEnd && job.Attempt == capability.Attempt
 }
 
-func renderUploadsForClaim(claimed RenderAssignment) []RenderUpload {
-	tracked := make([]RenderUpload, 0, (claimed.Job.PageEnd-claimed.Job.PageStart+1)*2)
-	for page := claimed.Job.PageStart; page <= claimed.Job.PageEnd; page++ {
-		base := RenderUpload{TenantID: claimed.Job.TenantID, SpaceID: claimed.Job.SpaceID, DocumentID: claimed.Job.DocumentID, JobID: claimed.Job.JobID, Page: page, Attempt: claimed.Job.Attempt}
-		if claimed.Job.Kind == "zoom" {
+// claimedLease returns the lease expiry and the time left on it. A claim without an expiry gets the default lease.
+func claimedLease(job RenderJob, now time.Time) (time.Time, time.Duration) {
+	leaseExpiry := job.LeaseExpiry
+	if leaseExpiry.IsZero() {
+		leaseExpiry = now.Add(RenderLeaseDuration)
+	}
+	return leaseExpiry, time.Until(leaseExpiry)
+}
+
+// renderUploads lists the objects the renderer may write for each page of the claimed job.
+func renderUploads(claimed RenderAssignment) []RenderUpload {
+	job, document := claimed.Job, claimed.Document
+	tracked := make([]RenderUpload, 0, (job.PageEnd-job.PageStart+1)*2)
+	for page := job.PageStart; page <= job.PageEnd; page++ {
+		base := RenderUpload{TenantID: job.TenantID, SpaceID: job.SpaceID, DocumentID: job.DocumentID, JobID: job.JobID, Page: page, Attempt: job.Attempt}
+		if job.Kind == "zoom" {
 			base.Rendition = "zoom"
-			base.ObjectKey = attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+			base.ObjectKey = attemptZoomKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page)
 			tracked = append(tracked, base)
 			continue
 		}
 		base.Rendition = "image"
-		base.ObjectKey = attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+		base.ObjectKey = attemptImageKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page)
 		tracked = append(tracked, base)
 		base.Rendition = "thumbnail"
-		base.ObjectKey = attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
+		base.ObjectKey = attemptThumbnailKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page)
 		tracked = append(tracked, base)
 	}
 	return tracked
 }
 
-func (s Service) signRenderUploads(ctx context.Context, claimed RenderAssignment, ttl time.Duration) ([]PageUploads, error) {
-	uploads := make([]PageUploads, 0, claimed.Job.PageEnd-claimed.Job.PageStart+1)
+func (s Service) signPageUploads(ctx context.Context, claimed RenderAssignment, ttl time.Duration) ([]PageUploads, error) {
+	var uploads []PageUploads
 	for page := claimed.Job.PageStart; page <= claimed.Job.PageEnd; page++ {
-		upload, err := s.signPageUploads(ctx, claimed, page, ttl)
+		upload, err := s.signRenderPage(ctx, claimed, page, ttl)
 		if err != nil {
 			return nil, err
 		}
@@ -126,21 +133,20 @@ func (s Service) signRenderUploads(ctx context.Context, claimed RenderAssignment
 	return uploads, nil
 }
 
-func (s Service) signPageUploads(ctx context.Context, claimed RenderAssignment, page int, ttl time.Duration) (PageUploads, error) {
+func (s Service) signRenderPage(ctx context.Context, claimed RenderAssignment, page int, ttl time.Duration) (PageUploads, error) {
+	job, document := claimed.Job, claimed.Document
 	upload := PageUploads{Page: page}
 	var err error
-	if claimed.Job.Kind == "zoom" {
-		upload.Zoom, err = s.signUpload(ctx, attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-	} else {
-		upload.Image, err = s.signUpload(ctx, attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-		if err == nil {
-			upload.Thumbnail, err = s.signUpload(ctx, attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-		}
+	if job.Kind == "zoom" {
+		upload.Zoom, err = s.signUpload(ctx, attemptZoomKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page), ttl)
+		return upload, err
 	}
+	upload.Image, err = s.signUpload(ctx, attemptImageKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page), ttl)
 	if err != nil {
-		return PageUploads{}, err
+		return upload, err
 	}
-	return upload, nil
+	upload.Thumbnail, err = s.signUpload(ctx, attemptThumbnailKey(document.TenantID, document.SpaceID, document.EpisodeID, document.DocumentID, job.JobID, job.Attempt, page), ttl)
+	return upload, err
 }
 
 func (s Service) signUpload(ctx context.Context, key string, ttl time.Duration) (SignedUpload, error) {
@@ -188,9 +194,15 @@ func (s Service) CompleteInventory(ctx context.Context, report InventoryReport) 
 	if err != nil {
 		return err
 	}
+	var wait sync.WaitGroup
 	for _, job := range jobs {
-		_ = s.invokeJob(ctx, job, false)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_ = s.invokeJob(ctx, job, false)
+		}()
 	}
+	wait.Wait()
 	return nil
 }
 

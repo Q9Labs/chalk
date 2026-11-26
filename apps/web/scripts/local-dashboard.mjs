@@ -1,5 +1,5 @@
 import { previewAudio } from "../../../scripts/dev/dashboard-artifacts.mjs";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 
@@ -75,9 +75,11 @@ function artifactContentType(path, stored) {
   return "application/octet-stream";
 }
 
-function artifactObjectHeaders(path, file, stored) {
+export function artifactObjectHeaders(path, file, stored) {
   const headers = {
     "Content-Type": artifactContentType(path, stored),
+    "Content-Disposition": "attachment",
+    "X-Content-Type-Options": "nosniff",
     "Content-Length": String(file.byteLength),
     ETag: stored.etag || createHash("md5").update(file).digest("hex"),
     "Last-Modified": new Date().toUTCString(),
@@ -87,9 +89,72 @@ function artifactObjectHeaders(path, file, stored) {
   return headers;
 }
 
+
+const ARTIFACT_ACCESS_KEY = "local-dashboard";
+const ARTIFACT_SECRET = "local-dashboard-storage-not-a-production-secret";
+
+function awsEncode(value) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hmac(key, value) {
+  return createHmac("sha256", key).update(value).digest();
+}
+
+function artifactSignatureSecret() {
+  return process.env.CHALK_LOCAL_ARTIFACT_SIGNING_SECRET || ARTIFACT_SECRET;
+}
+
+function artifactSignatureAccessKey() {
+  return process.env.CHALK_LOCAL_ARTIFACT_SIGNING_ACCESS_KEY || ARTIFACT_ACCESS_KEY;
+}
+
+function artifactCanonicalHeader(incoming, name) {
+  if (name === "host") return incoming.headers.host || "";
+  const value = incoming.headers[name];
+  if (Array.isArray(value)) return value.join(",");
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+export function artifactSignatureValid(method, url, incoming, now = new Date()) {
+  const algorithm = url.searchParams.get("X-Amz-Algorithm");
+  const credential = url.searchParams.get("X-Amz-Credential");
+  const date = url.searchParams.get("X-Amz-Date");
+  const expires = Number(url.searchParams.get("X-Amz-Expires"));
+  const signedHeaders = url.searchParams.get("X-Amz-SignedHeaders");
+  const signature = url.searchParams.get("X-Amz-Signature");
+  if (algorithm !== "AWS4-HMAC-SHA256" || !credential || !date || !Number.isInteger(expires) || expires < 1 || !signedHeaders || !/^[a-f0-9]{64}$/.test(signature || "")) return false;
+  const [accessKey, day, region, service, terminator] = credential.split("/");
+  if (accessKey !== artifactSignatureAccessKey() || !day || !region || service !== "s3" || terminator !== "aws4_request" || !date.startsWith(day)) return false;
+  const signedAt = Date.parse(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}T${date.slice(9, 11)}:${date.slice(11, 13)}:${date.slice(13, 15)}Z`);
+  if (!Number.isFinite(signedAt) || now.getTime() < signedAt - 60_000 || now.getTime() > signedAt + expires * 1000) return false;
+  const headerNames = signedHeaders.split(";").sort();
+  const canonicalHeaders = `${headerNames.map((name) => `${name}:${artifactCanonicalHeader(incoming, name)}\n`).join("")}`;
+  const query = [...url.searchParams.entries()]
+    .filter(([name]) => name !== "X-Amz-Signature")
+    .sort(([leftName, leftValue], [rightName, rightValue]) => leftName === rightName ? (leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0) : (leftName < rightName ? -1 : 1))
+    .map(([name, value]) => `${awsEncode(name)}=${awsEncode(value)}`)
+    .join("&");
+  const canonicalRequest = [method, url.pathname, query, canonicalHeaders, headerNames.join(";"), "UNSIGNED-PAYLOAD"].join("\n");
+  const scope = `${day}/${region}/s3/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", date, scope, sha256Hex(canonicalRequest)].join("\n");
+  const dateKey = hmac(`AWS4${artifactSignatureSecret()}`, day);
+  const regionKey = hmac(dateKey, region);
+  const serviceKey = hmac(regionKey, "s3");
+  const signingKey = hmac(serviceKey, "aws4_request");
+  const expected = createHmac("sha256", signingKey).update(stringToSign).digest();
+  const actual = Buffer.from(signature, "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
 async function artifactResponse(url, incoming) {
   const path = artifactPath(url.pathname);
   if (incoming.method === "PUT") {
+    if (!artifactSignatureValid("PUT", url, incoming)) return new Response("Forbidden", { status: 403 });
     if (incoming.headers["if-none-match"] === "*") {
       const exists = await stat(path).then(
         () => true,
@@ -110,6 +175,7 @@ async function artifactResponse(url, incoming) {
     return new Response(null, { headers: { ETag: stored.etag } });
   }
   if (incoming.method === "DELETE") {
+    if (!artifactSignatureValid("DELETE", url, incoming)) return new Response("Forbidden", { status: 403 });
     await rm(path, { force: true });
     await rm(artifactMetadataPath(path), { force: true });
     return new Response(null, { status: 204 });

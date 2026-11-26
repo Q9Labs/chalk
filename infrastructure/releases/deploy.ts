@@ -5,17 +5,33 @@ import { entryFile, requireDeployable, selectStack } from "../registry.ts";
 import { resourceTypes } from "../transcription-dispatcher/policy.ts";
 import { reportFailure } from "./failure.ts";
 
+export interface BootstrapRow {
+  readonly action: string;
+  readonly resource: { readonly FQN: string; readonly Type: string };
+}
+
+// The renderer lists its own types; ControlApiPermission is optional, every other type is required.
+export const bootstrapMatches = (stackName: string, rows: ReadonlyArray<BootstrapRow>) => {
+  const types = new Map(
+    Object.entries(
+      stackName === "document-renderer"
+        ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm", ControlApiPermission: "AWS.Lambda.Permission" }
+        : resourceTypes,
+    ),
+  );
+  const created = new Map(rows.map((row) => [row.resource.FQN, row]));
+  const requiredPresent = [...types.keys()].filter((name) => name !== "ControlApiPermission").every((name) => created.has(name));
+  const allExpected = rows.every((row) => row.action === "create" && types.get(row.resource.FQN) === row.resource.Type);
+  return requiredPresent && allExpected;
+};
+
 export const checkBootstrap = Effect.fn(function* (plan: Alchemist.StackPlan) {
   const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
   const identity = { stack: plan.stack.name, stage: plan.stack.stage };
   if ((yield* store.list(identity)).length || (yield* store.getOutput(identity)) !== undefined) return yield* Effect.die("Ephemeral stage already exists; refusing to claim or clean up another run");
   if (plan.actions.length || Object.keys(plan.native.deletions).length) return yield* Effect.die("Ephemeral bootstrap cannot contain actions or deletions");
   const resources = Object.values(plan.native.resources);
-  const types = plan.stack.name === "document-renderer"
-    ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm" }
-    : resourceTypes;
-  const expected = Object.entries(types).filter(([name]) => name !== "ControlApiPermission");
-  if (resources.length !== expected.length || resources.some((row) => row.action !== "create" || !expected.some(([name, type]) => row.resource.FQN === name && row.resource.Type === type))) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated workload resource set");
+  if (!bootstrapMatches(plan.stack.name, resources)) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated workload resource set");
 });
 
 export const requireSeededState = Effect.fn(function* (plan: Alchemist.StackPlan) {

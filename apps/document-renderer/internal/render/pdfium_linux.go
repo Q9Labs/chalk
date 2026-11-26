@@ -17,6 +17,7 @@ static FPDF_DOCUMENT load_mem(void *data, int length) {
 import "C"
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
@@ -35,6 +36,20 @@ type PDFInventory struct {
 	Pages     []PDFPage
 }
 
+func loadPDFDocument(data []byte) (C.FPDF_DOCUMENT, func()) {
+	var pinner runtime.Pinner
+	pinner.Pin(&data[0])
+	document := C.load_mem(unsafe.Pointer(&data[0]), C.int(len(data)))
+	if document == nil {
+		pinner.Unpin()
+		return nil, nil
+	}
+	return document, func() {
+		C.FPDF_CloseDocument(document)
+		pinner.Unpin()
+	}
+}
+
 func PDFInventoryFromBytes(data []byte) (PDFInventory, string, error) {
 	inventory, _, failure, err := PDFInventoryFromBytesTimed(data)
 	return inventory, failure, err
@@ -47,7 +62,7 @@ func PDFInventoryFromBytesTimed(data []byte) (PDFInventory, ChildTiming, string,
 		return PDFInventory{}, timing, "corrupt", fmt.Errorf("empty pdf")
 	}
 	openStarted := time.Now()
-	document := C.load_mem(unsafe.Pointer(&data[0]), C.int(len(data)))
+	document, closeDocument := loadPDFDocument(data)
 	timing.DocumentOpenMs = time.Since(openStarted).Milliseconds()
 	if document == nil {
 		code := int(C.FPDF_GetLastError())
@@ -57,7 +72,7 @@ func PDFInventoryFromBytesTimed(data []byte) (PDFInventory, ChildTiming, string,
 		}
 		return PDFInventory{}, timing, failure, fmt.Errorf("pdf open failed with pdfium error %d", code)
 	}
-	defer C.FPDF_CloseDocument(document)
+	defer closeDocument()
 	inventoryStarted := time.Now()
 	count := int(C.FPDF_GetPageCount(document))
 	if count < 1 || count > 300 {
@@ -99,7 +114,7 @@ func RenderPDFPageTimed(data []byte, pageNumber int, targetEdge int) ([]byte, in
 		return nil, 0, 0, timing, "corrupt", fmt.Errorf("invalid pdf render input")
 	}
 	openStarted := time.Now()
-	document := C.load_mem(unsafe.Pointer(&data[0]), C.int(len(data)))
+	document, closeDocument := loadPDFDocument(data)
 	timing.DocumentOpenMs = time.Since(openStarted).Milliseconds()
 	if document == nil {
 		code := int(C.FPDF_GetLastError())
@@ -109,7 +124,7 @@ func RenderPDFPageTimed(data []byte, pageNumber int, targetEdge int) ([]byte, in
 		}
 		return nil, 0, 0, timing, failure, fmt.Errorf("pdf open failed with pdfium error %d", code)
 	}
-	defer C.FPDF_CloseDocument(document)
+	defer closeDocument()
 	loadStarted := time.Now()
 	page := C.FPDF_LoadPage(document, C.int(pageNumber-1))
 	timing.PageLoadMs = time.Since(loadStarted).Milliseconds()

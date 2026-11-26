@@ -487,6 +487,7 @@ type Querier interface {
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
 	RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error)
+	RequeuePresentingRenderJob(ctx context.Context, arg RequeuePresentingRenderJobParams) (int64, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	ReserveChatAttachmentUpload(ctx context.Context, arg ReserveChatAttachmentUploadParams) (ReserveChatAttachmentUploadRow, error)
 	ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error)

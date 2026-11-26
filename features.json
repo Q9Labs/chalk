@@ -467,7 +467,8 @@
         "scripts/gates/obs-coverage.mjs",
         "scripts/gates/obs-coverage.test.mjs",
         "sdks/typescript/client/src/obs",
-        "sdks/typescript/client/src/transport-diagnostics.ts"
+        "sdks/typescript/client/src/transport-diagnostics.ts",
+        "apps/api/internal/httpapi/telemetry_chain_helpers_test.go"
       ]
     },
     {
@@ -602,8 +603,12 @@
         "apps/api/db/migrations/20261125230000_presenting.sql",
         "apps/api/db/queries/presenting.sql",
         "apps/api/internal/adapters/postgres/presenting.go",
+        "apps/api/internal/adapters/postgres/presenting_completion_integration_test.go",
         "apps/api/internal/adapters/postgres/presenting_integration_test.go",
+        "apps/api/internal/adapters/postgres/presenting_inventory.go",
+        "apps/api/internal/adapters/postgres/presenting_render.go",
         "apps/api/internal/adapters/postgres/presenting_settings.go",
+        "apps/api/internal/adapters/postgres/presenting_zoom_integration_test.go",
         "apps/api/internal/httpapi/presenting.go",
         "apps/api/internal/httpapi/presenting_capability.go",
         "apps/api/internal/httpapi/presenting_test.go",
@@ -1021,7 +1026,8 @@
         "sdks/typescript/react/tsconfig.json",
         "sdks/typescript/react/vitest.config.ts",
         "tests",
-        "tools"
+        "tools",
+        "apps/api/internal/httpapi/cors_test.go"
       ]
     }
   ]

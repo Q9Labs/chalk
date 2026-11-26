@@ -5,6 +5,7 @@ package render
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -75,4 +76,37 @@ func TestRenderPDFPageProducesBitmapAndWebP(t *testing.T) {
 	if string(encoded[:4]) != "RIFF" || string(encoded[8:12]) != "WEBP" {
 		t.Fatal("encoded payload is not a webp RIFF")
 	}
+}
+
+func TestPDFInventoryAndRenderUnderGCPressure(t *testing.T) {
+	data := fixture(t, "normal.pdf")
+	stop := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				pressure := make([]byte, 32*1024)
+				runtime.KeepAlive(pressure)
+				runtime.GC()
+			}
+		}
+	}()
+	for range 2 {
+		if _, failure, err := PDFInventoryFromBytes(data); err != nil {
+			close(stop)
+			<-finished
+			t.Fatalf("inventory under GC pressure failure %q: %v", failure, err)
+		}
+		if _, _, _, failure, err := RenderPDFPage(data, 1, 1600); err != nil {
+			close(stop)
+			<-finished
+			t.Fatalf("render under GC pressure failure %q: %v", failure, err)
+		}
+	}
+	close(stop)
+	<-finished
 }

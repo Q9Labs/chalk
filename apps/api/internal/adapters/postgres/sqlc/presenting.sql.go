@@ -16,7 +16,7 @@ with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
     where job.status = 'leased'
-        and job.lease_expires_at <= $4
+        and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
 ),
@@ -28,7 +28,7 @@ failed_documents as (
         and document.space_id = expired.space_id
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
-        and document.status <> 'failed'
+        and document.status = 'preparing'
     returning document.document_id
 ),
 candidate as (
@@ -40,7 +40,7 @@ candidate as (
         and document.document_id = job.document_id
     where job.status in ('queued', 'leased')
         and job.available_at <= $4
-        and (job.status = 'queued' or job.lease_expires_at <= $4)
+        and (job.status = 'queued' or job.lease_expires_at <= now())
         and job.attempt_count < job.attempt_limit
         and job.attempt_count + 1 = $5
         and ($6::uuid is null or job.job_id = $6::uuid)
@@ -144,6 +144,7 @@ where tenant_id = $1
     and attempt_count = $5
     and lease_owner = $6
     and lease_token = $7
+    and lease_expires_at > now()
     and status in ('leased', 'succeeded')
 `
 
@@ -430,12 +431,18 @@ func (q *Queries) DeletePresentingDocument(ctx context.Context, arg DeletePresen
 }
 
 const failPresentingDocument = `-- name: FailPresentingDocument :execrows
-update presenting_documents
+update presenting_documents document
 set status = 'failed', failure_code = $1, failure_message = $2, updated_at = now()
-where tenant_id = $3
-    and space_id = $4
-    and document_id = $5
-    and status <> 'failed'
+from presenting_render_jobs job
+where document.tenant_id = $3
+    and document.space_id = $4
+    and document.document_id = $5
+    and job.tenant_id = document.tenant_id
+    and job.space_id = document.space_id
+    and job.document_id = document.document_id
+    and job.job_id = $6
+    and job.kind in ('inventory', 'pages')
+    and document.status <> 'failed'
 `
 
 type FailPresentingDocumentParams struct {
@@ -444,6 +451,7 @@ type FailPresentingDocumentParams struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	SpaceID        pgtype.UUID `json:"space_id"`
 	DocumentID     pgtype.UUID `json:"document_id"`
+	JobID          pgtype.UUID `json:"job_id"`
 }
 
 func (q *Queries) FailPresentingDocument(ctx context.Context, arg FailPresentingDocumentParams) (int64, error) {
@@ -453,6 +461,7 @@ func (q *Queries) FailPresentingDocument(ctx context.Context, arg FailPresenting
 		arg.TenantID,
 		arg.SpaceID,
 		arg.DocumentID,
+		arg.JobID,
 	)
 	if err != nil {
 		return 0, err
@@ -470,7 +479,8 @@ where tenant_id = $3
     and attempt_count = $7
     and lease_owner = $8
     and lease_token = $9
-    and status in ('leased', 'failed')
+    and lease_expires_at > now()
+    and status = 'leased'
 `
 
 type FailPresentingRenderJobParams struct {
@@ -860,7 +870,7 @@ where tenant_id = $2
     and attempt_count = $6
     and lease_owner = $7
     and lease_token = $8
-    and lease_expires_at > $9
+    and lease_expires_at > now()
 `
 
 type HeartbeatPresentingRenderJobParams struct {
@@ -872,7 +882,6 @@ type HeartbeatPresentingRenderJobParams struct {
 	AttemptCount   int32              `json:"attempt_count"`
 	LeaseOwner     pgtype.Text        `json:"lease_owner"`
 	LeaseToken     pgtype.UUID        `json:"lease_token"`
-	NowAt          pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) HeartbeatPresentingRenderJob(ctx context.Context, arg HeartbeatPresentingRenderJobParams) (int64, error) {
@@ -885,7 +894,6 @@ func (q *Queries) HeartbeatPresentingRenderJob(ctx context.Context, arg Heartbea
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -1146,6 +1154,25 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 }
 
 const listStalePresentingRenderJobs = `-- name: ListStalePresentingRenderJobs :many
+with expired as (
+    update presenting_render_jobs job
+    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
+    where job.status = 'leased'
+        and job.lease_expires_at <= now()
+        and job.attempt_count >= job.attempt_limit
+    returning job.tenant_id, job.space_id, job.document_id, job.kind
+),
+failed_documents as (
+    update presenting_documents document
+    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
+    from expired
+    where document.tenant_id = expired.tenant_id
+        and document.space_id = expired.space_id
+        and document.document_id = expired.document_id
+        and expired.kind in ('inventory', 'pages')
+        and document.status = 'preparing'
+    returning document.document_id
+)
 select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
        job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
        job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at
@@ -1154,7 +1181,7 @@ where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
   and (
     (job.status = 'queued' and job.available_at <= $1)
-    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < $1)
+    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
   )
 order by job.available_at asc, job.created_at asc
 limit $2
@@ -1235,23 +1262,22 @@ where page.tenant_id = $3
             and job.attempt_count = $8
             and job.lease_owner = $9
             and job.lease_token = $10
-            and job.lease_expires_at > $11
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     )
 `
 
 type MarkPresentingPageReadyParams struct {
-	ImageKey     pgtype.Text        `json:"image_key"`
-	ThumbnailKey pgtype.Text        `json:"thumbnail_key"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	DocumentID   pgtype.UUID        `json:"document_id"`
-	Page         int32              `json:"page"`
-	JobID        pgtype.UUID        `json:"job_id"`
-	AttemptCount int32              `json:"attempt_count"`
-	LeaseOwner   pgtype.Text        `json:"lease_owner"`
-	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
+	ImageKey     pgtype.Text `json:"image_key"`
+	ThumbnailKey pgtype.Text `json:"thumbnail_key"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	Page         int32       `json:"page"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
 }
 
 func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentingPageReadyParams) (int64, error) {
@@ -1266,7 +1292,6 @@ func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -1293,7 +1318,7 @@ where page.tenant_id = $3
             and job.attempt_count = $8
             and job.lease_owner = $9
             and job.lease_token = $10
-            and job.lease_expires_at > $11
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     )
 `
@@ -1309,7 +1334,6 @@ type MarkPresentingZoomReadyParams struct {
 	AttemptCount int32              `json:"attempt_count"`
 	LeaseOwner   pgtype.Text        `json:"lease_owner"`
 	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) MarkPresentingZoomReady(ctx context.Context, arg MarkPresentingZoomReadyParams) (int64, error) {
@@ -1324,7 +1348,6 @@ func (q *Queries) MarkPresentingZoomReady(ctx context.Context, arg MarkPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -1341,6 +1364,51 @@ func (q *Queries) PresentingEnabled(ctx context.Context, defaultEnabled bool) (b
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const requeuePresentingRenderJob = `-- name: RequeuePresentingRenderJob :execrows
+update presenting_render_jobs
+set status = 'queued', lease_token = null, lease_owner = null, lease_expires_at = null, available_at = now(), error_code = $1, error_message = $2, updated_at = now()
+where tenant_id = $3
+    and space_id = $4
+    and document_id = $5
+    and job_id = $6
+    and attempt_count = $7
+    and attempt_count < attempt_limit
+    and lease_owner = $8
+    and lease_token = $9
+    and lease_expires_at > now()
+    and status = 'leased'
+`
+
+type RequeuePresentingRenderJobParams struct {
+	ErrorCode    pgtype.Text `json:"error_code"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
+}
+
+func (q *Queries) RequeuePresentingRenderJob(ctx context.Context, arg RequeuePresentingRenderJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, requeuePresentingRenderJob,
+		arg.ErrorCode,
+		arg.ErrorMessage,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.DocumentID,
+		arg.JobID,
+		arg.AttemptCount,
+		arg.LeaseOwner,
+		arg.LeaseToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setPresentingDocumentInventory = `-- name: SetPresentingDocumentInventory :execrows

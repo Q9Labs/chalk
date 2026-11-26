@@ -2,4 +2,4 @@
 
 package render
 
-func applyChildRlimits() {}
+func applyChildRlimits() error { return nil }

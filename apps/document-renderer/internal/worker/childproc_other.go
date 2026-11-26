@@ -2,14 +2,17 @@
 
 package worker
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
 
-func configureIsolatedChild(command *exec.Cmd) {}
+func configureIsolatedChild(command *exec.Cmd, namespaces bool) {}
 
-func configureIsolatedChildWithoutNamespaces(command *exec.Cmd) {}
+func isolatedChildProcessGroupID(pid int) int { return pid }
 
-func isolatedNamespaceError(err error) bool { return false }
-
-func isolatedNamespacesEnabled() bool { return false }
-
-func disableIsolatedNamespaces() {}
+func killIsolatedChildProcessGroup(pgid int, process *os.Process) {
+	if process != nil {
+		_ = process.Kill()
+	}
+}

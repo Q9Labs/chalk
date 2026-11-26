@@ -12,9 +12,7 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
   const roleArn = (suffix: string) => `arn:aws:iam::${account}:role/${input.function_name}-${suffix}`;
   const logName = `/aws/lambda/${input.function_name}`;
   const tags = { chalk_environment: input.environment_name, chalk_component: "document-renderer" };
-  const executionPolicy = policy([
-    allow("WriteOwnLogs", ["logs:CreateLogStream", "logs:PutLogEvents"], [`arn:aws:logs:${region}:${account}:log-group:${logName}:*`]),
-  ]);
+  const executionPolicy = policy([allow("WriteOwnLogs", ["logs:CreateLogStream", "logs:PutLogEvents"], [`arn:aws:logs:${region}:${account}:log-group:${logName}:*`])]);
   const executionRole: AWS.IAM.Role["Props"] = {
     roleName: `${input.function_name}-execution`,
     tags,
@@ -57,8 +55,7 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
     executionRole,
     log,
     fn,
-    controlPermission:
-      input.control_api_invoker_principal !== null && input.control_api_invoke_source_arn !== null ? { functionName: input.function_name, action: "lambda:InvokeFunction", principal: input.control_api_invoker_principal, sourceArn: input.control_api_invoke_source_arn } : undefined,
+    controlPermission: input.control_api_invoker_principal !== null && input.control_api_invoke_source_arn !== null ? { functionName: input.function_name, action: "lambda:InvokeFunction", principal: input.control_api_invoker_principal, sourceArn: input.control_api_invoke_source_arn } : undefined,
     alarms: {
       Errors: alarm("errors", "Document renderer invocation errors.", "Errors"),
       Throttles: alarm("throttles", "Reserved-concurrency throttles on the document renderer.", "Throttles"),

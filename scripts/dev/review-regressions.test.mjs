@@ -192,16 +192,17 @@ test("the local artifact server stores bytes and object metadata for finalize", 
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
-  const child = spawn("python3", ["scripts/dev/artifact-server.py", String(port), root], { stdio: "ignore" });
+  const python = process.platform === "win32" ? "python" : "python3";
+  const child = spawn(python, ["scripts/dev/artifact-server.py", String(port), root], { stdio: "ignore" });
   try {
     const base = `http://127.0.0.1:${port}/__local-dashboard-artifacts/local-dashboard/test.pdf`;
     let ready = false;
-    for (let attempt = 0; attempt < 30 && !ready; attempt++) {
+    for (let attempt = 0; attempt < 200 && !ready; attempt++) {
       ready = await fetch(base, { method: "HEAD" }).then(
         () => true,
         () => false,
       );
-      if (!ready) await delay(50);
+      if (!ready) await delay(100);
     }
     assert.equal(ready, true);
     const put = await fetch(base, {

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,16 @@ import (
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/worker"
 )
+
+var runtimeBootNonce = newRuntimeBootNonce()
+
+func newRuntimeBootNonce() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "unavailable"
+	}
+	return hex.EncodeToString(buf)
+}
 
 type invocationEvent struct {
 	Source      string `json:"source"`
@@ -121,7 +133,7 @@ func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logge
 		response, err := client.Do(request)
 		if err != nil {
 			logger.Error("runtime invocation poll failed", "error", err)
-			time.Sleep(time.Second)
+			<-time.After(time.Second)
 			continue
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
@@ -137,16 +149,18 @@ func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logge
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+		logger.Info("render invocation claimed", "job_id", event.JobID, "boot_nonce", runtimeBootNonce)
 		processErr := processOne(ctx, control, event)
 		cancel()
 		if processErr == nil {
 			postRuntimeResult(client, base+"/invocation/"+requestID+"/response", []byte(`{"ok":true}`), logger)
-		} else {
-			payload, _ := json.Marshal(map[string]string{"errorMessage": processErr.Error()})
-			postRuntimeResult(client, base+"/invocation/"+requestID+"/error", payload, logger)
-			logger.Error("render invocation failed; recycling execution environment", "error", processErr)
-			os.Exit(1)
+			logger.Info("render invocation finished; recycling execution environment", "boot_nonce", runtimeBootNonce)
+			os.Exit(0)
 		}
+		payload, _ := json.Marshal(map[string]string{"errorMessage": processErr.Error()})
+		postRuntimeResult(client, base+"/invocation/"+requestID+"/error", payload, logger)
+		logger.Error("render invocation failed; recycling execution environment", "error", processErr, "boot_nonce", runtimeBootNonce)
+		os.Exit(1)
 	}
 }
 

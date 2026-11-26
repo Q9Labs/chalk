@@ -31,9 +31,6 @@ func mountPresentingWorkerRoutes(r chi.Router, service interface {
 	FailRender(context.Context, presenting.RenderLease, presenting.RenderFailure) error
 	CompleteZoomRender(context.Context, presenting.RenderLease) error
 }, authorizer PresentingCapabilityAuthorizer) {
-	if service == nil || authorizer == nil {
-		return
-	}
 	r.Route("/internal/v1/presenting/render", func(r chi.Router) {
 		r.Post("/claim", presentingClaimHandler(service, authorizer))
 		r.Post("/heartbeat", presentingHeartbeatHandler(service, authorizer))

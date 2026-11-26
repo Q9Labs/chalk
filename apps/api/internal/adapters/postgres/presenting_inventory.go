@@ -112,7 +112,7 @@ func (r PresentingRepository) CompleteZoom(ctx context.Context, lease presenting
 	}
 	rows, err := q.MarkPresentingZoomReady(ctx, sqlc.MarkPresentingZoomReadyParams{
 		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(lease.Page), ZoomReadyAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, ZoomKey: pgtype.Text{String: zoomKey, Valid: true},
-		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
 	})
 	if err != nil {
 		return fmt.Errorf("mark presenting zoom ready: %w", err)
@@ -138,7 +138,7 @@ func publishPresentingPage(ctx context.Context, q *sqlc.Queries, lease presentin
 	rows, err := q.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{
 		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page),
 		ImageKey: pgtype.Text{String: imageKey, Valid: true}, ThumbnailKey: pgtype.Text{String: thumbnailKey, Valid: true},
-		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
 	})
 	if err != nil {
 		return fmt.Errorf("mark presenting page ready: %w", err)
