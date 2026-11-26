@@ -1001,6 +1001,10 @@
         "apps/api/internal/httpapi/presenting_test.go",
         "apps/api/internal/httpapi/presenting_worker.go",
         "apps/api/internal/httpapi/presenting_worker_request.go",
+        "apps/api/internal/adapters/postgres/presenting.go",
+        "apps/api/internal/adapters/postgres/presenting_render.go",
+        "apps/api/internal/adapters/postgres/presenting_zoom.go",
+        "apps/document-renderer",
         "infrastructure/document-renderer"
       ]
     }

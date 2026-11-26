@@ -11,9 +11,17 @@ export const checkBootstrap = Effect.fn(function* (plan: Alchemist.StackPlan) {
   if ((yield* store.list(identity)).length || (yield* store.getOutput(identity)) !== undefined) return yield* Effect.die("Ephemeral stage already exists; refusing to claim or clean up another run");
   if (plan.actions.length || Object.keys(plan.native.deletions).length) return yield* Effect.die("Ephemeral bootstrap cannot contain actions or deletions");
   const resources = Object.values(plan.native.resources);
-  const types = plan.stack.name === "document-renderer" ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm" } : resourceTypes;
-  const expected = Object.entries(types).filter(([name]) => name !== "ControlApiPermission");
-  if (resources.length !== expected.length || resources.some((row) => row.action !== "create" || !expected.some(([name, type]) => row.resource.FQN === name && row.resource.Type === type))) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated workload resource set");
+  const types = new Map(
+    Object.entries(
+      plan.stack.name === "document-renderer"
+        ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm", ControlApiPermission: "AWS.Lambda.Permission" }
+        : resourceTypes,
+    ),
+  );
+  const created = new Map(resources.map((row) => [row.resource.FQN, row]));
+  const requiredPresent = [...types.keys()].filter((name) => name !== "ControlApiPermission").every((name) => created.has(name));
+  const allExpected = resources.every((row) => row.action === "create" && types.get(row.resource.FQN) === row.resource.Type);
+  if (!requiredPresent || !allExpected) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated workload resource set");
 });
 
 export const requireSeededState = Effect.fn(function* (plan: Alchemist.StackPlan) {
