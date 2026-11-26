@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -18,8 +19,8 @@ type tenantScopedReconcileRepository struct {
 
 func (r tenantScopedReconcileRepository) ListStaleRenderJobs(ctx context.Context, now time.Time, limit int) ([]presenting.RenderJob, error) {
 	scanLimit := limit
-	if scanLimit < 1000 {
-		scanLimit = 1000
+	if scanLimit < math.MaxInt32 {
+		scanLimit = math.MaxInt32
 	}
 	jobs, err := r.Repository.ListStaleRenderJobs(ctx, now, scanLimit)
 	if err != nil {
