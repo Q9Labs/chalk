@@ -75,9 +75,11 @@ function artifactContentType(path, stored) {
   return "application/octet-stream";
 }
 
-function artifactObjectHeaders(path, file, stored) {
+export function artifactObjectHeaders(path, file, stored) {
   const headers = {
     "Content-Type": artifactContentType(path, stored),
+    "Content-Disposition": "attachment",
+    "X-Content-Type-Options": "nosniff",
     "Content-Length": String(file.byteLength),
     ETag: stored.etag || createHash("md5").update(file).digest("hex"),
     "Last-Modified": new Date().toUTCString(),
