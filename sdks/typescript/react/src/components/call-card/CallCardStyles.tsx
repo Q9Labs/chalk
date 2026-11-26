@@ -893,7 +893,7 @@ const styles = `.call-card-tabs {
   place-items: center;
   flex: none;
 }
-.call-file-drop-dimmer {
+.chalk-frame-overlays > .call-file-drop-dimmer {
   position: absolute;
   inset: 0;
   z-index: 35;
