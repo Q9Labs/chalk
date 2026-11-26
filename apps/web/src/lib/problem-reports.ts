@@ -13,6 +13,7 @@ const parseAvailability = Schema.decodeUnknownSync(Schema.Struct({ available: Sc
 export function useReportCredentialExpired(expiresAt: number | undefined) {
   const [expiredAt, setExpiredAt] = useState<number>();
   useEffect(() => {
+    setExpiredAt(undefined);
     if (expiresAt === undefined) return;
     const timer = globalThis.setTimeout(() => setExpiredAt(expiresAt), Math.max(0, expiresAt - Date.now()));
     return () => globalThis.clearTimeout(timer);

@@ -47,7 +47,7 @@ export function CallDialogContent({
   const [session, setSession] = useState({ kind, open });
   if (session.kind !== kind || session.open !== open) {
     setSession({ kind, open });
-    if (open && kind === "report") {
+    if (open && kind === "report" && status === "sent") {
       setText("");
       setIncludeDiagnostics(false);
       setError("");
