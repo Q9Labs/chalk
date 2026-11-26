@@ -219,10 +219,8 @@ export const ChatPanelSurface = React.memo(
       if (fileInputRef.current) fileInputRef.current.value = "";
       return batch.accepted;
     };
-    const retainDrop = useChatDropRouting({
-      droppedFiles, onDroppedFilesChange,
-      stageFiles: (files) => keepRetainedFiles(files, stagedFiles, selectFiles(files, { deferUploads: true })),
-    });
+    const stageRetained = (files: readonly ChatUploadFile[]) => keepRetainedFiles(files, stagedFiles, selectFiles(files, { deferUploads: true }));
+    const retainDrop = useChatDropRouting({ droppedFiles, onDroppedFilesChange, stageFiles: stageRetained });
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {
