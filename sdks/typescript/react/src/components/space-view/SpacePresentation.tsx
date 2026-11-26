@@ -1,5 +1,5 @@
 "use client";
-import { useRef, type ReactNode } from "react";
+import { useRef, type DragEventHandler, type ReactNode } from "react";
 import { useIdleChrome } from "../../internal/call-motion";
 import { NarrowCallProvider, useNarrowCallFrame } from "../../internal/call-width";
 import { cn } from "../../utils/cn";
@@ -19,6 +19,11 @@ export interface SpacePresentationProps {
   readonly dialogs?: ReactNode;
   readonly renderToken?: string;
   readonly interactive?: boolean;
+  readonly onDragEnterCapture?: DragEventHandler<HTMLElement>;
+  readonly onDragOverCapture?: DragEventHandler<HTMLElement>;
+  readonly onDragLeaveCapture?: DragEventHandler<HTMLElement>;
+  readonly onDropCapture?: DragEventHandler<HTMLElement>;
+  readonly onDrop?: DragEventHandler<HTMLElement>;
   /** While the call reconnects the header and dock stay on screen; once it is lost the dock dims except Leave. */
   readonly connectionTrouble?: "reconnecting" | "lost";
   readonly className?: string;
@@ -27,7 +32,29 @@ export interface SpacePresentationProps {
  * Presentation-only Space chrome shared by the live controller and deterministic
  * Recording projection. Networking, device effects and commands stay in callers.
  */
-export function SpacePresentation({ colorScheme = "dark", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, toasts, overlays, dialogs, renderToken, interactive = true, connectionTrouble, className }: SpacePresentationProps): React.JSX.Element {
+export function SpacePresentation({
+  colorScheme = "dark",
+  stageBackground,
+  header,
+  stage,
+  controls,
+  compactControls,
+  stageOverlay,
+  sidebar,
+  mediaOutput,
+  toasts,
+  overlays,
+  dialogs,
+  renderToken,
+  interactive = true,
+  onDragEnterCapture,
+  onDragOverCapture,
+  onDragLeaveCapture,
+  onDropCapture,
+  onDrop,
+  connectionTrouble,
+  className,
+}: SpacePresentationProps): React.JSX.Element {
   const root = useRef<HTMLElement>(null);
   const idle = useIdleChrome(root, interactive && connectionTrouble === undefined);
   const narrow = useNarrowCallFrame(root);
@@ -42,6 +69,11 @@ export function SpacePresentation({ colorScheme = "dark", stageBackground, heade
         data-chalk-theme={colorScheme}
         data-recording-space-render-token={renderToken}
         inert={interactive ? undefined : true}
+        onDragEnterCapture={onDragEnterCapture}
+        onDragOverCapture={onDragOverCapture}
+        onDragLeaveCapture={onDragLeaveCapture}
+        onDropCapture={onDropCapture}
+        onDrop={onDrop}
         className={cn("chalk-root chalk-frame", className)}
       >
         {mediaOutput}

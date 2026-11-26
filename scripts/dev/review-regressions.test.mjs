@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createSocket } from "node:dgram";
+import { createServer } from "node:net";
 import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -177,6 +179,59 @@ for (const signal of [undefined, "SIGINT", "SIGTERM"]) {
     assert.equal(signals.listenerCount("SIGTERM"), 0);
   });
 }
+
+// Windows runners may expose `python3` as an app-execution alias that exits at once, so probe for a real interpreter.
+async function python3Command() {
+  for (const command of ["python3", "python"]) {
+    const works = await new Promise((resolve) => {
+      const probe = spawn(command, ["-c", "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)"], { stdio: "ignore" });
+      probe.on("error", () => resolve(false));
+      probe.on("exit", (code) => resolve(code === 0));
+    });
+    if (works) return command;
+  }
+  throw new Error("No working Python 3 interpreter is on PATH for the artifact server test");
+}
+
+test("the local artifact server stores bytes and object metadata for finalize", async () => {
+  const python = await python3Command();
+  const root = await mkdtemp(join(tmpdir(), "chalk-artifact-server-"));
+  const listener = createServer();
+  await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
+  const port = listener.address().port;
+  await new Promise((resolve) => listener.close(resolve));
+  const child = spawn(python, ["scripts/dev/artifact-server.py", String(port), root], { stdio: "ignore" });
+  try {
+    const base = `http://127.0.0.1:${port}/__local-dashboard-artifacts/local-dashboard/test.pdf`;
+    let ready = false;
+    for (let attempt = 0; attempt < 200 && !ready; attempt++) {
+      ready = await fetch(base, { method: "HEAD" }).then(
+        () => true,
+        () => false,
+      );
+      if (!ready) await delay(50);
+    }
+    assert.equal(ready, true);
+    const put = await fetch(base, {
+      method: "PUT",
+      body: "abc",
+      headers: { "Content-Type": "application/pdf", "x-amz-meta-chalk-upload-id": "upload-one", "x-amz-checksum-sha256": "digest" },
+    });
+    assert.equal(put.status, 200);
+    const got = await fetch(base);
+    assert.equal(got.status, 200);
+    assert.equal(got.headers.get("content-type"), "application/pdf");
+    assert.equal(got.headers.get("x-amz-meta-chalk-upload-id"), "upload-one");
+    assert.equal(got.headers.get("x-amz-checksum-sha256"), "digest");
+    assert.equal(await got.text(), "abc");
+    const head = await fetch(base, { method: "HEAD" });
+    assert.equal(head.headers.get("content-length"), "3");
+    assert.equal((await fetch(base, { method: "DELETE" })).status, 204);
+  } finally {
+    child.kill();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("the mounted artifact directory contains byte-identical JSON/audio and refuses path escapes", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-artifact-files-"));

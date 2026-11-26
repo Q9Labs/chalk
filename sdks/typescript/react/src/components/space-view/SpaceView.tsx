@@ -18,6 +18,7 @@ import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
+import { useChatFileDropFlow } from "./chat-file-drop";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
@@ -172,6 +173,7 @@ export function SpaceView({
   const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
+  const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
@@ -218,6 +220,7 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
+  const chatFileDrop = useChatFileDropFlow({ chatOpen: activePanel === "chat", chatAvailable: feature("chat") && canSendChat, onOpenChat: () => setActivePanel("chat") });
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -321,6 +324,7 @@ export function SpaceView({
               connectionTrouble={connectionPhase.kind === "failed" ? "lost" : connectionPhase.kind === "reconnecting" ? "reconnecting" : undefined}
               colorScheme={colorScheme}
               stageBackground={stageBackground}
+              {...chatFileDrop.handlers}
               header={{
                 colorScheme,
                 onColorSchemeChange,
@@ -429,8 +433,8 @@ export function SpaceView({
                 </>
               }
               sidebar={
-                <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
-                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+                <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)} overlay={chatFileDrop.overlay}>
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} {...chatFileDrop.panelProps} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {
@@ -470,6 +474,7 @@ export function SpaceView({
               }
               overlays={
                 <>
+                  {chatFileDrop.dimmer}
                   <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />
                   {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
                     <Suspense fallback={null}>

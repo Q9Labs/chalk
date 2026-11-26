@@ -5,7 +5,7 @@ import { cn } from "../../utils/cn";
 import { formatClockTime } from "../../utils/formatClockTime";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
-import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
+import { formatFileSize, useChatAttachmentPreviews } from "./use-chat-attachment-previews";
 import { UnavailableAttachment } from "./UnavailableAttachment";
 
 export interface MessageBubbleProps {
@@ -275,7 +275,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                       </span>
                       <span>
                         <b dir="auto">{file.fileName}</b>
-                        <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
+                        <small>{image ? "Loading preview…" : formatFileSize(file.byteLength)}</small>
                       </span>
                     </button>
                   );
