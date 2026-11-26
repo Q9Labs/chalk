@@ -44,10 +44,13 @@ it("resolves a fresh source URL on every download click path and saves a blob", 
     return url;
   };
   URL.revokeObjectURL = () => {};
+  vi.useFakeTimers();
   try {
     await downloadDocumentSource(client, manifest, "deck.pdf");
     await downloadDocumentSource(client, manifest, "deck.pdf");
+    vi.advanceTimersByTime(30_000);
   } finally {
+    vi.useRealTimers();
     HTMLAnchorElement.prototype.click = originalClick;
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
