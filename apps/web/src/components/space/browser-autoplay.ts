@@ -5,8 +5,12 @@ export function browserAllowsMediaAutoplay(): boolean {
   if (typeof policy === "string") return policy === "allowed";
   const Context = globalThis.AudioContext;
   if (!Context) return false;
-  const context = new Context();
-  const allowed = context.state === "running";
-  void context.close().catch(() => undefined);
-  return allowed;
+  try {
+    const context = new Context();
+    const allowed = context.state === "running";
+    void context.close().catch(() => undefined);
+    return allowed;
+  } catch {
+    return false;
+  }
 }
