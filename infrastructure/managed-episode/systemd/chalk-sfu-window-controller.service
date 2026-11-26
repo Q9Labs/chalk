@@ -6,7 +6,7 @@ After=network-online.target
 [Service]
 Type=notify
 NotifyAccess=main
-TimeoutStartSec=30s
+TimeoutStartSec=90s
 User=chalk-sfu-window
 EnvironmentFile=/home/chalk-sfu-window/controller.env
 ExecStart=/usr/local/bin/chalk-sfu-window-controller

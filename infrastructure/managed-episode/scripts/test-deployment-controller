@@ -389,13 +389,49 @@ if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE:-}" && "$*" == *"${FAKE_SYSTEMCTL_FAIL_ONCE
   printf 'Job for %s canceled.\n' "${*: -1}" >&2
   exit 1
 fi
-if [[ "$*" == 'is-active --quiet chalk-sfu-window-controller.service' ]]; then
+sfu_active_state="${FAKE_COMMAND_LOG}.sfu-window-active"
+sfu_enabled_state="${FAKE_COMMAND_LOG}.sfu-window-enabled"
+sfu_invocation_state="${FAKE_COMMAND_LOG}.sfu-window-invocation"
+if [[ "$*" == 'restart chalk-sfu-window-controller.service' ]]; then
+  invocation=0
+  [[ ! -e "$sfu_invocation_state" ]] || invocation="$(<"$sfu_invocation_state")"
+  invocation=$((invocation + 1))
+  printf '%s
+' "$invocation" >"$sfu_invocation_state"
   once_state="${FAKE_SYSTEMCTL_FAILURE_STATE:?}.sfu-window-inactive"
   if [[ "${FAKE_SFU_WINDOW_INACTIVE_ONCE:-false}" == true && ! -e "$once_state" ]]; then
     : >"$once_state"
-    exit 1
+    rm -f "$sfu_active_state"
+  else
+    : >"$sfu_active_state"
   fi
-  [[ "${FAKE_SFU_WINDOW_INACTIVE:-false}" != true ]]
+  exit
+fi
+if [[ "$*" == 'stop chalk-sfu-window-controller.service' ]]; then
+  rm -f "$sfu_active_state"
+  exit
+fi
+if [[ "$*" == 'enable chalk-sfu-window-controller.service' ]]; then
+  : >"$sfu_enabled_state"
+  exit
+fi
+if [[ "$*" == 'disable chalk-sfu-window-controller.service' ]]; then
+  rm -f "$sfu_enabled_state"
+  exit
+fi
+if [[ "$*" == 'is-enabled --quiet chalk-sfu-window-controller.service' ]]; then
+  [[ -e "$sfu_enabled_state" ]]
+  exit
+fi
+if [[ "$*" == 'show -p InvocationID --value chalk-sfu-window-controller.service' ]]; then
+  invocation=0
+  [[ ! -e "$sfu_invocation_state" ]] || invocation="$(<"$sfu_invocation_state")"
+  printf '%032x
+' "$invocation"
+  exit
+fi
+if [[ "$*" == 'is-active --quiet chalk-sfu-window-controller.service' ]]; then
+  [[ "${FAKE_SFU_WINDOW_INACTIVE:-false}" != true && -e "$sfu_active_state" ]]
   exit
 fi
 if [[ "$*" == '--user is-active --quiet chalk-cloudflared.service' ]]; then
@@ -425,7 +461,11 @@ cat >"${fixture_root}/bin/journalctl" <<'JOURNALCTL'
 set -euo pipefail
 printf 'journalctl %s
 ' "$*" >>"${FAKE_COMMAND_LOG:?}"
-if [[ "$*" == *chalk-sfu-window-controller.service* && "$*" == *"SFU window plan"* ]]; then
+invocation=0
+invocation_state="${FAKE_COMMAND_LOG}.sfu-window-invocation"
+[[ ! -e "$invocation_state" ]] || invocation="$(<"$invocation_state")"
+printf -v invocation_hex '%032x' "$invocation"
+if [[ "$*" == *chalk-sfu-window-controller.service* && "$*" == *"_SYSTEMD_INVOCATION_ID=${invocation_hex}"* && "$*" == *"SFU window plan"* ]]; then
   printf 'SFU window plan
 '
 fi
@@ -1202,7 +1242,7 @@ api_stop_line="$(grep -nE '^systemctl --user .*stop chalk-api.service' "${fixtur
 for line in \
   'Type=notify' \
   'NotifyAccess=main' \
-  'TimeoutStartSec=30s' \
+  'TimeoutStartSec=90s' \
   'User=chalk-sfu-window' \
   'EnvironmentFile=/home/chalk-sfu-window/controller.env' \
   'ExecStart=/usr/local/bin/chalk-sfu-window-controller' \
@@ -1456,27 +1496,50 @@ if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture
   fail "a repeated deploy passed while another release was running"
 fi
 grep -Fq 'the running release differs' "${fixture_root}/retry-interrupted.log" || fail "a running release that differs from the active pointer was not named"
+cp "${fixture_root}/retry-manifest.json" "${fixture_root}/run/release/release-manifest.json"
+rm -f "${fixture_root}/commands.log.sfu-window-active"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-controller-inactive.log" 2>&1; then
+  fail "a repeated deploy passed while the SFU window controller was inactive"
+fi
+grep -Fq 'SFU window controller is not active' "${fixture_root}/retry-controller-inactive.log" || fail "an inactive controller on the active release fast path was not named"
+: >"${fixture_root}/commands.log.sfu-window-active"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
 make_request candidate "${fixture_root}/candidate-request.json"
+sfu_state="${fixture_root}/sfu-state"
+mkdir -p "$sfu_state"
+run_controller "$sfu_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null || fail "the SFU rollback fixture base release did not deploy"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed" "${fixture_root}/systemctl-failed.sfu-window-inactive"
 : >"${fixture_root}/commands.log"
 sed -i.bak 's/^Type=notify$/Type=simple/' "${fixture_root}/systemd/chalk-sfu-window-controller.service"
 rm -f "${fixture_root}/systemd/chalk-sfu-window-controller.service.bak"
-if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/sfu-window-inactive.log" 2>&1; then
+if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$sfu_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/sfu-window-inactive.log" 2>&1; then
   fail "an inactive SFU window controller was accepted"
 fi
 grep -Fq 'SFU window controller did not become active' "${fixture_root}/sfu-window-inactive.log" || fail "inactive SFU window controller was not reported"
 api_stop_line="$(grep -n -E '^systemctl --user .*stop chalk-api.service' "${fixture_root}/commands.log" | head -n1 | cut -d: -f1)"
 sfu_extract_line="$(grep -n '^podman cp chalk-sfu-window-extract-' "${fixture_root}/commands.log" | head -n1 | cut -d: -f1)"
 [[ -n "$api_stop_line" && -n "$sfu_extract_line" && "$sfu_extract_line" -lt "$api_stop_line" ]] || fail "SFU window controller extraction did not complete before the runtime cutover"
-grep -Fq '"rolled_back":true' "${fixture_root}/sfu-window-inactive.log" || fail "SFU window controller failure did not restore the stable release"
-[[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == 2 ]] || fail "rollback did not reinstall and restart the stable SFU window controller"
-grep -Fq 'journalctl -q -o cat -u chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || fail "legacy controller rollback did not wait for the reconcile loop"
-jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed after SFU window controller failure"
-[[ ! -e "${stable_state}/sfu-window-backup" ]] || fail "rollback retained the SFU window controller backup"
+grep -Fq '"rolled_back":false' "${fixture_root}/sfu-window-inactive.log" || fail "SFU window controller failure rolled back the promoted API release"
+[[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == 2 ]] || fail "controller rollback did not reinstall and restart the previously active controller"
+grep -Fq 'journalctl -q -o cat -u chalk-sfu-window-controller.service _SYSTEMD_INVOCATION_ID=' "${fixture_root}/commands.log" || fail "legacy controller rollback did not wait for the new invocation's reconcile loop"
+jq -e '.release_id == "candidate"' "${sfu_state}/active-release.json" >/dev/null || fail "SFU window controller failure changed the promoted API release pointer"
+
+make_request candidate-inactive "${fixture_root}/candidate-inactive-request.json"
+make_manifest candidate-inactive >"${fixture_root}/candidate-inactive-manifest.json"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed" "${fixture_root}/systemctl-failed.sfu-window-inactive" "${fixture_root}/commands.log.sfu-window-active" "${fixture_root}/commands.log.sfu-window-enabled"
+: >"${fixture_root}/commands.log"
+if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$sfu_state" "${fixture_root}/candidate-inactive-request.json" "${fixture_root}/candidate-inactive-manifest.json" ok >"${fixture_root}/sfu-window-prior-inactive.log" 2>&1; then
+  fail "an inactive SFU window controller was accepted over an inactive prior controller"
+fi
+[[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == 1 ]] || fail "controller rollback restarted a previously inactive controller"
+! grep -Fq 'journalctl -q -o cat -u chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || fail "controller rollback waited for a reconcile from a previously inactive controller"
+[[ ! -e "${fixture_root}/commands.log.sfu-window-active" && ! -e "${fixture_root}/commands.log.sfu-window-enabled" ]] || fail "controller rollback did not preserve the prior disabled inactive service state"
+jq -e '.release_id == "candidate-inactive"' "${sfu_state}/active-release.json" >/dev/null || fail "inactive prior controller rollback changed the promoted API release pointer"
+
 first_install_saved="${fixture_root}/first-install-saved"
 mkdir -p "${first_install_saved}/secrets"
 cp -p "${fixture_root}/chalk-sfu-window-controller" "${first_install_saved}/binary"
@@ -1485,11 +1548,13 @@ cp -p "${fixture_root}/sfu-window-home/controller.env" "${first_install_saved}/c
 cp -p "${fixture_root}/sfu-window-home/secrets/client-ca.crt" "${first_install_saved}/secrets/client-ca.crt"
 cp -p "${fixture_root}/sfu-window-home/secrets/server.crt" "${first_install_saved}/secrets/server.crt"
 cp -p "${fixture_root}/sfu-window-home/secrets/server.key" "${first_install_saved}/secrets/server.key"
-rm -f "${fixture_root}/chalk-sfu-window-controller" "${fixture_root}/systemd/chalk-sfu-window-controller.service" "${fixture_root}/sfu-window-home/controller.env" "${fixture_root}/sfu-window-home/secrets/client-ca.crt" "${fixture_root}/sfu-window-home/secrets/server.crt" "${fixture_root}/sfu-window-home/secrets/server.key"
+rm -f "${fixture_root}/chalk-sfu-window-controller" "${fixture_root}/systemd/chalk-sfu-window-controller.service" "${fixture_root}/sfu-window-home/controller.env" "${fixture_root}/sfu-window-home/secrets/client-ca.crt" "${fixture_root}/sfu-window-home/secrets/server.crt" "${fixture_root}/sfu-window-home/secrets/server.key" "${fixture_root}/commands.log.sfu-window-active" "${fixture_root}/commands.log.sfu-window-enabled"
+make_request candidate-first "${fixture_root}/candidate-first-request.json"
+make_manifest candidate-first >"${fixture_root}/candidate-first-manifest.json"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed" "${fixture_root}/systemctl-failed.sfu-window-inactive"
 : >"${fixture_root}/commands.log"
-if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/sfu-window-first-install.log" 2>&1; then
+if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$sfu_state" "${fixture_root}/candidate-first-request.json" "${fixture_root}/candidate-first-manifest.json" ok >"${fixture_root}/sfu-window-first-install.log" 2>&1; then
   fail "an inactive first SFU window controller installation was accepted"
 fi
 for path in "${fixture_root}/chalk-sfu-window-controller" "${fixture_root}/systemd/chalk-sfu-window-controller.service" "${fixture_root}/sfu-window-home/controller.env" "${fixture_root}/sfu-window-home/secrets/client-ca.crt" "${fixture_root}/sfu-window-home/secrets/server.crt" "${fixture_root}/sfu-window-home/secrets/server.key"; do
@@ -1497,12 +1562,15 @@ for path in "${fixture_root}/chalk-sfu-window-controller" "${fixture_root}/syste
 done
 grep -Fq 'systemctl disable chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || fail "failed first SFU window controller installation was not disabled"
 [[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == 1 ]] || fail "first-install rollback restarted a controller that did not exist before"
+jq -e '.release_id == "candidate-first"' "${sfu_state}/active-release.json" >/dev/null || fail "first controller installation failure changed the promoted API release pointer"
 cp -p "${first_install_saved}/binary" "${fixture_root}/chalk-sfu-window-controller"
 cp -p "${first_install_saved}/unit" "${fixture_root}/systemd/chalk-sfu-window-controller.service"
 cp -p "${first_install_saved}/controller.env" "${fixture_root}/sfu-window-home/controller.env"
 cp -p "${first_install_saved}/secrets/client-ca.crt" "${fixture_root}/sfu-window-home/secrets/client-ca.crt"
 cp -p "${first_install_saved}/secrets/server.crt" "${fixture_root}/sfu-window-home/secrets/server.crt"
 cp -p "${first_install_saved}/secrets/server.key" "${fixture_root}/sfu-window-home/secrets/server.key"
+: >"${fixture_root}/commands.log.sfu-window-active"
+: >"${fixture_root}/commands.log.sfu-window-enabled"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
 if FAKE_SYSTEMCTL_FAIL_ONCE='stop chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/stop-failure.log" 2>&1; then
@@ -1593,22 +1661,12 @@ cp "${fixture_root}/stable-ledger.jsonl" "${stable_state}/ledger.jsonl"
 fi
 
 if group_enabled restore; then
-sfu_backup="${stable_state}/sfu-window-backup"
-mkdir -p "${sfu_backup}/bin" "${sfu_backup}/systemd" "${sfu_backup}/secrets"
-: >"${sfu_backup}/in-progress"
-printf 'previous-controller-binary\n' >"${sfu_backup}/bin/chalk-sfu-window-controller"
-cp -p "${fixture_root}/systemd/chalk-sfu-window-controller.service" "${sfu_backup}/systemd/chalk-sfu-window-controller.service"
-cp -p "${fixture_root}/sfu-window-home/controller.env" "${sfu_backup}/controller.env"
-cp -p "${fixture_root}/sfu-window-home/secrets/client-ca.crt" "${sfu_backup}/secrets/client-ca.crt"
-cp -p "${fixture_root}/sfu-window-home/secrets/server.crt" "${sfu_backup}/secrets/server.crt"
-cp -p "${fixture_root}/sfu-window-home/secrets/server.key" "${sfu_backup}/secrets/server.key"
-printf 'candidate-controller-binary\n' >"${fixture_root}/chalk-sfu-window-controller"
+printf 'installed-controller-binary\n' >"${fixture_root}/chalk-sfu-window-controller"
 printf '0' >"${fixture_root}/health-index"
 : >"${fixture_root}/aws.log"
 find "${fixture_root}/run" -mindepth 1 -depth -delete
 run_restore "$stable_state" ok >/dev/null
-cmp -s <(printf 'previous-controller-binary\n') "${fixture_root}/chalk-sfu-window-controller" || fail "reboot restore did not restore the pre-candidate SFU window controller"
-[[ ! -e "$sfu_backup" ]] || fail "reboot restore retained the SFU window controller backup"
+cmp -s <(printf 'installed-controller-binary\n') "${fixture_root}/chalk-sfu-window-controller" || fail "reboot restore rewrote the independent SFU window controller"
 grep -Eq -- '--names /chalk/production/[^ ]+:[1-9][0-9]* ' "${fixture_root}/aws.log" || fail "restore did not request exact SSM versions"
 [[ -s "${fixture_root}/run/env/api.env" && -s "${fixture_root}/run/env/sync.env" ]] || fail "reboot restore did not rebuild /run environment files"
 (cd "${fixture_root}/run/release" && if command -v sha256sum >/dev/null 2>&1; then sha256sum --check --status release-manifest.sha256; else expected="$(awk '{print $1}' release-manifest.sha256)"; [[ "$(shasum -a 256 release-manifest.json | awk '{print $1}')" == "$expected" ]]; fi) || fail "reboot restore did not rebuild the release identity"

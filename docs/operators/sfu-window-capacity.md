@@ -26,13 +26,18 @@ Production runs the controller as the system service
 user. The managed release builds `apps/api/cmd/sfu-window-controller` into the
 API image, so the host installs exactly the binary built with that release's
 API. During deployment the host controller extracts that binary from the
-digest-pinned API image through root Podman, so the API runtime user does not
-control the credentialed executable, installs it at
+digest-pinned API image through root Podman before runtime cutover, so the API
+runtime user does not control the credentialed executable. After API and Sync
+promotion succeeds and the durable release pointer is published, the host
+installs the controller independently at
 `/usr/local/bin/chalk-sfu-window-controller`, installs the hardened systemd
 unit, writes `/home/chalk-sfu-window/controller.env` and the mTLS files under
-`/home/chalk-sfu-window/secrets/`, restarts the service, and refuses the
-release unless the service signals systemd readiness after connecting to the database, acquiring the controller lease, and initializing reconciliation. The service user has no login. The
-unit keeps `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and
+`/home/chalk-sfu-window/secrets/`, restarts the service, and fails the release
+run unless the service completes one successful reconcile pass. That first pass
+must read the demand, scheduling, tenant-configuration, and node-journal tables
+after connecting to the database and acquiring the controller lease; missing
+grants therefore fail the gate. The service user has no login. The unit keeps
+`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and
 `ReadWritePaths=/home/chalk-sfu-window`.
 
 The environment comes from the SecureString suffix
@@ -99,7 +104,7 @@ operator investigation; silence does not prove emptiness.
 
 ## Roll out and roll back
 
-If a candidate controller fails its readiness check, deployment rollback restores the service binary, unit, environment, and mTLS files that were present before the candidate and requires that previous service to become ready. The backup is durable host state, so a reboot during the release restores it before restoring the prior API runtime. If no controller existed before a first managed installation, rollback stops and disables it and removes the candidate files. A later API rollback to a release that predates controller management leaves the independent service installed and enabled.
+Controller replacement is deliberately independent of API/Sync rollback because the controller tolerates version skew with the API and the schema moves forward only. If a candidate controller fails its readiness check after the release pointer is published, the deployment restores the binary, unit, environment, and mTLS files copied immediately before replacement, preserves the prior service's enabled and active state, and requires a previously active service to become ready again. On a first managed installation it stops and disables the candidate and removes its files. In either case the already-promoted API and Sync stay on the new release and the release run fails. Reboot restore does not repair or replace the controller: systemd starts whatever controller files are installed. A later API rollback to a release that predates controller management leaves the independent service installed and enabled.
 
 1. Prove the exact release and image in Nightly with a 20-class booking against a
    disposable environment. Record the plan, available Droplet IDs before the

@@ -54,24 +54,26 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	notifySystemdReady()
 	return reconcileContinuously(ctx, conn, reconciler)
 }
 
-func notifySystemdReady() {
+func notifySystemdReady() error {
 	endpoint := os.Getenv("NOTIFY_SOCKET")
 	if endpoint == "" {
-		return
+		return nil
 	}
 	if strings.HasPrefix(endpoint, "@") {
 		endpoint = "\x00" + endpoint[1:]
 	}
 	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: endpoint, Net: "unixgram"})
 	if err != nil {
-		return
+		return fmt.Errorf("connect to systemd notification socket: %w", err)
 	}
 	defer conn.Close()
-	_, _ = conn.Write([]byte("READY=1"))
+	if _, err := conn.Write([]byte("READY=1")); err != nil {
+		return fmt.Errorf("write systemd readiness notification: %w", err)
+	}
+	return nil
 }
 
 func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {
@@ -107,16 +109,28 @@ func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {
 func reconcileContinuously(ctx context.Context, conn *pgx.Conn, reconciler *sfufleet.Reconciler) error {
 	tick := time.NewTicker(sfufleet.ReconcileEvery)
 	defer tick.Stop()
+	notified := false
 	for {
 		pass, cancel := context.WithTimeout(ctx, time.Minute)
 		result, err := reconciler.Reconcile(pass)
 		cancel()
-		slog.Info("SFU window plan", "booked_slots", result.PeakBookedSlots,
-			"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
-			"serving", result.Serving, "online", result.Online, "starting", result.Starting,
-			"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
-		if err != nil && ctx.Err() == nil {
-			slog.Warn("SFU window reconcile incomplete", "reason", err)
+		if err == nil {
+			slog.Info("SFU window plan", "booked_slots", result.PeakBookedSlots,
+				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
+				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
+			if !notified {
+				if notifyErr := notifySystemdReady(); notifyErr != nil {
+					slog.Warn("SFU window readiness notification failed", "reason", notifyErr)
+				} else {
+					notified = true
+				}
+			}
+		} else if ctx.Err() == nil {
+			slog.Warn("SFU window reconcile incomplete", "reason", err, "booked_slots", result.PeakBookedSlots,
+				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
+				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
 		}
 		if conn.IsClosed() && ctx.Err() == nil {
 			return errors.New("SFU window database connection and controller lease lost")

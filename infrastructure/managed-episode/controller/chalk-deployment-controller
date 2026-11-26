@@ -917,6 +917,10 @@ sfu_window_controller_enabled() {
   jq -e --arg id "$SFU_WINDOW_INPUT_ID" 'any(.[]; .id == $id and .missing == false)' <<<"${input_records_json}" >/dev/null 2>&1
 }
 
+sfu_window_controller_requested() {
+  jq -e --arg id "$SFU_WINDOW_INPUT_ID" 'index($id) == null' <<<"${excluded_json}" >/dev/null 2>&1
+}
+
 require_sfu_window_controller_input() {
   if [[ "$request_environment" == production ]] && ! sfu_window_controller_enabled; then
     fail "production requires the SFU window controller environment input"
@@ -1000,21 +1004,13 @@ extract_sfu_window_controller_binary() {
   [[ -s "$output" ]] || fail "SFU window controller binary extraction was empty"
 }
 
-sfu_window_backup_root() {
-  printf '%s/sfu-window-backup' "$state_root"
+sfu_window_previous_root() {
+  printf '%s/sfu-window-previous' "$stage_root"
 }
 
-clear_sfu_window_backup() {
+snapshot_sfu_window_controller_state() {
   local backup
-  backup="$(sfu_window_backup_root)"
-  [[ ! -e "$backup" ]] || find "$backup" -depth -delete 2>/dev/null || return 1
-}
-
-snapshot_sfu_window_controller() {
-  local backup
-  backup="$(sfu_window_backup_root)"
-  [[ ! -e "${backup}/in-progress" ]] || fail "an unresolved SFU window controller rollback backup already exists"
-  find "$backup" -depth -delete 2>/dev/null || true
+  backup="$(sfu_window_previous_root)"
   mkdir -p "${backup}/secrets" "${backup}/systemd" "${backup}/bin"
   chmod 700 "$backup" "${backup}/secrets" "${backup}/systemd" "${backup}/bin"
   [[ ! -f "$sfu_window_binary" || -L "$sfu_window_binary" ]] || cp -p "$sfu_window_binary" "${backup}/bin/chalk-sfu-window-controller"
@@ -1023,49 +1019,65 @@ snapshot_sfu_window_controller() {
   [[ ! -f "${sfu_window_home}/secrets/client-ca.crt" || -L "${sfu_window_home}/secrets/client-ca.crt" ]] || cp -p "${sfu_window_home}/secrets/client-ca.crt" "${backup}/secrets/client-ca.crt"
   [[ ! -f "${sfu_window_home}/secrets/server.crt" || -L "${sfu_window_home}/secrets/server.crt" ]] || cp -p "${sfu_window_home}/secrets/server.crt" "${backup}/secrets/server.crt"
   [[ ! -f "${sfu_window_home}/secrets/server.key" || -L "${sfu_window_home}/secrets/server.key" ]] || cp -p "${sfu_window_home}/secrets/server.key" "${backup}/secrets/server.key"
-  : >"${backup}/in-progress"
-  chmod 600 "${backup}/in-progress"
+  if "$systemctl_bin" is-enabled --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-enabled-probe.log"; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi >"${backup}/enabled"
+  if "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-active-probe.log"; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi >"${backup}/active"
 }
 
-sfu_window_backup_exists() {
-  [[ -f "$(sfu_window_backup_root)/in-progress" ]]
-}
+restore_sfu_window_controller_state() {
+  local backup had_unit was_enabled was_active
+  backup="$(sfu_window_previous_root)"
+  require_directory "$backup"
+  require_regular_file "${backup}/enabled"
+  require_regular_file "${backup}/active"
+  was_enabled="$(tr -d '[:space:]' <"${backup}/enabled")"
+  was_active="$(tr -d '[:space:]' <"${backup}/active")"
+  [[ "$was_enabled" == true || "$was_enabled" == false ]] || fail "prior SFU window controller enabled state is invalid"
+  [[ "$was_active" == true || "$was_active" == false ]] || fail "prior SFU window controller active state is invalid"
 
-restore_sfu_window_controller_backup() {
-  sfu_window_backup_exists || return 0
-  local backup had_unit
-  backup="$(sfu_window_backup_root)"
-  "$systemctl_bin" stop "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-stop.log" || true
-  if [[ ! -f "${backup}/bin/chalk-sfu-window-controller" ]]; then rm -f "$sfu_window_binary"; else atomic_install 0755 "${backup}/bin/chalk-sfu-window-controller" "$sfu_window_binary"; fi
+  if [[ -f "${systemd_root}/${SFU_WINDOW_UNIT}" && ! -L "${systemd_root}/${SFU_WINDOW_UNIT}" ]] \
+    || "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-active-probe.log"; then
+    "$systemctl_bin" stop "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-stop.log" || fail "SFU window controller stop failed during rollback"
+  fi
+
   had_unit=false
   if [[ -f "${backup}/systemd/${SFU_WINDOW_UNIT}" ]]; then
     had_unit=true
-    atomic_install 0644 "${backup}/systemd/${SFU_WINDOW_UNIT}" "${systemd_root}/${SFU_WINDOW_UNIT}"
-  else
-    rm -f "${systemd_root}/${SFU_WINDOW_UNIT}"
+  elif [[ -f "${systemd_root}/${SFU_WINDOW_UNIT}" && ! -L "${systemd_root}/${SFU_WINDOW_UNIT}" ]]; then
+    "$systemctl_bin" disable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-disable.log" || fail "SFU window controller disable failed during rollback"
   fi
+
+  if [[ ! -f "${backup}/bin/chalk-sfu-window-controller" ]]; then rm -f "$sfu_window_binary"; else atomic_install 0755 "${backup}/bin/chalk-sfu-window-controller" "$sfu_window_binary"; fi
+  if [[ "$had_unit" == true ]]; then atomic_install 0644 "${backup}/systemd/${SFU_WINDOW_UNIT}" "${systemd_root}/${SFU_WINDOW_UNIT}"; else rm -f "${systemd_root}/${SFU_WINDOW_UNIT}"; fi
   ensure_sfu_window_user
   if [[ -f "${backup}/controller.env" ]]; then install_sfu_window_file "${backup}/controller.env" "${sfu_window_home}/controller.env" 0440; else rm -f "${sfu_window_home}/controller.env"; fi
   if [[ -f "${backup}/secrets/client-ca.crt" ]]; then install_sfu_window_file "${backup}/secrets/client-ca.crt" "${sfu_window_home}/secrets/client-ca.crt" 0440; else rm -f "${sfu_window_home}/secrets/client-ca.crt"; fi
   if [[ -f "${backup}/secrets/server.crt" ]]; then install_sfu_window_file "${backup}/secrets/server.crt" "${sfu_window_home}/secrets/server.crt" 0440; else rm -f "${sfu_window_home}/secrets/server.crt"; fi
   if [[ -f "${backup}/secrets/server.key" ]]; then install_sfu_window_file "${backup}/secrets/server.key" "${sfu_window_home}/secrets/server.key" 0440; else rm -f "${sfu_window_home}/secrets/server.key"; fi
+
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-reload.log" || fail "SFU window controller systemd reload failed during rollback"
-  local restart_started=0
   if [[ "$had_unit" == true ]]; then
-    "$systemctl_bin" enable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-enable.log" || fail "SFU window controller enable failed during rollback"
-    restart_started="$(date +%s)"
-    "$systemctl_bin" restart "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-restart.log" || fail "SFU window controller restart failed during rollback"
-  else
-    "$systemctl_bin" disable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-disable.log" || true
-  fi
-  if [[ "$had_unit" == true ]]; then
-    if grep -Fqx 'Type=notify' "${systemd_root}/${SFU_WINDOW_UNIT}" 2>/dev/null; then
-      wait_sfu_window_controller_active "previous SFU window controller did not become active during rollback"
+    if [[ "$was_enabled" == true ]]; then
+      "$systemctl_bin" enable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-enable.log" || fail "SFU window controller enable failed during rollback"
     else
-      wait_sfu_window_controller_loop "previous SFU window controller did not run its reconcile loop during rollback" $((restart_started - 1))
+      "$systemctl_bin" disable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-disable.log" || fail "SFU window controller disable failed during rollback"
+    fi
+    if [[ "$was_active" == true ]]; then
+      "$systemctl_bin" restart "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-restart.log" || fail "SFU window controller restart failed during rollback"
+      if grep -Fqx 'Type=notify' "${systemd_root}/${SFU_WINDOW_UNIT}" 2>/dev/null; then
+        wait_sfu_window_controller_active "previous SFU window controller did not become active during rollback"
+      else
+        wait_sfu_window_controller_loop "previous SFU window controller did not complete a reconcile during rollback"
+      fi
     fi
   fi
-  clear_sfu_window_backup || fail "SFU window controller rollback backup cleanup failed"
 }
 
 wait_sfu_window_controller_active() {
@@ -1080,9 +1092,12 @@ wait_sfu_window_controller_active() {
 }
 
 wait_sfu_window_controller_loop() {
-  local message="$1" started="$2" attempt
+  local message="$1" invocation attempt
+  invocation="$("$systemctl_bin" show -p InvocationID --value "$SFU_WINDOW_UNIT" 2>"${stage_root}/sfu-window-invocation-error.log" | tail -n 1)"
+  [[ "$invocation" =~ ^[0-9a-fA-F]{32}$ ]] || fail "SFU window controller invocation ID is unavailable"
   for ((attempt = 1; attempt <= sfu_window_ready_attempts; attempt += 1)); do
-    if "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-active.log"       && "$journalctl_bin" -q -o cat -u "$SFU_WINDOW_UNIT" --since "@${started}" -g 'SFU window plan' 2>/dev/null | grep -q .; then
+    if "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-active.log" \
+      && "$journalctl_bin" -q -o cat -u "$SFU_WINDOW_UNIT" "_SYSTEMD_INVOCATION_ID=${invocation}" -g 'SFU window plan' 2>/dev/null | grep -q .; then
       return 0
     fi
     sleep 1
@@ -1090,46 +1105,60 @@ wait_sfu_window_controller_loop() {
   fail "$message"
 }
 
-install_sfu_window_controller() {
+install_sfu_window_controller_files() {
   local runtime_source="$1"
-  local configure_files=false
-  if sfu_window_controller_enabled; then
-    configure_files=true
-  else
-    return 0
-  fi
   require_regular_file "${runtime_source}/systemd/${SFU_WINDOW_UNIT}"
-  if [[ "$configure_files" == true ]]; then
-    require_regular_file "${stage_root}/sfu-window-controller/controller.env"
-    require_regular_file "${stage_root}/secret-inputs/provider-bridge/sync-client-ca.crt"
-    require_regular_file "${stage_root}/secret-inputs/provider-bridge/api-server.crt"
-    require_regular_file "${stage_root}/secret-inputs/provider-bridge/api-server.key"
-  else
-    require_regular_file "${sfu_window_home}/controller.env"
-    require_regular_file "${sfu_window_home}/secrets/client-ca.crt"
-    require_regular_file "${sfu_window_home}/secrets/server.crt"
-    require_regular_file "${sfu_window_home}/secrets/server.key"
-  fi
-  ensure_sfu_window_user
-  if [[ "$configure_files" == true ]]; then
-    snapshot_sfu_window_controller
-  fi
-
+  require_regular_file "${stage_root}/sfu-window-controller/controller.env"
+  require_regular_file "${stage_root}/secret-inputs/provider-bridge/sync-client-ca.crt"
+  require_regular_file "${stage_root}/secret-inputs/provider-bridge/api-server.crt"
+  require_regular_file "${stage_root}/secret-inputs/provider-bridge/api-server.key"
   local extracted="${stage_root}/sfu-window-image/chalk-sfu-window-controller"
   require_regular_file "$extracted"
+  ensure_sfu_window_user
   atomic_install 0755 "$extracted" "$sfu_window_binary"
+  install_sfu_window_file "${stage_root}/sfu-window-controller/controller.env" "${sfu_window_home}/controller.env" 0440
+  install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/sync-client-ca.crt" "${sfu_window_home}/secrets/client-ca.crt" 0440
+  install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/api-server.crt" "${sfu_window_home}/secrets/server.crt" 0440
+  install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/api-server.key" "${sfu_window_home}/secrets/server.key" 0440
   atomic_install 0644 "${runtime_source}/systemd/${SFU_WINDOW_UNIT}" "${systemd_root}/${SFU_WINDOW_UNIT}"
-  if [[ "$configure_files" == true ]]; then
-    install_sfu_window_file "${stage_root}/sfu-window-controller/controller.env" "${sfu_window_home}/controller.env" 0440
-    install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/sync-client-ca.crt" "${sfu_window_home}/secrets/client-ca.crt" 0440
-    install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/api-server.crt" "${sfu_window_home}/secrets/server.crt" 0440
-    install_sfu_window_file "${stage_root}/secret-inputs/provider-bridge/api-server.key" "${sfu_window_home}/secrets/server.key" 0440
-  fi
-
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/sfu-window-systemd-reload.log" || fail "SFU window controller systemd reload failed"
   "$systemctl_bin" enable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-enable.log" || fail "SFU window controller enable failed"
   "$systemctl_bin" restart "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-restart.log" || fail "SFU window controller restart failed"
   wait_sfu_window_controller_active "SFU window controller did not become active"
+}
+
+install_sfu_window_controller() {
+  local runtime_source="$1"
+  sfu_window_controller_enabled || return 0
+  local snapshot_status install_status restore_status
+  set +e
+  (
+    set -e
+    snapshot_sfu_window_controller_state
+  )
+  snapshot_status=$?
+  set -e
+  ((snapshot_status == 0)) || return 1
+  set +e
+  (
+    set -e
+    install_sfu_window_controller_files "$runtime_source"
+  )
+  install_status=$?
+  set -e
+  ((install_status == 0)) && return 0
+  set +e
+  (
+    set -e
+    restore_sfu_window_controller_state
+  )
+  restore_status=$?
+  set -e
+  if ((restore_status != 0)); then
+    printf 'FAIL SFU window controller rollback after installation failure also failed\n' >&2
+    return 2
+  fi
+  return 1
 }
 
 # The Cloudflare retirement migration refuses live legacy Episodes, but only after the runtime has been stopped.
@@ -1772,9 +1801,6 @@ run_candidate() {
   if ! health_runtime; then
     return 1
   fi
-  if [[ -f "${runtime_source}/systemd/${SFU_WINDOW_UNIT}" && ! -L "${runtime_source}/systemd/${SFU_WINDOW_UNIT}" ]]; then
-    install_sfu_window_controller "$runtime_source"
-  fi
 }
 
 rollback_to_stable() {
@@ -1821,9 +1847,11 @@ deploy() {
   validate_inventory "${managed_root}/contracts/runtime-inputs.json"
   validate_manifest "$managed_root"
   prepare_stage
-  restore_sfu_window_controller_backup
   if release_already_active; then
     health_runtime || fail "release ${request_release_id} is already active but its health check failed"
+    if sfu_window_controller_requested; then
+      "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-active.log" || fail "release ${request_release_id} is already active but the SFU window controller is not active"
+    fi
     emit_result deployed passed false
     return
   fi
@@ -1910,11 +1938,19 @@ deploy() {
       install_controller_runtime "$managed_root"
       install_restore_unit "${managed_root}/systemd/chalk-runtime-restore.service"
       persist_release "$release_root" "$rendered_root" "$active_pointer"
-      clear_sfu_window_backup
     )
     promotion_status=$?
     set -e
     if ((promotion_status == 0)); then
+      local sfu_install_status=0
+      set +e
+      install_sfu_window_controller "$rendered_root"
+      sfu_install_status=$?
+      set -e
+      if ((sfu_install_status != 0)); then
+        emit_result failed failed false "SFU window controller installation failed after release promotion"
+        exit 1
+      fi
       emit_result deployed passed false
       return
     fi
@@ -1942,14 +1978,6 @@ deploy() {
   if ! fence_runtime; then
     candidate_failure="${candidate_failure}; runtime fencing reported errors"
   fi
-  local sfu_restore_status=0
-  set +e
-  ( restore_sfu_window_controller_backup )
-  sfu_restore_status=$?
-  set -e
-  if ((sfu_restore_status != 0)); then
-    candidate_failure="${candidate_failure}; SFU window controller rollback failed"
-  fi
   if [[ "$stable_exists" != true ]]; then
     emit_result failed failed false "${candidate_failure}; no previous release exists"
     exit 1
@@ -1966,16 +1994,13 @@ deploy() {
   )
   rollback_status=$?
   set -e
-  if ((rollback_status == 0 && sfu_restore_status == 0)) && [[ "$installed_runtime_restored" == true ]]; then
+  if ((rollback_status == 0)) && [[ "$installed_runtime_restored" == true ]]; then
     emit_result rolled_back failed true "$candidate_failure; previous release restored"
     exit 1
   fi
   local rollback_failure="rollback health failed"
   if ((rollback_status == 0)); then
-    rollback_failure="SFU window controller rollback failed"
-    if [[ "$installed_runtime_restored" != true ]]; then
-      rollback_failure="installed controller rollback failed; ${rollback_failure}"
-    fi
+    rollback_failure="installed controller rollback failed"
   fi
   if ! fence_runtime; then
     rollback_failure="${rollback_failure}; runtime fencing reported errors"
@@ -1991,7 +2016,6 @@ restore() {
   require_host_commands
   [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || fail "durable active release pointer is missing"
   prepare_stage
-  restore_sfu_window_controller_backup
   load_active_pointer
   local release_root
   release_root="$(jq -er '.release_root' "$active_pointer")"
