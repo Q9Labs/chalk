@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
@@ -9,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
 
@@ -29,6 +32,29 @@ func (w *apiWiring) wireStorage() error {
 			chatService := chatattachments.NewService(chatRepository, storage)
 			w.options.ChatAttachments = chatService
 			w.options.ChatParticipants = w.syncParticipantVerifier
+		}
+		if w.cfg.Capabilities.Presenting {
+			var invoker presenting.RendererInvoker
+			if strings.TrimSpace(w.cfg.Presenting.RendererEndpoint) != "" {
+				invoker = presenting.NewHTTPInvoker(w.cfg.Presenting.RendererEndpoint)
+			} else {
+				lambdaInvoker, err := presenting.NewLambdaInvoker(context.Background(), w.cfg.Presenting.RendererFunction, w.cfg.RecordingKMS.Region)
+				if err != nil {
+					return fmt.Errorf("configure presenting renderer invoke: %w", err)
+				}
+				invoker = lambdaInvoker
+			}
+			if w.syncParticipantVerifierConfigured {
+				presentingRepository := postgres.NewPresentingRepository(w.pool)
+				w.presentingCleanupScheduler = objectcleanup.NewScheduler(presenting.NewCleanupWorker(presentingRepository, storage), 0, w.logger)
+				capabilitySigner, err := presenting.NewCapabilitySigner(w.cfg.Presenting.CapabilitySecret)
+				if err != nil {
+					return fmt.Errorf("configure presenting render capabilities: %w", err)
+				}
+				service := presenting.NewService(presentingRepository, storage, invoker).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting}.Enabled)
+				w.options.Presenting = service
+				w.presentingReconcileScheduler = objectcleanup.NewScheduler(presenting.NewReconcileWorker(service), presenting.ReconcileInterval, w.logger)
+			}
 		}
 		if w.cfg.Capabilities.WhiteboardFiles {
 			whiteboardRepository := postgres.NewWhiteboardFileRepository(w.pool)

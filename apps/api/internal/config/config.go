@@ -36,6 +36,7 @@ type Config struct {
 
 	SyncToken     SyncTokenConfig
 	Transcription TranscriptionConfig
+	Presenting    PresentingConfig
 	Webhooks      WebhookConfig
 }
 

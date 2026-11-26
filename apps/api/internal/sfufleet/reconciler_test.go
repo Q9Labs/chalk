@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func TestWindowReconcilerAcceptsProductionStandingCapacity(t *testing.T) {
+	f := &windowFixture{state: Snapshot{ObservedAt: time.Now()}}
+	if _, err := NewReconciler(Policy{
+		Application: "test", Capacity: Capacity{StandingSlots: 26, SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6},
+		MonthlyNodeTime: 900 * time.Hour,
+	}, f, fakeWindowProvider{f}, f); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewReconciler(Policy{
+		Application: "test", Capacity: Capacity{StandingSlots: 41, SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6},
+		MonthlyNodeTime: 900 * time.Hour,
+	}, f, fakeWindowProvider{f}, f); err == nil {
+		t.Fatal("accepted standing capacity above the controller bound")
+	}
+}
+
 func TestWindowReconcilerKeepsLiveBindingsAndConfirmsDrain(t *testing.T) {
 	f := newWindowFixture(t)
 	address := netip.MustParseAddr("192.0.2.9")
@@ -135,17 +151,20 @@ func TestWindowReconcilerRemembersAnAcceptedCreateBeforeFirstObservation(t *test
 }
 
 type windowFixture struct {
-	reconciler *Reconciler
-	state      Snapshot
-	health     Health
-	healthErr  error
-	bound      bool
-	droplet    Droplet
-	createErr  error
-	createID   int64
-	creates    int
-	destroyed  int64
-	missing    int64
+	reconciler     *Reconciler
+	state          Snapshot
+	health         Health
+	healthErr      error
+	bound          bool
+	droplet        Droplet
+	inspectDroplet *Droplet
+	createErr      error
+	createID       int64
+	creates        int
+	observes       int
+	inspects       int
+	destroyed      int64
+	missing        int64
 }
 
 func newWindowFixture(t *testing.T) *windowFixture {
@@ -228,6 +247,7 @@ func (p fakeWindowProvider) Create(context.Context, string) (int64, bool, error)
 }
 
 func (p fakeWindowProvider) Observe(context.Context, string) (Droplet, bool, error) {
+	p.f.observes++
 	return p.f.droplet, p.f.droplet.ID > 0, nil
 }
 
@@ -237,8 +257,12 @@ func (p fakeWindowProvider) Destroy(_ context.Context, _ string, id int64) error
 }
 
 func (p fakeWindowProvider) Inspect(_ context.Context, name string, id int64) (Droplet, bool, error) {
+	p.f.inspects++
 	if id == p.f.destroyed || id == p.f.missing {
 		return Droplet{}, false, nil
+	}
+	if p.f.inspectDroplet != nil && p.f.inspectDroplet.ID == id {
+		return *p.f.inspectDroplet, true, nil
 	}
 	if p.f.droplet.ID == id {
 		return p.f.droplet, true, nil

@@ -58,6 +58,15 @@ func (r *Reconciler) identifyStartingDroplet(ctx context.Context, node Node, now
 	if node.ProviderID != 0 && node.ProviderID != droplet.ID {
 		return true, errors.New("SFU window provider ID changed")
 	}
+	if node.ProviderID == 0 {
+		droplet, found, err = r.provider.Inspect(ctx, node.ID, droplet.ID)
+		if err != nil {
+			return true, err
+		}
+		if !found {
+			return true, nil
+		}
+	}
 	next := node
 	next.ProviderID = droplet.ID
 	if droplet.Outdated {

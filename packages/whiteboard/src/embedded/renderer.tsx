@@ -160,7 +160,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
             bridge.post({ type: "follow", payload: { participantId } });
           }}
           sendView={boardContext.viewsAvailable ? (view) => bridge.sendView(view) : undefined}
-          onClose={() => bridge.post({ type: "close_board", payload: {} })}
+          onClose={boardContext.closeAvailable ? () => bridge.post({ type: "close_board", payload: {} }) : undefined}
           downloadLabel="Save or share image"
           onExport={async (image, action) => bridge.exportImage({ format: "png", mimeType: "image/png", dataURL: await blobToDataURL(image), action })}
         />

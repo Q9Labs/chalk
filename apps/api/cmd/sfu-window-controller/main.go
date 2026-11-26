@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,6 +57,25 @@ func run(ctx context.Context) error {
 	return reconcileContinuously(ctx, conn, reconciler)
 }
 
+func notifySystemdReady() error {
+	endpoint := os.Getenv("NOTIFY_SOCKET")
+	if endpoint == "" {
+		return nil
+	}
+	if strings.HasPrefix(endpoint, "@") {
+		endpoint = "\x00" + endpoint[1:]
+	}
+	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: endpoint, Net: "unixgram"})
+	if err != nil {
+		return fmt.Errorf("connect to systemd notification socket: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("READY=1")); err != nil {
+		return fmt.Errorf("write systemd readiness notification: %w", err)
+	}
+	return nil
+}
+
 func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {
 	db, err := pgx.ParseConfig(os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL"))
 	if err != nil || os.Getenv("CHALK_SFU_WINDOW_DATABASE_URL") == "" {
@@ -88,16 +109,28 @@ func connectControllerDatabase(ctx context.Context) (*pgx.Conn, error) {
 func reconcileContinuously(ctx context.Context, conn *pgx.Conn, reconciler *sfufleet.Reconciler) error {
 	tick := time.NewTicker(sfufleet.ReconcileEvery)
 	defer tick.Stop()
+	notified := false
 	for {
 		pass, cancel := context.WithTimeout(ctx, time.Minute)
 		result, err := reconciler.Reconcile(pass)
 		cancel()
-		slog.Info("SFU window plan", "booked_slots", result.PeakBookedSlots,
-			"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
-			"serving", result.Serving, "online", result.Online, "starting", result.Starting,
-			"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
-		if err != nil && ctx.Err() == nil {
-			slog.Warn("SFU window reconcile incomplete", "reason", err)
+		if err == nil {
+			slog.Info("SFU window plan", "booked_slots", result.PeakBookedSlots,
+				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
+				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
+			if !notified {
+				if notifyErr := notifySystemdReady(); notifyErr != nil {
+					slog.Warn("SFU window readiness notification failed", "reason", notifyErr)
+				} else {
+					notified = true
+				}
+			}
+		} else if ctx.Err() == nil {
+			slog.Warn("SFU window reconcile incomplete", "reason", err, "booked_slots", result.PeakBookedSlots,
+				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
+				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
 		}
 		if conn.IsClosed() && ctx.Err() == nil {
 			return errors.New("SFU window database connection and controller lease lost")
@@ -138,8 +171,8 @@ func loadRuntime() (windowProvider, chalksfu.WindowControl, sfufleet.Policy, err
 		return provider, control, policy, err
 	}
 	slots, err := readNumber("CHALK_SFU_WINDOW_STANDING_SLOTS", 0)
-	if err != nil || slots < 1 || slots > 10 {
-		return provider, control, policy, errors.New("set CHALK_SFU_WINDOW_STANDING_SLOTS to measured standing capacity (1 to 10 class slots)")
+	if err != nil || slots < 1 || slots > 40 {
+		return provider, control, policy, errors.New("set CHALK_SFU_WINDOW_STANDING_SLOTS to measured standing capacity (1 to 40 class slots)")
 	}
 	policy.Capacity = sfufleet.Capacity{StandingSlots: int(slots), SlotsPerNode: 4, SpareSlots: 4, MaxNodes: 6}
 	hours, err := readNumber("CHALK_SFU_WINDOW_BUDGET_NODE_HOURS", 900)

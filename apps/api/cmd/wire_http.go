@@ -39,6 +39,10 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.Capabilities.ScreenAnnotation = postgres.ScreenAnnotationSettings{
 		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.ScreenAnnotation,
 	}.Enabled
+	presentingWired := w.options.Presenting != nil && w.options.PresentingCapabilityAuthorizer != nil
+	w.options.Capabilities.Presenting = postgres.PresentingSettings{
+		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting && presentingWired,
+	}.Enabled
 	if w.options.HelperAccess != nil {
 		w.options.HelperAccess.WithAnnotationAvailability(w.options.Capabilities.ScreenAnnotation)
 	}
@@ -85,6 +89,10 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 		options.RecorderFleetVerifier = nil
 		options.RecorderFleetEnvironment = ""
 		options.RecorderWorkerVerifier = nil
+	}
+	if !capabilities.Presenting {
+		options.Presenting = nil
+		options.PresentingCapabilityAuthorizer = nil
 	}
 	if !capabilities.WhiteboardFiles {
 		options.WhiteboardFiles = nil
