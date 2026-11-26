@@ -78,7 +78,7 @@
   },
   "budgets": {
     "web.route.js_gzip_kib": {
-      "max_p50": 222,
+      "max_p50": 221,
       "tolerancePct": 1,
       "gate": true
     },
