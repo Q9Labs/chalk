@@ -165,3 +165,20 @@ func TestTelemetryChainEndWrongScreen(t *testing.T) {
 // isolatedChainDatabase keeps the end-to-end relay proof away from integration
 // tests in other packages: relaying is intentionally global, and the shared gate
 // database can contain synthetic payloads that are not production evidence rows.
+
+func compareChainFile(t *testing.T, name string, value any) {
+	t.Helper()
+	text, _ := json.MarshalIndent(value, "", "  ")
+	text = append(text, '\n')
+	if os.Getenv("CHALK_CHAIN_WRITE") == "1" {
+		if err := os.WriteFile(filepath.Join(chainDir, name), text, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var want, got any
+	readChainFile(t, name, &want)
+	_ = json.Unmarshal(text, &got)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s is stale: the API wrote\n%s", name, text)
+	}
+}
