@@ -1182,6 +1182,17 @@ type RecordingTranscriptionSourceChunk struct {
 	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
+type RecordingTranscriptionSourceRenewal struct {
+	RecordingID       pgtype.UUID        `json:"recording_id"`
+	JobID             pgtype.UUID        `json:"job_id"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	DatabaseUser      string             `json:"database_user"`
+	Operator          string             `json:"operator"`
+	Reason            string             `json:"reason"`
+	SourceExpiresAt   pgtype.Timestamptz `json:"source_expires_at"`
+	RequestedAt       pgtype.Timestamptz `json:"requested_at"`
+}
+
 type ScheduledEpisode struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
 	SpaceID              pgtype.UUID        `json:"space_id"`

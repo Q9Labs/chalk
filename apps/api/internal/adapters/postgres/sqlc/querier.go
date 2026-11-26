@@ -22,6 +22,7 @@ type Querier interface {
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
 	ApproveHelperDeviceRequest(ctx context.Context, arg ApproveHelperDeviceRequestParams) error
+	ArchiveRecordingTranscriptionRearmFailure(ctx context.Context, arg ArchiveRecordingTranscriptionRearmFailureParams) (pgtype.UUID, error)
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
 	AuthenticateMCPOAuthAccessToken(ctx context.Context, arg AuthenticateMCPOAuthAccessTokenParams) (AuthenticateMCPOAuthAccessTokenRow, error)
 	AuthorizeRecordingArtifactReplay(ctx context.Context, arg AuthorizeRecordingArtifactReplayParams) (bool, error)
@@ -241,6 +242,7 @@ type Querier interface {
 	GetRecordingTranscriptionMode(ctx context.Context, arg GetRecordingTranscriptionModeParams) (string, error)
 	GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error)
 	GetRecordingTranscriptionPreparationCommit(ctx context.Context, arg GetRecordingTranscriptionPreparationCommitParams) (pgtype.UUID, error)
+	GetRecordingTranscriptionRearmCandidate(ctx context.Context, recordingID pgtype.UUID) (GetRecordingTranscriptionRearmCandidateRow, error)
 	GetRecordingTranscriptionSource(ctx context.Context, arg GetRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	GetRecordingTranscriptionSourceChunk(ctx context.Context, arg GetRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
 	GetScheduledEpisode(ctx context.Context, arg GetScheduledEpisodeParams) (ScheduledEpisode, error)
@@ -296,6 +298,7 @@ type Querier interface {
 	InsertRecordingPresentationBaseline(ctx context.Context, arg InsertRecordingPresentationBaselineParams) (RecordingPresentationBaseline, error)
 	InsertRecordingPresentationSource(ctx context.Context, arg InsertRecordingPresentationSourceParams) (RecordingPresentationSource, error)
 	InsertRecordingRenderInput(ctx context.Context, arg InsertRecordingRenderInputParams) (RecordingRenderInput, error)
+	InsertRecordingTranscriptionSourceRenewal(ctx context.Context, arg InsertRecordingTranscriptionSourceRenewalParams) (RecordingTranscriptionSourceRenewal, error)
 	InsertTelemetryOutbox(ctx context.Context, arg InsertTelemetryOutboxParams) error
 	InsertTelemetrySource(ctx context.Context, arg InsertTelemetrySourceParams) (int64, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
@@ -330,6 +333,7 @@ type Querier interface {
 	ListRecordingPresentationReactions(ctx context.Context, arg ListRecordingPresentationReactionsParams) ([]RecordingPresentationReaction, error)
 	ListRecordingRenderBackfillCandidates(ctx context.Context, arg ListRecordingRenderBackfillCandidatesParams) ([]ListRecordingRenderBackfillCandidatesRow, error)
 	ListRecordingRenderCaptureObjects(ctx context.Context, arg ListRecordingRenderCaptureObjectsParams) ([]ListRecordingRenderCaptureObjectsRow, error)
+	ListRecordingTranscriptionRearmCandidates(ctx context.Context, arg ListRecordingTranscriptionRearmCandidatesParams) ([]ListRecordingTranscriptionRearmCandidatesRow, error)
 	ListRecordingTranscriptionSourceChunks(ctx context.Context, arg ListRecordingTranscriptionSourceChunksParams) ([]RecordingTranscriptionSourceChunk, error)
 	ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error)
 	// The newest confirmed grant of every source in a live Chalk SFU Episode whose
@@ -404,6 +408,8 @@ type Querier interface {
 	LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
 	LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error)
+	LockRecordingTranscriptionRearmJob(ctx context.Context, recordingID pgtype.UUID) (LockRecordingTranscriptionRearmJobRow, error)
+	LockRecordingTranscriptionRearmPipeline(ctx context.Context, recordingID pgtype.UUID) (pgtype.UUID, error)
 	LockRecordingTranscriptionSource(ctx context.Context, arg LockRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	// The Space a booking belongs to, locked against archive and restore until the transaction ends.
 	LockScheduledEpisodeSpace(ctx context.Context, arg LockScheduledEpisodeSpaceParams) (pgtype.Timestamptz, error)
@@ -461,6 +467,7 @@ type Querier interface {
 	ReadHelperDevices(ctx context.Context, tenantID pgtype.UUID) ([]ReadHelperDevicesRow, error)
 	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
 	ReadSFUWindowNodeSeconds(ctx context.Context, arg ReadSFUWindowNodeSecondsParams) (int64, error)
+	RearmRecordingTranscriptionJob(ctx context.Context, arg RearmRecordingTranscriptionJobParams) (RecordingJob, error)
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingColocatedWorkerObservation(ctx context.Context, arg RecordRecordingColocatedWorkerObservationParams) (RecordRecordingColocatedWorkerObservationRow, error)
