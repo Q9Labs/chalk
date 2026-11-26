@@ -40,7 +40,6 @@ export class AudioPlayback {
   readonly #elements = new Map<HTMLAudioElement, ElementEntry>();
   readonly #contexts = new Set<ContextEntry>();
   #snapshot: AudioPlaybackSlice = UNBLOCKED;
-  #resuming: Promise<void> | undefined;
 
   constructor(options: AudioPlaybackOptions) {
     this.#options = options;
@@ -102,11 +101,8 @@ export class AudioPlayback {
     };
   }
 
-  async resume(): Promise<void> {
-    this.#resuming ??= this.#resumeNow().finally(() => {
-      this.#resuming = undefined;
-    });
-    return this.#resuming;
+  resume(): Promise<void> {
+    return this.#resumeNow();
   }
 
   dispose(): void {

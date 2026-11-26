@@ -118,19 +118,26 @@ it("does not let an earlier rejection reblock an element that is already playing
   observation.detach();
 });
 
-it("shares one in-flight resume across gestures", async () => {
+it("retries every blocked output on every gesture when an earlier play stalls", async () => {
   const { playback } = fixture();
-  let finish: (() => void) | undefined;
-  const element = audioElement(() => new Promise<void>((resolve) => (finish = resolve)));
-  const observation = playback.observeElement({} as MediaStreamTrack, element);
-  observation.played(notAllowed());
-  element.play.mockImplementation(async () => {
-    element.paused = false;
-  });
+  const finishes: (() => void)[] = [];
+  const stalledElement = audioElement(() => new Promise<void>((resolve) => finishes.push(resolve)));
+  const stalled = playback.observeElement({} as MediaStreamTrack, stalledElement);
+  stalled.played(notAllowed());
+
   const first = playback.resume();
+  expect(stalledElement.play).toHaveBeenCalledTimes(1);
+
+  const laterElement = audioElement(() => Promise.reject(notAllowed()));
+  const later = playback.observeElement({} as MediaStreamTrack, laterElement);
+  later.played(notAllowed());
   const second = playback.resume();
-  expect(element.paused).toBe(false);
-  await Promise.all([first, second]);
-  expect(playback.snapshot.blocked).toBe(false);
-  observation.detach();
+  const third = playback.resume();
+  expect(laterElement.play).toHaveBeenCalledTimes(2);
+  expect(stalledElement.play).toHaveBeenCalledTimes(3);
+
+  for (const finish of finishes.splice(0)) finish();
+  await Promise.allSettled([first, second, third]);
+  stalled.detach();
+  later.detach();
 });
