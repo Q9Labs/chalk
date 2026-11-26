@@ -5,7 +5,7 @@ import { cn } from "../../utils/cn";
 import { formatClockTime } from "../../utils/formatClockTime";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
-import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
+import { formatFileSize, useChatAttachmentPreviews } from "./use-chat-attachment-previews";
 import { UnavailableAttachment } from "./UnavailableAttachment";
 
 export interface MessageBubbleProps {
@@ -394,8 +394,3 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
   },
 );
 MessageBubble.displayName = "MessageBubble";
-
-function formatFileSize(byteLength: number): string {
-  if (byteLength < 1024 * 1024) return `${Math.max(1, Math.round(byteLength / 1024))} KB`;
-  return `${(byteLength / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
-}

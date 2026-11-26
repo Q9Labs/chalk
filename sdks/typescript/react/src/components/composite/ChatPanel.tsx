@@ -3,20 +3,17 @@ import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, Ch
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCan, useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
-import { Cancel01Icon, Upload01Icon } from "../../utils/icons";
+import { Cancel01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { MessageBubble } from "./MessageBubble";
+import { stagePastedFiles, useStagedChatFileDrop } from "./chat-file-drop-staging";
 import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
-import { describeChatUploadFile } from "./chat-upload-file";
-import type { ChatMessage } from "./chat-types";
+import { chatAttachmentRefusal, describeChatUploadFile } from "./chat-upload-file";
+import type { ChatMessage, ChatPanelFileDrop } from "./chat-types";
 
 export type { ChatMessage } from "./chat-types";
-
-export interface ChatPanelFileDrop {
-  readonly files: readonly ChatUploadFile[];
-}
 
 export interface ChatPanelProps {
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
@@ -32,25 +29,9 @@ export interface ChatPanelProps {
   readonly generatedAvatars?: boolean;
 }
 
-export function ChatFileDropOverlay(): React.JSX.Element {
-  return (
-    <div className="call-file-drop-overlay" data-part="chat-file-drop-overlay">
-      <div className="call-file-drop-zone">
-        <div className="call-file-drop-icon" aria-hidden="true">
-          <Upload01Icon className="h-5 w-5" />
-        </div>
-        <h3>Drop files to send</h3>
-        <p>Up to {CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files, 25 MB each</p>
-      </div>
-    </div>
-  );
-}
-
 export const ChatPanelPresentation = React.memo((props: ChatPanelSurfaceProps): React.JSX.Element => {
   return <ChatPanelSurface {...props} />;
 });
-
-const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 
 export interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly messages: readonly ChatMessage[];
@@ -123,8 +104,6 @@ export const ChatPanelSurface = React.memo(
     const scrollRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const selectFilesRef = useRef<((files: FileList | readonly ChatUploadFile[] | null) => void) | null>(null);
-    const handledFileDropRef = useRef<ChatPanelFileDrop | null>(null);
     const isAtBottomRef = useRef(true);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
     const restoreScrollRef = useRef<{
@@ -237,18 +216,9 @@ export const ChatPanelSurface = React.memo(
     const selectFiles = (files: FileList | readonly ChatUploadFile[] | null) => {
       if (!files) return;
       const selected: ChatUploadFile[] = Array.from(files);
-      if (stagedFiles.length + selected.length > CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage) {
-        setComposerError(`You can attach up to ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files.`);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-      const invalid = selected.find((file) => {
-        const { fileName, mimeType, byteLength } = describeChatUploadFile(file);
-        const fileNameBytes = new TextEncoder().encode(fileName).byteLength;
-        return !fileName || !Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || fileNameBytes > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes || !ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType);
-      });
-      if (invalid) {
-        setComposerError(`${describeChatUploadFile(invalid).fileName} is not a supported chat attachment.`);
+      const refusal = chatAttachmentRefusal(stagedFiles.length, selected);
+      if (refusal) {
+        setComposerError(refusal);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
@@ -257,14 +227,7 @@ export const ChatPanelSurface = React.memo(
       setComposerError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
-    selectFilesRef.current = selectFiles;
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Stage a file drop committed by the call surface once for each drop object.
-    useEffect(() => {
-      if (!fileDrop || handledFileDropRef.current === fileDrop) return;
-      handledFileDropRef.current = fileDrop;
-      selectFilesRef.current?.(fileDrop.files);
-      onFileDropStaged?.(fileDrop);
-    }, [fileDrop, onFileDropStaged]);
+    useStagedChatFileDrop({ fileDrop, onFileDropStaged, stageFiles: selectFiles });
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {
@@ -450,11 +413,7 @@ export const ChatPanelSurface = React.memo(
               ref={textareaRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              onPaste={(event) => {
-                if (!onUploadAttachment || event.clipboardData.files.length === 0) return;
-                event.preventDefault();
-                selectFiles(event.clipboardData.files);
-              }}
+              onPaste={(event) => stagePastedFiles(event, Boolean(onUploadAttachment), selectFiles)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey) return;
                 event.preventDefault();

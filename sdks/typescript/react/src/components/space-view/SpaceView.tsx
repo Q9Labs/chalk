@@ -17,8 +17,8 @@ import { AudioOutput } from "../audio-output/AudioOutput";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { useHandOrder } from "../../internal/useHandOrder";
-import { ChatFileDropOverlay, ChatPanel, type ChatPanelFileDrop } from "../composite/ChatPanel";
-import { routeChatFileDrop, useChatFileDrop } from "./chat-file-drop";
+import { ChatPanel } from "../composite/ChatPanel";
+import { useChatFileDropFlow } from "./chat-file-drop";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
@@ -185,7 +185,6 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
-  const [chatFileDrop, setChatFileDrop] = useState<ChatPanelFileDrop | null>(null);
   const [hiddenKnocks, setHiddenKnocks] = useState<ReadonlySet<string>>(new Set());
   const handOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((person) => person.handRaised).map((person) => person.participantId), [participantsSlice.roster]));
   const [previousInitialPanel, setPreviousInitialPanel] = useState(initialPanel);
@@ -221,15 +220,7 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
-  const fileDropRoute = routeChatFileDrop({ chatOpen: activePanel === "chat", chatAvailable: feature("chat") && canSendChat });
-  const chatFileDropTarget = useChatFileDrop({
-    route: fileDropRoute,
-    onChatFiles: (files) => {
-      setActivePanel("chat");
-      setChatFileDrop({ files });
-    },
-  });
-  const showChatFileDrop = chatFileDropTarget.active && fileDropRoute === "chat" && activePanel === "chat";
+  const chatFileDrop = useChatFileDropFlow({ chatOpen: activePanel === "chat", chatAvailable: feature("chat") && canSendChat, onOpenChat: () => setActivePanel("chat") });
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -333,7 +324,7 @@ export function SpaceView({
               connectionTrouble={connectionPhase.kind === "failed" ? "lost" : connectionPhase.kind === "reconnecting" ? "reconnecting" : undefined}
               colorScheme={colorScheme}
               stageBackground={stageBackground}
-              {...chatFileDropTarget.handlers}
+              {...chatFileDrop.handlers}
               header={{
                 colorScheme,
                 onColorSchemeChange,
@@ -442,19 +433,8 @@ export function SpaceView({
                 </>
               }
               sidebar={
-                <CallCard
-                  state={drawer.state}
-                  panel={drawer.panel}
-                  onPanelChange={setActivePanel}
-                  peopleCount={participantsSlice.roster.length}
-                  participantsEnabled={feature("participants")}
-                  chatEnabled={feature("chat")}
-                  onClose={() => setActivePanel(null)}
-                  overlay={showChatFileDrop ? <ChatFileDropOverlay /> : undefined}
-                >
-                  {drawer.panel === "chat" && feature("chat") ? (
-                    <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} fileDrop={chatFileDrop ?? undefined} onFileDropStaged={(drop) => setChatFileDrop((current) => (current === drop ? null : current))} />
-                  ) : null}
+                <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)} overlay={chatFileDrop.overlay}>
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} {...chatFileDrop.panelProps} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {
@@ -494,7 +474,7 @@ export function SpaceView({
               }
               overlays={
                 <>
-                  {showChatFileDrop ? <div className="call-file-drop-dimmer" data-part="chat-file-drop-dimmer" /> : null}
+                  {chatFileDrop.dimmer}
                   <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />
                   {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
                     <Suspense fallback={null}>

@@ -1,5 +1,7 @@
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent, type DragEventHandler } from "react";
+import { ChatFileDropOverlay } from "../composite/ChatFileDropOverlay";
+import type { ChatPanelFileDrop } from "../composite/chat-types";
 
 export type ChatFileDropRoute = "chat" | "stage" | "unavailable";
 
@@ -29,7 +31,7 @@ export function useChatFileDrop({ route, onChatFiles }: { readonly route: ChatFi
     setActive(false);
   }, []);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Clear file-drag chrome on Escape or window focus loss; remove the listeners on cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Clear file-drag chrome on Escape or window focus loss; remove the listeners on cleanup.
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") clear();
@@ -80,6 +82,29 @@ export function useChatFileDrop({ route, onChatFiles }: { readonly route: ChatFi
       onDragLeaveCapture,
       onDropCapture,
       onDrop,
+    },
+  };
+}
+
+/** The file-drop state a call surface needs: the drop target, the chrome while a file is dragged over the chat, and the staged drop. */
+export function useChatFileDropFlow({ chatOpen, chatAvailable, onOpenChat }: { readonly chatOpen: boolean; readonly chatAvailable: boolean; readonly onOpenChat: () => void }) {
+  const [fileDrop, setFileDrop] = useState<ChatPanelFileDrop | null>(null);
+  const route = routeChatFileDrop({ chatOpen, chatAvailable });
+  const target = useChatFileDrop({
+    route,
+    onChatFiles: (files) => {
+      onOpenChat();
+      setFileDrop({ files });
+    },
+  });
+  const showing = target.active && route === "chat";
+  return {
+    handlers: target.handlers,
+    overlay: showing ? <ChatFileDropOverlay /> : undefined,
+    dimmer: showing ? <div className="call-file-drop-dimmer" data-part="chat-file-drop-dimmer" /> : null,
+    panelProps: {
+      fileDrop: fileDrop ?? undefined,
+      onFileDropStaged: (drop: ChatPanelFileDrop) => setFileDrop((current) => (current === drop ? null : current)),
     },
   };
 }
