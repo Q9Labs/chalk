@@ -5,6 +5,7 @@ package worker
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -18,6 +19,11 @@ func configureIsolatedChild(command *exec.Cmd, namespaces bool) {
 		attributes.GidMappingsEnableSetgroups = false
 	}
 	command.SysProcAttr = attributes
+}
+
+func isolatedNamespacesAvailable() bool {
+	encoded, err := os.ReadFile("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
+	return err != nil || strings.TrimSpace(string(encoded)) != "1"
 }
 
 func isolatedChildProcessGroupID(pid int) int {

@@ -103,6 +103,15 @@ func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
 }
 
 func TestIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
+	testIsolatedChildSuccessKillsProcessGroup(t)
+}
+
+func TestIsolatedLambdaChildSuccessKillsProcessGroup(t *testing.T) {
+	t.Setenv("RENDERER_LAMBDA", "1")
+	testIsolatedChildSuccessKillsProcessGroup(t)
+}
+
+func testIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +126,15 @@ func TestIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
 }
 
 func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
+	testIsolatedChildTimeoutKillsProcessGroup(t)
+}
+
+func TestIsolatedLambdaChildTimeoutKillsProcessGroup(t *testing.T) {
+	t.Setenv("RENDERER_LAMBDA", "1")
+	testIsolatedChildTimeoutKillsProcessGroup(t)
+}
+
+func testIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
