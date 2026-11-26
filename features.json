@@ -252,6 +252,7 @@
         "sdks/typescript/client/src/space-client/chat-upload-report.ts",
         "sdks/typescript/client/src/space-client/reactions-controller.ts",
         "sdks/typescript/react-native/src/sheets/people-chat",
+        "sdks/typescript/react/src/components/composite/ChatPanel.test.tsx",
         "sdks/typescript/react/src/components/composite/ChatPanel.tsx",
         "sdks/typescript/react/src/components/composite/MessageAttachments.tsx",
         "sdks/typescript/react/src/components/composite/MessageBubble.tsx",

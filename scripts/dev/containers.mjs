@@ -36,7 +36,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
     args.push("--name", names[service], "--network-alias", service);
     const ports = service === "api" ? [config.ports.api, config.ports.providerBridge] : [config.ports.sync];
     for (const port of ports) args.push("--publish", `127.0.0.1:${port}:${port}`);
-    if (service === "api") args.push("--mount", `type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts`);
+    if (service === "api") args.push("--mount", `type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts,readonly`);
   }
   const mounts =
     service === "api"

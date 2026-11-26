@@ -19,10 +19,12 @@ type Attr = Record<string, unknown>;
 type FunctionResource = Resource<"Chalk.Lambda.VersionedFunction", Props, Attr>;
 type RoleResource = Resource<"AWS.IAM.Role", Props, Attr>;
 type LogResource = Resource<"AWS.Logs.LogGroup", Props, Attr>;
+type MetricFilterResource = Resource<"AWS.Logs.MetricFilter", Props, Attr>;
 type AlarmResource = Resource<"AWS.CloudWatch.Alarm", Props, Attr>;
 const FunctionResource = Resource<FunctionResource>("Chalk.Lambda.VersionedFunction");
 const RoleResource = Resource<RoleResource>("AWS.IAM.Role");
 const LogResource = Resource<LogResource>("AWS.Logs.LogGroup");
+const MetricFilterResource = Resource<MetricFilterResource>("AWS.Logs.MetricFilter");
 const AlarmResource = Resource<AlarmResource>("AWS.CloudWatch.Alarm");
 
 const input = (release: string, keyRelease = release): DocumentRendererInputs =>
@@ -94,12 +96,13 @@ const providerFor = (resource: Parameters<typeof Provider.succeed>[0]) =>
     reconcile: (() => Effect.die("recovery policy proof must not apply in this test")) as never,
     delete: (() => Effect.die("recovery policy proof must not delete")) as never,
   });
-const providers = Layer.mergeAll(providerFor(FunctionResource as never), providerFor(RoleResource as never), providerFor(LogResource as never), providerFor(AlarmResource as never));
+const providers = Layer.mergeAll(providerFor(FunctionResource as never), providerFor(RoleResource as never), providerFor(LogResource as never), providerFor(MetricFilterResource as never), providerFor(AlarmResource as never));
 
 const makeState = () => {
   const rows: Record<string, ResourceState> = {
     ExecutionRole: baseRow("ExecutionRole", resourceTypes.ExecutionRole, beforeDeclaration.executionRole as Props, { stable: "role" }),
     Logs: baseRow("Logs", resourceTypes.Logs, beforeDeclaration.log as Props, { stable: "logs" }),
+    FailureLogMetric: baseRow("FailureLogMetric", resourceTypes.FailureLogMetric, beforeDeclaration.failureLogMetric as Props, { stable: "failure-metric" }),
     Function: updatingRow("Function", resourceTypes.Function, beforeDeclaration.fn as unknown as Props, afterDeclaration.fn as unknown as Props, {
       functionName: releaseA.function_name,
       functionArn: "arn:aws:lambda:ap-southeast-1:000000000000:function:chalk-nightly-test-document-renderer",
@@ -121,6 +124,7 @@ const makeStack = (value: DocumentRendererInputs, state: ReturnType<typeof makeS
     Effect.gen(function* () {
       yield* RoleResource("ExecutionRole", declared.executionRole as Props);
       yield* LogResource("Logs", declared.log as Props);
+      yield* MetricFilterResource("FailureLogMetric", declared.failureLogMetric as Props);
       yield* FunctionResource("Function", declared.fn as unknown as Props);
       yield* AlarmResource("Errors", declared.alarms.Errors as Props);
       yield* AlarmResource("Throttles", declared.alarms.Throttles as Props);

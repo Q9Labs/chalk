@@ -35,7 +35,7 @@ const original = parseInputs({
 function declaration(input: DocumentRendererInputs) {
   const props = resourceProps(input, "0".repeat(12), "ap-southeast-1");
   return {
-    resources: [["Function", props.fn], ["Logs", props.log], ["ExecutionRole", props.executionRole], ...Object.entries(props.alarms)].map(([id, value]) => {
+    resources: [["Function", props.fn], ["Logs", props.log], ["FailureLogMetric", props.failureLogMetric], ["ExecutionRole", props.executionRole], ...Object.entries(props.alarms)].map(([id, value]) => {
       if (typeof id !== "string") throw new Error("Fixture ID missing");
       const type = Object.entries(resourceTypes).find(([name]) => name === id)?.[1];
       if (!type) throw new Error("Fixture resource type missing");

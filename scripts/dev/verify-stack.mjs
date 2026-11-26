@@ -77,8 +77,7 @@ async function verifyDashboardArtifacts() {
   assert.equal(text.status, 200);
   assert.ok((await text.text()).includes(expected.cues[0].text));
   const { stdout: mounts } = await runChecked("docker", ["inspect", "--format", "{{json .Mounts}}", containerNames(config).api]);
-  // The API container's artifact server writes local object bytes and rendered pages through this bind mount.
-  assert.equal(JSON.parse(mounts).find(({ Destination }) => Destination === "/dashboard-artifacts").RW, true, "the local artifact server requires a writable dashboard artifact mount");
+  assert.equal(JSON.parse(mounts).find(({ Destination }) => Destination === "/dashboard-artifacts").RW, false);
 }
 
 async function verifyContainerPublications() {
