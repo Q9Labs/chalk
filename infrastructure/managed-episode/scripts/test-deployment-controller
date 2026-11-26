@@ -158,6 +158,8 @@ for name in "${names[@]}"; do
   if [[ "$name" == *:* ]]; then
     base="${name%:*}"
     version="${name##*:}"
+  elif [[ -n "${FAKE_VERSION_SUFFIX:-}" && "$base" == *"/${FAKE_VERSION_SUFFIX}" ]]; then
+    version="${FAKE_PARAMETER_VERSION:-2}"
   fi
   if [[ -n "${FAKE_MISSING_SUFFIX:-}" && "$base" == *"/${FAKE_MISSING_SUFFIX}" ]]; then
     continue
@@ -1357,6 +1359,17 @@ if run_controller "$retry_state" "${fixture_root}/retry-excluded-request.json" "
   fail "a repeated deploy with other exclusions passed"
 fi
 grep -Fq 'already active with different deployment settings' "${fixture_root}/retry-excluded.log" || fail "changed deployment settings for the active release were not named"
+# The same release is not a no-op when an input version moves: it is deployed again with a fresh durable input-refresh root.
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+FAKE_VERSION_SUFFIX=api.env FAKE_PARAMETER_VERSION=2 run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-input-refresh.log" 2>&1 || fail "an input version change did not redeploy the active release"
+jq -e '.release_id == "retry" and (.release_root | endswith("--inputs-test-retry")) and (.inputs[] | select(.id == "api-env") | .version == 2)' "${retry_state}/active-release.json" >/dev/null || fail "an input refresh did not persist its exact input version"
+[[ -d "${retry_state}/releases/retry/runtime" ]] || fail "an input refresh removed the rollback copy of the original release root"
+[[ -d "${retry_state}/releases/retry--inputs-test-retry/runtime" ]] || fail "an input refresh did not keep its own durable runtime"
+grep -Eq '^systemctl .*start chalk-runtime.target' "${fixture_root}/commands.log" || fail "an input refresh did not restart the runtime"
+FAKE_VERSION_SUFFIX=api.env FAKE_PARAMETER_VERSION=2 run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-input-repeat.log" 2>&1 || fail "an unchanged input refresh repeat did not pass"
+jq -e -s 'length == 2' "${retry_state}/ledger.jsonl" >/dev/null || fail "an unchanged input refresh repeat wrote another ledger record"
 # A promotion cut short after another release started leaves the pointer on this one: health alone must not pass it.
 cp "${fixture_root}/retry-changed-manifest.json" "${fixture_root}/run/release/release-manifest.json"
 if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-interrupted.log" 2>&1; then

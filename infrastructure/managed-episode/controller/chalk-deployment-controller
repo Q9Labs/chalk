@@ -1384,7 +1384,11 @@ persist_release() {
 
 remove_unpublished_release() {
   local release_root="$1"
-  [[ "$release_root" == "${state_root}/releases/${request_release_id}" ]] || return 1
+  local release_root_base="${state_root}/releases/${request_release_id}"
+  case "$release_root" in
+    "$release_root_base" | "$release_root_base"--inputs-*) ;;
+    *) return 1 ;;
+  esac
   [[ ! -e "$release_root" && ! -L "$release_root" ]] && return 0
   [[ -d "$release_root" && ! -L "$release_root" ]] || return 1
   if [[ -f "$active_pointer" && ! -L "$active_pointer" ]] && jq -e --arg release_root "$release_root" '.release_root == $release_root' "$active_pointer" >/dev/null 2>&1; then
@@ -1436,7 +1440,11 @@ load_active_pointer() {
   local pointer_release_root
   pointer_release_root="$(jq -er '.release_root' "$active_pointer")"
   [[ "$pointer_release_root" == "${state_root}/releases/"* && "$pointer_release_root" != *'..'* ]] || fail "active release pointer escapes state root"
-  [[ "$pointer_release_root" == "${state_root}/releases/$(jq -er '.release_id' "$active_pointer")" ]] || fail "active release pointer release root is inconsistent"
+  local pointer_release_base="${state_root}/releases/$(jq -er '.release_id' "$active_pointer")"
+  case "$pointer_release_root" in
+    "$pointer_release_base" | "$pointer_release_base"--inputs-*) ;;
+    *) fail "active release pointer release root is inconsistent" ;;
+  esac
   local durable_manifest
   durable_manifest="${pointer_release_root}/release-manifest.json"
   require_regular_file "$durable_manifest"
@@ -1549,8 +1557,8 @@ rollback_to_stable() {
   run_candidate "$stable_runtime"
 }
 
-# A job re-run repeats a deploy this host already promoted. It passes on health alone and changes nothing; the same
-# release id with another manifest is refused, as is any other active release.
+# A job re-run repeats a deploy this host already promoted. It passes on health alone when its exact input versions
+# are unchanged; changed input versions redeploy the same release. A different manifest or active release is refused.
 release_already_active() {
   [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || return 1
   [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
@@ -1575,12 +1583,20 @@ deploy() {
   validate_inventory "${managed_root}/contracts/runtime-inputs.json"
   validate_manifest "$managed_root"
   prepare_stage
+  local active_release_repeated=false
   if release_already_active; then
-    health_runtime || fail "release ${request_release_id} is already active but its health check failed"
-    emit_result deployed passed false
-    return
+    active_release_repeated=true
   fi
   fetch_deployment_inputs
+  local input_refresh=false
+  if [[ "$active_release_repeated" == true ]]; then
+    if jq -e --argjson current "$input_records_json" '.inputs == $current' "$active_pointer" >/dev/null; then
+      health_runtime || fail "release ${request_release_id} is already active but its health check failed"
+      emit_result deployed passed false
+      return
+    fi
+    input_refresh=true
+  fi
   inject_runtime_identity
   local rendered_root="${stage_root}/runtime"
   mkdir -p "$rendered_root"
@@ -1625,6 +1641,9 @@ deploy() {
     fi
   fi
   local release_root="${state_root}/releases/${request_release_id}"
+  if [[ "$input_refresh" == true ]]; then
+    release_root="${release_root}--inputs-${request_id}"
+  fi
   [[ ! -e "$release_root" ]] || fail "release already exists in durable state"
   local stable_pointer_copy="${stage_root}/stable-pointer.json"
   if [[ "$stable_exists" == true ]]; then
