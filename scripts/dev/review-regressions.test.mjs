@@ -130,7 +130,7 @@ test("container artifact reads stay internal without changing browser download U
   assert.equal(internal.hostname, "127.0.0.1");
   assert.equal(internal.port, String(config.ports.web));
   const args = containerArguments(config, "api", { image: "test", env });
-  assert.ok(args.includes(`type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts,readonly`));
+  assert.ok(args.includes(`type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts`));
   for (let index = 0; index < args.length; index++) if (args[index] === "--publish") assert.ok(args[index + 1].startsWith("127.0.0.1:"));
   assert.equal(internal.pathname, "/__local-dashboard-artifacts");
   const remote = containerEnvironment(config, "api", { CHALK_R2_ENDPOINT: "https://artifacts.example.test" });

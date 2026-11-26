@@ -743,9 +743,9 @@ const styles = `.call-card-tabs {
 
 .call-file-wrap { position: relative; display: block; }
 .call-file-wrap .call-file { width: 100%; }
-.call-file-actions { position: absolute; right: 6px; top: 6px; display: none; gap: 4px; }
+.call-file-actions { position: absolute; right: var(--space-1-5); top: var(--space-1-5); display: none; gap: var(--space-1); }
 .call-file-wrap:hover .call-file-actions, .call-file-wrap:focus-within .call-file-actions { display: flex; }
-.call-file-actions button { border-radius: var(--corner-pill); background: var(--chalk-overlay-strong); color: var(--chalk-on-overlay); padding: 5px 9px; font-size: var(--type-caption); font-weight: 600; box-shadow: var(--chalk-shadow); }
+.call-file-actions button { border-radius: var(--corner-pill); background: var(--chalk-overlay-strong); color: var(--chalk-on-overlay); padding: var(--space-1-5) var(--space-2-5); font-size: var(--type-caption); font-weight: 600; box-shadow: var(--chalk-shadow); }
 .call-file-actions button:hover { background: var(--chalk-on-overlay); color: var(--chalk-overlay); }
 
 .call-file > span:not(.call-file-type) {

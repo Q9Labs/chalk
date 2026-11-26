@@ -24,23 +24,27 @@ it("opens the file picker even while the connection is not live", async () => {
   const { hook } = mount(false);
   const input = document.querySelector("input[type=file]");
   expect(input).toBeTruthy();
-  const clicks = vi.fn();
-  input?.addEventListener("click", clicks);
+  let pickerOpens = 0;
+  input?.addEventListener("click", () => {
+    pickerOpens += 1;
+  });
   await act(async () => {
     await hook()?.choosePresentFiles();
   });
-  expect(clicks).toHaveBeenCalledTimes(1);
+  expect(pickerOpens).toBe(1);
 });
 
 it("opens the file picker when live", async () => {
   const { hook } = mount(true);
   const input = document.querySelector("input[type=file]");
-  const clicks = vi.fn();
-  input?.addEventListener("click", clicks);
+  let pickerOpens = 0;
+  input?.addEventListener("click", () => {
+    pickerOpens += 1;
+  });
   await act(async () => {
     await hook()?.choosePresentFiles();
   });
-  expect(clicks).toHaveBeenCalledTimes(1);
+  expect(pickerOpens).toBe(1);
 });
 
 it("stages every remaining dropped file in the chat composer instead of sending it", async () => {
