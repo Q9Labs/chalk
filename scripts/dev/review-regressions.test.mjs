@@ -184,7 +184,7 @@ for (const signal of [undefined, "SIGINT", "SIGTERM"]) {
 async function python3Command() {
   for (const command of ["python3", "python"]) {
     const works = await new Promise((resolve) => {
-      const probe = spawn(command, ["--version"], { stdio: "ignore" });
+      const probe = spawn(command, ["-c", "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)"], { stdio: "ignore" });
       probe.on("error", () => resolve(false));
       probe.on("exit", (code) => resolve(code === 0));
     });
