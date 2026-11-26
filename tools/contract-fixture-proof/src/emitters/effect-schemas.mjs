@@ -280,6 +280,12 @@ function renderLiteral(values) {
   return `Schema.Literals([${values.map((value) => JSON.stringify(value)).join(", ")}])`;
 }
 
+// A response that is only a $ref to a component of the same name is already emitted with the components.
+function isComponentAlias(schema, name, document) {
+  const target = typeof schema.$ref === "string" ? schema.$ref.split("/").at(-1) : undefined;
+  return target === name && Boolean(document.components?.schemas?.[target]);
+}
+
 function collectOperationSchemas(document) {
   const operations = [];
   for (const [, pathItem] of Object.entries(document.paths ?? {})) {
@@ -308,10 +314,8 @@ function collectOperationSchemas(document) {
       if (requestBody) {
         schemas.push({ name: `${operationName}RequestBody`, schema: requestBody });
       }
-      if (responseBody) {
-        const responseName = `${operationName}Response`;
-        const componentTarget = typeof responseBody.$ref === "string" ? responseBody.$ref.split("/").at(-1) : undefined;
-        if (!(componentTarget === responseName && document.components?.schemas?.[componentTarget])) schemas.push({ name: responseName, schema: responseBody });
+      if (responseBody && !isComponentAlias(responseBody, `${operationName}Response`, document)) {
+        schemas.push({ name: `${operationName}Response`, schema: responseBody });
       }
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         const headers = response?.headers ?? {};

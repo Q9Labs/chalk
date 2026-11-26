@@ -77,7 +77,7 @@ async function verifyDashboardArtifacts() {
   assert.equal(text.status, 200);
   assert.ok((await text.text()).includes(expected.cues[0].text));
   const { stdout: mounts } = await runChecked("docker", ["inspect", "--format", "{{json .Mounts}}", containerNames(config).api]);
-  assert.equal(JSON.parse(mounts).find(({ Destination }) => Destination === "/dashboard-artifacts").RW, false);
+  assert.equal(JSON.parse(mounts).find(({ Destination }) => Destination === "/dashboard-artifacts").RW, true);
 }
 
 async function verifyContainerPublications() {
