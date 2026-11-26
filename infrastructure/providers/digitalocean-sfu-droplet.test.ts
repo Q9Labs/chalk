@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type * as DigitalOcean from "@alchemy.run/digitalocean";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { keepRecordedPowerStatus } from "./digitalocean-sfu-droplet.ts";
 
 const droplet = (status: DigitalOcean.DropletAttributes["status"]): DigitalOcean.DropletAttributes => ({
@@ -34,4 +35,11 @@ test("an unchanged or missing power status is left alone", () => {
   assert.equal(keepRecordedPowerStatus(live, "active"), live);
   assert.equal(keepRecordedPowerStatus(live, undefined), live);
   assert.equal(keepRecordedPowerStatus(undefined, "off"), undefined);
+});
+
+test("keeping the recorded power status preserves an ownership refusal", () => {
+  const foreign = Unowned(droplet("active"));
+  const kept = keepRecordedPowerStatus(foreign, "off");
+  assert.equal(kept?.status, "off");
+  assert.equal(Unowned.is(kept), true);
 });

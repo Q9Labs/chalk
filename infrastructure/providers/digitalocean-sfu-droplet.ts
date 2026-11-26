@@ -1,5 +1,6 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as DO from "@distilled.cloud/digitalocean";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -18,8 +19,11 @@ class UnsafeSfuChange extends Data.TaggedError("UnsafeSfuChange")<{ message: str
 
 const bootInputs = (props: SfuDropletProps) => ({ ...props, image: undefined, sshKeys: undefined, userData: undefined, size: undefined });
 
-export const keepRecordedPowerStatus = <Live extends { readonly status?: DigitalOcean.DropletAttributes["status"] | undefined }>(live: Live | undefined, recorded: DigitalOcean.DropletAttributes["status"] | undefined) =>
-  live?.status !== undefined && recorded !== undefined && live.status !== recorded ? { ...live, status: recorded } : live;
+export const keepRecordedPowerStatus = <Live extends { readonly status?: DigitalOcean.DropletAttributes["status"] | undefined }>(live: Live | undefined, recorded: DigitalOcean.DropletAttributes["status"] | undefined) => {
+  if (live?.status === undefined || recorded === undefined || live.status === recorded) return live;
+  const result = { ...live, status: recorded };
+  return Unowned.is(live) ? Unowned(result) : result;
+};
 
 export const sfuDropletProvider = Provider.effect(
   SfuDroplet,
