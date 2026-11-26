@@ -61,53 +61,9 @@ func (r RecordingPipelineRepository) RearmTranscription(ctx context.Context, inp
 	}
 	var result recordingpipeline.TranscriptionRearmResult
 	err := r.transaction(ctx, func(tx pgx.Tx, _ recordingPipelineQuerier) error {
-		queries := sqlc.New(tx)
-		var schemaReady bool
-		if err := tx.QueryRow(ctx, `select exists(select 1 from goose_db_version where version_id = 20261126090000 and is_applied)`).Scan(&schemaReady); err != nil {
-			return err
-		}
-		if !schemaReady {
-			reason = "schema_not_ready"
-			return recordingpipeline.ErrTranscriptionRearmUnavailable
-		}
-		if _, err := queries.LockRecordingTranscriptionRearmPipeline(ctx, uuid(input.RecordingID)); err != nil {
-			return err
-		}
-		row, err := queries.LockRecordingTranscriptionRearmJob(ctx, uuid(input.RecordingID))
-		if err != nil {
-			return err
-		}
-		candidate := mapLockedTranscriptionRearmCandidate(row)
-		if candidate.HasRenewal && (candidate.State != recordingpipeline.JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired") {
-			reason = "already_rearmed"
-			return recordingpipeline.ErrTranscriptionRearmNotNeeded
-		}
-		if refusal := recordingpipeline.TranscriptionRearmRefusal(candidate, r.now().UTC()); refusal != "" {
-			reason = refusal
-			return recordingpipeline.ErrTranscriptionRearmUnavailable
-		}
-		generation := candidate.FencingGeneration + 1
-		renewal, err := queries.InsertRecordingTranscriptionSourceRenewal(ctx, sqlc.InsertRecordingTranscriptionSourceRenewalParams{
-			FencingGeneration: generation, Operator: input.Operator, Reason: input.Reason,
-			JobID: uuid(candidate.JobID), RecordingID: uuid(input.RecordingID),
-		})
-		if err != nil {
-			return err
-		}
-		if _, err := queries.ArchiveRecordingTranscriptionRearmFailure(ctx, sqlc.ArchiveRecordingTranscriptionRearmFailureParams{
-			ManualRetryCount: int32(candidate.FailureHistoryCount + 1), JobID: uuid(candidate.JobID),
-		}); err != nil {
-			return err
-		}
-		if _, err := queries.RearmRecordingTranscriptionJob(ctx, sqlc.RearmRecordingTranscriptionJobParams{
-			FencingGeneration: generation, JobID: uuid(candidate.JobID), RecordingID: uuid(input.RecordingID),
-		}); err != nil {
-			return err
-		}
-		result = recordingpipeline.TranscriptionRearmResult{
-			JobID: candidate.JobID, FencingGeneration: generation, SourceExpiresAt: renewal.SourceExpiresAt.Time.UTC(),
-		}
-		return nil
+		var err error
+		result, err = r.rearmTranscriptionLocked(ctx, tx, input, &reason)
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.TranscriptionRearmResult{}, recordingpipeline.ErrTranscriptionRearmUnavailable
@@ -121,6 +77,79 @@ func (r RecordingPipelineRepository) RearmTranscription(ctx context.Context, inp
 	}
 	outcome, reason = "accepted", "queued"
 	return result, nil
+}
+
+func (r RecordingPipelineRepository) rearmTranscriptionLocked(ctx context.Context, tx pgx.Tx, input recordingpipeline.TranscriptionRearmInput, reason *string) (recordingpipeline.TranscriptionRearmResult, error) {
+	queries := sqlc.New(tx)
+	if err := ensureTranscriptionRearmSchema(ctx, tx); err != nil {
+		if errors.Is(err, recordingpipeline.ErrTranscriptionRearmUnavailable) {
+			*reason = "schema_not_ready"
+		}
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	if _, err := queries.LockRecordingTranscriptionRearmPipeline(ctx, uuid(input.RecordingID)); err != nil {
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	row, err := queries.LockRecordingTranscriptionRearmJob(ctx, uuid(input.RecordingID))
+	if err != nil {
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	candidate := mapLockedTranscriptionRearmCandidate(row)
+	if refusal, err := transcriptionRearmEligibility(candidate, r.now().UTC()); err != nil {
+		*reason = refusal
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	generation := candidate.FencingGeneration + 1
+	renewal, err := insertTranscriptionRearmRenewal(ctx, queries, candidate, input, generation)
+	if err != nil {
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	if err := resetTranscriptionRearmJob(ctx, queries, candidate, input.RecordingID, generation); err != nil {
+		return recordingpipeline.TranscriptionRearmResult{}, err
+	}
+	return recordingpipeline.TranscriptionRearmResult{
+		JobID: candidate.JobID, FencingGeneration: generation, SourceExpiresAt: renewal.SourceExpiresAt.Time.UTC(),
+	}, nil
+}
+
+func ensureTranscriptionRearmSchema(ctx context.Context, tx pgx.Tx) error {
+	var schemaReady bool
+	if err := tx.QueryRow(ctx, `select exists(select 1 from goose_db_version where version_id = 20261126090000 and is_applied)`).Scan(&schemaReady); err != nil {
+		return err
+	}
+	if !schemaReady {
+		return recordingpipeline.ErrTranscriptionRearmUnavailable
+	}
+	return nil
+}
+
+func transcriptionRearmEligibility(candidate recordingpipeline.TranscriptionRearmCandidate, now time.Time) (string, error) {
+	if candidate.HasRenewal && (candidate.State != recordingpipeline.JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired") {
+		return "already_rearmed", recordingpipeline.ErrTranscriptionRearmNotNeeded
+	}
+	if refusal := recordingpipeline.TranscriptionRearmRefusal(candidate, now); refusal != "" {
+		return refusal, recordingpipeline.ErrTranscriptionRearmUnavailable
+	}
+	return "", nil
+}
+
+func insertTranscriptionRearmRenewal(ctx context.Context, queries *sqlc.Queries, candidate recordingpipeline.TranscriptionRearmCandidate, input recordingpipeline.TranscriptionRearmInput, generation int64) (sqlc.RecordingTranscriptionSourceRenewal, error) {
+	return queries.InsertRecordingTranscriptionSourceRenewal(ctx, sqlc.InsertRecordingTranscriptionSourceRenewalParams{
+		FencingGeneration: generation, Operator: input.Operator, Reason: input.Reason,
+		JobID: uuid(candidate.JobID), RecordingID: uuid(input.RecordingID),
+	})
+}
+
+func resetTranscriptionRearmJob(ctx context.Context, queries *sqlc.Queries, candidate recordingpipeline.TranscriptionRearmCandidate, recordingID utilities.ID, generation int64) error {
+	if _, err := queries.ArchiveRecordingTranscriptionRearmFailure(ctx, sqlc.ArchiveRecordingTranscriptionRearmFailureParams{
+		ManualRetryCount: int32(candidate.FailureHistoryCount + 1), JobID: uuid(candidate.JobID),
+	}); err != nil {
+		return err
+	}
+	_, err := queries.RearmRecordingTranscriptionJob(ctx, sqlc.RearmRecordingTranscriptionJobParams{
+		FencingGeneration: generation, JobID: uuid(candidate.JobID), RecordingID: uuid(recordingID),
+	})
+	return err
 }
 
 func mapTranscriptionRearmCandidateFields(recordingID, tenantID, episodeID, jobID utilities.ID, state string, errorCode string, attemptCount int32, fencingGeneration int64, retention *time.Time, captureSucceeded bool, mode string, hasSource, hasTranscript, hasKey, hasPresentation bool, bundleCount int32, cleanupStarted, hasAuthority bool, historyCount int32, hasRenewal bool) recordingpipeline.TranscriptionRearmCandidate {

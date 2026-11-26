@@ -62,38 +62,59 @@ func ValidateTranscriptionRearmInput(input TranscriptionRearmInput) error {
 // TranscriptionRearmRefusal is the operator-facing eligibility decision. The
 // database rechecks it under the re-arm locks before mutating the job.
 func TranscriptionRearmRefusal(candidate TranscriptionRearmCandidate, now time.Time) string {
-	if candidate.HasRenewal && (candidate.State != JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired") {
-		return "already_rearmed"
-	}
-	if candidate.State == JobStateSucceeded {
-		return "completed"
-	}
-	if candidate.State != JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired" {
-		return "not_expired"
-	}
-	if candidate.TranscriptionMode != "automatic" && candidate.TranscriptionMode != "on_demand" {
-		return "transcription_disabled"
-	}
-	if !candidate.CaptureSucceeded {
-		return "capture_not_successful"
-	}
-	if candidate.HasTranscriptionSource || candidate.HasTranscript {
-		return "transcription_exists"
-	}
-	if candidate.CaptureRetentionExpiresAt == nil || !candidate.CaptureRetentionExpiresAt.After(now) {
-		return "retention_expired"
-	}
-	if candidate.CleanupStarted {
-		return "cleanup_started"
-	}
-	if candidate.AttemptCount != 0 || candidate.HasAttemptAuthority {
-		return "already_claimed"
-	}
-	if candidate.BundleCount == 0 || !candidate.HasDataKey || !candidate.HasPresentation {
-		return "missing_source"
-	}
-	if candidate.FailureHistoryCount >= 5 {
-		return "retry_limit_reached"
+	for _, check := range transcriptionRearmRefusalChecks(candidate, now) {
+		if check.condition {
+			return check.refusal
+		}
 	}
 	return ""
+}
+
+type transcriptionRearmRefusalCheck struct {
+	condition bool
+	refusal   string
+}
+
+func transcriptionRearmRefusalChecks(candidate TranscriptionRearmCandidate, now time.Time) []transcriptionRearmRefusalCheck {
+	return []transcriptionRearmRefusalCheck{
+		{transcriptionRearmAlreadySatisfied(candidate), "already_rearmed"},
+		{candidate.State == JobStateSucceeded, "completed"},
+		{transcriptionRearmNotExpired(candidate), "not_expired"},
+		{transcriptionRearmModeDisabled(candidate), "transcription_disabled"},
+		{!candidate.CaptureSucceeded, "capture_not_successful"},
+		{transcriptionRearmOutputExists(candidate), "transcription_exists"},
+		{transcriptionRearmRetentionExpired(candidate, now), "retention_expired"},
+		{candidate.CleanupStarted, "cleanup_started"},
+		{transcriptionRearmAlreadyClaimed(candidate), "already_claimed"},
+		{transcriptionRearmSourceMissing(candidate), "missing_source"},
+		{candidate.FailureHistoryCount >= 5, "retry_limit_reached"},
+	}
+}
+
+func transcriptionRearmAlreadySatisfied(candidate TranscriptionRearmCandidate) bool {
+	return candidate.HasRenewal && (candidate.State != JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired")
+}
+
+func transcriptionRearmNotExpired(candidate TranscriptionRearmCandidate) bool {
+	return candidate.State != JobStateTerminalFailure || candidate.ErrorCode != "recording_source_expired"
+}
+
+func transcriptionRearmModeDisabled(candidate TranscriptionRearmCandidate) bool {
+	return candidate.TranscriptionMode != "automatic" && candidate.TranscriptionMode != "on_demand"
+}
+
+func transcriptionRearmOutputExists(candidate TranscriptionRearmCandidate) bool {
+	return candidate.HasTranscriptionSource || candidate.HasTranscript
+}
+
+func transcriptionRearmRetentionExpired(candidate TranscriptionRearmCandidate, now time.Time) bool {
+	return candidate.CaptureRetentionExpiresAt == nil || !candidate.CaptureRetentionExpiresAt.After(now)
+}
+
+func transcriptionRearmAlreadyClaimed(candidate TranscriptionRearmCandidate) bool {
+	return candidate.AttemptCount != 0 || candidate.HasAttemptAuthority
+}
+
+func transcriptionRearmSourceMissing(candidate TranscriptionRearmCandidate) bool {
+	return candidate.BundleCount == 0 || !candidate.HasDataKey || !candidate.HasPresentation
 }

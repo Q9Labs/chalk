@@ -66,9 +66,7 @@ type recordingPipelineQuerier interface {
 	ReleaseRecordingReservation(context.Context, sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error)
 	UpsertRecordingPoolHealth(context.Context, sqlc.UpsertRecordingPoolHealthParams) (sqlc.UpsertRecordingPoolHealthRow, error)
 	GetRecordingPoolHealth(context.Context, string) (sqlc.GetRecordingPoolHealthRow, error)
-	ListHeldCaptureSlots(context.Context, int32) ([]sqlc.ListHeldCaptureSlotsRow, error)
-	GetRecordingTranscriptionRearmCandidate(context.Context, pgtype.UUID) (sqlc.GetRecordingTranscriptionRearmCandidateRow, error)
-	ListRecordingTranscriptionRearmCandidates(context.Context, sqlc.ListRecordingTranscriptionRearmCandidatesParams) ([]sqlc.ListRecordingTranscriptionRearmCandidatesRow, error)
+	recordingPipelineInventoryQuerier
 }
 
 func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
