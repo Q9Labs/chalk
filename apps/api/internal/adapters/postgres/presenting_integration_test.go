@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -26,7 +27,7 @@ func newPresentingFixture(t *testing.T, pool *pgxpool.Pool, capabilities string)
 	attachment, _ := utilities.NewID()
 	upload, _ := utilities.NewID()
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'Presenting test')`, uuid(tenant))
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting test',$3,'chalk_sfu')`, uuid(space), uuid(tenant), "presenting-"+space.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting test',$3,$4)`, uuid(space), uuid(tenant), "presenting-"+space.String(), string(mediaplane.ProviderChalkSFU))
 	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(episode), uuid(tenant), uuid(space))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,$5::text[],1,'active','collaborator')`, uuid(participant), uuid(tenant), uuid(space), uuid(episode), capabilities)
 	mustExec(t, pool, `insert into sync_chat_streams(tenant_id,space_id) values($1,$2)`, uuid(tenant), uuid(space))
@@ -100,7 +101,7 @@ func TestPresentingDocumentAccessDeniedIntegration(t *testing.T) {
 	otherEpisode, _ := utilities.NewID()
 	otherParticipant, _ := utilities.NewID()
 	otherSpace, _ := utilities.NewID()
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting other',$3,'chalk_sfu')`, uuid(otherSpace), uuid(fixture.tenant), "presenting-other-"+otherSpace.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Presenting other',$3,$4)`, uuid(otherSpace), uuid(fixture.tenant), "presenting-other-"+otherSpace.String(), string(mediaplane.ProviderChalkSFU))
 	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,config_snapshot) values($1,$2,$3,'active','{}'::jsonb)`, uuid(otherEpisode), uuid(fixture.tenant), uuid(otherSpace))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,capabilities,generation,status,role) values($1,$2,$3,$4,'{publishScreen}',1,'active','collaborator')`, uuid(otherParticipant), uuid(fixture.tenant), uuid(otherSpace), uuid(otherEpisode))
 	otherSubject := presenting.Subject{TenantID: fixture.tenant, SpaceID: otherSpace, EpisodeID: otherEpisode, ParticipantID: otherParticipant, ParticipantGeneration: 1}
