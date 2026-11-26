@@ -48,6 +48,8 @@ int main(int argc, char **argv) {
 	struct sock_fprog program = { .len = 4, .filter = filter };
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) return 71;
 	if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) != 0) return 72;
+	errno = 0;
+	if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != -1 || errno != EPERM) return 74;
 	execv(argv[1], argv + 1);
 	return 73;
 }
