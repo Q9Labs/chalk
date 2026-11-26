@@ -5933,7 +5933,6 @@ $$;
 create trigger sync_presenting_participant_left
     after update of status on participants
     for each row execute function sync_presenting_participant_left();
-||||||| ce0d7a5923
 create table recording_transcription_source_renewals (
     recording_id uuid not null references recordings(id) on delete restrict,
     job_id uuid not null references recording_jobs(id) on delete restrict,
