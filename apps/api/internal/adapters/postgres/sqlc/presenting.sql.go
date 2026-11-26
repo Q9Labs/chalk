@@ -1512,6 +1512,16 @@ func (q *Queries) PresentingEnabled(ctx context.Context, defaultEnabled bool) (b
 	return column_1, err
 }
 
+const publishPresentingServable = `-- name: PublishPresentingServable :exec
+insert into presenting_api_capability (singleton, servable) values (true, $1::boolean)
+on conflict (singleton) do update set servable = excluded.servable, updated_at = now()
+`
+
+func (q *Queries) PublishPresentingServable(ctx context.Context, servable bool) error {
+	_, err := q.db.Exec(ctx, publishPresentingServable, servable)
+	return err
+}
+
 const requeuePresentingRenderJob = `-- name: RequeuePresentingRenderJob :execrows
 update presenting_render_jobs
 set status = 'queued', lease_token = null, lease_owner = null, lease_expires_at = null, available_at = now(), error_code = $1, error_message = $2, updated_at = now()

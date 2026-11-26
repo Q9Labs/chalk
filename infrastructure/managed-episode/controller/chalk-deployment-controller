@@ -430,6 +430,53 @@ write_input_file() {
   chmod 600 "$target"
 }
 
+# An environment input may carry lines such as `#chalk-include api.env.2:7`. Each names another SecureString under the
+# same prefix and its exact version, and its text is appended in order. One input can then outgrow one SSM value, and the
+# recorded version of the input still fixes every byte, because the pinned versions are part of its text. A release that
+# does not know the directive reads the line as a comment. A key that appears in two parts fails the deploy.
+expand_env_includes() {
+  local file="$1"
+  local name="$2"
+  local region="$3"
+  local -a directives
+  mapfile -t directives < <(grep -E '^#chalk-include ' "$file" || true)
+  ((${#directives[@]} > 0)) || return 0
+  ((${#directives[@]} <= 8)) || fail "environment input includes more than 8 parameters"
+  local work="${stage_root}/env-include"
+  remove_staged_tree "$work"
+  mkdir -p "$work"
+  chmod 700 "$work"
+  umask 077
+  local merged="${work}/merged" part="${work}/part" response="${work}/response.json"
+  local directive include version include_name
+  { grep -Ev '^#chalk-include ' "$file" || true; } >"$merged"
+  { grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$merged" || true; } | sort -u >"${work}/keys"
+  for directive in "${directives[@]}"; do
+    [[ "$directive" =~ ^#chalk-include\ (api\.env\.[a-z0-9-]+):([1-9][0-9]*)$ ]] || fail "environment include directive is malformed"
+    include="${BASH_REMATCH[1]}"
+    version="${BASH_REMATCH[2]}"
+    include_name="${name%/*}/${include}"
+    if ! "$aws_bin" ssm get-parameters --names "${include_name}:${version}" --with-decryption --region "$region" --output json >"$response" 2>"${work}/ssm-error.log"; then
+      fail "SSM environment include fetch failed: ${include}"
+    fi
+    jq -e --arg name "$include_name" --argjson version "$version" '
+      (.InvalidParameters // []) == [] and (.Parameters | type == "array" and length == 1) and
+      .Parameters[0].Name == $name and .Parameters[0].Version == $version and .Parameters[0].Type == "SecureString" and
+      (.Parameters[0].Value | type == "string" and length > 0)
+    ' "$response" >/dev/null 2>&1 || fail "SSM environment include response is malformed: ${include}"
+    jq -j '.Parameters[0].Value' "$response" >"$part"
+    ! grep -Eq '^#chalk-include ' "$part" || fail "environment include cannot include another parameter: ${include}"
+    { grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$part" || true; } | sort -u >"${work}/part-keys"
+    [[ -z "$(comm -12 "${work}/keys" "${work}/part-keys")" ]] || fail "environment include repeats a key of the input: ${include}"
+    [[ ! -s "$merged" || "$(tail -c 1 "$merged" | wc -l)" -ge 1 ]] || printf '\n' >>"$merged"
+    cat "$part" >>"$merged"
+    sort -u -o "${work}/keys" "${work}/keys" "${work}/part-keys"
+  done
+  chmod 600 "$merged"
+  mv -f "$merged" "$file" || fail "environment input could not be replaced with its merged text"
+  remove_staged_tree "$work"
+}
+
 read_env_value() {
   local file="$1"
   local name="$2"
@@ -612,6 +659,7 @@ fetch_deployment_inputs() {
     fi
     [[ "$value_length" != 0 ]] || fail "required SSM runtime input is empty: ${id}"
     write_input_file "$destination" "$response_file" "$name"
+    [[ "$id" != api-env ]] || expand_env_includes "${stage_root}/${destination}" "$name" "$request_region"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done
 
@@ -1789,6 +1837,7 @@ restore_inputs_from_pointer() {
     returned_value_length="$(jq -er '.Parameters[0].Value | strings | length' "$response_file")" || fail "SSM restore parameter value is malformed"
     [[ "$returned_value_length" != 0 ]] || fail "required exact-version runtime input is empty: ${id}"
     write_input_file "$destination" "$response_file" "$name"
+    [[ "$id" != api-env ]] || expand_env_includes "${stage_root}/${destination}" "$name" "$pointer_region"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done < <(jq -r '.inputs[] | [.id, .name, (.version // 0), .missing, .destination, .kind, .suffix] | @tsv' "$pointer_file")
 }

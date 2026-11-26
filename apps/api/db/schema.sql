@@ -5696,6 +5696,12 @@ create table presenting_settings (
     enabled boolean not null
 );
 
+create table presenting_api_capability (
+    singleton boolean primary key default true check (singleton),
+    servable boolean not null,
+    updated_at timestamptz not null default now()
+);
+
 create table presenting_documents (
     tenant_id uuid not null,
     space_id uuid not null,

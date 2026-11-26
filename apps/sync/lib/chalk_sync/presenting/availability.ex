@@ -1,5 +1,11 @@
 defmodule ChalkSync.Presenting.Availability do
-  @moduledoc "One runtime switch read per Sync node; presenting sockets only read its local cache."
+  @moduledoc """
+  One runtime switch read per Sync node; presenting sockets only read its local cache.
+
+  The API decides whether Presenting can be served and publishes that to `presenting_api_capability`.
+  Sync offers Presenting only while the API says it is servable and the operator override allows it.
+  The node default stands in only until an API release that publishes has started.
+  """
 
   use GenServer
 
@@ -54,7 +60,10 @@ defmodule ChalkSync.Presenting.Availability do
       fn ->
         case Postgrex.query(
                Database.connection_for(:background),
-               "select coalesce((select enabled from presenting_settings where singleton), $1)",
+               """
+               select coalesce((select servable from presenting_api_capability where singleton), $1)
+                 and coalesce((select enabled from presenting_settings where singleton), $1)
+               """,
                [default],
                timeout: @query_timeout_ms
              ) do
