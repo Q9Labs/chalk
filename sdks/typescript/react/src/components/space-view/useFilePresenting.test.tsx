@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
@@ -171,6 +171,54 @@ it("keeps a staged drop when chat unmounts and remounts until the user removes i
   expect(remove).toBeDefined();
   act(() => remove?.click());
   expect(batch).toBeUndefined();
+  act(() => root.unmount());
+});
+
+it("retains a staged drop through panel switches with reactive parent state", () => {
+  const file = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" }) as ChatUploadFile;
+  let reservations = 0;
+  function Harness() {
+    const [chatOpen, setChatOpen] = useState(true);
+    const [batch, setBatch] = useState<{ readonly key: number; readonly files: readonly ChatUploadFile[] } | undefined>({ key: 9, files: [file] });
+    return (
+      <>
+        <button type="button" onClick={() => setChatOpen((open) => !open)}>
+          {chatOpen ? "People" : "Chat"}
+        </button>
+        {chatOpen ? (
+          <ChatPanelSurface
+            messages={[]}
+            droppedFiles={batch}
+            onDroppedFilesChange={(key, files) => {
+              setBatch((current) => {
+                if (current?.key !== key) return current;
+                return files.length ? { ...current, files } : undefined;
+              });
+            }}
+            onUploadAttachment={async (file) => {
+              reservations += 1;
+              return { attachmentId: `a-${reservations}`, byteLength: file.size, fileName: file.name, mimeType: file.type };
+            }}
+          />
+        ) : (
+          <div>People panel</div>
+        )}
+      </>
+    );
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root.render(<Harness />));
+  expect(document.body.textContent).toContain("notes.txt");
+
+  const people = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "People");
+  act(() => people?.click());
+  expect(document.body.textContent).toContain("People panel");
+  expect(document.body.textContent).not.toContain("notes.txt");
+
+  const chat = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Chat");
+  act(() => chat?.click());
+  expect(document.body.textContent).toContain("notes.txt");
+  expect(reservations).toBe(0);
   act(() => root.unmount());
 });
 
