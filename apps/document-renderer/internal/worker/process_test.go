@@ -93,6 +93,24 @@ func TestResetWritableTempRemovesBootEntries(t *testing.T) {
 	}
 }
 
+func TestResetWritableTempReturnsUndeletableEntryFailure(t *testing.T) {
+	root := t.TempDir()
+	protectedPath := filepath.Join(root, "retained-job-file")
+	if err := os.WriteFile(protectedPath, []byte("tenant bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removeFailure := errors.New("simulated undeletable job file")
+	err := resetWritableTempRemoving(root, func(path string) error {
+		if path == protectedPath {
+			return removeFailure
+		}
+		return os.RemoveAll(path)
+	})
+	if !errors.Is(err, removeFailure) {
+		t.Fatalf("reset writable temp error = %v; want undeletable-file failure", err)
+	}
+}
+
 func TestCleanupRendererScratchPreservesSiblingJob(t *testing.T) {
 	if err := ResetRendererScratch(); err != nil {
 		t.Fatalf("reset scratch: %v", err)

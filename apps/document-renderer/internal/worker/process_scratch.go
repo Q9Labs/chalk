@@ -27,16 +27,17 @@ func ResetWritableTemp() error {
 }
 
 func resetWritableTemp(root string) error {
+	return resetWritableTempRemoving(root, os.RemoveAll)
+}
+
+func resetWritableTempRemoving(root string, removeAll func(string) error) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return fmt.Errorf("read writable temp area: %w", err)
 	}
 	for _, entry := range entries {
 		path := filepath.Join(root, entry.Name())
-		if err := os.RemoveAll(path); err != nil {
-			if os.IsPermission(err) {
-				continue
-			}
+		if err := removeAll(path); err != nil {
 			return fmt.Errorf("wipe writable temp entry %q: %w", path, err)
 		}
 	}

@@ -42,6 +42,9 @@ func rendererRunsOnLambda() bool {
 }
 
 func main() {
+	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
+		os.Exit(render.RunChild(mode, os.Args[1:]))
+	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	lambdaRuntime := rendererRunsOnLambda()
 	if err := worker.MakeProcessNonDumpable(); err != nil {
@@ -53,9 +56,6 @@ func main() {
 		// ordinary dumpable process. Its compensating boundary is mandatory
 		// execution-environment recycling after every invocation.
 		logger.Error("renderer process protection unavailable; relying on execution-environment recycling", "error", err)
-	}
-	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
-		os.Exit(render.RunChild(mode, os.Args[1:]))
 	}
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
