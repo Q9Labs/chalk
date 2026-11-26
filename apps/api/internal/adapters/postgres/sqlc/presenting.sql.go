@@ -1160,6 +1160,25 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 }
 
 const listStalePresentingRenderJobs = `-- name: ListStalePresentingRenderJobs :many
+with expired as (
+    update presenting_render_jobs job
+    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
+    where job.status = 'leased'
+        and job.lease_expires_at <= $1
+        and job.attempt_count >= job.attempt_limit
+    returning job.tenant_id, job.space_id, job.document_id, job.kind
+),
+failed_documents as (
+    update presenting_documents document
+    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
+    from expired
+    where document.tenant_id = expired.tenant_id
+        and document.space_id = expired.space_id
+        and document.document_id = expired.document_id
+        and expired.kind in ('inventory', 'pages')
+        and document.status <> 'failed'
+    returning document.document_id
+)
 select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
        job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
        job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at

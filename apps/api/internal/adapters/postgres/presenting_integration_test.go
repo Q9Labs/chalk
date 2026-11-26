@@ -345,3 +345,44 @@ func TestPresentingZoomFailureLeavesReadyDocumentIntegration(t *testing.T) {
 		t.Fatalf("zoom failure left job=%q document=%q", jobStatus, documentStatus)
 	}
 }
+
+func TestPresentingFinalRenderAttemptTimeoutFailsDocumentIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	realNow := time.Now().UTC()
+	claimNow := realNow.Add(2 * time.Second)
+	leaseUntil := realNow.Add(-time.Minute)
+	var lease presenting.RenderLease
+	for attempt := 1; attempt <= presenting.RenderAttemptLimit; attempt++ {
+		token, _ := utilities.NewID()
+		claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, attempt, claimNow, leaseUntil, token, "document-renderer")
+		if err != nil {
+			t.Fatalf("claim attempt %d: %v", attempt, err)
+		}
+		lease = claimed.Job.RenderLease
+		claimNow = claimNow.Add(time.Second)
+	}
+	jobs, err := repository.ListStaleRenderJobs(ctx, claimNow, 10)
+	if err != nil {
+		t.Fatalf("list stale jobs: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Fatalf("final expired attempt was offered for another retry: %+v", jobs)
+	}
+	var jobStatus, documentStatus string
+	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
+		t.Fatalf("read job status: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
+		t.Fatalf("read document status: %v", err)
+	}
+	if jobStatus != "failed" || documentStatus != "failed" {
+		t.Fatalf("final timeout left job=%q document=%q", jobStatus, documentStatus)
+	}
+}
