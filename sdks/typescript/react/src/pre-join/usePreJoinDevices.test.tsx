@@ -129,6 +129,16 @@ it("starts devices off for a rejoin without overwriting the remembered choice", 
   expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject(saved);
 });
 
+it("keeps mic and camera preferences when only the speaker changes before rejoining", async () => {
+  const saved = { microphone: true, camera: true };
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify(saved));
+  const devices = await mountDevices({ startWithDevicesOff: true });
+
+  await act(async () => devices().selectSpeaker("speaker"));
+  devices().commit();
+  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ ...saved, speakerDeviceId: "speaker" });
+});
+
 it("remembers a device the visitor turns back on before rejoining", async () => {
   localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true }));
   const devices = await mountDevices({ startWithDevicesOff: true });

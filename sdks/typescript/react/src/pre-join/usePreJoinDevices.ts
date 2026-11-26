@@ -4,6 +4,7 @@ import { NO_DETECTED_DEVICES, watchMediaDevices, type DetectedMediaDevices } fro
 import { playSpeakerTestTone } from "../internal/speaker-test";
 import { useInputLevel } from "../internal/useInputLevel";
 import { useMirrorSetting } from "../internal/useMirrorSetting";
+import { openPreview, NOTHING_CAPTURED, type Capture } from "./preview-capture";
 import { readRememberedDevices, rememberDevices, type RememberedDevices } from "./remembered-devices";
 
 /**
@@ -54,26 +55,13 @@ export type PreJoinDevices = {
   readonly commit: () => PreJoinJoinOptions;
 };
 
-type Source = "microphone" | "camera";
-type Failure = "denied" | "missing" | "failed";
-type Capture = {
-  readonly microphone: MediaStreamTrack | null;
-  readonly camera: MediaStreamTrack | null;
-  readonly missing: ReadonlySet<Source>;
-  readonly denied: boolean;
-};
-const NOTHING_CAPTURED: Capture = { microphone: null, camera: null, missing: new Set(), denied: false };
-
 /**
  * Owns the one preview stream shown before joining: it opens the camera and microphone the visitor wants, follows device changes,
  * remembers the choice per browser, and stops every track when the component unmounts, so the camera light goes off.
  */
-export function usePreJoinDevices(options: PreJoinDevicesOptions = {}): PreJoinDevices {
-  const startWithDevicesOff = options.startWithDevicesOff === true;
-  const [choice, setChoice] = useState<RememberedDevices>(() => {
-    const remembered = readRememberedDevices() ?? { microphone: true, camera: true };
-    return startWithDevicesOff ? { ...remembered, microphone: false, camera: false } : remembered;
-  });
+export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevices {
+  const startWithDevicesOff = startsOff(options);
+  const [choice, setChoice] = useState<RememberedDevices>(() => initialChoice(startWithDevicesOff));
   const [access, setAccess] = useState<PreJoinAccess>("checking");
   const [devices, setDevices] = useState<DetectedMediaDevices | null>(null);
   const [capture, setCapture] = useState<Capture>(NOTHING_CAPTURED);
@@ -84,12 +72,20 @@ export function usePreJoinDevices(options: PreJoinDevicesOptions = {}): PreJoinD
   const stream = useRef<MediaStream | null>(null);
 
   const latestChoice = useRef(choice);
-  const choiceTouched = useRef(false);
-  const update = (change: Partial<RememberedDevices>) => {
-    choiceTouched.current = true;
+  const inputChoiceTouched = useRef(false);
+  const speakerChoiceTouched = useRef(false);
+  const writeChoice = (change: Partial<RememberedDevices>) => {
     const next = { ...latestChoice.current, ...change };
     latestChoice.current = next;
     setChoice(next);
+  };
+  const update = (change: Partial<RememberedDevices>) => {
+    inputChoiceTouched.current = true;
+    writeChoice(change);
+  };
+  const updateSpeaker = (change: Partial<RememberedDevices>) => {
+    speakerChoiceTouched.current = true;
+    writeChoice(change);
   };
 
   const microphones = devices?.audioinput ?? NO_DETECTED_DEVICES.audioinput;
@@ -237,7 +233,7 @@ export function usePreJoinDevices(options: PreJoinDevicesOptions = {}): PreJoinD
     setCameraOn: (on) => update({ camera: on }),
     selectMicrophone: (deviceId) => update({ microphoneDeviceId: deviceId }),
     selectCamera: (deviceId) => update({ cameraDeviceId: deviceId }),
-    selectSpeaker: (deviceId) => update({ speakerDeviceId: deviceId }),
+    selectSpeaker: (deviceId) => updateSpeaker({ speakerDeviceId: deviceId }),
     cameraTrack: cameraOn ? capture.camera : null,
     microphoneLevel,
     mirrored,
@@ -246,11 +242,28 @@ export function usePreJoinDevices(options: PreJoinDevicesOptions = {}): PreJoinD
     testSpeaker,
     joinOptions,
     commit: () => {
-      // The toggles are what the visitor asked for, so a camera that was busy once does not turn it off for good. Only picked device ids are kept.
-      if (granted && (!startWithDevicesOff || choiceTouched.current)) rememberDevices(latestChoice.current);
+      // Rejoin starts mic and camera off as a temporary safety default. Only a visitor's own input choice may replace the saved one; a speaker-only change must not save those temporary offs.
+      rememberCommitChoice(latestChoice.current, granted, startWithDevicesOff, inputChoiceTouched.current, speakerChoiceTouched.current);
       return joinOptions;
     },
   };
+}
+
+function startsOff(options: PreJoinDevicesOptions | undefined): boolean {
+  return options?.startWithDevicesOff === true;
+}
+
+function initialChoice(startWithDevicesOff: boolean): RememberedDevices {
+  const remembered = readRememberedDevices() ?? { microphone: true, camera: true };
+  return startWithDevicesOff ? { ...remembered, microphone: false, camera: false } : remembered;
+}
+
+function rememberCommitChoice(choice: RememberedDevices, granted: boolean, startWithDevicesOff: boolean, inputTouched: boolean, speakerTouched: boolean): void {
+  if (!granted) return;
+  if (!startWithDevicesOff || inputTouched) return rememberDevices(choice);
+  if (!speakerTouched) return;
+  const saved = readRememberedDevices() ?? { microphone: true, camera: true };
+  rememberDevices({ ...saved, ...(choice.speakerDeviceId ? { speakerDeviceId: choice.speakerDeviceId } : {}) });
 }
 
 /** A remembered device only counts while the browser still lists it. */
@@ -262,41 +275,4 @@ function knownDevice(deviceId: string | undefined, listed: readonly MediaDeviceI
 function adopt(current: { current: MediaStream | null }, next: MediaStream | null): void {
   current.current?.getTracks().forEach((track) => track.stop());
   current.current = next;
-}
-
-type Request = false | { readonly deviceId: string | undefined };
-
-/** `held` collects every stream as soon as the browser hands it over, so the caller can stop it before the whole sequence ends. */
-async function openPreview(microphone: Request, camera: Request, held: MediaStream[]): Promise<{ readonly stream: MediaStream | null; readonly missing: ReadonlySet<Source>; readonly denied: boolean }> {
-  const together = await attempt(microphone, camera, held);
-  if (together.stream) return { stream: together.stream, missing: new Set(), denied: false };
-  // One absent, busy or refused device fails a combined request, so each wanted device gets its own try.
-  const separate = microphone && camera ? [await attempt(microphone, false, held), await attempt(false, camera, held)] : [together];
-  const sources: readonly Source[] = microphone && camera ? ["microphone", "camera"] : [microphone ? "microphone" : "camera"];
-  const tracks = separate.flatMap((result) => result.stream?.getTracks() ?? []);
-  const missing = new Set(sources.filter((_, index) => separate[index]?.stream === undefined));
-  return { stream: tracks.length > 0 ? new MediaStream(tracks) : null, missing, denied: tracks.length === 0 && separate.some((result) => result.failure === "denied") };
-}
-
-async function attempt(microphone: Request, camera: Request, held: MediaStream[]): Promise<{ readonly stream?: MediaStream; readonly failure?: Failure }> {
-  if (!microphone && !camera) return { failure: "missing" };
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: constraint(microphone), video: constraint(camera) });
-    held.push(stream);
-    return { stream };
-  } catch (cause) {
-    return { failure: classify(cause) };
-  }
-}
-
-function constraint(request: Request): boolean | MediaTrackConstraints {
-  if (!request) return false;
-  return request.deviceId === undefined ? true : { deviceId: { exact: request.deviceId } };
-}
-
-function classify(cause: unknown): Failure {
-  const name = cause instanceof DOMException ? cause.name : "";
-  if (name === "NotAllowedError" || name === "SecurityError") return "denied";
-  if (name === "NotFoundError" || name === "OverconstrainedError") return "missing";
-  return "failed";
 }
