@@ -9,9 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
@@ -33,20 +30,19 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 		return err
 	}
 	defer cancel()
-	resources, err := openCommandResources(ctx, options.apply, stderr)
+	runtime, err := openCommandRuntime(ctx, options.apply, stderr)
 	if err != nil {
 		return err
 	}
-	defer resources.close(stderr)
-	ctx, batchSpan := resources.tracer.Start(ctx, "recording.transcription.rearm", trace.WithAttributes(attribute.String("chalk.journey.id", rearmJourneyID(ctx).String())))
-	defer batchSpan.End()
-	inventory, err := loadInventory(ctx, resources.repository, options)
+	defer runtime.close(stderr)
+	ctx = runtime.ctx
+	inventory, err := loadInventory(ctx, runtime.repository, options)
 	if err != nil {
 		return err
 	}
 	result := report{DryRun: !options.apply, Recordings: []recordingOutcome{}}
 	recordMissingRecordings(&result, inventory.missing)
-	if err := processInventory(ctx, resources, options, inventory, &result); err != nil {
+	if err := processInventory(ctx, runtime.commandResources, options, inventory, &result); err != nil {
 		return errors.Join(writeReport(out, result), err)
 	}
 	return writeReport(out, result)

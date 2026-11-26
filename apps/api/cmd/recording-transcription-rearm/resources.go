@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -27,35 +28,50 @@ type commandResources struct {
 	telemetry  func(io.Writer)
 }
 
-func openCommandResources(ctx context.Context, apply bool, stderr io.Writer) (commandResources, error) {
+type commandRuntime struct {
+	commandResources
+	ctx       context.Context
+	batchSpan trace.Span
+}
+
+func openCommandRuntime(ctx context.Context, apply bool, stderr io.Writer) (commandRuntime, error) {
 	url := os.Getenv(config.DatabaseURL)
 	if url == "" {
-		return commandResources{}, errors.New("CHALK_DATABASE_URL required")
+		return commandRuntime{}, errors.New("CHALK_DATABASE_URL required")
 	}
 	telemetry, err := startRearmTelemetry(ctx)
 	if err != nil {
-		return commandResources{}, err
+		return commandRuntime{}, err
 	}
-	pool, err := openRearmDatabase(ctx, apply, url)
-	if err != nil {
+	tracer := otel.Tracer("github.com/q9labs/chalk/apps/api/cmd/recording-transcription-rearm")
+	spanCtx, batchSpan := tracer.Start(ctx, "recording.transcription.rearm", trace.WithAttributes(attribute.String("chalk.journey.id", rearmJourneyID(ctx).String())))
+	fail := func(err error) (commandRuntime, error) {
+		batchSpan.End()
 		telemetry(stderr)
-		return commandResources{}, err
+		return commandRuntime{}, err
+	}
+	pool, err := openRearmDatabase(spanCtx, apply, url)
+	if err != nil {
+		return fail(err)
 	}
 	store, err := openRearmObjectStore()
 	if err != nil {
 		pool.Close()
-		telemetry(stderr)
-		return commandResources{}, err
+		return fail(err)
 	}
-	return commandResources{
-		repository: postgres.NewRecordingPipelineRepositoryWithPool(pool), store: store,
-		tracer: otel.Tracer("github.com/q9labs/chalk/apps/api/cmd/recording-transcription-rearm"), pool: pool, telemetry: telemetry,
+	return commandRuntime{
+		commandResources: commandResources{
+			repository: postgres.NewRecordingPipelineRepositoryWithPool(pool), store: store,
+			tracer: tracer, pool: pool, telemetry: telemetry,
+		},
+		ctx: spanCtx, batchSpan: batchSpan,
 	}, nil
 }
 
-func (resources commandResources) close(stderr io.Writer) {
-	resources.pool.Close()
-	resources.telemetry(stderr)
+func (runtime commandRuntime) close(stderr io.Writer) {
+	runtime.pool.Close()
+	runtime.batchSpan.End()
+	runtime.telemetry(stderr)
 }
 
 func startRearmTelemetry(ctx context.Context) (func(io.Writer), error) {
