@@ -73,6 +73,7 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
 
   const latestChoice = useRef(choice);
   const inputChoiceTouched = useRef(false);
+  const speakerChoiceTouched = useRef(false);
   const writeChoice = (change: Partial<RememberedDevices>) => {
     const next = { ...latestChoice.current, ...change };
     latestChoice.current = next;
@@ -228,7 +229,10 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
     setCameraOn: (on) => update({ camera: on }),
     selectMicrophone: (deviceId) => update({ microphoneDeviceId: deviceId }),
     selectCamera: (deviceId) => update({ cameraDeviceId: deviceId }),
-    selectSpeaker: (deviceId) => writeChoice({ speakerDeviceId: deviceId }),
+    selectSpeaker: (deviceId) => {
+      speakerChoiceTouched.current = true;
+      writeChoice({ speakerDeviceId: deviceId });
+    },
     cameraTrack: cameraOn ? capture.camera : null,
     microphoneLevel,
     mirrored,
@@ -237,8 +241,8 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
     testSpeaker,
     joinOptions,
     commit: () => {
-      // Rejoin starts mic and camera off as a temporary safety default. Only a visitor's own input choice may replace the saved one; a speaker-only change must not save those temporary offs.
-      rememberCommitChoice(latestChoice.current, granted, startWithDevicesOff, inputChoiceTouched.current);
+      // Rejoin starts mic and camera off as a temporary safety default. Input choices may replace the saved inputs; only an explicit speaker selection may replace the saved speaker.
+      rememberCommitChoice(latestChoice.current, granted, startWithDevicesOff, inputChoiceTouched.current, speakerChoiceTouched.current);
       return joinOptions;
     },
   };
@@ -253,11 +257,19 @@ function initialChoice(startWithDevicesOff: boolean): RememberedDevices {
   return startWithDevicesOff ? { ...remembered, microphone: false, camera: false } : remembered;
 }
 
-function rememberCommitChoice(choice: RememberedDevices, granted: boolean, startWithDevicesOff: boolean, inputTouched: boolean): void {
+function rememberCommitChoice(choice: RememberedDevices, granted: boolean, startWithDevicesOff: boolean, inputTouched: boolean, speakerTouched: boolean): void {
   if (!granted) return;
-  if (!startWithDevicesOff || inputTouched) return rememberDevices(choice);
-  const saved = readRememberedDevices() ?? { microphone: true, camera: true };
-  rememberDevices({ ...saved, speakerDeviceId: choice.speakerDeviceId ?? saved.speakerDeviceId });
+  if (!startWithDevicesOff) return rememberDevices(choice);
+  if (inputTouched) {
+    const savedSpeaker = readRememberedDevices()?.speakerDeviceId;
+    const { speakerDeviceId: chosenSpeaker, ...inputChoice } = choice;
+    const speakerDeviceId = speakerTouched ? chosenSpeaker : savedSpeaker;
+    return rememberDevices({ ...inputChoice, ...(speakerDeviceId ? { speakerDeviceId } : {}) });
+  }
+  if (!speakerTouched) return;
+  const saved = readRememberedDevices();
+  if (!saved) return;
+  rememberDevices({ ...saved, speakerDeviceId: choice.speakerDeviceId });
 }
 
 /** A remembered device only counts while the browser still lists it. */

@@ -140,12 +140,19 @@ it("keeps mic and camera preferences when only the speaker changes before rejoin
 });
 
 it("keeps a speaker remembered in another tab before rejoining", async () => {
-  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true }));
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true, speakerDeviceId: "speaker" }));
   const devices = await mountDevices({ startWithDevicesOff: true });
 
-  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true, speakerDeviceId: "speaker" }));
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true, speakerDeviceId: "other-speaker" }));
   devices().commit();
-  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ microphone: true, camera: true, speakerDeviceId: "speaker" });
+  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ microphone: true, camera: true, speakerDeviceId: "other-speaker" });
+});
+
+it("leaves preferences absent when an untouched rejoin had none", async () => {
+  const devices = await mountDevices({ startWithDevicesOff: true });
+
+  devices().commit();
+  expect(localStorage.getItem("chalk.prejoin-devices")).toBeNull();
 });
 
 it("remembers a device the visitor turns back on before rejoining", async () => {
