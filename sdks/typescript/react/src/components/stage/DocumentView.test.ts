@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type { PresentingDocumentManifest } from "@q9labsai/chalk-client";
 import { documentKeyTurnEvent, documentSourceAttachment, downloadDocumentSource } from "./DocumentView";
 
@@ -18,10 +18,19 @@ it("ignores document page keys from editable controls and handled events", () =>
   textarea.remove();
 });
 
-it("resolves a fresh source URL on every download click path", async () => {
+it("resolves a fresh source URL on every download click path without navigating", async () => {
   let calls = 0;
   const client = { chat: { files: { resolveUrl: async () => `signed-${++calls}` } } } as never;
+  const before = window.location.href;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(new Blob(["file"]), { status: 200 })),
+  );
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:document"), revokeObjectURL: vi.fn() }));
   await downloadDocumentSource(client, manifest, "deck.pdf");
   await downloadDocumentSource(client, manifest, "deck.pdf");
   expect(calls).toBe(2);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(window.location.href).toBe(before);
+  vi.unstubAllGlobals();
 });

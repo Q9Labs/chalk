@@ -219,7 +219,15 @@ export const ChatPanelSurface = React.memo(
       if (fileInputRef.current) fileInputRef.current.value = "";
       return batch.accepted;
     };
-    const retainDrop = useChatDropRouting({ droppedFiles, onDroppedFilesChange, stageFiles: selectFiles });
+    const retainDrop = useChatDropRouting({
+      droppedFiles,
+      onDroppedFilesChange,
+      stageFiles: (files) => {
+        const alreadyStaged = stagedFiles;
+        const accepted = selectFiles(files, { deferUploads: true });
+        return files.filter((file) => alreadyStaged.includes(file) || accepted.includes(file));
+      },
+    });
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {

@@ -22,10 +22,20 @@ export function documentSourceAttachment(manifest: PresentingDocumentManifest): 
 
 export async function downloadDocumentSource(client: SpaceClient, manifest: PresentingDocumentManifest, fileName: string): Promise<void> {
   const url = await client.chat.files.resolveUrl(documentSourceAttachment(manifest));
+  // Fetch the bytes so cross-origin image/PDF URLs save instead of navigating; the download attribute is ignored there.
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Document download failed (${response.status})`);
+  const blobUrl = URL.createObjectURL(await response.blob());
   const link = window.document.createElement("a");
-  link.href = url;
+  link.href = blobUrl;
   link.download = fileName;
-  link.click();
+  window.document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+  }
 }
 
 export function documentKeyTurnEvent(event: Pick<KeyboardEvent, "key" | "target" | "defaultPrevented">): boolean {
