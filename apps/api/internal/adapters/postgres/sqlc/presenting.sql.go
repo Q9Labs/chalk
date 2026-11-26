@@ -19,6 +19,10 @@ with candidate as (
         on document.tenant_id = job.tenant_id
         and document.space_id = job.space_id
         and document.document_id = job.document_id
+    join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
     where job.status in ('queued', 'leased')
         and job.available_at <= $4
         and (job.status = 'queued' or job.lease_expires_at <= now())
@@ -26,6 +30,11 @@ with candidate as (
         and job.attempt_count + 1 = $5
         and ($6::uuid is null or job.job_id = $6::uuid)
         and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
+        and attachment.cleanup_claim_token is null
+        and (
+            attachment.status = 'attached'
+            or (attachment.status = 'ready' and attachment.expires_at > now())
+        )
     order by job.available_at, job.created_at, job.job_id
     for update of job skip locked
     limit 1
@@ -1167,9 +1176,18 @@ join presenting_documents document
     on document.tenant_id = job.tenant_id
     and document.space_id = job.space_id
     and document.document_id = job.document_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
   and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
+  and attachment.cleanup_claim_token is null
+  and (
+    attachment.status = 'attached'
+    or (attachment.status = 'ready' and attachment.expires_at > now())
+  )
   and (
     (job.status = 'queued' and job.available_at <= $1)
     or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
@@ -1432,17 +1450,27 @@ func (q *Queries) SetPresentingDocumentInventory(ctx context.Context, arg SetPre
 }
 
 const terminalizePresentingRenderJobs = `-- name: TerminalizePresentingRenderJobs :exec
+with candidates as (
+    select job.tenant_id, job.space_id, job.document_id, job.job_id
+    from presenting_render_jobs job
+    join presenting_documents document
+        on document.tenant_id = job.tenant_id
+        and document.space_id = job.space_id
+        and document.document_id = job.document_id
+    where job.status in ('queued', 'leased')
+        and (
+            document.status = 'failed'
+            or (document.status = 'ready' and job.kind = 'pages')
+        )
+    for update of job skip locked
+)
 update presenting_render_jobs job
 set status = 'failed', error_code = 'document_terminal', error_message = 'Document reached a terminal state', completed_at = now(), updated_at = now()
-from presenting_documents document
-where document.tenant_id = job.tenant_id
-    and document.space_id = job.space_id
-    and document.document_id = job.document_id
-    and job.status in ('queued', 'leased')
-    and (
-        document.status = 'failed'
-        or (document.status = 'ready' and job.kind = 'pages')
-    )
+from candidates
+where job.tenant_id = candidates.tenant_id
+    and job.space_id = candidates.space_id
+    and job.document_id = candidates.document_id
+    and job.job_id = candidates.job_id
 `
 
 func (q *Queries) TerminalizePresentingRenderJobs(ctx context.Context) error {

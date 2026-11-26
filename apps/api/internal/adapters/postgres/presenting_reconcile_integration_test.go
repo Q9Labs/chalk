@@ -66,15 +66,15 @@ func TestPresentingClaimFailsTimeoutDocumentSiblingsIntegration(t *testing.T) {
 	repository := NewPresentingRepository(pool)
 	fixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
-	documentID, inventoryJobID, siblingJobID := newTestID(t), newTestID(t), newTestID(t)
-	mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status)
-		values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing')`,
-		uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(documentID), uuid(newTestID(t)), uuid(fixture.participant))
+	documentID, timedOutJobID, siblingJobID := newTestID(t), newTestID(t), newTestID(t)
+	mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,page_count)
+		values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing',10)`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(documentID), uuid(fixture.attachment), uuid(fixture.participant))
 	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
-		values($1,$2,$3,$4,'inventory',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes')`,
-		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(inventoryJobID))
+		values($1,$2,$3,$4,'pages',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes')`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(timedOutJobID))
 	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
-		values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`,
+		values($1,$2,$3,$4,'pages',2,2,'queued',now()-interval '1 minute')`,
 		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(siblingJobID))
 	token, _ := utilities.NewID()
 	now := time.Now().UTC()
@@ -82,16 +82,50 @@ func TestPresentingClaimFailsTimeoutDocumentSiblingsIntegration(t *testing.T) {
 	if !errors.Is(err, presenting.ErrNoRenderJob) {
 		t.Fatalf("same-pass timeout sibling claim error = %v", err)
 	}
-	var documentStatus, inventoryCode, siblingStatus, siblingCode string
-	if err := pool.QueryRow(ctx, `select document.status, inventory.error_code, sibling.status, sibling.error_code
+	var documentStatus, timedOutCode, siblingStatus, siblingCode string
+	if err := pool.QueryRow(ctx, `select document.status, timed_out.error_code, sibling.status, sibling.error_code
 		from presenting_documents document
-		join presenting_render_jobs inventory on inventory.document_id=document.document_id and inventory.job_id=$2
+		join presenting_render_jobs timed_out on timed_out.document_id=document.document_id and timed_out.job_id=$2
 		join presenting_render_jobs sibling on sibling.document_id=document.document_id and sibling.job_id=$3
-		where document.tenant_id=$1 and document.document_id=$4`, uuid(fixture.tenant), uuid(inventoryJobID), uuid(siblingJobID), uuid(documentID)).Scan(&documentStatus, &inventoryCode, &siblingStatus, &siblingCode); err != nil {
+		where document.tenant_id=$1 and document.document_id=$4`, uuid(fixture.tenant), uuid(timedOutJobID), uuid(siblingJobID), uuid(documentID)).Scan(&documentStatus, &timedOutCode, &siblingStatus, &siblingCode); err != nil {
 		t.Fatalf("read same-pass timeout rows: %v", err)
 	}
-	if documentStatus != "failed" || inventoryCode != "timeout" || siblingStatus != "failed" || siblingCode != "document_terminal" {
-		t.Fatalf("same-pass timeout left document=%q inventory=%q sibling=%q/%q", documentStatus, inventoryCode, siblingStatus, siblingCode)
+	if documentStatus != "failed" || timedOutCode != "timeout" || siblingStatus != "failed" || siblingCode != "document_terminal" {
+		t.Fatalf("same-pass timeout left document=%q timed_out=%q sibling=%q/%q", documentStatus, timedOutCode, siblingStatus, siblingCode)
+	}
+}
+
+func TestPresentingReconcileSkipsExpiredSourceJobsIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	expiredFixture := newPresentingFixture(t, pool, "{publishScreen}")
+	goodFixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	mustExec(t, pool, `delete from presenting_render_jobs`)
+	if _, err := repository.CreateDocument(ctx, expiredFixture.subject, expiredFixture.attachment, newTestID(t)); err != nil {
+		t.Fatalf("create expired-source document: %v", err)
+	}
+	good, err := repository.CreateDocument(ctx, goodFixture.subject, goodFixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create good document: %v", err)
+	}
+	mustExec(t, pool, `update sync_chat_attachments set expires_at=now()-interval '1 minute' where tenant_id=$1 and space_id=$2 and attachment_id=$3`, uuid(expiredFixture.tenant), uuid(expiredFixture.space), uuid(expiredFixture.attachment))
+	invoker := &recordingRenderInvoker{}
+	signer, err := presenting.NewCapabilitySigner(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := presenting.NewService(repository, nil, invoker).WithCapabilitySigner(signer).WithAvailability(func(context.Context) bool { return true })
+	stale, invoked, err := service.ReconcileRenderJobs(ctx, presenting.ReconcileBatchLimit)
+	if err != nil {
+		t.Fatalf("reconcile expired-source jobs: %v", err)
+	}
+	if stale != 1 || invoked != 1 {
+		t.Fatalf("expired-source reconcile stale=%d invoked=%d; want one good job only", stale, invoked)
+	}
+	invokedJobs := invoker.invoked()
+	if len(invokedJobs) != 1 || invokedJobs[0] != good.InventoryJobID {
+		t.Fatalf("expired-source invoked jobs = %+v, want only good inventory job %s", invokedJobs, good.InventoryJobID)
 	}
 }
 
@@ -111,18 +145,18 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	select tenant_id,space_id,document_id,gen_random_uuid(),'pages',1,1,'queued',now()-interval '1 minute'
 	from terminal_documents`, uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(fixture.participant))
 	mustExec(t, pool, `with timeout_document as (
-		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status)
-		values($1,$2,$3,gen_random_uuid(),gen_random_uuid(),$4,1,'timeout-deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing')
+		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,page_count)
+		values($1,$2,$3,gen_random_uuid(),gen_random_uuid(),$4,1,'timeout-deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing',10)
 		returning tenant_id,space_id,document_id
-	), expired_inventory as (
+	), expired_pages as (
 		insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
-		select tenant_id,space_id,document_id,gen_random_uuid(),'inventory',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes'
+		select tenant_id,space_id,document_id,gen_random_uuid(),'pages',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes'
 		from timeout_document
 		returning job_id
 	)
 	insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
 	select tenant_id,space_id,document_id,gen_random_uuid(),'pages',g,g,'queued',now()-interval '1 minute'
-	from timeout_document, generate_series(1,10) g`, uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(fixture.participant))
+	from timeout_document, generate_series(2,11) g`, uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(fixture.participant))
 	good, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
 	if err != nil {
 		t.Fatalf("create good document: %v", err)
