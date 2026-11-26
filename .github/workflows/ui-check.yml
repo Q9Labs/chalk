@@ -110,7 +110,8 @@ jobs:
   report:
     name: UI check report
     needs: ui-check
-    if: always() && needs.ui-check.outputs.ui == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # A run that a newer push superseded (concurrency cancels it) must not overwrite the comment with "did not finish".
+    if: always() && needs.ui-check.result != 'cancelled' && needs.ui-check.outputs.ui == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
