@@ -220,6 +220,31 @@ where document.tenant_id = expired.tenant_id
     and expired.kind in ('inventory', 'pages')
     and document.status = 'preparing';
 
+-- name: LockPresentingRenderSweepAttachments :many
+with attachment_keys as (
+    select distinct attachment.tenant_id, attachment.space_id, attachment.attachment_id
+    from presenting_render_jobs job
+    join presenting_documents document
+        on document.tenant_id = job.tenant_id
+        and document.space_id = job.space_id
+        and document.document_id = job.document_id
+    join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
+    where job.status in ('queued', 'leased')
+        and attachment.status <> 'attached'
+        and attachment.expires_at <= now()
+)
+select attachment.tenant_id, attachment.space_id, attachment.attachment_id
+from sync_chat_attachments attachment
+join attachment_keys keys
+    on keys.tenant_id = attachment.tenant_id
+    and keys.space_id = attachment.space_id
+    and keys.attachment_id = attachment.attachment_id
+order by attachment.tenant_id, attachment.space_id, attachment.attachment_id
+for update of attachment;
+
 -- name: LockPresentingRenderSweepDocuments :many
 with document_keys as (
     select distinct job.tenant_id, job.space_id, job.document_id

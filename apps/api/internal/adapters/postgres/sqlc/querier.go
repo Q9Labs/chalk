@@ -390,6 +390,7 @@ type Querier interface {
 	LockMediaPlaneKillSwitchForUpdate(ctx context.Context) (bool, error)
 	LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error)
 	LockPresentingRenderDocument(ctx context.Context, arg LockPresentingRenderDocumentParams) (pgtype.UUID, error)
+	LockPresentingRenderSweepAttachments(ctx context.Context) ([]LockPresentingRenderSweepAttachmentsRow, error)
 	LockPresentingRenderSweepDocuments(ctx context.Context) ([]LockPresentingRenderSweepDocumentsRow, error)
 	LockPublicEpisodeAdmission(ctx context.Context, arg LockPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
 	LockReadyTelemetryOutbox(ctx context.Context) ([]LockReadyTelemetryOutboxRow, error)

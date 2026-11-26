@@ -14,6 +14,9 @@ import (
 )
 
 func reapPresentingRenderJobs(ctx context.Context, q *sqlc.Queries) error {
+	if _, err := q.LockPresentingRenderSweepAttachments(ctx); err != nil {
+		return fmt.Errorf("lock presenting render sweep attachments: %w", err)
+	}
 	if _, err := q.LockPresentingRenderSweepDocuments(ctx); err != nil {
 		return fmt.Errorf("lock presenting render sweep documents: %w", err)
 	}
@@ -277,6 +280,9 @@ func presentingRenderUploadKey(ctx context.Context, q *sqlc.Queries, lease prese
 
 func lockPresentingRenderDocument(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {
 	if _, err := q.LockPresentingRenderDocument(ctx, sqlc.LockPresentingRenderDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID)}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return presenting.ErrLeaseLost
+		}
 		return fmt.Errorf("lock presenting render document: %w", err)
 	}
 	return nil

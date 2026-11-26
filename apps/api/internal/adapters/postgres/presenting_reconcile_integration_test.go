@@ -183,7 +183,7 @@ func TestPresentingSweepAndFailRenderJobDoNotDeadlockIntegration(t *testing.T) {
 		mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
 			values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(terminalJobID))
 		mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
-			values($1,$2,$3,$4,'pages',2,2,'leased',1,3,$5,'document-renderer',now()+interval '1 minute',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(targetJobID), uuid(leaseToken))
+			values($1,$2,$3,$4,'pages',2,2,'leased',1,3,$5,'document-renderer',now()-interval '1 minute',now()-interval '2 minutes')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(targetJobID), uuid(leaseToken))
 		lease := presenting.RenderLease{TenantID: fixture.tenant, SpaceID: fixture.space, DocumentID: documentID, JobID: targetJobID, Attempt: 1, LeaseToken: leaseToken, LeaseOwner: "document-renderer"}
 		start := make(chan struct{})
 		errorsCh := make(chan error, 2)

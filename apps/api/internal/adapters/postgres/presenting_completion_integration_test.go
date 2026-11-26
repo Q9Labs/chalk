@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -67,5 +68,24 @@ $$`)
 	}
 	if jobStatus != "leased" || documentStatus != "preparing" {
 		t.Fatalf("interrupted completion left job=%q document=%q", jobStatus, documentStatus)
+	}
+}
+
+func TestPresentingLateRenderCallbackAfterDocumentDeleteReturnsLeaseLostIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	lease := presenting.RenderLease{TenantID: document.TenantID, SpaceID: document.SpaceID, DocumentID: document.DocumentID, JobID: document.InventoryJobID, Attempt: 1, LeaseToken: newTestID(t), LeaseOwner: "document-renderer"}
+	mustExec(t, pool, `delete from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
+	if err := repository.CompleteRenderJob(ctx, lease); !errors.Is(err, presenting.ErrLeaseLost) {
+		t.Fatalf("late completion error = %v; want lease lost", err)
+	}
+	if err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "late"}); !errors.Is(err, presenting.ErrLeaseLost) {
+		t.Fatalf("late failure error = %v; want lease lost", err)
 	}
 }
