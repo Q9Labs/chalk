@@ -1,5 +1,5 @@
 import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
-import { ShellStyles } from "@q9labsai/chalk-react/utils";
+import { MediaGlyphStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
@@ -87,7 +87,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{joinTitle(spaceName, rejoin)}</h1>;
   const preview = (
     <>
-      <ShellStyles />
+      <MediaGlyphStyles />
       <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
         {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)]">{card}</div> : null}
       </PreviewTile>

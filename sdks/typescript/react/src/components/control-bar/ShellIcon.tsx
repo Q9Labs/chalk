@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { MEDIA_GLYPH_CSS, MEDIA_GLYPH_REDUCED_CSS } from "./media-glyph-css";
 
 const GLYPHS = {
   flip: (
@@ -108,6 +109,17 @@ const GLYPHS = {
   ),
 };
 
+const MEDIA_GLYPH_STYLE = `${MEDIA_GLYPH_CSS}@media (prefers-reduced-motion: reduce) {${MEDIA_GLYPH_REDUCED_CSS}}`;
+
+/** The glyph's slash and startup motion, without the rest of the call shell. */
+export function MediaGlyphStyles() {
+  return (
+    <style href="chalk-media-glyph" precedence="default">
+      {MEDIA_GLYPH_STYLE}
+    </style>
+  );
+}
+
 type PathLength = { readonly pathLength?: 1 };
 const MEDIA_BODY = {
   mic: (p: PathLength) => (
@@ -127,7 +139,7 @@ const MEDIA_BODY = {
 /**
  * The microphone or camera glyph. A slash draws across it while the device is off, and while the
  * device starts a light runs along its outline (`busy`), so the button needs no separate loader.
- * Motion lives in ShellStyles, keyed on the data attributes.
+ * MediaGlyphStyles, or the full ShellStyles in a call, keys the motion on the data attributes.
  */
 export function MediaGlyph({ kind, slashed, busy, size = 20 }: { readonly kind: keyof typeof MEDIA_BODY; readonly slashed: boolean; readonly busy: boolean; readonly size?: number }) {
   const cut = useId();
