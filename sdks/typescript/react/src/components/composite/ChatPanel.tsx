@@ -11,7 +11,7 @@ import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScr
 import { uploadChatAttachment } from "./chat-file-upload";
 import { describeChatUploadFile, prepareChatAttachmentBatch } from "./chat-upload-file";
 import type { ChatMessage } from "./chat-types";
-import { chatSelectionNotice, useAutoGrowTextarea, useChatDropRouting, useStagedFilePreviews } from "./chat-composer-effects";
+import { chatSelectionNotice, keepRetainedFiles, useAutoGrowTextarea, useChatDropRouting, useStagedFilePreviews } from "./chat-composer-effects";
 
 export type { ChatMessage } from "./chat-types";
 
@@ -220,13 +220,8 @@ export const ChatPanelSurface = React.memo(
       return batch.accepted;
     };
     const retainDrop = useChatDropRouting({
-      droppedFiles,
-      onDroppedFilesChange,
-      stageFiles: (files) => {
-        const alreadyStaged = stagedFiles;
-        const accepted = selectFiles(files, { deferUploads: true });
-        return files.filter((file) => alreadyStaged.includes(file) || accepted.includes(file));
-      },
+      droppedFiles, onDroppedFilesChange,
+      stageFiles: (files) => keepRetainedFiles(files, stagedFiles, selectFiles(files, { deferUploads: true })),
     });
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;

@@ -2,6 +2,11 @@ import { useEffect, useState, type RefObject } from "react";
 import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile } from "@q9labsai/chalk-client";
 import type { prepareChatAttachmentBatch } from "./chat-upload-file";
 
+/** A retained drop restages on remount; keep the files already staged and the ones the composer accepts now. */
+export function keepRetainedFiles(files: readonly ChatUploadFile[], staged: readonly ChatUploadFile[], accepted: readonly ChatUploadFile[]): readonly ChatUploadFile[] {
+  return files.filter((file) => staged.includes(file) || accepted.includes(file));
+}
+
 /** Object URLs for the staged image files, revoked when the files change or the composer unmounts. */
 export function useStagedFilePreviews(stagedFiles: readonly ChatUploadFile[]): ReadonlyMap<ChatUploadFile, string> {
   const [previews, setPreviews] = useState<ReadonlyMap<ChatUploadFile, string>>(new Map());
