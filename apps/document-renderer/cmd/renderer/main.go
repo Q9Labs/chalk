@@ -48,6 +48,10 @@ func main() {
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
 	}
+	if err := worker.ResetRendererScratch(); err != nil {
+		logger.Error("renderer scratch reset failed", "error", err)
+		os.Exit(1)
+	}
 	if benchmarkFile := os.Getenv("RENDER_BENCHMARK_FILE"); benchmarkFile != "" {
 		if err := runBenchmark(benchmarkFile); err != nil {
 			logger.Error("benchmark failed", "error", err)

@@ -189,32 +189,43 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 	go func() { waitDone <- command.Wait() }()
 
 	var waitErr error
-	waitFinished, readersFinished := false, false
-	waitChannel, readerChannel := waitDone, readerDone
-	for !waitFinished || !readersFinished {
+	interrupted := false
+	select {
+	case waitErr = <-waitDone:
+	case <-childCtx.Done():
+		interrupted = true
+	}
+
+	// A parser child can spawn descendants and then exit successfully. Always
+	// kill the whole group before trusting the result, not only after a timeout.
+	killIsolatedChildProcessGroup(pgid, command.Process)
+	if interrupted {
+		closePipe(stdoutRead)
+		closePipe(stderrRead)
 		select {
-		case waitErr = <-waitChannel:
-			waitFinished = true
-			waitChannel = nil
-		case <-readerChannel:
-			readersFinished = true
-			readerChannel = nil
-		case <-childCtx.Done():
-			killIsolatedChildProcessGroup(pgid, command.Process)
-			closePipe(stdoutRead)
-			closePipe(stderrRead)
-			select {
-			case waitErr = <-waitDone:
-			case <-time.After(2 * time.Second):
-			}
-			select {
-			case <-readerDone:
-			case <-time.After(200 * time.Millisecond):
-			}
-			if childCtx.Err() == context.DeadlineExceeded {
-				return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
-			}
-			return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
+		case waitErr = <-waitDone:
+		case <-time.After(2 * time.Second):
+		}
+		select {
+		case <-readerDone:
+		case <-time.After(200 * time.Millisecond):
+		}
+		if childCtx.Err() == context.DeadlineExceeded {
+			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
+		}
+		return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
+	}
+
+	// The direct child has been reaped. Killing its group makes descendants close
+	// the pipes; give the readers a short bounded chance to drain diagnostics.
+	select {
+	case <-readerDone:
+	case <-time.After(300 * time.Millisecond):
+		closePipe(stdoutRead)
+		closePipe(stderrRead)
+		select {
+		case <-readerDone:
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 	closePipe(stdoutRead)
@@ -286,15 +297,56 @@ func renderedPrefix(sourcePath string, page, target int) string {
 	return filepath.Join(filepath.Dir(sourcePath), fmt.Sprintf("page-%d-%d", page, target))
 }
 
-func writeSource(source []byte) (string, func(), error) {
-	directory, err := os.MkdirTemp("", "chalk-render-")
-	if err != nil {
-		return "", func() {}, err
+const rendererScratchRoot = "/tmp/chalk-renderer"
+
+// ResetRendererScratch runs once when the runtime process boots. Lambda may
+// preserve /tmp for a reused execution environment, so no renderer scratch may
+// survive from a previous job or runtime.
+func ResetRendererScratch() error {
+	if err := os.RemoveAll(rendererScratchRoot); err != nil {
+		return fmt.Errorf("wipe renderer scratch area: %w", err)
 	}
+	return nil
+}
+
+func writeSource(source []byte) (string, func() error, error) {
+	if err := os.MkdirAll(rendererScratchRoot, 0o700); err != nil {
+		return "", func() error { return nil }, err
+	}
+	directory, err := os.MkdirTemp(rendererScratchRoot, "job-")
+	if err != nil {
+		return "", func() error { return nil }, err
+	}
+	cleanup := func() error { return cleanupRendererScratch(directory) }
 	path := filepath.Join(directory, "source")
 	if err := os.WriteFile(path, source, 0o600); err != nil {
-		os.RemoveAll(directory)
-		return "", func() {}, err
+		_ = cleanup()
+		return "", func() error { return nil }, err
 	}
-	return path, func() { os.RemoveAll(directory) }, nil
+	return path, cleanup, nil
+}
+
+func cleanupRendererScratch(directory string) error {
+	removeErr := os.RemoveAll(directory)
+	entries, readErr := os.ReadDir(rendererScratchRoot)
+	unexpected := 0
+	if readErr == nil {
+		unexpected = len(entries)
+	} else if os.IsNotExist(readErr) {
+		readErr = nil
+	}
+	clearErr := os.RemoveAll(rendererScratchRoot)
+	if removeErr != nil {
+		return fmt.Errorf("remove renderer job scratch: %w", removeErr)
+	}
+	if readErr != nil {
+		return fmt.Errorf("inspect renderer scratch area: %w", readErr)
+	}
+	if clearErr != nil {
+		return fmt.Errorf("clear renderer scratch area: %w", clearErr)
+	}
+	if unexpected != 0 {
+		return fmt.Errorf("renderer scratch area retained %d unexpected entries", unexpected)
+	}
+	return nil
 }

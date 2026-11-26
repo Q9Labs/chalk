@@ -35,9 +35,17 @@ func init() {
 
 func init() {
 	if os.Getenv("RENDER_CHILD_MODE") == "selftest" {
+		allowed := map[string]bool{"RENDER_CHILD_MODE": true, "LD_LIBRARY_PATH": true, "RENDERER_TIMEOUT_PROBE": true}
+		for _, item := range os.Environ() {
+			key, _, _ := strings.Cut(item, "=")
+			if !allowed[key] {
+				fmt.Fprintln(os.Stderr, "unexpected child environment key", key)
+				os.Exit(16)
+			}
+		}
 		os.Exit(0)
 	}
-	if os.Getenv("RENDER_CHILD_MODE") == "grouptest" {
+	if os.Getenv("RENDER_CHILD_MODE") == "grouptest" || os.Getenv("RENDER_CHILD_MODE") == "slowtest" {
 		child := exec.Command("/bin/sh", "-c", "sleep 30")
 		child.Stdout = os.Stdout
 		child.Stderr = os.Stderr
@@ -46,6 +54,9 @@ func init() {
 		}
 		if err := os.WriteFile(os.Args[1], []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
 			os.Exit(12)
+		}
+		if os.Getenv("RENDER_CHILD_MODE") == "slowtest" {
+			time.Sleep(30 * time.Second)
 		}
 		os.Exit(0)
 	}
@@ -57,6 +68,9 @@ func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("AWS_ACCESS_KEY_ID", "must-not-reach-child")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "must-not-reach-child")
+	t.Setenv("AWS_LAMBDA_RUNTIME_API", "must-not-reach-child")
+	t.Setenv("CONTROL_API_BASE_URL", "must-not-reach-child")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := runIsolatedChild(ctx, executable, "selftest"); err != nil {
@@ -84,6 +98,20 @@ func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
 	}
 }
 
+func TestIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := runIsolatedChild(ctx, executable, "grouptest", pidFile); err != nil {
+		t.Fatalf("successful isolated child: %v", err)
+	}
+	assertProcessDies(t, readGrandchildPID(t, pidFile))
+}
+
 func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
@@ -92,10 +120,15 @@ func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	err = runIsolatedChild(ctx, executable, "grouptest", pidFile)
+	err = runIsolatedChild(ctx, executable, "slowtest", pidFile)
 	if err == nil || !strings.Contains(err.Error(), "wall-clock") {
 		t.Fatalf("timeout error = %v", err)
 	}
+	assertProcessDies(t, readGrandchildPID(t, pidFile))
+}
+
+func readGrandchildPID(t *testing.T, pidFile string) int {
+	t.Helper()
 	encoded, err := os.ReadFile(pidFile)
 	if err != nil {
 		t.Fatalf("read grandchild pid: %v", err)
@@ -104,6 +137,11 @@ func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("grandchild pid %q: %v", encoded, err)
 	}
+	return pid
+}
+
+func assertProcessDies(t *testing.T, pid int) {
+	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
