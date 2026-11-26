@@ -10,7 +10,7 @@ import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { AnnotationReplica } from "../screen-annotation/replica";
-import { PresentingReplica } from "../presenting/replica";
+import { createV1PresentingReplica, receiveV1PresentingFrame } from "./v1-presenting";
 import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
@@ -124,15 +124,7 @@ export class V1SyncClient implements V1CollaborationClient {
       return false;
     }
   });
-  readonly presenting = new PresentingReplica((wire) => {
-    if (!this.#socket || this.#phase.phase !== "live" || !this.#extensions.presenting) return false;
-    try {
-      this.#socket.send(wire);
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  readonly presenting = createV1PresentingReplica(() => ({ socket: this.#socket, phase: this.#phase.phase, negotiated: this.#extensions.presenting }));
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -549,10 +541,7 @@ export class V1SyncClient implements V1CollaborationClient {
         if (this.#extensions.annotation && this.#phase.phase === "live") this.annotation.receive(frame.value);
         return;
       }
-      if (frame.kind === "presenting") {
-        if (this.#extensions.presenting && this.#phase.phase === "live") this.presenting.receive(frame.value);
-        return;
-      }
+      if (receiveV1PresentingFrame(frame, this.presenting, this.#extensions.presenting, this.#phase.phase)) return;
       await this.#handleFrame(frame.value);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
