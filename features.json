@@ -611,6 +611,7 @@
         "apps/api/internal/httpapi/problem_reports.go",
         "apps/api/internal/problemreports",
         "apps/web/src/lib/problem-reports.test.ts",
+        "apps/web/src/lib/problem-reports.test.tsx",
         "apps/web/src/lib/problem-reports.ts",
         "apps/web/src/lib/send-problem-report.ts"
       ]
