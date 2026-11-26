@@ -62,7 +62,8 @@ before truncate on recording_transcription_source_renewals
 for each statement execute function reject_recording_transcription_source_renewal_mutation();
 
 -- +goose Down
--- Renewal grants are audit facts and must survive runtime rollback.
--- +goose StatementBegin
-do $$ begin raise exception 'recording transcription source renewal audit cannot be removed'; end $$;
--- +goose StatementEnd
+drop trigger recording_transcription_source_renewals_no_truncate on recording_transcription_source_renewals;
+drop trigger recording_transcription_source_renewals_immutable on recording_transcription_source_renewals;
+drop function reject_recording_transcription_source_renewal_mutation();
+drop function recording_transcription_source_expires_at(uuid, timestamptz, jsonb);
+drop table recording_transcription_source_renewals;
