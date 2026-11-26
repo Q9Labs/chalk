@@ -7,10 +7,14 @@ set -euo pipefail
 
 environment="${1:?deployment environment is required}"
 database_url="${2:?database URL is required}"
+if [[ "$database_url" == - ]]; then
+  database_url="$(cat)"
+fi
+label="${3:-CHALK_DATABASE_URL}"
 
-[[ "${database_url}" =~ ^postgres(ql)?:// ]] || { echo "CHALK_DATABASE_URL must be a PostgreSQL URL" >&2; exit 1; }
+[[ "${database_url}" =~ ^postgres(ql)?:// ]] || { echo "${label} must be a PostgreSQL URL" >&2; exit 1; }
 if [[ "${environment}" == production ]]; then
-  [[ "${database_url}" =~ [?\&]sslmode=verify-full(\&|$) ]] || { echo "CHALK_DATABASE_URL must use sslmode=verify-full" >&2; exit 1; }
+  [[ "${database_url}" =~ [?\&]sslmode=verify-full(\&|$) ]] || { echo "${label} must use sslmode=verify-full" >&2; exit 1; }
   exit 0
 fi
-[[ "${database_url}" =~ [?\&]sslmode=(verify-full|require)(\&|$) ]] || { echo "CHALK_DATABASE_URL must use sslmode=verify-full or sslmode=require in ${environment}" >&2; exit 1; }
+[[ "${database_url}" =~ [?\&]sslmode=(verify-full|require)(\&|$) ]] || { echo "${label} must use sslmode=verify-full or sslmode=require in ${environment}" >&2; exit 1; }
