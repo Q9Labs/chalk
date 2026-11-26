@@ -1,4 +1,4 @@
-import { writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
+import { LOCAL_ARTIFACT_ACCESS_KEY_ID, LOCAL_ARTIFACT_SECRET_ACCESS_KEY, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { writeJsonAtomic } from "./json-file.mjs";
@@ -15,8 +15,8 @@ export function dashboardArtifactBindings(config) {
     CHALK_TRANSCRIPTION_ENABLED: "true",
     CHALK_R2_BUCKET: "local-dashboard",
     CHALK_R2_ENDPOINT: `${config.publicOrigin || config.urls.web}/__local-dashboard-artifacts`,
-    CHALK_R2_ACCESS_KEY_ID: "local-dashboard",
-    CHALK_R2_SECRET_ACCESS_KEY: "local-dashboard-storage-not-a-production-secret",
+    CHALK_R2_ACCESS_KEY_ID: LOCAL_ARTIFACT_ACCESS_KEY_ID,
+    CHALK_R2_SECRET_ACCESS_KEY: LOCAL_ARTIFACT_SECRET_ACCESS_KEY,
     CHALK_RECORDING_KMS_KEY_ID: "alias/local-dashboard",
     CHALK_RECORDING_KMS_REGION: "us-east-1",
     CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET: "local-dashboard-transcription-not-a-production-secret",
