@@ -140,6 +140,7 @@ it("stages five files and notices the overflow and an empty file", async () => {
 it("keeps a staged drop when chat unmounts and remounts until the user removes it", () => {
   const file = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" }) as ChatUploadFile;
   let batch: { readonly key: number; readonly files: readonly ChatUploadFile[] } | undefined = { key: 7, files: [file] };
+  let uploads = 0;
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   const render = (open: boolean) =>
     root.render(
@@ -149,6 +150,10 @@ it("keeps a staged drop when chat unmounts and remounts until the user removes i
           droppedFiles={batch}
           onDroppedFilesChange={(key, files) => {
             batch = files.length ? { key, files } : undefined;
+          }}
+          onUploadAttachment={async (file) => {
+            uploads += 1;
+            return { attachmentId: `a-${uploads}`, byteLength: file.size, fileName: file.name, mimeType: file.type };
           }}
         />
       ) : null,
@@ -160,6 +165,7 @@ it("keeps a staged drop when chat unmounts and remounts until the user removes i
   expect(document.body.textContent).not.toContain("notes.txt");
   act(() => render(true));
   expect(document.body.textContent).toContain("notes.txt");
+  expect(uploads).toBe(0);
 
   const remove = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === "Remove notes.txt");
   expect(remove).toBeDefined();

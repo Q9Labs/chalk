@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatAttachment, PresentingDocumentManifest } from "@q9labsai/chalk-client";
+import type { ChatAttachment, PresentingDocumentManifest, SpaceClient } from "@q9labsai/chalk-client";
 import { usePresenting, useSelf, useSpaceClient } from "../../bindings/hooks";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { DocumentPageArea, DocumentPageStrip, DocumentThumbnail } from "./DocumentPages";
@@ -18,6 +18,14 @@ export interface DocumentViewProps {
 
 export function documentSourceAttachment(manifest: PresentingDocumentManifest): ChatAttachment {
   return { attachmentId: manifest.attachmentId, fileName: manifest.fileName, mimeType: "application/pdf", byteLength: 0 };
+}
+
+export async function downloadDocumentSource(client: SpaceClient, manifest: PresentingDocumentManifest, fileName: string): Promise<void> {
+  const url = await client.chat.files.resolveUrl(documentSourceAttachment(manifest));
+  const link = window.document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
 }
 
 export function documentKeyTurnEvent(event: Pick<KeyboardEvent, "key" | "target" | "defaultPrevented">): boolean {
@@ -37,7 +45,6 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const [ownPage, setOwnPage] = useState<number | null>(null);
   const [thumbnails, setThumbnails] = useState(false);
   const [localZoom, setLocalZoom] = useState(document.zoom);
-  const [downloadUrl, setDownloadUrl] = useState<string>();
   const pageCount = manifest?.pageCount ?? document.pageCount ?? Math.max(1, document.page);
   const page = ownPage ?? document.page;
   const ready = manifest?.status === "ready";
@@ -46,19 +53,10 @@ export function DocumentView({ document, people, primary, interactive }: Documen
   const fileName = manifest?.fileName ?? document.fileName ?? "Document";
   const presenterName = presenter?.displayName ?? "Presenter";
 
-  useEffect(() => {
-    if (!ready || !manifest) {
-      setDownloadUrl(undefined);
-      return;
-    }
-    let active = true;
-    void client.chat.files.resolveUrl(documentSourceAttachment(manifest)).then((url) => {
-      if (active) setDownloadUrl(url);
-    });
-    return () => {
-      active = false;
-    };
-  }, [client, ready, manifest?.attachmentId, fileName]);
+  const download = useCallback(async () => {
+    if (!manifest) throw new Error("The document is not ready.");
+    await downloadDocumentSource(client, manifest, fileName);
+  }, [client, fileName, manifest]);
 
   const turn = useCallback(
     (next: number) => {
@@ -142,7 +140,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
       onReturn={() => setOwnPage(null)}
       onTurn={turn}
       onZoom={zoomTo}
-      downloadUrl={downloadUrl}
+      onDownload={download}
     />
   );
 }
@@ -163,7 +161,7 @@ interface PrimaryDocumentProps {
   readonly presenterName: string;
   readonly presenterPage: number;
   readonly toolbarRef: React.RefObject<HTMLDivElement | null>;
-  readonly downloadUrl?: string;
+  readonly onDownload: () => Promise<void>;
   readonly onThumbnails: () => void;
   readonly onReturn: () => void;
   readonly onTurn: (page: number) => void;
@@ -196,7 +194,7 @@ function PrimaryDocument(props: PrimaryDocumentProps): React.JSX.Element {
               zoom={props.zoom}
               thumbnails={props.thumbnails}
               fileName={props.fileName}
-              downloadUrl={props.downloadUrl}
+              onDownload={props.onDownload}
               onThumbnails={props.onThumbnails}
               onTurn={props.onTurn}
               onZoom={props.onZoom}

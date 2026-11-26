@@ -16,7 +16,7 @@ export interface DocumentToolbarProps {
   readonly zoom: number;
   readonly thumbnails: boolean;
   readonly fileName: string;
-  readonly downloadUrl?: string;
+  readonly onDownload: () => Promise<void>;
   readonly onThumbnails: () => void;
   readonly onTurn: (page: number) => void;
   readonly onZoom: (zoom: number) => void;
@@ -26,15 +26,15 @@ export interface DocumentToolbarProps {
 export function DocumentToolbar(props: DocumentToolbarProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
-  const { documentId, mine, ready, downloadUrl, fileName } = props;
+  const { documentId, mine, ready, onDownload } = props;
   return (
     <div className={toolbar}>
       {ready ? <PageControls {...props} /> : null}
-      {!mine && downloadUrl && ready ? (
-        <a className={cn(button, "px-3")} href={downloadUrl} download={fileName} aria-label="Download document">
+      {!mine && ready ? (
+        <button type="button" className={cn(button, "px-3")} aria-label="Download document" onClick={() => void onDownload().catch(() => {})}>
           <StageIcon name="download" size={16} />
           Download
-        </a>
+        </button>
       ) : null}
       {mine || self.can("stopScreenOthers") ? (
         <>

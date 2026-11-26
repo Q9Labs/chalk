@@ -204,7 +204,7 @@ export const ChatPanelSurface = React.memo(
         setSending(false);
       }
     };
-    const selectFiles = (files: FileList | readonly ChatUploadFile[] | null): readonly ChatUploadFile[] => {
+    const selectFiles = (files: FileList | readonly ChatUploadFile[] | null, options: { readonly deferUploads?: boolean } = {}): readonly ChatUploadFile[] => {
       if (!files) return [];
       const incoming = [...files].filter((file) => !stagedFiles.includes(file));
       const batch = prepareChatAttachmentBatch(incoming, stagedFiles.length);
@@ -213,7 +213,7 @@ export const ChatPanelSurface = React.memo(
         if (fileInputRef.current) fileInputRef.current.value = "";
         return [];
       }
-      for (const file of batch.accepted) startUpload(file);
+      if (!options.deferUploads) for (const file of batch.accepted) startUpload(file);
       if (batch.accepted.length) setStagedFiles((current) => [...current, ...batch.accepted]);
       setComposerError(chatSelectionNotice(batch));
       if (fileInputRef.current) fileInputRef.current.value = "";
