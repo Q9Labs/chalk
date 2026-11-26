@@ -9,6 +9,8 @@ import (
 
 func configureIsolatedChild(command *exec.Cmd, namespaces bool) {}
 
+func isolatedNamespacesAvailable() bool { return true }
+
 func isolatedChildProcessGroupID(pid int) int { return pid }
 
 func killIsolatedChildProcessGroup(pgid int, process *os.Process) {

@@ -639,7 +639,7 @@ jobs:
       - name: Build pinned arm64 renderer ZIP
         run: scripts/build-document-renderer.sh
       - name: Test renderer
-        run: cd apps/document-renderer && LD_LIBRARY_PATH="$PWD/native/pdfium/lib" go test ./cmd/renderer ./internal/...
+        run: cd apps/document-renderer && RENDERER_LAMBDA=1 LD_LIBRARY_PATH="$PWD/native/pdfium/lib" go test ./cmd/renderer ./internal/...
       - name: Verify renderer artifact identity
         run: |
           python3 - <<'PY'

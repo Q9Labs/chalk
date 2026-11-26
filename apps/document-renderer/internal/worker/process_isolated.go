@@ -136,10 +136,6 @@ func closePipe(pipe *os.File) {
 	}
 }
 
-func useIsolatedNamespaces() bool {
-	return os.Getenv("AWS_LAMBDA_RUNTIME_API") == "" && os.Getenv("RENDERER_LAMBDA") != "1"
-}
-
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
 	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()

@@ -66,6 +66,25 @@ func init() {
 	}
 }
 
+func TestIsolatedNamespacesAvailableHonorsAppArmorRestriction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "apparmor_restrict_unprivileged_userns")
+	previous := appArmorUserNamespaceRestrictionPath
+	appArmorUserNamespaceRestrictionPath = path
+	t.Cleanup(func() { appArmorUserNamespaceRestrictionPath = previous })
+	if err := os.WriteFile(path, []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isolatedNamespacesAvailable() {
+		t.Fatal("namespaces are available despite the AppArmor restriction")
+	}
+	if err := os.WriteFile(path, []byte("0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isolatedNamespacesAvailable() {
+		t.Fatal("namespaces are unavailable without the AppArmor restriction")
+	}
+}
+
 func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
@@ -103,6 +122,15 @@ func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
 }
 
 func TestIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
+	testIsolatedChildSuccessKillsProcessGroup(t)
+}
+
+func TestIsolatedLambdaChildSuccessKillsProcessGroup(t *testing.T) {
+	t.Setenv("RENDERER_LAMBDA", "1")
+	testIsolatedChildSuccessKillsProcessGroup(t)
+}
+
+func testIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +145,15 @@ func TestIsolatedChildSuccessKillsProcessGroup(t *testing.T) {
 }
 
 func TestIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
+	testIsolatedChildTimeoutKillsProcessGroup(t)
+}
+
+func TestIsolatedLambdaChildTimeoutKillsProcessGroup(t *testing.T) {
+	t.Setenv("RENDERER_LAMBDA", "1")
+	testIsolatedChildTimeoutKillsProcessGroup(t)
+}
+
+func testIsolatedChildTimeoutKillsProcessGroup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
