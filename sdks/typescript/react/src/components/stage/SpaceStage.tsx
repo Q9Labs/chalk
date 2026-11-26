@@ -1,42 +1,14 @@
 import type { AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
 import type { ScreenAnnotationOptions } from "../screen-annotation/model";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { cn } from "../../utils/cn";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout, type StageTileRenderContext } from "./Stage";
 import { buildStageItems, type ContentItem, type StageItem } from "./stage-items";
 import { usePresenting } from "../../bindings/hooks";
-import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
-
-/** Holds the board's place while its chunk loads, so the stage does not jump when the board arrives. */
-function BoardOpening() {
-  return (
-    <div role="status" className="grid h-full place-content-center rounded-[inherit] bg-[var(--chalk-surface)] text-sm text-[var(--chalk-muted-text)]">
-      Opening board
-    </div>
-  );
-}
-
-/** Shown when the board chunk cannot be fetched, so a bad connection does not take the call view down with it. */
-function BoardUnavailable() {
-  return (
-    <div role="alert" className="grid h-full place-content-center rounded-[inherit] bg-[var(--chalk-surface)] px-6 text-center text-sm text-[var(--chalk-muted-text)]">
-      The board could not load. Check your connection and rejoin to try again.
-    </div>
-  );
-}
-
-const Board = lazy(() =>
-  import("../board/Board").then(
-    (module) => ({ default: module.Board }),
-    () => ({ default: BoardUnavailable }),
-  ),
-);
-
-const DocumentView = lazy(() => import("./DocumentView").then((module) => ({ default: module.DocumentView })));
+import { renderBoardContentTile, renderDocumentContentTile, renderScreenShareContentTile } from "./space-stage-content-tiles";
 
 export interface StageScreenAnnotation extends Omit<ScreenAnnotationOptions, "publicationId"> {
   readonly context: AnnotationPresentationContext;
@@ -112,74 +84,9 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   );
   const renderContentTile = useCallback(
     (item: ContentItem, context: StageTileRenderContext) => {
-      if (item.kind === "document") {
-        return (
-          <StageContentTileSurface
-            item={item}
-            {...context}
-            mediaVisible
-            media={
-              <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Suspense fallback={<div className="grid h-full place-items-center bg-[var(--chalk-app-tile-base)] text-sm text-[var(--chalk-on-overlay)] opacity-70">Opening document</div>}>
-                  <DocumentView document={item.document} people={tiles} primary={context.primary} interactive={context.active} />
-                </Suspense>
-              </div>
-            }
-          />
-        );
-      }
-      if (item.kind === "screen-share") {
-        const track = item.participant.screenShareTrack;
-        const publicationId = track && screenAnnotation?.publicationForTrack(track);
-        return (
-          <StageContentTile
-            item={item}
-            {...context}
-            capture={item.participant.isLocal ? shareCapture : undefined}
-            annotation={screenAnnotation && publicationId ? { ...screenAnnotation, publicationId } : undefined}
-            annotationContext={screenAnnotation?.context}
-            onStopSharing={item.participant.isLocal ? onStopSharing : undefined}
-            onChangeShare={item.participant.isLocal ? onChangeShare : undefined}
-            switcher={
-              shares.length > 1 ? (
-                <div role="group" aria-label="Whose screen is big" className={cn("absolute left-2 z-30 flex rounded-(--corner-pill) bg-[var(--chalk-overlay-strong)] p-(--space-1)", item.participant.screenShareState === "low-quality" ? "top-11" : "top-2")}>
-                  {shares.map((share) => (
-                    <button
-                      key={share.id}
-                      type="button"
-                      aria-pressed={share.id === item.id}
-                      onClick={() => {
-                        setPin(null);
-                        setSelectedShare(share.id);
-                      }}
-                      className="relative h-7 rounded-(--corner-pill) px-3 text-(length:--type-caption) font-semibold text-[var(--chalk-on-overlay)] hover:bg-[var(--chalk-on-overlay)]/10 aria-pressed:bg-[var(--chalk-on-overlay)] aria-pressed:text-[var(--chalk-overlay)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-y-2 [@media(pointer:coarse)]:before:inset-x-0"
-                    >
-                      {share.participant.displayName}
-                    </button>
-                  ))}
-                </div>
-              ) : null
-            }
-          />
-        );
-      }
-      const boardProps = whiteboard?.props;
-      return (
-        <StageContentTileSurface
-          item={item}
-          {...context}
-          mediaVisible={Boolean(boardProps)}
-          media={
-            boardProps ? (
-              <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Suspense fallback={<BoardOpening />}>
-                  <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={follow} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
-                </Suspense>
-              </div>
-            ) : null
-          }
-        />
-      );
+      if (item.kind === "document") return renderDocumentContentTile({ item, context, tiles });
+      if (item.kind === "screen-share") return renderScreenShareContentTile({ item, context, shares, shareCapture, screenAnnotation, onStopSharing, onChangeShare, setPin, setSelectedShare });
+      return renderBoardContentTile({ item, context, whiteboard, tiles, followed, follow, canFollow, onCloseBoard, colorScheme });
     },
     [follow, whiteboard, shares, shareCapture, screenAnnotation, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
   );
