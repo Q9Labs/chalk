@@ -97,7 +97,7 @@ export function useChatFileDropFlow({ chatOpen, chatAvailable, onOpenChat }: { r
       setFileDrop({ files });
     },
   });
-  const showing = target.active && route === "chat";
+  const showing = target.active && route === "chat" && chatOpen;
   return {
     handlers: target.handlers,
     overlay: showing ? <ChatFileDropOverlay /> : undefined,

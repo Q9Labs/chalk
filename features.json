@@ -249,6 +249,7 @@
         "sdks/typescript/react/src/components/composite/ChatPanel.test.tsx",
         "sdks/typescript/react/src/components/composite/ChatFileDropOverlay.tsx",
         "sdks/typescript/react/src/components/composite/chat-file-drop-staging.ts",
+        "sdks/typescript/react/src/components/space-view/chat-file-drop.tsx",
         "sdks/typescript/react/src/components/composite/MessageBubble.tsx",
         "sdks/typescript/react/src/components/composite/UnavailableAttachment.tsx",
         "sdks/typescript/react/src/components/composite/chat-file-upload.ts",
