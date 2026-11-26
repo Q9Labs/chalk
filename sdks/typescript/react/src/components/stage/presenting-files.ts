@@ -10,14 +10,20 @@ export type PresentingFileResult = {
   readonly failures: readonly PresentingFileFailure[];
 };
 
+export type PresentingFileSplit = {
+  readonly stageFile?: ChatUploadFile;
+  readonly chatFiles: readonly ChatUploadFile[];
+  readonly failures: readonly PresentingFileFailure[];
+};
+
 export function presentingFileProblem(file: ChatUploadFile): "unsupported" | "too_big" | null {
   const description = describeChatUploadFile(file);
   if (description.byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength) return "too_big";
   return PRESENTABLE_MIME_TYPES.has(description.mimeType) ? null : "unsupported";
 }
 
-/** Uploads the first presentable file to the renderer and puts it on the Stage when Presenting is available; other sendable files go to chat. */
-export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): Promise<PresentingFileResult> {
+/** Splits dropped or chosen files into the first Stage candidate, files chat can carry, and files neither accepts. */
+export function splitPresentingFiles(files: readonly ChatUploadFile[], options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): PresentingFileSplit {
   const presentingAvailable = options.presentingAvailable !== false;
   const chatEnabled = options.chatEnabled !== false;
   const failures: PresentingFileFailure[] = [];
@@ -36,6 +42,13 @@ export async function presentFiles(files: readonly ChatUploadFile[], client: Spa
     if (chatEnabled && (CHALK_CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(description.mimeType)) chatFiles.push(file);
     else failures.push({ fileName: description.fileName, reason: "unsupported" });
   }
+  return { stageFile, chatFiles, failures };
+}
+
+/** Uploads the first presentable file to the renderer and puts it on the Stage when Presenting is available; other sendable files go to chat. */
+export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): Promise<PresentingFileResult> {
+  const { stageFile, chatFiles, failures: splitFailures } = splitPresentingFiles(files, options);
+  const failures: PresentingFileFailure[] = [...splitFailures];
   let presented: string | undefined;
   if (stageFile) {
     try {

@@ -61,6 +61,13 @@ defmodule ChalkSync.Presenting.Statements do
     """
   end
 
+  def document_sql do
+    """
+    select document_id from presenting_documents
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and document_id = $4
+    """
+  end
+
   def receipt_sql do
     """
     select fingerprint, revision from sync_presenting_receipts

@@ -83,49 +83,65 @@ defmodule ChalkSync.Presenting.Repository do
   end
 
   defp write_command(connection, identity, state, actor, frame, operation) do
-    case apply_command(state, actor, frame["command"]) do
-      {:ok, documents} ->
-        revision = state.revision + 1
-        params = context(identity)
-
-        Postgrex.query!(connection, Statements.update_revision_sql(), params ++ [revision],
-          log: nil
-        )
-
-        Postgrex.query!(connection, Statements.delete_documents_sql(), params, log: nil)
-
-        Enum.with_index(documents, 1)
-        |> Enum.each(fn {document, position} ->
-          Postgrex.query!(
-            connection,
-            Statements.insert_document_sql(),
-            params ++
-              [
-                uuid(document.document_id),
-                uuid(document.presenter_id),
-                document.presenter_generation,
-                position,
-                document.page,
-                document.zoom,
-                document.started_at_ms
-              ],
-            log: nil
-          )
-        end)
-
-        Postgrex.query!(
-          connection,
-          Statements.insert_receipt_sql(),
-          operation.key ++ [operation.fingerprint, revision, operation.expires],
-          log: nil
-        )
-
-        {:ok, %{"kind" => "accepted", "revision" => revision}}
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- validate_target(connection, identity, actor, frame["command"]),
+         {:ok, documents} <- apply_command(state, actor, frame["command"]) do
+      persist_command(connection, identity, state, documents, operation)
     end
   end
+
+  defp persist_command(connection, identity, state, documents, operation) do
+    revision = state.revision + 1
+    params = context(identity)
+
+    Postgrex.query!(connection, Statements.update_revision_sql(), params ++ [revision], log: nil)
+    Postgrex.query!(connection, Statements.delete_documents_sql(), params, log: nil)
+
+    Enum.with_index(documents, 1)
+    |> Enum.each(fn {document, position} ->
+      Postgrex.query!(
+        connection,
+        Statements.insert_document_sql(),
+        params ++
+          [
+            uuid(document.document_id),
+            uuid(document.presenter_id),
+            document.presenter_generation,
+            position,
+            document.page,
+            document.zoom,
+            document.started_at_ms
+          ],
+        log: nil
+      )
+    end)
+
+    Postgrex.query!(
+      connection,
+      Statements.insert_receipt_sql(),
+      operation.key ++ [operation.fingerprint, revision, operation.expires],
+      log: nil
+    )
+
+    {:ok, %{"kind" => "accepted", "revision" => revision}}
+  end
+
+  defp validate_target(connection, identity, actor, %{
+         "kind" => "present",
+         "document_id" => document_id
+       }) do
+    if actor.can_present do
+      params = context(identity) ++ [uuid(document_id)]
+
+      case Postgrex.query!(connection, Statements.document_sql(), params, log: nil).rows do
+        [[_document_id]] -> :ok
+        [] -> {:error, "invalid_target"}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp validate_target(_connection, _identity, _actor, _command), do: :ok
 
   defp apply_command(state, actor, %{"kind" => "present", "document_id" => document_id}) do
     cond do

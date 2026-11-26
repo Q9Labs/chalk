@@ -136,7 +136,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onStart={props.onStartScreenShare}
         />
       ) : null}
-      {has("presenting") && (props.onPresent || props.displayOnly) ? iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting) : null}
+      {has("presenting") && (props.onPresent || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -188,6 +188,12 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
+            </button>
+          ) : null}
+          {has("presenting") && props.onPresent ? (
+            <button type="button" className="chalk-sheet-row" onClick={props.onPresent}>
+              <ShellIcon name="present" />
+              <span>{props.isPresenting ? "Presenting" : "Present"}</span>
             </button>
           ) : null}
           {has("whiteboard") ? (

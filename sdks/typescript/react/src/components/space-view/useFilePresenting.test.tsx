@@ -7,12 +7,12 @@ import { useFilePresenting } from "./use-file-presenting";
 
 afterEach(() => document.body.replaceChildren());
 
-function mount(live: boolean) {
+function mount(live: boolean, openChat: () => void = () => {}) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const client = createPreviewClient();
   let api: ReturnType<typeof useFilePresenting> | undefined;
   function Probe() {
-    api = useFilePresenting({ client, notify: () => {}, live, chatOpen: false, chatEnabled: true, presentingAvailable: true, openChat: () => {} });
+    api = useFilePresenting({ client, notify: () => {}, live, chatOpen: false, chatEnabled: true, presentingAvailable: true, openChat });
     return <input ref={api.presentInputRef} type="file" aria-hidden="true" />;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -41,4 +41,21 @@ it("opens the file picker when live", async () => {
     await hook()?.choosePresentFiles();
   });
   expect(clicks).toHaveBeenCalledTimes(1);
+});
+
+it("stages every remaining dropped file in the chat composer instead of sending it", async () => {
+  const openChat = vi.fn();
+  const { hook } = mount(true, openChat);
+  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
+  const image = new File([new Uint8Array(8)], "image.png", { type: "image/png" });
+  const text = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" });
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf, image, text] } });
+
+  await act(async () => {
+    window.dispatchEvent(event);
+  });
+
+  expect(openChat).toHaveBeenCalledTimes(1);
+  expect(hook()?.chatDrop?.files).toEqual([image, text]);
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
-import { presentFiles, presentingFileProblem } from "../stage/presenting-files";
+import { presentFiles, presentingFileProblem, splitPresentingFiles } from "../stage/presenting-files";
 import { describeChatUploadFile } from "../composite/chat-upload-file";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
@@ -97,7 +97,18 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!files.length || !live) return;
       if (chatOpen && chatEnabled) setChatDrop({ key: Date.now(), files });
-      else if (presentingAvailable || chatEnabled) void presentChosenFiles(files);
+      else if (presentingAvailable || chatEnabled) {
+        const split = splitPresentingFiles(files, { presentingAvailable, chatEnabled });
+        if (split.stageFile) void presentChosenFiles([split.stageFile]);
+        if (split.chatFiles.length) {
+          openChat();
+          setChatDrop({ key: Date.now(), files: split.chatFiles });
+        }
+        for (const failure of split.failures) {
+          const description = failure.reason === "too_big" ? `${failure.fileName} is over 25 MB.` : `${failure.fileName} can't be presented or sent in chat.`;
+          notify({ type: "error", duration: Infinity, message: description });
+        }
+      }
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragover", over);
@@ -109,7 +120,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
-  }, [chatOpen, chatEnabled, live, presentingAvailable, presentChosenFiles]);
+  }, [chatOpen, chatEnabled, live, notify, openChat, presentingAvailable, presentChosenFiles]);
 
   const dropTarget = chatOpen && chatEnabled ? "chat" : presentingAvailable ? "present" : chatEnabled ? "chat" : null;
   return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };

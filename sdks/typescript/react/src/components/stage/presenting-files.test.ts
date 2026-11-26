@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
-import { presentFiles } from "./presenting-files";
+import { presentFiles, splitPresentingFiles } from "./presenting-files";
 
 function file(name: string, type = "application/pdf"): ChatUploadFile {
   return new File([new Uint8Array(1024)], name, { type }) as ChatUploadFile;
@@ -51,4 +51,22 @@ it("does not send hidden chat when both Presenting and chat are unavailable", as
   expect(result).toMatchObject({ chatted: 0, failures: [{ fileName: "deck.pdf", reason: "unsupported" }] });
   expect(presented).toEqual([]);
   expect(sent).toEqual([]);
+});
+
+it("splits a multi-file drop into one stage candidate and the remaining chat files", () => {
+  const pdf = file("deck.pdf");
+  const image = file("image.png", "image/png");
+  const text = file("notes.txt", "text/plain");
+  const split = splitPresentingFiles([pdf, image, text], { presentingAvailable: true, chatEnabled: true });
+  expect(split.stageFile).toBe(pdf);
+  expect(split.chatFiles).toEqual([image, text]);
+  expect(split.failures).toEqual([]);
+});
+
+it("puts every sendable file in the chat split when Presenting is unavailable", () => {
+  const pdf = file("deck.pdf");
+  const image = file("image.png", "image/png");
+  const split = splitPresentingFiles([pdf, image], { presentingAvailable: false, chatEnabled: true });
+  expect(split.stageFile).toBeUndefined();
+  expect(split.chatFiles).toEqual([pdf, image]);
 });
