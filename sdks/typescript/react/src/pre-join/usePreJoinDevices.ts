@@ -15,6 +15,10 @@ export type PreJoinAccess = "checking" | "ask" | "requesting" | "blocked" | "gra
 /** The device choice to hand to `client.join()`. Devices that are not live join off. */
 export type PreJoinJoinOptions = Required<Pick<JoinOptions, "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 
+export type PreJoinDevicesOptions = {
+  readonly startWithDevicesOff?: boolean;
+};
+
 export type PreJoinDevices = {
   readonly access: PreJoinAccess;
   /** Asks the browser for camera and microphone together and turns both on. Also the retry after `blocked`. */
@@ -64,8 +68,12 @@ const NOTHING_CAPTURED: Capture = { microphone: null, camera: null, missing: new
  * Owns the one preview stream shown before joining: it opens the camera and microphone the visitor wants, follows device changes,
  * remembers the choice per browser, and stops every track when the component unmounts, so the camera light goes off.
  */
-export function usePreJoinDevices(): PreJoinDevices {
-  const [choice, setChoice] = useState<RememberedDevices>(() => readRememberedDevices() ?? { microphone: true, camera: true });
+export function usePreJoinDevices(options: PreJoinDevicesOptions = {}): PreJoinDevices {
+  const startWithDevicesOff = options.startWithDevicesOff === true;
+  const [choice, setChoice] = useState<RememberedDevices>(() => {
+    const remembered = readRememberedDevices() ?? { microphone: true, camera: true };
+    return startWithDevicesOff ? { ...remembered, microphone: false, camera: false } : remembered;
+  });
   const [access, setAccess] = useState<PreJoinAccess>("checking");
   const [devices, setDevices] = useState<DetectedMediaDevices | null>(null);
   const [capture, setCapture] = useState<Capture>(NOTHING_CAPTURED);
@@ -76,7 +84,9 @@ export function usePreJoinDevices(): PreJoinDevices {
   const stream = useRef<MediaStream | null>(null);
 
   const latestChoice = useRef(choice);
+  const choiceTouched = useRef(false);
   const update = (change: Partial<RememberedDevices>) => {
+    choiceTouched.current = true;
     const next = { ...latestChoice.current, ...change };
     latestChoice.current = next;
     setChoice(next);
@@ -237,7 +247,7 @@ export function usePreJoinDevices(): PreJoinDevices {
     joinOptions,
     commit: () => {
       // The toggles are what the visitor asked for, so a camera that was busy once does not turn it off for good. Only picked device ids are kept.
-      if (granted) rememberDevices(latestChoice.current);
+      if (granted && (!startWithDevicesOff || choiceTouched.current)) rememberDevices(latestChoice.current);
       return joinOptions;
     },
   };

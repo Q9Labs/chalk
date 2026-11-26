@@ -60,7 +60,7 @@ function joinLabel(rejoin: boolean): string {
 
 /** The step before the call: see yourself, hear yourself, press Join. */
 export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, rejoin = false, onJoin }: PreJoinProps) {
-  const devices = usePreJoinDevices();
+  const devices = usePreJoinDevices({ startWithDevicesOff: rejoin });
   const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
   const { access } = devices;
