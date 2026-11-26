@@ -177,8 +177,8 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
   useEffect(() => () => adopt(stream, null), []);
 
   const granted = access === "granted";
-  const microphoneMissing = granted && (capture.missing.has("microphone") || (devicesKnown && !hasMicrophone));
-  const cameraMissing = granted && (capture.missing.has("camera") || (devicesKnown && !hasCamera));
+  const microphoneMissing = inputMissing(granted, capture, devicesKnown, hasMicrophone, "microphone");
+  const cameraMissing = inputMissing(granted, capture, devicesKnown, hasCamera, "camera");
   const microphoneOn = granted && choice.microphone && !microphoneMissing;
   const cameraOn = granted && choice.camera && !cameraMissing;
   const microphoneId = chosenMicrophone ?? knownDevice(capture.microphone?.getSettings().deviceId, microphones) ?? microphones[0]?.deviceId;
@@ -246,6 +246,10 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
       return joinOptions;
     },
   };
+}
+
+function inputMissing(granted: boolean, capture: Capture, devicesKnown: boolean, hasDevice: boolean, device: "microphone" | "camera"): boolean {
+  return granted && (capture.missing.has(device) || (devicesKnown && !hasDevice));
 }
 
 function startsOff(options: PreJoinDevicesOptions | undefined): boolean {
