@@ -116,6 +116,14 @@ export async function request(config, method, path, body, authorization = {}, ex
 }
 async function readResponse(response, method) {
   if (response.status === 204) return undefined;
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (!contentType.includes("json")) {
+    // A proxy or edge error page is not an API answer; keep its status instead of a JSON parse error.
+    await response.body?.cancel();
+    const error = new ProofError("api", `API ${method} answered ${contentType.split(";")[0] || "no content type"}: HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   const value = await response.json();
   if (!response.ok) {
     const error = new ProofError("api", `API ${method} failed: HTTP ${response.status}, ${errorCode(value)}`);
@@ -150,9 +158,9 @@ export async function createRun(config, directory, signal = new AbortController(
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
-const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout", "capture-slot-held", "media-plane-config", "proof-space-busy", "proof-origin-busy"]);
+const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout", "capture-slot-held", "media-plane-config", "proof-space-busy", "proof-origin-busy", "webhook-transport"]);
 const publicApiCodes = new Set(["api_key.inactive", "access.forbidden", "resource.not_found", "request.invalid", "rate_limit.exceeded", "internal.error"]);
-const publicStatuses = new Set([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]);
+const publicStatuses = new Set([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530]);
 function apiFailure(error) {
   const status = publicStatuses.has(error.status) ? error.status : "unknown";
   const code = publicApiCodes.has(error.apiCode) ? error.apiCode : "unknown";
