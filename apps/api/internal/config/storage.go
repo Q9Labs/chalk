@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -92,8 +93,15 @@ func (cfg *Config) loadStorage() error {
 		RendererFunction: envOrDefault(PresentingRendererFunction, ""),
 		RendererEndpoint: envOrDefault(PresentingRendererEndpoint, ""),
 	}
-	if cfg.Capabilities.Presenting && !presentingConfigComplete(cfg.Presenting, cfg.SyncToken, cfg.R2) {
-		cfg.Capabilities.Presenting = false
+	if cfg.Capabilities.Presenting {
+		if problems := presentingConfigProblems(cfg.Presenting, cfg.SyncToken, cfg.R2, cfg.RecordingKMS); len(problems) != 0 {
+			message := fmt.Sprintf("presenting is enabled but its configuration is incomplete; missing or invalid: %s", strings.Join(problems, ", "))
+			if cfg.Observability.Environment == "production" || strings.EqualFold(strings.TrimSpace(os.Getenv(PresentingEnabled)), "true") {
+				return fmt.Errorf("%s", message)
+			}
+			cfg.PresentingConfigError = message
+			cfg.Capabilities.Presenting = false
+		}
 	}
 	cfg.Transcription = TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
@@ -126,11 +134,26 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 	return nil
 }
 
-func presentingConfigComplete(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config) bool {
-	return len(presenting.CapabilitySecret) >= 32 &&
-		(strings.TrimSpace(presenting.RendererFunction) != "" || strings.TrimSpace(presenting.RendererEndpoint) != "") &&
-		len(syncToken.PrivateKey) != 0 &&
-		validateR2Config(r2, PresentingEnabled) == nil
+func presentingConfigProblems(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config, kms RecordingKMSConfig) []string {
+	var problems []string
+	if len(presenting.CapabilitySecret) < 32 {
+		problems = append(problems, PresentingCapabilitySecret+" (at least 32 bytes)")
+	}
+	function := strings.TrimSpace(presenting.RendererFunction) != ""
+	endpoint := strings.TrimSpace(presenting.RendererEndpoint) != ""
+	if !function && !endpoint {
+		problems = append(problems, PresentingRendererFunction+" or "+PresentingRendererEndpoint)
+	}
+	if function && !endpoint && strings.TrimSpace(kms.Region) == "" {
+		problems = append(problems, RecordingKMSRegion)
+	}
+	if len(syncToken.PrivateKey) == 0 {
+		problems = append(problems, SyncTokenAudience+", "+SyncTokenIssuer+", "+SyncTokenKeyID+", and "+SyncTokenPrivateKey)
+	}
+	if validateR2Config(r2, PresentingEnabled) != nil {
+		problems = append(problems, R2Bucket+", either "+R2AccountID+" or "+R2Endpoint+", "+R2AccessKeyID+", and "+R2SecretAccessKey)
+	}
+	return problems
 }
 
 func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {

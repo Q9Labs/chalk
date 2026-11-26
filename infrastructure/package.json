@@ -7,7 +7,7 @@
     "check-types": "node platform/check-preview-build.mjs && tsx run-stack.ts check && tsc --noEmit",
     "test:digitalocean": "tsx --test recorder/config.test.ts",
     "test:dispatcher": "tsx --test transcription-dispatcher/*.test.ts releases/*.test.ts providers/aws-dispatcher-alarm.test.ts",
-    "test": "tsx --test oncall-alert.test.mjs platform/*.test.ts providers/*.test.ts migration/*.test.ts recorder/*.test.ts transcription-dispatcher/*.test.ts releases/*.test.ts"
+    "test": "tsx --test oncall-alert.test.mjs platform/*.test.ts providers/*.test.ts migration/*.test.ts recorder/*.test.ts transcription-dispatcher/*.test.ts releases/*.test.ts document-renderer/*.test.ts"
   },
   "dependencies": {
     "@alchemy.run/aws": "https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz",

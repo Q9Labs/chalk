@@ -52,6 +52,9 @@ func newDiagnostics(cfg config.Config) observability.Diagnostics {
 }
 
 func logStartup(logger *slog.Logger, cfg config.Config) {
+	if cfg.PresentingConfigError != "" {
+		logger.Error("presenting configuration incomplete", "event", "presenting.config_incomplete", "reason", cfg.PresentingConfigError)
+	}
 	logger.Info("api starting",
 		"event", "api.starting",
 		"previous_boot_end", previousBootEnd(os.Getenv("CHALK_PREVIOUS_BOOT_END")),

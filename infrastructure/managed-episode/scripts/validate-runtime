@@ -106,6 +106,22 @@ require_env() {
   env_value "${file}" "${name}" >/dev/null || fail "${name} must occur exactly once with a non-empty value in ${file}"
 }
 
+optional_boolean_or_false() {
+  local file="$1"
+  local name="$2"
+  local count value
+  count="$(awk -v name="${name}" 'index($0, name "=") == 1 { count++ } END { print count + 0 }' "${file}")"
+  if [[ "$count" == 0 ]]; then
+    printf 'false\n'
+    return
+  fi
+  if [[ "$count" == 1 ]] && value="$(env_value "${file}" "${name}")"; then
+    printf '%s\n' "$value"
+  else
+    printf '__invalid__\n'
+  fi
+}
+
 api_env="${env_root}/api.env"
 sync_env="${env_root}/sync.env"
 
@@ -236,6 +252,30 @@ case "$(env_value "${api_env}" CHALK_TRANSCRIPTION_ENABLED)" in
     ;;
   *) fail "CHALK_TRANSCRIPTION_ENABLED must be true or false" ;;
 esac
+api_presenting_enabled="$(optional_boolean_or_false "${api_env}" CHALK_PRESENTING_ENABLED)"
+sync_presenting_enabled="$(optional_boolean_or_false "${sync_env}" CHALK_PRESENTING_ENABLED)"
+case "${api_presenting_enabled}" in
+  false) ;;
+  true)
+    for name in CHALK_PRESENTING_CAPABILITY_SECRET CHALK_PRESENTING_RENDERER_FUNCTION_NAME CHALK_RECORDING_KMS_REGION CHALK_R2_ACCOUNT_ID CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET; do
+      require_env "${api_env}" "${name}"
+    done
+    presenting_capability_secret="$(env_value "${api_env}" CHALK_PRESENTING_CAPABILITY_SECRET)"
+    presenting_capability_secret_bytes="$(LC_ALL=C printf '%s' "${presenting_capability_secret}" | LC_ALL=C wc -c | tr -d '[:space:]')"
+    (( presenting_capability_secret_bytes >= 32 )) || fail "CHALK_PRESENTING_CAPABILITY_SECRET must contain at least 32 bytes"
+    presenting_renderer_function_name="$(env_value "${api_env}" CHALK_PRESENTING_RENDERER_FUNCTION_NAME)"
+    [[ "${presenting_renderer_function_name}" =~ ^[a-zA-Z0-9_-]{1,64}$ ]] || fail "CHALK_PRESENTING_RENDERER_FUNCTION_NAME must be a valid Lambda function name"
+    ;;
+  *) fail "CHALK_PRESENTING_ENABLED must be true or false" ;;
+esac
+case "${sync_presenting_enabled}" in
+  true|false) ;;
+  *) fail "Sync CHALK_PRESENTING_ENABLED must be true or false" ;;
+esac
+if [[ "${sync_presenting_enabled}" == true && "${api_presenting_enabled}" != true ]]; then
+  fail "Sync CHALK_PRESENTING_ENABLED=true requires API CHALK_PRESENTING_ENABLED=true"
+fi
+
 case "$(env_value "${api_env}" CHALK_WHITEBOARD_FILES_ENABLED)" in
   true)
     for name in CHALK_R2_ACCOUNT_ID CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET; do

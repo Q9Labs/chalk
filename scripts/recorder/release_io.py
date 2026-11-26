@@ -52,8 +52,11 @@ class Provider:
     def command(self, arguments, *, timeout=120, input_text=None, read_only=False, environment=None):
         if self.dry_run:
             require(read_only, "dry-run refused a non-read operation")
-        result = subprocess.run(arguments, input=input_text, text=True, capture_output=True, timeout=timeout,
-                                env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
+        try:
+            result = subprocess.run(arguments, input=input_text, text=True, capture_output=True, timeout=timeout,
+                                    env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"{arguments[0]} operation timed out after {timeout} seconds; no command arguments or payload logged") from None
         if result.returncode:
             # Provider errors can quote secret payloads. Never echo stdout/stderr here.
             error_class = f"; error class: {infrastructure_error_class(result.stderr)}" if arguments[0] in ("tofu", "pnpm") else ""
