@@ -120,7 +120,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   return (
     <>
       <ShellStyles />
-      <div className="fixed inset-0 z-20" data-reactions-backdrop onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" data-reactions-backdrop data-ui-dismiss-layer onClick={onClose} aria-hidden="true" />
       {
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
           {onToggleHandRaise ? (
