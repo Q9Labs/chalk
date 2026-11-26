@@ -21,9 +21,28 @@ between `online` and `target_nodes` in its logs.
 
 ## Run the controller
 
-Use a separate service account from the Chalk API. Install the binary built
-from `apps/api/cmd/sfu-window-controller` for the same API release as the
-database. Supply the environment below from the host's encrypted secret store.
+Production runs the controller as the system service
+`chalk-sfu-window-controller.service` under the dedicated `chalk-sfu-window`
+user. The managed release builds `apps/api/cmd/sfu-window-controller` into the
+API image, so the host installs exactly the binary built with that release's
+API. During deployment the host controller extracts that binary from the
+digest-pinned API image through root Podman, so the API runtime user does not
+control the credentialed executable, installs it at
+`/usr/local/bin/chalk-sfu-window-controller`, installs the hardened systemd
+unit, writes `/home/chalk-sfu-window/controller.env` and the mTLS files under
+`/home/chalk-sfu-window/secrets/`, restarts the service, and refuses the
+release unless the service becomes active. The service user has no login. The
+unit keeps `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and
+`ReadWritePaths=/home/chalk-sfu-window`.
+
+The environment comes from the SecureString suffix
+`sfu-window-controller/controller.env` under the managed release parameter
+prefix. The deployment copies the existing provider-bridge server certificate,
+server key, and Sync client CA inputs into the controller's `secrets` directory
+for the controller only. Its environment is not published with the API and Sync
+environment and is not registered as a Podman secret, so the API runtime user
+and API container do not receive the DigitalOcean credential.
+
 Use a direct connection to the environment's own database, not a
 transaction-pooled endpoint: the controller holds a session advisory lock.
 Grant the controller role `SELECT` on `scheduled_episodes`, `spaces`,
@@ -38,7 +57,7 @@ owner password. The Chalk API has no DigitalOcean credentials.
 | `CHALK_SFU_WINDOW_MODE`                                                                                 | `scale` for normal operation or `retire` for rollback                                                      |
 | `CHALK_SFU_WINDOW_DATABASE_URL`                                                                         | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints                            |
 | `CHALK_SFU_APPLICATION_ID`                                                                              | Same pool identity as in the API                                                                           |
-| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API                                                                  |
+| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API; the file paths are the managed paths under `/home/chalk-sfu-window/secrets/`                                                                  |
 | `CHALK_SFU_WINDOW_PROVIDER_TOKEN`                                                                       | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets |
 | `CHALK_SFU_WINDOW_SNAPSHOT_ID`, `CHALK_SFU_WINDOW_REVISION`                                             | Ready-to-boot 2 vCPU snapshot and the exact SFU SHA it runs                                                |
 | `CHALK_SFU_WINDOW_REGION`, `CHALK_SFU_WINDOW_VPC_UUID`                                                  | Window pool region and VPC                                                                                 |
@@ -71,6 +90,8 @@ operator investigation; silence does not prove emptiness.
 
 ## Roll out and roll back
 
+If a candidate controller fails its activation check, deployment rollback restores the service binary, unit, environment, and mTLS files that were present before the candidate and requires that previous service to become active. A later API rollback to a release that predates controller management leaves the independent service installed and enabled.
+
 1. Prove the exact release and image in Nightly with a 20-class booking against a
    disposable environment. Record the plan, available Droplet IDs before the
    start, media completion, host headroom, and provider disappearance after the
@@ -80,10 +101,12 @@ operator investigation; silence does not prove emptiness.
    2 vCPU nodes and verify both with the existing release and readiness checks.
    Drain and replace the 1 vCPU standby without taking down the primary. Verify
    the API's standby ceiling before counting its class slots. Deploy the schema
-   and dynamic-routing API with the controller stopped, then enable the
-   controller and watch a small scheduled window before routing the full peak.
-3. To stop new changes immediately, stop the controller; the API retains
-   existing routing. To unwind, set `CHALK_SFU_WINDOW_MODE=retire` and run it
+   and dynamic-routing API, then watch a small scheduled window before routing
+   the full peak. The release itself restarts the controller.
+3. To stop new changes immediately, stop the controller with
+   `systemctl stop chalk-sfu-window-controller.service`; the API retains
+   existing routing. To unwind, set `CHALK_SFU_WINDOW_MODE=retire` in the SSM
+   controller environment and run the managed release. The controller then runs
    until all known window Droplets are gone. It fences bindings before drain,
    waits for no live Episode binding and two empty observations on the same
    boot, then deletes by verified provider ID. Do not roll back to an API that

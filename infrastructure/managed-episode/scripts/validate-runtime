@@ -6,6 +6,7 @@ env_root=""
 secret_root=""
 manifest=""
 sync_proof=""
+sfu_window_env=""
 rendered_root=""
 allow_dirty=false
 excluded_secrets=""
@@ -19,7 +20,7 @@ validate_environment_inputs() {
 }
 
 usage() {
-  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--environment <name>] [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
+  echo "usage: validate-runtime --env-root <dir> --sfu-window-env <file> --secret-root <dir> --manifest <file> --sync-proof <file> [--environment <name>] [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
 }
 
 while (($# > 0)); do
@@ -29,6 +30,7 @@ while (($# > 0)); do
     --secret-root) secret_root="${2:-}"; shift 2 ;;
     --manifest) manifest="${2:-}"; shift 2 ;;
     --sync-proof) sync_proof="${2:-}"; shift 2 ;;
+    --sfu-window-env) sfu_window_env="${2:-}"; shift 2 ;;
     --rendered-root) rendered_root="${2:-}"; shift 2 ;;
     --allow-dirty) allow_dirty=true; shift ;;
     --excluded-secrets) excluded_secrets="${2:-}"; shift 2 ;;
@@ -39,14 +41,14 @@ done
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 environment_policy="$(jq -ce --arg environment "$environment" '.[$environment] // .production' "${managed_root}/contracts/environments.json")"
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
-if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_proof}" ]]; then
+if [[ -z "${env_root}" || -z "${sfu_window_env}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_proof}" ]]; then
   usage
   exit 2
 fi
 [[ "$environment" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ && ${#environment} -le 32 ]] || { echo "deployment environment is invalid" >&2; exit 2; }
 
 if [[ -n "${excluded_secrets}" ]]; then
-  excluded_secrets="$(jq -Rcer --argjson allowed '["api-env","sync-env","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]' '
+  excluded_secrets="$(jq -Rcer --argjson allowed '["api-env","sync-env","sfu-window-controller-env","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]' '
     split(",") |
     if length > 0 and all(.[]; length > 0) and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique)) then . else error end
   ' <<<"${excluded_secrets}")" || { echo "excluded runtime input IDs are invalid" >&2; exit 2; }
@@ -106,6 +108,43 @@ require_env() {
 
 api_env="${env_root}/api.env"
 sync_env="${env_root}/sync.env"
+
+sfu_window_required=(
+  CHALK_SFU_WINDOW_ENVIRONMENT CHALK_SFU_WINDOW_MODE CHALK_SFU_WINDOW_DATABASE_URL
+  CHALK_SFU_APPLICATION_ID CHALK_SFU_SERVER_NAME CHALK_SFU_CA_FILE
+  CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE CHALK_SFU_WINDOW_PROVIDER_TOKEN
+  CHALK_SFU_WINDOW_SNAPSHOT_ID CHALK_SFU_WINDOW_REVISION CHALK_SFU_WINDOW_REGION
+  CHALK_SFU_WINDOW_VPC_UUID CHALK_SFU_WINDOW_FIREWALL_ID CHALK_SFU_WINDOW_STANDING_SLOTS
+)
+if is_excluded sfu-window-controller-env; then
+  [[ "$environment" != production ]] || fail "production cannot exclude the SFU window controller environment"
+fi
+if is_excluded sfu-window-controller-env && input_is_absent "$sfu_window_env"; then
+  :
+else
+  secure_regular_file "$sfu_window_env"
+  grep -Eq '__[A-Z0-9_]+__' "$sfu_window_env" && fail "SFU window controller environment contains unresolved placeholders"
+  for name in "${sfu_window_required[@]}"; do require_env "$sfu_window_env" "$name"; done
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_ENVIRONMENT)" == "$environment" ]] || fail "CHALK_SFU_WINDOW_ENVIRONMENT must match deployment environment"
+  case "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_MODE)" in scale|retire) ;; *) fail "CHALK_SFU_WINDOW_MODE must be scale or retire" ;; esac
+  env_value "$sfu_window_env" CHALK_SFU_WINDOW_DATABASE_URL | "${managed_root}/scripts/validate-database-url" "$environment" - CHALK_SFU_WINDOW_DATABASE_URL || fail "CHALK_SFU_WINDOW_DATABASE_URL does not meet the ${environment} rule"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_CA_FILE)" == /home/chalk-sfu-window/secrets/client-ca.crt ]] || fail "CHALK_SFU_CA_FILE must use the managed controller CA path"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_CLIENT_CERT_FILE)" == /home/chalk-sfu-window/secrets/server.crt ]] || fail "CHALK_SFU_CLIENT_CERT_FILE must use the managed controller certificate path"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_CLIENT_KEY_FILE)" == /home/chalk-sfu-window/secrets/server.key ]] || fail "CHALK_SFU_CLIENT_KEY_FILE must use the managed controller key path"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_REVISION)" =~ ^[0-9a-f]{40}$ ]] || fail "CHALK_SFU_WINDOW_REVISION must be a full lowercase Git SHA"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_SNAPSHOT_ID)" =~ ^[1-9][0-9]*$ ]] || fail "CHALK_SFU_WINDOW_SNAPSHOT_ID must be a positive integer"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_REGION)" =~ ^[a-z]{3}[0-9]$ ]] || fail "CHALK_SFU_WINDOW_REGION must be a DigitalOcean region slug"
+  uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_VPC_UUID)" =~ $uuid_pattern ]] || fail "CHALK_SFU_WINDOW_VPC_UUID must be a UUID"
+  [[ "$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_FIREWALL_ID)" =~ $uuid_pattern ]] || fail "CHALK_SFU_WINDOW_FIREWALL_ID must be a UUID"
+  standing_slots="$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_STANDING_SLOTS)"
+  [[ "$standing_slots" =~ ^([1-9]|[1-3][0-9]|40)$ ]] || fail "CHALK_SFU_WINDOW_STANDING_SLOTS must be 1 to 40"
+  if budget_hours="$(env_value "$sfu_window_env" CHALK_SFU_WINDOW_BUDGET_NODE_HOURS)"; then
+    if [[ ! "$budget_hours" =~ ^[0-9]+$ ]] || ((budget_hours < 1 || budget_hours > 930)); then
+      fail "CHALK_SFU_WINDOW_BUDGET_NODE_HOURS must be 1 to 930"
+    fi
+  fi
+fi
 
 api_required=(
   CHALK_API_ADDR CHALK_API_CORS_ALLOWED_ORIGINS CHALK_API_ENV
