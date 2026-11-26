@@ -606,9 +606,9 @@
       "name": "presenting",
       "summary": "Puts a file on the call Stage as a Document everyone can follow, with the renderer producing page images and Sync carrying presenter state.",
       "paths": [
-        "apps/api/db/migrations/20261126091000_presenting.sql",
-        "apps/api/db/migrations/20261126092000_presenting_publication.sql",
-        "apps/api/db/migrations/20261126093000_presenting_stage.sql",
+        "apps/api/db/migrations/20261125230000_presenting.sql",
+        "apps/api/db/migrations/20261125231000_presenting_publication.sql",
+        "apps/api/db/migrations/20261125232000_presenting_stage.sql",
         "apps/api/db/queries/presenting.sql",
         "apps/api/internal/adapters/postgres/presenting.go",
         "apps/api/internal/adapters/postgres/presenting_integration_test.go",

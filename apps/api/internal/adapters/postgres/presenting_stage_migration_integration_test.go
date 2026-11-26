@@ -3,8 +3,11 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"io/fs"
+	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -13,9 +16,121 @@ import (
 )
 
 const (
-	presentingPublicationMigrationVersion int64 = 20261126092000
-	presentingStageMigrationVersion       int64 = 20261126093000
+	masterRearmMigrationVersion           int64 = 20261126090000
+	presentingMigrationVersion            int64 = 20261125230000
+	presentingPublicationMigrationVersion int64 = 20261125231000
+	presentingStageMigrationVersion       int64 = 20261125232000
 )
+
+// A database already migrated through master's rearm migration sees the three presenting files as
+// explicitly allowed out-of-order migrations. Applying the candidate must add exactly those three
+// versions once and must not replay any migration the base database already recorded.
+func TestPresentingMigrationsApplyOnceAfterBaseUpgrade(t *testing.T) {
+	if testing.Short() {
+		t.Skip("postgres integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+	database := isolatedMigrationDatabase(t, ctx)
+	baseFiles := withoutPresentingMigrationFiles(t)
+	baseProvider, err := goose.NewProvider(goose.DialectPostgres, database, baseFiles, goose.WithLogger(goose.NopLogger()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := baseProvider.UpTo(ctx, masterRearmMigrationVersion); err != nil {
+		t.Fatalf("apply the base migration set: %v", err)
+	}
+	before := appliedMigrationCounts(t, ctx, database)
+
+	candidateProvider, err := goose.NewProvider(goose.DialectPostgres, database, migrations.Files, goose.WithLogger(goose.NopLogger()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := candidateProvider.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentVersion, err := candidateProvider.GetDBVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentVersion != masterRearmMigrationVersion {
+		t.Fatalf("base database is at %d, not master's rearm migration %d", currentVersion, masterRearmMigrationVersion)
+	}
+	pending := make([]int64, 0)
+	for _, status := range statuses {
+		if status.State == goose.StatePending && status.Source.Version < currentVersion {
+			pending = append(pending, status.Source.Version)
+		}
+	}
+	slices.Sort(pending)
+	want := []int64{presentingMigrationVersion, presentingPublicationMigrationVersion, presentingStageMigrationVersion}
+	if !slices.Equal(pending, want) {
+		t.Fatalf("out-of-order pending migrations = %v, want exactly the presenting versions %v", pending, want)
+	}
+	for _, version := range pending {
+		if _, err := candidateProvider.ApplyVersion(ctx, version, true); err != nil {
+			t.Fatalf("apply out-of-order migration %d: %v", version, err)
+		}
+	}
+	if _, err := candidateProvider.UpTo(ctx, masterRearmMigrationVersion); err != nil {
+		t.Fatalf("finish the candidate migration target: %v", err)
+	}
+
+	after := appliedMigrationCounts(t, ctx, database)
+	for version, count := range before {
+		if after[version] != count {
+			t.Fatalf("migration %d has %d applied rows after upgrade, want the unchanged base count %d", version, after[version], count)
+		}
+	}
+	for _, version := range want {
+		if after[version] != 1 {
+			t.Fatalf("presenting migration %d has %d applied rows after upgrade, want exactly 1", version, after[version])
+		}
+	}
+}
+
+func withoutPresentingMigrationFiles(t *testing.T) fs.FS {
+	t.Helper()
+	entries, err := fs.ReadDir(migrations.Files, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := fstest.MapFS{}
+	for _, entry := range entries {
+		if entry.IsDir() || strings.Contains(entry.Name(), "presenting") {
+			continue
+		}
+		data, err := fs.ReadFile(migrations.Files, entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[entry.Name()] = &fstest.MapFile{Data: data}
+	}
+	return files
+}
+
+func appliedMigrationCounts(t *testing.T, ctx context.Context, database *sql.DB) map[int64]int {
+	t.Helper()
+	rows, err := database.QueryContext(ctx, `select version_id, count(*) from goose_db_version where is_applied group by version_id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	counts := map[int64]int{}
+	for rows.Next() {
+		var version int64
+		var count int
+		if err := rows.Scan(&version, &count); err != nil {
+			t.Fatal(err)
+		}
+		counts[version] = count
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return counts
+}
 
 // A live Episode row lock must not let the Stage migration hold one hot table while it waits for
 // the other. The migration gives up inside its lock timeout, rolls back, and can be retried.
