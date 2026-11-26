@@ -109,7 +109,7 @@ it("keeps the lobby open when reload autoplay evidence is blocked", async () => 
   await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
 });
 
-it("resumes a reload in an automated browser when autoplay evidence is blocked", async () => {
+it("keeps the lobby open in an automated browser when autoplay evidence is blocked", async () => {
   Object.defineProperty(globalThis.navigator, "webdriver", { configurable: true, value: true });
   try {
     vi.stubGlobal(
@@ -121,7 +121,8 @@ it("resumes a reload in an automated browser when autoplay evidence is blocked",
     );
     writeReloadRejoin(sessionStorage, marker);
     await entry("access.media_proof_rejected");
-    await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));
+    await expectMessage("Rejoin");
+    expect(requests).toEqual([]);
   } finally {
     Reflect.deleteProperty(globalThis.navigator, "webdriver");
   }
