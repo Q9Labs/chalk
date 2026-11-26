@@ -76,6 +76,68 @@ func TestWindowReconcilerAdoptsAnAmbiguousCreate(t *testing.T) {
 	}
 }
 
+func TestWindowReconcilerAdoptsUnconfirmedCreateByProviderID(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Demand = Demand{LiveSlots: 5, Bookings: []Booking{{StartsAt: f.state.ObservedAt.Add(time.Minute), EndsAt: f.state.ObservedAt.Add(time.Hour), Participants: 3}}}
+	f.createErr = errors.New("shape not confirmed in create reply")
+	f.createID = 123
+	if _, err := f.reconciler.Reconcile(t.Context()); !errors.Is(err, f.createErr) {
+		t.Fatalf("unconfirmed create: %v", err)
+	}
+	if node := f.state.Nodes[0]; node.Phase != Starting || node.ProviderID != 123 {
+		t.Fatalf("node=%+v, want starting with provider ID 123", node)
+	}
+	f.droplet = Droplet{ID: 123, Address: netip.MustParseAddr("192.0.2.9"), Active: true}
+	f.health = Health{Incarnation: "first-boot", Admission: true}
+	f.reconcile(t, Starting, Serving)
+	if f.observes != 0 || f.inspects == 0 {
+		t.Fatalf("observes=%d inspects=%d, want adoption by Inspect only", f.observes, f.inspects)
+	}
+	if f.creates != 1 {
+		t.Fatalf("repeated a possibly committed create: %d POSTs", f.creates)
+	}
+}
+
+func TestWindowReconcilerConfirmsAdoptedCreateByInspect(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Demand = Demand{LiveSlots: 5, Bookings: []Booking{{StartsAt: f.state.ObservedAt.Add(time.Minute), EndsAt: f.state.ObservedAt.Add(time.Hour), Participants: 3}}}
+	f.createErr = errors.New("lost create reply")
+	if _, err := f.reconciler.Reconcile(t.Context()); !errors.Is(err, f.createErr) {
+		t.Fatalf("ambiguous create: %v", err)
+	}
+	address := netip.MustParseAddr("192.0.2.9")
+	f.droplet = Droplet{ID: 123, Address: address, Active: true, Outdated: true}
+	confirmed := Droplet{ID: 123, Address: address, Active: true}
+	f.inspectDroplet = &confirmed
+	f.reconcile(t, Starting)
+	if node := f.state.Nodes[0]; node.ProviderID != 123 || node.Phase != Starting {
+		t.Fatalf("node=%+v, want adopted starting node", node)
+	}
+	if f.destroyed != 0 || f.inspects != 1 {
+		t.Fatalf("destroyed=%d inspects=%d, want one by-ID read and no delete", f.destroyed, f.inspects)
+	}
+	f.health = Health{Incarnation: "first-boot", Admission: true}
+	f.reconcile(t, Serving)
+	if f.creates != 1 || f.destroyed != 0 {
+		t.Fatalf("creates=%d destroyed=%d", f.creates, f.destroyed)
+	}
+}
+
+func TestWindowReconcilerDeletesOutdatedAdoptedCreateAfterInspect(t *testing.T) {
+	f := newWindowFixture(t)
+	f.state.Demand = Demand{LiveSlots: 5, Bookings: []Booking{{StartsAt: f.state.ObservedAt.Add(time.Minute), EndsAt: f.state.ObservedAt.Add(time.Hour), Participants: 3}}}
+	f.createErr = errors.New("lost create reply")
+	if _, err := f.reconciler.Reconcile(t.Context()); !errors.Is(err, f.createErr) {
+		t.Fatalf("ambiguous create: %v", err)
+	}
+	f.state.Demand = Demand{}
+	f.droplet = Droplet{ID: 123, Address: netip.MustParseAddr("192.0.2.9"), Active: true, Outdated: true}
+	f.reconcile(t, Deleting, Deleted)
+	if f.destroyed != 123 {
+		t.Fatalf("destroyed=%d, want the confirmed outdated Droplet 123", f.destroyed)
+	}
+}
+
 func TestWindowReconcilerStopsCreatingAtBudget(t *testing.T) {
 	f := newWindowFixture(t)
 	f.state.Demand.LiveSlots = 20
@@ -151,17 +213,20 @@ func TestWindowReconcilerRemembersAnAcceptedCreateBeforeFirstObservation(t *test
 }
 
 type windowFixture struct {
-	reconciler *Reconciler
-	state      Snapshot
-	health     Health
-	healthErr  error
-	bound      bool
-	droplet    Droplet
-	createErr  error
-	createID   int64
-	creates    int
-	destroyed  int64
-	missing    int64
+	reconciler     *Reconciler
+	state          Snapshot
+	health         Health
+	healthErr      error
+	bound          bool
+	droplet        Droplet
+	inspectDroplet *Droplet
+	createErr      error
+	createID       int64
+	creates        int
+	observes       int
+	inspects       int
+	destroyed      int64
+	missing        int64
 }
 
 func newWindowFixture(t *testing.T) *windowFixture {
@@ -244,6 +309,7 @@ func (p fakeWindowProvider) Create(context.Context, string) (int64, bool, error)
 }
 
 func (p fakeWindowProvider) Observe(context.Context, string) (Droplet, bool, error) {
+	p.f.observes++
 	return p.f.droplet, p.f.droplet.ID > 0, nil
 }
 
@@ -253,8 +319,12 @@ func (p fakeWindowProvider) Destroy(_ context.Context, _ string, id int64) error
 }
 
 func (p fakeWindowProvider) Inspect(_ context.Context, name string, id int64) (Droplet, bool, error) {
+	p.f.inspects++
 	if id == p.f.destroyed || id == p.f.missing {
 		return Droplet{}, false, nil
+	}
+	if p.f.inspectDroplet != nil && p.f.inspectDroplet.ID == id {
+		return *p.f.inspectDroplet, true, nil
 	}
 	if p.f.droplet.ID == id {
 		return p.f.droplet, true, nil
