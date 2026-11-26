@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
@@ -91,6 +92,54 @@ type isolatedChildCompromiseError struct{ err error }
 func (e isolatedChildCompromiseError) Error() string { return e.err.Error() }
 func (e isolatedChildCompromiseError) Unwrap() error { return e.err }
 
+type isolatedSandboxError struct{ err error }
+
+func (e isolatedSandboxError) Error() string { return e.err.Error() }
+func (e isolatedSandboxError) Unwrap() error { return e.err }
+
+type cappedChildOutput struct {
+	mu  sync.Mutex
+	out bytes.Buffer
+}
+
+func (o *cappedChildOutput) appendChunk(chunk []byte) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if remaining := 4096 - o.out.Len(); remaining > 0 {
+		o.out.Write(chunk[:min(len(chunk), remaining)])
+	}
+}
+
+func (o *cappedChildOutput) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.out.String()
+}
+
+func collectChildOutput(pipe *os.File, output *cappedChildOutput, done chan<- struct{}) {
+	defer close(done)
+	chunk := make([]byte, 4096)
+	for {
+		n, err := pipe.Read(chunk)
+		if n > 0 {
+			output.appendChunk(chunk[:n])
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func closePipe(pipe *os.File) {
+	if pipe != nil {
+		_ = pipe.Close()
+	}
+}
+
+func useIsolatedNamespaces() bool {
+	return os.Getenv("AWS_LAMBDA_RUNTIME_API") == ""
+}
+
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
 	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -100,33 +149,80 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 	}
 	command := exec.Command(executable, args...)
 	command.Env = environment
-	configureIsolatedChild(command)
-	var output bytes.Buffer
-	command.Stdout = &output
-	command.Stderr = &output
-	if err := command.Start(); err != nil {
-		return fmt.Errorf("start isolated %s render sandbox: %w", mode, err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- command.Wait() }()
-	var err error
-	select {
-	case err = <-done:
-	case <-childCtx.Done():
-		killIsolatedChildProcessGroup(command)
-		<-done
-		if childCtx.Err() == context.DeadlineExceeded {
-			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
-		}
-		return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
-	}
+	configureIsolatedChild(command, useIsolatedNamespaces())
+	stdoutRead, stdoutWrite, err := os.Pipe()
 	if err != nil {
+		return fmt.Errorf("create isolated %s stdout pipe: %w", mode, err)
+	}
+	stderrRead, stderrWrite, err := os.Pipe()
+	if err != nil {
+		closePipe(stdoutRead)
+		closePipe(stdoutWrite)
+		return fmt.Errorf("create isolated %s stderr pipe: %w", mode, err)
+	}
+	command.Stdout = stdoutWrite
+	command.Stderr = stderrWrite
+	if err := command.Start(); err != nil {
+		closePipe(stdoutRead)
+		closePipe(stdoutWrite)
+		closePipe(stderrRead)
+		closePipe(stderrWrite)
+		return isolatedSandboxError{err: fmt.Errorf("start isolated %s render sandbox: %w", mode, err)}
+	}
+	closePipe(stdoutWrite)
+	closePipe(stderrWrite)
+	pgid := isolatedChildProcessGroupID(command.Process.Pid)
+	output := &cappedChildOutput{}
+	stdoutDone, stderrDone := make(chan struct{}), make(chan struct{})
+	go collectChildOutput(stdoutRead, output, stdoutDone)
+	go collectChildOutput(stderrRead, output, stderrDone)
+	readerDone := make(chan struct{})
+	go func() {
+		<-stdoutDone
+		<-stderrDone
+		close(readerDone)
+	}()
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- command.Wait() }()
+
+	var waitErr error
+	waitFinished, readersFinished := false, false
+	waitChannel, readerChannel := waitDone, readerDone
+	for !waitFinished || !readersFinished {
+		select {
+		case waitErr = <-waitChannel:
+			waitFinished = true
+			waitChannel = nil
+		case <-readerChannel:
+			readersFinished = true
+			readerChannel = nil
+		case <-childCtx.Done():
+			killIsolatedChildProcessGroup(pgid, command.Process)
+			closePipe(stdoutRead)
+			closePipe(stderrRead)
+			select {
+			case waitErr = <-waitDone:
+			case <-time.After(2 * time.Second):
+			}
+			<-readerDone
+			if childCtx.Err() == context.DeadlineExceeded {
+				return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
+			}
+			return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
+		}
+	}
+	closePipe(stdoutRead)
+	closePipe(stderrRead)
+	if waitErr != nil {
 		message := strings.TrimSpace(output.String())
 		if len(message) > 160 {
 			message = message[:160]
 		}
+		if strings.Contains(message, "renderer sandbox setup failed") {
+			return isolatedSandboxError{err: fmt.Errorf("isolated %s render sandbox setup failed: %s", mode, message)}
+		}
 		if message == "" {
-			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %w", mode, err)}
+			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %w", mode, waitErr)}
 		}
 		return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %s", mode, message)}
 	}

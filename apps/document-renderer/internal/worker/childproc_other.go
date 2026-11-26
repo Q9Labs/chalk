@@ -2,12 +2,17 @@
 
 package worker
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
 
-func configureIsolatedChild(command *exec.Cmd) {}
+func configureIsolatedChild(command *exec.Cmd, namespaces bool) {}
 
-func killIsolatedChildProcessGroup(command *exec.Cmd) {
-	if command.Process != nil {
-		_ = command.Process.Kill()
+func isolatedChildProcessGroupID(pid int) int { return pid }
+
+func killIsolatedChildProcessGroup(pgid int, process *os.Process) {
+	if process != nil {
+		_ = process.Kill()
 	}
 }

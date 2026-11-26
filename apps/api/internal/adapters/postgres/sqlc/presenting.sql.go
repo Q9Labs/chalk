@@ -16,7 +16,7 @@ with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
     where job.status = 'leased'
-        and job.lease_expires_at <= $4
+        and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
 ),
@@ -28,7 +28,7 @@ failed_documents as (
         and document.space_id = expired.space_id
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
-        and document.status <> 'failed'
+        and document.status = 'preparing'
     returning document.document_id
 ),
 candidate as (
@@ -40,7 +40,7 @@ candidate as (
         and document.document_id = job.document_id
     where job.status in ('queued', 'leased')
         and job.available_at <= $4
-        and (job.status = 'queued' or job.lease_expires_at <= $4)
+        and (job.status = 'queued' or job.lease_expires_at <= now())
         and job.attempt_count < job.attempt_limit
         and job.attempt_count + 1 = $5
         and ($6::uuid is null or job.job_id = $6::uuid)
@@ -144,19 +144,18 @@ where tenant_id = $1
     and attempt_count = $5
     and lease_owner = $6
     and lease_token = $7
-    and lease_expires_at > $8
+    and lease_expires_at > now()
     and status in ('leased', 'succeeded')
 `
 
 type CompletePresentingRenderJobParams struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	DocumentID   pgtype.UUID        `json:"document_id"`
-	JobID        pgtype.UUID        `json:"job_id"`
-	AttemptCount int32              `json:"attempt_count"`
-	LeaseOwner   pgtype.Text        `json:"lease_owner"`
-	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
 }
 
 func (q *Queries) CompletePresentingRenderJob(ctx context.Context, arg CompletePresentingRenderJobParams) (int64, error) {
@@ -168,7 +167,6 @@ func (q *Queries) CompletePresentingRenderJob(ctx context.Context, arg CompleteP
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -481,21 +479,20 @@ where tenant_id = $3
     and attempt_count = $7
     and lease_owner = $8
     and lease_token = $9
-    and lease_expires_at > $10
-    and status in ('leased', 'failed')
+    and lease_expires_at > now()
+    and status = 'leased'
 `
 
 type FailPresentingRenderJobParams struct {
-	ErrorCode    pgtype.Text        `json:"error_code"`
-	ErrorMessage pgtype.Text        `json:"error_message"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	DocumentID   pgtype.UUID        `json:"document_id"`
-	JobID        pgtype.UUID        `json:"job_id"`
-	AttemptCount int32              `json:"attempt_count"`
-	LeaseOwner   pgtype.Text        `json:"lease_owner"`
-	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
+	ErrorCode    pgtype.Text `json:"error_code"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
 }
 
 func (q *Queries) FailPresentingRenderJob(ctx context.Context, arg FailPresentingRenderJobParams) (int64, error) {
@@ -509,7 +506,6 @@ func (q *Queries) FailPresentingRenderJob(ctx context.Context, arg FailPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -874,7 +870,7 @@ where tenant_id = $2
     and attempt_count = $6
     and lease_owner = $7
     and lease_token = $8
-    and lease_expires_at > $9
+    and lease_expires_at > now()
 `
 
 type HeartbeatPresentingRenderJobParams struct {
@@ -886,7 +882,6 @@ type HeartbeatPresentingRenderJobParams struct {
 	AttemptCount   int32              `json:"attempt_count"`
 	LeaseOwner     pgtype.Text        `json:"lease_owner"`
 	LeaseToken     pgtype.UUID        `json:"lease_token"`
-	NowAt          pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) HeartbeatPresentingRenderJob(ctx context.Context, arg HeartbeatPresentingRenderJobParams) (int64, error) {
@@ -899,7 +894,6 @@ func (q *Queries) HeartbeatPresentingRenderJob(ctx context.Context, arg Heartbea
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -1164,7 +1158,7 @@ with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
     where job.status = 'leased'
-        and job.lease_expires_at <= $1
+        and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
 ),
@@ -1187,7 +1181,7 @@ where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
   and (
     (job.status = 'queued' and job.available_at <= $1)
-    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < $1)
+    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
   )
 order by job.available_at asc, job.created_at asc
 limit $2
@@ -1268,23 +1262,22 @@ where page.tenant_id = $3
             and job.attempt_count = $8
             and job.lease_owner = $9
             and job.lease_token = $10
-            and job.lease_expires_at > $11
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     )
 `
 
 type MarkPresentingPageReadyParams struct {
-	ImageKey     pgtype.Text        `json:"image_key"`
-	ThumbnailKey pgtype.Text        `json:"thumbnail_key"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	DocumentID   pgtype.UUID        `json:"document_id"`
-	Page         int32              `json:"page"`
-	JobID        pgtype.UUID        `json:"job_id"`
-	AttemptCount int32              `json:"attempt_count"`
-	LeaseOwner   pgtype.Text        `json:"lease_owner"`
-	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
+	ImageKey     pgtype.Text `json:"image_key"`
+	ThumbnailKey pgtype.Text `json:"thumbnail_key"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	Page         int32       `json:"page"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
 }
 
 func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentingPageReadyParams) (int64, error) {
@@ -1299,7 +1292,6 @@ func (q *Queries) MarkPresentingPageReady(ctx context.Context, arg MarkPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -1326,7 +1318,7 @@ where page.tenant_id = $3
             and job.attempt_count = $8
             and job.lease_owner = $9
             and job.lease_token = $10
-            and job.lease_expires_at > $11
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     )
 `
@@ -1342,7 +1334,6 @@ type MarkPresentingZoomReadyParams struct {
 	AttemptCount int32              `json:"attempt_count"`
 	LeaseOwner   pgtype.Text        `json:"lease_owner"`
 	LeaseToken   pgtype.UUID        `json:"lease_token"`
-	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) MarkPresentingZoomReady(ctx context.Context, arg MarkPresentingZoomReadyParams) (int64, error) {
@@ -1357,7 +1348,6 @@ func (q *Queries) MarkPresentingZoomReady(ctx context.Context, arg MarkPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
-		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err

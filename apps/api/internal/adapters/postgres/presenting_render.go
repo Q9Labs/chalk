@@ -42,7 +42,7 @@ func (r PresentingRepository) ClaimRenderJob(ctx context.Context, jobID utilitie
 func (r PresentingRepository) HeartbeatRenderJob(ctx context.Context, lease presenting.RenderLease, leaseUntil time.Time) error {
 	rows, err := r.queries.HeartbeatPresentingRenderJob(ctx, sqlc.HeartbeatPresentingRenderJobParams{
 		LeaseExpiresAt: pgtype.Timestamptz{Time: leaseUntil, Valid: true}, TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID),
-		AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
 	})
 	if err != nil {
 		return fmt.Errorf("heartbeat presenting render job: %w", err)
@@ -175,7 +175,7 @@ func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presentin
 	q := sqlc.New(tx)
 	rows, err := q.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
 		ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
-		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
 	})
 	if err != nil {
 		return fmt.Errorf("fail presenting render job: %w", err)
@@ -205,7 +205,7 @@ func publishPresentingPage(ctx context.Context, q *sqlc.Queries, lease presentin
 	rows, err := q.MarkPresentingPageReady(ctx, sqlc.MarkPresentingPageReadyParams{
 		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), Page: int32(page),
 		ImageKey: pgtype.Text{String: imageKey, Valid: true}, ThumbnailKey: pgtype.Text{String: thumbnailKey, Valid: true},
-		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
 	})
 	if err != nil {
 		return fmt.Errorf("mark presenting page ready: %w", err)
@@ -231,7 +231,7 @@ func presentingRenderUploadKey(ctx context.Context, q *sqlc.Queries, lease prese
 }
 
 func completePresentingJob(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {
-	rows, err := q.CompletePresentingRenderJob(ctx, sqlc.CompletePresentingRenderJobParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
+	rows, err := q.CompletePresentingRenderJob(ctx, sqlc.CompletePresentingRenderJobParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken)})
 	if err != nil {
 		return fmt.Errorf("complete presenting render job: %w", err)
 	}

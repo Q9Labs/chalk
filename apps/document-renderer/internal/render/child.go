@@ -28,7 +28,10 @@ type inventoryPage struct {
 // native PDFium call, so CPU, address-space, output and wall-clock bounds are
 // all enforced around this process.
 func RunChild(mode string, args []string) int {
-	applyChildRlimits()
+	if err := applyChildRlimits(); err != nil {
+		fmt.Fprintln(os.Stderr, "renderer sandbox setup failed:", err)
+		return 2
+	}
 	switch mode {
 	case "inventory":
 		return runInventoryChild(args)
@@ -45,7 +48,10 @@ func RunChild(mode string, args []string) int {
 // RunPageChild keeps the original benchmark entrypoint. Production uses
 // RunChild("page", ...) through RENDER_CHILD_MODE.
 func RunPageChild(args []string) int {
-	applyChildRlimits()
+	if err := applyChildRlimits(); err != nil {
+		fmt.Fprintln(os.Stderr, "renderer sandbox setup failed:", err)
+		return 2
+	}
 	return runPageChild(args)
 }
 

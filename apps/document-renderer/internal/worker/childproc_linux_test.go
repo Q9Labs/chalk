@@ -39,13 +39,14 @@ func init() {
 	}
 	if os.Getenv("RENDER_CHILD_MODE") == "grouptest" {
 		child := exec.Command("/bin/sh", "-c", "sleep 30")
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
 		if err := child.Start(); err != nil {
 			os.Exit(11)
 		}
 		if err := os.WriteFile(os.Args[1], []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
 			os.Exit(12)
 		}
-		time.Sleep(30 * time.Second)
 		os.Exit(0)
 	}
 }
@@ -68,13 +69,18 @@ func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 
 func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
 	command := exec.Command("/bin/sh")
-	configureIsolatedChild(command)
+	configureIsolatedChild(command, true)
 	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
 		t.Fatal("isolated child is not placed in its own process group")
 	}
 	required := uintptr(syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET)
 	if command.SysProcAttr.Unshareflags&required != required {
 		t.Fatalf("isolated child namespace flags %#x do not include user and network namespaces", command.SysProcAttr.Unshareflags)
+	}
+	lambdaCommand := exec.Command("/bin/sh")
+	configureIsolatedChild(lambdaCommand, false)
+	if lambdaCommand.SysProcAttr == nil || !lambdaCommand.SysProcAttr.Setpgid || lambdaCommand.SysProcAttr.Unshareflags != 0 {
+		t.Fatalf("Lambda child attributes = %+v; want process group without namespaces", lambdaCommand.SysProcAttr)
 	}
 }
 

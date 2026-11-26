@@ -207,7 +207,7 @@ with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
     where job.status = 'leased'
-        and job.lease_expires_at <= sqlc.arg(now_at)
+        and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
 ),
@@ -230,7 +230,7 @@ where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
   and (
     (job.status = 'queued' and job.available_at <= sqlc.arg(now_at))
-    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < sqlc.arg(now_at))
+    or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
   )
 order by job.available_at asc, job.created_at asc
 limit sqlc.arg(batch_limit);
@@ -240,7 +240,7 @@ with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
     where job.status = 'leased'
-        and job.lease_expires_at <= sqlc.arg(now_at)
+        and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
 ),
@@ -252,7 +252,7 @@ failed_documents as (
         and document.space_id = expired.space_id
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
-        and document.status <> 'failed'
+        and document.status = 'preparing'
     returning document.document_id
 ),
 candidate as (
@@ -264,7 +264,7 @@ candidate as (
         and document.document_id = job.document_id
     where job.status in ('queued', 'leased')
         and job.available_at <= sqlc.arg(now_at)
-        and (job.status = 'queued' or job.lease_expires_at <= sqlc.arg(now_at))
+        and (job.status = 'queued' or job.lease_expires_at <= now())
         and job.attempt_count < job.attempt_limit
         and job.attempt_count + 1 = sqlc.arg(expected_attempt)
         and (sqlc.narg(job_id)::uuid is null or job.job_id = sqlc.narg(job_id)::uuid)
@@ -313,7 +313,7 @@ where tenant_id = sqlc.arg(tenant_id)
     and attempt_count = sqlc.arg(attempt_count)
     and lease_owner = sqlc.arg(lease_owner)
     and lease_token = sqlc.arg(lease_token)
-    and lease_expires_at > sqlc.arg(now_at);
+    and lease_expires_at > now();
 
 -- name: CompletePresentingRenderJob :execrows
 update presenting_render_jobs
@@ -325,7 +325,7 @@ where tenant_id = sqlc.arg(tenant_id)
     and attempt_count = sqlc.arg(attempt_count)
     and lease_owner = sqlc.arg(lease_owner)
     and lease_token = sqlc.arg(lease_token)
-    and lease_expires_at > sqlc.arg(now_at)
+    and lease_expires_at > now()
     and status in ('leased', 'succeeded');
 
 -- name: FailPresentingRenderJob :execrows
@@ -338,8 +338,8 @@ where tenant_id = sqlc.arg(tenant_id)
     and attempt_count = sqlc.arg(attempt_count)
     and lease_owner = sqlc.arg(lease_owner)
     and lease_token = sqlc.arg(lease_token)
-    and lease_expires_at > sqlc.arg(now_at)
-    and status in ('leased', 'failed');
+    and lease_expires_at > now()
+    and status = 'leased';
 
 -- name: InsertPresentingDocumentPage :exec
 insert into presenting_document_pages (tenant_id, space_id, document_id, page, width, height, status)
@@ -372,7 +372,7 @@ where page.tenant_id = sqlc.arg(tenant_id)
             and job.attempt_count = sqlc.arg(attempt_count)
             and job.lease_owner = sqlc.arg(lease_owner)
             and job.lease_token = sqlc.arg(lease_token)
-            and job.lease_expires_at > sqlc.arg(now_at)
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     );
 
@@ -395,7 +395,7 @@ where page.tenant_id = sqlc.arg(tenant_id)
             and job.attempt_count = sqlc.arg(attempt_count)
             and job.lease_owner = sqlc.arg(lease_owner)
             and job.lease_token = sqlc.arg(lease_token)
-            and job.lease_expires_at > sqlc.arg(now_at)
+            and job.lease_expires_at > now()
             and page.page between job.page_start and job.page_end
     );
 

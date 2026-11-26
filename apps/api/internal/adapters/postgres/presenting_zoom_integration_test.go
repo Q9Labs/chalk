@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -115,8 +116,10 @@ func TestPresentingFinalTimeoutLeavesReadyDocumentIntegration(t *testing.T) {
 		lease = claimed.Job.RenderLease
 		claimNow = claimNow.Add(time.Second)
 	}
-	if _, err := repository.ListStaleRenderJobs(ctx, claimNow, 10); err != nil {
-		t.Fatalf("list stale jobs: %v", err)
+	token, _ := utilities.NewID()
+	_, err = repository.ClaimRenderJob(ctx, document.InventoryJobID, presenting.RenderAttemptLimit+1, claimNow, leaseUntil, token, "document-renderer")
+	if !errors.Is(err, presenting.ErrNoRenderJob) {
+		t.Fatalf("final-attempt claim error = %v", err)
 	}
 	var jobStatus, documentStatus string
 	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {

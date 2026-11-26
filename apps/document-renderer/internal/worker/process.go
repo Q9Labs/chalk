@@ -58,6 +58,14 @@ type renderFailure struct {
 func (f renderFailure) Error() string { return f.err.Error() }
 func (f renderFailure) Unwrap() error { return f.err }
 
+func isolatedRenderFailure(err error) error {
+	var sandbox isolatedSandboxError
+	if errors.As(err, &sandbox) {
+		return err
+	}
+	return renderFailure{code: classifyIsolatedFailure(err), err: err}
+}
+
 func processInventory(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
 	sourcePath, cleanup, err := writeSource(source)
 	if err != nil {
@@ -71,7 +79,7 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	inventoryPrefix := renderedPrefix(sourcePath, 0, 0)
 	inventoryStarted := time.Now()
 	if err := runIsolatedChild(ctx, executable, "inventory", sourcePath, inventoryPrefix, assignment.MIMEType); err != nil {
-		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+		return isolatedRenderFailure(err)
 	}
 	logChildTiming(ctx, assignment, 0, "inventory", inventoryPrefix, time.Since(inventoryStarted))
 	pageSpecs, err := readInventory(inventoryPrefix)
@@ -84,7 +92,7 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	renderStarted := time.Now()
 	bitmap, width, height, err := renderIsolatedEagerPage(ctx, executable, sourcePath, assignment.MIMEType, 1)
 	if err != nil {
-		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+		return isolatedRenderFailure(err)
 	}
 	logChildTiming(ctx, assignment, 1, "page", renderedPrefix(sourcePath, 1, standardEdge), time.Since(renderStarted))
 	if err := uploadEagerRenditions(ctx, assignment, assignment.Uploads[0], bitmap, width, height); err != nil {
@@ -176,7 +184,7 @@ func processZoom(ctx context.Context, control controlplane.ControlClient, assign
 	renderStarted := time.Now()
 	bitmap, width, height, err = renderIsolatedBitmap(ctx, executable, sourcePath, assignment.MIMEType, target.Page, zoomEdge)
 	if err != nil {
-		return renderFailure{code: classifyIsolatedFailure(err), err: err}
+		return isolatedRenderFailure(err)
 	}
 	logChildTiming(ctx, assignment, target.Page, "page", renderedPrefix(sourcePath, target.Page, zoomEdge), time.Since(renderStarted))
 	resizeStarted := time.Now()

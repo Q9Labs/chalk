@@ -215,6 +215,36 @@ func TestPresentingOnePageRenderLifecycleIntegration(t *testing.T) {
 	}
 }
 
+func TestPresentingFailureCannotOverwriteSweptTimeoutIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	now := time.Now().UTC()
+	token, _ := utilities.NewID()
+	claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim inventory job: %v", err)
+	}
+	lease := claimed.Job.RenderLease
+	mustExec(t, pool, `update presenting_render_jobs set status='failed', error_code='timeout', error_message='Render worker lease expired at the attempt limit', completed_at=now(), updated_at=now() where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID))
+	err = repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "late parser report"})
+	if !errors.Is(err, presenting.ErrLeaseLost) {
+		t.Fatalf("late failure error = %v", err)
+	}
+	var code string
+	if err := pool.QueryRow(ctx, `select error_code from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&code); err != nil {
+		t.Fatalf("read job error code: %v", err)
+	}
+	if code != "timeout" {
+		t.Fatalf("late failure overwrote timeout with %q", code)
+	}
+}
+
 func TestPresentingExpiredLeaseCannotCompleteOrFailRenderJobIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)

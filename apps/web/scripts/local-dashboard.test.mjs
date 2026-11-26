@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { artifactObjectHeaders, artifactWriteAllowed } from "./local-dashboard.mjs";
+import { artifactObjectHeaders, artifactSignatureValid } from "./local-dashboard.mjs";
 
 test("uploaded artifacts cannot execute active content on the dashboard origin", () => {
   const headers = artifactObjectHeaders("/local-dashboard/evil.html", Buffer.from("<script>alert(1)</script>"), { contentType: "text/html" });
@@ -8,10 +8,14 @@ test("uploaded artifacts cannot execute active content on the dashboard origin",
   expect(headers["X-Content-Type-Options"]).toBe("nosniff");
 });
 
-test("artifact writes and deletes are limited to loopback clients", () => {
-  expect(artifactWriteAllowed("127.0.0.1")).toBe(true);
-  expect(artifactWriteAllowed("::1")).toBe(true);
-  expect(artifactWriteAllowed("::ffff:127.0.0.1")).toBe(true);
-  expect(artifactWriteAllowed("192.0.2.10")).toBe(false);
-  expect(artifactWriteAllowed(undefined)).toBe(false);
+test("artifact writes and deletes require a valid unexpired signed URL", () => {
+  const signed = new URL("http://localhost:3070/__local-dashboard-artifacts/local-dashboard/test.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=local-dashboard%2F20261126%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20261126T043237Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&x-id=PutObject&X-Amz-Signature=93c225d94274f83d9a89ed47fce28250b56ba51a6a7c813a80880b3945d69b6a");
+  const now = new Date("2026-11-26T04:33:00Z");
+  const incoming = { headers: { host: "localhost:3070" } };
+  expect(artifactSignatureValid("PUT", signed, incoming, now)).toBe(true);
+  expect(artifactSignatureValid("DELETE", signed, incoming, now)).toBe(false);
+  expect(artifactSignatureValid("PUT", signed, { headers: { host: "evil.test" } }, now)).toBe(false);
+  expect(artifactSignatureValid("PUT", signed, incoming, new Date("2026-11-26T05:33:00Z"))).toBe(false);
+  const unsigned = new URL("http://localhost:3070/__local-dashboard-artifacts/local-dashboard/test.pdf");
+  expect(artifactSignatureValid("PUT", unsigned, incoming, now)).toBe(false);
 });
