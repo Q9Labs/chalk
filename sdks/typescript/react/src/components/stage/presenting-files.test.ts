@@ -1,9 +1,10 @@
 import { expect, it } from "vitest";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
+import { prepareChatAttachmentBatch } from "../composite/chat-upload-file";
 import { presentFiles, splitPresentingFiles } from "./presenting-files";
 
-function file(name: string, type = "application/pdf"): ChatUploadFile {
-  return new File([new Uint8Array(1024)], name, { type }) as ChatUploadFile;
+function file(name: string, type = "application/pdf", byteLength = 1024): ChatUploadFile {
+  return new File([new Uint8Array(byteLength)], name, { type }) as ChatUploadFile;
 }
 
 function client(presentAccepted = true) {
@@ -82,4 +83,50 @@ it("puts every sendable file in the chat split when Presenting is unavailable", 
   const split = splitPresentingFiles([pdf, image], { presentingAvailable: false, chatEnabled: true });
   expect(split.stageFile).toBeUndefined();
   expect(split.chatFiles).toEqual([pdf, image]);
+});
+
+it("stages only five chat files and counts the rest", () => {
+  const files = Array.from({ length: 6 }, (_, index) => file(`notes-${index}.txt`, "text/plain"));
+  const split = splitPresentingFiles(files, { presentingAvailable: false, chatEnabled: true });
+  expect(split.chatFiles).toEqual(files.slice(0, 5));
+  expect(split.chatOverflow).toBe(1);
+});
+
+it("keeps the failed Stage file inside the five-file composer batch", async () => {
+  const files = Array.from({ length: 6 }, (_, index) => file(`deck-${index}.pdf`));
+  const { api } = client(false);
+  const result = await presentFiles(files, api, { presentingAvailable: true, chatEnabled: true });
+  expect(result.chatFiles).toEqual(files.slice(0, 5));
+  expect(result.chatOverflow).toBe(1);
+  expect(result.failures).toEqual([{ fileName: "deck-0.pdf", reason: "failed" }]);
+});
+
+it("skips empty files instead of blocking the valid chat batch", () => {
+  const empty = file("empty.txt", "text/plain", 0);
+  const valid = file("notes.txt", "text/plain");
+  const split = splitPresentingFiles([empty, valid], { presentingAvailable: false, chatEnabled: true });
+  expect(split.chatFiles).toEqual([valid]);
+  expect(split.failures).toEqual([{ fileName: "empty.txt", reason: "empty" }]);
+});
+
+it("the composer skips empty files while accepting the valid rest", () => {
+  const empty = file("empty.txt", "text/plain", 0);
+  const valid = file("notes.txt", "text/plain");
+  const batch = prepareChatAttachmentBatch([empty, valid], 0);
+  expect(batch.accepted).toEqual([valid]);
+  expect(batch.emptyCount).toBe(1);
+  expect(batch.overflowCount).toBe(0);
+  expect(batch.invalid).toBeUndefined();
+});
+
+it("the composer accepts files up to its remaining capacity", () => {
+  const files = Array.from({ length: 4 }, (_, index) => file(`notes-${index}.txt`, "text/plain"));
+  const batch = prepareChatAttachmentBatch(files, 3);
+  expect(batch.accepted).toEqual(files.slice(0, 2));
+  expect(batch.overflowCount).toBe(2);
+});
+
+it("the composer still rejects an unsupported file before staging the batch", () => {
+  const batch = prepareChatAttachmentBatch([file("notes.txt", "text/plain"), file("archive.zip", "application/zip")], 0);
+  expect(batch.invalid?.fileName).toBe("archive.zip");
 });

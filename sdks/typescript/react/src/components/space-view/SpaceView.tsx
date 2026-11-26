@@ -209,7 +209,7 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
-  const { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, presentInputRef, choosePresentFiles, presentChosenFiles } = useFilePresenting({
+  const { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, consumeChatDrop, presentInputRef, choosePresentFiles, presentChosenFiles } = useFilePresenting({
     client,
     notify: callToasts.notify,
     live: connection.status === "live",
@@ -433,7 +433,7 @@ export function SpaceView({
               })}
               sidebar={
                 <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
-                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={chatDrop} /> : null}
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={chatDrop} onDroppedFilesConsumed={consumeChatDrop} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {

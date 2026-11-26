@@ -34,6 +34,8 @@ defmodule ChalkSync.Presenting.Repository do
     Store.transaction(identity, fn connection ->
       params = context(identity)
 
+      # Keep the authority order fixed with the lifecycle triggers: Episode, participant,
+      # then Stage state. A command that waits on an earlier row must not hold a later one.
       with %{rows: [["active"]]} <-
              Postgrex.query!(connection, Statements.lock_episode_sql(), params),
            %{rows: [[_capabilities]]} <-

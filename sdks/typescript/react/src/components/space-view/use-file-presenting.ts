@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type SpaceClient } from "@q9labsai/chalk-client";
 import { presentFiles } from "../stage/presenting-files";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
@@ -31,13 +31,16 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
         const message =
           failure.reason === "too_big"
             ? `${failure.fileName} is over 25 MB.`
-            : failure.reason === "unsupported"
-              ? `${failure.fileName} can't be presented or sent in chat.`
-              : chatEnabled
-                ? `${failure.fileName} could not be presented; it is waiting in chat.`
-                : `${failure.fileName} could not be presented.`;
+            : failure.reason === "empty"
+              ? `${failure.fileName} is empty and was skipped.`
+              : failure.reason === "unsupported"
+                ? `${failure.fileName} can't be presented or sent in chat.`
+                : chatEnabled
+                  ? `${failure.fileName} could not be presented; it is waiting in chat.`
+                  : `${failure.fileName} could not be presented.`;
         notify({ type: "error", duration: Infinity, message });
       }
+      if (result.chatOverflow) notify({ type: "info", message: `Only the first ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files were staged in chat.` });
     },
     [chatEnabled, notify],
   );
@@ -113,5 +116,9 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
   }, [chatOpen, chatEnabled, live, notify, openChat, presentingAvailable, presentChosenFiles]);
 
   const dropTarget = chatOpen && chatEnabled ? "chat" : presentingAvailable ? "present" : chatEnabled ? "chat" : null;
-  return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
+  const consumeChatDrop = useCallback((key: number) => {
+    setChatDrop((current) => (current?.key === key ? undefined : current));
+  }, []);
+
+  return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, consumeChatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
 }

@@ -1,4 +1,6 @@
 -- +goose Up
+SET LOCAL lock_timeout = '5s';
+
 create table sync_presenting_states (
     tenant_id uuid not null,
     space_id uuid not null,
@@ -99,8 +101,10 @@ create trigger sync_presenting_participant_left
     for each row execute function sync_presenting_participant_left();
 
 -- +goose Down
-drop trigger sync_presenting_participant_left on participants;
+SET LOCAL lock_timeout = '5s';
+
 drop trigger sync_presenting_episode_ended on episodes;
+drop trigger sync_presenting_participant_left on participants;
 drop trigger sync_presenting_document_changed on sync_presenting_documents;
 drop trigger sync_presenting_state_changed on sync_presenting_states;
 drop function sync_presenting_participant_left();
