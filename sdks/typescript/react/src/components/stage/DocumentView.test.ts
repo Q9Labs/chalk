@@ -18,19 +18,36 @@ it("ignores document page keys from editable controls and handled events", () =>
   textarea.remove();
 });
 
-it("resolves a fresh source URL on every download click path without navigating", async () => {
+it("resolves a fresh source URL on every download click path and saves a blob", async () => {
   let calls = 0;
   const client = { chat: { files: { resolveUrl: async () => `signed-${++calls}` } } } as never;
   const before = window.location.href;
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(new Blob(["file"]), { status: 200 })),
-  );
-  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:document"), revokeObjectURL: vi.fn() }));
-  await downloadDocumentSource(client, manifest, "deck.pdf");
-  await downloadDocumentSource(client, manifest, "deck.pdf");
+  const fetched: string[] = [];
+  const clicked: { readonly href: string; readonly download: string }[] = [];
+  const originalClick = HTMLAnchorElement.prototype.click;
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+  vi.stubGlobal("fetch", async (url: string | URL | Request) => {
+    fetched.push(String(url));
+    return new Response(new Blob(["file"]), { status: 200 });
+  });
+  HTMLAnchorElement.prototype.click = function click() {
+    clicked.push({ href: this.href, download: this.download });
+  };
+  URL.createObjectURL = () => "blob:document";
+  URL.revokeObjectURL = () => {};
+  try {
+    await downloadDocumentSource(client, manifest, "deck.pdf");
+    await downloadDocumentSource(client, manifest, "deck.pdf");
+  } finally {
+    HTMLAnchorElement.prototype.click = originalClick;
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    vi.unstubAllGlobals();
+  }
   expect(calls).toBe(2);
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetched).toEqual(["signed-1", "signed-2"]);
+  expect(clicked).toHaveLength(2);
+  expect(clicked.every((anchor) => anchor.download === "deck.pdf" && anchor.href.startsWith("blob:"))).toBe(true);
   expect(window.location.href).toBe(before);
-  vi.unstubAllGlobals();
 });
