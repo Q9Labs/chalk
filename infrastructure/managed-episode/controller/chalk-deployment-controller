@@ -43,6 +43,7 @@ controller_install_dir="${CHALK_CONTROLLER_INSTALL_DIR:-/usr/local/libexec}"
 sfu_window_user="${CHALK_SFU_WINDOW_USER:-chalk-sfu-window}"
 sfu_window_home="${CHALK_SFU_WINDOW_HOME:-/home/${sfu_window_user}}"
 sfu_window_binary="${CHALK_SFU_WINDOW_BINARY:-/usr/local/bin/chalk-sfu-window-controller}"
+sfu_window_install_record="${CHALK_SFU_WINDOW_INSTALL_RECORD:-${state_root}/sfu-window-controller-install.json}"
 sfu_window_active_attempts="${CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS:-15}"
 sfu_window_ready_attempts="${CHALK_SFU_WINDOW_READY_ATTEMPTS:-75}"
 sfu_window_extract_sequence=0
@@ -917,10 +918,6 @@ sfu_window_controller_enabled() {
   jq -e --arg id "$SFU_WINDOW_INPUT_ID" 'any(.[]; .id == $id and .missing == false)' <<<"${input_records_json}" >/dev/null 2>&1
 }
 
-sfu_window_controller_requested() {
-  jq -e --arg id "$SFU_WINDOW_INPUT_ID" 'index($id) == null' <<<"${excluded_json}" >/dev/null 2>&1
-}
-
 require_sfu_window_controller_input() {
   if [[ "$request_environment" == production ]] && ! sfu_window_controller_enabled; then
     fail "production requires the SFU window controller environment input"
@@ -1019,6 +1016,7 @@ snapshot_sfu_window_controller_state() {
   [[ ! -f "${sfu_window_home}/secrets/client-ca.crt" || -L "${sfu_window_home}/secrets/client-ca.crt" ]] || cp -p "${sfu_window_home}/secrets/client-ca.crt" "${backup}/secrets/client-ca.crt"
   [[ ! -f "${sfu_window_home}/secrets/server.crt" || -L "${sfu_window_home}/secrets/server.crt" ]] || cp -p "${sfu_window_home}/secrets/server.crt" "${backup}/secrets/server.crt"
   [[ ! -f "${sfu_window_home}/secrets/server.key" || -L "${sfu_window_home}/secrets/server.key" ]] || cp -p "${sfu_window_home}/secrets/server.key" "${backup}/secrets/server.key"
+  [[ ! -f "$sfu_window_install_record" || -L "$sfu_window_install_record" ]] || cp -p "$sfu_window_install_record" "${backup}/install-record.json"
   if "$systemctl_bin" is-enabled --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-enabled-probe.log"; then
     printf 'true\n'
   else
@@ -1061,6 +1059,7 @@ restore_sfu_window_controller_state() {
   if [[ -f "${backup}/secrets/client-ca.crt" ]]; then install_sfu_window_file "${backup}/secrets/client-ca.crt" "${sfu_window_home}/secrets/client-ca.crt" 0440; else rm -f "${sfu_window_home}/secrets/client-ca.crt"; fi
   if [[ -f "${backup}/secrets/server.crt" ]]; then install_sfu_window_file "${backup}/secrets/server.crt" "${sfu_window_home}/secrets/server.crt" 0440; else rm -f "${sfu_window_home}/secrets/server.crt"; fi
   if [[ -f "${backup}/secrets/server.key" ]]; then install_sfu_window_file "${backup}/secrets/server.key" "${sfu_window_home}/secrets/server.key" 0440; else rm -f "${sfu_window_home}/secrets/server.key"; fi
+  if [[ -f "${backup}/install-record.json" ]]; then atomic_install 0600 "${backup}/install-record.json" "$sfu_window_install_record"; else rm -f "$sfu_window_install_record"; fi
 
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/sfu-window-restore-systemd-reload.log" || fail "SFU window controller systemd reload failed during rollback"
   if [[ "$had_unit" == true ]]; then
@@ -1105,6 +1104,49 @@ wait_sfu_window_controller_loop() {
   fail "$message"
 }
 
+sfu_window_controller_versions_json() {
+  jq -cS '[.[] | select(.id == "sfu-window-controller-env" or .id == "provider-bridge-sync-client-ca" or .id == "provider-bridge-api-server-cert" or .id == "provider-bridge-api-server-key") | {id,version}] | sort_by(.id)' <<<"${input_records_json}"
+}
+
+write_sfu_window_installation_record() {
+  local extracted="${stage_root}/sfu-window-image/chalk-sfu-window-controller"
+  require_regular_file "$extracted"
+  local record_tmp="${stage_root}/sfu-window-install-record.json"
+  jq -n \
+    --arg binary_sha256 "$(sha256_file "$extracted")" \
+    --argjson input_versions "$(sfu_window_controller_versions_json)" \
+    '{schema_version:1,binary_sha256:$binary_sha256,input_versions:$input_versions}' >"$record_tmp"
+  atomic_write "$sfu_window_install_record" "$record_tmp"
+}
+
+sfu_window_controller_matches_release() {
+  local runtime_source="$1"
+  local extracted="${stage_root}/sfu-window-image/chalk-sfu-window-controller"
+  [[ -f "$extracted" && ! -L "$extracted" ]] || return 1
+  [[ -f "$sfu_window_binary" && ! -L "$sfu_window_binary" ]] || return 1
+  [[ "$(sha256_file "$sfu_window_binary")" == "$(sha256_file "$extracted")" ]] || return 1
+  [[ -f "${systemd_root}/${SFU_WINDOW_UNIT}" && ! -L "${systemd_root}/${SFU_WINDOW_UNIT}" ]] || return 1
+  cmp -s "${runtime_source}/systemd/${SFU_WINDOW_UNIT}" "${systemd_root}/${SFU_WINDOW_UNIT}" || return 1
+  cmp -s "${stage_root}/sfu-window-controller/controller.env" "${sfu_window_home}/controller.env" || return 1
+  cmp -s "${stage_root}/secret-inputs/provider-bridge/sync-client-ca.crt" "${sfu_window_home}/secrets/client-ca.crt" || return 1
+  cmp -s "${stage_root}/secret-inputs/provider-bridge/api-server.crt" "${sfu_window_home}/secrets/server.crt" || return 1
+  cmp -s "${stage_root}/secret-inputs/provider-bridge/api-server.key" "${sfu_window_home}/secrets/server.key" || return 1
+  [[ -f "$sfu_window_install_record" && ! -L "$sfu_window_install_record" ]] || return 1
+  jq -e --arg binary_sha256 "$(sha256_file "$extracted")" --argjson input_versions "$(sfu_window_controller_versions_json)" \
+    '.schema_version == 1 and .binary_sha256 == $binary_sha256 and (.input_versions | sort_by(.id)) == $input_versions' \
+    "$sfu_window_install_record" >/dev/null 2>&1 || return 1
+  "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-active.log"
+}
+
+prepare_sfu_window_controller_candidate() {
+  local runtime_source="$1"
+  require_regular_file "${runtime_source}/systemd/${SFU_WINDOW_UNIT}"
+  mkdir -p "${stage_root}/sfu-window-image"
+  chmod 700 "${stage_root}/sfu-window-image"
+  pull_sfu_window_controller_image
+  extract_sfu_window_controller_binary "${stage_root}/sfu-window-image/chalk-sfu-window-controller"
+}
+
 install_sfu_window_controller_files() {
   local runtime_source="$1"
   require_regular_file "${runtime_source}/systemd/${SFU_WINDOW_UNIT}"
@@ -1125,6 +1167,7 @@ install_sfu_window_controller_files() {
   "$systemctl_bin" enable "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-enable.log" || fail "SFU window controller enable failed"
   "$systemctl_bin" restart "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-restart.log" || fail "SFU window controller restart failed"
   wait_sfu_window_controller_active "SFU window controller did not become active"
+  write_sfu_window_installation_record
 }
 
 install_sfu_window_controller() {
@@ -1821,8 +1864,8 @@ rollback_to_stable() {
   fi
 }
 
-# A job re-run repeats a deploy this host already promoted. It passes on health alone and changes nothing; the same
-# release id with another manifest is refused, as is any other active release.
+# A job re-run repeats a deploy this host already promoted. It must not cut API/Sync over again, but it still
+# verifies the independent controller against this release; the same release id with another manifest is refused.
 release_already_active() {
   [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || return 1
   [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
@@ -1847,13 +1890,9 @@ deploy() {
   validate_inventory "${managed_root}/contracts/runtime-inputs.json"
   validate_manifest "$managed_root"
   prepare_stage
+  local active_release_retry=false
   if release_already_active; then
-    health_runtime || fail "release ${request_release_id} is already active but its health check failed"
-    if sfu_window_controller_requested; then
-      "$systemctl_bin" is-active --quiet "$SFU_WINDOW_UNIT" >/dev/null 2>"${stage_root}/sfu-window-systemd-active.log" || fail "release ${request_release_id} is already active but the SFU window controller is not active"
-    fi
-    emit_result deployed passed false
-    return
+    active_release_retry=true
   fi
   fetch_deployment_inputs
   require_sfu_window_controller_input
@@ -1880,6 +1919,27 @@ deploy() {
     fail "candidate runtime validation failed"
   }
   validate_host_quadlets "$rendered_root"
+  if [[ "$active_release_retry" == true ]]; then
+    health_runtime || fail "release ${request_release_id} is already active but its health check failed"
+    if sfu_window_controller_enabled; then
+      prepare_sfu_window_controller_candidate "$rendered_root"
+      if ! sfu_window_controller_matches_release "$rendered_root"; then
+        local retry_install_status=0
+        set +e
+        (
+          install_sfu_window_controller "$rendered_root"
+        )
+        retry_install_status=$?
+        set -e
+        if ((retry_install_status != 0)); then
+          emit_result failed failed false "SFU window controller installation failed for the active release"
+          exit 1
+        fi
+      fi
+    fi
+    emit_result deployed passed false
+    return
+  fi
   local stable_exists=false
   local stable_was_adopted=false
   if [[ -f "$active_pointer" && ! -L "$active_pointer" ]]; then
@@ -1890,11 +1950,7 @@ deploy() {
   fi
   pull_images
   if sfu_window_controller_enabled; then
-    require_regular_file "${rendered_root}/systemd/${SFU_WINDOW_UNIT}"
-    mkdir -p "${stage_root}/sfu-window-image"
-    chmod 700 "${stage_root}/sfu-window-image"
-    pull_sfu_window_controller_image
-    extract_sfu_window_controller_binary "${stage_root}/sfu-window-image/chalk-sfu-window-controller"
+    prepare_sfu_window_controller_candidate "$rendered_root"
   fi
   check_disk_space
   if [[ "$stable_exists" == false && "$adopt_existing_release" == true ]]; then
@@ -1944,7 +2000,9 @@ deploy() {
     if ((promotion_status == 0)); then
       local sfu_install_status=0
       set +e
-      install_sfu_window_controller "$rendered_root"
+      (
+        install_sfu_window_controller "$rendered_root"
+      )
       sfu_install_status=$?
       set -e
       if ((sfu_install_status != 0)); then

@@ -1471,10 +1471,12 @@ mkdir -p "$retry_state"
 make_request retry "${fixture_root}/retry-request.json"
 make_manifest retry >"${fixture_root}/retry-manifest.json"
 run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >/dev/null
-retry_pulls="$(grep -c '^podman pull ' "${fixture_root}/commands.log")"
+retry_api_stops="$(grep -c -E '^systemctl --user .*stop chalk-api.service' "${fixture_root}/commands.log" || true)"
+retry_controller_restarts="$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)"
 run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry.log"
 grep -Fq 'RESULT {"schema_version":1,"status":"deployed","release_id":"retry","health":"passed","rolled_back":false' "${fixture_root}/retry.log" || fail "a repeated deploy of the active release did not pass"
-[[ "$(grep -c '^podman pull ' "${fixture_root}/commands.log")" == "$retry_pulls" ]] || fail "a repeated deploy of the active release pulled images again"
+[[ "$(grep -c -E '^systemctl --user .*stop chalk-api.service' "${fixture_root}/commands.log" || true)" == "$retry_api_stops" ]] || fail "a repeated deploy of the active release cut over API/Sync again"
+[[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == "$retry_controller_restarts" ]] || fail "a repeated deploy restarted a current SFU window controller"
 jq -e -s 'length == 1' "${retry_state}/ledger.jsonl" >/dev/null || fail "a repeated deploy of the active release wrote a second ledger record"
 printf '0' >"${fixture_root}/health-index"
 if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" fail >"${fixture_root}/retry-unhealthy.log" 2>&1; then
@@ -1490,6 +1492,11 @@ if run_controller "$retry_state" "${fixture_root}/retry-excluded-request.json" "
   fail "a repeated deploy with other exclusions passed"
 fi
 grep -Fq 'already active with different deployment settings' "${fixture_root}/retry-excluded.log" || fail "changed deployment settings for the active release were not named"
+make_request retry "${fixture_root}/retry-sfu-excluded-request.json" '["sfu-window-controller-env"]'
+if run_controller "$retry_state" "${fixture_root}/retry-sfu-excluded-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-sfu-excluded.log" 2>&1; then
+  fail "a production retry that excluded the controller input passed"
+fi
+grep -Fq 'production requires the SFU window controller environment input' "${fixture_root}/retry-sfu-excluded.log" || fail "a production retry bypassed the controller input requirement"
 # A promotion cut short after another release started leaves the pointer on this one: health alone must not pass it.
 cp "${fixture_root}/retry-changed-manifest.json" "${fixture_root}/run/release/release-manifest.json"
 if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-interrupted.log" 2>&1; then
@@ -1498,11 +1505,9 @@ fi
 grep -Fq 'the running release differs' "${fixture_root}/retry-interrupted.log" || fail "a running release that differs from the active pointer was not named"
 cp "${fixture_root}/retry-manifest.json" "${fixture_root}/run/release/release-manifest.json"
 rm -f "${fixture_root}/commands.log.sfu-window-active"
-if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-controller-inactive.log" 2>&1; then
-  fail "a repeated deploy passed while the SFU window controller was inactive"
-fi
-grep -Fq 'SFU window controller is not active' "${fixture_root}/retry-controller-inactive.log" || fail "an inactive controller on the active release fast path was not named"
-: >"${fixture_root}/commands.log.sfu-window-active"
+run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-controller-inactive.log" 2>&1 || fail "a repeated deploy did not repair an inactive SFU window controller"
+grep -Fq 'RESULT {"schema_version":1,"status":"deployed","release_id":"retry"' "${fixture_root}/retry-controller-inactive.log" || fail "an inactive controller repair did not report deployed"
+[[ -e "${fixture_root}/commands.log.sfu-window-active" ]] || fail "an inactive controller repair did not restart the controller"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
@@ -1561,6 +1566,7 @@ for path in "${fixture_root}/chalk-sfu-window-controller" "${fixture_root}/syste
   [[ ! -e "$path" ]] || fail "failed first SFU window controller installation left $path"
 done
 grep -Fq 'systemctl disable chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || fail "failed first SFU window controller installation was not disabled"
+grep -Fq 'RESULT {"schema_version":1,"status":"failed","release_id":"candidate-first","health":"failed","rolled_back":false' "${fixture_root}/sfu-window-first-install.log" || fail "failed first SFU window controller installation did not emit a RESULT line"
 [[ "$(grep -c '^systemctl restart chalk-sfu-window-controller.service' "${fixture_root}/commands.log" || true)" == 1 ]] || fail "first-install rollback restarted a controller that did not exist before"
 jq -e '.release_id == "candidate-first"' "${sfu_state}/active-release.json" >/dev/null || fail "first controller installation failure changed the promoted API release pointer"
 cp -p "${first_install_saved}/binary" "${fixture_root}/chalk-sfu-window-controller"
@@ -1571,6 +1577,23 @@ cp -p "${first_install_saved}/secrets/server.crt" "${fixture_root}/sfu-window-ho
 cp -p "${first_install_saved}/secrets/server.key" "${fixture_root}/sfu-window-home/secrets/server.key"
 : >"${fixture_root}/commands.log.sfu-window-active"
 : >"${fixture_root}/commands.log.sfu-window-enabled"
+printf 'test-only-old-controller-binary
+' >"${fixture_root}/chalk-sfu-window-controller"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed" "${fixture_root}/systemctl-failed.sfu-window-inactive"
+if FAKE_SFU_WINDOW_INACTIVE_ONCE=true CHALK_SFU_WINDOW_ACTIVE_ATTEMPTS=1 run_controller "$sfu_state" "${fixture_root}/candidate-first-request.json" "${fixture_root}/candidate-first-manifest.json" ok >"${fixture_root}/sfu-window-retry-unchanged.log" 2>&1; then
+  fail "an unchanged retry accepted a failed SFU window controller installation"
+fi
+grep -Fq 'RESULT {"schema_version":1,"status":"failed","release_id":"candidate-first","health":"failed","rolled_back":false' "${fixture_root}/sfu-window-retry-unchanged.log" || fail "unchanged controller retry did not emit a failed RESULT line"
+! grep -Fq '"status":"deployed"' "${fixture_root}/sfu-window-retry-unchanged.log" || fail "unchanged controller retry reported deployed"
+cmp -s <(printf 'test-only-old-controller-binary
+') "${fixture_root}/chalk-sfu-window-controller" || fail "unchanged controller retry did not restore the previous controller"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed" "${fixture_root}/systemctl-failed.sfu-window-inactive"
+run_controller "$sfu_state" "${fixture_root}/candidate-first-request.json" "${fixture_root}/candidate-first-manifest.json" ok >"${fixture_root}/sfu-window-retry-fixed.log" 2>&1 || fail "a fixed retry did not reinstall the SFU window controller"
+grep -Fq 'RESULT {"schema_version":1,"status":"deployed","release_id":"candidate-first","health":"passed","rolled_back":false' "${fixture_root}/sfu-window-retry-fixed.log" || fail "fixed controller retry did not report deployed"
+cmp -s <(printf 'test-only-linux-binary
+') "${fixture_root}/chalk-sfu-window-controller" || fail "fixed controller retry did not install the candidate controller"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
 if FAKE_SYSTEMCTL_FAIL_ONCE='stop chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/stop-failure.log" 2>&1; then
