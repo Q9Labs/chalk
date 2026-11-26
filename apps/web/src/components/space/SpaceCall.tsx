@@ -25,7 +25,7 @@ export function LocalSpace({
   onEnded,
 }: {
   readonly admission: PublicSpaceAdmission;
-  readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string, reportExpiresAt: number | undefined) => void;
+  readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly displayName: string;
   readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
   readonly inviteLink?: string;
@@ -138,7 +138,7 @@ export function LocalSpace({
           client={client}
           onReportProblem={reportsAvailable ? reportProblem : undefined}
           reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
-          onOpenReportProblem={() => onOpenReportProblem(reportProblem, reportDiagnostics(spaceName ?? "Call", connection), reportExpiresAt)}
+          onOpenReportProblem={() => onOpenReportProblem(reportProblem, reportDiagnostics(spaceName ?? "Call", connection))}
           displayName={displayName}
           defaults={defaults}
           spaceName={spaceName}
@@ -199,12 +199,20 @@ export function EndedStatusSurface({
 export function SpaceReportProblemDialog({
   tenantId,
   reportExpiresAt,
+  reportSession,
   ...props
 }: Omit<ComponentProps<typeof ReportProblemDialog>, "unavailableReason"> & {
   readonly tenantId: string | undefined;
   readonly reportExpiresAt: number | undefined;
+  readonly reportSession?: PublicSpaceAdmission["session"];
 }) {
-  const reportExpired = useReportCredentialExpired(reportExpiresAt);
+  const subscribeReportSession = useCallback((listener: () => void) => reportSession?.subscribe(listener) ?? (() => undefined), [reportSession]);
+  const liveReportExpiresAt = useSyncExternalStore(
+    subscribeReportSession,
+    () => reportSession?.mediaExpiresAt(),
+    () => reportSession?.mediaExpiresAt(),
+  );
+  const reportExpired = useReportCredentialExpired(reportExpiresAt ?? liveReportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), tenantId);
   return <ReportProblemDialog {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
 }

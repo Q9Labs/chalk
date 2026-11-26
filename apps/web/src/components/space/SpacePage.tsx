@@ -60,7 +60,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const { mode } = useTheme();
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string; reportExpiresAt: number | undefined } | null>(null);
+  const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
   const [reloadMarker] = useState(() => {
     const routeKey = slug ?? inviteCode;
@@ -315,8 +315,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       return (
         <LocalSpace
           admission={entrance.joined}
-          onOpenReportProblem={(send, diagnostics, reportExpiresAt) => {
-            setReportDialog({ send, diagnostics, reportExpiresAt });
+          onOpenReportProblem={(send, diagnostics) => {
+            setReportDialog({ send, diagnostics });
             setReportOpen(true);
           }}
           displayName={settings.displayName}
@@ -378,7 +378,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {sendReport && callSurface ? (
         <callSurface.SpaceReportProblemDialog
           tenantId={ended?.tenantId ?? session?.reloadMarker().tenantId}
-          reportExpiresAt={ended?.reportExpiresAt ?? reportDialog?.reportExpiresAt}
+          reportExpiresAt={ended?.reportExpiresAt}
+          reportSession={session}
           diagnostics={ended ? callSurface.reportDiagnostics(ended.callName ?? "Call", { status: ended.phase, lastError: ended.failure }) : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}
