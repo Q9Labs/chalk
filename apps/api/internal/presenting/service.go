@@ -71,27 +71,39 @@ func (s Service) Zoom(ctx context.Context, subject Subject, documentID utilities
 		return "", time.Time{}, ErrDocumentNotReady
 	}
 	if !page.ZoomReady {
-		job, created, err := s.repository.EnsureZoomJob(ctx, document, pageNumber, s.now().UTC())
+		page, err = s.ensureZoomPage(ctx, subject, document, documentID, pageNumber)
 		if err != nil {
 			return "", time.Time{}, err
-		}
-		if !created {
-			return "", time.Time{}, ErrZoomNotReady
-		}
-		if s.invoker == nil {
-			return "", time.Time{}, ErrRenderUnavailable
-		}
-		if err := s.invokeJob(ctx, job, true); err != nil {
-			return "", time.Time{}, fmt.Errorf("invoke presenting zoom renderer: %w", err)
-		}
-		_, page, err = s.repository.AuthorizedPage(ctx, subject, documentID, pageNumber)
-		if err != nil {
-			return "", time.Time{}, err
-		}
-		if !page.ZoomReady {
-			return "", time.Time{}, ErrZoomNotReady
 		}
 	}
+	return s.signZoomPage(ctx, page)
+}
+
+func (s Service) ensureZoomPage(ctx context.Context, subject Subject, document Document, documentID utilities.ID, pageNumber int) (Page, error) {
+	job, created, err := s.repository.EnsureZoomJob(ctx, document, pageNumber, s.now().UTC())
+	if err != nil {
+		return Page{}, err
+	}
+	if !created {
+		return Page{}, ErrZoomNotReady
+	}
+	if s.invoker == nil {
+		return Page{}, ErrRenderUnavailable
+	}
+	if err := s.invokeJob(ctx, job, true); err != nil {
+		return Page{}, fmt.Errorf("invoke presenting zoom renderer: %w", err)
+	}
+	_, page, err := s.repository.AuthorizedPage(ctx, subject, documentID, pageNumber)
+	if err != nil {
+		return Page{}, err
+	}
+	if !page.ZoomReady {
+		return Page{}, ErrZoomNotReady
+	}
+	return page, nil
+}
+
+func (s Service) signZoomPage(ctx context.Context, page Page) (string, time.Time, error) {
 	signed, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{
 		Key: page.ZoomKey, ExpiresIn: PageURLLifetime,
 	})

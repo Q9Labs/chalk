@@ -55,7 +55,7 @@ func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (
 	if err != nil {
 		return ControlAssignment{}, false, err
 	}
-	if claimed.Job.TenantID != capability.TenantID || claimed.Job.SpaceID != capability.SpaceID || claimed.Job.DocumentID != capability.DocumentID || claimed.Job.Kind != capability.Kind || claimed.Job.PageStart != capability.PageStart || claimed.Job.PageEnd != capability.PageEnd || claimed.Job.Attempt != capability.Attempt {
+	if !claimedJobMatchesCapability(claimed.Job, capability) {
 		return ControlAssignment{}, false, ErrLeaseLost
 	}
 	leaseExpiry := claimed.Job.LeaseExpiry
@@ -66,6 +66,35 @@ func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (
 	if ttl <= 0 {
 		return ControlAssignment{}, false, ErrNoRenderJob
 	}
+	tracked := renderUploadsForClaim(claimed)
+	if err := s.repository.TrackRenderUploads(ctx, tracked); err != nil {
+		return ControlAssignment{}, false, err
+	}
+	source, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: claimed.Document.SourceKey, ExpiresIn: ttl})
+	if err != nil {
+		return ControlAssignment{}, false, fmt.Errorf("sign presenting source: %w", err)
+	}
+	assignment := ControlAssignment{
+		JobID: claimed.Job.JobID.String(), TenantID: claimed.Job.TenantID.String(), SpaceID: claimed.Job.SpaceID.String(), DocumentID: claimed.Document.DocumentID.String(), Kind: claimed.Job.Kind,
+		PageStart: claimed.Job.PageStart, PageEnd: claimed.Job.PageEnd, Attempt: claimed.Job.Attempt,
+		LeaseToken: token.String(), LeaseExpiresAt: leaseExpiry.UTC().Format(time.RFC3339Nano),
+		FileName: claimed.Document.FileName, MIMEType: claimed.Document.MIMEType,
+		SourceURL: source.URL, SourceExpiresAt: source.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		SourceSHA256: fmt.Sprintf("%x", claimed.Document.SourceSHA256), SourceSizeBytes: claimed.Document.ByteLength,
+	}
+	uploads, err := s.signRenderUploads(ctx, claimed, ttl)
+	if err != nil {
+		return ControlAssignment{}, false, err
+	}
+	assignment.Uploads = uploads
+	return assignment, true, nil
+}
+
+func claimedJobMatchesCapability(job RenderJob, capability RenderCapability) bool {
+	return job.TenantID == capability.TenantID && job.SpaceID == capability.SpaceID && job.DocumentID == capability.DocumentID && job.Kind == capability.Kind && job.PageStart == capability.PageStart && job.PageEnd == capability.PageEnd && job.Attempt == capability.Attempt
+}
+
+func renderUploadsForClaim(claimed RenderAssignment) []RenderUpload {
 	tracked := make([]RenderUpload, 0, (claimed.Job.PageEnd-claimed.Job.PageStart+1)*2)
 	for page := claimed.Job.PageStart; page <= claimed.Job.PageEnd; page++ {
 		base := RenderUpload{TenantID: claimed.Job.TenantID, SpaceID: claimed.Job.SpaceID, DocumentID: claimed.Job.DocumentID, JobID: claimed.Job.JobID, Page: page, Attempt: claimed.Job.Attempt}
@@ -82,41 +111,36 @@ func (s Service) ClaimRender(ctx context.Context, capability RenderCapability) (
 		base.ObjectKey = attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page)
 		tracked = append(tracked, base)
 	}
-	if err := s.repository.TrackRenderUploads(ctx, tracked); err != nil {
-		return ControlAssignment{}, false, err
-	}
-	source, err := s.objects.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: claimed.Document.SourceKey, ExpiresIn: ttl})
-	if err != nil {
-		return ControlAssignment{}, false, fmt.Errorf("sign presenting source: %w", err)
-	}
-	assignment := ControlAssignment{
-		JobID: claimed.Job.JobID.String(), TenantID: claimed.Job.TenantID.String(), SpaceID: claimed.Job.SpaceID.String(), DocumentID: claimed.Document.DocumentID.String(), Kind: claimed.Job.Kind,
-		PageStart: claimed.Job.PageStart, PageEnd: claimed.Job.PageEnd, Attempt: claimed.Job.Attempt,
-		LeaseToken: token.String(), LeaseExpiresAt: leaseExpiry.UTC().Format(time.RFC3339Nano),
-		FileName: claimed.Document.FileName, MIMEType: claimed.Document.MIMEType,
-		SourceURL: source.URL, SourceExpiresAt: source.ExpiresAt.UTC().Format(time.RFC3339Nano),
-		SourceSHA256: fmt.Sprintf("%x", claimed.Document.SourceSHA256), SourceSizeBytes: claimed.Document.ByteLength,
-	}
-	pages := make([]int, 0, claimed.Job.PageEnd-claimed.Job.PageStart+1)
+	return tracked
+}
+
+func (s Service) signRenderUploads(ctx context.Context, claimed RenderAssignment, ttl time.Duration) ([]PageUploads, error) {
+	uploads := make([]PageUploads, 0, claimed.Job.PageEnd-claimed.Job.PageStart+1)
 	for page := claimed.Job.PageStart; page <= claimed.Job.PageEnd; page++ {
-		pages = append(pages, page)
-	}
-	for _, page := range pages {
-		upload := PageUploads{Page: page}
-		if claimed.Job.Kind == "zoom" {
-			upload.Zoom, err = s.signUpload(ctx, attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-		} else {
-			upload.Image, err = s.signUpload(ctx, attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-			if err == nil {
-				upload.Thumbnail, err = s.signUpload(ctx, attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
-			}
-		}
+		upload, err := s.signPageUploads(ctx, claimed, page, ttl)
 		if err != nil {
-			return ControlAssignment{}, false, err
+			return nil, err
 		}
-		assignment.Uploads = append(assignment.Uploads, upload)
+		uploads = append(uploads, upload)
 	}
-	return assignment, true, nil
+	return uploads, nil
+}
+
+func (s Service) signPageUploads(ctx context.Context, claimed RenderAssignment, page int, ttl time.Duration) (PageUploads, error) {
+	upload := PageUploads{Page: page}
+	var err error
+	if claimed.Job.Kind == "zoom" {
+		upload.Zoom, err = s.signUpload(ctx, attemptZoomKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
+	} else {
+		upload.Image, err = s.signUpload(ctx, attemptImageKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
+		if err == nil {
+			upload.Thumbnail, err = s.signUpload(ctx, attemptThumbnailKey(claimed.Document.TenantID, claimed.Document.SpaceID, claimed.Document.EpisodeID, claimed.Document.DocumentID, claimed.Job.JobID, claimed.Job.Attempt, page), ttl)
+		}
+	}
+	if err != nil {
+		return PageUploads{}, err
+	}
+	return upload, nil
 }
 
 func (s Service) signUpload(ctx context.Context, key string, ttl time.Duration) (SignedUpload, error) {
