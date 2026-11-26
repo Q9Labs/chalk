@@ -173,10 +173,21 @@ func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presentin
 	}
 	defer tx.Rollback(ctx)
 	q := sqlc.New(tx)
-	rows, err := q.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
-		ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
-		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
-	})
+	var rows int64
+	if failure.Code == "infrastructure" {
+		rows, err = q.RequeuePresentingRenderJob(ctx, sqlc.RequeuePresentingRenderJobParams{
+			ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
+			TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
+		})
+		if err == nil && rows == 1 {
+			return tx.Commit(ctx)
+		}
+	} else {
+		rows, err = q.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
+			ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
+			TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
+		})
+	}
 	if err != nil {
 		return fmt.Errorf("fail presenting render job: %w", err)
 	}

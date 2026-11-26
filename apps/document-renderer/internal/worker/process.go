@@ -61,7 +61,7 @@ func (f renderFailure) Unwrap() error { return f.err }
 func isolatedRenderFailure(err error) error {
 	var sandbox isolatedSandboxError
 	if errors.As(err, &sandbox) {
-		return err
+		return renderFailure{code: "infrastructure", err: err}
 	}
 	return renderFailure{code: classifyIsolatedFailure(err), err: err}
 }

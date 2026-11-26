@@ -10,15 +10,11 @@ import (
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
 )
 
-func TestIsolatedRenderFailureDoesNotClassifySandboxSetupAsDocumentFailure(t *testing.T) {
+func TestIsolatedRenderFailureClassifiesSandboxSetupAsInfrastructure(t *testing.T) {
 	err := isolatedRenderFailure(isolatedSandboxError{err: errors.New("namespace unavailable")})
 	var failure renderFailure
-	if errors.As(err, &failure) {
-		t.Fatalf("sandbox setup became document failure %#v", failure)
-	}
-	var sandbox isolatedSandboxError
-	if !errors.As(err, &sandbox) {
-		t.Fatalf("sandbox error lost its type: %v", err)
+	if !errors.As(err, &failure) || failure.code != "infrastructure" {
+		t.Fatalf("sandbox setup classification = %#v", err)
 	}
 }
 

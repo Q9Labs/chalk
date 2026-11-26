@@ -215,6 +215,41 @@ func TestPresentingOnePageRenderLifecycleIntegration(t *testing.T) {
 	}
 }
 
+func TestPresentingInfrastructureFailureRequeuesRenderJobIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	now := time.Now().UTC()
+	token, _ := utilities.NewID()
+	claimed, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim inventory job: %v", err)
+	}
+	lease := claimed.Job.RenderLease
+	if err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "infrastructure", Message: "sandbox unavailable"}); err != nil {
+		t.Fatalf("report infrastructure failure: %v", err)
+	}
+	var jobStatus, documentStatus, code string
+	if err := pool.QueryRow(ctx, `select status, error_code from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus, &code); err != nil {
+		t.Fatalf("read requeued job: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select status from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID)).Scan(&documentStatus); err != nil {
+		t.Fatalf("read document: %v", err)
+	}
+	if jobStatus != "queued" || documentStatus != "preparing" || code != "infrastructure" {
+		t.Fatalf("infrastructure failure left job=%q document=%q code=%q", jobStatus, documentStatus, code)
+	}
+	retryToken, _ := utilities.NewID()
+	if _, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, 2, time.Now().UTC(), time.Now().UTC().Add(time.Minute), retryToken, "document-renderer"); err != nil {
+		t.Fatalf("claim infrastructure retry: %v", err)
+	}
+}
+
 func TestPresentingFailureCannotOverwriteSweptTimeoutIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)

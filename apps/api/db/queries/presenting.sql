@@ -341,6 +341,21 @@ where tenant_id = sqlc.arg(tenant_id)
     and lease_expires_at > now()
     and status = 'leased';
 
+
+-- name: RequeuePresentingRenderJob :execrows
+update presenting_render_jobs
+set status = 'queued', lease_token = null, lease_owner = null, lease_expires_at = null, available_at = now(), error_code = sqlc.arg(error_code), error_message = sqlc.arg(error_message), updated_at = now()
+where tenant_id = sqlc.arg(tenant_id)
+    and space_id = sqlc.arg(space_id)
+    and document_id = sqlc.arg(document_id)
+    and job_id = sqlc.arg(job_id)
+    and attempt_count = sqlc.arg(attempt_count)
+    and attempt_count < attempt_limit
+    and lease_owner = sqlc.arg(lease_owner)
+    and lease_token = sqlc.arg(lease_token)
+    and lease_expires_at > now()
+    and status = 'leased';
+
 -- name: InsertPresentingDocumentPage :exec
 insert into presenting_document_pages (tenant_id, space_id, document_id, page, width, height, status)
 values (sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(document_id), sqlc.arg(page), sqlc.arg(width), sqlc.arg(height), 'pending')

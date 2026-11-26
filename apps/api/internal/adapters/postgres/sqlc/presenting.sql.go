@@ -1366,6 +1366,51 @@ func (q *Queries) PresentingEnabled(ctx context.Context, defaultEnabled bool) (b
 	return column_1, err
 }
 
+const requeuePresentingRenderJob = `-- name: RequeuePresentingRenderJob :execrows
+update presenting_render_jobs
+set status = 'queued', lease_token = null, lease_owner = null, lease_expires_at = null, available_at = now(), error_code = $1, error_message = $2, updated_at = now()
+where tenant_id = $3
+    and space_id = $4
+    and document_id = $5
+    and job_id = $6
+    and attempt_count = $7
+    and attempt_count < attempt_limit
+    and lease_owner = $8
+    and lease_token = $9
+    and lease_expires_at > now()
+    and status = 'leased'
+`
+
+type RequeuePresentingRenderJobParams struct {
+	ErrorCode    pgtype.Text `json:"error_code"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	DocumentID   pgtype.UUID `json:"document_id"`
+	JobID        pgtype.UUID `json:"job_id"`
+	AttemptCount int32       `json:"attempt_count"`
+	LeaseOwner   pgtype.Text `json:"lease_owner"`
+	LeaseToken   pgtype.UUID `json:"lease_token"`
+}
+
+func (q *Queries) RequeuePresentingRenderJob(ctx context.Context, arg RequeuePresentingRenderJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, requeuePresentingRenderJob,
+		arg.ErrorCode,
+		arg.ErrorMessage,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.DocumentID,
+		arg.JobID,
+		arg.AttemptCount,
+		arg.LeaseOwner,
+		arg.LeaseToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPresentingDocumentInventory = `-- name: SetPresentingDocumentInventory :execrows
 update presenting_documents
 set page_count = $1, updated_at = now()
