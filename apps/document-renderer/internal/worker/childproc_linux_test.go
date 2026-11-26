@@ -66,6 +66,25 @@ func init() {
 	}
 }
 
+func TestIsolatedNamespacesAvailableHonorsAppArmorRestriction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "apparmor_restrict_unprivileged_userns")
+	previous := appArmorUserNamespaceRestrictionPath
+	appArmorUserNamespaceRestrictionPath = path
+	t.Cleanup(func() { appArmorUserNamespaceRestrictionPath = previous })
+	if err := os.WriteFile(path, []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isolatedNamespacesAvailable() {
+		t.Fatal("namespaces are available despite the AppArmor restriction")
+	}
+	if err := os.WriteFile(path, []byte("0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isolatedNamespacesAvailable() {
+		t.Fatal("namespaces are unavailable without the AppArmor restriction")
+	}
+}
+
 func TestIsolatedChildEnvironmentAndProcessSetup(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {
