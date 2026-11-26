@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	presentingPublicationMigrationVersion int64 = 20261125231000
-	presentingStageMigrationVersion       int64 = 20261125232000
+	presentingPublicationMigrationVersion int64 = 20261126092000
+	presentingStageMigrationVersion       int64 = 20261126093000
 )
 
 // A live Episode row lock must not let the Stage migration hold one hot table while it waits for
