@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- scene composition maps each presentation rule to one tile or span; the branches are the rules, and the scene and stage-geometry tests cover each one.
 import { choosePrimary, DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, screenShareItemId, WHITEBOARD_ITEM_ID, type Participant, type StageBox, type StageItem } from "@q9labsai/chalk-react/headless";
 import { createRecordingPresentationCursor, type RecordingPresentationParticipantV1, type RecordingPresentationSnapshotV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import type { DecodedMediaIndexV1, DecodedVisualSourceV1 } from "../decoded-media.js";

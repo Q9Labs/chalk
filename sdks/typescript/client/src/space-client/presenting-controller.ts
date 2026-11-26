@@ -173,10 +173,16 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
   }
 }
 
+const MANIFEST_STATUSES: ReadonlySet<unknown> = new Set(["preparing", "ready", "failed"]);
+
 function isManifest(value: unknown): value is PresentingDocumentManifest {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const manifest = value as Record<string, unknown>;
-  return typeof manifest.documentId === "string" && typeof manifest.attachmentId === "string" && typeof manifest.fileName === "string" && (manifest.status === "preparing" || manifest.status === "ready" || manifest.status === "failed") && Array.isArray(manifest.pages);
+  return hasManifestIdentity(manifest) && MANIFEST_STATUSES.has(manifest.status) && Array.isArray(manifest.pages);
+}
+
+function hasManifestIdentity(manifest: Record<string, unknown>): boolean {
+  return typeof manifest.documentId === "string" && typeof manifest.attachmentId === "string" && typeof manifest.fileName === "string";
 }
 
 function refreshDelay(manifest: PresentingDocumentManifest | null): number | null {
@@ -191,20 +197,25 @@ function urlExpiry(value: string | undefined): number | null {
   try {
     const url = new URL(value);
     const amazonSeconds = url.searchParams.get("X-Amz-Expires");
-    if (amazonSeconds) {
-      const seconds = Number(amazonSeconds);
-      const signedAt = amazonSigningTime(url.searchParams.get("X-Amz-Date"));
-      return Number.isFinite(seconds) && signedAt !== null ? signedAt + seconds * 1_000 : null;
-    }
-    for (const key of ["expires", "Expires", "exp"]) {
-      const raw = url.searchParams.get(key);
-      if (!raw) continue;
-      const number = Number(raw);
-      if (!Number.isFinite(number)) continue;
-      return number < 10_000_000_000 ? number * 1_000 : number;
-    }
+    return amazonSeconds ? amazonExpiry(url, amazonSeconds) : queryExpiry(url);
   } catch {
     return null;
+  }
+}
+
+function amazonExpiry(url: URL, amazonSeconds: string): number | null {
+  const seconds = Number(amazonSeconds);
+  const signedAt = amazonSigningTime(url.searchParams.get("X-Amz-Date"));
+  return Number.isFinite(seconds) && signedAt !== null ? signedAt + seconds * 1_000 : null;
+}
+
+function queryExpiry(url: URL): number | null {
+  for (const key of ["expires", "Expires", "exp"]) {
+    const raw = url.searchParams.get(key);
+    if (!raw) continue;
+    const number = Number(raw);
+    if (!Number.isFinite(number)) continue;
+    return number < 10_000_000_000 ? number * 1_000 : number;
   }
   return null;
 }

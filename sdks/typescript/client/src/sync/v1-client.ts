@@ -1,5 +1,5 @@
 import { v1NegotiatedExtensions } from "./v1-negotiated-extensions";
-import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
+import { sameHead, sameRawHead } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
@@ -14,7 +14,8 @@ import { createV1PresentingReplica, receiveV1PresentingFrame } from "./v1-presen
 import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
-import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
+import type { CommandOptions, Recovery, RequestDeferred, RequestOptions } from "./v1-client-types";
+import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
 import { frameSignature, rememberBoundedEvidence } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
@@ -59,22 +60,6 @@ const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
 const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
-type RequestDeferred = Deferred<V1DirectedRequestResult> & {
-  readonly frame: SyncV1ClientFrame;
-};
-type Recovery = {
-  readonly id: string;
-  readonly head: Head;
-  replayEvents: number;
-  replayBytes: number;
-  controlComplete: boolean;
-};
-type CommandOptions = {
-  readonly commandId?: string;
-};
-type RequestOptions = {
-  readonly requestId?: string;
-};
 export { V1SyncError } from "./v1-error";
 export class V1SyncClient implements V1CollaborationClient {
   readonly #options: V1SyncClientOptions;

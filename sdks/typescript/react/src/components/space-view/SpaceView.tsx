@@ -210,7 +210,7 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
-  const { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, updateChatDrop, presentInputRef, choosePresentFiles, presentChosenFiles } = useFilePresenting({
+  const filePresenting = useFilePresenting({
     client,
     notify: callToasts.notify,
     live: connection.status === "live",
@@ -402,7 +402,7 @@ export function SpaceView({
                     onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                     onToggleWhiteboard={onToggleWhiteboard}
                     isWhiteboardOpen={whiteboard?.isOpen}
-                    {...spaceViewControlBarActions({ setPresentOpen, setReactionPickerOpen, documents: presenting.documents, selfId: self.participantId })}
+                    {...spaceViewControlBarActions({ setPresentOpen: filePresenting.setPresentOpen, setReactionPickerOpen, documents: presenting.documents, selfId: self.participantId })}
                     reactionsOpen={isReactionPickerOpen}
                     onCommandError={onCommandError}
                     onLeaveRequest={leaveCall}
@@ -411,14 +411,8 @@ export function SpaceView({
                 </DeviceAccessProvider>
               }
               stageOverlay={renderSpaceViewStageOverlay({
-                presentInputRef,
-                dropActive,
-                dropTarget,
-                presentOpen,
+                ...filePresenting,
                 presentingAvailable: presenting.available,
-                presentBusy,
-                choosePresentFiles,
-                presentChosenFiles,
                 reactionsEnabled: feature("reactions"),
                 canSendReaction,
                 live: connection.status === "live",
@@ -432,7 +426,7 @@ export function SpaceView({
               })}
               sidebar={
                 <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
-                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={chatDrop} onDroppedFilesChange={updateChatDrop} /> : null}
+                  {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} droppedFiles={filePresenting.chatDrop} onDroppedFilesChange={filePresenting.updateChatDrop} /> : null}
                   {drawer.panel === "participants" && feature("participants") ? (
                     <ParticipantsPanel
                       onParticipantClick={(id) => {

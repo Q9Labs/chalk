@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- one end-to-end journey; its steps run in order across two browser sessions, so splitting it would hide the flow it proves.
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
