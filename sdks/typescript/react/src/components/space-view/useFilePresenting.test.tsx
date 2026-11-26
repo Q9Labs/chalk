@@ -48,8 +48,10 @@ it("opens the file picker when live", async () => {
 });
 
 it("stages every remaining dropped file in the chat composer instead of sending it", async () => {
-  const openChat = vi.fn();
-  const { hook } = mount(true, openChat);
+  let chatOpens = 0;
+  const { hook } = mount(true, () => {
+    chatOpens += 1;
+  });
   const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
   const image = new File([new Uint8Array(8)], "image.png", { type: "image/png" });
   const text = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" });
@@ -60,6 +62,6 @@ it("stages every remaining dropped file in the chat composer instead of sending 
     window.dispatchEvent(event);
   });
 
-  expect(openChat).toHaveBeenCalledTimes(1);
+  expect(chatOpens).toBe(1);
   expect(hook()?.chatDrop?.files).toEqual([image, text]);
 });
