@@ -39,18 +39,22 @@ function AvailabilityProbe({ enabled }: { readonly enabled: boolean }) {
 
 it("releases the report availability probe while the dialog is closed", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const fetchMock = vi.fn(async () => Response.json({ available: true }));
-  vi.stubGlobal("fetch", fetchMock);
+  const requests: string[] = [];
+  const fetchFake: typeof fetch = async (input) => {
+    requests.push(String(input));
+    return Response.json({ available: true });
+  };
+  vi.stubGlobal("fetch", fetchFake);
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
 
   await act(async () => root?.render(<AvailabilityProbe enabled={false} />));
-  expect(fetchMock).toHaveBeenCalledTimes(0);
+  expect(requests).toHaveLength(0);
   await act(async () => root?.render(<AvailabilityProbe enabled={true} />));
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(requests).toHaveLength(1));
   await act(async () => root?.render(<AvailabilityProbe enabled={false} />));
   window.dispatchEvent(new Event("online"));
   await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(requests).toHaveLength(1);
 });
