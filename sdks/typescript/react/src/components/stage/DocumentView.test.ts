@@ -23,18 +23,26 @@ it("resolves a fresh source URL on every download click path and saves a blob", 
   const client = { chat: { files: { resolveUrl: async () => `signed-${++calls}` } } } as never;
   const before = window.location.href;
   const fetched: string[] = [];
+  const payloads: string[] = [];
+  const blobs = new Map<string, Blob>();
   const clicked: { readonly href: string; readonly download: string }[] = [];
   const originalClick = HTMLAnchorElement.prototype.click;
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
   vi.stubGlobal("fetch", async (url: string | URL | Request) => {
     fetched.push(String(url));
-    return new Response(new Blob(["file"]), { status: 200 });
+    const payload = `file-${fetched.length}`;
+    payloads.push(payload);
+    return new Response(payload, { status: 200 });
   });
   HTMLAnchorElement.prototype.click = function click() {
     clicked.push({ href: this.href, download: this.download });
   };
-  URL.createObjectURL = () => "blob:document";
+  URL.createObjectURL = (blob) => {
+    const url = `blob:document-${blobs.size + 1}`;
+    blobs.set(url, blob as Blob);
+    return url;
+  };
   URL.revokeObjectURL = () => {};
   try {
     await downloadDocumentSource(client, manifest, "deck.pdf");
@@ -48,6 +56,11 @@ it("resolves a fresh source URL on every download click path and saves a blob", 
   expect(calls).toBe(2);
   expect(fetched).toEqual(["signed-1", "signed-2"]);
   expect(clicked).toHaveLength(2);
-  expect(clicked.every((anchor) => anchor.download === "deck.pdf" && anchor.href.startsWith("blob:"))).toBe(true);
+  expect(new Set(clicked.map((anchor) => anchor.href)).size).toBe(2);
+  for (const [index, anchor] of clicked.entries()) {
+    expect(anchor.download).toBe("deck.pdf");
+    expect(anchor.href.startsWith("blob:document-")).toBe(true);
+    await expect(blobs.get(anchor.href)?.text()).resolves.toBe(payloads[index]);
+  }
   expect(window.location.href).toBe(before);
 });
