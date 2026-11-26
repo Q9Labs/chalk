@@ -1,6 +1,6 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import ports from "../scripts/dev/ports.json";
@@ -26,7 +26,7 @@ startxref
 
 async function joinTwo(contexts: BrowserContext[]): Promise<[Page, Page]> {
   const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
-  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://127.0.0.1:${ports.web}`).href);
+  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}`).href);
   await a.getByLabel("Your name", { exact: true }).fill("Nora");
   await a.getByRole("button", { name: "Join call", exact: true }).click();
   await a.getByRole("button", { name: "Video tile for Nora", exact: true }).waitFor();
@@ -86,18 +86,19 @@ async function presentingEnabled(enabled: boolean): Promise<void> {
 
 test("the Present button is hidden when Sync does not offer Presenting", async () => {
   await presentingEnabled(false);
-  const browser = await chromium.launch();
-  const context = await browser.newContext();
-  await context.addInitScript(webMediaFixture(1, { permission: "granted" }));
+  let browser: Browser | undefined;
   try {
+    browser = await chromium.launch();
+    const context = await browser.newContext();
+    await context.addInitScript(webMediaFixture(1, { permission: "granted" }));
     const page = await context.newPage();
-    await page.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://127.0.0.1:${ports.web}`).href);
+    await page.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}`).href);
     await page.getByLabel("Your name", { exact: true }).fill("Nora");
     await page.getByRole("button", { name: "Join call", exact: true }).click();
     await page.getByRole("button", { name: "Video tile for Nora", exact: true }).waitFor();
-    await expect(page.getByRole("button", { name: "Present", exact: true })).toHaveCount(0);
+    await expect.poll(async () => page.getByRole("button", { name: "Present", exact: true }).count(), { timeout: 5_000 }).toBe(0);
   } finally {
-    await browser.close();
+    await browser?.close();
     await presentingEnabled(true);
   }
 });

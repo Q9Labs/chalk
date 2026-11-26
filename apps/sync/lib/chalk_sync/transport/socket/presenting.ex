@@ -80,21 +80,21 @@ defmodule ChalkSync.Transport.Socket.Presenting do
   defp refresh(state, forced?) do
     if Availability.enabled?() do
       case Repository.read(state.identity) do
-        {:ok, current} ->
-          wire = wire_state(current)
-          previous = state.presenting_state
-
-          cond do
-            forced? -> push(%{state | presenting_state: wire}, [state_frame(wire)])
-            previous != wire -> push(%{state | presenting_state: wire}, [change_frame(wire)])
-            true -> {:ok, state}
-          end
-
-        _failure ->
-          {:ok, state}
+        {:ok, current} -> push_refresh(state, wire_state(current), forced?)
+        _failure -> {:ok, state}
       end
     else
       disabled(state)
+    end
+  end
+
+  defp push_refresh(state, wire, forced?) do
+    previous = state.presenting_state
+
+    cond do
+      forced? -> push(%{state | presenting_state: wire}, [state_frame(wire)])
+      previous != wire -> push(%{state | presenting_state: wire}, [change_frame(wire)])
+      true -> {:ok, state}
     end
   end
 
