@@ -232,7 +232,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     recording: { current: null },
     offline: { pending: [], decisionNeeded: false, policy: "ask" },
     whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
-    presenting: { status: "connecting", revision: 0, documents: [], manifests: {} },
+    presenting: { status: "connecting", available: true, revision: 0, documents: [], manifests: {} },
   };
 }
 

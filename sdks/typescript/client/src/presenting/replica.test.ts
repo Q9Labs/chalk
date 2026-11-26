@@ -29,6 +29,7 @@ it("requests state on entry and applies state and change frames", () => {
   });
   replica.enterLive(true);
   expect(outbound).toMatchObject([{ type: "presenting_state_request" }]);
+  expect(replica.available).toBe(true);
   expect(replica.getSnapshot()).toEqual({ status: "connecting" });
 
   replica.receive({ type: "presenting_state", state, server_at_ms: 1 });
@@ -63,10 +64,12 @@ it("settles commands as delivery_unknown when the receipt never arrives", async 
 it("refuses commands while the extension is unavailable and recovers with state", async () => {
   const { replica } = liveReplica();
   replica.receive({ type: "presenting_state", state: null, enabled: false, server_at_ms: 1 });
+  expect(replica.available).toBe(false);
   expect(replica.getSnapshot()).toEqual({ status: "unavailable" });
   await expect(replica.present(documentId)).resolves.toEqual({ kind: "unavailable" });
 
   replica.enterLive(true);
+  expect(replica.available).toBe(true);
   replica.receive({ type: "presenting_state", state, server_at_ms: 2 });
   expect(replica.getSnapshot()).toMatchObject({ status: "ready" });
 });
@@ -79,4 +82,12 @@ it("discards pending commands on terminal disconnect", async () => {
   await expect(pending).resolves.toEqual({ kind: "delivery_unknown" });
   expect(replica.getSnapshot()).toEqual({ status: "unavailable" });
   expect(await replica.stop(documentId)).toEqual({ kind: "unavailable" });
+});
+
+it("stays unavailable when Sync does not negotiate the extension", () => {
+  const replica = new PresentingReplica(() => true);
+  expect(replica.available).toBe(false);
+  replica.enterLive(false);
+  expect(replica.available).toBe(false);
+  expect(replica.getSnapshot()).toEqual({ status: "unavailable" });
 });

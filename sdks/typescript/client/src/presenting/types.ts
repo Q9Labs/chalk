@@ -29,6 +29,8 @@ export type PresentingDocumentManifest = {
 };
 export type PresentingSlice = {
   readonly status: "connecting" | "ready" | "unavailable";
+  /** Whether the live Sync connection currently offers Presenting. */
+  readonly available: boolean;
   readonly revision: number;
   readonly documents: readonly PresentingDocument[];
   readonly manifests: Readonly<Record<string, PresentingDocumentManifest>>;

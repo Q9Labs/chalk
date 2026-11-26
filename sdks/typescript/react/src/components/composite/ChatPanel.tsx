@@ -1,7 +1,7 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
 import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, ChatReactionInput, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useCan, useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useChat, useParticipants, usePresenting, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
@@ -456,6 +456,7 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
   const client = useSpaceClient();
   const canSendChat = useCan("sendChat");
   const chat = useChat();
+  const presenting = usePresenting();
   const participants = useParticipants();
   const self = useSelf();
   const localParticipantId = self.participantId ?? "local";
@@ -478,10 +479,14 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
         if (!attachment) throw new Error("The chat attachment is no longer available.");
         return client.chat.files.resolveUrl(attachment);
       }}
-      onOpenAttachmentOnStage={async (attachment) => {
-        const result = await client.presenting.present(attachment.attachmentId);
-        if (result.kind !== "accepted") throw new Error("The file could not be opened on stage.");
-      }}
+      onOpenAttachmentOnStage={
+        presenting.available
+          ? async (attachment) => {
+              const result = await client.presenting.present(attachment.attachmentId);
+              if (result.kind !== "accepted") throw new Error("The file could not be opened on stage.");
+            }
+          : undefined
+      }
       onMarkRead={(sequence) => {
         const message = chat.messages.find((candidate) => candidate.sequence === sequence);
         return message ? client.chat.markRead(message.messageId) : undefined;

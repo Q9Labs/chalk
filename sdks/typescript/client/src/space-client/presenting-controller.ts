@@ -38,6 +38,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
   #replica: PresentingReplica | null = null;
   #revision = 0;
   #status: PresentingSlice["status"] = "connecting";
+  #available = false;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeReplica: (() => void) | null = null;
 
@@ -96,6 +97,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
       this.#observe();
     } else {
       this.#status = "connecting";
+      this.#available = false;
       this.#revision = 0;
       this.#documents = Object.freeze([]);
       this.#manifests.clear();
@@ -107,6 +109,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
     const snapshot = this.#replica?.getSnapshot();
     if (!snapshot) return;
     this.#status = snapshot.status;
+    this.#available = this.#replica?.available === true;
     this.#revision = snapshot.status === "ready" ? snapshot.revision : 0;
     this.#documents = snapshot.status === "ready" ? Object.freeze([...snapshot.documents]) : Object.freeze([]);
     const active = new Set(this.#documents.map((document) => document.documentId));
@@ -166,7 +169,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
 
   #publish(): void {
     const manifests = Object.freeze(Object.fromEntries(this.#manifests));
-    this.#store.update("presenting", Object.freeze({ status: this.#status, revision: this.#revision, documents: this.#documents, manifests }));
+    this.#store.update("presenting", Object.freeze({ status: this.#status, available: this.#available, revision: this.#revision, documents: this.#documents, manifests }));
   }
 }
 
@@ -187,7 +190,13 @@ function urlExpiry(value: string | undefined): number | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    for (const key of ["expires", "Expires", "exp", "X-Amz-Expires"]) {
+    const amazonSeconds = url.searchParams.get("X-Amz-Expires");
+    if (amazonSeconds) {
+      const seconds = Number(amazonSeconds);
+      const signedAt = amazonSigningTime(url.searchParams.get("X-Amz-Date"));
+      return Number.isFinite(seconds) && signedAt !== null ? signedAt + seconds * 1_000 : null;
+    }
+    for (const key of ["expires", "Expires", "exp"]) {
       const raw = url.searchParams.get(key);
       if (!raw) continue;
       const number = Number(raw);
@@ -198,4 +207,11 @@ function urlExpiry(value: string | undefined): number | null {
     return null;
   }
   return null;
+}
+
+function amazonSigningTime(value: string | null): number | null {
+  const match = value ? /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(value) : null;
+  if (!match) return null;
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6]));
+  return Number.isFinite(time) ? time : null;
 }

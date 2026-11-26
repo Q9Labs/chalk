@@ -11,12 +11,13 @@ export interface FilePresentingOptions {
   readonly live: boolean;
   readonly chatOpen: boolean;
   readonly chatEnabled: boolean;
+  readonly presentingAvailable: boolean;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly openChat: () => void;
 }
 
 /** Owns the Present popover's file flow: validation toasts, the first-file-to-stage split, and window drop routing. */
-export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, pickChatFiles, openChat }: FilePresentingOptions) {
+export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, presentingAvailable, pickChatFiles, openChat }: FilePresentingOptions) {
   const [presentOpen, setPresentOpen] = useState(false);
   const [presentBusy, setPresentBusy] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -51,12 +52,12 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
         const unsupported = files.map((file) => ({ file, problem: presentingFileProblem(file) })).find(({ problem }) => problem === "too_big" || (problem === "unsupported" && files.length === 1));
         if (unsupported?.problem === "too_big") notify({ type: "error", duration: Infinity, message: `${describeChatUploadFile(unsupported.file).fileName} is over 25 MB.` });
         else if (unsupported?.problem === "unsupported" && files.length === 1) notify({ type: "error", duration: Infinity, message: `${describeChatUploadFile(unsupported.file).fileName} can't be presented.` });
-        reportPresentingResult(await presentFiles(files, client));
+        reportPresentingResult(await presentFiles(files, client, { presentingAvailable, chatEnabled }));
       } finally {
         setPresentBusy(false);
       }
     },
-    [client, notify, presentBusy, reportPresentingResult],
+    [chatEnabled, client, notify, presentBusy, presentingAvailable, reportPresentingResult],
   );
 
   const choosePresentFiles = useCallback(async () => {
@@ -96,7 +97,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!files.length || !live) return;
       if (chatOpen && chatEnabled) setChatDrop({ key: Date.now(), files });
-      else void presentChosenFiles(files);
+      else if (presentingAvailable || chatEnabled) void presentChosenFiles(files);
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragover", over);
@@ -108,7 +109,8 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
-  }, [chatOpen, chatEnabled, live, presentChosenFiles]);
+  }, [chatOpen, chatEnabled, live, presentingAvailable, presentChosenFiles]);
 
-  return { presentOpen, setPresentOpen, presentBusy, dropActive, chatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
+  const dropTarget = chatOpen && chatEnabled ? "chat" : presentingAvailable ? "present" : chatEnabled ? "chat" : null;
+  return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
 }

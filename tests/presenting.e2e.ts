@@ -1,8 +1,12 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import ports from "../scripts/dev/ports.json";
 import { webMediaFixture } from "../scripts/web-proof/media.mjs";
+
+const execFileAsync = promisify(execFile);
 
 /** A minimal one-page PDF the chat attachment pipeline accepts. */
 const PDF_BYTES = `%PDF-1.4
@@ -72,5 +76,28 @@ test("one person presents a PDF and it lands on both stages", async () => {
     }
   } finally {
     await browser.close();
+  }
+});
+
+async function presentingEnabled(enabled: boolean): Promise<void> {
+  const database = process.env.CHALK_DATABASE_URL ?? `postgres://postgres:postgres@127.0.0.1:${ports.postgres}/chalk_dev?sslmode=disable`;
+  await execFileAsync("psql", [database, "-v", "ON_ERROR_STOP=1", "-q", "-c", `insert into presenting_settings (singleton, enabled) values (true, ${enabled}) on conflict (singleton) do update set enabled = excluded.enabled`]);
+}
+
+test("the Present button is hidden when Sync does not offer Presenting", async () => {
+  await presentingEnabled(false);
+  const browser = await chromium.launch();
+  const context = await browser.newContext();
+  await context.addInitScript(webMediaFixture(1, { permission: "granted" }));
+  try {
+    const page = await context.newPage();
+    await page.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://127.0.0.1:${ports.web}`).href);
+    await page.getByLabel("Your name", { exact: true }).fill("Nora");
+    await page.getByRole("button", { name: "Join call", exact: true }).click();
+    await page.getByRole("button", { name: "Video tile for Nora", exact: true }).waitFor();
+    await expect(page.getByRole("button", { name: "Present", exact: true })).toHaveCount(0);
+  } finally {
+    await browser.close();
+    await presentingEnabled(true);
   }
 });

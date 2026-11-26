@@ -17,12 +17,16 @@ export class PresentingReplica {
   readonly #pending = new Map<string, Pending>();
   #snapshot: PresentingReplicaSnapshot = { status: "connecting" };
   #live = false;
+  #available = false;
 
   constructor(send: (wire: string) => boolean) {
     this.#send = send;
   }
 
   getSnapshot = (): PresentingReplicaSnapshot => this.#snapshot;
+  get available(): boolean {
+    return this.#available;
+  }
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -30,9 +34,13 @@ export class PresentingReplica {
 
   enterLive(negotiated: boolean): void {
     this.#live = negotiated;
+    this.#available = negotiated;
     if (negotiated) {
       this.#set({ status: "connecting" });
-      if (!this.#send(JSON.stringify({ type: "presenting_state_request" }))) this.#set({ status: "unavailable" });
+      if (!this.#send(JSON.stringify({ type: "presenting_state_request" }))) {
+        this.#available = false;
+        this.#set({ status: "unavailable" });
+      }
     } else {
       this.#reset("unavailable", true);
     }
@@ -40,6 +48,7 @@ export class PresentingReplica {
 
   disconnected(terminal = false): void {
     this.#live = false;
+    this.#available = false;
     this.#reset(terminal ? "unavailable" : "connecting", terminal);
   }
 
@@ -47,9 +56,11 @@ export class PresentingReplica {
     if (!this.#live) return;
     switch (frame.type) {
       case "presenting_state":
+        this.#available = frame.state !== null;
         this.#set(frame.state ? { status: "ready", revision: frame.state.revision, documents: frame.state.documents.map(document) } : { status: "unavailable" });
         return;
       case "presenting_changed":
+        this.#available = true;
         this.#set({ status: "ready", revision: frame.state.revision, documents: frame.state.documents.map(document) });
         return;
       case "presenting_receipt":

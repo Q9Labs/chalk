@@ -16,8 +16,10 @@ export function presentingFileProblem(file: ChatUploadFile): "unsupported" | "to
   return PRESENTABLE_MIME_TYPES.has(description.mimeType) ? null : "unsupported";
 }
 
-/** Uploads the first presentable file to the renderer and puts it on the Stage; other sendable files go to chat. */
-export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient): Promise<PresentingFileResult> {
+/** Uploads the first presentable file to the renderer and puts it on the Stage when Presenting is available; other sendable files go to chat. */
+export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): Promise<PresentingFileResult> {
+  const presentingAvailable = options.presentingAvailable !== false;
+  const chatEnabled = options.chatEnabled !== false;
   const failures: PresentingFileFailure[] = [];
   const chatFiles: ChatUploadFile[] = [];
   let stageFile: ChatUploadFile | undefined;
@@ -27,11 +29,11 @@ export async function presentFiles(files: readonly ChatUploadFile[], client: Spa
       failures.push({ fileName: description.fileName, reason: "too_big" });
       continue;
     }
-    if (!stageFile && PRESENTABLE_MIME_TYPES.has(description.mimeType)) {
+    if (presentingAvailable && !stageFile && PRESENTABLE_MIME_TYPES.has(description.mimeType)) {
       stageFile = file;
       continue;
     }
-    if ((CHALK_CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(description.mimeType)) chatFiles.push(file);
+    if (chatEnabled && (CHALK_CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(description.mimeType)) chatFiles.push(file);
     else failures.push({ fileName: description.fileName, reason: "unsupported" });
   }
   let presented: string | undefined;

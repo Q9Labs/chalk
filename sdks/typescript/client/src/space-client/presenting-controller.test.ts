@@ -1,10 +1,14 @@
 import { Effect } from "effect";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { PresentingReplica } from "../presenting/replica";
 import { makePresentingController } from "./presenting-controller";
 import { SpaceStore } from "./store";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const documentId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const presenterId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
@@ -14,6 +18,7 @@ function harness(options: { readonly fetch: typeof globalThis.fetch; readonly re
   const presented: string[] = [];
   const replica = {
     getSnapshot: () => ({ status: "ready", revision: 1, documents: [{ documentId, presenterId, page: 1, zoom: 100, startedAtMs: 5 }] }),
+    available: true,
     subscribe: () => () => undefined,
     present: async (document: string) => {
       presented.push(document);
@@ -90,6 +95,7 @@ it("publishes replica documents and fetches their manifests into the store", asy
         yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
         const slice = store.getSnapshot().presenting;
         expect(slice.status).toBe("ready");
+        expect(slice.available).toBe(true);
         expect(slice.documents).toMatchObject([{ documentId, page: 1 }]);
         expect(slice.manifests[documentId]).toMatchObject({ fileName: "deck.pdf", status: "ready" });
         expect(slice.manifests[documentId]?.pages[0]?.imageUrl).toContain("expires=9999999999");
@@ -131,6 +137,48 @@ it("resolves zoom urls and reports unavailable without a negotiated replica", as
       Effect.gen(function* () {
         const controller = yield* makePresentingController({ connection: deadConnection, store: deadStore, apiBaseUrl: "https://api.example", fetch: fetching });
         expect(yield* controller.stop(documentId)).toEqual({ kind: "unavailable" });
+        expect(deadStore.getSnapshot().presenting.available).toBe(false);
+        controller.dispose();
+      }),
+    ),
+  );
+});
+
+it("refreshes a ready manifest shortly before its signed urls expire", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+  const signed = {
+    ...manifest,
+    pages: [
+      {
+        page: 1,
+        width: 1600,
+        height: 900,
+        status: "ready",
+        imageUrl: "https://cdn.example/p1.png?X-Amz-Date=20260101T000100Z&X-Amz-Expires=300",
+        thumbnailUrl: "https://cdn.example/t1.png?X-Amz-Date=20260101T000100Z&X-Amz-Expires=300",
+      },
+    ],
+  };
+  let fetches = 0;
+  const fetching = (async (input: RequestInfo | URL) => {
+    fetches += 1;
+    return new Response(JSON.stringify(signed), { status: 200 });
+  }) as typeof globalThis.fetch;
+  const { connection, store } = harness({ fetch: fetching });
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const controller = yield* makePresentingController({ connection, store, apiBaseUrl: "https://api.example", fetch: fetching });
+        for (let index = 0; index < 10; index += 1) yield* Effect.promise(() => Promise.resolve());
+        expect(fetches).toBe(1);
+
+        yield* Effect.promise(() => vi.advanceTimersByTimeAsync(299_000));
+        expect(fetches).toBe(1);
+        yield* Effect.promise(() => vi.advanceTimersByTimeAsync(1_000));
+        for (let index = 0; index < 10; index += 1) yield* Effect.promise(() => Promise.resolve());
+        expect(fetches).toBe(2);
         controller.dispose();
       }),
     ),

@@ -14,7 +14,8 @@ defmodule ChalkSync.Presenting.Repository do
     connection = Database.connection(identity.episode)
     params = context(identity)
 
-    with {:ok, %{rows: rows}} <- Postgrex.query(connection, Statements.state_sql(), params, log: nil),
+    with {:ok, %{rows: rows}} <-
+           Postgrex.query(connection, Statements.state_sql(), params, log: nil),
          {:ok, %{rows: documents}} <-
            Postgrex.query(connection, Statements.documents_sql(), params, log: nil) do
       revision =
@@ -33,7 +34,8 @@ defmodule ChalkSync.Presenting.Repository do
     Store.transaction(identity, fn connection ->
       params = context(identity)
 
-      with %{rows: [["active"]]} <- Postgrex.query!(connection, Statements.lock_episode_sql(), params),
+      with %{rows: [["active"]]} <-
+             Postgrex.query!(connection, Statements.lock_episode_sql(), params),
            %{rows: [[_capabilities]]} <-
              Postgrex.query!(
                connection,
@@ -85,7 +87,11 @@ defmodule ChalkSync.Presenting.Repository do
       {:ok, documents} ->
         revision = state.revision + 1
         params = context(identity)
-        Postgrex.query!(connection, Statements.update_revision_sql(), params ++ [revision], log: nil)
+
+        Postgrex.query!(connection, Statements.update_revision_sql(), params ++ [revision],
+          log: nil
+        )
+
         Postgrex.query!(connection, Statements.delete_documents_sql(), params, log: nil)
 
         Enum.with_index(documents, 1)
@@ -227,7 +233,6 @@ defmodule ChalkSync.Presenting.Repository do
       started_at_ms: started_at_ms
     }
   end
-
 
   defp context(identity),
     do: [

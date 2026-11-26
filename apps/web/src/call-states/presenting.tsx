@@ -50,6 +50,7 @@ function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
     ...base,
     presenting: {
       status: "ready",
+      available: true,
       revision: 3,
       documents: [{ documentId, presenterId, page: options.page ?? 3, zoom: options.zoom ?? 100, startedAtMs: Date.now() - 60_000 }],
       manifests: {

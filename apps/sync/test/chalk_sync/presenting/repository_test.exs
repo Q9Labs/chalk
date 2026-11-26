@@ -1,6 +1,7 @@
 defmodule ChalkSync.Presenting.RepositoryTest do
   use ChalkSync.WhiteboardV1.PostgresRepositoryCase, async: false
 
+  alias ChalkSync.Presenting.Housekeeping
   alias ChalkSync.Presenting.Repository
   alias ChalkSync.ProtocolV1
   alias ChalkSync.UUID
@@ -102,6 +103,38 @@ defmodule ChalkSync.Presenting.RepositoryTest do
 
     conflict = put_in(operation["command"]["document_id"], UUID.generate())
     assert {:error, "operation_id_conflict"} = Repository.command(ctx.host, conflict)
+  end
+
+  test "expired operation receipts are swept and fresh receipts stay", ctx do
+    first = frame("present", UUID.generate())
+    second = frame("present", UUID.generate())
+    assert {:ok, %{"revision" => 1}} = Repository.command(ctx.host, first)
+    assert {:ok, %{"revision" => 2}} = Repository.command(ctx.host, second)
+
+    params = [
+      UUID.dump!(ctx.host.episode.tenant_id),
+      UUID.dump!(ctx.host.episode.space_id),
+      UUID.dump!(ctx.host.episode.episode_id),
+      Base.decode16!(String.replace(first["operation_id"], "-", ""), case: :lower)
+    ]
+
+    Postgrex.query!(
+      ctx.connection,
+      """
+      update sync_presenting_receipts set expires_at_ms = 1
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and operation_id = $4
+      """,
+      params
+    )
+
+    assert :ok = Housekeeping.sweep(ctx.connection)
+
+    assert %{rows: [[1]]} =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*) from sync_presenting_receipts where tenant_id = $1 and space_id = $2 and episode_id = $3",
+               Enum.take(params, 3)
+             )
   end
 
   test "the wire validator rejects extra fields and invalid page state", _ctx do

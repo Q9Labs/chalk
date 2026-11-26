@@ -12,7 +12,7 @@ function mount(live: boolean) {
   const client = createPreviewClient();
   let api: ReturnType<typeof useFilePresenting> | undefined;
   function Probe() {
-    api = useFilePresenting({ client, notify: () => {}, live, chatOpen: false, chatEnabled: true, openChat: () => {} });
+    api = useFilePresenting({ client, notify: () => {}, live, chatOpen: false, chatEnabled: true, presentingAvailable: true, openChat: () => {} });
     return <input ref={api.presentInputRef} type="file" aria-hidden="true" />;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
