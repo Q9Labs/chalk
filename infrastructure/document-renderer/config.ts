@@ -39,8 +39,6 @@ export const parseInputs = (value: unknown): DocumentRendererInputs => {
   requireInput(Number.isInteger(input.memory_size) && input.memory_size >= 1024 && input.memory_size <= 10240, "memory_size must be an integer between 1024 and 10240 MB");
   requireInput(input.timeout_seconds >= 60 && input.timeout_seconds <= 900, "timeout_seconds failed validation");
   requireInput(input.reserved_concurrency >= 1 && input.reserved_concurrency <= 64, "reserved_concurrency failed validation");
-  requireInput(input.async_maximum_retry_attempts === 0, "async_maximum_retry_attempts must be 0 because presenting retries are owned by the control plane");
-  requireInput(input.async_max_event_age_seconds === 300, "async_max_event_age_seconds must be 300");
   requireInput((input.control_api_invoker_principal === null) === (input.control_api_invoke_source_arn === null), "Configure both control API permission fields, or neither");
   const stage = parseStage(input.environment_name);
   if (stage.kind === "ephemeral") {

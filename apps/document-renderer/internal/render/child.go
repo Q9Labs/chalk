@@ -60,7 +60,7 @@ func runTimeoutProbeChild() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	<-time.After(60 * time.Second)
+	time.Sleep(60 * time.Second)
 	return 0
 }
 

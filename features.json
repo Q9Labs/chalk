@@ -246,10 +246,7 @@
         "sdks/typescript/client/src/space-client/reactions-controller.ts",
         "sdks/typescript/react-native/src/sheets/people-chat",
         "sdks/typescript/react/src/components/composite/ChatPanel.tsx",
-        "sdks/typescript/react/src/components/composite/ChatPanel.test.tsx",
-        "sdks/typescript/react/src/components/composite/ChatFileDropOverlay.tsx",
-        "sdks/typescript/react/src/components/composite/chat-file-drop-staging.ts",
-        "sdks/typescript/react/src/components/space-view/chat-file-drop.tsx",
+        "sdks/typescript/react/src/components/composite/MessageAttachments.tsx",
         "sdks/typescript/react/src/components/composite/MessageBubble.tsx",
         "sdks/typescript/react/src/components/composite/UnavailableAttachment.tsx",
         "sdks/typescript/react/src/components/composite/chat-file-upload.ts",
@@ -596,6 +593,45 @@
         "apps/web/src/routes/dashboard_.call.$spaceId.join.tsx",
         "sdks/typescript/client/src/public-invites",
         "sdks/typescript/react-native/src/invites.ts"
+      ]
+    },
+    {
+      "name": "presenting",
+      "summary": "Puts a file on the call Stage as a Document everyone can follow, with the renderer producing page images and Sync carrying presenter state.",
+      "paths": [
+        "apps/api/db/migrations/20261125230000_presenting.sql",
+        "apps/api/db/migrations/20261125231000_presenting_publication.sql",
+        "apps/api/db/migrations/20261125232000_presenting_stage.sql",
+        "apps/api/db/queries/presenting.sql",
+        "apps/api/internal/adapters/postgres/presenting.go",
+        "apps/api/internal/adapters/postgres/presenting_integration_test.go",
+        "apps/api/internal/adapters/postgres/presenting_settings.go",
+        "apps/api/internal/httpapi/presenting.go",
+        "apps/api/internal/httpapi/presenting_capability.go",
+        "apps/api/internal/httpapi/presenting_test.go",
+        "apps/api/internal/httpapi/presenting_worker.go",
+        "apps/api/internal/presenting",
+        "apps/document-renderer",
+        "apps/sync/lib/chalk_sync/contract/generated_presenting_v1.ex",
+        "apps/sync/lib/chalk_sync/presenting",
+        "apps/sync/lib/chalk_sync/transport/socket/presenting.ex",
+        "apps/sync/test/chalk_sync/presenting",
+        "apps/web/src/call-states/presenting.tsx",
+        "contract/schema/presenting-v1.json",
+        "infrastructure/document-renderer",
+        "sdks/typescript/client/src/generated/presenting-v1.ts",
+        "sdks/typescript/client/src/presenting",
+        "sdks/typescript/client/src/space-client/presenting-controller.test.ts",
+        "sdks/typescript/client/src/space-client/presenting-controller.ts",
+        "sdks/typescript/react/src/components/stage/DocumentView.tsx",
+        "sdks/typescript/react/src/components/stage/presenting-files.ts",
+        "tests/presenting.e2e.ts",
+        "tools/contract-fixture-proof/src/emitters/presenting.mjs",
+        "apps/api/internal/httpapi/presenting_worker_request.go",
+        "apps/api/internal/adapters/postgres/presenting_render.go",
+        "apps/api/internal/adapters/postgres/presenting_zoom.go",
+        "sdks/typescript/react/src/components/composite/chat-composer-effects.ts",
+        "sdks/typescript/react/src/components/composite/ReactionSheet.test.tsx"
       ]
     },
     {
@@ -993,23 +1029,6 @@
         "tests",
         "tools",
         "apps/api/internal/httpapi/cors_test.go"
-      ]
-    },
-    {
-      "name": "presenting",
-      "summary": "Renders a presented document into page images and serves them on the Chalk stage.",
-      "paths": [
-        "apps/api/internal/presenting",
-        "apps/api/internal/httpapi/presenting.go",
-        "apps/api/internal/httpapi/presenting_capability.go",
-        "apps/api/internal/httpapi/presenting_test.go",
-        "apps/api/internal/httpapi/presenting_worker.go",
-        "apps/api/internal/httpapi/presenting_worker_request.go",
-        "apps/api/internal/adapters/postgres/presenting.go",
-        "apps/api/internal/adapters/postgres/presenting_render.go",
-        "apps/api/internal/adapters/postgres/presenting_zoom.go",
-        "apps/document-renderer",
-        "infrastructure/document-renderer"
       ]
     }
   ]

@@ -10,6 +10,7 @@ import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { AnnotationReplica } from "../screen-annotation/replica";
+import { createV1PresentingReplica, receiveV1PresentingFrame } from "./v1-presenting";
 import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
@@ -123,6 +124,7 @@ export class V1SyncClient implements V1CollaborationClient {
       return false;
     }
   });
+  readonly presenting = createV1PresentingReplica(() => ({ socket: this.#socket, phase: this.#phase.phase, negotiated: this.#extensions.presenting }));
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -239,6 +241,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket = null;
     this.#phase = { phase: "stopped" };
     this.annotation.disconnected(true);
+    this.presenting.disconnected(true);
     this.#options.mediaPlane?.remotePublicationsChanged?.([], "unavailable");
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
@@ -538,6 +541,7 @@ export class V1SyncClient implements V1CollaborationClient {
         if (this.#extensions.annotation && this.#phase.phase === "live") this.annotation.receive(frame.value);
         return;
       }
+      if (receiveV1PresentingFrame(frame, this.presenting, this.#extensions.presenting, this.#phase.phase)) return;
       await this.#handleFrame(frame.value);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
@@ -809,6 +813,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#missedHeartbeats = 0;
     if (this.#entryPending && this.#extensions.entryConfirmation) this.#send({ type: "entered" });
     this.annotation.enterLive(this.#extensions.annotation, this.#extensions.annotationBurnIn);
+    this.presenting.enterLive(this.#extensions.presenting);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -854,6 +859,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
     this.annotation.disconnected(this.#phase.phase === "terminal");
+    this.presenting.disconnected(this.#phase.phase === "terminal");
     if (!this.#started || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -1066,7 +1072,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#timers.cancel("noticeProbe");
   }
   #emit(): void {
-    if (this.#phase.phase === "terminal") this.annotation.disconnected(true);
+    if (this.#phase.phase === "terminal") {
+      this.annotation.disconnected(true);
+      this.presenting.disconnected(true);
+    }
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }

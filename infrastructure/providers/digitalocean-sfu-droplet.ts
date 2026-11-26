@@ -1,6 +1,5 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as DO from "@distilled.cloud/digitalocean";
-import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -18,12 +17,6 @@ export const sfuClient = digitalOceanClient("sfu");
 class UnsafeSfuChange extends Data.TaggedError("UnsafeSfuChange")<{ message: string }> {}
 
 const bootInputs = (props: SfuDropletProps) => ({ ...props, image: undefined, sshKeys: undefined, userData: undefined, size: undefined });
-
-export const keepRecordedPowerStatus = <Live extends { readonly status?: DigitalOcean.DropletAttributes["status"] | undefined }>(live: Live | undefined, recorded: DigitalOcean.DropletAttributes["status"] | undefined) => {
-  if (live?.status === undefined || recorded === undefined || live.status === recorded) return live;
-  const result = { ...live, status: recorded };
-  return Unowned.is(live) ? Unowned(result) : result;
-};
 
 export const sfuDropletProvider = Provider.effect(
   SfuDroplet,
@@ -50,7 +43,7 @@ export const sfuDropletProvider = Provider.effect(
     return {
       stables: upstream.stables ?? [],
       list: upstream.list,
-      read: (input: Parameters<NonNullable<Provider.ProviderService<SfuDroplet>["read"]>>[0]) => (upstream.read ? upstream.read(input).pipe(Effect.map((live) => keepRecordedPowerStatus(live, input.output?.status))) : Effect.undefined),
+      read: (input: Parameters<NonNullable<Provider.ProviderService<SfuDroplet>["read"]>>[0]) => (upstream.read ? upstream.read(input) : Effect.undefined),
       delete: upstream.delete,
       diff,
       reconcile: Effect.fn(function* (input: Parameters<Provider.ProviderService<SfuDroplet>["reconcile"]>[0]) {

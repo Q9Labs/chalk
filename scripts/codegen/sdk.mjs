@@ -24,6 +24,7 @@ const emitters = [
   { script: "whiteboard-typescript", outputs: { CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/whiteboard-v1.ts`, CODEGEN_WHITEBOARD_WIRE_LIMITS_OUTPUT_PATH: "packages/whiteboard/src/collab/wire-limits.ts" } },
   { script: "whiteboard-elixir", outputs: { CODEGEN_WHITEBOARD_ELIXIR_OUTPUT_PATH: "apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex" } },
   { script: "screen-annotation", outputs: { CODEGEN_SCREEN_ANNOTATION_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/screen-annotation-v1.ts`, CODEGEN_SCREEN_ANNOTATION_ELIXIR_OUTPUT_PATH: "apps/sync/lib/chalk_sync/contract/generated_screen_annotation_v1.ex" } },
+  { script: "presenting", outputs: { CODEGEN_PRESENTING_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/presenting-v1.ts`, CODEGEN_PRESENTING_ELIXIR_OUTPUT_PATH: "apps/sync/lib/chalk_sync/contract/generated_presenting_v1.ex" } },
 ];
 
 const formatted = [openapi, openapiTypes, ...emitters.flatMap((emitter) => Object.values(emitter.outputs)).filter((file) => file.endsWith(".ts"))];

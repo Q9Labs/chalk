@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { publicErrorCodes } from "./effect-error-compatibility.mjs";
+import { operationResponseSchema, parameterSchema } from "./effect-operation-schemas.mjs";
 import { codegenPath, pascalCase } from "./sync-contract.mjs";
 
 const inputPath = codegenPath("CODEGEN_OPENAPI_PATH", "contract/generated/openapi.json");
@@ -294,7 +295,7 @@ function collectOperationSchemas(document) {
       const queryParameters = parameterSchema(operation.parameters, "query");
       const requestHeaders = parameterSchema(operation.parameters, "header");
       const requestBody = operation.requestBody?.content?.["application/json"]?.schema;
-      const responseBody = successResponseSchema(operation.responses);
+      const responseBody = operationResponseSchema(document, operation, operationName);
 
       if (pathParameters) {
         schemas.push({ name: `${operationName}PathParams`, schema: pathParameters });
@@ -404,48 +405,6 @@ function headerDefinition(headerName, schema) {
       }
       return undefined;
   }
-}
-
-function parameterSchema(parameters = [], location) {
-  const matching = parameters.filter((parameter) => parameter.in === location);
-  if (matching.length === 0) {
-    return undefined;
-  }
-
-  const required = matching
-    .filter((parameter) => parameter.required)
-    .map((parameter) => parameter.name)
-    .sort();
-  const properties = Object.fromEntries(
-    matching
-      .slice()
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((parameter) => [
-        parameter.name,
-        {
-          ...(parameter.schema ?? {}),
-          "x-chalk-url-parameter": true,
-        },
-      ]),
-  );
-
-  return {
-    type: "object",
-    required,
-    properties,
-    additionalProperties: false,
-  };
-}
-
-function successResponseSchema(responses = {}) {
-  const statuses = Object.keys(responses).sort();
-  const status = statuses.find((value) => /^2\d\d$/.test(value)) ?? statuses.find((value) => /^3\d\d$/.test(value));
-
-  if (!status) {
-    return undefined;
-  }
-
-  return responses[status]?.content?.["application/json"]?.schema ?? responses[status]?.content?.["text/plain"]?.schema;
 }
 
 function orderedSchemas(schemas) {

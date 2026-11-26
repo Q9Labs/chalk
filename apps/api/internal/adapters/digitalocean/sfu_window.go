@@ -42,7 +42,7 @@ var (
 	ErrSFUWindowFirewall = errors.New("sfu window: firewall does not agree with the window tags")
 	// ErrSFUWindowCreateUnknown marks a Create failure where DigitalOcean may
 	// have accepted the request. The droplet may exist, so the caller
-	// must settle the outcome with Observe or Inspect and must not treat it as a rejection.
+	// must settle the outcome with Observe and must not treat it as a rejection.
 	ErrSFUWindowCreateUnknown = errors.New("sfu window: create outcome unknown")
 )
 
@@ -218,11 +218,8 @@ func (a *SFUWindow) Create(ctx context.Context, name string) (int64, error) {
 		}
 		return 0, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
 	}
-	if response.Droplet.ID <= 0 || response.Droplet.Name != name {
-		return 0, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, ErrSFUWindowDrift)
-	}
-	if err := a.verifyCreateResponse(response.Droplet, name); err != nil {
-		return response.Droplet.ID, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
+	if err := a.verifyOwned(response.Droplet, name, false); err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrSFUWindowCreateUnknown, err)
 	}
 	slog.InfoContext(ctx, "sfu window droplet creation accepted",
 		"event", "sfu_window.create_accepted",

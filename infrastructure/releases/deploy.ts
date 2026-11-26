@@ -15,16 +15,7 @@ export const bootstrapMatches = (stackName: string, rows: ReadonlyArray<Bootstra
   const types = new Map(
     Object.entries(
       stackName === "document-renderer"
-        ? {
-            ExecutionRole: "AWS.IAM.Role",
-            Logs: "AWS.Logs.LogGroup",
-            FailureLogMetric: "AWS.Logs.MetricFilter",
-            Function: "Chalk.Lambda.VersionedFunction",
-            Errors: "AWS.CloudWatch.Alarm",
-            Throttles: "AWS.CloudWatch.Alarm",
-            AsyncEventsDropped: "AWS.CloudWatch.Alarm",
-            ControlApiPermission: "AWS.Lambda.Permission",
-          }
+        ? { ExecutionRole: "AWS.IAM.Role", Logs: "AWS.Logs.LogGroup", Function: "Chalk.Lambda.VersionedFunction", Errors: "AWS.CloudWatch.Alarm", Throttles: "AWS.CloudWatch.Alarm", AsyncEventsDropped: "AWS.CloudWatch.Alarm", ControlApiPermission: "AWS.Lambda.Permission" }
         : resourceTypes,
     ),
   );

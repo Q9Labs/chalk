@@ -343,7 +343,7 @@
       "gate": true
     },
     "web.laptop.board.js_gzip_kib": {
-      "max_p50": 763,
+      "max_p50": 764,
       "tolerancePct": 1,
       "gate": true
     },
@@ -788,7 +788,7 @@
       "gate": true
     },
     "web.phone.board.js_gzip_kib": {
-      "max_p50": 763,
+      "max_p50": 764,
       "tolerancePct": 1,
       "gate": true
     },

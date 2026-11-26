@@ -10,15 +10,11 @@ which also documents the threat model.
 
 ## Resources and inputs
 
-The stack manages seven resources: a CloudWatch log group, a metric filter for
-reported render invocation failures, an execution role with one inline policy,
-the versioned Lambda function, and three alarms (`Errors`, `Throttles` and
-`AsyncEventsDropped`). An eighth, the `ControlApiPermission` that lets the
-control API invoke the function, exists only when both control API permission
-inputs are set. The `Errors` alarm uses the metric filter rather than Lambda's
-`Errors` metric because the renderer deliberately exits after every job to reset
-its execution environment, and Lambda counts even a successful deliberate recycle
-as a runtime error. The function is `provided.al2023` on arm64 with the
+The stack manages six resources: a CloudWatch log group, an execution role with
+one inline policy, the versioned Lambda function, and three alarms (`Errors`,
+`Throttles` and `AsyncEventsDropped`). A seventh, the `ControlApiPermission` that
+lets the control API invoke the function, exists only when both control API
+permission inputs are set. The function is `provided.al2023` on arm64 with the
 `bootstrap` handler, active X-Ray tracing, and no VPC configuration, so it uses
 default Lambda networking.
 
@@ -26,11 +22,8 @@ default Lambda networking.
 must match `^[a-z0-9-]{8,64}$`, the artifact key must contain the release ID, and
 the hexadecimal and base64 SHA-256 values must agree. Memory must be an integer
 from 1024 to 10240 MB, the timeout from 60 to 900 seconds, and reserved concurrency
-from 1 to 64. Asynchronous invocation configuration is explicit: Lambda retries
-are fixed at zero because presenting leases and reconciliation own retries, and
-the maximum event age is fixed at 300 seconds. The two control API permission
-fields must be set together or not at all. An ephemeral stage must derive its
-function name from the stage.
+from 1 to 64. The two control API permission fields must be set together or not
+at all. An ephemeral stage must derive its function name from the stage.
 
 Inputs come from one of two places. A deploy with `CHALK_INFRA_INPUTS` reads that
 JSON file. Otherwise the stack reads the redacted `renderer_inputs` output stored

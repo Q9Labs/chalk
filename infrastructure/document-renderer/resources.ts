@@ -37,19 +37,12 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
     eventInvokeConfig: { maximumEventAge: input.async_max_event_age_seconds, maximumRetryAttempts: input.async_maximum_retry_attempts },
     tags: { ...tags, chalk_release_id: input.release_id, chalk_release_manifest_digest: input.release_manifest_digest, chalk_config_digest: input.config_digest },
   };
-  const failureMetricName = `RenderInvocationFailures-${input.function_name}`;
-  const failureLogMetric: AWS.Logs.MetricFilterProps = {
-    logGroupName: logName,
-    filterName: `${input.function_name}-invocation-failures`,
-    filterPattern: '{ $.msg = "render invocation failed; recycling execution environment" }',
-    metricTransformations: [{ metricName: failureMetricName, metricNamespace: "Chalk/DocumentRenderer", metricValue: "1" }],
-  };
-  const alarm = (suffix: string, AlarmDescription: string, Namespace: string, MetricName: string, withFunctionDimension = true): AWS.CloudWatch.AlarmProps => ({
+  const alarm = (suffix: string, AlarmDescription: string, MetricName: string): AWS.CloudWatch.AlarmProps => ({
     name: `${input.function_name}-${suffix}`,
     AlarmDescription,
-    Namespace,
+    Namespace: "AWS/Lambda",
     MetricName,
-    ...(withFunctionDimension ? { Dimensions: [{ Name: "FunctionName", Value: input.function_name }] } : {}),
+    Dimensions: [{ Name: "FunctionName", Value: input.function_name }],
     Statistic: "Sum",
     Period: 300,
     EvaluationPeriods: 1,
@@ -62,12 +55,11 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
     executionRole,
     log,
     fn,
-    failureLogMetric,
     controlPermission: input.control_api_invoker_principal !== null && input.control_api_invoke_source_arn !== null ? { functionName: input.function_name, action: "lambda:InvokeFunction", principal: input.control_api_invoker_principal, sourceArn: input.control_api_invoke_source_arn } : undefined,
     alarms: {
-      Errors: alarm("errors", "Document renderer reported a render invocation failure.", "Chalk/DocumentRenderer", failureMetricName, false),
-      Throttles: alarm("throttles", "Reserved-concurrency throttles on the document renderer.", "AWS/Lambda", "Throttles"),
-      AsyncEventsDropped: alarm("async-events-dropped", "Lambda dropped asynchronous renderer wake-up events.", "AWS/Lambda", "AsyncEventsDropped"),
+      Errors: alarm("errors", "Document renderer invocation errors.", "Errors"),
+      Throttles: alarm("throttles", "Reserved-concurrency throttles on the document renderer.", "Throttles"),
+      AsyncEventsDropped: alarm("async-events-dropped", "Lambda dropped asynchronous renderer wake-up events.", "AsyncEventsDropped"),
     },
     outputs: {
       renderer_inputs: Redacted.make(input),
