@@ -144,17 +144,19 @@ where tenant_id = $1
     and attempt_count = $5
     and lease_owner = $6
     and lease_token = $7
+    and lease_expires_at > $8
     and status in ('leased', 'succeeded')
 `
 
 type CompletePresentingRenderJobParams struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	SpaceID      pgtype.UUID `json:"space_id"`
-	DocumentID   pgtype.UUID `json:"document_id"`
-	JobID        pgtype.UUID `json:"job_id"`
-	AttemptCount int32       `json:"attempt_count"`
-	LeaseOwner   pgtype.Text `json:"lease_owner"`
-	LeaseToken   pgtype.UUID `json:"lease_token"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	AttemptCount int32              `json:"attempt_count"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	LeaseToken   pgtype.UUID        `json:"lease_token"`
+	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) CompletePresentingRenderJob(ctx context.Context, arg CompletePresentingRenderJobParams) (int64, error) {
@@ -166,6 +168,7 @@ func (q *Queries) CompletePresentingRenderJob(ctx context.Context, arg CompleteP
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
+		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err
@@ -470,19 +473,21 @@ where tenant_id = $3
     and attempt_count = $7
     and lease_owner = $8
     and lease_token = $9
+    and lease_expires_at > $10
     and status in ('leased', 'failed')
 `
 
 type FailPresentingRenderJobParams struct {
-	ErrorCode    pgtype.Text `json:"error_code"`
-	ErrorMessage pgtype.Text `json:"error_message"`
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	SpaceID      pgtype.UUID `json:"space_id"`
-	DocumentID   pgtype.UUID `json:"document_id"`
-	JobID        pgtype.UUID `json:"job_id"`
-	AttemptCount int32       `json:"attempt_count"`
-	LeaseOwner   pgtype.Text `json:"lease_owner"`
-	LeaseToken   pgtype.UUID `json:"lease_token"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	AttemptCount int32              `json:"attempt_count"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	LeaseToken   pgtype.UUID        `json:"lease_token"`
+	NowAt        pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) FailPresentingRenderJob(ctx context.Context, arg FailPresentingRenderJobParams) (int64, error) {
@@ -496,6 +501,7 @@ func (q *Queries) FailPresentingRenderJob(ctx context.Context, arg FailPresentin
 		arg.AttemptCount,
 		arg.LeaseOwner,
 		arg.LeaseToken,
+		arg.NowAt,
 	)
 	if err != nil {
 		return 0, err

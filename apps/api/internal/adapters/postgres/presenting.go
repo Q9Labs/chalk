@@ -276,7 +276,7 @@ func (r PresentingRepository) CompleteRenderJob(ctx context.Context, lease prese
 func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presenting.RenderLease, failure presenting.RenderFailure) error {
 	rows, err := r.queries.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
 		ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
-		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken),
+		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("fail presenting render job: %w", err)
@@ -410,7 +410,7 @@ func presentingRenderUploadKey(ctx context.Context, q *sqlc.Queries, lease prese
 }
 
 func completePresentingJob(ctx context.Context, q *sqlc.Queries, lease presenting.RenderLease) error {
-	rows, err := q.CompletePresentingRenderJob(ctx, sqlc.CompletePresentingRenderJobParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken)})
+	rows, err := q.CompletePresentingRenderJob(ctx, sqlc.CompletePresentingRenderJobParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}})
 	if err != nil {
 		return fmt.Errorf("complete presenting render job: %w", err)
 	}

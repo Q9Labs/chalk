@@ -306,6 +306,7 @@ where tenant_id = sqlc.arg(tenant_id)
     and attempt_count = sqlc.arg(attempt_count)
     and lease_owner = sqlc.arg(lease_owner)
     and lease_token = sqlc.arg(lease_token)
+    and lease_expires_at > sqlc.arg(now_at)
     and status in ('leased', 'succeeded');
 
 -- name: FailPresentingRenderJob :execrows
@@ -318,6 +319,7 @@ where tenant_id = sqlc.arg(tenant_id)
     and attempt_count = sqlc.arg(attempt_count)
     and lease_owner = sqlc.arg(lease_owner)
     and lease_token = sqlc.arg(lease_token)
+    and lease_expires_at > sqlc.arg(now_at)
     and status in ('leased', 'failed');
 
 -- name: InsertPresentingDocumentPage :exec
