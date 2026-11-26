@@ -61,33 +61,42 @@ func TestPresentingClaimFailsJobForTerminalDocumentIntegration(t *testing.T) {
 	}
 }
 
-func TestPresentingClaimFailsTimeoutDocumentSiblingsIntegration(t *testing.T) {
+func TestPresentingClaimSkipsTimeoutDocumentSiblingsIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)
-	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	timeoutFixture := newPresentingFixture(t, pool, "{publishScreen}")
+	goodFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
+	mustExec(t, pool, `delete from presenting_render_jobs`)
 	documentID, timedOutJobID, siblingJobID := newTestID(t), newTestID(t), newTestID(t)
 	mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,page_count)
 		values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing',10)`,
-		uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(documentID), uuid(fixture.attachment), uuid(fixture.participant))
+		uuid(timeoutFixture.tenant), uuid(timeoutFixture.space), uuid(timeoutFixture.episode), uuid(documentID), uuid(timeoutFixture.attachment), uuid(timeoutFixture.participant))
 	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
 		values($1,$2,$3,$4,'pages',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes')`,
-		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(timedOutJobID))
+		uuid(timeoutFixture.tenant), uuid(timeoutFixture.space), uuid(documentID), uuid(timedOutJobID))
 	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
-		values($1,$2,$3,$4,'pages',2,2,'queued',now()-interval '1 minute')`,
-		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(siblingJobID))
+		values($1,$2,$3,$4,'pages',2,2,'queued',now()-interval '2 minutes')`,
+		uuid(timeoutFixture.tenant), uuid(timeoutFixture.space), uuid(documentID), uuid(siblingJobID))
+	good, err := repository.CreateDocument(ctx, goodFixture.subject, goodFixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create good document: %v", err)
+	}
 	token, _ := utilities.NewID()
 	now := time.Now().UTC()
-	_, err := repository.ClaimRenderJob(ctx, siblingJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
-	if !errors.Is(err, presenting.ErrNoRenderJob) {
-		t.Fatalf("same-pass timeout sibling claim error = %v", err)
+	assignment, err := repository.ClaimRenderJob(ctx, utilities.ID{}, 1, now, now.Add(time.Minute), token, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim with same-pass timeout sibling: %v", err)
+	}
+	if assignment.Job.JobID != good.InventoryJobID {
+		t.Fatalf("claim selected job %s, want good inventory job %s rather than timeout sibling %s", assignment.Job.JobID, good.InventoryJobID, siblingJobID)
 	}
 	var documentStatus, timedOutCode, siblingStatus, siblingCode string
 	if err := pool.QueryRow(ctx, `select document.status, timed_out.error_code, sibling.status, sibling.error_code
 		from presenting_documents document
 		join presenting_render_jobs timed_out on timed_out.document_id=document.document_id and timed_out.job_id=$2
 		join presenting_render_jobs sibling on sibling.document_id=document.document_id and sibling.job_id=$3
-		where document.tenant_id=$1 and document.document_id=$4`, uuid(fixture.tenant), uuid(timedOutJobID), uuid(siblingJobID), uuid(documentID)).Scan(&documentStatus, &timedOutCode, &siblingStatus, &siblingCode); err != nil {
+		where document.tenant_id=$1 and document.document_id=$4`, uuid(timeoutFixture.tenant), uuid(timedOutJobID), uuid(siblingJobID), uuid(documentID)).Scan(&documentStatus, &timedOutCode, &siblingStatus, &siblingCode); err != nil {
 		t.Fatalf("read same-pass timeout rows: %v", err)
 	}
 	if documentStatus != "failed" || timedOutCode != "timeout" || siblingStatus != "failed" || siblingCode != "document_terminal" {
