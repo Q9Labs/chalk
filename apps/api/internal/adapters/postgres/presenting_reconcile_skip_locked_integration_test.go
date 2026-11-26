@@ -28,6 +28,7 @@ func TestPresentingReconcileSkipsLockedTerminalJobIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create good document: %v", err)
 	}
+	mustExec(t, pool, `update presenting_render_jobs set available_at=timestamp '2000-01-02' where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(fixture.tenant), uuid(fixture.space), uuid(good.DocumentID), uuid(good.InventoryJobID))
 	lockTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin terminal job lock transaction: %v", err)
@@ -42,7 +43,8 @@ func TestPresentingReconcileSkipsLockedTerminalJobIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := presenting.NewService(repository, nil, invoker).WithCapabilitySigner(signer).WithAvailability(func(context.Context) bool { return true })
+	scopedRepository := tenantScopedReconcileRepository{Repository: repository, tenantID: fixture.tenant, spaceID: fixture.space}
+	service := presenting.NewService(scopedRepository, nil, invoker).WithCapabilitySigner(signer).WithAvailability(func(context.Context) bool { return true })
 	reconcileCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if _, _, err := service.ReconcileRenderJobs(reconcileCtx, 1000); err != nil {
