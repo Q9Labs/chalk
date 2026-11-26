@@ -147,6 +147,9 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 	if libraryPath := os.Getenv("LD_LIBRARY_PATH"); libraryPath != "" {
 		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
 	}
+	if os.Getenv("RENDERER_TIMEOUT_PROBE") == "1" {
+		environment = append(environment, "RENDERER_TIMEOUT_PROBE=1")
+	}
 	command := exec.Command(executable, args...)
 	command.Env = environment
 	configureIsolatedChild(command, useIsolatedNamespaces())
