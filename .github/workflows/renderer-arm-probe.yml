@@ -1,0 +1,25 @@
+name: Renderer ARM probe
+on: push
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/document-renderer/go.mod
+          cache-dependency-path: apps/document-renderer/go.sum
+      - name: Install renderer build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc libwebp-dev
+      - name: Probe user namespace restriction and test renderer
+        run: |
+          echo "apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo absent)"
+          uname -a
+          scripts/build-document-renderer.sh
+          cd apps/document-renderer
+          RENDERER_LAMBDA=1 LD_LIBRARY_PATH="$PWD/native/pdfium/lib" go test ./cmd/renderer ./internal/...
