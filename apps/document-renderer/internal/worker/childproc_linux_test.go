@@ -35,7 +35,11 @@ func init() {
 
 func init() {
 	if os.Getenv("RENDER_CHILD_MODE") == "selftest" {
-		allowed := map[string]bool{"RENDER_CHILD_MODE": true, "LD_LIBRARY_PATH": true, "RENDERER_TIMEOUT_PROBE": true}
+		allowed := map[string]bool{"RENDER_CHILD_MODE": true, "LD_LIBRARY_PATH": true, "RENDERER_LAMBDA": true, "RENDERER_TIMEOUT_PROBE": true}
+		if os.Getenv("RENDERER_LAMBDA") != "1" {
+			fmt.Fprintln(os.Stderr, "Lambda runtime marker did not reach child")
+			os.Exit(17)
+		}
 		for _, item := range os.Environ() {
 			key, _, _ := strings.Cut(item, "=")
 			if !allowed[key] {

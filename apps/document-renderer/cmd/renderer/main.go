@@ -37,10 +37,15 @@ type invocationEvent struct {
 	Tracestate  string `json:"tracestate"`
 }
 
+func rendererRunsOnLambda() bool {
+	return os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" || os.Getenv("RENDERER_LAMBDA") == "1"
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	lambdaRuntime := rendererRunsOnLambda()
 	if err := worker.MakeProcessNonDumpable(); err != nil {
-		if os.Getenv("AWS_LAMBDA_RUNTIME_API") == "" {
+		if !lambdaRuntime {
 			logger.Error("renderer process protection unavailable", "error", err)
 			os.Exit(1)
 		}
@@ -56,7 +61,7 @@ func main() {
 		os.Exit(render.RunPageChild(os.Args[1:]))
 	}
 	resetScratch := worker.ResetRendererScratch
-	if os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {
+	if lambdaRuntime {
 		resetScratch = worker.ResetWritableTemp
 	}
 	if err := resetScratch(); err != nil {
