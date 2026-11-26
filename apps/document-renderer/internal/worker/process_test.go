@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
@@ -34,18 +33,26 @@ func TestWriteSourceCleanupRemovesRendererScratch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write source: %v", err)
 	}
-	if filepath.Dir(filepath.Dir(path)) != rendererScratchRoot {
+	jobDirectory := filepath.Dir(path)
+	if filepath.Dir(jobDirectory) != rendererScratchRoot {
 		t.Fatalf("source path %q is not under the renderer scratch root", path)
 	}
 	if err := cleanup(); err != nil {
 		t.Fatalf("clean scratch: %v", err)
 	}
-	if _, err := os.Stat(rendererScratchRoot); !os.IsNotExist(err) {
-		t.Fatalf("renderer scratch root remains after cleanup: %v", err)
+	if _, err := os.Stat(jobDirectory); !os.IsNotExist(err) {
+		t.Fatalf("renderer job scratch remains after cleanup: %v", err)
+	}
+	entries, err := os.ReadDir(rendererScratchRoot)
+	if err != nil {
+		t.Fatalf("read renderer scratch root: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("renderer scratch root has %d entries after cleanup", len(entries))
 	}
 }
 
-func TestRendererScratchResetAndCleanupWipeLeftovers(t *testing.T) {
+func TestRendererScratchResetWipesRoot(t *testing.T) {
 	if err := os.MkdirAll(rendererScratchRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -58,20 +65,38 @@ func TestRendererScratchResetAndCleanupWipeLeftovers(t *testing.T) {
 	if _, err := os.Stat(rendererScratchRoot); !os.IsNotExist(err) {
 		t.Fatalf("renderer scratch root remains after boot reset: %v", err)
 	}
+}
 
-	_, cleanup, err := writeSource([]byte("pdf"))
-	if err != nil {
-		t.Fatalf("write source: %v", err)
+func TestCleanupRendererScratchPreservesSiblingJob(t *testing.T) {
+	if err := ResetRendererScratch(); err != nil {
+		t.Fatalf("reset scratch: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(rendererScratchRoot, "job-leftover"), []byte("stale"), 0o600); err != nil {
+	t.Cleanup(func() { _ = os.RemoveAll(rendererScratchRoot) })
+	finishedPath, finishCleanup, err := writeSource([]byte("finished"))
+	if err != nil {
+		t.Fatalf("write finished source: %v", err)
+	}
+	siblingPath, siblingCleanup, err := writeSource([]byte("sibling"))
+	if err != nil {
+		t.Fatalf("write sibling source: %v", err)
+	}
+	markerPath := filepath.Join(filepath.Dir(siblingPath), "still-rendering")
+	if err := os.WriteFile(markerPath, []byte("rendering"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err = cleanup()
-	if err == nil || !strings.Contains(err.Error(), "unexpected entries") {
-		t.Fatalf("cleanup error = %v; want unexpected scratch entry failure", err)
+	if err := finishCleanup(); err != nil {
+		t.Fatalf("clean finished job scratch: %v", err)
 	}
-	if _, statErr := os.Stat(rendererScratchRoot); !os.IsNotExist(statErr) {
-		t.Fatalf("renderer scratch root remains after leftover cleanup: %v", statErr)
+	if _, err := os.Stat(filepath.Dir(finishedPath)); !os.IsNotExist(err) {
+		t.Fatalf("finished job scratch remains: %v", err)
+	}
+	for _, path := range []string{siblingPath, markerPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("sibling job file %q was removed: %v", path, err)
+		}
+	}
+	if err := siblingCleanup(); err != nil {
+		t.Fatalf("clean sibling job scratch: %v", err)
 	}
 }
 
@@ -96,8 +121,18 @@ func TestProcessInventoryJobLeavesNoRendererScratch(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("/internal/v1/presenting/render/inventory/complete", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	mux.HandleFunc("/internal/v1/presenting/render/fail", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.HandleFunc("/internal/v1/presenting/render/inventory/complete", func(w http.ResponseWriter, _ *http.Request) {
+		entries, err := os.ReadDir(rendererScratchRoot)
+		if err != nil && !os.IsNotExist(err) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if len(entries) != 0 {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	upload := controlplane.SignedUpload{URL: server.URL + "/upload/rendition", Headers: map[string]string{}}
@@ -109,8 +144,12 @@ func TestProcessInventoryJobLeavesNoRendererScratch(t *testing.T) {
 	if err := Process(context.Background(), controlplane.NewControlClient(server.URL), assignment); err != nil {
 		t.Fatalf("process inventory job: %v", err)
 	}
-	if _, err := os.Stat(rendererScratchRoot); !os.IsNotExist(err) {
-		t.Fatalf("renderer scratch root remains after job: %v", err)
+	entries, err := os.ReadDir(rendererScratchRoot)
+	if err != nil {
+		t.Fatalf("read renderer scratch root after job: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("renderer scratch root has %d entries after job", len(entries))
 	}
 }
 

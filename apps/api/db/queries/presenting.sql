@@ -220,7 +220,7 @@ failed_documents as (
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
         and document.status = 'preparing'
-    returning document.document_id
+    returning document.tenant_id, document.space_id, document.document_id
 ),
 terminal_jobs as (
     update presenting_render_jobs job
@@ -248,6 +248,12 @@ join presenting_documents document
 where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
   and not (document.status = 'failed' or (document.status = 'ready' and job.kind in ('inventory', 'pages')))
+  and not exists (
+    select 1 from failed_documents failed
+    where failed.tenant_id = job.tenant_id
+      and failed.space_id = job.space_id
+      and failed.document_id = job.document_id
+  )
   and (
     (job.status = 'queued' and job.available_at <= sqlc.arg(now_at))
     or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
@@ -273,7 +279,7 @@ failed_documents as (
         and document.document_id = expired.document_id
         and expired.kind in ('inventory', 'pages')
         and document.status = 'preparing'
-    returning document.document_id
+    returning document.tenant_id, document.space_id, document.document_id
 ),
 terminal_jobs as (
     update presenting_render_jobs job
@@ -304,6 +310,12 @@ candidate as (
         and job.attempt_count + 1 = sqlc.arg(expected_attempt)
         and (sqlc.narg(job_id)::uuid is null or job.job_id = sqlc.narg(job_id)::uuid)
         and not (document.status = 'failed' or (document.status = 'ready' and job.kind in ('inventory', 'pages')))
+        and not exists (
+            select 1 from failed_documents failed
+            where failed.tenant_id = job.tenant_id
+                and failed.space_id = job.space_id
+                and failed.document_id = job.document_id
+        )
     order by job.available_at, job.created_at, job.job_id
     for update of job skip locked
     limit 1

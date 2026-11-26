@@ -327,26 +327,13 @@ func writeSource(source []byte) (string, func() error, error) {
 }
 
 func cleanupRendererScratch(directory string) error {
-	removeErr := os.RemoveAll(directory)
-	entries, readErr := os.ReadDir(rendererScratchRoot)
-	unexpected := 0
-	if readErr == nil {
-		unexpected = len(entries)
-	} else if os.IsNotExist(readErr) {
-		readErr = nil
+	if err := os.RemoveAll(directory); err != nil {
+		return fmt.Errorf("remove renderer job scratch: %w", err)
 	}
-	clearErr := os.RemoveAll(rendererScratchRoot)
-	if removeErr != nil {
-		return fmt.Errorf("remove renderer job scratch: %w", removeErr)
-	}
-	if readErr != nil {
-		return fmt.Errorf("inspect renderer scratch area: %w", readErr)
-	}
-	if clearErr != nil {
-		return fmt.Errorf("clear renderer scratch area: %w", clearErr)
-	}
-	if unexpected != 0 {
-		return fmt.Errorf("renderer scratch area retained %d unexpected entries", unexpected)
+	if _, err := os.Stat(directory); err == nil {
+		return fmt.Errorf("renderer job scratch remains after cleanup")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect renderer job scratch: %w", err)
 	}
 	return nil
 }

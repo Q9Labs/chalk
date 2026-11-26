@@ -75,6 +75,19 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
 	select tenant_id,space_id,document_id,gen_random_uuid(),'pages',1,1,'queued',now()-interval '1 minute'
 	from terminal_documents`, uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(fixture.participant))
+	mustExec(t, pool, `with timeout_document as (
+		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status)
+		values($1,$2,$3,gen_random_uuid(),gen_random_uuid(),$4,1,'timeout-deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing')
+		returning tenant_id,space_id,document_id
+	), expired_inventory as (
+		insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
+		select tenant_id,space_id,document_id,gen_random_uuid(),'inventory',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes'
+		from timeout_document
+		returning job_id
+	)
+	insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
+	select tenant_id,space_id,document_id,gen_random_uuid(),'pages',g,g,'queued',now()-interval '1 minute'
+	from timeout_document, generate_series(1,10) g`, uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(fixture.participant))
 	good, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
 	if err != nil {
 		t.Fatalf("create good document: %v", err)
@@ -102,5 +115,14 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	}
 	if terminalCount != 60 {
 		t.Fatalf("terminal sweep marked %d jobs; want 60", terminalCount)
+	}
+	var activeSiblingCount int
+	if err := pool.QueryRow(ctx, `select count(*) from presenting_render_jobs job
+		join presenting_documents document on document.tenant_id=job.tenant_id and document.space_id=job.space_id and document.document_id=job.document_id
+		where job.tenant_id=$1 and job.space_id=$2 and document.failure_code='timeout' and job.kind='pages' and job.status='queued'`, uuid(fixture.tenant), uuid(fixture.space)).Scan(&activeSiblingCount); err != nil {
+		t.Fatalf("count active sibling jobs: %v", err)
+	}
+	if activeSiblingCount != 10 {
+		t.Fatalf("active sibling jobs after same-statement exclusion = %d; want the 10 seeded siblings still queued but not selected", activeSiblingCount)
 	}
 }
