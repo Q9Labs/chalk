@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -39,6 +40,14 @@ func insertFailedDocumentJob(t *testing.T, repository PresentingRepository, fixt
 		values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`, uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(jobID))
 }
 
+func clearPresentingRenderJobsForSerialTest(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	// Reconciliation and untargeted claims are global. These integration tests
+	// share one database but do not use t.Parallel, so this reset cannot race
+	// another test's presenting jobs.
+	mustExec(t, pool, `delete from presenting_render_jobs`)
+}
+
 func TestPresentingClaimFailsJobForTerminalDocumentIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)
@@ -67,7 +76,7 @@ func TestPresentingClaimSkipsTimeoutDocumentSiblingsIntegration(t *testing.T) {
 	timeoutFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	goodFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
-	mustExec(t, pool, `delete from presenting_render_jobs`)
+	clearPresentingRenderJobsForSerialTest(t, pool)
 	documentID, timedOutJobID, siblingJobID := newTestID(t), newTestID(t), newTestID(t)
 	mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,page_count)
 		values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing',10)`,
@@ -110,7 +119,7 @@ func TestPresentingReconcileSkipsExpiredSourceJobsIntegration(t *testing.T) {
 	expiredFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	goodFixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
-	mustExec(t, pool, `delete from presenting_render_jobs`)
+	clearPresentingRenderJobsForSerialTest(t, pool)
 	if _, err := repository.CreateDocument(ctx, expiredFixture.subject, expiredFixture.attachment, newTestID(t)); err != nil {
 		t.Fatalf("create expired-source document: %v", err)
 	}
@@ -143,7 +152,7 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	repository := NewPresentingRepository(pool)
 	fixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
-	mustExec(t, pool, `delete from presenting_render_jobs`)
+	clearPresentingRenderJobsForSerialTest(t, pool)
 	mustExec(t, pool, `with terminal_documents as (
 		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,failure_code,failure_message)
 		select $1,$2,$3,gen_random_uuid(),gen_random_uuid(),$4,1,'deck.pdf','application/pdf',1024,'terminal-'||g,repeat('b',32)::bytea,'failed','corrupt','failed in test'

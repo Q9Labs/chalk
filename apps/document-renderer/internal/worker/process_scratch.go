@@ -7,6 +7,7 @@ import (
 )
 
 const rendererScratchRoot = "/tmp/chalk-renderer"
+const lambdaTempRoot = "/tmp"
 
 // ResetRendererScratch runs once when the runtime process boots. Lambda may
 // preserve /tmp for a reused execution environment, so no renderer scratch may
@@ -14,6 +15,30 @@ const rendererScratchRoot = "/tmp/chalk-renderer"
 func ResetRendererScratch() error {
 	if err := os.RemoveAll(rendererScratchRoot); err != nil {
 		return fmt.Errorf("wipe renderer scratch area: %w", err)
+	}
+	return nil
+}
+
+// ResetWritableTemp wipes the Lambda execution environment's writable temp
+// entries at boot. It is only for Lambda startup; local renderers keep their
+// host temp directory unchanged.
+func ResetWritableTemp() error {
+	return resetWritableTemp(lambdaTempRoot)
+}
+
+func resetWritableTemp(root string) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return fmt.Errorf("read writable temp area: %w", err)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			if os.IsPermission(err) {
+				continue
+			}
+			return fmt.Errorf("wipe writable temp entry %q: %w", path, err)
+		}
 	}
 	return nil
 }

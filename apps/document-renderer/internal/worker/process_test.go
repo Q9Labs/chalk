@@ -67,6 +67,32 @@ func TestRendererScratchResetWipesRoot(t *testing.T) {
 	}
 }
 
+func TestResetWritableTempRemovesBootEntries(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "leftover"), []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "nested", "job"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "job", "source"), []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resetWritableTemp(root); err != nil {
+		t.Fatalf("reset writable temp: %v", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read writable temp after reset: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("writable temp has %d entries after boot reset", len(entries))
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("writable temp root was removed: %v", err)
+	}
+}
+
 func TestCleanupRendererScratchPreservesSiblingJob(t *testing.T) {
 	if err := ResetRendererScratch(); err != nil {
 		t.Fatalf("reset scratch: %v", err)
