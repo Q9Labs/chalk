@@ -37,16 +37,36 @@ type invocationEvent struct {
 	Tracestate  string `json:"tracestate"`
 }
 
+func rendererRunsOnLambda() bool {
+	return os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" || os.Getenv("RENDERER_LAMBDA") == "1"
+}
+
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := worker.MakeProcessNonDumpable(); err != nil {
-		logger.Warn("renderer process protection unavailable", "error", err)
-	}
 	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
 		os.Exit(render.RunChild(mode, os.Args[1:]))
 	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	lambdaRuntime := rendererRunsOnLambda()
+	if err := worker.MakeProcessNonDumpable(); err != nil {
+		if !lambdaRuntime {
+			logger.Error("renderer process protection unavailable", "error", err)
+			os.Exit(1)
+		}
+		// Lambda's seccomp policy blocks prctl even though the runtime starts as an
+		// ordinary dumpable process. Its compensating boundary is mandatory
+		// execution-environment recycling after every invocation.
+		logger.Error("renderer process protection unavailable; relying on execution-environment recycling", "error", err)
+	}
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
+	}
+	resetScratch := worker.ResetRendererScratch
+	if lambdaRuntime {
+		resetScratch = worker.ResetWritableTemp
+	}
+	if err := resetScratch(); err != nil {
+		logger.Error("renderer scratch reset failed", "error", err)
+		os.Exit(1)
 	}
 	if benchmarkFile := os.Getenv("RENDER_BENCHMARK_FILE"); benchmarkFile != "" {
 		if err := runBenchmark(benchmarkFile); err != nil {

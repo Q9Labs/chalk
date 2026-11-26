@@ -19,7 +19,7 @@ func (r PresentingRepository) CompleteZoom(ctx context.Context, lease presenting
 		return fmt.Errorf("begin presenting zoom completion: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	q := sqlc.New(tx)
+	q := r.queries.WithTx(tx)
 	zoomKey, err := presentingRenderUploadKey(ctx, q, lease, lease.Page, "zoom")
 	if err != nil {
 		return err

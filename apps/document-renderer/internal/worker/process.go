@@ -111,6 +111,9 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	if err := uploadEagerRenditions(ctx, assignment, assignment.Uploads[0], bitmap, width, height); err != nil {
 		return err
 	}
+	if err := cleanupRendererScratchBeforeReport(cleanup); err != nil {
+		return err
+	}
 	controlStarted := time.Now()
 	if err := control.CompleteInventory(ctx, assignment, pageSpecs); err != nil {
 		return fmt.Errorf("complete inventory: %w", err)
@@ -169,6 +172,9 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 			return err
 		}
 	}
+	if err := cleanupRendererScratchBeforeReport(cleanup); err != nil {
+		return err
+	}
 	controlStarted := time.Now()
 	if err := control.Complete(ctx, assignment); err != nil {
 		return fmt.Errorf("complete page job: %w", err)
@@ -217,11 +223,21 @@ func processZoom(ctx context.Context, control controlplane.ControlClient, assign
 		return err
 	}
 	stageLog(ctx, assignment, target.Page, "upload", time.Since(uploadStarted), "object", "zoom", "bytes", len(encoded))
+	if err := cleanupRendererScratchBeforeReport(cleanup); err != nil {
+		return err
+	}
 	controlStarted := time.Now()
 	if err := control.CompleteZoom(ctx, assignment, target.Page); err != nil {
 		return fmt.Errorf("complete zoom render: %w", err)
 	}
 	stageLog(ctx, assignment, target.Page, "zoom_complete_control", time.Since(controlStarted))
+	return nil
+}
+
+func cleanupRendererScratchBeforeReport(cleanup func() error) error {
+	if err := cleanup(); err != nil {
+		return renderFailure{code: "infrastructure", err: fmt.Errorf("clean renderer scratch area: %w", err)}
+	}
 	return nil
 }
 
