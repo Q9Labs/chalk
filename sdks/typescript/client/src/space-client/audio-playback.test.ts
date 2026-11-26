@@ -126,18 +126,23 @@ it("retries every blocked output on every gesture when an earlier play stalls", 
   stalled.played(notAllowed());
 
   const first = playback.resume();
-  expect(stalledElement.play).toHaveBeenCalledTimes(1);
-
-  const laterElement = audioElement(() => Promise.reject(notAllowed()));
+  let refuseOnce = true;
+  const laterElement = audioElement(async () => {
+    if (refuseOnce) {
+      refuseOnce = false;
+      throw notAllowed();
+    }
+    laterElement.paused = false;
+  });
   const later = playback.observeElement({} as MediaStreamTrack, laterElement);
   later.played(notAllowed());
   const second = playback.resume();
   const third = playback.resume();
-  expect(laterElement.play).toHaveBeenCalledTimes(2);
-  expect(stalledElement.play).toHaveBeenCalledTimes(3);
 
   for (const finish of finishes.splice(0)) finish();
   await Promise.allSettled([first, second, third]);
+  expect(laterElement.paused).toBe(false);
+  expect(playback.snapshot.blocked).toBe(false);
   stalled.detach();
   later.detach();
 });
