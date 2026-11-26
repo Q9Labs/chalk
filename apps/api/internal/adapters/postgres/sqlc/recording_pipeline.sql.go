@@ -64,11 +64,11 @@ with claimant as (
 ), candidate as (
     select recording_jobs.id, recovery.source_expires_at as recovery_expires_at,
         (recording_jobs.kind = 'capture' and recording_capture_completion_available(recording_jobs.recording_id))::boolean as completion_only,
-        recording_pipelines.capture_completed_at +
-            ((case when recording_jobs.kind = 'transcription'
-                then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                else recording_deferred_retention_seconds(episodes.config_snapshot)
-            end) * interval '1 second') as source_expires_at
+        (case when recording_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(recording_jobs.recording_id, recording_pipelines.capture_completed_at, episodes.config_snapshot)
+                else recording_pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) as source_expires_at
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
@@ -90,11 +90,11 @@ with claimant as (
       and recording_jobs.state = 'pending'
       and (recording_jobs.kind <> 'transcription' or $3::boolean)
       and (recording_jobs.kind not in ('render', 'transcription') or
-          recording_pipelines.capture_completed_at +
-              ((case when recording_jobs.kind = 'transcription'
-                  then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                  else recording_deferred_retention_seconds(episodes.config_snapshot)
-              end) * interval '1 second') > clock_timestamp())
+          (case when recording_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(recording_jobs.recording_id, recording_pipelines.capture_completed_at, episodes.config_snapshot)
+                else recording_pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp())
       and (recording_jobs.kind not in ('render', 'transcription') or
           coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $4::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
@@ -2714,11 +2714,11 @@ with completed_captures as materialized (
     on conflict (recording_id) do nothing
 ), expired as (
     select jobs.id, jobs.state as prior_state, jobs.lease_owner as prior_lease_owner, ((jobs.kind in ('render', 'transcription') and
-        pipelines.capture_completed_at +
-            ((case when jobs.kind = 'transcription'
-                then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                else recording_deferred_retention_seconds(episodes.config_snapshot)
-            end) * interval '1 second') <= clock_timestamp())
+        (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) <= clock_timestamp())
         or (jobs.kind = 'capture' and pipelines.capture_ready_at is not null
             and recording_capture_salvage_deadline(jobs.recording_id) <= clock_timestamp())
         or exists (select 1 from recording_completion_recoveries recovery
@@ -2733,11 +2733,11 @@ with completed_captures as materialized (
     join episodes on episodes.id = jobs.episode_id
     where (jobs.state = 'leased' and jobs.lease_expires_at <= clock_timestamp())
        or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
-           pipelines.capture_completed_at +
-               ((case when jobs.kind = 'transcription'
-                   then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                   else recording_deferred_retention_seconds(episodes.config_snapshot)
-               end) * interval '1 second') <= clock_timestamp())
+           (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) <= clock_timestamp())
        or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
            coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id), jobs.created_at) + $1::integer * interval '1 second' <= clock_timestamp())
        or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null
