@@ -94,7 +94,7 @@ try {
         try {
           if (!arguments_.has("--agreement-only")) {
             await proveToastLayering(browser, baseURL);
-            if (browserName === "chromium") await runChromiumEntry(browser, baseURL, tenantAPIKey, { autoplayOnly: arguments_.has("--autoplay-only"), runMatrix: runChromiumMatrix, executablePath, autoplayHelpers: { chromium, invoke, waitForState } }); else await runLaunchSmoke(browser, browserName, baseURL);
+            await (browserName === "chromium" ? runChromiumEntry(browser, baseURL, tenantAPIKey, { autoplayOnly: arguments_.has("--autoplay-only"), runMatrix: runChromiumMatrix, executablePath, autoplayHelpers: { chromium, invoke, waitForState } }) : runLaunchSmoke(browser, browserName, baseURL));
           }
           if (browserName !== "firefox") {
             process.stdout.write(`[agreement] browser=${browserName}${browserName === "webkit" ? " profile=iPad Pro 11" : ""}\n`);
