@@ -63,17 +63,6 @@ function metadataHeaders(incoming) {
   return result;
 }
 
-// Uploads keep only types the chat accepts. Anything else is served as opaque bytes, so a caller can't publish active content.
-const STORED_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "audio/wav", "application/pdf", "application/json", "text/plain"]);
-
-function storedContentType(header) {
-  const type = String(header ?? "")
-    .split(";")[0]
-    .trim()
-    .toLowerCase();
-  return STORED_CONTENT_TYPES.has(type) ? type : "";
-}
-
 function artifactContentType(path, stored) {
   if (stored.contentType) return stored.contentType;
   if (path.endsWith(".json")) return "application/json";
@@ -97,13 +86,13 @@ function artifactObjectHeaders(path, file, stored) {
   // Uploads share the Chalk origin, so they never run as a page: no sniffing, no scripts, and a download unless it's media.
   headers["X-Content-Type-Options"] = "nosniff";
   headers["Content-Security-Policy"] = "sandbox";
-  if (!/^(image|audio)\//.test(headers["Content-Type"])) headers["Content-Disposition"] = "attachment";
+  if (!/^(image\/(?!svg)|audio\/)/.test(headers["Content-Type"])) headers["Content-Disposition"] = "attachment";
   if (stored.checksumSHA256) headers["x-amz-checksum-sha256"] = stored.checksumSHA256;
   for (const [name, value] of Object.entries(stored.metadata ?? {})) headers[`x-amz-meta-${name}`] = value;
   return headers;
 }
 
-async function artifactResponse(url, incoming) {
+export async function artifactResponse(url, incoming) {
   const path = artifactPath(url.pathname);
   if (incoming.method === "PUT" || incoming.method === "DELETE") {
     const signed = isLocalArtifactRequestSigned(incoming, { accessKeyId: LOCAL_ARTIFACT_ACCESS_KEY_ID, secretAccessKey: LOCAL_ARTIFACT_SECRET_ACCESS_KEY });
@@ -121,7 +110,7 @@ async function artifactResponse(url, incoming) {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, body);
     const stored = {
-      contentType: storedContentType(incoming.headers["content-type"]) || artifactContentType(path, {}),
+      contentType: incoming.headers["content-type"] || artifactContentType(path, {}),
       metadata: metadataHeaders(incoming),
       checksumSHA256: incoming.headers["x-amz-checksum-sha256"] || "",
       etag: createHash("md5").update(body).digest("hex"),
