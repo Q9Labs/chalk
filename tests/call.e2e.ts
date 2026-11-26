@@ -76,6 +76,8 @@ test("a dropped PDF stages in chat with the panel open or closed", async ({ app,
 
     await screen.getByRole("button", "Close panel", { exact: true }).click();
     await expect(screen.getByRole("complementary", "Chat panel", { exact: true })).not.toBeVisible();
+    await dragPdf(browser, false);
+    await expect(screen.getByText("Drop files to send", { exact: true })).not.toBeVisible();
     await dragPdf(browser, true);
     await screen.getByRole("complementary", "Chat panel", { exact: true }).waitFor({ state: "visible" });
     await expect(screen.getByText("Algebra worksheet.pdf", { exact: true })).toBeVisible();
