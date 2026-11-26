@@ -16,6 +16,7 @@ import {
   type SpaceClient,
   type SpaceSnapshot,
   type WhiteboardSlice,
+  type PresentingSlice,
 } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
@@ -38,6 +39,7 @@ const selectOffline = (snapshot: SpaceSnapshot): OfflineSlice => snapshot.offlin
 const selectReactions = (snapshot: SpaceSnapshot): ReactionsSlice => snapshot.reactions;
 const selectRecording = (snapshot: SpaceSnapshot): RecordingSlice => snapshot.recording;
 const selectWhiteboard = (snapshot: SpaceSnapshot): WhiteboardSlice => snapshot.whiteboard;
+const selectPresenting = (snapshot: SpaceSnapshot): PresentingSlice => snapshot.presenting;
 
 export function useSpaceClient(): SpaceClient {
   const client = useContext(SpaceClientContext);
@@ -94,6 +96,10 @@ export function useRecording(): RecordingSlice {
 
 export function useWhiteboard(): WhiteboardSlice {
   return useSnapshotSlice(selectWhiteboard);
+}
+
+export function usePresenting(): PresentingSlice {
+  return useSnapshotSlice(selectPresenting);
 }
 
 export function useCan(capability: Capability): boolean {

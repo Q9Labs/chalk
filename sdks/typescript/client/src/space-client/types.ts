@@ -13,6 +13,8 @@ export type { ParticipantPresence, Participant, AdmissionRequest, AdmissionPolic
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
+import type { PresentingControllerEffects } from "./presenting-controller";
+import type { PresentingSlice } from "../presenting/types";
 import type { PromiseController } from "./promise-facade";
 import type { AccessContext, AccessReason } from "../access/context";
 import type { AppTelemetry } from "../telemetry/app";
@@ -202,6 +204,7 @@ export type SpaceSnapshot = {
   readonly reactions: ReactionsSlice;
   readonly recording: RecordingSlice;
   readonly whiteboard: WhiteboardSlice;
+  readonly presenting: PresentingSlice;
   readonly offline: OfflineSlice;
 };
 export type ChatSendInput = {
@@ -235,6 +238,7 @@ export type ParticipantsController = PromiseController<Omit<ParticipantsControll
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
 export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;
+export type PresentingController = PromiseController<Omit<PresentingControllerEffects, "dispose">>;
 export type ClientEventMap = {
   readonly participantJoined: {
     readonly participant: Participant;
@@ -269,6 +273,7 @@ export type SpaceClient = {
   readonly reactions: ReactionsController;
   readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;
+  readonly presenting: PresentingController;
   readonly offline: OfflineController;
   readonly telemetry: AppTelemetry;
   readonly join: (options?: JoinOptions) => Promise<void>;

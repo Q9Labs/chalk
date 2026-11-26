@@ -12,39 +12,29 @@ import (
 )
 
 const claimPresentingRenderJob = `-- name: ClaimPresentingRenderJob :one
-with expired as (
-    update presenting_render_jobs job
-    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
-    where job.status = 'leased'
-        and job.lease_expires_at <= now()
-        and job.attempt_count >= job.attempt_limit
-    returning job.tenant_id, job.space_id, job.document_id, job.kind
-),
-failed_documents as (
-    update presenting_documents document
-    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
-    from expired
-    where document.tenant_id = expired.tenant_id
-        and document.space_id = expired.space_id
-        and document.document_id = expired.document_id
-        and expired.kind in ('inventory', 'pages')
-        and document.status = 'preparing'
-    returning document.document_id
-),
-candidate as (
+with candidate as (
     select job.tenant_id, job.space_id, job.document_id, job.job_id
     from presenting_render_jobs job
     join presenting_documents document
         on document.tenant_id = job.tenant_id
         and document.space_id = job.space_id
         and document.document_id = job.document_id
+    join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
     where job.status in ('queued', 'leased')
         and job.available_at <= $4
         and (job.status = 'queued' or job.lease_expires_at <= now())
         and job.attempt_count < job.attempt_limit
         and job.attempt_count + 1 = $5
         and ($6::uuid is null or job.job_id = $6::uuid)
-        and document.status <> 'failed'
+        and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
+        and attachment.cleanup_claim_token is null
+        and (
+            attachment.status = 'attached'
+            or (attachment.status = 'ready' and attachment.expires_at > now())
+        )
     order by job.available_at, job.created_at, job.job_id
     for update of job skip locked
     limit 1
@@ -428,6 +418,30 @@ func (q *Queries) DeletePresentingDocument(ctx context.Context, arg DeletePresen
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const expirePresentingRenderJobs = `-- name: ExpirePresentingRenderJobs :exec
+with expired as (
+    update presenting_render_jobs job
+    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
+    where job.status = 'leased'
+        and job.lease_expires_at <= now()
+        and job.attempt_count >= job.attempt_limit
+    returning job.tenant_id, job.space_id, job.document_id, job.kind
+)
+update presenting_documents document
+set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
+from expired
+where document.tenant_id = expired.tenant_id
+    and document.space_id = expired.space_id
+    and document.document_id = expired.document_id
+    and expired.kind in ('inventory', 'pages')
+    and document.status = 'preparing'
+`
+
+func (q *Queries) ExpirePresentingRenderJobs(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, expirePresentingRenderJobs)
+	return err
 }
 
 const failPresentingDocument = `-- name: FailPresentingDocument :execrows
@@ -1154,31 +1168,26 @@ func (q *Queries) ListPresentingPageRanges(ctx context.Context, arg ListPresenti
 }
 
 const listStalePresentingRenderJobs = `-- name: ListStalePresentingRenderJobs :many
-with expired as (
-    update presenting_render_jobs job
-    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
-    where job.status = 'leased'
-        and job.lease_expires_at <= now()
-        and job.attempt_count >= job.attempt_limit
-    returning job.tenant_id, job.space_id, job.document_id, job.kind
-),
-failed_documents as (
-    update presenting_documents document
-    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
-    from expired
-    where document.tenant_id = expired.tenant_id
-        and document.space_id = expired.space_id
-        and document.document_id = expired.document_id
-        and expired.kind in ('inventory', 'pages')
-        and document.status = 'preparing'
-    returning document.document_id
-)
 select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
        job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
        job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at
 from presenting_render_jobs job
+join presenting_documents document
+    on document.tenant_id = job.tenant_id
+    and document.space_id = job.space_id
+    and document.document_id = job.document_id
+join sync_chat_attachments attachment
+    on attachment.tenant_id = document.tenant_id
+    and attachment.space_id = document.space_id
+    and attachment.attachment_id = document.attachment_id
 where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
+  and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
+  and attachment.cleanup_claim_token is null
+  and (
+    attachment.status = 'attached'
+    or (attachment.status = 'ready' and attachment.expires_at > now())
+  )
   and (
     (job.status = 'queued' and job.available_at <= $1)
     or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
@@ -1234,6 +1243,143 @@ func (q *Queries) ListStalePresentingRenderJobs(ctx context.Context, arg ListSta
 			&i.LeaseExpiresAt,
 			&i.AvailableAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockPresentingRenderDocument = `-- name: LockPresentingRenderDocument :one
+select document_id
+from presenting_documents
+where tenant_id = $1
+    and space_id = $2
+    and document_id = $3
+for update
+`
+
+type LockPresentingRenderDocumentParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	DocumentID pgtype.UUID `json:"document_id"`
+}
+
+func (q *Queries) LockPresentingRenderDocument(ctx context.Context, arg LockPresentingRenderDocumentParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPresentingRenderDocument, arg.TenantID, arg.SpaceID, arg.DocumentID)
+	var document_id pgtype.UUID
+	err := row.Scan(&document_id)
+	return document_id, err
+}
+
+const lockPresentingRenderSweepAttachments = `-- name: LockPresentingRenderSweepAttachments :many
+with attachment_keys as (
+    select distinct attachment.tenant_id, attachment.space_id, attachment.attachment_id
+    from presenting_render_jobs job
+    join presenting_documents document
+        on document.tenant_id = job.tenant_id
+        and document.space_id = job.space_id
+        and document.document_id = job.document_id
+    join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
+    where job.status in ('queued', 'leased')
+        and attachment.status <> 'attached'
+        and attachment.expires_at <= now()
+)
+select attachment.tenant_id, attachment.space_id, attachment.attachment_id
+from sync_chat_attachments attachment
+join attachment_keys keys
+    on keys.tenant_id = attachment.tenant_id
+    and keys.space_id = attachment.space_id
+    and keys.attachment_id = attachment.attachment_id
+order by attachment.tenant_id, attachment.space_id, attachment.attachment_id
+for update of attachment
+`
+
+type LockPresentingRenderSweepAttachmentsRow struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	AttachmentID pgtype.UUID `json:"attachment_id"`
+}
+
+func (q *Queries) LockPresentingRenderSweepAttachments(ctx context.Context) ([]LockPresentingRenderSweepAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, lockPresentingRenderSweepAttachments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockPresentingRenderSweepAttachmentsRow
+	for rows.Next() {
+		var i LockPresentingRenderSweepAttachmentsRow
+		if err := rows.Scan(&i.TenantID, &i.SpaceID, &i.AttachmentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockPresentingRenderSweepDocuments = `-- name: LockPresentingRenderSweepDocuments :many
+with document_keys as (
+    select distinct job.tenant_id, job.space_id, job.document_id
+    from presenting_render_jobs job
+    join presenting_documents document
+        on document.tenant_id = job.tenant_id
+        and document.space_id = job.space_id
+        and document.document_id = job.document_id
+    left join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
+    where (
+        job.status = 'leased'
+        and job.lease_expires_at <= now()
+        and job.attempt_count >= job.attempt_limit
+        and job.kind in ('inventory', 'pages')
+        and document.status = 'preparing'
+    ) or (
+        job.status in ('queued', 'leased')
+        and (
+            document.status = 'failed'
+            or (document.status = 'ready' and job.kind = 'pages')
+            or (attachment.status <> 'attached' and attachment.expires_at <= now())
+        )
+    )
+)
+select document.tenant_id, document.space_id, document.document_id
+from presenting_documents document
+join document_keys keys
+    on keys.tenant_id = document.tenant_id
+    and keys.space_id = document.space_id
+    and keys.document_id = document.document_id
+order by document.tenant_id, document.space_id, document.document_id
+for update of document
+`
+
+type LockPresentingRenderSweepDocumentsRow struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
+	DocumentID pgtype.UUID `json:"document_id"`
+}
+
+func (q *Queries) LockPresentingRenderSweepDocuments(ctx context.Context) ([]LockPresentingRenderSweepDocumentsRow, error) {
+	rows, err := q.db.Query(ctx, lockPresentingRenderSweepDocuments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockPresentingRenderSweepDocumentsRow
+	for rows.Next() {
+		var i LockPresentingRenderSweepDocumentsRow
+		if err := rows.Scan(&i.TenantID, &i.SpaceID, &i.DocumentID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1438,4 +1584,46 @@ func (q *Queries) SetPresentingDocumentInventory(ctx context.Context, arg SetPre
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const terminalizePresentingRenderJobs = `-- name: TerminalizePresentingRenderJobs :exec
+with candidates as (
+    select job.tenant_id, job.space_id, job.document_id, job.job_id,
+        case
+            when document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages') then 'document_terminal'
+            else 'source_expired'
+        end as failure_code,
+        case
+            when document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages') then 'Document reached a terminal state'
+            else 'Source attachment expired'
+        end as failure_message
+    from presenting_render_jobs job
+    join presenting_documents document
+        on document.tenant_id = job.tenant_id
+        and document.space_id = job.space_id
+        and document.document_id = job.document_id
+    left join sync_chat_attachments attachment
+        on attachment.tenant_id = document.tenant_id
+        and attachment.space_id = document.space_id
+        and attachment.attachment_id = document.attachment_id
+    where job.status in ('queued', 'leased')
+        and (
+            document.status = 'failed'
+            or (document.status = 'ready' and job.kind = 'pages')
+            or (attachment.status <> 'attached' and attachment.expires_at <= now())
+        )
+    for update of job skip locked
+)
+update presenting_render_jobs job
+set status = 'failed', error_code = candidates.failure_code, error_message = candidates.failure_message, completed_at = now(), updated_at = now()
+from candidates
+where job.tenant_id = candidates.tenant_id
+    and job.space_id = candidates.space_id
+    and job.document_id = candidates.document_id
+    and job.job_id = candidates.job_id
+`
+
+func (q *Queries) TerminalizePresentingRenderJobs(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, terminalizePresentingRenderJobs)
+	return err
 }

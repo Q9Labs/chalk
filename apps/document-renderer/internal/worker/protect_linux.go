@@ -4,7 +4,6 @@ package worker
 
 import (
 	"os"
-	"strings"
 	"syscall"
 )
 
@@ -30,14 +29,16 @@ func MakeProcessNonDumpable() error {
 }
 
 func processDumpable() (bool, error) {
-	status, err := os.ReadFile("/proc/self/status")
+	info, err := os.Lstat("/proc/self/environ")
 	if err != nil {
 		return false, err
 	}
-	for line := range strings.Lines(string(status)) {
-		if strings.HasPrefix(line, "Dumpable:") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "Dumpable:")) != "0", nil
-		}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, os.ErrInvalid
 	}
-	return false, os.ErrNotExist
+	// The kernel owns /proc/pid entries as root while dumpable is not 1.
+	// Lambda blocks PR_GET_DUMPABLE, so ownership is the available evidence
+	// that the runtime image was already started with equivalent protection.
+	return stat.Uid == uint32(os.Geteuid()) && stat.Gid == uint32(os.Getegid()), nil
 }

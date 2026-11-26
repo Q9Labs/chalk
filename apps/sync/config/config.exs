@@ -10,6 +10,7 @@ config :chalk_sync,
   listen_ip: {127, 0, 0, 1},
   max_synchronous_wal_lag_bytes: 0,
   port: 4100,
+  presenting_default: true,
   # Sync requires the complete release migration set before it reports ready.
   minimum_compatible_sync_migration: 20_261_106_120_000,
   provider_bridge: nil,

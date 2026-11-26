@@ -1613,6 +1613,38 @@ type SyncPresenceRuntime struct {
 	RecoverAfter pgtype.Timestamptz `json:"recover_after"`
 }
 
+type SyncPresentingDocument struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	SpaceID             pgtype.UUID `json:"space_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	DocumentID          pgtype.UUID `json:"document_id"`
+	PresenterID         pgtype.UUID `json:"presenter_id"`
+	PresenterGeneration int64       `json:"presenter_generation"`
+	Position            int64       `json:"position"`
+	Page                int32       `json:"page"`
+	Zoom                int32       `json:"zoom"`
+	StartedAtMs         int64       `json:"started_at_ms"`
+}
+
+type SyncPresentingReceipt struct {
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	SpaceID         pgtype.UUID `json:"space_id"`
+	EpisodeID       pgtype.UUID `json:"episode_id"`
+	ActorID         pgtype.UUID `json:"actor_id"`
+	ActorGeneration int64       `json:"actor_generation"`
+	OperationID     []byte      `json:"operation_id"`
+	Fingerprint     []byte      `json:"fingerprint"`
+	Revision        int64       `json:"revision"`
+	ExpiresAtMs     int64       `json:"expires_at_ms"`
+}
+
+type SyncPresentingState struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	Revision  int64       `json:"revision"`
+}
+
 type SyncPublicationFence struct {
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	SpaceID               pgtype.UUID        `json:"space_id"`

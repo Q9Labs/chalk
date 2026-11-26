@@ -137,19 +137,13 @@ func closePipe(pipe *os.File) {
 }
 
 func useIsolatedNamespaces() bool {
-	return os.Getenv("AWS_LAMBDA_RUNTIME_API") == ""
+	return os.Getenv("AWS_LAMBDA_RUNTIME_API") == "" && os.Getenv("RENDERER_LAMBDA") != "1"
 }
 
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
 	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	environment := []string{"RENDER_CHILD_MODE=" + mode}
-	if libraryPath := os.Getenv("LD_LIBRARY_PATH"); libraryPath != "" {
-		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
-	}
-	if os.Getenv("RENDERER_TIMEOUT_PROBE") == "1" {
-		environment = append(environment, "RENDERER_TIMEOUT_PROBE=1")
-	}
+	environment := isolatedChildEnvironment(mode)
 	command := exec.Command(executable, args...)
 	command.Env = environment
 	configureIsolatedChild(command, useIsolatedNamespaces())
@@ -189,32 +183,43 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 	go func() { waitDone <- command.Wait() }()
 
 	var waitErr error
-	waitFinished, readersFinished := false, false
-	waitChannel, readerChannel := waitDone, readerDone
-	for !waitFinished || !readersFinished {
+	interrupted := false
+	select {
+	case waitErr = <-waitDone:
+	case <-childCtx.Done():
+		interrupted = true
+	}
+
+	// A parser child can spawn descendants and then exit successfully. Always
+	// kill the whole group before trusting the result, not only after a timeout.
+	killIsolatedChildProcessGroup(pgid, command.Process)
+	if interrupted {
+		closePipe(stdoutRead)
+		closePipe(stderrRead)
 		select {
-		case waitErr = <-waitChannel:
-			waitFinished = true
-			waitChannel = nil
-		case <-readerChannel:
-			readersFinished = true
-			readerChannel = nil
-		case <-childCtx.Done():
-			killIsolatedChildProcessGroup(pgid, command.Process)
-			closePipe(stdoutRead)
-			closePipe(stderrRead)
-			select {
-			case waitErr = <-waitDone:
-			case <-time.After(2 * time.Second):
-			}
-			select {
-			case <-readerDone:
-			case <-time.After(200 * time.Millisecond):
-			}
-			if childCtx.Err() == context.DeadlineExceeded {
-				return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
-			}
-			return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
+		case waitErr = <-waitDone:
+		case <-time.After(2 * time.Second):
+		}
+		select {
+		case <-readerDone:
+		case <-time.After(200 * time.Millisecond):
+		}
+		if childCtx.Err() == context.DeadlineExceeded {
+			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render exceeded wall-clock limit", mode)}
+		}
+		return fmt.Errorf("isolated %s render interrupted: %w", mode, childCtx.Err())
+	}
+
+	// The direct child has been reaped. Killing its group makes descendants close
+	// the pipes; give the readers a short bounded chance to drain diagnostics.
+	select {
+	case <-readerDone:
+	case <-time.After(300 * time.Millisecond):
+		closePipe(stdoutRead)
+		closePipe(stderrRead)
+		select {
+		case <-readerDone:
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 	closePipe(stdoutRead)
@@ -284,17 +289,4 @@ func readRenderedPage(sourcePath string, page, target int) ([]byte, int, int, er
 
 func renderedPrefix(sourcePath string, page, target int) string {
 	return filepath.Join(filepath.Dir(sourcePath), fmt.Sprintf("page-%d-%d", page, target))
-}
-
-func writeSource(source []byte) (string, func(), error) {
-	directory, err := os.MkdirTemp("", "chalk-render-")
-	if err != nil {
-		return "", func() {}, err
-	}
-	path := filepath.Join(directory, "source")
-	if err := os.WriteFile(path, source, 0o600); err != nil {
-		os.RemoveAll(directory)
-		return "", func() {}, err
-	}
-	return path, func() { os.RemoveAll(directory) }, nil
 }

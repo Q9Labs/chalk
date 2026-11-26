@@ -7,6 +7,7 @@ defmodule ChalkSync.Transport.Socket.Outbound do
   alias ChalkSync.Transport.Socket.Annotation
   alias ChalkSync.Transport.Socket.Frames
   alias ChalkSync.Transport.Socket.Lifecycle
+  alias ChalkSync.Transport.Socket.Presenting
 
   @terminal_ack_timeout_ms 5_000
 
@@ -24,6 +25,7 @@ defmodule ChalkSync.Transport.Socket.Outbound do
           |> Lifecycle.start_heartbeat()
           |> Lifecycle.start_entry_deadline()
           |> Annotation.enter()
+          |> Presenting.enter()
 
         send(self(), :collaboration_drain)
         {:push, {:text, Frames.encode_with_context(next, encoded)}, next}

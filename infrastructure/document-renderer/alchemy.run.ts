@@ -35,8 +35,7 @@ export default Alchemy.Stack(
     requireInput(input.environment_name === stage, "Renderer input environment does not match stage");
     const aws = yield* AWSEnvironment.current;
     const props = resourceProps(input, aws.accountId, aws.region);
-    const logGroup = yield* AWS.Logs.LogGroup("Logs", props.log);
-    yield* AWS.Logs.MetricFilter("FailureLogMetric", { ...props.failureLogMetric, logGroupName: logGroup.logGroupName });
+    yield* AWS.Logs.LogGroup("Logs", props.log);
     const execution = yield* AWS.IAM.Role("ExecutionRole", props.executionRole);
     const fn = yield* VersionedFunction("Function", { ...props.fn, role: execution.roleArn });
     if (props.controlPermission) yield* AWS.Lambda.Permission("ControlApiPermission", { ...props.controlPermission, functionName: fn.functionName });

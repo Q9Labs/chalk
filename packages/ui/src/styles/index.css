@@ -173,6 +173,15 @@
   --chalk-overlay-warning: #e2bd3a;
   --chalk-overlay-danger: #ff6b6b;
   --chalk-scrim: rgba(0, 0, 0, 0.55);
+  --chalk-overlay-hairline: rgba(255, 255, 255, 0.12);
+  --chalk-overlay-line-strong: rgba(255, 255, 255, 0.6);
+  --chalk-overlay-hover-fill: rgba(255, 255, 255, 0.1);
+  --chalk-overlay-active-fill: rgba(255, 255, 255, 0.2);
+  --chalk-overlay-track: rgba(255, 255, 255, 0.15);
+  --chalk-overlay-track-fill: rgba(255, 255, 255, 0.7);
+  --chalk-overlay-scrim-soft: rgba(0, 0, 0, 0.45);
+  --chalk-overlay-scrim-faint: rgba(0, 0, 0, 0.25);
+  --chalk-overlay-inverse: #000000;
   --chalk-sheet-scrim: var(--chalk-scrim);
   --chalk-app-canvas: var(--chalk-canvas);
   --chalk-app-chrome: var(--chalk-canvas);
