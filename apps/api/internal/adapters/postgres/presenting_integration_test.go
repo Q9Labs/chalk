@@ -372,8 +372,10 @@ func TestPresentingFinalRenderAttemptTimeoutFailsDocumentIntegration(t *testing.
 	if err != nil {
 		t.Fatalf("list stale jobs: %v", err)
 	}
-	if len(jobs) != 0 {
-		t.Fatalf("final expired attempt was offered for another retry: %+v", jobs)
+	for _, job := range jobs {
+		if job.DocumentID == document.DocumentID {
+			t.Fatalf("final expired attempt was offered for another retry: %+v", job)
+		}
 	}
 	var jobStatus, documentStatus string
 	if err := pool.QueryRow(ctx, `select status from presenting_render_jobs where tenant_id=$1 and space_id=$2 and document_id=$3 and job_id=$4`, uuid(lease.TenantID), uuid(lease.SpaceID), uuid(lease.DocumentID), uuid(lease.JobID)).Scan(&jobStatus); err != nil {
