@@ -6,7 +6,7 @@ import { formatClockTime } from "../../utils/formatClockTime";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
 import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
-import { UnavailableAttachment } from "./UnavailableAttachment";
+import { MessageAttachments } from "./MessageAttachments";
 
 export interface MessageBubbleProps {
   content: string;
@@ -143,8 +143,6 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       }, delay);
     };
     const photos = attachments.filter((file) => file.mimeType.startsWith("image/") && resolvedUrls.has(file.attachmentId));
-    const imageFiles = attachments.filter((file) => file.mimeType.startsWith("image/"));
-    const visibleAttachments = [...imageFiles.slice(0, 4), ...attachments.filter((file) => !file.mimeType.startsWith("image/"))];
     const photoIndex = photos.findIndex((file) => file.attachmentId === photo?.attachmentId);
     const changePhoto = (step: number) => {
       if (photos.length > 1) setPhoto(photos[(photoIndex + step + photos.length) % photos.length]!);
@@ -162,31 +160,6 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         setReactionError(cause instanceof Error ? cause.message : "Couldn’t react to this message.");
       } finally {
         setReacting(false);
-      }
-    };
-    const openFile = async (file: ChatAttachment) => {
-      if (!onResolveAttachmentUrl) return;
-      const popup = window.open("about:blank", "_blank");
-      if (popup) popup.opener = null;
-      try {
-        const url = await onResolveAttachmentUrl(file.attachmentId);
-        if (popup) popup.location.href = url;
-      } catch {
-        popup?.close();
-        markFailed(file.attachmentId, "open");
-      }
-    };
-    const downloadFile = async (file: ChatAttachment) => {
-      if (!onResolveAttachmentUrl) return;
-      try {
-        const url = await onResolveAttachmentUrl(file.attachmentId);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = file.fileName;
-        anchor.rel = "noopener";
-        anchor.click();
-      } catch {
-        markFailed(file.attachmentId, "open");
       }
     };
     if (isSystem) return <p className="call-chat-system">{content}</p>;
@@ -251,67 +224,20 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               </div>
             ) : null}
             {attachments.length ? (
-              <div className={cn("call-attachments", `image-${Math.min(imageFiles.length, 4)}`)}>
-                {visibleAttachments.map((file) => {
-                  const image = file.mimeType.startsWith("image/");
-                  const url = resolvedUrls.get(file.attachmentId);
-                  if (failedAttachmentIds.has(file.attachmentId))
-                    return (
-                      <UnavailableAttachment
-                        key={file.attachmentId}
-                        fileName={file.fileName}
-                        onTryAgain={() => {
-                          retry(file.attachmentId);
-                          if (!image) void openFile(file);
-                        }}
-                      />
-                    );
-                  if (image && url)
-                    return (
-                      <button
-                        type="button"
-                        className="call-photo"
-                        key={file.attachmentId}
-                        aria-label={`View ${file.fileName}`}
-                        onClick={() => {
-                          setPhotoClosing(false);
-                          setPhoto(file);
-                          viewer.current?.showModal();
-                        }}
-                      >
-                        <img src={url} alt={file.fileName} onError={() => markFailed(file.attachmentId, "render")} />
-                        {imageFiles.length > 4 && imageFiles.indexOf(file) === 3 ? <span className="call-photo-more">+{imageFiles.length - 4}</span> : null}
-                      </button>
-                    );
-                  const presentable = file.mimeType === "application/pdf" || file.mimeType.startsWith("image/");
-                  return (
-                    <span className="call-file-wrap" key={file.attachmentId}>
-                      <button type="button" className="call-file" disabled={!onResolveAttachmentUrl || image} aria-label={`Download ${file.fileName}`} onClick={() => void openFile(file)}>
-                        <span className="call-file-type" data-extension={file.fileName.split(".").at(-1)?.toLowerCase()}>
-                          {file.fileName.split(".").at(-1)?.toUpperCase()}
-                        </span>
-                        <span>
-                          <b dir="auto">{file.fileName}</b>
-                          <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
-                        </span>
-                      </button>
-                      <span className="call-file-actions">
-                        {presentable && onOpenAttachmentOnStage ? (
-                          <button type="button" onClick={() => void onOpenAttachmentOnStage(file)}>
-                            Open on stage
-                          </button>
-                        ) : null}
-                        <button type="button" onClick={() => void openFile(file)}>
-                          Open in new tab
-                        </button>
-                        <button type="button" onClick={() => void downloadFile(file)}>
-                          Download
-                        </button>
-                      </span>
-                    </span>
-                  );
-                })}
-              </div>
+              <MessageAttachments
+                attachments={attachments}
+                resolvedUrls={resolvedUrls}
+                failedAttachmentIds={failedAttachmentIds}
+                onResolveAttachmentUrl={onResolveAttachmentUrl}
+                onOpenAttachmentOnStage={onOpenAttachmentOnStage}
+                retry={retry}
+                markFailed={markFailed}
+                onPhotoOpen={(file) => {
+                  setPhotoClosing(false);
+                  setPhoto(file);
+                  viewer.current?.showModal();
+                }}
+              />
             ) : null}
             {reactions.length ? (
               <div className="call-message-reactions">

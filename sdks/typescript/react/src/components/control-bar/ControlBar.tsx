@@ -11,18 +11,19 @@ import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
-import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps as SurfaceBehaviorProps, type ControlBarProps as BehaviorProps, type MediaDevice } from "./control-bar-behavior";
+import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type MediaDevice } from "./control-bar-behavior";
+import type { ConnectedControlBarProps, ControlBarSurfaceProps as SurfaceBehaviorProps } from "./control-bar-props";
 import { MediaGlyph, ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
-export type { ControlBarButtonName } from "./control-bar-behavior";
+export type { ControlBarButtonName } from "./control-bar-props";
 
 interface HelperInstallProps {
   readonly helperInstallUrl?: string;
 }
 
 type ControlBarSurfaceProps = SurfaceBehaviorProps & HelperInstallProps;
-export type ControlBarProps = BehaviorProps & HelperInstallProps;
+export type ControlBarProps = ConnectedControlBarProps & HelperInstallProps;
 
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
