@@ -1,8 +1,11 @@
 package postgres_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,6 +115,28 @@ func TestTranscriptionRearmProducesClaimableJobAndSurvivesSweep(t *testing.T) {
 	if err != nil || len(states) != 1 || states[0].TranscriptionPreparationStatus != "pending" {
 		t.Fatalf("public transcription preparation status: rows=%+v err=%v", states, err)
 	}
+	envelopeDigest := bytes.Repeat([]byte{7}, 32)
+	if _, err := sqlc.New(f.tx).InsertRecordingJobAttemptAuthority(t.Context(), sqlc.InsertRecordingJobAttemptAuthorityParams{
+		JobID: cleanupUUID(f.transcriptionJobID), AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
+		CaptureEpoch: claimed.CaptureEpoch, ClaimRequestID: cleanupUUID(f.recordingID), Kind: "transcription",
+		LeaseOwner: "rearm-test-worker", LeaseToken: "rearm-test-lease",
+		LeaseExpiresAt: leaseExpiry, EnvelopeBytes: []byte(`{"completion_only":false,"hard_deadline":"2099-01-01T00:00:00Z"}`),
+		EnvelopeDigest: envelopeDigest, IssuedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}); err != nil {
+		t.Fatalf("record heartbeat attempt authority: %v", err)
+	}
+	heartbeated, err := sqlc.New(f.tx).HeartbeatRecordingJob(t.Context(), sqlc.HeartbeatRecordingJobParams{
+		LeaseExpiresAt: pgtype.Timestamptz{Time: result.SourceExpiresAt.Add(2 * time.Hour), Valid: true},
+		ID:             cleanupUUID(f.transcriptionJobID), AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
+		LeaseToken: claimed.LeaseToken, LeaseOwner: claimed.LeaseOwner,
+		CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: envelopeDigest,
+	})
+	if err != nil {
+		t.Fatalf("heartbeat renewed transcription job: %v", err)
+	}
+	if heartbeated.LeaseExpiresAt.Time.After(result.SourceExpiresAt) {
+		t.Fatalf("heartbeat extended past source expiry: lease=%s source=%s", heartbeated.LeaseExpiresAt.Time, result.SourceExpiresAt)
+	}
 }
 
 func TestTranscriptionRearmIsIdempotent(t *testing.T) {
@@ -159,6 +184,53 @@ func TestTranscriptionRearmRefusesIneligibleRecordings(t *testing.T) {
 			t.Fatalf("cleanup rearm error: %v", err)
 		}
 	})
+}
+
+func TestTranscriptionRearmCapsRenewalAtPendingCleanup(t *testing.T) {
+	f := newTranscriptionRearmFixture(t, false)
+	due := time.Now().UTC().Add(30 * time.Minute).Truncate(time.Microsecond)
+	execCleanupFixture(t, f.tx, `insert into transcription_cleanup_jobs (
+		id, tenant_id, recording_id, object_key, object_kind, due_at
+	) values (gen_random_uuid(), $1, $2, $3, 'recording_source', $4)`,
+		f.tenantID.Bytes(), f.recordingID.Bytes(), "fixtures/"+f.recordingID.String()+"/capture.bundle", due)
+	result, err := f.repository.RearmTranscription(t.Context(), rearmInput(f.recordingID))
+	if err != nil {
+		t.Fatalf("rearm with pending cleanup: %v", err)
+	}
+	if !result.SourceExpiresAt.Equal(due) {
+		t.Fatalf("renewal expiry=%s, want earliest cleanup due %s", result.SourceExpiresAt, due)
+	}
+}
+
+func TestTranscriptionRearmRefusesWhenPendingCleanupLeavesNoWindow(t *testing.T) {
+	f := newTranscriptionRearmFixture(t, false)
+	execCleanupFixture(t, f.tx, `insert into transcription_cleanup_jobs (
+		id, tenant_id, recording_id, object_key, object_kind, due_at
+	) values (gen_random_uuid(), $1, $2, $3, 'recording_source', now() - interval '1 minute')`,
+		f.tenantID.Bytes(), f.recordingID.Bytes(), "fixtures/"+f.recordingID.String()+"/capture.bundle")
+	_, err := f.repository.RearmTranscription(t.Context(), rearmInput(f.recordingID))
+	if !errors.Is(err, recordingpipeline.ErrTranscriptionRearmUnavailable) {
+		t.Fatalf("past-due cleanup rearm error: %v", err)
+	}
+}
+
+func TestTranscriptionRearmRequiresRenewalAwareMigration(t *testing.T) {
+	f := newTranscriptionRearmFixture(t, false)
+	execCleanupFixture(t, f.tx, `delete from goose_db_version where version_id = 20261126090000`)
+	_, err := f.repository.RearmTranscription(t.Context(), rearmInput(f.recordingID))
+	if !errors.Is(err, recordingpipeline.ErrTranscriptionRearmUnavailable) {
+		t.Fatalf("missing migration marker rearm error: %v", err)
+	}
+}
+
+func TestRecordingSweepUpdateRequiresSelectedFence(t *testing.T) {
+	query, err := os.ReadFile("../../../db/queries/recording_pipeline.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(query), "recording_jobs.fencing_generation = expired.fencing_generation") {
+		t.Fatal("expired-job sweep update does not require the fencing generation it selected")
+	}
 }
 
 func TestTranscriptionRearmRejectsStaleFence(t *testing.T) {

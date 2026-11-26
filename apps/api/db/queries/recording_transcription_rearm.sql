@@ -3,8 +3,12 @@ select recordings.id as recording_id, recordings.tenant_id, recordings.episode_i
     jobs.id as job_id, jobs.state, jobs.error_code, jobs.attempt_count, jobs.fencing_generation,
     jobs.terminal_at, jobs.created_at,
     recording_transcription_source_window_seconds(episodes.config_snapshot)::bigint as source_window_seconds,
-    (pipelines.capture_completed_at +
-        (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'))::timestamptz as capture_retention_expires_at,
+    least(
+        pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+        (select min(cleanup.due_at) from transcription_cleanup_jobs cleanup
+         where cleanup.recording_id = jobs.recording_id and cleanup.object_kind = 'recording_source'
+           and cleanup.state = 'pending')
+    )::timestamptz as capture_retention_expires_at,
     (pipelines.capture_completed_at is not null and exists (
         select 1 from recording_jobs capture
         where capture.recording_id = jobs.recording_id and capture.kind = 'capture' and capture.state = 'succeeded'
@@ -51,8 +55,12 @@ select recordings.id as recording_id, recordings.tenant_id, recordings.episode_i
     jobs.id as job_id, jobs.state, jobs.error_code, jobs.attempt_count, jobs.fencing_generation,
     jobs.terminal_at, jobs.created_at,
     recording_transcription_source_window_seconds(episodes.config_snapshot)::bigint as source_window_seconds,
-    (pipelines.capture_completed_at +
-        (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'))::timestamptz as capture_retention_expires_at,
+    least(
+        pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+        (select min(cleanup.due_at) from transcription_cleanup_jobs cleanup
+         where cleanup.recording_id = jobs.recording_id and cleanup.object_kind = 'recording_source'
+           and cleanup.state = 'pending')
+    )::timestamptz as capture_retention_expires_at,
     (pipelines.capture_completed_at is not null and exists (
         select 1 from recording_jobs capture
         where capture.recording_id = jobs.recording_id and capture.kind = 'capture' and capture.state = 'succeeded'
@@ -100,8 +108,12 @@ select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.state,
     jobs.error_code, jobs.attempt_count, jobs.fencing_generation, jobs.terminal_at,
     jobs.created_at,
     recording_transcription_source_window_seconds(episodes.config_snapshot)::bigint as source_window_seconds,
-    (pipelines.capture_completed_at +
-        (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'))::timestamptz as capture_retention_expires_at,
+    least(
+        pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+        (select min(cleanup.due_at) from transcription_cleanup_jobs cleanup
+         where cleanup.recording_id = jobs.recording_id and cleanup.object_kind = 'recording_source'
+           and cleanup.state = 'pending')
+    )::timestamptz as capture_retention_expires_at,
     (pipelines.capture_completed_at is not null and exists (
         select 1 from recording_jobs capture
         where capture.recording_id = jobs.recording_id and capture.kind = 'capture' and capture.state = 'succeeded'
@@ -137,7 +149,12 @@ insert into recording_transcription_source_renewals (
 select jobs.recording_id, jobs.id, sqlc.arg(fencing_generation), sqlc.arg(operator), sqlc.arg(reason),
     least(
         clock_timestamp() + (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second'),
-        pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+        least(
+            pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+            (select min(cleanup.due_at) from transcription_cleanup_jobs cleanup
+             where cleanup.recording_id = jobs.recording_id and cleanup.object_kind = 'recording_source'
+               and cleanup.state = 'pending')
+        )
     ),
     now()
 from recording_jobs jobs
@@ -147,7 +164,12 @@ where jobs.id = sqlc.arg(job_id)
   and jobs.recording_id = sqlc.arg(recording_id)
   and least(
       clock_timestamp() + (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second'),
-      pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+      least(
+            pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+            (select min(cleanup.due_at) from transcription_cleanup_jobs cleanup
+             where cleanup.recording_id = jobs.recording_id and cleanup.object_kind = 'recording_source'
+               and cleanup.state = 'pending')
+        )
   ) > now()
 returning *;
 

@@ -62,6 +62,14 @@ func (r RecordingPipelineRepository) RearmTranscription(ctx context.Context, inp
 	var result recordingpipeline.TranscriptionRearmResult
 	err := r.transaction(ctx, func(tx pgx.Tx, _ recordingPipelineQuerier) error {
 		queries := sqlc.New(tx)
+		var schemaReady bool
+		if err := tx.QueryRow(ctx, `select exists(select 1 from goose_db_version where version_id = 20261126090000 and is_applied)`).Scan(&schemaReady); err != nil {
+			return err
+		}
+		if !schemaReady {
+			reason = "schema_not_ready"
+			return recordingpipeline.ErrTranscriptionRearmUnavailable
+		}
 		if _, err := queries.LockRecordingTranscriptionRearmPipeline(ctx, uuid(input.RecordingID)); err != nil {
 			return err
 		}

@@ -24,14 +24,21 @@ source cleanup has not started, and the data key, presentation and capture
 bundle records exist. It then HEADs every referenced R2 object. A storage error
 is reported as `unverifiable`, not as missing.
 
-Apply rechecks eligibility under the recording pipeline and job locks. It
-writes an append-only renewal, moves the job back to `pending` with a new
-fencing generation, clears the terminal error, and records the expired attempt
-in failure history so the render execution deadline starts at the re-arm. The
-new source expiry is the re-arm time plus the Episode snapshot's transcription
-source window, capped at the capture retention deadline. Repeating an apply is
-safe: a job that is already pending, leased or complete reports
-`already_rearmed` or `completed` and does not change.
+Apply first requires the renewal-aware migration to be applied. Run it only
+after the API rollout carrying this release is complete. It rechecks eligibility
+under the recording pipeline and job locks, writes an append-only renewal,
+moves the job back to `pending` with a new fencing generation, clears the
+terminal error, and records the expired attempt in failure history so the
+render execution deadline starts at the re-arm. The new source expiry is the
+re-arm time plus the Episode snapshot's transcription source window, capped at
+the capture retention deadline and the earliest pending recording-source
+cleanup time. Repeating an apply is safe: a job that is already pending, leased
+or complete reports `already_rearmed` or `completed` and does not change.
+
+Rolling the API back after a re-arm re-expires renewed jobs because the old
+sweep does not read renewals. If a rollback is necessary, expect those jobs to
+terminalize again and re-run this command only after the renewal-aware release
+is fully restored.
 
 Start with a small batch and watch jobs finish before continuing. Continue a
 batch with `--after-recording` set to the report's `next_after_recording`, and
