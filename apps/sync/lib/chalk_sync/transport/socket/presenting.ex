@@ -47,6 +47,9 @@ defmodule ChalkSync.Transport.Socket.Presenting do
   def changed(%{phase: :live, presenting: true} = state), do: refresh(state, false)
   def changed(state), do: {:ok, state}
 
+  def leave(%{identity: identity}) when is_map(identity), do: Fanout.leave(identity.episode)
+  def leave(_state), do: :ok
+
   defp command(frame, state) do
     now = System.monotonic_time(:millisecond)
     recent = Enum.filter(state.presenting_commands, &(now - &1 < 1_000))

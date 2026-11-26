@@ -8,7 +8,6 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Observability
-  alias ChalkSync.Presenting.Fanout, as: PresentingFanout
   alias ChalkSync.ProtocolV1
   alias ChalkSync.ScreenAnnotation.Presence, as: AnnotationPresence
   alias ChalkSync.Stateholder
@@ -211,10 +210,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     Lifecycle.cancel_timer(state.entry_timer)
     Lifecycle.cancel_timer(state.terminal_ack_timer)
     if state.screen_annotation, do: AnnotationPresence.leave()
-
-    if is_map_key(state, :identity) and state.identity,
-      do: PresentingFanout.leave(state.identity.episode)
-
+    Presenting.leave(state)
     Collaboration.unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
     if is_pid(state.coordinator), do: Coordinator.unsubscribe(state.coordinator, self())
