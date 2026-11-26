@@ -104,13 +104,39 @@ class ArtifactHandler(BaseHTTPRequestHandler):
             return
         size = path.stat().st_size
         stored = self.read_metadata(path)
-        self.send_response(200)
-        self.object_headers(path, size, stored)
+        start = 0
+        end = size - 1
+        partial = False
+        range_header = self.headers.get("Range") or ""
+        if range_header.startswith("bytes=") and "-" in range_header[6:]:
+            left, right = range_header[6:].split(",", 1)[0].split("-", 1)
+            try:
+                if left:
+                    start = int(left)
+                    end = min(int(right), size - 1) if right else size - 1
+                else:
+                    suffix = int(right)
+                    start = max(0, size - suffix)
+                partial = 0 <= start <= end < size
+            except ValueError:
+                partial = False
+            if not partial:
+                self.send_error(416)
+                return
+        length = end - start + 1 if partial else size
+        self.send_response(206 if partial else 200)
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Accept-Ranges", "bytes")
+        self.object_headers(path, length, stored)
         self.end_headers()
         if include_body:
             with path.open("rb") as source:
-                while chunk := source.read(1024 * 1024):
+                source.seek(start)
+                remaining = length
+                while remaining and (chunk := source.read(min(1024 * 1024, remaining))):
                     self.wfile.write(chunk)
+                    remaining -= len(chunk)
 
     def delete_object(self):
         try:

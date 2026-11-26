@@ -72,6 +72,19 @@ API `/readyz` shows `capabilities.screen_annotation: disabled` on the next reque
 
 Use the same statement with `true` to turn annotation back on, or `delete from screen_annotation_settings where singleton;` to use the startup default again. A client that connected while annotation was off must reconnect to negotiate it. Clients already using annotation before the flip get the current layer back without reconnecting.
 
+### Turn off presenting
+
+`CHALK_PRESENTING_ENABLED` is the startup default: off in production, on in local development, staging, nightly and Orbs. For a rollback without a restart, use the application's direct database connection with the operator role:
+
+```sql
+insert into presenting_settings (singleton, enabled) values (true, false)
+on conflict (singleton) do update set enabled = excluded.enabled;
+```
+
+API `/readyz` shows `capabilities.presenting: disabled` on the next request. Participant presenting routes then reject new reads and writes with `presenting.disabled`; live calls, chat attachments and screen shares stay in place. Renderer control claims are rejected while the switch is off. Leases already issued may drain only through their completion, failure, heartbeat, page-ready and zoom-completion callbacks; their object writes remain unpublished if their lease has expired. No new Document can be created while the switch is off.
+
+Use the same statement with `true` to turn presenting back on, or `delete from presenting_settings where singleton;` to use the startup default again.
+
 ## Never stop the production node
 
 Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does block termination through the console, CLI or API.

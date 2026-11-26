@@ -50,7 +50,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
         ];
   for (const [name, target] of mounts) args.push("--mount", `type=volume,source=${names.cache}-${name},target=${target}`);
   for (const key of Object.keys(env)) args.push("--env", key);
-  args.push(image, ...(command || (service === "api" ? ["sh", "-c", 'set -e; go build -buildvcs=false -o /tmp/chalk-api ./cmd; python3 /workspace/scripts/dev/artifact-server.py "$CHALK_DEV_ARTIFACT_PORT" /dashboard-artifacts & exec /tmp/chalk-api'] : ["mix", "run", "--no-halt"])));
+  args.push(image, ...(command || (service === "api" ? ["sh", "-c", "set -e; /workspace/scripts/dev/start-api-container.sh"] : ["mix", "run", "--no-halt"])));
   return args;
 }
 
@@ -64,6 +64,7 @@ export function containerEnvironment(config, service, env) {
       result.CHALK_R2_INTERNAL_ENDPOINT = `http://127.0.0.1:${config.ports.web}/__local-dashboard-artifacts`;
       result.CHALK_DEV_ARTIFACT_PORT = String(config.ports.web);
     }
+    result.CHALK_PRESENTING_RENDERER_ENDPOINT ||= "http://127.0.0.1:8093/invoke";
     result.CHALK_API_ADDR = `0.0.0.0:${config.ports.api}`;
     result.CHALK_PROVIDER_BRIDGE_ADDRESS = `0.0.0.0:${config.ports.providerBridge}`;
     result.CHALK_REDIS_URL = `redis://${config.redis.container}:6379/0`;

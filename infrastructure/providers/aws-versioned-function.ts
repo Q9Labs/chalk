@@ -16,7 +16,7 @@ const functionProps = Schema.Struct({
   functionName: Schema.String,
   description: Schema.String,
   role: Schema.String,
-  runtime: Schema.Literal("nodejs22.x"),
+  runtime: Schema.Union([Schema.Literal("nodejs22.x"), Schema.Literal("provided.al2023")]),
   handler: Schema.String,
   architectures: Schema.Array(Schema.Literal("arm64")),
   code: Schema.Struct({ bucket: Schema.String, key: Schema.String, version: Schema.String, sha256: Schema.String }),
@@ -26,7 +26,7 @@ const functionProps = Schema.Struct({
   ephemeralStorageSize: Schema.Number,
   environment: Schema.Redacted(Schema.Record(Schema.String, Schema.String)),
   tracingMode: Schema.Literal("Active"),
-  eventInvokeConfig: Schema.Struct({ maximumEventAge: Schema.Number, maximumRetryAttempts: Schema.Number, onFailure: Schema.String }),
+  eventInvokeConfig: Schema.Struct({ maximumEventAge: Schema.Number, maximumRetryAttempts: Schema.Number, onFailure: Schema.optionalKey(Schema.String) }),
   tags: Schema.Record(Schema.String, Schema.String),
 });
 export type FunctionProps = typeof functionProps.Type;
@@ -100,7 +100,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
     ephemeralStorageSize: config.EphemeralStorage?.Size,
     environment: Redacted.make(environment),
     tracingMode: config.TracingConfig?.Mode,
-    ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination } } : {}),
+    ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, ...(invoke.DestinationConfig?.OnFailure?.Destination ? { onFailure: invoke.DestinationConfig.OnFailure.Destination } : {}) } } : {}),
     tags: Object.fromEntries(Object.entries(yield* tagsOf(current)).filter(([key]) => !key.startsWith("alchemy:"))),
   });
   if (!runOwned) Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))(configuration);
@@ -135,7 +135,8 @@ const settled = Effect.fn(function* (functionName: string) {
 
 export function requireRunOwnedFunction(stageName: string, functionName: string) {
   const stage = parseStage(stageName);
-  if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
+  const allowed = [`chalk-${stage.name}-transcription-dispatcher`, `chalk-${stage.name}-document-renderer`];
+  if (stage.kind !== "ephemeral" || !allowed.includes(functionName)) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
 }
 type Configuration = Pick<FunctionProps, "environment">;
 // Lambda returns environment variables in its own order, and deepEqual compares a redacted record in
@@ -171,7 +172,12 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
     Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
   yield* lambda.putFunctionConcurrency({ FunctionName: news.functionName, ReservedConcurrentExecutions: news.reservedConcurrency });
-  yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } });
+  yield* lambda.putFunctionEventInvokeConfig({
+    FunctionName: news.functionName,
+    MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge,
+    MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts,
+    ...(news.eventInvokeConfig.onFailure ? { DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } } : {}),
+  });
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
   if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
@@ -222,7 +228,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
           FunctionName: news.functionName,
           MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge,
           MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts,
-          DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } },
+          ...(news.eventInvokeConfig.onFailure ? { DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } } : {}),
         });
       const removed = Object.keys(live.configuration.tags).filter((key) => !(key in news.tags));
       if (removed.length) yield* lambda.untagResource({ Resource: live.functionArn, TagKeys: removed });

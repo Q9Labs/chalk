@@ -65,6 +65,7 @@ func logStartup(logger *slog.Logger, cfg config.Config) {
 		"request_logs", cfg.Observability.RequestLogs,
 		"recording_enabled", cfg.Capabilities.Recording,
 		"transcription_enabled", cfg.Capabilities.Transcription,
+		"presenting_enabled", cfg.Capabilities.Presenting,
 	)
 }
 
@@ -161,8 +162,10 @@ type apiWiring struct {
 	recordingDispatcherWake         recordingrender.DispatcherWake
 	recordingSourceCleanupScheduler *transcripts.LocalCleanupScheduler
 
-	chatCleanupScheduler       *objectcleanup.Scheduler
-	whiteboardCleanupScheduler *objectcleanup.Scheduler
-	webhookProtector           *webhooks.AESGCMProtector
-	options                    httpapi.Options
+	chatCleanupScheduler         *objectcleanup.Scheduler
+	whiteboardCleanupScheduler   *objectcleanup.Scheduler
+	presentingCleanupScheduler   *objectcleanup.Scheduler
+	presentingReconcileScheduler *objectcleanup.Scheduler
+	webhookProtector             *webhooks.AESGCMProtector
+	options                      httpapi.Options
 }

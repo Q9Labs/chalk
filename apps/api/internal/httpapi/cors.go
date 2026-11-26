@@ -141,7 +141,7 @@ func requiresTenantOriginLookup(r *http.Request, origin string, allowed map[stri
 	if origin == "" || options.TenantOrigins == nil {
 		return false
 	}
-	if (!tenantScoped || tenantID.IsZero()) && !(isChatAttachmentPath(r.URL.Path) && options.ChatParticipants != nil && r.Method != http.MethodOptions) {
+	if (!tenantScoped || tenantID.IsZero()) && !(isChatParticipantPath(r.URL.Path) && options.ChatParticipants != nil && r.Method != http.MethodOptions) {
 		return false
 	}
 	_, deploymentOrigin := allowedCORSOrigin(origin, allowed, false)
@@ -150,8 +150,8 @@ func requiresTenantOriginLookup(r *http.Request, origin string, allowed map[stri
 
 func requestAllowedCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, allowAnyOrigin bool, options CORSOptions) (string, string, error) {
 	tenantOrigins := options.TenantOrigins
-	if isChatAttachmentPath(r.URL.Path) && options.ChatParticipants != nil && tenantOrigins != nil {
-		return chatAttachmentCORSOrigin(r, origin, allowed, options)
+	if isChatParticipantPath(r.URL.Path) && options.ChatParticipants != nil && tenantOrigins != nil {
+		return chatParticipantCORSOrigin(r, origin, allowed, options)
 	}
 	tenantID, tenantScoped := tenantIDFromCORSPath(r.URL.Path)
 	if !tenantScoped {
@@ -214,11 +214,15 @@ func allowedCORSOrigin(origin string, allowed map[string]struct{}, allowAnyOrigi
 	return "", false
 }
 
-func isChatAttachmentPath(path string) bool {
-	return path == "/v1/chat/attachments/uploads" || strings.HasPrefix(path, "/v1/chat/attachments/uploads/") || (strings.HasPrefix(path, "/v1/chat/attachments/") && strings.HasSuffix(path, "/download"))
+func isChatParticipantPath(path string) bool {
+	if path == "/v1/chat/attachments/uploads" || strings.HasPrefix(path, "/v1/chat/attachments/uploads/") || (strings.HasPrefix(path, "/v1/chat/attachments/") && strings.HasSuffix(path, "/download")) {
+		return true
+	}
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	return len(segments) >= 3 && segments[0] == "v1" && segments[1] == "presenting" && segments[2] == "documents"
 }
 
-func chatAttachmentCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, options CORSOptions) (string, string, error) {
+func chatParticipantCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, options CORSOptions) (string, string, error) {
 	if deploymentOrigin, ok := allowedCORSOrigin(origin, allowed, false); ok {
 		return deploymentOrigin, "deployment", nil
 	}

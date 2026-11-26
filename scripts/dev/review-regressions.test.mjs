@@ -180,7 +180,6 @@ for (const signal of [undefined, "SIGINT", "SIGTERM"]) {
   });
 }
 
-// Windows runners may expose `python3` as an app-execution alias that exits at once, so probe for a real interpreter.
 async function python3Command() {
   for (const command of ["python3", "python"]) {
     const works = await new Promise((resolve) => {
@@ -194,12 +193,12 @@ async function python3Command() {
 }
 
 test("the local artifact server stores bytes and object metadata for finalize", async () => {
-  const python = await python3Command();
   const root = await mkdtemp(join(tmpdir(), "chalk-artifact-server-"));
   const listener = createServer();
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
+  const python = await python3Command();
   const child = spawn(python, ["scripts/dev/artifact-server.py", String(port), root], { stdio: "ignore" });
   try {
     const base = `http://127.0.0.1:${port}/__local-dashboard-artifacts/local-dashboard/test.pdf`;
@@ -209,7 +208,7 @@ test("the local artifact server stores bytes and object metadata for finalize", 
         () => true,
         () => false,
       );
-      if (!ready) await delay(50);
+      if (!ready) await delay(100);
     }
     assert.equal(ready, true);
     const put = await fetch(base, {

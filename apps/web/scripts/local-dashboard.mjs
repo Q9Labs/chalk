@@ -1,8 +1,10 @@
 import { LOCAL_ARTIFACT_ACCESS_KEY_ID, LOCAL_ARTIFACT_SECRET_ACCESS_KEY, previewAudio } from "../../../scripts/dev/dashboard-artifacts.mjs";
+import { isLocalArtifactRequestSigned } from "./local-artifact-signature.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
-import { isLocalArtifactRequestSigned } from "./local-artifact-signature.mjs";
+
+const LOCAL_ARTIFACT_CREDENTIALS = { accessKeyId: LOCAL_ARTIFACT_ACCESS_KEY_ID, secretAccessKey: LOCAL_ARTIFACT_SECRET_ACCESS_KEY };
 
 const ARTIFACT_PREFIX = "/__local-dashboard-artifacts";
 
@@ -76,17 +78,16 @@ function artifactContentType(path, stored) {
   return "application/octet-stream";
 }
 
-function artifactObjectHeaders(path, file, stored) {
+export function artifactObjectHeaders(path, file, stored) {
   const headers = {
     "Content-Type": artifactContentType(path, stored),
+    "Content-Disposition": "attachment",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox",
     "Content-Length": String(file.byteLength),
     ETag: stored.etag || createHash("md5").update(file).digest("hex"),
     "Last-Modified": new Date().toUTCString(),
   };
-  // Uploads share the Chalk origin, so they never run as a page: no sniffing, no scripts, and a download unless it's media.
-  headers["X-Content-Type-Options"] = "nosniff";
-  headers["Content-Security-Policy"] = "sandbox";
-  if (!/^(image\/(?!svg)|audio\/)/.test(headers["Content-Type"])) headers["Content-Disposition"] = "attachment";
   if (stored.checksumSHA256) headers["x-amz-checksum-sha256"] = stored.checksumSHA256;
   for (const [name, value] of Object.entries(stored.metadata ?? {})) headers[`x-amz-meta-${name}`] = value;
   return headers;
@@ -94,11 +95,8 @@ function artifactObjectHeaders(path, file, stored) {
 
 export async function artifactResponse(url, incoming) {
   const path = artifactPath(url.pathname);
-  if (incoming.method === "PUT" || incoming.method === "DELETE") {
-    const signed = isLocalArtifactRequestSigned(incoming, { accessKeyId: LOCAL_ARTIFACT_ACCESS_KEY_ID, secretAccessKey: LOCAL_ARTIFACT_SECRET_ACCESS_KEY });
-    if (!signed) return new Response("Forbidden", { status: 403 });
-  }
   if (incoming.method === "PUT") {
+    if (!isLocalArtifactRequestSigned(incoming, LOCAL_ARTIFACT_CREDENTIALS)) return new Response("Forbidden", { status: 403 });
     if (incoming.headers["if-none-match"] === "*") {
       const exists = await stat(path).then(
         () => true,
@@ -119,6 +117,7 @@ export async function artifactResponse(url, incoming) {
     return new Response(null, { headers: { ETag: stored.etag } });
   }
   if (incoming.method === "DELETE") {
+    if (!isLocalArtifactRequestSigned(incoming, LOCAL_ARTIFACT_CREDENTIALS)) return new Response("Forbidden", { status: 403 });
     await rm(path, { force: true });
     await rm(artifactMetadataPath(path), { force: true });
     return new Response(null, { status: 204 });
