@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -17,19 +19,29 @@ func TestPresentingRenderCompletionIsAtomicWithDocumentReadinessIntegration(t *t
 	if err != nil {
 		t.Fatalf("create document: %v", err)
 	}
-	jobID := newTestID(t)
-	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
-		values($1,$2,$3,$4,'pages',1,1,'queued',now())`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID), uuid(jobID))
 	now := time.Now().UTC()
-	token, _ := utilities.NewID()
-	claimed, err := repository.ClaimRenderJob(ctx, jobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+	inventoryToken, _ := utilities.NewID()
+	inventoryClaim, err := repository.ClaimRenderJob(ctx, document.InventoryJobID, 1, now, now.Add(time.Minute), inventoryToken, "document-renderer")
+	if err != nil {
+		t.Fatalf("claim inventory job: %v", err)
+	}
+	inventoryLease := inventoryClaim.Job.RenderLease
+	trackTestUploads(t, repository, inventoryLease, 1)
+	jobs, err := repository.CompleteInventory(ctx, presenting.InventoryReport{Lease: inventoryLease, PageCount: 2, Pages: []presenting.PageSpec{{Page: 1, Width: 1600, Height: 900}, {Page: 2, Width: 1600, Height: 900}}}, 25)
+	if err != nil {
+		t.Fatalf("complete inventory: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("inventory queued page jobs %+v; want one", jobs)
+	}
+	pageToken, _ := utilities.NewID()
+	now = time.Now().UTC()
+	claimed, err := repository.ClaimRenderJob(ctx, jobs[0].JobID, 1, now, now.Add(time.Minute), pageToken, "document-renderer")
 	if err != nil {
 		t.Fatalf("claim page job: %v", err)
 	}
 	lease := claimed.Job.RenderLease
-	mustExec(t, pool, `update presenting_documents set page_count=1 where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
-	mustExec(t, pool, `insert into presenting_document_pages(tenant_id,space_id,document_id,page,width,height,status,image_key,thumbnail_key)
-		values($1,$2,$3,1,1600,900,'ready','test-image','test-thumbnail')`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
+	mustExec(t, pool, `update presenting_document_pages set status='ready',image_key='test-image',thumbnail_key='test-thumbnail' where tenant_id=$1 and space_id=$2 and document_id=$3 and page=2`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
 	mustExec(t, pool, `create or replace function presenting_test_abort_ready_completion() returns trigger language plpgsql as $$
 begin
 	if NEW.status = 'ready' and OLD.status is distinct from 'ready' then
@@ -56,5 +68,24 @@ $$`)
 	}
 	if jobStatus != "leased" || documentStatus != "preparing" {
 		t.Fatalf("interrupted completion left job=%q document=%q", jobStatus, documentStatus)
+	}
+}
+
+func TestPresentingLateRenderCallbackAfterDocumentDeleteReturnsLeaseLostIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	document, err := repository.CreateDocument(ctx, fixture.subject, fixture.attachment, newTestID(t))
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	lease := presenting.RenderLease{TenantID: document.TenantID, SpaceID: document.SpaceID, DocumentID: document.DocumentID, JobID: document.InventoryJobID, Attempt: 1, LeaseToken: newTestID(t), LeaseOwner: "document-renderer"}
+	mustExec(t, pool, `delete from presenting_documents where tenant_id=$1 and space_id=$2 and document_id=$3`, uuid(document.TenantID), uuid(document.SpaceID), uuid(document.DocumentID))
+	if err := repository.CompleteRenderJob(ctx, lease); !errors.Is(err, presenting.ErrLeaseLost) {
+		t.Fatalf("late completion error = %v; want lease lost", err)
+	}
+	if err := repository.FailRenderJob(ctx, lease, presenting.RenderFailure{Code: "corrupt", Message: "late"}); !errors.Is(err, presenting.ErrLeaseLost) {
+		t.Fatalf("late failure error = %v; want lease lost", err)
 	}
 }

@@ -268,7 +268,7 @@ defmodule ChalkSync.Chat.Repository.SQL do
       and attachment_id = any($4::uuid[])
       and expires_at > now()
       and cleanup_claim_token is null
-    order by array_position($4::uuid[], attachment_id)
+    order by tenant_id, space_id, attachment_id
     """
   end
 

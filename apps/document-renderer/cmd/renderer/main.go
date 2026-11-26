@@ -10,9 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
@@ -30,16 +28,45 @@ func newRuntimeBootNonce() string {
 	return hex.EncodeToString(buf)
 }
 
+type invocationEvent struct {
+	Source      string `json:"source"`
+	JobID       string `json:"jobId"`
+	Capability  string `json:"capability"`
+	JourneyID   string `json:"journeyId"`
+	Traceparent string `json:"traceparent"`
+	Tracestate  string `json:"tracestate"`
+}
+
+func rendererRunsOnLambda() bool {
+	return os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" || os.Getenv("RENDERER_LAMBDA") == "1"
+}
+
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := worker.MakeProcessNonDumpable(); err != nil {
-		logger.Warn("renderer process protection unavailable", "error", err)
-	}
 	if mode := os.Getenv("RENDER_CHILD_MODE"); mode != "" {
 		os.Exit(render.RunChild(mode, os.Args[1:]))
 	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	lambdaRuntime := rendererRunsOnLambda()
+	if err := worker.MakeProcessNonDumpable(); err != nil {
+		if !lambdaRuntime {
+			logger.Error("renderer process protection unavailable", "error", err)
+			os.Exit(1)
+		}
+		// Lambda's seccomp policy blocks prctl even though the runtime starts as an
+		// ordinary dumpable process. Its compensating boundary is mandatory
+		// execution-environment recycling after every invocation.
+		logger.Error("renderer process protection unavailable; relying on execution-environment recycling", "error", err)
+	}
 	if os.Getenv("RENDER_PAGE_MODE") == "1" {
 		os.Exit(render.RunPageChild(os.Args[1:]))
+	}
+	resetScratch := worker.ResetRendererScratch
+	if lambdaRuntime {
+		resetScratch = worker.ResetWritableTemp
+	}
+	if err := resetScratch(); err != nil {
+		logger.Error("renderer scratch reset failed", "error", err)
+		os.Exit(1)
 	}
 	if benchmarkFile := os.Getenv("RENDER_BENCHMARK_FILE"); benchmarkFile != "" {
 		if err := runBenchmark(benchmarkFile); err != nil {
@@ -112,107 +139,79 @@ func runLocalRenderer(address string, control controlplane.ControlClient, logger
 	}
 }
 
-func runBenchmark(path string) error {
-	started := time.Now()
-	source, err := os.ReadFile(path)
+func runLambdaRuntime(endpoint string, control controlplane.ControlClient, logger *slog.Logger) {
+	client := &http.Client{Timeout: 0}
+	base := "http://" + endpoint + "/2018-06-01/runtime"
+	for {
+		request, err := http.NewRequest(http.MethodGet, base+"/invocation/next", nil)
+		if err != nil {
+			logger.Error("runtime request construction failed", "error", err)
+			return
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			logger.Error("runtime invocation poll failed", "error", err)
+			<-time.After(time.Second)
+			continue
+		}
+		body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		requestID := response.Header.Get("Lambda-Runtime-Aws-Request-Id")
+		response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK {
+			logger.Error("runtime invocation poll returned an error", "status", response.StatusCode, "error", err)
+			continue
+		}
+		var event invocationEvent
+		if err := json.Unmarshal(body, &event); err != nil {
+			postRuntimeResult(client, base+"/invocation/"+requestID+"/error", []byte(`{"errorMessage":"invalid invocation event"}`), logger)
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+		logger.Info("render invocation claimed", "job_id", event.JobID, "boot_nonce", runtimeBootNonce)
+		processErr := processOne(ctx, control, event)
+		cancel()
+		if processErr == nil {
+			postRuntimeResult(client, base+"/invocation/"+requestID+"/response", []byte(`{"ok":true}`), logger)
+			logger.Info("render invocation finished; recycling execution environment", "boot_nonce", runtimeBootNonce)
+			os.Exit(0)
+		}
+		payload, _ := json.Marshal(map[string]string{"errorMessage": processErr.Error()})
+		postRuntimeResult(client, base+"/invocation/"+requestID+"/error", payload, logger)
+		logger.Error("render invocation failed; recycling execution environment", "error", processErr, "boot_nonce", runtimeBootNonce)
+		os.Exit(1)
+	}
+}
+
+func processOne(ctx context.Context, control controlplane.ControlClient, event invocationEvent) error {
+	if event.Capability == "" {
+		return fmt.Errorf("render invocation is missing its job capability")
+	}
+	control = control.WithCapability(event.Capability).WithJourney(event.JourneyID, event.Traceparent, event.Tracestate)
+	assignment, err := control.Claim(ctx, event.JobID)
 	if err != nil {
 		return err
 	}
-	mode := envOr("RENDER_BENCHMARK_MODE", "page")
-	if mode == "page" {
-		bitmap, width, height, _, err := render.RenderPDFPage(source, 1, 1600)
-		if err != nil {
-			return err
-		}
-		thumbnail, thumbWidth, thumbHeight, err := render.ResizeBGRA(bitmap, width, height, 240)
-		if err != nil {
-			return err
-		}
-		if _, err := render.EncodeWebP(bitmap, width, height, 78); err != nil {
-			return err
-		}
-		if _, err := render.EncodeWebP(thumbnail, thumbWidth, thumbHeight, 78); err != nil {
-			return err
-		}
-		fmt.Printf(`{"mode":"page","durationMs":%d,"width":%d,"height":%d}`+"\n", time.Since(started).Milliseconds(), width, height)
+	if assignment == nil {
 		return nil
 	}
-	inventory, _, err := render.PDFInventoryFromBytes(source)
-	if err != nil {
-		return err
+	if err := worker.Process(ctx, control, *assignment); err != nil {
+		return fmt.Errorf("render job %s: %w", assignment.JobID, err)
 	}
-	input, err := os.CreateTemp("", "benchmark-source-*")
-	if err != nil {
-		return err
-	}
-	inputPath := input.Name()
-	_ = input.Close()
-	if err := os.WriteFile(inputPath, source, 0o600); err != nil {
-		return err
-	}
-	defer os.Remove(inputPath)
-	executable, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	semaphore := make(chan struct{}, 2)
-	errorsChannel := make(chan error, inventory.PageCount)
-	var wait sync.WaitGroup
-	for page := 1; page <= inventory.PageCount; page++ {
-		page := page
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			prefix := fmt.Sprintf("%s-%d", inputPath, page)
-			command := exec.Command(executable, inputPath, prefix, fmt.Sprint(page), "1600")
-			command.Env = append(os.Environ(), "RENDER_PAGE_MODE=1")
-			if output, err := command.CombinedOutput(); err != nil {
-				errorsChannel <- fmt.Errorf("page %d: %w: %s", page, err, output)
-				return
-			}
-			bitmap, err := os.ReadFile(prefix + ".raw")
-			if err != nil {
-				errorsChannel <- err
-				return
-			}
-			var metadata struct{ Width, Height int }
-			metadataBytes, err := os.ReadFile(prefix + ".json")
-			if err == nil {
-				err = json.Unmarshal(metadataBytes, &metadata)
-			}
-			if err != nil {
-				errorsChannel <- err
-				return
-			}
-			if len(bitmap) != metadata.Width*metadata.Height*4 {
-				errorsChannel <- fmt.Errorf("page %d bitmap length mismatch", page)
-				return
-			}
-			if _, err := render.EncodeWebP(bitmap, metadata.Width, metadata.Height, 78); err != nil {
-				errorsChannel <- err
-				return
-			}
-			thumbnail, width, height, err := render.ResizeBGRA(bitmap, metadata.Width, metadata.Height, 240)
-			if err != nil {
-				errorsChannel <- err
-				return
-			}
-			if _, err := render.EncodeWebP(thumbnail, width, height, 78); err != nil {
-				errorsChannel <- err
-			}
-			_ = os.Remove(prefix + ".raw")
-			_ = os.Remove(prefix + ".json")
-		}()
-	}
-	wait.Wait()
-	close(errorsChannel)
-	for err := range errorsChannel {
-		if err != nil {
-			return err
-		}
-	}
-	fmt.Printf(`{"mode":"full","pages":%d,"durationMs":%d}`+"\n", inventory.PageCount, time.Since(started).Milliseconds())
 	return nil
+}
+
+func postRuntimeResult(client *http.Client, url string, body []byte, logger *slog.Logger) {
+	request, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(body)))
+	if err != nil {
+		logger.Error("runtime result request construction failed", "error", err)
+		return
+	}
+	request.Header.Set("content-type", "application/json")
+	response, err := client.Do(request)
+	if err == nil {
+		response.Body.Close()
+	}
+	if err != nil {
+		logger.Error("runtime result post failed", "error", err)
+	}
 }

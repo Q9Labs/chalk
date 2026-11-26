@@ -212,9 +212,21 @@ func presentingPage(documentID pgtype.UUID, page, width, height int32, status st
 }
 
 func (r PresentingRepository) ListStaleRenderJobs(ctx context.Context, now time.Time, limit int) ([]presenting.RenderJob, error) {
-	rows, err := r.queries.ListStalePresentingRenderJobs(ctx, sqlc.ListStalePresentingRenderJobsParams{NowAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true}, BatchLimit: int32(limit)})
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin presenting render job reconciliation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	q := r.queries.WithTx(tx)
+	if err := reapPresentingRenderJobs(ctx, q); err != nil {
+		return nil, err
+	}
+	rows, err := q.ListStalePresentingRenderJobs(ctx, sqlc.ListStalePresentingRenderJobsParams{NowAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true}, BatchLimit: int32(limit)})
 	if err != nil {
 		return nil, fmt.Errorf("list stale presenting render jobs: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit presenting render job reconciliation: %w", err)
 	}
 	jobs := make([]presenting.RenderJob, 0, len(rows))
 	for _, row := range rows {
