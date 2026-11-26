@@ -202,7 +202,7 @@ insert into presenting_render_jobs (
 on conflict do nothing
 returning tenant_id, space_id, document_id, job_id, kind, page_start, page_end, status, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, available_at, error_code, error_message, completed_at, created_at, updated_at;
 
--- name: ListStalePresentingRenderJobs :many
+-- name: ExpirePresentingRenderJobs :exec
 with expired as (
     update presenting_render_jobs job
     set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
@@ -210,33 +210,30 @@ with expired as (
         and job.lease_expires_at <= now()
         and job.attempt_count >= job.attempt_limit
     returning job.tenant_id, job.space_id, job.document_id, job.kind
-),
-failed_documents as (
-    update presenting_documents document
-    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
-    from expired
-    where document.tenant_id = expired.tenant_id
-        and document.space_id = expired.space_id
-        and document.document_id = expired.document_id
-        and expired.kind in ('inventory', 'pages')
-        and document.status = 'preparing'
-    returning document.tenant_id, document.space_id, document.document_id
-),
-terminal_jobs as (
-    update presenting_render_jobs job
-    set status = 'failed', error_code = 'document_terminal', error_message = 'Document reached a terminal state', completed_at = now(), updated_at = now()
-    from presenting_documents document
-    where document.tenant_id = job.tenant_id
-        and document.space_id = job.space_id
-        and document.document_id = job.document_id
-        and job.status in ('queued', 'leased')
-        and (
-            document.status = 'failed'
-            or (document.status = 'ready' and job.kind in ('inventory', 'pages'))
-        )
-        and not (job.status = 'leased' and job.lease_expires_at <= now() and job.attempt_count >= job.attempt_limit)
-    returning job.job_id
 )
+update presenting_documents document
+set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
+from expired
+where document.tenant_id = expired.tenant_id
+    and document.space_id = expired.space_id
+    and document.document_id = expired.document_id
+    and expired.kind in ('inventory', 'pages')
+    and document.status = 'preparing';
+
+-- name: TerminalizePresentingRenderJobs :exec
+update presenting_render_jobs job
+set status = 'failed', error_code = 'document_terminal', error_message = 'Document reached a terminal state', completed_at = now(), updated_at = now()
+from presenting_documents document
+where document.tenant_id = job.tenant_id
+    and document.space_id = job.space_id
+    and document.document_id = job.document_id
+    and job.status in ('queued', 'leased')
+    and (
+        document.status = 'failed'
+        or (document.status = 'ready' and job.kind = 'pages')
+    );
+
+-- name: ListStalePresentingRenderJobs :many
 select job.tenant_id, job.space_id, job.document_id, job.job_id, job.kind,
        job.page_start, job.page_end, job.status, job.attempt_count, job.attempt_limit,
        job.lease_token, job.lease_owner, job.lease_expires_at, job.available_at
@@ -247,13 +244,7 @@ join presenting_documents document
     and document.document_id = job.document_id
 where job.status in ('queued', 'leased')
   and job.attempt_count < job.attempt_limit
-  and not (document.status = 'failed' or (document.status = 'ready' and job.kind in ('inventory', 'pages')))
-  and not exists (
-    select 1 from failed_documents failed
-    where failed.tenant_id = job.tenant_id
-      and failed.space_id = job.space_id
-      and failed.document_id = job.document_id
-  )
+  and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
   and (
     (job.status = 'queued' and job.available_at <= sqlc.arg(now_at))
     or (job.status = 'leased' and job.lease_expires_at is not null and job.lease_expires_at < now())
@@ -262,41 +253,7 @@ order by job.available_at asc, job.created_at asc
 limit sqlc.arg(batch_limit);
 
 -- name: ClaimPresentingRenderJob :one
-with expired as (
-    update presenting_render_jobs job
-    set status = 'failed', error_code = 'timeout', error_message = 'Render worker lease expired at the attempt limit', completed_at = now(), updated_at = now()
-    where job.status = 'leased'
-        and job.lease_expires_at <= now()
-        and job.attempt_count >= job.attempt_limit
-    returning job.tenant_id, job.space_id, job.document_id, job.kind
-),
-failed_documents as (
-    update presenting_documents document
-    set status = 'failed', failure_code = 'timeout', failure_message = 'Rendering timed out', updated_at = now()
-    from expired
-    where document.tenant_id = expired.tenant_id
-        and document.space_id = expired.space_id
-        and document.document_id = expired.document_id
-        and expired.kind in ('inventory', 'pages')
-        and document.status = 'preparing'
-    returning document.tenant_id, document.space_id, document.document_id
-),
-terminal_jobs as (
-    update presenting_render_jobs job
-    set status = 'failed', error_code = 'document_terminal', error_message = 'Document reached a terminal state', completed_at = now(), updated_at = now()
-    from presenting_documents document
-    where document.tenant_id = job.tenant_id
-        and document.space_id = job.space_id
-        and document.document_id = job.document_id
-        and job.status in ('queued', 'leased')
-        and (
-            document.status = 'failed'
-            or (document.status = 'ready' and job.kind in ('inventory', 'pages'))
-        )
-        and not (job.status = 'leased' and job.lease_expires_at <= now() and job.attempt_count >= job.attempt_limit)
-    returning job.job_id
-),
-candidate as (
+with candidate as (
     select job.tenant_id, job.space_id, job.document_id, job.job_id
     from presenting_render_jobs job
     join presenting_documents document
@@ -309,13 +266,7 @@ candidate as (
         and job.attempt_count < job.attempt_limit
         and job.attempt_count + 1 = sqlc.arg(expected_attempt)
         and (sqlc.narg(job_id)::uuid is null or job.job_id = sqlc.narg(job_id)::uuid)
-        and not (document.status = 'failed' or (document.status = 'ready' and job.kind in ('inventory', 'pages')))
-        and not exists (
-            select 1 from failed_documents failed
-            where failed.tenant_id = job.tenant_id
-                and failed.space_id = job.space_id
-                and failed.document_id = job.document_id
-        )
+        and not (document.status = 'failed' or (document.status = 'ready' and job.kind = 'pages'))
     order by job.available_at, job.created_at, job.job_id
     for update of job skip locked
     limit 1

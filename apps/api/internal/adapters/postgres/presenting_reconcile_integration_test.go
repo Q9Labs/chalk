@@ -61,11 +61,46 @@ func TestPresentingClaimFailsJobForTerminalDocumentIntegration(t *testing.T) {
 	}
 }
 
+func TestPresentingClaimFailsTimeoutDocumentSiblingsIntegration(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewPresentingRepository(pool)
+	fixture := newPresentingFixture(t, pool, "{publishScreen}")
+	ctx := context.Background()
+	documentID, inventoryJobID, siblingJobID := newTestID(t), newTestID(t), newTestID(t)
+	mustExec(t, pool, `insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status)
+		values($1,$2,$3,$4,$5,$6,1,'deck.pdf','application/pdf',1024,'timeout-source',repeat('c',32)::bytea,'preparing')`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(fixture.episode), uuid(documentID), uuid(newTestID(t)), uuid(fixture.participant))
+	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,attempt_count,attempt_limit,lease_token,lease_owner,lease_expires_at,available_at)
+		values($1,$2,$3,$4,'inventory',1,1,'leased',1,1,gen_random_uuid(),'document-renderer',now()-interval '2 minutes',now()-interval '3 minutes')`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(inventoryJobID))
+	mustExec(t, pool, `insert into presenting_render_jobs(tenant_id,space_id,document_id,job_id,kind,page_start,page_end,status,available_at)
+		values($1,$2,$3,$4,'pages',1,1,'queued',now()-interval '1 minute')`,
+		uuid(fixture.tenant), uuid(fixture.space), uuid(documentID), uuid(siblingJobID))
+	token, _ := utilities.NewID()
+	now := time.Now().UTC()
+	_, err := repository.ClaimRenderJob(ctx, siblingJobID, 1, now, now.Add(time.Minute), token, "document-renderer")
+	if !errors.Is(err, presenting.ErrNoRenderJob) {
+		t.Fatalf("same-pass timeout sibling claim error = %v", err)
+	}
+	var documentStatus, inventoryCode, siblingStatus, siblingCode string
+	if err := pool.QueryRow(ctx, `select document.status, inventory.error_code, sibling.status, sibling.error_code
+		from presenting_documents document
+		join presenting_render_jobs inventory on inventory.document_id=document.document_id and inventory.job_id=$2
+		join presenting_render_jobs sibling on sibling.document_id=document.document_id and sibling.job_id=$3
+		where document.tenant_id=$1 and document.document_id=$4`, uuid(fixture.tenant), uuid(inventoryJobID), uuid(siblingJobID), uuid(documentID)).Scan(&documentStatus, &inventoryCode, &siblingStatus, &siblingCode); err != nil {
+		t.Fatalf("read same-pass timeout rows: %v", err)
+	}
+	if documentStatus != "failed" || inventoryCode != "timeout" || siblingStatus != "failed" || siblingCode != "document_terminal" {
+		t.Fatalf("same-pass timeout left document=%q inventory=%q sibling=%q/%q", documentStatus, inventoryCode, siblingStatus, siblingCode)
+	}
+}
+
 func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	repository := NewPresentingRepository(pool)
 	fixture := newPresentingFixture(t, pool, "{publishScreen}")
 	ctx := context.Background()
+	mustExec(t, pool, `delete from presenting_render_jobs`)
 	mustExec(t, pool, `with terminal_documents as (
 		insert into presenting_documents(tenant_id,space_id,episode_id,document_id,attachment_id,created_by_participant_id,created_by_participant_generation,file_name,mime_type,byte_length,source_object_key,source_sha256,status,failure_code,failure_message)
 		select $1,$2,$3,gen_random_uuid(),gen_random_uuid(),$4,1,'deck.pdf','application/pdf',1024,'terminal-'||g,repeat('b',32)::bytea,'failed','corrupt','failed in test'
@@ -113,8 +148,8 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select count(*) from presenting_render_jobs where tenant_id=$1 and space_id=$2 and status='failed' and error_code='document_terminal'`, uuid(fixture.tenant), uuid(fixture.space)).Scan(&terminalCount); err != nil {
 		t.Fatalf("count terminal jobs: %v", err)
 	}
-	if terminalCount != 60 {
-		t.Fatalf("terminal sweep marked %d jobs; want 60", terminalCount)
+	if terminalCount != 70 {
+		t.Fatalf("terminal sweep marked %d jobs; want 60 terminal-document jobs plus 10 timeout siblings", terminalCount)
 	}
 	var activeSiblingCount int
 	if err := pool.QueryRow(ctx, `select count(*) from presenting_render_jobs job
@@ -122,7 +157,7 @@ func TestPresentingReconcileSkipsTerminalDocumentJobsIntegration(t *testing.T) {
 		where job.tenant_id=$1 and job.space_id=$2 and document.failure_code='timeout' and job.kind='pages' and job.status='queued'`, uuid(fixture.tenant), uuid(fixture.space)).Scan(&activeSiblingCount); err != nil {
 		t.Fatalf("count active sibling jobs: %v", err)
 	}
-	if activeSiblingCount != 10 {
-		t.Fatalf("active sibling jobs after same-statement exclusion = %d; want the 10 seeded siblings still queued but not selected", activeSiblingCount)
+	if activeSiblingCount != 0 {
+		t.Fatalf("active sibling jobs after terminalization = %d; want the 10 seeded siblings swept terminal", activeSiblingCount)
 	}
 }

@@ -149,6 +149,7 @@ type Querier interface {
 	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireHelperDeviceRequests(ctx context.Context) error
+	ExpirePresentingRenderJobs(ctx context.Context) error
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
 	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
@@ -532,6 +533,7 @@ type Querier interface {
 	// The participant row implies a live tenant (participants.tenant_id references tenants). The key
 	// share lock keeps the row from being deleted until the admission commits.
 	TelemetryParticipantLive(ctx context.Context, arg TelemetryParticipantLiveParams) ([]pgtype.UUID, error)
+	TerminalizePresentingRenderJobs(ctx context.Context) error
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
