@@ -72,7 +72,7 @@ func TestIsolatedChildRequiresNamespaceSandbox(t *testing.T) {
 	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
 		t.Fatal("isolated child is not placed in its own process group")
 	}
-	required := syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET
+	required := uintptr(syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET)
 	if command.SysProcAttr.Unshareflags&required != required {
 		t.Fatalf("isolated child namespace flags %#x do not include user and network namespaces", command.SysProcAttr.Unshareflags)
 	}
