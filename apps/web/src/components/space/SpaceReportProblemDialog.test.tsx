@@ -62,3 +62,16 @@ it("drops an unsent report draft when a new admission opens the dialog", async (
   await act(async () => root?.render(dialog(2, true)));
   expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
 });
+
+it("uses the live session expiry instead of a stale opening expiry", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("fetch", async () => Response.json({ available: true }));
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  const focusScope = { current: document.body };
+
+  await act(async () => root?.render(<SpaceReportProblemDialog tenantId="tenant" reportExpiresAt={1} reportSession={reportSession(1)} diagnostics="" focusScope={focusScope} open={true} onClose={() => undefined} onReportProblem={async () => undefined} colorScheme="light" />));
+  await vi.waitFor(() => expect(document.querySelector("textarea")).not.toBeNull());
+  expect(document.body.textContent).not.toContain("Your call access has expired");
+});
