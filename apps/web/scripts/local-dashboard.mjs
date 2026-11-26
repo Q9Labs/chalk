@@ -89,9 +89,16 @@ export function artifactObjectHeaders(path, file, stored) {
   return headers;
 }
 
+
+export function artifactWriteAllowed(remoteAddress) {
+  const normalized = remoteAddress?.startsWith("::ffff:") ? remoteAddress.slice("::ffff:".length) : remoteAddress;
+  return normalized === "::1" || typeof normalized === "string" && normalized.startsWith("127.");
+}
+
 async function artifactResponse(url, incoming) {
   const path = artifactPath(url.pathname);
   if (incoming.method === "PUT") {
+    if (!artifactWriteAllowed(incoming.socket?.remoteAddress)) return new Response("Forbidden", { status: 403 });
     if (incoming.headers["if-none-match"] === "*") {
       const exists = await stat(path).then(
         () => true,
@@ -112,6 +119,7 @@ async function artifactResponse(url, incoming) {
     return new Response(null, { headers: { ETag: stored.etag } });
   }
   if (incoming.method === "DELETE") {
+    if (!artifactWriteAllowed(incoming.socket?.remoteAddress)) return new Response("Forbidden", { status: 403 });
     await rm(path, { force: true });
     await rm(artifactMetadataPath(path), { force: true });
     return new Response(null, { status: 204 });
