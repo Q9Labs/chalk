@@ -66,10 +66,7 @@ export class AudioPlayback {
     element.addEventListener("playing", entry.onPlaying);
     this.#elements.set(element, entry);
     return {
-      played: (result) => {
-        health.played(result);
-        this.#recordElementResult(element, entry, result);
-      },
+      played: (result) => this.#reportElementResult(element, entry, result),
       detach: () => {
         if (this.#elements.get(element) !== entry) return;
         this.#elements.delete(element);

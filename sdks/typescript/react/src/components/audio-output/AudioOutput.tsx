@@ -39,6 +39,8 @@ type SinkAwareAudioElement = HTMLAudioElement & {
   sinkId?: string;
 };
 
+const UNLOCK_EVENTS = ["touchend", "click", "keydown"] as const;
+
 export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioOutputProps) {
   const client = useSpaceClient();
   const media = useMedia();
@@ -119,8 +121,6 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     [effectiveParticipants],
   );
 
-  const unlockEvents = useMemo(() => ["touchend", "click", "keydown"] as const, []);
-
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own autoplay gesture listeners until playback is unblocked.
   useEffect(() => {
     if (!media.audioPlayback.blocked || typeof window === "undefined") return;
@@ -128,7 +128,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       void client.media.resumeAudioPlayback().catch(() => undefined);
     };
     const opts: AddEventListenerOptions = { capture: true, passive: true };
-    for (const event of unlockEvents) window.addEventListener(event, resume, opts);
+    for (const event of UNLOCK_EVENTS) window.addEventListener(event, resume, opts);
     try {
       const activation = navigator?.userActivation;
       if (activation?.isActive || activation?.hasBeenActive) resume();
@@ -136,9 +136,9 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       // A browser without userActivation still receives the gesture listeners above.
     }
     return () => {
-      for (const event of unlockEvents) window.removeEventListener(event, resume, opts);
+      for (const event of UNLOCK_EVENTS) window.removeEventListener(event, resume, opts);
     };
-  }, [client, media.audioPlayback.blocked, unlockEvents]);
+  }, [client, media.audioPlayback.blocked]);
 
   // Attach/update audio elements - NO cleanup on re-render to prevent audio breaks
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
