@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { publicErrorCodes } from "./effect-error-compatibility.mjs";
+import { operationResponseSchema, parameterSchema } from "./effect-operation-schemas.mjs";
 import { codegenPath, pascalCase } from "./sync-contract.mjs";
 
 const inputPath = codegenPath("CODEGEN_OPENAPI_PATH", "contract/generated/openapi.json");
@@ -280,12 +281,6 @@ function renderLiteral(values) {
   return `Schema.Literals([${values.map((value) => JSON.stringify(value)).join(", ")}])`;
 }
 
-// A response that is only a $ref to a component of the same name is already emitted with the components.
-function isComponentAlias(schema, name, document) {
-  const target = typeof schema.$ref === "string" ? schema.$ref.split("/").at(-1) : undefined;
-  return target === name && Boolean(document.components?.schemas?.[target]);
-}
-
 function collectOperationSchemas(document) {
   const operations = [];
   for (const [, pathItem] of Object.entries(document.paths ?? {})) {
@@ -300,7 +295,7 @@ function collectOperationSchemas(document) {
       const queryParameters = parameterSchema(operation.parameters, "query");
       const requestHeaders = parameterSchema(operation.parameters, "header");
       const requestBody = operation.requestBody?.content?.["application/json"]?.schema;
-      const responseBody = successResponseSchema(operation.responses);
+      const responseBody = operationResponseSchema(document, operation, operationName);
 
       if (pathParameters) {
         schemas.push({ name: `${operationName}PathParams`, schema: pathParameters });
@@ -314,7 +309,7 @@ function collectOperationSchemas(document) {
       if (requestBody) {
         schemas.push({ name: `${operationName}RequestBody`, schema: requestBody });
       }
-      if (responseBody && !isComponentAlias(responseBody, `${operationName}Response`, document)) {
+      if (responseBody) {
         schemas.push({ name: `${operationName}Response`, schema: responseBody });
       }
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
@@ -410,48 +405,6 @@ function headerDefinition(headerName, schema) {
       }
       return undefined;
   }
-}
-
-function parameterSchema(parameters = [], location) {
-  const matching = parameters.filter((parameter) => parameter.in === location);
-  if (matching.length === 0) {
-    return undefined;
-  }
-
-  const required = matching
-    .filter((parameter) => parameter.required)
-    .map((parameter) => parameter.name)
-    .sort();
-  const properties = Object.fromEntries(
-    matching
-      .slice()
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((parameter) => [
-        parameter.name,
-        {
-          ...(parameter.schema ?? {}),
-          "x-chalk-url-parameter": true,
-        },
-      ]),
-  );
-
-  return {
-    type: "object",
-    required,
-    properties,
-    additionalProperties: false,
-  };
-}
-
-function successResponseSchema(responses = {}) {
-  const statuses = Object.keys(responses).sort();
-  const status = statuses.find((value) => /^2\d\d$/.test(value)) ?? statuses.find((value) => /^3\d\d$/.test(value));
-
-  if (!status) {
-    return undefined;
-  }
-
-  return responses[status]?.content?.["application/json"]?.schema ?? responses[status]?.content?.["text/plain"]?.schema;
 }
 
 function orderedSchemas(schemas) {
