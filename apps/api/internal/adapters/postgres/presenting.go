@@ -259,22 +259,37 @@ func (r PresentingRepository) MarkPageReady(ctx context.Context, lease presentin
 }
 
 func (r PresentingRepository) CompleteRenderJob(ctx context.Context, lease presenting.RenderLease) error {
-	if err := completePresentingJob(ctx, r.queries, lease); err != nil {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin presenting render completion: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+	if err := completePresentingJob(ctx, q, lease); err != nil {
 		return err
 	}
-	ready, err := r.queries.CountPresentingReadyPages(ctx, sqlc.CountPresentingReadyPagesParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID)})
+	ready, err := q.CountPresentingReadyPages(ctx, sqlc.CountPresentingReadyPagesParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID)})
 	if err != nil {
 		return fmt.Errorf("count presenting ready pages: %w", err)
 	}
-	_, err = r.queries.CompletePresentingDocumentIfReady(ctx, sqlc.CompletePresentingDocumentIfReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), ReadyPages: pgtype.Int4{Int32: ready, Valid: true}})
+	_, err = q.CompletePresentingDocumentIfReady(ctx, sqlc.CompletePresentingDocumentIfReadyParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), ReadyPages: pgtype.Int4{Int32: ready, Valid: true}})
 	if err != nil {
 		return fmt.Errorf("complete presenting document: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit presenting render completion: %w", err)
 	}
 	return nil
 }
 
 func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presenting.RenderLease, failure presenting.RenderFailure) error {
-	rows, err := r.queries.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin presenting render failure: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+	rows, err := q.FailPresentingRenderJob(ctx, sqlc.FailPresentingRenderJobParams{
 		ErrorCode: pgtype.Text{String: failure.Code, Valid: true}, ErrorMessage: pgtype.Text{String: failure.Message, Valid: true},
 		TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), JobID: uuid(lease.JobID), AttemptCount: int32(lease.Attempt), LeaseOwner: pgtype.Text{String: lease.LeaseOwner, Valid: true}, LeaseToken: uuid(lease.LeaseToken), NowAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	})
@@ -284,9 +299,12 @@ func (r PresentingRepository) FailRenderJob(ctx context.Context, lease presentin
 	if rows != 1 {
 		return presenting.ErrLeaseLost
 	}
-	_, err = r.queries.FailPresentingDocument(ctx, sqlc.FailPresentingDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), FailureCode: pgtype.Text{String: failure.Code, Valid: true}, FailureMessage: pgtype.Text{String: failure.Message, Valid: true}})
+	_, err = q.FailPresentingDocument(ctx, sqlc.FailPresentingDocumentParams{TenantID: uuid(lease.TenantID), SpaceID: uuid(lease.SpaceID), DocumentID: uuid(lease.DocumentID), FailureCode: pgtype.Text{String: failure.Code, Valid: true}, FailureMessage: pgtype.Text{String: failure.Message, Valid: true}})
 	if err != nil {
 		return fmt.Errorf("fail presenting document: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit presenting render failure: %w", err)
 	}
 	return nil
 }
