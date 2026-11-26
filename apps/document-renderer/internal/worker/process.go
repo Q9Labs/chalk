@@ -37,6 +37,19 @@ func Process(ctx context.Context, control controlplane.ControlClient, assignment
 		err = processPages(ctx, control, assignment, source)
 	case "zoom":
 		err = processZoom(ctx, control, assignment, source)
+	case "timeout-probe":
+		if os.Getenv("RENDERER_TIMEOUT_PROBE") != "1" {
+			err = fmt.Errorf("timeout probe is disabled")
+		} else {
+			var executable string
+			executable, err = os.Executable()
+			if err == nil {
+				childErr := runIsolatedChild(ctx, executable, "timeout-probe")
+				if childErr != nil {
+					err = renderFailure{code: classifyIsolatedFailure(childErr), err: childErr}
+				}
+			}
+		}
 	default:
 		err = fmt.Errorf("unknown render job kind %q", assignment.Kind)
 	}

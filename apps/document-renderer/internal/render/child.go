@@ -9,6 +9,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -39,10 +40,28 @@ func RunChild(mode string, args []string) int {
 		return runPageChild(args)
 	case "image":
 		return runImageChild(args)
+	case "timeout-probe":
+		return runTimeoutProbeChild()
 	default:
 		fmt.Fprintln(os.Stderr, "unknown renderer child mode")
 		return 2
 	}
+}
+
+func runTimeoutProbeChild() int {
+	if os.Getenv("RENDERER_TIMEOUT_PROBE") != "1" {
+		fmt.Fprintln(os.Stderr, "timeout probe is disabled")
+		return 2
+	}
+	grandchild := exec.Command("/bin/sh", "-c", "sleep 60")
+	grandchild.Stdout = os.Stdout
+	grandchild.Stderr = os.Stderr
+	if err := grandchild.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	time.Sleep(60 * time.Second)
+	return 0
 }
 
 // RunPageChild keeps the original benchmark entrypoint. Production uses
