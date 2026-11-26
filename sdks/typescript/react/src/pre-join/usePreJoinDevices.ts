@@ -271,8 +271,7 @@ function rememberCommitChoice(choice: RememberedDevices, granted: boolean, start
     return rememberDevices({ ...inputChoice, ...(speakerDeviceId ? { speakerDeviceId } : {}) });
   }
   if (!speakerTouched) return;
-  const saved = readRememberedDevices();
-  if (!saved) return;
+  const saved = readRememberedDevices() ?? { microphone: true, camera: true };
   rememberDevices({ ...saved, speakerDeviceId: choice.speakerDeviceId });
 }
 

@@ -155,6 +155,14 @@ it("leaves preferences absent when an untouched rejoin had none", async () => {
   expect(localStorage.getItem("chalk.prejoin-devices")).toBeNull();
 });
 
+it("remembers an explicit speaker when a rejoin had no saved preferences", async () => {
+  const devices = await mountDevices({ startWithDevicesOff: true });
+
+  await act(async () => devices().selectSpeaker("speaker"));
+  devices().commit();
+  expect(JSON.parse(localStorage.getItem("chalk.prejoin-devices") ?? "{}")).toMatchObject({ microphone: true, camera: true, speakerDeviceId: "speaker" });
+});
+
 it("remembers a device the visitor turns back on before rejoining", async () => {
   localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true }));
   const devices = await mountDevices({ startWithDevicesOff: true });
