@@ -60,7 +60,7 @@ export type PreJoinDevices = {
  * remembers the choice per browser, and stops every track when the component unmounts, so the camera light goes off.
  */
 export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevices {
-  const startWithDevicesOff = options?.startWithDevicesOff === true;
+  const startWithDevicesOff = startsOff(options);
   const [choice, setChoice] = useState<RememberedDevices>(() => initialChoice(startWithDevicesOff));
   const [access, setAccess] = useState<PreJoinAccess>("checking");
   const [devices, setDevices] = useState<DetectedMediaDevices | null>(null);
@@ -242,6 +242,10 @@ export function usePreJoinDevices(options?: PreJoinDevicesOptions): PreJoinDevic
       return joinOptions;
     },
   };
+}
+
+function startsOff(options: PreJoinDevicesOptions | undefined): boolean {
+  return options?.startWithDevicesOff === true;
 }
 
 function initialChoice(startWithDevicesOff: boolean): RememberedDevices {
