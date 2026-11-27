@@ -63,7 +63,7 @@ export function DocumentPageArea({
         <div className="absolute inset-0 grid place-items-center p-6">
           <div role="alert" className="flex max-w-80 flex-col items-center gap-1.5 text-center">
             <StageIcon name="info" size={22} />
-            <h3 className="mt-1.5 text-sm font-semibold">{`Couldn't open ${fileName}`}</h3>
+            <h3 className="mt-1.5 text-sm font-semibold" style={{ letterSpacing: "normal" }}>{`Couldn't open ${fileName}`}</h3>
             <p className="text-(length:--type-caption) opacity-70">{manifest.failure?.message ?? "It may be password protected or damaged."} Nobody else saw it.</p>
             <div className="mt-2.5 flex gap-2">
               <button type="button" className="flex h-8 items-center rounded-full bg-[var(--chalk-overlay-hover-fill)] px-3 text-(length:--type-caption) font-medium" onClick={onClose}>
@@ -121,7 +121,7 @@ function PageContent({ page, imageUrl, fileName, zoom }: { readonly page: number
     );
   }
   const fit = zoom === 100;
-  return <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className={fit ? "h-full w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"} style={fit ? undefined : { width: `${zoom}%` }} />;
+  return <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className={fit ? "h-full w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"} style={fit ? undefined : { width: `${zoom}%`, maxWidth: "none" }} />;
 }
 
 function preparedPercent(manifest?: PresentingDocumentManifest): number | null {
