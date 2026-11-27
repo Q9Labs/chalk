@@ -261,6 +261,7 @@
         "sdks/typescript/react/src/components/composite/chat-panel-model.ts",
         "sdks/typescript/react/src/components/composite/chat-types.ts",
         "sdks/typescript/react/src/components/composite/chat-upload-file.ts",
+        "sdks/typescript/react/src/components/composite/use-chat-attachment-previews.test.ts",
         "sdks/typescript/react/src/components/composite/use-chat-attachment-previews.ts"
       ]
     },

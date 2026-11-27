@@ -102,7 +102,7 @@ const makeState = () => {
   const rows: Record<string, ResourceState> = {
     ExecutionRole: baseRow("ExecutionRole", resourceTypes.ExecutionRole, beforeDeclaration.executionRole as Props, { stable: "role" }),
     Logs: baseRow("Logs", resourceTypes.Logs, beforeDeclaration.log as Props, { stable: "logs" }),
-    FailureLogMetric: baseRow("FailureLogMetric", resourceTypes.FailureLogMetric, beforeDeclaration.failureLogMetric as Props, { stable: "failure-metric" }),
+    FailureLogMetric: baseRow("FailureLogMetric", resourceTypes.FailureLogMetric, beforeDeclaration.failureLogMetric as unknown as Props, { stable: "failure-metric" }),
     Function: updatingRow("Function", resourceTypes.Function, beforeDeclaration.fn as unknown as Props, afterDeclaration.fn as unknown as Props, {
       functionName: releaseA.function_name,
       functionArn: "arn:aws:lambda:ap-southeast-1:000000000000:function:chalk-nightly-test-document-renderer",
@@ -124,7 +124,7 @@ const makeStack = (value: DocumentRendererInputs, state: ReturnType<typeof makeS
     Effect.gen(function* () {
       yield* RoleResource("ExecutionRole", declared.executionRole as Props);
       yield* LogResource("Logs", declared.log as Props);
-      yield* MetricFilterResource("FailureLogMetric", declared.failureLogMetric as Props);
+      yield* MetricFilterResource("FailureLogMetric", declared.failureLogMetric as unknown as Props);
       yield* FunctionResource("Function", declared.fn as unknown as Props);
       yield* AlarmResource("Errors", declared.alarms.Errors as Props);
       yield* AlarmResource("Throttles", declared.alarms.Throttles as Props);
