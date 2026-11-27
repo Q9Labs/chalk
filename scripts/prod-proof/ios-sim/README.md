@@ -10,7 +10,7 @@ PROOF_URL='https://example.com/classroom' PROOF_SECONDS=120 PROOF_OUT=./out ./ru
 | --- | --- |
 | `PROOF_URL` | Required. The page to open. |
 | `PROOF_SECONDS` | How long the UI test watches and screenshots (default 90). |
-| `PROOF_OUT` | Output folder (default `./out`). |
+| `PROOF_OUT` | Output folder (default: an `out` folder next to the script). |
 | `PROOF_DEVICE` | Simulator UDID (default: the booted one). |
 | `PROOF_REOPEN_AFTER` | Seconds after which the URL is opened again, which is a reload and rejoin. |
 | `PROOF_TAP_TO_HEAR=1` | Also taps the "Click to hear the call" notice, the gesture iOS needs before it plays sound. |
