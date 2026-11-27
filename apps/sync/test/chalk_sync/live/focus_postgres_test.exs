@@ -171,7 +171,7 @@ defmodule ChalkSync.Live.FocusPostgresTest do
       })
 
   defp next_presence_item(client, identity) do
-    case (fn r -> IO.inspect(r |> Tuple.delete_at(tuple_size(r) - 1), label: "FRAME", limit: 30, printable_limit: 600, width: 2000); r end).(Client.recv(client)) do
+    case Client.recv(client) do
       {:json, %{"type" => "projection_event", "stream" => "presence", "item" => item}, client} ->
         if item["participant_id"] == identity.participant_id,
           do: {item, client},

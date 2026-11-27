@@ -15,7 +15,7 @@ defmodule ChalkSync.Transport.Socket.LiveRequests do
   }
 
   def app_state(app_state, windowed, %{phase: :live, app_state: true} = state) do
-    case Coordinator.set_app_state(state.coordinator, state.identity, app_state, windowed, self()) do
+    case IO.inspect(Coordinator.set_app_state(state.coordinator, state.identity, app_state, windowed, self()), label: "SETAPP") do
       :ok -> {:ok, state}
       {:error, reason} -> Frames.protocol_error(reason, state)
     end

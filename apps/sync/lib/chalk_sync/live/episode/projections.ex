@@ -11,6 +11,7 @@ defmodule ChalkSync.Live.Episode.Projections do
   defguard is_connection_quality(quality) when quality in @connection_qualities
 
   def presence_snapshot(state) do
+    IO.inspect(presence_items(state), label: "PRESITEMS", limit: :infinity, width: 3000)
     with {:ok, items} <- presence_items(state) do
       case reconcile_presence(state.presence_projection, items) do
         {:ok, projection, frames} -> {:ok, %{state | presence_projection: projection}, frames}
