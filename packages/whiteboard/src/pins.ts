@@ -3,7 +3,7 @@
 // No imports: build-embedded.mjs runs this file directly under Node.
 export const EXCALIDRAW_VERSION = "0.18.1";
 export const MATHJAX_VERSION = "4.1.3";
-const RENDERER_REVISION = 1;
+const RENDERER_REVISION = 2;
 export const RENDERER_BUILD_ID = `chalk-excalidraw-${EXCALIDRAW_VERSION}-r${RENDERER_REVISION}` as const;
 export const EXCALIDRAW_CDN_CSS = `https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@${EXCALIDRAW_VERSION}/dist/prod/index.css`;
 export const MATHJAX_CDN_SCRIPT = `https://cdn.jsdelivr.net/npm/mathjax@${MATHJAX_VERSION}/tex-svg-nofont.js`;

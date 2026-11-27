@@ -118,14 +118,10 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
   const { messages, displayTimes, attachmentAssets } = toChatMessages(frame);
   const participantNames = Object.fromEntries(frame.participants.map((participant) => [participant.id, participant.displayName]));
   const durationSeconds = Math.floor(frame.elapsedMs / 1000);
-  const renderContent = (
-    item: Extract<
-      StageItem,
-      {
-        readonly kind: "screen-share" | "whiteboard";
-      }
-    >,
-  ): ReactNode => {
+  const renderContent = (item: import("../stage/stage-items").ContentItem): ReactNode => {
+    if (item.kind === "document") {
+      return <StageContentTileSurface item={item} media={null} mediaVisible={false} className="h-full w-full" />;
+    }
     if (item.kind === "whiteboard") {
       const content = sharedContent.kind === "whiteboard" ? renderWhiteboard?.(sharedContent) : null;
       return <StageContentTileSurface item={item} media={content} mediaVisible={hasRenderableMedia(content)} className="h-full w-full" />;
@@ -174,7 +170,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
               );
             }}
             renderContentTile={(item, context) => {
-              const media = item.kind === "whiteboard" && frame.sharedContent.kind === "whiteboard" ? renderWhiteboard?.(frame.sharedContent) : frame.sharedContent.kind === "screen_share" ? mediaNodes.get(frame.sharedContent.sourceId) : null;
+              const media = item.kind === "whiteboard" && frame.sharedContent.kind === "whiteboard" ? renderWhiteboard?.(frame.sharedContent) : item.kind === "screen-share" && frame.sharedContent.kind === "screen_share" ? mediaNodes.get(frame.sharedContent.sourceId) : null;
               return <StageContentTileSurface item={item} media={media} mediaVisible={hasRenderableMedia(media)} pinned={context.pinned} style={context.style} hidden={context.hidden} />;
             }}
             renderPrimaryContent={renderContent}

@@ -64,11 +64,11 @@ with claimant as (
 ), candidate as (
     select recording_jobs.id, recovery.source_expires_at as recovery_expires_at,
         (recording_jobs.kind = 'capture' and recording_capture_completion_available(recording_jobs.recording_id))::boolean as completion_only,
-        recording_pipelines.capture_completed_at +
-            ((case when recording_jobs.kind = 'transcription'
-                then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                else recording_deferred_retention_seconds(episodes.config_snapshot)
-            end) * interval '1 second') as source_expires_at
+        (case when recording_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(recording_jobs.recording_id, recording_pipelines.capture_completed_at, episodes.config_snapshot)
+                else recording_pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) as source_expires_at
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
@@ -90,11 +90,11 @@ with claimant as (
       and recording_jobs.state = 'pending'
       and (recording_jobs.kind <> 'transcription' or $3::boolean)
       and (recording_jobs.kind not in ('render', 'transcription') or
-          recording_pipelines.capture_completed_at +
-              ((case when recording_jobs.kind = 'transcription'
-                  then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                  else recording_deferred_retention_seconds(episodes.config_snapshot)
-              end) * interval '1 second') > clock_timestamp())
+          (case when recording_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(recording_jobs.recording_id, recording_pipelines.capture_completed_at, episodes.config_snapshot)
+                else recording_pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp())
       and (recording_jobs.kind not in ('render', 'transcription') or
           coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $4::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
@@ -1990,7 +1990,14 @@ set lease_expires_at = case when recording_jobs.kind in ('render', 'transcriptio
          from recording_job_attempt_authorities authority
          where authority.job_id = recording_jobs.id
            and authority.attempt_count = recording_jobs.attempt_count
-           and authority.fencing_generation = recording_jobs.fencing_generation))
+           and authority.fencing_generation = recording_jobs.fencing_generation),
+        (select case when recording_jobs.kind = 'transcription'
+            then recording_transcription_source_expires_at(recording_jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+            else pipelines.capture_completed_at + (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+         end
+         from recording_pipelines pipelines
+         join episodes on episodes.id = recording_jobs.episode_id
+         where pipelines.recording_id = recording_jobs.recording_id))
         else least($1::timestamptz,
             (select recovery.source_expires_at from recording_completion_recoveries recovery
              where recovery.job_id = recording_jobs.id
@@ -2001,8 +2008,8 @@ set lease_expires_at = case when recording_jobs.kind in ('render', 'transcriptio
              where authority.job_id = recording_jobs.id
                and authority.attempt_count = recording_jobs.attempt_count
                and authority.fencing_generation = recording_jobs.fencing_generation)) end, updated_at = now()
-where id = $2
-  and state = 'leased'
+where recording_jobs.id = $2
+  and recording_jobs.state = 'leased'
   and recording_jobs.attempt_count = $3
   and recording_jobs.fencing_generation = $4
   and recording_jobs.lease_token = $5
@@ -2713,12 +2720,12 @@ with completed_captures as materialized (
     from completed_captures
     on conflict (recording_id) do nothing
 ), expired as (
-    select jobs.id, jobs.state as prior_state, jobs.lease_owner as prior_lease_owner, ((jobs.kind in ('render', 'transcription') and
-        pipelines.capture_completed_at +
-            ((case when jobs.kind = 'transcription'
-                then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                else recording_deferred_retention_seconds(episodes.config_snapshot)
-            end) * interval '1 second') <= clock_timestamp())
+    select jobs.id, jobs.fencing_generation, pipelines.capture_completed_at, episodes.config_snapshot, jobs.state as prior_state, jobs.lease_owner as prior_lease_owner, ((jobs.kind in ('render', 'transcription') and
+        (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) <= clock_timestamp())
         or (jobs.kind = 'capture' and pipelines.capture_ready_at is not null
             and recording_capture_salvage_deadline(jobs.recording_id) <= clock_timestamp())
         or exists (select 1 from recording_completion_recoveries recovery
@@ -2733,11 +2740,11 @@ with completed_captures as materialized (
     join episodes on episodes.id = jobs.episode_id
     where (jobs.state = 'leased' and jobs.lease_expires_at <= clock_timestamp())
        or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
-           pipelines.capture_completed_at +
-               ((case when jobs.kind = 'transcription'
-                   then recording_transcription_source_window_seconds(episodes.config_snapshot)
-                   else recording_deferred_retention_seconds(episodes.config_snapshot)
-               end) * interval '1 second') <= clock_timestamp())
+           (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) <= clock_timestamp())
        or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
            coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id), jobs.created_at) + $1::integer * interval '1 second' <= clock_timestamp())
        or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null
@@ -2770,9 +2777,12 @@ with completed_captures as materialized (
         updated_at = now()
     from expired
     where recording_jobs.id = expired.id
+      and recording_jobs.fencing_generation = expired.fencing_generation
+      and (recording_jobs.kind <> 'transcription' or not expired.source_expired or
+          recording_transcription_source_expires_at(recording_jobs.recording_id, expired.capture_completed_at, expired.config_snapshot) <= clock_timestamp())
     returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
-        attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
+        attempt_limit, lease_token, lease_owner, lease_expires_at, recording_jobs.fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), expired_attempt_failure as (
     -- A lease that ran out never reached Fail, so the attempt would leave no failure row.

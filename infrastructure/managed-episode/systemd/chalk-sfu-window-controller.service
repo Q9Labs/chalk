@@ -1,0 +1,21 @@
+[Unit]
+Description=Chalk SFU scheduled-window controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+TimeoutStartSec=90s
+User=chalk-sfu-window
+EnvironmentFile=/home/chalk-sfu-window/controller.env
+ExecStart=/usr/local/bin/chalk-sfu-window-controller
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/chalk-sfu-window
+
+[Install]
+WantedBy=multi-user.target

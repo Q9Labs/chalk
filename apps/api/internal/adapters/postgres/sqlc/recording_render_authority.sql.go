@@ -13,11 +13,11 @@ import (
 
 const authorizeRecordingRenderInput = `-- name: AuthorizeRecordingRenderInput :one
 select inputs.render_input_handle, inputs.tenant_id, inputs.space_id, inputs.episode_id, inputs.recording_id, inputs.render_job_id, inputs.attempt_count, inputs.fencing_generation, inputs.capture_epoch, inputs.envelope_digest, inputs.key_handle, inputs.object_handle, inputs.presentation_handle, inputs.presentation_schema_version, inputs.presentation_profile_version, inputs.presentation_sha256, inputs.presentation_duration_millis, inputs.capture_ready_at, inputs.created_at,
-    (pipelines.capture_completed_at +
-        ((case when jobs.kind = 'transcription'
-            then recording_transcription_source_window_seconds(episodes.config_snapshot)
-            else recording_deferred_retention_seconds(episodes.config_snapshot)
-        end) * interval '1 second'))::timestamptz as source_expires_at
+    ((case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end))::timestamptz as source_expires_at
 from recording_render_inputs inputs
 join recording_jobs jobs on jobs.id = inputs.render_job_id
 join recording_job_attempt_authorities authority
@@ -51,11 +51,11 @@ where inputs.render_input_handle = $1
   and ((jobs.kind = 'render' and pipelines.state = 'rendering')
     or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
 	and pipelines.capture_completed_at is not null
-  and pipelines.capture_completed_at +
-      ((case when jobs.kind = 'transcription'
-          then recording_transcription_source_window_seconds(episodes.config_snapshot)
-          else recording_deferred_retention_seconds(episodes.config_snapshot)
-      end) * interval '1 second') > clock_timestamp()
+  and (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
 for share of jobs
 `
 
@@ -593,11 +593,11 @@ where inputs.render_input_handle = $2
   and render_jobs.lease_owner = $15
   and render_jobs.lease_expires_at = $16
   and render_jobs.lease_expires_at > clock_timestamp()
-  and pipelines.capture_completed_at +
-      ((case when render_jobs.kind = 'transcription'
-          then recording_transcription_source_window_seconds(episodes.config_snapshot)
-          else recording_deferred_retention_seconds(episodes.config_snapshot)
-      end) * interval '1 second') > clock_timestamp()
+  and (case when render_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(render_jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
   and exists (
       select 1
       from recording_bundle_allocations allocations
@@ -1503,8 +1503,7 @@ where inputs.render_input_handle = $1
   and jobs.lease_expires_at > clock_timestamp()
   and pipelines.capture_completed_at is not null
   and pipelines.state <> 'deleted'
-  and pipelines.capture_completed_at +
-      (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
+  and recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot) > clock_timestamp()
   and recordings.status in ('pending', 'processing', 'completed', 'failed')
 for update of jobs, recordings
 `
@@ -1591,11 +1590,11 @@ with authorized as (
       and jobs.lease_owner = $18
       and jobs.lease_expires_at = $19
       and jobs.lease_expires_at > clock_timestamp()
-      and pipelines.capture_completed_at +
-          ((case when jobs.kind = 'transcription'
-              then recording_transcription_source_window_seconds(episodes.config_snapshot)
-              else recording_deferred_retention_seconds(episodes.config_snapshot)
-          end) * interval '1 second') > clock_timestamp()
+      and (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
     for update of jobs
 ), next_version as (
     select coalesce(max(allocation_version), 0) + 1 as value

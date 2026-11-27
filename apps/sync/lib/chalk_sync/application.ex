@@ -31,6 +31,9 @@ defmodule ChalkSync.Application do
         annotation_availability_child(),
         annotation_presence_child(),
         annotation_housekeeping_child(),
+        presenting_availability_child(),
+        presenting_fanout_child(),
+        presenting_housekeeping_child(),
         lifecycle_consumer_child(),
         external_operation_consumer_children(),
         retention_scheduler_child(),
@@ -165,6 +168,20 @@ defmodule ChalkSync.Application do
 
   defp annotation_housekeeping_child do
     if database_workers?(), do: {ChalkSync.ScreenAnnotation.Housekeeping, []}
+  end
+
+  defp presenting_availability_child do
+    if database_workers?(), do: {ChalkSync.Presenting.Availability, []}
+  end
+
+  defp presenting_fanout_child do
+    if database_workers?() do
+      {ChalkSync.Presenting.Fanout, url: Application.fetch_env!(:chalk_sync, :database_url)}
+    end
+  end
+
+  defp presenting_housekeeping_child do
+    if database_workers?(), do: {ChalkSync.Presenting.Housekeeping, []}
   end
 
   defp instance_id do

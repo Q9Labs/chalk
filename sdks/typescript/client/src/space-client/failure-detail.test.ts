@@ -32,6 +32,24 @@ describe("a media start failure's message", () => {
     expect(getConnectionFailureDetail(failure)).toBe(NETWORK_DETAIL);
   });
 
+  it.each(["new", "checking", "failed"] as const)("tells the person their network or VPN blocked ICE in the %s state", (iceConnectionState) => {
+    const failure = mediaStartFailure(new SFUError("Timed out waiting for the Chalk SFU peer connection", "media_failed", { iceConnectionState }));
+    expect(failure.mediaIceFailure).toBe(true);
+    expect(getConnectionFailureDetail(failure)).toBe("Your network or VPN is blocking the call connection. Turn off the VPN or try another network, then join again.");
+  });
+
+  it.each(["connected", "completed", "disconnected"] as const)("does not blame the VPN when ICE reached %s before the transport timed out", (iceConnectionState) => {
+    const failure = mediaStartFailure(new SFUError("Timed out waiting for the Chalk SFU peer connection", "media_failed", { iceConnectionState }));
+    expect(failure.mediaIceFailure).toBeUndefined();
+    expect(getConnectionFailureDetail(failure)).toBe(NETWORK_DETAIL);
+  });
+
+  it("uses the VPN copy for an ICE failure reported by the connection itself", () => {
+    const failure = mediaStartFailure(new SFUError("ICE connection failed", "ice_connection_failed"));
+    expect(failure.mediaIceFailure).toBe(true);
+    expect(getConnectionFailureDetail(failure)).toContain("Turn off the VPN");
+  });
+
   it("does not treat a rejected media grant as a fault of ours", () => {
     const failure = mediaStartFailure(new SFUError("Chalk SFU signaling failed with HTTP 403", "signaling_failed", { status: 403, retryableConnection: false }));
     expect(failure.mediaHttpStatus).toBeUndefined();

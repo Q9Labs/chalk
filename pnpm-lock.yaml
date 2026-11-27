@@ -163,26 +163,26 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@alchemy.run/acme': https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz
-  '@alchemy.run/aws': https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz
-  '@alchemy.run/cloudflare': https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz
-  '@alchemy.run/cloudflare-runtime': https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz
-  '@alchemy.run/digitalocean': https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz
-  '@alchemy.run/docker': https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz
-  '@alchemy.run/frontend-frameworks': https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz
-  '@alchemy.run/kubernetes': https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz
-  '@alchemy.run/node-utils': https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz
-  '@alchemy.run/redis': https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz
-  '@alchemy.run/sql': https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz
-  '@distilled.cloud/acme': https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz
-  '@distilled.cloud/aws': https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz
-  '@distilled.cloud/aws4signer': https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz
-  '@distilled.cloud/cloudflare': https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz
-  '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz
-  '@distilled.cloud/digitalocean': https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz
-  '@distilled.cloud/iceberg': https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz
-  '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz
-  alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+  '@alchemy.run/acme': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-acme-2.0.0-beta.87.tgz
+  '@alchemy.run/aws': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz
+  '@alchemy.run/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz
+  '@alchemy.run/cloudflare-runtime': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz
+  '@alchemy.run/digitalocean': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz
+  '@alchemy.run/docker': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz
+  '@alchemy.run/frontend-frameworks': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz
+  '@alchemy.run/kubernetes': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz
+  '@alchemy.run/node-utils': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz
+  '@alchemy.run/redis': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-redis-2.0.0-beta.87.tgz
+  '@alchemy.run/sql': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz
+  '@distilled.cloud/acme': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-acme-1.0.0-rc.20.tgz
+  '@distilled.cloud/aws': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz
+  '@distilled.cloud/aws4signer': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz
+  '@distilled.cloud/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz
+  '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz
+  '@distilled.cloud/digitalocean': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz
+  '@distilled.cloud/iceberg': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-iceberg-1.0.0-rc.20.tgz
+  '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz
+  alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
   effect@^4.1.4: 4.1.4
   '@q9labsai/config-depcruise': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   '@q9labsai/gates': 0.4.1
@@ -626,29 +626,29 @@ importers:
   infrastructure:
     dependencies:
       '@alchemy.run/aws':
-        specifier: https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz
-        version: https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       '@alchemy.run/cloudflare':
-        specifier: https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz
-        version: https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       '@alchemy.run/digitalocean':
-        specifier: https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz
-        version: https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
       '@distilled.cloud/aws':
-        specifier: https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz
-        version: https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz(effect@4.1.4)
       '@distilled.cloud/cloudflare':
-        specifier: https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz
-        version: https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4)
       '@distilled.cloud/digitalocean':
-        specifier: https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz
-        version: https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz(effect@4.1.4)
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz(effect@4.1.4)
       '@effect/platform-node':
         specifier: 4.1.4
         version: 4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1))
       alchemy:
-        specifier: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
-        version: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+        specifier: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
+        version: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -942,6 +942,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.4(@types/react@19.2.18)
+      '@types/react-test-renderer':
+        specifier: ^19.3.1
+        version: 19.3.1
       expo-audio:
         specifier: ~55.0.18
         version: 55.0.18(expo-asset@55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)(supports-color@10.2.2)(typescript@6.0.3))(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)
@@ -984,6 +987,9 @@ importers:
       react-native-worklets:
         specifier: 0.7.2
         version: 0.7.2(@babel/core@7.29.7(supports-color@10.2.2))(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)(supports-color@10.2.2)
+      react-test-renderer:
+        specifier: 19.2.7
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1020,20 +1026,20 @@ packages:
     resolution: {integrity: sha512-BZ443uBEq6HuMA+Z4b7Hpm65GpZSo7pWqnYqpf/7tAO3C48JbtvAhOE2JnODFj+jodsZzfRHkAyQb64xuD2tZQ==}
     engines: {node: '>=22'}
 
-  '@alchemy.run/acme@https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz':
-    resolution: {integrity: sha512-Je0Sv3rQ2uqAXumoj5OOpsREl/Ku8GgGxP81jNsP7SxNlU3tKApix+u7DJbX3YsBQX2UFhb5zrHs5qZrhw3Q2g==, tarball: https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz}
+  '@alchemy.run/acme@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-acme-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-FuhnRfooxu5i5psvqPNYdvhAMcPXHdz7q4thZh3zLglOrVt2Gzz/kTfInEvgImJpp3Lzrcd7Nuu4yg3GbC4ekg==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-acme-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
 
-  '@alchemy.run/aws@https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz':
-    resolution: {integrity: sha512-jxPC4Cu1TGzXhc48Xyyb4/FgxHWtJtdLRD1FTKECgtn81RPeb7eZNpNK/jRqWIMj7GwYQEdkk74QUYPcXvx1fA==, tarball: https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz}
+  '@alchemy.run/aws@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-bx9sn6pe5rQgoLhUEsW6G0sIvEyHrgEVXO6ehScnxmc0JSQBVhiX7sb9/AJbGejWHj0+Qu22QJbVd8JCK4D2YQ==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-bun': ^4.1.4
       '@effect/platform-node': ^4.1.4
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
       mongodb: ^6.10.0
       pg: ^8.22.0
@@ -1047,11 +1053,11 @@ packages:
       pg:
         optional: true
 
-  '@alchemy.run/cloudflare-runtime@https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz':
-    resolution: {integrity: sha512-bMwsHriDlJ18eRSFj6oBkM15iCwfQpnEKHqqkJEGrwilnpSozgIVdeNLIYcKMRqOEPDTHi0IDCGtPPnMg7+dvw==, tarball: https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz}
+  '@alchemy.run/cloudflare-runtime@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-In8+1YGpWawzbyH9dCfPLR2ndatoqbC1CftEHJyr4cL3N7hQXPgQZbrMDZ+A9xihsxW71VviYqFNFtKBWdJtbQ==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
-      '@distilled.cloud/cloudflare': https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz
+      '@distilled.cloud/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz
       '@effect/platform-bun': ^4.1.4
       '@effect/platform-node': ^4.1.4
       effect: 4.1.4
@@ -1067,13 +1073,13 @@ packages:
       vite:
         optional: true
 
-  '@alchemy.run/cloudflare@https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz':
-    resolution: {integrity: sha512-85TDT1bya+bnLFYdRtQuyEPJQEgwnaXhXtwSrGxhMla7gSLsRWbOwmmFSY9hjK/F4sjG8+1hyHty4PIvvRWMTw==, tarball: https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz}
+  '@alchemy.run/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-0+6xRHXQS+YOmqKbzRUMjZ/nVjOITDpC6kUPWqdNYoXHZ8YW35KshyGSLsMtMnz27W7J/DKIcWwntVVWgsvcJQ==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-bun': ^4.1.4
       '@effect/platform-node': ^4.1.4
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
       vite: 8.1.6
     peerDependenciesMeta:
@@ -1084,12 +1090,12 @@ packages:
       vite:
         optional: true
 
-  '@alchemy.run/digitalocean@https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz':
-    resolution: {integrity: sha512-hEVQ1AIGpmufJ1kzf8GuNFKpHu5jGBxP+dxdl1L3NZx8GwwIhQLF3l863bqCg8OXEAIlb9Rc4iCSAI06kwGasg==, tarball: https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz}
+  '@alchemy.run/digitalocean@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-2iPS8eICDF8SFZ4R4l1n2NY/OccnDTAV4jJRCuuAecPtdD7G+WCiORF57BWP/ooJ6h2Wd3tzbHNlLXM2bozwyA==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-node': ^4.1.4
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
       mysql2: ^3.24.2
       pg: ^8.22.0
@@ -1101,19 +1107,19 @@ packages:
       pg:
         optional: true
 
-  '@alchemy.run/docker@https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz':
-    resolution: {integrity: sha512-umUXNCJn702PiT7kvVHqkxKRmRNKUERXivgEurRIhkba5Qjj0EhOjEp9/POdDSaNWIp67at91JS0mAoOj5TYXw==, tarball: https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz}
+  '@alchemy.run/docker@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-u2BatJjOxkOiI2fxGtqhny+DiSSMXs0fBbM1BA/aF5WvsCa4aqN7oLZ/RRZr5z40/GeOPdngLD+xt0F7nH47Pw==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-bun': ^4.1.4
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
     peerDependenciesMeta:
       '@effect/platform-bun':
         optional: true
 
-  '@alchemy.run/frontend-frameworks@https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz':
-    resolution: {integrity: sha512-Z6rte2AEJ7HJFQFClhlAs/c2j+jIv0NIdP92eLPdP14VWFjOuhKg/86Ue76357oJluHQNgf2bCvcjFHCGR5ytg==, tarball: https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz}
+  '@alchemy.run/frontend-frameworks@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-dvns6LIVQ5Ppsf+gxpFf5uE4uFo+nOSxaCcyR7cgXFlOdV8/2vS+76uk0mEsHR6SKc4fCn+uypFZsvkNdj5ZlQ==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-bun': ^4.1.4
@@ -1158,25 +1164,25 @@ packages:
       waku:
         optional: true
 
-  '@alchemy.run/kubernetes@https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz':
-    resolution: {integrity: sha512-WZpiAPQBzyrtOwi6Fn/xyBzE3A+Lcg0KKKev7X+JK7GmtseZlVtDoXaadXF7FA6j696AeEMdWPMNc8qdR4SjRw==, tarball: https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz}
+  '@alchemy.run/kubernetes@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-nSImaArzMVERaNeXsHwVugSZHB3Co1Mte/s1T1BJA0cs316NlHEj5HjqLfhNgxZSQ9ox2LrYhbajYL3actX4Xw==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/platform-bun': ^4.1.4
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
     peerDependenciesMeta:
       '@effect/platform-bun':
         optional: true
 
-  '@alchemy.run/node-utils@https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz':
-    resolution: {integrity: sha512-BMmrAC0Hwg4APqjGZWFusjhXk5v8AwXQAonrogMMAvMN98fhegxsUQRy9TvxPr22a7Y8r+sNYFVMOYAQknTxng==, tarball: https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz}
+  '@alchemy.run/node-utils@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-+WM7d6OsmLctuTJ8m/XPtCSrxHB1j+ffLAaZnb/8ycPKlYkvmpNurDlwmosp7vkMg6ZoAg6TNdlhcPXpHckC/w==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       effect: 4.1.4
 
-  '@alchemy.run/redis@https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz':
-    resolution: {integrity: sha512-lV6BjDpQesRYA+PibEHyOFXKVpOyezJphzPOhFhDxS6SUJ7ZqhhLsZLzG/P0TiFUxIE27mrqSF1ew9RkfjEG+g==, tarball: https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz}
+  '@alchemy.run/redis@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-redis-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-wMYsSRscy/jTyEdhmrJdUavqmNs7DHePF6NPTpIFq8ldqmorikSpCkx9JlXt/JsNCzCvEbjjQwjg5KT9649Igw==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-redis-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       effect: 4.1.4
@@ -1193,15 +1199,15 @@ packages:
       react-devtools-core:
         optional: true
 
-  '@alchemy.run/sql@https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz':
-    resolution: {integrity: sha512-TKJTPlnJ4E9hDmZOwK7YZQ97WJeKunrgtMgXCxu39wQZWgRAI4HPg/tLmGqz8BDmpt5duOgm9di1+Vp5UzgrgQ==, tarball: https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz}
+  '@alchemy.run/sql@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz':
+    resolution: {integrity: sha512-3BWX8W3yyUe5SgLlbtLR73l7hPX/r0JdV9q+GfCGefHQO9mq2gtKRFOLwJdDeyobUIrEGNwFXSU4Z3R1CKsPmw==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     peerDependencies:
       '@effect/sql-libsql': ^4.1.4
       '@effect/sql-mysql2': ^4.1.4
       '@effect/sql-pg': ^4.1.4
       '@types/pg': ^8.20.0
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz
       effect: 4.1.4
       mysql2: ^3.24.2
       pg: ^8.22.0
@@ -2157,50 +2163,50 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@distilled.cloud/acme@https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz':
-    resolution: {integrity: sha512-gMnKNRZMI3uyRKmN3Y1ACmAVH4/xYJhsjx05vMGTwKyP35fhpeJqMtNRxilscAP3muaum1pfkOfeSAgGqaJtdg==, tarball: https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz}
+  '@distilled.cloud/acme@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-acme-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-hJ191cjI7gMeW3Y++yeKcdkHwZ+9VQgjam7cr8i0Pzq52cesr8520MXmO5dALNlJRDhJxYcYDFhBi/CSBa9ALg==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-acme-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/aws4signer@https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz':
-    resolution: {integrity: sha512-f16akr+HdzZtiXqEzH6pkYkHvUi4Na/n+rxKC2mXC/sng7dnCgUegPNIhRyDGe/seJ1Z/p30jR+6rF3SMf0y+g==, tarball: https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz}
+  '@distilled.cloud/aws4signer@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-JHeKVVxNQh4jxY/sBnatZji2p8LOX9JFxzgrbnJ4lifUMuhrcxwcG8G5dCSh6KsTYWTv8lM2vuwjRf+L/iQX3A==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/aws@https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz':
-    resolution: {integrity: sha512-TAEDWN6wYzYrsog9mcb7dC31dfCExZ4varYVq2ISlWDxfMpw0n8Vua6lVKreRCXUsVc0VQB/5r7cWe4Itp7UNA==, tarball: https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz}
+  '@distilled.cloud/aws@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-+0roxXUK8KSUxjP+Fyw4L94jVEYaYsAw5ryCCa/lb9iZ003iBasertBXjJcf54j/OkMq8BVk3t9YD9Z88hCTmg==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/cloudflare@https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz':
-    resolution: {integrity: sha512-x6SA+RTKds650u8WjOTD32bChXst0Q74BnDI/gm313Yhia1zXuzS644CjiRELIZ7C5BC1j8djdxwQOx+cu8SyA==, tarball: https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz}
+  '@distilled.cloud/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-Yd13yf8rdaCdc7mq4Xt03zB7F7oFPvzfS8O9wwkiBuOVN8Q3lB34F2MWPe7Vcwqc7EQJjE5EOYgL5f6Azp6tsA==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/core@https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz':
-    resolution: {integrity: sha512-5xqRMk4HuQwoZsGbyn0U0oLnZdjZTSn9XlqRTSHFmN83oQBWs0EXDhVskD3it9dUirBGibMiyAsq0HDcU6Cqfw==, tarball: https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz}
+  '@distilled.cloud/core@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-APV7BQAJS5wB00WnoEm+ZboI2m9QLXa7obiAt5SM5jC5XELc7FguHYaKsowT/n1Q8mFk2NNztTcR85Y/N4R/zw==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/digitalocean@https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz':
-    resolution: {integrity: sha512-njO35AtFYn7Pe1RlGbXWon8R4FdTI69egSfzZh0oexO/dZ0TI457+zoVP4jOZPLrcDYp4eUGjZQxQ3XJ5gqbag==, tarball: https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz}
+  '@distilled.cloud/digitalocean@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-jEgoYY/QIP8+aUE8QuR4D0RzzSobYon7m5kfLn+fanlJmHteJUjlXdEQfYIWWibV/Cf3qhLK0YZ3Kr59z0XtJg==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/iceberg@https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz':
-    resolution: {integrity: sha512-m3kETPV/bwhhOplbAGujWU+QTbQgdbYtc/Go+3ccevgPwQ9E6i3DH21DbRlilgmY3lhLCK/Jw74l7pKOCqelVw==, tarball: https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz}
+  '@distilled.cloud/iceberg@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-iceberg-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-emFuupm3Ku3qW6XFXRUPGYh8nUh5XMrM+cDwwgJIJ6XulLlIR57ZcnjwG0ILMW8ByFtdGGRBbX/SVmDOV8HDeA==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-iceberg-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/s3@https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz':
-    resolution: {integrity: sha512-URsjufqDCIm8ZZRXaeEqQ/LjXWKOxPR1vyqSqbs5tBQEPXoOxitfB3sL/iES07VHKZO/xFikg7pJUKs3UA2Q3g==, tarball: https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz}
+  '@distilled.cloud/s3@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz':
+    resolution: {integrity: sha512-o4D/OUbfnjVAO7TzV/EHFIbXJOcdBFHgrwh95QADk/cmriUrK2bHRpp1MoDwzgeUHAdbwg5h8K5NsM9n2rPL0Q==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz}
     version: 1.0.0-rc.20
     peerDependencies:
       effect: 4.1.4
@@ -5412,6 +5418,9 @@ packages:
     peerDependencies:
       '@types/react': ^19.2.0
 
+  '@types/react-test-renderer@19.3.1':
+    resolution: {integrity: sha512-9AwMfeBOcXsN5kC4oAauNTOKEwqLHtc69tkJC2CihQ5fCELDwzfQvookvtyaxm6i+vc5LLD0V5OLB8arzY8Smw==}
+
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
 
@@ -5810,8 +5819,8 @@ packages:
   ajv@8.18.0:
     resolution: {integrity: sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==}
 
-  alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz:
-    resolution: {integrity: sha512-gJnhM5nuZVboE/PUe9jSxulQQXA30P99uyN1bQAcdq4TlfH9DTGi/kRGCM5JlbcjJzxWlQ9727D55wCt69/1MQ==, tarball: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz}
+  alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz:
+    resolution: {integrity: sha512-S/pl8Uakqc++IY/0FCxz5tbq/19NeSsxUrgfDN1fI4VxUIayGVIOzG4qkcKCyCs895WVxARQZqTvBrCb3qhAOA==, tarball: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz}
     version: 2.0.0-beta.87
     hasBin: true
     peerDependencies:
@@ -8685,6 +8694,9 @@ packages:
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
 
+  react-is@19.3.1:
+    resolution: {integrity: sha512-RRieF6IyxQBkcK6pP8xOHprLTPW6QjRkbGdImtqNme+/hYVwCZkLQLdlZGOhUqXwkS9IEynaGvPJtv6XB/cz0Q==}
+
   react-native-gesture-handler@2.30.1:
     resolution: {integrity: sha512-xIUBDo5ktmJs++0fZlavQNvDEE4PsihWhSeJsJtoz4Q6p0MiTM9TgrTgfEgzRR36qGPytFoeq+ShLrVwGdpUdA==}
     peerDependencies:
@@ -8783,6 +8795,11 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  react-test-renderer@19.2.7:
+    resolution: {integrity: sha512-U4TyPDJ9MsC8rFimXuJum8w40aPc9kbOZYO8Pc2/4A884i8hwJsMNA/JNyuOc/f2/37wHvk7HjpVl1V4re7Dig==}
+    peerDependencies:
+      react: 19.2.7
 
   react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
@@ -10065,22 +10082,22 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@alchemy.run/acme@https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
+  '@alchemy.run/acme@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-acme-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/acme': https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz(effect@4.1.4)
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      '@distilled.cloud/acme': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-acme-1.0.0-rc.20.tgz(effect@4.1.4)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
 
-  '@alchemy.run/aws@https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@alchemy.run/aws@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-aws-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
-      '@alchemy.run/docker': https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/frontend-frameworks': https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
-      '@alchemy.run/kubernetes': https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/sql': https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@distilled.cloud/aws': https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)
-      '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)
+      '@alchemy.run/docker': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/frontend-frameworks': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@alchemy.run/kubernetes': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/sql': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@distilled.cloud/aws': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)
       '@types/aws-lambda': 8.10.164
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
       rolldown: 1.2.16
     optionalDependencies:
@@ -10106,11 +10123,11 @@ snapshots:
       - vocs
       - waku
 
-  '@alchemy.run/cloudflare-runtime@https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz(@distilled.cloud/cloudflare@https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@alchemy.run/cloudflare-runtime@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz(@distilled.cloud/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
-      '@alchemy.run/node-utils': https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz(effect@4.1.4)
+      '@alchemy.run/node-utils': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz(effect@4.1.4)
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261117.1)
-      '@distilled.cloud/cloudflare': https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)
+      '@distilled.cloud/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4)
       '@puppeteer/browsers': 3.2.7(yauzl@3.4.0)
       capnp-es: 0.0.17(typescript@6.0.3)
       effect: 4.1.4
@@ -10129,20 +10146,20 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/cloudflare@https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@alchemy.run/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
-      '@alchemy.run/acme': https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/cloudflare-runtime': https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz(@distilled.cloud/cloudflare@https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
-      '@alchemy.run/docker': https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/frontend-frameworks': https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
-      '@alchemy.run/sql': https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@distilled.cloud/aws': https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)
-      '@distilled.cloud/aws4signer': https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz(effect@4.1.4)
-      '@distilled.cloud/cloudflare': https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
-      '@distilled.cloud/iceberg': https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz(effect@4.1.4)
+      '@alchemy.run/acme': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-acme-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/cloudflare-runtime': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz(@distilled.cloud/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@alchemy.run/docker': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/frontend-frameworks': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@alchemy.run/sql': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@distilled.cloud/aws': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/aws4signer': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/iceberg': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-iceberg-1.0.0-rc.20.tgz(effect@4.1.4)
       '@effect/sql-d1': 4.1.4(effect@4.1.4)
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
       pathe: 2.0.3
       picomatch: 4.0.7
@@ -10172,15 +10189,15 @@ snapshots:
       - vocs
       - waku
 
-  '@alchemy.run/digitalocean@https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
+  '@alchemy.run/digitalocean@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-digitalocean-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
     dependencies:
-      '@alchemy.run/docker': https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/kubernetes': https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@alchemy.run/sql': https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
-      '@distilled.cloud/digitalocean': https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz(effect@4.1.4)
-      '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      '@alchemy.run/docker': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/kubernetes': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@alchemy.run/sql': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/digitalocean': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
       rolldown: 1.2.16
     optionalDependencies:
@@ -10192,19 +10209,19 @@ snapshots:
       - '@effect/sql-pg'
       - '@types/pg'
 
-  '@alchemy.run/docker@https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
+  '@alchemy.run/docker@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
     dependencies:
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
       rolldown: 1.2.16
 
-  '@alchemy.run/frontend-frameworks@https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
+  '@alchemy.run/frontend-frameworks@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
-      '@alchemy.run/cloudflare-runtime': https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz(@distilled.cloud/cloudflare@https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
-      '@alchemy.run/node-utils': https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz(effect@4.1.4)
-      '@alchemy.run/redis': https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz(effect@4.1.4)
-      '@distilled.cloud/aws': https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)
-      '@distilled.cloud/cloudflare': https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)
+      '@alchemy.run/cloudflare-runtime': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-cloudflare-runtime-2.0.0-beta.87.tgz(@distilled.cloud/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4))(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(rolldown@1.2.16)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@alchemy.run/node-utils': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz(effect@4.1.4)
+      '@alchemy.run/redis': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-redis-2.0.0-beta.87.tgz(effect@4.1.4)
+      '@distilled.cloud/aws': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/cloudflare': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
       esbuild: 0.28.2
       rolldown: 1.2.16
@@ -10218,20 +10235,20 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/kubernetes@https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
+  '@alchemy.run/kubernetes@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-kubernetes-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
     dependencies:
-      '@alchemy.run/docker': https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      '@alchemy.run/docker': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-docker-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
       yaml: 2.9.1
 
-  '@alchemy.run/node-utils@https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz(effect@4.1.4)':
+  '@alchemy.run/node-utils@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz(effect@4.1.4)':
     dependencies:
       chokidar: 5.0.0
       effect: 4.1.4
       rolldown: 1.2.16
 
-  '@alchemy.run/redis@https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz(effect@4.1.4)':
+  '@alchemy.run/redis@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-redis-2.0.0-beta.87.tgz(effect@4.1.4)':
     dependencies:
       effect: 4.1.4
 
@@ -10240,9 +10257,9 @@ snapshots:
       '@types/react': 19.2.18
       react-devtools-core: 6.1.5
 
-  '@alchemy.run/sql@https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz(alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
+  '@alchemy.run/sql@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-sql-2.0.0-beta.87.tgz(alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0))(effect@4.1.4)':
     dependencies:
-      alchemy: https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
+      alchemy: https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0)
       effect: 4.1.4
 
   '@andrewbranch/untar.js@1.0.3': {}
@@ -11352,47 +11369,47 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@distilled.cloud/acme@https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz(effect@4.1.4)':
+  '@distilled.cloud/acme@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-acme-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/aws4signer@https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz(effect@4.1.4)':
+  '@distilled.cloud/aws4signer@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/aws@https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)':
+  '@distilled.cloud/aws@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
-      '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/cloudflare@https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)':
+  '@distilled.cloud/cloudflare@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-cloudflare-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
-      '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/core@https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)':
+  '@distilled.cloud/core@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
       effect: 4.1.4
 
-  '@distilled.cloud/digitalocean@https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz(effect@4.1.4)':
+  '@distilled.cloud/digitalocean@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-digitalocean-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
-      '@distilled.cloud/s3': https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/s3': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/iceberg@https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz(effect@4.1.4)':
+  '@distilled.cloud/iceberg@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-iceberg-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
-  '@distilled.cloud/s3@https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz(effect@4.1.4)':
+  '@distilled.cloud/s3@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-s3-1.0.0-rc.20.tgz(effect@4.1.4)':
     dependencies:
-      '@distilled.cloud/aws4signer': https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz(effect@4.1.4)
-      '@distilled.cloud/core': https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz(effect@4.1.4)
+      '@distilled.cloud/aws4signer': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-aws4signer-1.0.0-rc.20.tgz(effect@4.1.4)
+      '@distilled.cloud/core': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/distilled.cloud-core-1.0.0-rc.20.tgz(effect@4.1.4)
       effect: 4.1.4
 
   '@e2e-dev/web@0.15.0(e2e@0.21.0)':
@@ -14434,6 +14451,10 @@ snapshots:
     dependencies:
       '@types/react': 19.2.18
 
+  '@types/react-test-renderer@19.3.1':
+    dependencies:
+      '@types/react': 19.2.18
+
   '@types/react@19.2.18':
     dependencies:
       csstype: 3.2.3
@@ -14753,10 +14774,10 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0):
+  alchemy@https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(@types/react@19.2.18)(effect@4.1.4)(react-devtools-core@6.1.5)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(ws@8.23.0):
     dependencies:
-      '@alchemy.run/frontend-frameworks': https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
-      '@alchemy.run/node-utils': https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz(effect@4.1.4)
+      '@alchemy.run/frontend-frameworks': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-frontend-frameworks-2.0.0-beta.87.tgz(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.1(@opentelemetry/api@1.9.1)))(@types/node@24.12.0)(effect@4.1.4)(typescript@6.0.3)(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+      '@alchemy.run/node-utils': https://github.com/Q9Labs/chalk/releases/download/vendor-alchemy-852675f/alchemy.run-node-utils-2.0.0-beta.87.tgz(effect@4.1.4)
       '@alchemy.run/sigil': 0.1.0-alpha.4(@types/react@19.2.18)(react-devtools-core@6.1.5)
       capnweb: 0.12.0
       effect: 4.1.4
@@ -18469,6 +18490,8 @@ snapshots:
 
   react-is@18.3.1: {}
 
+  react-is@19.3.1: {}
+
   react-native-gesture-handler@2.30.1(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7):
     dependencies:
       '@egjs/hammerjs': 2.0.17
@@ -18611,6 +18634,12 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       '@types/react': 19.2.18
+
+  react-test-renderer@19.2.7(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      react-is: 19.3.1
+      scheduler: 0.27.0
 
   react@19.2.7: {}
 

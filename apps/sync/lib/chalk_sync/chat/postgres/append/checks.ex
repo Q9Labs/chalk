@@ -72,16 +72,22 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
         attachment_state_error(rows)
 
       true ->
-        {:ok,
-         Enum.map(rows, fn [id, name, mime_type, byte_length, _status, _owner, _generation] ->
-           %{
-             attachment_id: UUID.load!(id),
-             file_name: name,
-             mime_type: mime_type,
-             byte_length: byte_length
-           }
-         end)}
+        {:ok, ordered_attachments(rows, dumped_ids)}
     end
+  end
+
+  # Rows come back in fixed key order for the locks; the caller's order is restored here.
+  defp ordered_attachments(rows, dumped_ids) do
+    dumped_ids
+    |> Enum.map(fn id -> Enum.find(rows, fn [row_id | _] -> row_id == id end) end)
+    |> Enum.map(fn [id, name, mime_type, byte_length, _status, _owner, _generation] ->
+      %{
+        attachment_id: UUID.load!(id),
+        file_name: name,
+        mime_type: mime_type,
+        byte_length: byte_length
+      }
+    end)
   end
 
   # Cheap checks before the Space stream lock, so a refused flood or a missing file never holds

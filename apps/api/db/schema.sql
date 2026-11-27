@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261023190003.
+-- Schema snapshot through migration 20261126090000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -5731,3 +5731,310 @@ $$;
 create trigger episodes_sfu_window_binding
 before insert or update of config_snapshot, status on episodes
 for each row execute function fence_sfu_window_binding();
+
+
+create table presenting_settings (
+    singleton boolean primary key default true check (singleton),
+    enabled boolean not null
+);
+
+create table presenting_api_capability (
+    singleton boolean primary key default true check (singleton),
+    servable boolean not null,
+    updated_at timestamptz not null default now()
+);
+
+create table presenting_documents (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    document_id uuid not null,
+    attachment_id uuid not null,
+    created_by_participant_id uuid not null,
+    created_by_participant_generation bigint not null,
+    file_name text not null,
+    mime_type text not null,
+    byte_length bigint not null,
+    source_object_key text not null,
+    source_sha256 bytea not null,
+    status text not null,
+    failure_code text,
+    failure_message text,
+    page_count integer,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, document_id),
+    unique (tenant_id, space_id, attachment_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
+        on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, created_by_participant_id, created_by_participant_generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
+        on delete restrict,
+    check (status in ('preparing', 'ready', 'failed')),
+    check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    check (byte_length between 1 and 26214400),
+    check (octet_length(source_sha256) = 32),
+    check (octet_length(source_object_key) between 1 and 1024),
+    check (octet_length(file_name) between 1 and 255),
+    check (failure_code is null or octet_length(failure_code) between 1 and 128),
+    check (failure_message is null or octet_length(failure_message) <= 512),
+    check ((status = 'failed') = (failure_code is not null)),
+    check (page_count is null or page_count between 1 and 300)
+);
+create index presenting_documents_episode_idx
+    on presenting_documents(tenant_id, space_id, episode_id, created_at, document_id);
+
+create table presenting_document_pages (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    document_id uuid not null,
+    page integer not null,
+    width integer not null,
+    height integer not null,
+    status text not null,
+    zoom_ready_at timestamptz,
+    image_key text,
+    thumbnail_key text,
+    zoom_key text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, document_id, page),
+    foreign key (tenant_id, space_id, document_id)
+        references presenting_documents(tenant_id, space_id, document_id)
+        on delete cascade,
+    check (page between 1 and 300),
+    check (width between 1 and 3200 and height between 1 and 3200),
+    check (status in ('pending', 'ready')),
+    check (image_key is null or octet_length(image_key) between 1 and 1024),
+    check (thumbnail_key is null or octet_length(thumbnail_key) between 1 and 1024),
+    check (zoom_key is null or octet_length(zoom_key) between 1 and 1024),
+    check (status <> 'ready' or (image_key is not null and thumbnail_key is not null)),
+    check ((zoom_ready_at is null) = (zoom_key is null))
+);
+create index presenting_document_pages_zoom_idx
+    on presenting_document_pages(tenant_id, space_id, document_id, page)
+    where zoom_ready_at is not null;
+
+create table presenting_render_jobs (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    document_id uuid not null,
+    job_id uuid not null,
+    kind text not null,
+    page_start integer not null,
+    page_end integer not null,
+    status text not null,
+    attempt_count integer not null default 0,
+    attempt_limit integer not null default 4,
+    lease_token uuid,
+    lease_owner text,
+    lease_expires_at timestamptz,
+    available_at timestamptz not null default now(),
+    error_code text,
+    error_message text,
+    completed_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, document_id, job_id),
+    foreign key (tenant_id, space_id, document_id)
+        references presenting_documents(tenant_id, space_id, document_id)
+        on delete cascade,
+    check (kind in ('inventory', 'pages', 'zoom')),
+    check (page_start between 1 and 300 and page_end between page_start and 300),
+    check (kind <> 'zoom' or page_start = page_end),
+    check (status in ('queued', 'leased', 'succeeded', 'failed')),
+    check (attempt_count >= 0 and attempt_count <= attempt_limit),
+    check (attempt_limit between 1 and 8),
+    check ((lease_token is null) = (lease_owner is null)),
+    check ((lease_token is null) = (lease_expires_at is null)),
+    check (lease_owner is null or octet_length(lease_owner) between 1 and 128),
+    check (error_code is null or octet_length(error_code) between 1 and 128),
+    check (error_message is null or octet_length(error_message) <= 512),
+    check ((status in ('succeeded', 'failed')) = (completed_at is not null))
+);
+create unique index presenting_render_jobs_one_active_idx
+    on presenting_render_jobs(tenant_id, space_id, document_id, kind, page_start, page_end)
+    where status in ('queued', 'leased');
+create index presenting_render_jobs_claim_idx
+    on presenting_render_jobs(available_at, created_at, job_id)
+    where status in ('queued', 'leased');
+
+create table presenting_render_uploads (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    document_id uuid not null,
+    job_id uuid not null,
+    page integer not null,
+    rendition text not null,
+    attempt integer not null,
+    object_key text not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, document_id, job_id, page, rendition, attempt),
+    foreign key (tenant_id, space_id, document_id, job_id)
+        references presenting_render_jobs(tenant_id, space_id, document_id, job_id)
+        on delete cascade,
+    unique (object_key),
+    check (page between 1 and 300),
+    check (rendition in ('image', 'thumbnail', 'zoom')),
+    check (attempt between 1 and 8),
+    check (octet_length(object_key) between 1 and 1024)
+);
+create index presenting_render_uploads_document_idx
+    on presenting_render_uploads(tenant_id, space_id, document_id, created_at);
+
+create table sync_presenting_states (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    revision bigint not null default 0 check (revision >= 0),
+    primary key (tenant_id, space_id, episode_id)
+);
+
+create table sync_presenting_documents (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    document_id uuid not null,
+    presenter_id uuid not null,
+    presenter_generation bigint not null check (presenter_generation > 0),
+    position bigint not null check (position > 0),
+    page integer not null check (page between 1 and 10000),
+    zoom integer not null check (zoom between 25 and 400),
+    started_at_ms bigint not null check (started_at_ms >= 0),
+    primary key (tenant_id, space_id, episode_id, document_id),
+    unique (tenant_id, space_id, episode_id, position),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_presenting_states(tenant_id, space_id, episode_id) on delete cascade
+);
+
+create table sync_presenting_receipts (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    actor_id uuid not null,
+    actor_generation bigint not null check (actor_generation > 0),
+    operation_id bytea not null,
+    fingerprint bytea not null,
+    revision bigint not null check (revision >= 0),
+    expires_at_ms bigint not null,
+    primary key (tenant_id, space_id, episode_id, actor_id, actor_generation, operation_id)
+);
+
+create index sync_presenting_receipts_expiry
+    on sync_presenting_receipts(expires_at_ms);
+
+-- +goose StatementBegin
+create function sync_presenting_changed() returns trigger language plpgsql as $$
+declare
+    scope record;
+begin
+    if tg_op = 'DELETE' then scope := old; else scope := new; end if;
+    perform pg_notify('chalk_presenting', concat_ws(':', scope.tenant_id, scope.space_id, scope.episode_id));
+    return null;
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger sync_presenting_state_changed
+    after insert or update or delete on sync_presenting_states
+    for each row execute function sync_presenting_changed();
+
+create trigger sync_presenting_document_changed
+    after insert or update or delete on sync_presenting_documents
+    for each row execute function sync_presenting_changed();
+
+-- +goose StatementBegin
+create function sync_presenting_episode_ended() returns trigger language plpgsql as $$
+begin
+    if new.status = 'ended' and old.status is distinct from 'ended' then
+        delete from sync_presenting_states state
+        where state.tenant_id = new.tenant_id
+          and state.space_id = new.space_id
+          and state.episode_id = new.id;
+    end if;
+    return null;
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger sync_presenting_episode_ended
+    after update of status on episodes
+    for each row execute function sync_presenting_episode_ended();
+
+-- +goose StatementBegin
+create function sync_presenting_participant_left() returns trigger language plpgsql as $$
+begin
+    if new.status = 'left' and old.status is distinct from 'left' then
+        delete from sync_presenting_documents document
+        where document.tenant_id = new.tenant_id
+          and document.space_id = new.space_id
+          and document.episode_id = new.episode_id
+          and document.presenter_id = new.id
+          and document.presenter_generation = new.generation;
+    end if;
+    return null;
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger sync_presenting_participant_left
+    after update of status on participants
+    for each row execute function sync_presenting_participant_left();
+create table recording_transcription_source_renewals (
+    recording_id uuid not null references recordings(id) on delete restrict,
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    fencing_generation bigint not null check (fencing_generation > 0),
+    database_user text not null default current_user,
+    operator text not null check (octet_length(operator) between 1 and 256),
+    reason text not null check (octet_length(reason) between 1 and 1024),
+    source_expires_at timestamptz not null,
+    requested_at timestamptz not null default now(),
+    primary key (job_id, fencing_generation),
+    unique (recording_id, job_id, fencing_generation),
+    check (source_expires_at > requested_at)
+);
+create index recording_transcription_source_renewals_recording_idx
+    on recording_transcription_source_renewals(recording_id, source_expires_at);
+
+-- The immutable Episode snapshot sets the first source window. An operator
+-- renewal is a later durable fact for the same recording, so every claim,
+-- authorization, admission and expiry path reads this one authority.
+create function recording_transcription_source_expires_at(
+    p_recording_id uuid,
+    p_capture_completed_at timestamptz,
+    p_config_snapshot jsonb
+)
+returns timestamptz
+language sql
+stable
+strict
+as $$
+    select greatest(
+        p_capture_completed_at +
+            (recording_transcription_source_window_seconds(p_config_snapshot) * interval '1 second'),
+        coalesce((
+            select max(renewals.source_expires_at)
+            from recording_transcription_source_renewals renewals
+            join recording_jobs jobs on jobs.id = renewals.job_id
+            where renewals.recording_id = p_recording_id
+              and jobs.recording_id = p_recording_id
+              and jobs.kind = 'transcription'
+        ), p_capture_completed_at +
+            (recording_transcription_source_window_seconds(p_config_snapshot) * interval '1 second'))
+    );
+$$;
+
+create function reject_recording_transcription_source_renewal_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording transcription source renewals are append-only';
+end;
+$$;
+
+create trigger recording_transcription_source_renewals_immutable
+before update or delete on recording_transcription_source_renewals
+for each row execute function reject_recording_transcription_source_renewal_mutation();
+create trigger recording_transcription_source_renewals_no_truncate
+before truncate on recording_transcription_source_renewals
+for each statement execute function reject_recording_transcription_source_renewal_mutation();

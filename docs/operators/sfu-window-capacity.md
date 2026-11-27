@@ -21,9 +21,42 @@ between `online` and `target_nodes` in its logs.
 
 ## Run the controller
 
-Use a separate service account from the Chalk API. Install the binary built
-from `apps/api/cmd/sfu-window-controller` for the same API release as the
-database. Supply the environment below from the host's encrypted secret store.
+Production runs the controller as the system service
+`chalk-sfu-window-controller.service` under the dedicated `chalk-sfu-window`
+user. The managed release builds `apps/api/cmd/sfu-window-controller` into the
+API image, so the host installs exactly the binary built with that release's
+API. During deployment the host controller extracts that binary from the
+digest-pinned API image through root Podman before runtime cutover, so the API
+runtime user does not control the credentialed executable. After API and Sync
+promotion succeeds and the durable release pointer is published, the host
+installs the controller independently at
+`/usr/local/bin/chalk-sfu-window-controller`, installs the hardened systemd
+unit, writes `/home/chalk-sfu-window/controller.env` and the mTLS files under
+`/home/chalk-sfu-window/secrets/`, restarts the service, and fails the release
+run unless the service completes one successful reconcile pass. That first pass
+must read the demand, scheduling, tenant-configuration, and node-journal tables
+after connecting to the database and acquiring the controller lease; missing
+grants therefore fail the gate. The service user has no login. The unit keeps
+`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and
+`ReadWritePaths=/home/chalk-sfu-window`.
+
+The environment comes from the SecureString suffix
+`sfu-window-controller/controller.env` under the managed release parameter
+prefix. The deployment copies the existing provider-bridge server certificate,
+server key, and Sync client CA inputs into the controller's `secrets` directory
+for the controller only. Its environment is not published with the API and Sync
+environment and is not registered as a Podman secret, so the API runtime user
+and API container do not receive the DigitalOcean credential directly.
+
+This is credential non-proliferation, not a complete host privilege boundary.
+The API also uses the host instance role for AWS KMS and archive storage, and
+EC2 instance metadata does not distinguish the chalk runtime UID or its
+containers from other host processes. A compromised API runtime user could
+therefore use the instance role's managed-prefix SSM and KMS permissions to
+recover the controller credential. Do not treat the host alone as a security
+boundary between the API and DigitalOcean; real separation needs narrower
+instance-role permissions or a separate host/network identity.
+
 Use a direct connection to the environment's own database, not a
 transaction-pooled endpoint: the controller holds a session advisory lock.
 Grant the controller role `SELECT` on `scheduled_episodes`, `spaces`,
@@ -32,19 +65,19 @@ Grant the controller role `SELECT` on `scheduled_episodes`, `spaces`,
 `UPDATE`, and `DELETE` on `sfu_window_nodes`. It does not need the database
 owner password. The Chalk API has no DigitalOcean credentials.
 
-| Setting                                                                                                 | Value                                                                                                      |
-| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `CHALK_SFU_WINDOW_ENVIRONMENT`                                                                          | `nightly` or `production`, matching the database, provider account, and certificates                       |
-| `CHALK_SFU_WINDOW_MODE`                                                                                 | `scale` for normal operation or `retire` for rollback                                                      |
-| `CHALK_SFU_WINDOW_DATABASE_URL`                                                                         | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints                            |
-| `CHALK_SFU_APPLICATION_ID`                                                                              | Same pool identity as in the API                                                                           |
-| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API                                                                  |
-| `CHALK_SFU_WINDOW_PROVIDER_TOKEN`                                                                       | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets |
-| `CHALK_SFU_WINDOW_SNAPSHOT_ID`, `CHALK_SFU_WINDOW_REVISION`                                             | Ready-to-boot 2 vCPU snapshot and the exact SFU SHA it runs                                                |
-| `CHALK_SFU_WINDOW_REGION`, `CHALK_SFU_WINDOW_VPC_UUID`                                                  | Window pool region and VPC                                                                                 |
-| `CHALK_SFU_WINDOW_FIREWALL_ID`                                                                          | ID of the pre-created firewall targeting the environment's window firewall tag                             |
-| `CHALK_SFU_WINDOW_STANDING_SLOTS`                                                                       | Verified standing capacity, accounting for the API's standby packet ceiling                                |
-| `CHALK_SFU_WINDOW_BUDGET_NODE_HOURS`                                                                    | Rolling 31-day create budget, default 900 node-hours                                                       |
+| Setting                                                                                                 | Value                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `CHALK_SFU_WINDOW_ENVIRONMENT`                                                                          | `nightly` or `production`, matching the database, provider account, and certificates                                    |
+| `CHALK_SFU_WINDOW_MODE`                                                                                 | `scale` for normal operation or `retire` for rollback                                                                   |
+| `CHALK_SFU_WINDOW_DATABASE_URL`                                                                         | Direct controller DB connection; use `sslmode=verify-full` for remote endpoints                                         |
+| `CHALK_SFU_APPLICATION_ID`                                                                              | Same pool identity as in the API                                                                                        |
+| `CHALK_SFU_SERVER_NAME`, `CHALK_SFU_CA_FILE`, `CHALK_SFU_CLIENT_CERT_FILE`, `CHALK_SFU_CLIENT_KEY_FILE` | Same control trust settings as in the API; the file paths are the managed paths under `/home/chalk-sfu-window/secrets/` |
+| `CHALK_SFU_WINDOW_PROVIDER_TOKEN`                                                                       | Dedicated DigitalOcean token for this environment; read Droplets and firewalls; create and delete Droplets              |
+| `CHALK_SFU_WINDOW_SNAPSHOT_ID`, `CHALK_SFU_WINDOW_REVISION`                                             | Ready-to-boot 2 vCPU snapshot and the exact SFU SHA it runs                                                             |
+| `CHALK_SFU_WINDOW_REGION`, `CHALK_SFU_WINDOW_VPC_UUID`                                                  | Window pool region and VPC                                                                                              |
+| `CHALK_SFU_WINDOW_FIREWALL_ID`                                                                          | ID of the pre-created firewall targeting the environment's window firewall tag                                          |
+| `CHALK_SFU_WINDOW_STANDING_SLOTS`                                                                       | Verified standing capacity, accounting for the API's standby packet ceiling                                             |
+| `CHALK_SFU_WINDOW_BUDGET_NODE_HOURS`                                                                    | Rolling 31-day create budget, default 900 node-hours                                                                    |
 
 The journal records the firewall ID with each launch. Retire all nodes using
 the old firewall before changing that ID. A replacement snapshot must support
@@ -53,8 +86,10 @@ the drain incarnation precondition reported by `/readyz`.
 Use `chalk-sfu-window-<environment>` and
 `chalk-sfu-window-<environment>-firewall` only for the controller's nodes. Attach
 the pre-created firewall only to the latter tag. Allow the API/controller's
-source addresses to TCP 8443 and the SFU's public media port to clients. The
-controller does not open SSH. Keep standing nodes in the release bundle and in
+source addresses to TCP 8443 and the SFU's public media ports (UDP 50000, TCP 50000
+and TCP 443) to clients. The controller does not open SSH.
+
+Keep standing nodes in the release bundle and in
 `CHALK_ALERT_SFU_READY_URLS`. Do not put window nodes in either or in
 `CHALK_SFU_NODES`: the API reads their routing from Postgres, not from a startup
 environment variable. The standing readiness alert is not a window-capacity
@@ -69,6 +104,8 @@ operator investigation; silence does not prove emptiness.
 
 ## Roll out and roll back
 
+Controller replacement is deliberately independent of API/Sync rollback because the controller tolerates version skew with the API and the schema moves forward only. If a candidate controller fails its readiness check after the release pointer is published, the deployment restores the binary, unit, environment, and mTLS files copied immediately before replacement, preserves the prior service's enabled and active state, and requires a previously active service to become ready again. On a first managed installation it stops and disables the candidate and removes its files. In either case the already-promoted API and Sync stay on the new release and the release run fails. A retry of that release does not treat an active old controller as proof: it compares the installed binary, unit, environment, mTLS files, and recorded input versions with the release candidate, then repeats the gated replacement when they differ. Reboot restore does not repair or replace the controller: systemd starts whatever controller files are installed. A later API rollback to a release that predates controller management leaves the independent service installed and enabled.
+
 1. Prove the exact release and image in Nightly with a 20-class booking against a
    disposable environment. Record the plan, available Droplet IDs before the
    start, media completion, host headroom, and provider disappearance after the
@@ -78,10 +115,12 @@ operator investigation; silence does not prove emptiness.
    2 vCPU nodes and verify both with the existing release and readiness checks.
    Drain and replace the 1 vCPU standby without taking down the primary. Verify
    the API's standby ceiling before counting its class slots. Deploy the schema
-   and dynamic-routing API with the controller stopped, then enable the
-   controller and watch a small scheduled window before routing the full peak.
-3. To stop new changes immediately, stop the controller; the API retains
-   existing routing. To unwind, set `CHALK_SFU_WINDOW_MODE=retire` and run it
+   and dynamic-routing API, then watch a small scheduled window before routing
+   the full peak. The release itself restarts the controller.
+3. To stop new changes immediately, stop the controller with
+   `systemctl stop chalk-sfu-window-controller.service`; the API retains
+   existing routing. To unwind, set `CHALK_SFU_WINDOW_MODE=retire` in the SSM
+   controller environment and run the managed release. The controller then runs
    until all known window Droplets are gone. It fences bindings before drain,
    waits for no live Episode binding and two empty observations on the same
    boot, then deletes by verified provider ID. Do not roll back to an API that

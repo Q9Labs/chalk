@@ -13,6 +13,8 @@ export type Policy = {
   readonly inputs: readonly string[];
   readonly inputsOutputName: string;
   readonly requestedInputs: Schema.Json;
+  /** Permits only the no-delta Lambda projection produced while recovering an interrupted renderer update. */
+  readonly allowRecoverableInterruptedUpdate?: boolean;
 };
 export function object(value: Schema.MutableJson | undefined) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Plan property must be a completely known object");
@@ -61,8 +63,12 @@ export function checkPlan(plan: Plan, policy: Policy): void {
     object(row.after);
     const expected = structuredClone(row.before);
     if (row.action === "update") {
-      if (!rule.patches.length) throw new Error("Plan exceeds resource allowlist");
-      for (const edit of rule.patches) patch(expected, edit);
+      if (!rule.patches.length) {
+        const recoverableInterruptedUpdate = policy.allowRecoverableInterruptedUpdate === true && row.type === "Chalk.Lambda.VersionedFunction" && isDeepStrictEqual(row.before, row.after);
+        if (!recoverableInterruptedUpdate) throw new Error("Plan exceeds resource allowlist");
+      } else {
+        for (const edit of rule.patches) patch(expected, edit);
+      }
     }
     if (!isDeepStrictEqual(expected, row.after)) throw new Error("Plan changes a property outside the allowlist");
   }

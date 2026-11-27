@@ -1,9 +1,11 @@
 import timers from "node:timers/promises";
-import { check } from "./runtime.mjs";
+import { check, ProofError } from "./runtime.mjs";
 
 const readBudgetMs = 90_000;
 
 class CatcherHTTPError extends Error {
+  reason = "webhook-transport";
+
   constructor(response, method) {
     super(`Webhook transport ${method} failed: HTTP ${response.status}`);
     this.status = response.status;
@@ -46,7 +48,14 @@ async function readCatcher(url, options, deadline, signal, responseType) {
     ...options,
     signal: AbortSignal.any([AbortSignal.timeout(Math.min(15_000, remainingMs)), ...(signal ? [signal] : [])]),
   });
-  if (response.ok) return await response[responseType]();
+  if (response.ok) {
+    try {
+      return await response[responseType]();
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      throw new ProofError("webhook-transport", `Webhook transport ${options.method} answered a body that is not JSON: HTTP ${response.status}`);
+    }
+  }
   await response.body?.cancel();
   throw new CatcherHTTPError(response, options.method);
 }
