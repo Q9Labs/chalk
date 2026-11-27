@@ -51,9 +51,9 @@ try {
     const before = documents.length;
     try {
       await presenter.page.getByRole("region", { name: "Space stage", exact: true }).hover();
-      await presenter.page.getByRole("button", { name: /^present/i }).first().click();
+      await presenter.page.getByRole("button", { name: "Share options", exact: true }).click();
       const chooser = presenter.page.waitForEvent("filechooser");
-      await presenter.page.getByRole("dialog", { name: "Present a file or link" }).getByRole("button").first().click();
+      await presenter.page.getByRole("menuitem", { name: /^(A file|Another file)/ }).click();
       await (await chooser).setFiles(join(dir, file));
       if (expect === "ready") {
         for (const { name, page } of sessions) await page.locator("[data-document-viewer] img").first().waitFor({ timeout: 120_000 });
