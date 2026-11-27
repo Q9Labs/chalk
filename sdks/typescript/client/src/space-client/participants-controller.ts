@@ -34,6 +34,15 @@ export const makeParticipantsController = (connection: ConnectionLifecycleCapabi
     Effect.sync(() => new ParticipantsControllerRuntime(connection, store, offline)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
+type DeviceFields = Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind">;
+const DEVICE_KEYS = ["identityId", "deviceType", "deviceKind"] as const;
+
+/** What Sync just said about a seat, over what it said before for the same admission. Guests have no identity, so a device alone is enough. */
+function mergeDevice(admissionRevision: number, hint: DeviceFields | undefined, known: DeviceFields | undefined): SeatDevice | undefined {
+  const fields = Object.fromEntries(DEVICE_KEYS.map((key) => [key, hint?.[key] ?? known?.[key]])) as DeviceFields;
+  return Object.values(fields).some(Boolean) ? { admissionRevision, ...fields } : undefined;
+}
+
 class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
@@ -172,10 +181,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   }
   #deviceFor(participant: V1Participant, presence: readonly V1Presence[]): SeatDevice | undefined {
     const previous = this.#devices.get(participant.participantId);
-    const known: Pick<SeatDevice, "identityId" | "deviceType"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
-    const hint: Pick<SeatDevice, "identityId" | "deviceType"> = this.#hintFor(participant, presence) ?? {};
-    const identityId = hint.identityId ?? known.identityId;
-    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType } : undefined;
+    const known = previous?.admissionRevision === participant.admissionRevision ? previous : undefined;
+    return mergeDevice(participant.admissionRevision, this.#hintFor(participant, presence), known);
   }
   #hintFor(participant: V1Participant, presence: readonly V1Presence[]): V1Presence | undefined {
     return presence.find((item) => {

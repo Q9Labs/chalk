@@ -1,6 +1,7 @@
 import { releaseWarmBrowserSyncSocket, warmBrowserSyncSocket } from "../sync/browser";
 import { MAX_KEEP_WARM_MS } from "../sync/warm-socket";
 import { directFirstWarmUrl } from "../sync/direct-first";
+import { browserDeviceKind } from "../sync/device-kind";
 import { syncEntryUrl } from "../sync/entry-url";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "../urls";
 
@@ -41,7 +42,7 @@ export function preconnect(options: PreconnectOptions = {}): void {
     link.crossOrigin = "anonymous";
     document.head.appendChild(link);
   }
-  warmBrowserSyncSocket(directFirstWarmUrl(options.syncDirectUrl, syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true)), Math.min(options.keepWarmMs ?? 0, MAX_KEEP_WARM_MS));
+  warmBrowserSyncSocket(directFirstWarmUrl(options.syncDirectUrl, syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true, browserDeviceKind())), Math.min(options.keepWarmMs ?? 0, MAX_KEEP_WARM_MS));
 }
 
 /**

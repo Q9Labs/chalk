@@ -64,12 +64,14 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
       connection,
       """
       insert into participant_device_hints
-        (tenant_id, space_id, episode_id, participant_id, generation, device_type)
-      values ($1, $2, $3, $4, $5, $6)
+        (tenant_id, space_id, episode_id, participant_id, generation, device_type, device_kind)
+      values ($1, $2, $3, $4, $5, $6, $7)
       on conflict (participant_id) do update
-        set generation=excluded.generation, device_type=excluded.device_type
+        set generation=excluded.generation, device_type=excluded.device_type,
+          device_kind=excluded.device_kind
       """,
-      Scope.participant(identity) ++ [identity.participant_generation, identity.device_type]
+      Scope.participant(identity) ++
+        [identity.participant_generation, identity.device_type, identity.device_kind]
     )
   end
 
