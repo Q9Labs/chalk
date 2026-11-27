@@ -1247,13 +1247,8 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             const epoch = model.epoch;
             pendingEpisodeEnd = completed;
             return yield* operation.pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  if (model.epoch === epoch) model.episodeEndConfirmed = true;
-                }),
-              ),
-              // Sync can deliver the Episode's end before it acknowledges the command, and the end stops the Sync client, which
-              // rejects the command that caused it. The snapshot shows the Episode ended, so the host's end succeeded.
+              Effect.tap(() => Effect.sync(() => void (model.epoch === epoch && (model.episodeEndConfirmed = true)))),
+              // The end can stop Sync before it acknowledges the command, which rejects it; the snapshot shows the end, so it succeeded.
               Effect.catch((error) => (model.epoch === epoch && episodeHasEnded() && error instanceof V1SyncError && error.code === "client_stopped" ? Effect.void : Effect.fail(error))),
               Effect.asVoid,
               Effect.ensuring(
