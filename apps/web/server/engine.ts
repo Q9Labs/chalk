@@ -31,6 +31,8 @@ function client(env: DashboardEnvironment) {
 }
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
   const api = await client(env);
+  const accepted = !person.email ? null : await run(api.tenants.getLatestAcceptedTenantHandover({ query: { recipient_email: person.email } }).pipe(Effect.catchTag("TenantHandoverNotFoundError", () => Effect.succeed(null))));
+  if (accepted) return accepted.tenant_id;
   const externalId = `${person.provider}:${env.CHALK_ENVIRONMENT}:${person.userId}`;
   const tenant = await run(api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(Effect.catchTag("TenantNotFoundError", () => Effect.succeed(null))));
   if (tenant) return tenant.id;
@@ -46,8 +48,9 @@ export async function withSessionEngine(request: Request, env: DashboardEnvironm
   const cached = value ? tenantSession.parse(await unseal(value, env.SESSION_SECRET, "tenant")) : null;
   const hit = cached !== null && cached.scope === scope && cached.expiresAt > Date.now();
   const tenantId = hit ? Schema.decodeUnknownSync(TenantIdSchema)(cached.tenantId) : await resolveTenant(env, person);
-  const response = await respond({ api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN, mcpUrl: new URL("/mcp", env.CHALK_API_ORIGIN).href });
-  if (!hit) writeCookie(response, env, "tenant", await seal({ scope, tenantId, expiresAt: person.expiresAt }, env.SESSION_SECRET, "tenant"), Math.max(0, Math.floor((person.expiresAt - Date.now()) / 1000)));
+  const engine = { api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN, mcpUrl: new URL("/mcp", env.CHALK_API_ORIGIN).href };
+  const response = await respond(engine);
+  if (!hit || engine.tenantId !== tenantId) writeCookie(response, env, "tenant", await seal({ scope, tenantId: engine.tenantId, expiresAt: person.expiresAt }, env.SESSION_SECRET, "tenant"), Math.max(0, Math.floor((person.expiresAt - Date.now()) / 1000)));
   return response;
 }
 const apiFailure = z.object({ error: z.object({ code: z.string().max(100) }) });

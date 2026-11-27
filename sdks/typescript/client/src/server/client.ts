@@ -27,6 +27,7 @@ import type {
   SpacePublicInvite,
   SpaceList,
 } from "./types.js";
+import type { TenantHandover } from "./tenant-handover-types.js";
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
   const tenantId = required(options.tenantId, "tenantId");
@@ -97,6 +98,11 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       list: (input) => send<APIKeyList>("GET", `${tenantPath}/api-keys${query({ cursor: input?.cursor, page_size: input?.pageSize })}`, 200),
       rotate: (apiKeyId, input) => post<APIKeyWithSecret>(`${apiKeyPath(apiKeyId)}/rotate`, 200, undefined, { expires_at: input?.expiresAt }),
       revoke: (apiKeyId) => send<void>("DELETE", apiKeyPath(apiKeyId), 204),
+    },
+    tenantHandovers: {
+      create: (input, idempotency) => post<TenantHandover>(`${tenantPath}/handovers`, 201, idempotency, { recipient_email: input.recipientEmail, expires_in_seconds: input.expiresInSeconds }),
+      get: (handoverId) => send<TenantHandover>("GET", `${tenantPath}/handovers/${segment(handoverId)}`, 200),
+      cancel: (handoverId) => send<TenantHandover>("POST", `${tenantPath}/handovers/${segment(handoverId)}/cancellation`, 200),
     },
     recordings: {
       list: (input) => send<RecordingList>("GET", `${tenantPath}/recordings${query({ cursor: input?.cursor, episode_id: input?.episodeId, page_size: input?.pageSize, space_id: input?.spaceId })}`, 200),

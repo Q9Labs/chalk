@@ -86,7 +86,8 @@ type Options struct {
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
 
-	Memberships MembershipService
+	Memberships     MembershipService
+	TenantHandovers TenantHandoverService
 
 	RecordingDownloads    RecordingDownloadService
 	RecordingExports      RecordingExportService

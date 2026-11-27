@@ -1,6 +1,7 @@
 import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
 export type { AccessGrant } from "../access/grant.js";
+import type { TenantHandoverClient } from "./tenant-handover-types.js";
 import type { APIKeyList, APIKeyWithSecret, CreateAPIKeyInput, ListAPIKeysInput, RotateAPIKeyInput } from "./api-key-types.js";
 import type { PageInput, ServerResourceMethods, ServerSchemas } from "./resource-types.js";
 export type * from "./api-key-types.js";
@@ -12,9 +13,7 @@ export type ChalkServerClientOptions = {
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkServerHeaders;
 };
-export type ChalkIdempotencyOptions = {
-  readonly idempotencyKey?: string;
-};
+export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
 export type RecordingPolicy = "disabled" | "manual" | "automatic";
 export type TranscriptionPolicy = "disabled" | "on_demand" | "automatic";
 export type CreateSpaceInput = {
@@ -281,6 +280,7 @@ export type ChalkServerClient = ServerResourceMethods & {
     rotate(apiKeyId: string, input?: RotateAPIKeyInput): Promise<APIKeyWithSecret>;
     revoke(apiKeyId: string): Promise<void>;
   };
+  readonly tenantHandovers: TenantHandoverClient;
   readonly recordings: {
     list(input?: ListRecordingsInput): Promise<RecordingList>;
     get(recordingId: string): Promise<Recording>;
