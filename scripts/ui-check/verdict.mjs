@@ -5,6 +5,21 @@
 const id = (finding) => `${finding.check}|${finding.key}`;
 
 /**
+ * Findings a reviewer looked at and accepted, one per frame, each with the reason. A frame or finding not named here still blocks.
+ * @type {{ frame: string, check: string, key: string, reason: string }[]}
+ */
+export const ACCEPTED_FINDINGS = [
+  {
+    frame: "settings@tablet-dark.1",
+    check: "control-covered",
+    key: "button[Video tile for Alex]",
+    reason: "The open microphone menu lies over the self-view tile at tablet width. The dock lost its Present button (Present moved into the Share menu), so it re-centered and the menu moved 26px right.",
+  },
+];
+
+const accepted = (frame, finding) => ACCEPTED_FINDINGS.some((entry) => entry.frame === frame && entry.check === finding.check && entry.key === finding.key);
+
+/**
  * A finding blocks only when master's same frame lacks it. A frame master does not have (a new state) has no baseline,
  * so all of its findings count. A journey that failed to run always blocks, even when master's failed too: a journey that
  * never ran checked nothing, and a check that skips a journey in silence is how a bug goes unseen.
@@ -19,6 +34,7 @@ export function newFindings(headFrames, baseFrames) {
     const known = base.get(frame.frame);
     for (const finding of frame.findings) {
       if (finding.check !== "journey-failed" && known?.has(id(finding))) continue;
+      if (accepted(frame.frame, finding)) continue;
       if (!known && baseJourneyFailed.has(frame.frame.replace(/\.\d+$/u, ""))) continue;
       result.push({ frame: frame.frame, journey: frame.journey, size: frame.size, scheme: frame.scheme, label: frame.label, ...finding });
     }

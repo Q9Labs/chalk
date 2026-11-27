@@ -14,6 +14,12 @@ test("a finding the base lacks is new", () => {
   assert.equal(newFindings([frame("j@phone-dark.0", [clipped])], [frame("j@phone-dark.0", [])]).length, 1);
 });
 
+test("an accepted finding does not block, and the same finding in another frame still does", () => {
+  const covered = { check: "control-covered", key: "button[Video tile for Alex]", detail: "" };
+  assert.equal(newFindings([frame("settings@tablet-dark.1", [covered])], [frame("settings@tablet-dark.1", [])]).length, 0);
+  assert.equal(newFindings([frame("settings@tablet-light.1", [covered])], [frame("settings@tablet-light.1", [])]).length, 1);
+});
+
 test("a journey that failed on the branch blocks even when it failed on the base too", () => {
   const result = newFindings([frame("j@phone-dark.error", [failed], -1)], [frame("j@phone-dark.error", [failed], -1)]);
   assert.equal(result.length, 1);
