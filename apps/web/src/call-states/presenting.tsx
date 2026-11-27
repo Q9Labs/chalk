@@ -1,4 +1,6 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import type React from "react";
+import { DocumentControlsProvider, type DocumentControlsStyle } from "@q9labsai/chalk-react/preview";
 import { Live } from "./live";
 import { liveSnapshot, PEOPLE, type Person } from "./fixtures";
 import page01 from "./presenting-pages/page-01.webp";
@@ -67,16 +69,34 @@ function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
   };
 }
 
-export function PresenterState() {
-  return <Live snapshot={presentingSnapshot({ presenter: "self", page: 3 })} />;
+type Controls = { readonly controls?: DocumentControlsStyle };
+
+function WithControls({ controls, children }: Controls & { readonly children: React.ReactNode }) {
+  return <DocumentControlsProvider value={controls ?? "header"}>{children}</DocumentControlsProvider>;
 }
 
-export function ViewerFollowingState() {
-  return <Live snapshot={presentingSnapshot({ presenter: "nora", page: 3 })} />;
+export function PresenterState({ controls }: Controls) {
+  return (
+    <WithControls controls={controls}>
+      <Live snapshot={presentingSnapshot({ presenter: "self", page: 3 })} />
+    </WithControls>
+  );
 }
 
-export function ViewerBrowsingState() {
-  return <Live snapshot={presentingSnapshot({ presenter: "nora", page: 3 })} />;
+export function ViewerFollowingState({ controls }: Controls) {
+  return (
+    <WithControls controls={controls}>
+      <Live snapshot={presentingSnapshot({ presenter: "nora", page: 3 })} />
+    </WithControls>
+  );
+}
+
+export function ViewerBrowsingState({ controls }: Controls) {
+  return (
+    <WithControls controls={controls}>
+      <Live snapshot={presentingSnapshot({ presenter: "nora", page: 3 })} />
+    </WithControls>
+  );
 }
 
 export function PresenterZoomedState() {

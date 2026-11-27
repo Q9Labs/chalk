@@ -129,9 +129,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           sharing={props.isScreenSharing ?? false}
           onToggle={props.onToggleScreenShare}
           onStart={props.onStartScreenShare}
+          present={has("presenting") && props.onPresent ? { hint: props.presentHint ?? "", presenting: props.isPresenting ?? false, onChoose: props.onPresent } : undefined}
         />
       ) : null}
-      {has("presenting") && (props.onPresent || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
+      {has("presenting") && (props.onPresent || props.displayOnly) && !(has("screenshare") && canCaptureDisplay) ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -182,7 +183,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           {has("presenting") && props.onPresent ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onPresent}>
               <ShellIcon name="present" />
-              <span>{props.isPresenting ? "Presenting" : "Present"}</span>
+              <span className="flex flex-col text-left">
+                <span>{props.isPresenting ? "Present another file" : "Present a file"}</span>
+                {props.presentHint ? <small>{props.presentHint}</small> : null}
+              </span>
             </button>
           ) : null}
           {has("whiteboard") ? (

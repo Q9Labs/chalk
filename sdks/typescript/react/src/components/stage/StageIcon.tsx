@@ -1,6 +1,6 @@
 import React, { type SVGProps } from "react";
 
-type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info";
+type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info" | "pages";
 const paths: Record<StageIconName, React.ReactNode> = {
   share: (
     <>
@@ -65,6 +65,14 @@ const paths: Record<StageIconName, React.ReactNode> = {
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <path d="M14 2v6h6M9 13h6M9 17h6" />
+    </>
+  ),
+  pages: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
     </>
   ),
   download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,

@@ -198,7 +198,8 @@ export function Stage({
     const track = primary.kind === "screen-share" ? primary.participant.screenShareTrack : null;
     const settings = track?.getSettings();
     const observedAspect = shareAspects.get(primary.id);
-    const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
+    const aspect =
+      primary.kind === "whiteboard" || primary.kind === "document" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
     const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
     const speakerId = floatingSpeakerId(remaining, interactive ? lastRemoteSpeakerRef.current : null);
