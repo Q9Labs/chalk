@@ -167,15 +167,18 @@ const FOCUS_EVENTS: ReadonlySet<string> = new Set(["focus_step_away_set", "focus
 const FOCUS_COMMANDS: ReadonlySet<string> = new Set(["set_focus_step_away", "clear_focus_step_away", "open_focus_allowance", "close_focus_allowance"]);
 
 /** Focus state lives in presence and the Episode artifact, so these events and commands leave the control state unchanged. */
-function isFocusEvent(event: EventFrame): event is Extract<EventFrame, { name: "focus_step_away_set" | "focus_step_away_cleared" | "focus_allowance_opened" | "focus_allowance_closed" }> {
+type FocusEventFrame = Extract<EventFrame, { name: "focus_step_away_set" | "focus_step_away_cleared" | "focus_allowance_opened" | "focus_allowance_closed" }>;
+type FocusCommand = Extract<V1TargetCommand, { name: "set_focus_step_away" | "clear_focus_step_away" | "open_focus_allowance" | "close_focus_allowance" }>;
+
+function isFocusEvent(event: EventFrame): event is FocusEventFrame {
   return FOCUS_EVENTS.has(event.name);
 }
 
-function isFocusCommand(command: V1TargetCommand): command is Extract<V1TargetCommand, { name: "set_focus_step_away" | "clear_focus_step_away" | "open_focus_allowance" | "close_focus_allowance" }> {
+function isFocusCommand(command: V1TargetCommand): command is FocusCommand {
   return FOCUS_COMMANDS.has(command.name);
 }
 
-function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
+function reduceEvent(state: V1ControlState, event: Exclude<EventFrame, FocusEventFrame>): V1ControlState {
   switch (event.name) {
     case "participant_joined": {
       if (state.participants.some((participant) => participant.participantId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
@@ -219,7 +222,7 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
   }
 }
 
-function applyOptimistic(state: V1ControlState, actorId: string, command: V1TargetCommand): V1ControlState {
+function applyOptimistic(state: V1ControlState, actorId: string, command: Exclude<V1TargetCommand, FocusCommand>): V1ControlState {
   switch (command.name) {
     case "set_hand_raised":
       return updateParticipant(state, actorId, (participant) => ({ ...participant, handRaised: command.payload.raised }), false);
