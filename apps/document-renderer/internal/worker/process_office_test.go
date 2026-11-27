@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -51,5 +52,18 @@ func TestEveryOfficeTypeLeavesNoPDFOrImagePath(t *testing.T) {
 		if mimeType == "application/pdf" || strings.HasPrefix(mimeType, "image/") {
 			t.Fatalf("office table contains %s", mimeType)
 		}
+	}
+}
+
+func TestPrecheckRejectionDoesNotRecycleTheRenderer(t *testing.T) {
+	control, closeServer := testControlClient(t)
+	defer closeServer()
+	message := "isolated office render failed: " + (&office.Failure{Code: office.CodePasswordProtected, Message: "document is password protected", Precheck: true}).Error()
+	err := isolatedRenderFailure(errors.New(message))
+	if code := classifyIsolatedFailure(err); code != "password_protected" {
+		t.Fatalf("classification = %s", code)
+	}
+	if err := finishFailure(context.Background(), control, controlplane.Assignment{}, "password_protected", err); err != nil {
+		t.Fatalf("a precheck rejection recycled the renderer: %v", err)
 	}
 }

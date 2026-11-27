@@ -4,6 +4,7 @@ import type React from "react";
 import type { RefObject } from "react";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
+import { FileTypeBadge } from "../stage/FileTypeBadge";
 import { presentableFilesHint, type PresentingFileFailure } from "../stage/presenting-files";
 import type { DropZone, StageUpload } from "./use-file-presenting";
 
@@ -63,7 +64,7 @@ function StageUploadCard({ upload, onRetry, onSendToChat, onClose }: { readonly 
   return (
     <div className="absolute inset-0 z-40 grid place-items-center rounded-[inherit] bg-[var(--chalk-app-tile-base)] p-6 text-[var(--chalk-on-overlay)]">
       <div role={failed ? "alert" : "status"} className="flex w-80 max-w-full flex-col items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-strong)] p-5 text-center shadow-xl">
-        <span className="grid h-9 w-8 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">{failed ? "!" : "PDF"}</span>
+        <FileTypeBadge fileName={upload.fileName} className="h-9 min-w-8" />
         <div className="max-w-full truncate text-sm font-semibold">{failed ? `Couldn't present ${upload.fileName}` : `Uploading ${upload.fileName}`}</div>
         {failed ? (
           <>

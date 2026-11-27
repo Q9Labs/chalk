@@ -235,6 +235,10 @@ func runIsolatedChildWithTimeout(ctx context.Context, timeout time.Duration, exe
 		if strings.Contains(message, "renderer sandbox setup failed") {
 			return isolatedSandboxError{err: fmt.Errorf("isolated %s render sandbox setup failed: %s", mode, message)}
 		}
+		// A rejection made from the file's container alone never ran a parser, so there is no renderer state to recycle.
+		if office.IsPrecheckFailure(message) {
+			return fmt.Errorf("isolated %s render failed: %s", mode, message)
+		}
 		if message == "" {
 			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %w", mode, waitErr)}
 		}

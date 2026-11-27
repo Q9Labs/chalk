@@ -3,6 +3,7 @@ package office
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -51,16 +52,25 @@ func (c Config) available(format Format) error {
 	return nil
 }
 
+// precheckFailure marks a Failure as found before any parser ran, so the worker knows the renderer was never exposed to the document.
+func precheckFailure(err error) error {
+	var failure *Failure
+	if errors.As(err, &failure) {
+		failure.Precheck = true
+	}
+	return err
+}
+
 func Convert(ctx context.Context, config Config, mimeType string, input []byte, workDir, outputPath string) error {
 	format, ok := Lookup(mimeType)
 	if !ok {
-		return &Failure{Code: CodeUnsupportedFormat, Message: "document type " + mimeType + " is not an Office type"}
+		return precheckFailure(&Failure{Code: CodeUnsupportedFormat, Message: "document type " + mimeType + " is not an Office type"})
 	}
 	if err := config.available(format); err != nil {
-		return err
+		return precheckFailure(err)
 	}
 	if err := Precheck(format, input); err != nil {
-		return err
+		return precheckFailure(err)
 	}
 	return run(ctx, config, format, input, workDir, outputPath)
 }
