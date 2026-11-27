@@ -289,7 +289,7 @@ function renderElixir(contract) {
     "",
     '  defp valid_admission_request?(%{"admission_request_id" => request_id, "participant_id" => participant_id, "display_name" => name, "role" => role, "expires_at_ms" => expires_at} = request, role_capabilities), do: exact_keys?(request, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]) and valid_uuid?(request_id) and valid_uuid?(participant_id) and bounded_string?(name, 1, 256) and bounded_string?(role, 1, 64) and Map.has_key?(role_capabilities, role) and valid_positive_integer?(expires_at)',
     "  defp valid_admission_request?(_request, _role_capabilities), do: false",
-    "  defp valid_role_capabilities?(roles) when is_map(roles), do: map_size(roles) > 0 and Enum.all?(roles, fn {role, values} -> bounded_string?(role, 1, 64) and is_list(values) and unique_list?(values) and length(values) <= 23 and Enum.all?(values, &(&1 in @capabilities)) end)",
+    "  defp valid_role_capabilities?(roles) when is_map(roles), do: map_size(roles) > 0 and Enum.all?(roles, fn {role, values} -> bounded_string?(role, 1, 64) and is_list(values) and unique_list?(values) and length(values) <= 26 and Enum.all?(values, &(&1 in @capabilities)) end)",
     "  defp valid_role_capabilities?(_roles), do: false",
     "  defp valid_recording?(nil), do: true",
     '  defp valid_recording?(%{"recording_id" => id, "status" => status, "failure_code" => failure_code} = recording), do: exact_keys?(recording, ["recording_id", "status", "failure_code"]) and valid_uuid?(id) and status in ["starting", "recording", "stopping", "stopped", "failed"] and (is_nil(failure_code) or bounded_string?(failure_code, 1, 96)) and ((status == "failed") == (not is_nil(failure_code)))',

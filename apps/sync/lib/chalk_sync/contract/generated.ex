@@ -1169,7 +1169,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_admission_request?(_request, _role_capabilities), do: false
   defp valid_role_capabilities?(roles) when is_map(roles), do: map_size(roles) > 0 and
       Enum.all?(roles, fn {role, values} -> bounded_string?(role, 1, 64) and is_list(values) and
-      unique_list?(values) and length(values) <= 23 and Enum.all?(values,
+      unique_list?(values) and length(values) <= 26 and Enum.all?(values,
       &(&1 in @capabilities)) end)
   defp valid_role_capabilities?(_roles), do: false
   defp valid_recording?(nil), do: true
