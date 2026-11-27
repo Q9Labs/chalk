@@ -450,7 +450,7 @@ expand_env_includes() {
   local merged="${work}/merged" part="${work}/part" response="${work}/response.json"
   local directive include version include_name
   { grep -Ev '^#chalk-include ' "$file" || true; } >"$merged"
-  { grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$merged" || true; } | sort -u >"${work}/keys"
+  sed -nE 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' "$merged" | sort -u >"${work}/keys"
   for directive in "${directives[@]}"; do
     [[ "$directive" =~ ^#chalk-include\ (api\.env\.[a-z0-9-]+):([1-9][0-9]*)$ ]] || fail "environment include directive is malformed"
     include="${BASH_REMATCH[1]}"
@@ -466,7 +466,7 @@ expand_env_includes() {
     ' "$response" >/dev/null 2>&1 || fail "SSM environment include response is malformed: ${include}"
     jq -j '.Parameters[0].Value' "$response" >"$part"
     ! grep -Eq '^#chalk-include ' "$part" || fail "environment include cannot include another parameter: ${include}"
-    { grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$part" || true; } | sort -u >"${work}/part-keys"
+    sed -nE 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' "$part" | sort -u >"${work}/part-keys"
     [[ -z "$(comm -12 "${work}/keys" "${work}/part-keys")" ]] || fail "environment include repeats a key of the input: ${include}"
     [[ ! -s "$merged" || "$(tail -c 1 "$merged" | wc -l)" -ge 1 ]] || printf '\n' >>"$merged"
     cat "$part" >>"$merged"

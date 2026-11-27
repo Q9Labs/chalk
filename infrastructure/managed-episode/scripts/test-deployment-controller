@@ -1166,6 +1166,7 @@ assert_include_rejected() {
   fi
 }
 assert_include_rejected "a key repeated across parts" FAKE_API_ENV_INCLUDE=api.env.2:3 FAKE_API_ENV_PART=CHALK_API_VERSION=other
+assert_include_rejected "an indented key repeated across parts" FAKE_API_ENV_INCLUDE=api.env.2:3 "FAKE_API_ENV_PART=  CHALK_API_VERSION=other"
 assert_include_rejected "a parameter outside the api.env family" FAKE_API_ENV_INCLUDE=sync.env:1
 assert_include_rejected "a version that is not pinned" FAKE_API_ENV_INCLUDE=api.env.2:0
 assert_include_rejected "a nested include" FAKE_API_ENV_INCLUDE=api.env.2:3 "FAKE_API_ENV_PART=#chalk-include api.env.3:1"

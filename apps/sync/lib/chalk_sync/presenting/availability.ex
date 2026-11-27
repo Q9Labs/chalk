@@ -55,26 +55,42 @@ defmodule ChalkSync.Presenting.Availability do
     {:noreply, default}
   end
 
+  # Once the API has published, it alone decides what is servable and the override only narrows it, exactly as the
+  # API reads it. Until then (or on a schema without the table) the override and the node default apply as before.
+  @published_query """
+  select coalesce(
+    (select servable and coalesce((select enabled from presenting_settings where singleton), true)
+       from presenting_api_capability where singleton),
+    coalesce((select enabled from presenting_settings where singleton), $1))
+  """
+  @override_query "select coalesce((select enabled from presenting_settings where singleton), $1)"
+
   defp read_enabled(default) do
     Database.guard(
       fn ->
-        case Postgrex.query(
-               Database.connection_for(:background),
-               """
-               select coalesce((select servable from presenting_api_capability where singleton), $1)
-                 and coalesce((select enabled from presenting_settings where singleton), $1)
-               """,
-               [default],
-               timeout: @query_timeout_ms
-             ) do
-          {:ok, %{rows: [[enabled]]}} -> enabled
-          {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} -> default
-          {:error, _reason} -> false
+        case query(@published_query, default) do
+          {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} ->
+            case query(@override_query, default) do
+              {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} -> default
+              result -> enabled_or_false(result)
+            end
+
+          result ->
+            enabled_or_false(result)
         end
       end,
       false
     )
   end
+
+  defp query(sql, default) do
+    Postgrex.query(Database.connection_for(:background), sql, [default],
+      timeout: @query_timeout_ms
+    )
+  end
+
+  defp enabled_or_false({:ok, %{rows: [[enabled]]}}), do: enabled
+  defp enabled_or_false({:error, _reason}), do: false
 
   defp default_enabled?, do: Application.get_env(:chalk_sync, :presenting_default, false)
 end
