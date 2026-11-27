@@ -1,5 +1,6 @@
 defmodule ChalkSync.RollingEntryPostgresTest do
   use ExUnit.Case, async: false
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -39,7 +40,7 @@ defmodule ChalkSync.RollingEntryPostgresTest do
     connection = hd(connections)
     Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
     policy(connection, false)
-    fixture = SyncPostgres.seed_pending_join(connection)
+    fixture = SyncPostgres.seed_pending_join(connection, release_670_policy())
     # Exercise the real transaction marker, independent of fixture sessions.
     Enum.each(connections, fn connection ->
       Postgrex.query!(connection, "select set_config('chalk.entry_writer','',false)", [])
@@ -154,6 +155,15 @@ defmodule ChalkSync.RollingEntryPostgresTest do
     assert old(ctx, "join") == 0
     assert old(ctx, "leave") == 0
     assert [["left", "left", 0, 0]] = rows(ctx)
+  end
+
+  defp release_670_policy do
+    legacy_roles =
+      Map.new(Reducer.new(UUID.generate()).role_capabilities, fn {role, capabilities} ->
+        {role, Enum.reject(capabilities, &String.starts_with?(&1, "focus."))}
+      end)
+
+    Map.put(SyncPostgres.PendingJoin.pending_join_policy(), :role_capabilities, legacy_roles)
   end
 
   defp old(ctx, action) do
