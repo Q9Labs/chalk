@@ -13,7 +13,7 @@ defmodule ChalkSync.Live.Episode.Projections do
   def presence_snapshot(state) do
     IO.inspect(presence_items(state), label: "PRESITEMS", limit: :infinity, width: 3000)
     with {:ok, items} <- presence_items(state) do
-      case reconcile_presence(state.presence_projection, items) do
+      case IO.inspect(reconcile_presence(state.presence_projection, items) |> then(fn {:ok, _p, f} = r -> IO.inspect(f, label: "PRESFRAMES", width: 2000, limit: :infinity); r; o -> o end)) do
         {:ok, projection, frames} -> {:ok, %{state | presence_projection: projection}, frames}
         {:error, reason} -> {:error, reason}
       end
