@@ -78,8 +78,8 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
       ) : null}
       {focusAllowance ? (
         <>
-          <div className="chalk-shell-detail-helper" style={{ paddingTop: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+          <div className="chalk-shell-detail-helper" style={{ paddingTop: "var(--space-1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-3)", alignItems: "center" }}>
               <span>
                 <b style={{ color: "var(--chalk-text)" }}>{FOCUS_COPY.allowOtherTabs}</b>
                 <br />
@@ -87,7 +87,7 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
               </span>
               {focusAllowance.active ? <span className="chalk-shell-detail-value">{FOCUS_COPY.allowanceOn}</span> : null}
             </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "var(--space-1-5)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
               {[5, 10, 20].map((minutes) => (
                 <ChalkButton key={minutes} disabled={focusAllowance.active} onClick={() => void focusAllowance.onAllow(minutes)}>
                   {minutes} min

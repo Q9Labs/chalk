@@ -114,6 +114,10 @@ export class FixtureSyncClient {
   setHandRaised = (raised: boolean) => this.#command("set_hand_raised", { raised });
   setDisplayName = (displayName: string) => this.#command("set_display_name", { display_name: displayName });
   setAdmissionPolicy = (policy: V1AdmissionPolicy) => this.#command("set_admission_policy", { policy });
+  stepAway = (reason: "reading" | "notes" | "break") => this.#command("set_focus_step_away", { reason });
+  returnFromStepAway = () => this.#command("clear_focus_step_away", {});
+  allowOtherTabs = (minutes: number) => this.#command("open_focus_allowance", { minutes });
+  endAllowance = () => this.#command("close_focus_allowance", {});
   assignRole = (participantId: string, role: V1AssignableRole) => this.#command("assign_roles", { participant_id: participantId, role });
   admit = (admissionRequestId: string) => this.#command("admit_participant", { admission_request_id: admissionRequestId });
   deny = (admissionRequestId: string) => this.#command("deny_admission", { admission_request_id: admissionRequestId });
@@ -269,6 +273,10 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
     setHandRaised: client.setHandRaised,
     setDisplayName: client.setDisplayName,
     setAdmissionPolicy: client.setAdmissionPolicy,
+    stepAway: client.stepAway,
+    returnFromStepAway: client.returnFromStepAway,
+    allowOtherTabs: client.allowOtherTabs,
+    endAllowance: client.endAllowance,
     assignRole: client.assignRole,
     admit: client.admit,
     deny: client.deny,
