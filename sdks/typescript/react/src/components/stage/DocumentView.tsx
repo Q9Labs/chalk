@@ -123,6 +123,7 @@ export function DocumentView({ document, people, primary, interactive }: Documen
       onThumbnails={() => setThumbnails((open) => !open)}
       onReturn={() => setOwnPage(null)}
       onPresentAnother={mine ? onPresentAnother : undefined}
+      onClose={() => void client.presenting.stop(document.documentId)}
       onTurn={turn}
       onZoom={zoomTo}
       onDownload={download}
@@ -146,6 +147,7 @@ interface PrimaryDocumentProps {
   readonly presenterName: string;
   readonly presenterPage: number;
   readonly onPresentAnother?: () => void;
+  readonly onClose: () => void;
   readonly onDownload: () => Promise<void>;
   readonly onThumbnails: () => void;
   readonly onReturn: () => void;
@@ -182,7 +184,7 @@ function PrimaryDocument(props: PrimaryDocumentProps): React.JSX.Element {
       <div className="relative flex min-h-0 flex-1">
         {props.thumbnails && props.ready ? <DocumentPageStrip pages={pages} page={props.page} onSelect={props.onTurn} /> : null}
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <DocumentPageArea manifest={props.manifest} fileName={props.fileName} page={props.page} imageUrl={props.pageImageUrl} zoom={props.zoom} mine={props.mine} presenterName={props.presenterName} />
+          <DocumentPageArea manifest={props.manifest} fileName={props.fileName} page={props.page} imageUrl={props.pageImageUrl} zoom={props.zoom} mine={props.mine} presenterName={props.presenterName} onClose={props.onClose} onChooseAnother={props.onPresentAnother} />
         </div>
       </div>
     </div>

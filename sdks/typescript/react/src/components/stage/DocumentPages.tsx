@@ -1,6 +1,7 @@
 import React from "react";
 import type { PresentingDocumentManifest } from "@q9labsai/chalk-client";
 import { cn } from "../../utils/cn";
+import { StageIcon } from "./StageIcon";
 
 type DocumentPage = PresentingDocumentManifest["pages"][number];
 
@@ -39,6 +40,8 @@ export function DocumentPageArea({
   zoom,
   mine,
   presenterName,
+  onClose,
+  onChooseAnother,
 }: {
   readonly manifest?: PresentingDocumentManifest;
   readonly fileName: string;
@@ -47,6 +50,8 @@ export function DocumentPageArea({
   readonly zoom: number;
   readonly mine: boolean;
   readonly presenterName: string;
+  readonly onClose: () => void;
+  readonly onChooseAnother?: () => void;
 }): React.JSX.Element {
   const content = <PageContent page={page} imageUrl={imageUrl} fileName={fileName} zoom={zoom} />;
   return (
@@ -54,9 +59,21 @@ export function DocumentPageArea({
       {manifest?.status === "preparing" || !manifest ? (
         <DocumentPreparing manifest={manifest} fileName={fileName} mine={mine} presenterName={presenterName} />
       ) : manifest.status === "failed" ? (
-        <div className="grid h-full place-items-center p-4">
-          <div role="alert" className="rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-5 text-sm">
-            This document could not be prepared.
+        <div className="absolute inset-0 grid place-items-center p-6">
+          <div role="alert" className="flex max-w-80 flex-col items-center gap-1.5 text-center">
+            <StageIcon name="info" size={22} />
+            <h3 className="mt-1.5 text-[15px] font-semibold">Couldn't open {fileName}</h3>
+            <p className="text-(length:--type-caption) opacity-70">It may be password protected or damaged. Nobody else saw it.</p>
+            <div className="mt-2.5 flex gap-2">
+              <button type="button" className="flex h-8 items-center rounded-full bg-[var(--chalk-overlay-hover-fill)] px-3 text-(length:--type-caption) font-medium" onClick={onClose}>
+                Close
+              </button>
+              {onChooseAnother ? (
+                <button type="button" className="flex h-8 items-center rounded-full bg-[var(--chalk-on-overlay)] px-3 text-(length:--type-caption) font-medium text-[var(--chalk-overlay-inverse)]" onClick={onChooseAnother}>
+                  Choose another file
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : zoom === 100 ? (

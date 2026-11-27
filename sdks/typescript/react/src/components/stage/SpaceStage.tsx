@@ -6,7 +6,7 @@ import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout, type StageTileRenderContext } from "./Stage";
 import { buildStageItems, type ContentItem, type StageItem } from "./stage-items";
-import { usePresenting } from "../../bindings/hooks";
+import { usePresenting, useSelf } from "../../bindings/hooks";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
 import { renderBoardContentTile, renderDocumentContentTile, renderScreenShareContentTile } from "./space-stage-content-tiles";
 
@@ -35,13 +35,16 @@ export interface SpaceStageProps {
 /** One keyed renderer for people, the live board and each screen, in both layouts. */
 export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, screenAnnotation, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
   const presenting = usePresenting();
+  const self = useSelf();
   const documents = useMemo(
     () =>
-      presenting.documents.map((document) => {
-        const manifest = presenting.manifests[document.documentId];
-        return { ...document, fileName: manifest?.fileName, status: manifest?.status, pageCount: manifest?.pageCount };
-      }),
-    [presenting.documents, presenting.manifests],
+      presenting.documents
+        .filter((document) => presenting.manifests[document.documentId]?.status !== "failed" || document.presenterId === self.participantId)
+        .map((document) => {
+          const manifest = presenting.manifests[document.documentId];
+          return { ...document, fileName: manifest?.fileName, status: manifest?.status, pageCount: manifest?.pageCount };
+        }),
+    [presenting.documents, presenting.manifests, self.participantId],
   );
   const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true, documents), [tiles, whiteboard?.isOpen, documents]);
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
