@@ -165,8 +165,9 @@ func (r *Reconciler) create(ctx context.Context) error {
 		return err
 	}
 	// DO has no idempotency key on create. Never send a second create for this
-	// name, even if the first response timed out. Observation adopts it by
-	// exact name and owner tag. An unresolved intent stays charged to the cap.
+	// name, even if the first response timed out. A returned or observed
+	// provider ID is confirmed by Inspect before the node is used. An
+	// unresolved intent stays charged to the cap.
 	providerID, pending, err := r.provider.Create(ctx, id)
 	if !pending {
 		return errors.Join(err, r.store.ForgetIntent(ctx, id))
