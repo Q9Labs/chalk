@@ -1,0 +1,33 @@
+name: ChalkIOSProof
+options:
+  bundleIdPrefix: ai.chalk.proof
+  deploymentTarget:
+    iOS: "26.0"
+targets:
+  ProofHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.chalk.proof.host
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  ProofUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: ProofHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.chalk.proof.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ChalkIOSProof:
+    build:
+      targets:
+        ProofHost: all
+        ProofUITests: [test]
+    test:
+      targets: [ProofUITests]
