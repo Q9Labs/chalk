@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- generator templates repeat one line shape per target language, and a shared helper would hide what each generated file contains.
 import { readFile, writeFile } from "node:fs/promises";
 
 const schema = JSON.parse(await readFile("contract/schema/presenting-files-v1.json", "utf8"));

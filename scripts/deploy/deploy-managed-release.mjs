@@ -85,9 +85,9 @@ async function fileExists(path) {
 
 const rendererSkip = (environment, action) => ({ action, environment, verified: false, left_live: true });
 
-function rendererGate(options) {
-  if (options.environment !== "production") return rendererSkip(options.environment, "renderer-not-production-target");
-  if (process.env.CHALK_RENDERER_RELEASE_ENABLED !== "true") return rendererSkip(options.environment, "renderer-not-declared");
+function rendererGate(options, kind = "renderer", flag = "CHALK_RENDERER_RELEASE_ENABLED") {
+  if (options.environment !== "production") return rendererSkip(options.environment, `${kind}-not-production-target`);
+  if (process.env[flag] !== "true") return rendererSkip(options.environment, `${kind}-not-declared`);
   return undefined;
 }
 
@@ -105,8 +105,8 @@ export async function rendererBinding({ commandRunner, options, dryRun }) {
 export async function rendererImageBinding({ commandRunner, options, dryRun }) {
   const members = resolve(options.manifestPath).replace(/\.json$/, ".media.json");
   if (!(await fileExists(members))) return { action: "not-recorded", environment: options.environment };
-  if (options.environment !== "production") return rendererSkip(options.environment, "renderer-image-not-production-target");
-  if (process.env.CHALK_RENDERER_IMAGE_RELEASE_ENABLED !== "true") return rendererSkip(options.environment, "renderer-image-not-declared");
+  const skipped = rendererGate(options, "renderer-image", "CHALK_RENDERER_IMAGE_RELEASE_ENABLED");
+  if (skipped) return skipped;
   const args = [fileURLToPath(new URL("../releases/media.py", import.meta.url)), "deploy_renderer_image", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment];
   if (dryRun) args.push("--dry-run");
   const result = await commandRunner({ command: "python3", args });

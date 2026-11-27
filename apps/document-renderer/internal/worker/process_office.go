@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -35,7 +36,10 @@ func convertOffice(ctx context.Context, source []byte, mimeType string) ([]byte,
 	return os.ReadFile(prefix + ".pdf")
 }
 
-func verifyConvertedPages(ctx context.Context, executable, sourcePath string, lastPage int) error {
+func verifyConvertedPages(ctx context.Context, converted bool, executable, sourcePath string, lastPage int) error {
+	if !converted {
+		return nil
+	}
 	prefix := renderedPrefix(sourcePath, 0, 0)
 	if err := runIsolatedChild(ctx, executable, "inventory", sourcePath, prefix, "application/pdf"); err != nil {
 		return isolatedRenderFailure(err)
@@ -56,4 +60,31 @@ func lastUploadPage(uploads []controlplane.PageUploads) int {
 		last = max(last, upload.Page)
 	}
 	return last
+}
+
+func prepareSource(ctx context.Context, source []byte, assignment *controlplane.Assignment) ([]byte, bool, error) {
+	if _, isOffice := office.Lookup(assignment.MIMEType); !isOffice || assignment.Kind == "timeout-probe" {
+		return source, false, nil
+	}
+	pdf, err := convertOffice(ctx, source, assignment.MIMEType)
+	if err != nil {
+		return nil, false, err
+	}
+	assignment.MIMEType = "application/pdf"
+	return pdf, true, nil
+}
+
+func tooManyPages(pages int, converted bool) error {
+	if converted {
+		return renderFailure{code: office.CodeTooManyPages, err: errors.New(office.TooManyPagesMessage())}
+	}
+	return renderFailure{code: office.CodeTooManyPages, err: fmt.Errorf("document has %d pages", pages)}
+}
+
+func reportFailure(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, err error) error {
+	var failure renderFailure
+	if errors.As(err, &failure) {
+		return finishFailure(ctx, control, assignment, failure.code, failure.err)
+	}
+	return err
 }

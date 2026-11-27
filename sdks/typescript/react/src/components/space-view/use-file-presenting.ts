@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
 import { describeChatUploadFile } from "../composite/chat-upload-file";
-import { chatAcceptsFile, presentableAccept, presentFiles, splitPresentingFiles, type PresentingFileFailure } from "../stage/presenting-files";
+import { chatAcceptsFile, presentableAccept, presentableFilesHint, presentFiles, splitPresentingFiles, type PresentingFileFailure } from "../stage/presenting-files";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
 
@@ -182,5 +182,23 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
 
   const documentActions = useMemo(() => ({ presentAnother: presentingAvailable ? () => void choosePresentFiles() : undefined }), [choosePresentFiles, presentingAvailable]);
 
-  return { documentActions, presentBusy, stageUpload, dismissStageUpload, retryStageUpload, sendStageUploadToChat, dropActive, dropZones, dropZone, chatDrop, updateChatDrop, presentInputRef, presentAccept, presentFormats: formats, choosePresentFiles, presentChosenFiles };
+  return {
+    documentActions,
+    presentBusy,
+    stageUpload,
+    dismissStageUpload,
+    retryStageUpload,
+    sendStageUploadToChat,
+    dropActive,
+    dropZones,
+    dropZone,
+    chatDrop,
+    updateChatDrop,
+    presentHint: presentableFilesHint(formats),
+    presentInputRef,
+    presentAccept,
+    presentFormats: formats,
+    choosePresentFiles,
+    presentChosenFiles,
+  };
 }

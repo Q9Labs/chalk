@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- the renderer and the dispatcher entry points wire their providers and state the same way, and each stack releases independently.
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as Alchemy from "alchemy";
@@ -16,7 +17,7 @@ import { isImageInputs, parseInputs, requireInput } from "./config.ts";
 import { resourceProps } from "./resources.ts";
 
 import * as Layer from "effect/Layer";
-export const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), roleInlinePolicyProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers));
+const rendererProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), roleInlinePolicyProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers));
 const storedInputs = (value: unknown) => {
   const output = Schema.decodeUnknownSync(Schema.Struct({ renderer_inputs: Schema.Redacted(Schema.Unknown) }))(value);
   return parseInputs(Redacted.value(output.renderer_inputs));

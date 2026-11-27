@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- the renderer and the dispatcher declare the same Lambda, role and log-group resources by design; a shared builder would couple two stacks that release independently.
 import type * as AWS from "@alchemy.run/aws";
 import type { PolicyDocument, PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import * as Redacted from "effect/Redacted";

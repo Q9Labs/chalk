@@ -641,6 +641,7 @@
         "contract/schema/presenting-files-v1.json",
         "contract/schema/presenting-v1.json",
         "infrastructure/document-renderer",
+        "infrastructure/document-renderer-image",
         "sdks/typescript/client/src/generated/presenting-v1.ts",
         "sdks/typescript/client/src/presenting",
         "sdks/typescript/client/src/space-client/presenting-controller.test.ts",

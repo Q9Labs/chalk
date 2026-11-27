@@ -115,10 +115,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
     if (!snapshot) return;
     this.#status = snapshot.status;
     this.#available = this.#replica?.available === true;
-    if (this.#available && !this.#formatsRequested) {
-      this.#formatsRequested = true;
-      void this.#loadFormats();
-    }
+    void this.#loadFormats();
     this.#revision = snapshot.status === "ready" ? snapshot.revision : 0;
     this.#documents = snapshot.status === "ready" ? Object.freeze([...snapshot.documents]) : Object.freeze([]);
     const active = new Set(this.#documents.map((document) => document.documentId));
@@ -147,6 +144,8 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
   }
 
   async #loadFormats(): Promise<void> {
+    if (!this.#available || this.#formatsRequested) return;
+    this.#formatsRequested = true;
     try {
       const value = await this.#request<{ readonly formats?: unknown }>(apiUrls.presentingFormats(this.#apiBaseUrl), { method: "GET" });
       if (!Array.isArray(value.formats)) return;

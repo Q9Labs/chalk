@@ -39,7 +39,6 @@ import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { DocumentActionsContext } from "../stage/document-actions";
-import { presentableFilesHint } from "../stage/presenting-files";
 import { useFilePresenting } from "./use-file-presenting";
 import { spaceViewControlBarButtons } from "./control-bar-buttons";
 import { spaceViewControlBarActions } from "./control-bar-actions";
@@ -406,7 +405,7 @@ export function SpaceView({
                       onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                       onToggleWhiteboard={onToggleWhiteboard}
                       isWhiteboardOpen={whiteboard?.isOpen}
-                      presentHint={presentableFilesHint(presenting.formats)}
+                      presentHint={filePresenting.presentHint}
                       {...spaceViewControlBarActions({ choosePresentFiles: filePresenting.choosePresentFiles, setReactionPickerOpen, documents: presenting.documents, selfId: self.participantId })}
                       reactionsOpen={isReactionPickerOpen}
                       onCommandError={onCommandError}

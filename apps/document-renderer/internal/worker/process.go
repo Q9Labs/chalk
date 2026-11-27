@@ -31,14 +31,9 @@ func Process(ctx context.Context, control controlplane.ControlClient, assignment
 		return err
 	}
 	stageLog(ctx, assignment, 0, "source_download", time.Since(downloadStarted), "bytes", len(source))
-	converted := false
-	if _, isOffice := office.Lookup(assignment.MIMEType); isOffice && assignment.Kind != "timeout-probe" {
-		source, err = convertOffice(ctx, source, assignment.MIMEType)
-		if err != nil {
-			return reportFailure(ctx, control, assignment, err)
-		}
-		assignment.MIMEType = "application/pdf"
-		converted = true
+	source, converted, err := prepareSource(ctx, source, &assignment)
+	if err != nil {
+		return reportFailure(ctx, control, assignment, err)
 	}
 	switch assignment.Kind {
 	case "inventory":
@@ -63,18 +58,7 @@ func Process(ctx context.Context, control controlplane.ControlClient, assignment
 	default:
 		err = fmt.Errorf("unknown render job kind %q", assignment.Kind)
 	}
-	if err != nil {
-		return reportFailure(ctx, control, assignment, err)
-	}
-	return nil
-}
-
-func reportFailure(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, err error) error {
-	var failure renderFailure
-	if errors.As(err, &failure) {
-		return finishFailure(ctx, control, assignment, failure.code, failure.err)
-	}
-	return err
+	return reportFailure(ctx, control, assignment, err)
 }
 
 type renderFailure struct {
@@ -114,10 +98,7 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 		return err
 	}
 	if len(pageSpecs) > office.MaxPages {
-		if converted {
-			return renderFailure{code: office.CodeTooManyPages, err: errors.New(office.TooManyPagesMessage())}
-		}
-		return renderFailure{code: office.CodeTooManyPages, err: fmt.Errorf("document has %d pages", len(pageSpecs))}
+		return tooManyPages(len(pageSpecs), converted)
 	}
 	renderStarted := time.Now()
 	bitmap, width, height, err := renderIsolatedEagerPage(ctx, executable, sourcePath, assignment.MIMEType, 1)
@@ -152,10 +133,8 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 	if err != nil {
 		return err
 	}
-	if converted {
-		if err := verifyConvertedPages(ctx, executable, sourcePath, lastUploadPage(assignment.Uploads)); err != nil {
-			return err
-		}
+	if err := verifyConvertedPages(ctx, converted, executable, sourcePath, lastUploadPage(assignment.Uploads)); err != nil {
+		return err
 	}
 	semaphore := make(chan struct{}, 2)
 	errorsChannel := make(chan error, len(assignment.Uploads))
@@ -222,10 +201,8 @@ func processZoom(ctx context.Context, control controlplane.ControlClient, assign
 	if err != nil {
 		return err
 	}
-	if converted {
-		if err := verifyConvertedPages(ctx, executable, sourcePath, target.Page); err != nil {
-			return err
-		}
+	if err := verifyConvertedPages(ctx, converted, executable, sourcePath, target.Page); err != nil {
+		return err
 	}
 	renderStarted := time.Now()
 	bitmap, width, height, err = renderIsolatedBitmap(ctx, executable, sourcePath, assignment.MIMEType, target.Page, zoomEdge)

@@ -38,7 +38,7 @@ const imageInputSchema = Schema.Struct({
   image_digest: Schema.String,
 });
 const inputSchema = Schema.Union([zipInputSchema, imageInputSchema]);
-export type ZipRendererInputs = typeof zipInputSchema.Type;
+type ZipRendererInputs = typeof zipInputSchema.Type;
 export type ImageRendererInputs = typeof imageInputSchema.Type;
 export type DocumentRendererInputs = typeof inputSchema.Type;
 export const isImageInputs = (input: DocumentRendererInputs): input is ImageRendererInputs => input.package_type === "image";

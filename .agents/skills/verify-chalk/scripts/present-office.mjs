@@ -37,12 +37,18 @@ try {
       page.on("response", (response) => {
         const { pathname } = new URL(response.url());
         if (!pathname.includes("/presenting/documents") || response.request().method() !== "GET") return;
-        void response.json().then((body) => documents.push({ path: pathname, status: response.status(), body }), () => undefined);
+        void response.json().then(
+          (body) => documents.push({ path: pathname, status: response.status(), body }),
+          () => undefined,
+        );
       });
     await page.goto(new URL(seed.invite.path, web).href);
     await page.getByLabel("Your name", { exact: true }).fill(name);
     await page.getByRole("button", { name: "Join call", exact: true }).click();
-    await page.getByRole("button", { name: "Video tile for " + name, exact: true }).first().waitFor({ timeout: 60_000 });
+    await page
+      .getByRole("button", { name: "Video tile for " + name, exact: true })
+      .first()
+      .waitFor({ timeout: 60_000 });
     sessions.push({ name, page });
   }
   const [presenter, viewer] = sessions;
@@ -70,7 +76,13 @@ try {
             await viewerPage.waitForTimeout(400);
           }
           await viewerPage.waitForTimeout(1500);
-          const zoomed = await pageImage.evaluate((image) => ({ width: image.getBoundingClientRect().width, style: image.style.width, maxWidth: getComputedStyle(image).maxWidth, display: getComputedStyle(image).display, scrollable: image.parentElement.scrollWidth - image.parentElement.clientWidth }));
+          const zoomed = await pageImage.evaluate((image) => ({
+            width: image.getBoundingClientRect().width,
+            style: image.style.width,
+            maxWidth: getComputedStyle(image).maxWidth,
+            display: getComputedStyle(image).display,
+            scrollable: image.parentElement.scrollWidth - image.parentElement.clientWidth,
+          }));
           await viewerPage.screenshot({ path: join(out, "screenshots", "Viewer-" + file + "-zoomed.png") });
           await pageImage.hover();
           await viewerPage.mouse.wheel(900, 0);
@@ -90,9 +102,23 @@ try {
           if (!found) await presenter.page.waitForTimeout(2000);
         }
         await presenter.page.screenshot({ path: join(out, "screenshots", "Presenter-" + file + ".png") });
-        const titleStyle = await presenter.page.getByRole("alert").locator("h3").first().evaluate((node) => { const s = getComputedStyle(node); return { wordSpacing: s.wordSpacing, letterSpacing: s.letterSpacing, fontFamily: s.fontFamily, fontKerning: s.fontKerning, whiteSpace: s.whiteSpace, fontWeight: s.fontWeight }; }).catch(() => undefined);
+        const titleStyle = await presenter.page
+          .getByRole("alert")
+          .locator("h3")
+          .first()
+          .evaluate((node) => {
+            const s = getComputedStyle(node);
+            return { wordSpacing: s.wordSpacing, letterSpacing: s.letterSpacing, fontFamily: s.fontFamily, fontKerning: s.fontKerning, whiteSpace: s.whiteSpace, fontWeight: s.fontWeight };
+          })
+          .catch(() => undefined);
         console.error("TITLE", JSON.stringify(titleStyle));
-        const title = (await presenter.page.getByRole("alert").locator("h3").first().textContent({ timeout: 10_000 }).catch(() => "")) ?? "";
+        const title =
+          (await presenter.page
+            .getByRole("alert")
+            .locator("h3")
+            .first()
+            .textContent({ timeout: 10_000 })
+            .catch(() => "")) ?? "";
         steps.push({ name: file + " fails as " + expect, pass: Boolean(found) && title === "Couldn't open " + file, ms: Date.now() - started, detail: { failure: found?.body?.failure, title } });
         if (!found || title !== "Couldn't open " + file) failed = true;
       }

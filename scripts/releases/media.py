@@ -176,9 +176,7 @@ def deploy_renderer(args):
 
 
 def publish_renderer_image(args):
-    provider, config = settings(args)
-    del config
-    renderer_media.publish_renderer_image(args, provider)
+    renderer_media.publish_renderer_image(args, settings(args)[0])
 
 
 def deploy_renderer_image(args):

@@ -32,6 +32,7 @@ LibreOffice is a large, untrusted-input parser written in C++, with the Java int
 
 What is not isolated on Lambda: user namespaces are unavailable, so the converter does not get its own network namespace or a private filesystem view. A compromised soffice can read the image filesystem, reach the network that the function has, and read or write `/tmp` for the duration of the job, including the other jobs' scratch in the same environment if invocations overlap. It runs as the same uid as the parent, so non-dumpable protection of the parent is the only barrier to its memory. Outside Lambda, the child is placed in new user and network namespaces when the host allows it. Recycling the execution environment after each job bounds the time an attacker keeps any foothold.
 ||||||| 82a906dfb
+
 ## Packaging
 
 The renderer ships two ways. `scripts/build-document-renderer.sh` builds the ZIP custom runtime. `scripts/build-document-renderer-image.sh` builds the container image from [`image/Dockerfile`](image/Dockerfile): Debian trixie with the same Go bootstrap and pinned PDFium, LibreOffice for Office conversion, bundled fonts and `/opt/renderer/office-convert.py`, run as a non-root user on a read-only root with only `/tmp` writable. Release, rollback and the ECR repository are described in [infrastructure/document-renderer](../../infrastructure/document-renderer/README.md#container-image-renderer).

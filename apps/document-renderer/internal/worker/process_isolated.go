@@ -137,10 +137,8 @@ func closePipe(pipe *os.File) {
 	}
 }
 
-const isolatedChildTimeout = 20 * time.Second
-
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
-	return runIsolatedChildWithTimeout(ctx, isolatedChildTimeout, executable, mode, args...)
+	return runIsolatedChildWithTimeout(ctx, 20*time.Second, executable, mode, args...)
 }
 
 func runIsolatedChildWithTimeout(ctx context.Context, timeout time.Duration, executable, mode string, args ...string) error {
