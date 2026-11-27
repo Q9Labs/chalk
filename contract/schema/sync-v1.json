@@ -449,6 +449,12 @@
       "value": true,
       "description": "Present when both ends support annotation in screen video. Only a negotiated sharer may bind a baked publication, and only negotiated viewers receive its annotation layer."
     },
+    "presenting": {
+      "wireName": "presenting",
+      "optional": true,
+      "value": true,
+      "description": "Present only on a connection that negotiated presenting=1. Enables the separate presenting v1 extension after recovery."
+    },
     "entryGeneration": {
       "wireName": "entry_generation",
       "optional": true,

@@ -10,6 +10,7 @@ import (
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/presenting"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -56,6 +57,14 @@ func (w *apiWiring) wireTranscription() error {
 		}
 		worker := transcripts.NewLocalCleanupWorker(transcriptService, *w.recordingStorage)
 		w.recordingSourceCleanupScheduler = transcripts.NewLocalCleanupScheduler(worker, 0, w.logger)
+	}
+
+	if w.cfg.Capabilities.Presenting {
+		capabilitySigner, err := presenting.NewCapabilitySigner(w.cfg.Presenting.CapabilitySecret)
+		if err != nil {
+			return fmt.Errorf("configure presenting render capability verification: %w", err)
+		}
+		w.options.PresentingCapabilityAuthorizer = httpapi.NewHMACPresentingCapabilityAuthorizer(capabilitySigner)
 	}
 
 	// Keep worker control behind the internal workload boundary.

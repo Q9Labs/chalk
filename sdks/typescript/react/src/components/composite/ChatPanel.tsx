@@ -1,7 +1,7 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
 import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, ChatReactionInput, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useCan, useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useChat, useParticipants, usePresenting, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
@@ -9,13 +9,17 @@ import { CallCardStyles } from "../call-card/CallCardStyles";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 import { uploadChatAttachment } from "./chat-file-upload";
-import { describeChatUploadFile } from "./chat-upload-file";
+import { describeChatUploadFile, prepareChatAttachmentBatch } from "./chat-upload-file";
 import type { ChatMessage } from "./chat-types";
+import { chatSelectionNotice, keepRetainedFiles, stagePastedFiles, useAutoGrowTextarea, useChatDropRouting, useStagedFilePreviews } from "./chat-composer-effects";
 
 export type { ChatMessage } from "./chat-types";
 
 export interface ChatPanelProps {
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
+  /** Files dropped on the call and retained by the parent until they are sent or removed. The key changes for each drop. */
+  readonly droppedFiles?: { readonly key: number; readonly files: readonly ChatUploadFile[] };
+  readonly onDroppedFilesChange?: (key: number, files: readonly ChatUploadFile[]) => void;
   readonly onRetryMessage?: (id: string) => Promise<void>;
   readonly onClose?: () => void;
   readonly disabled?: boolean;
@@ -30,8 +34,6 @@ export const ChatPanelPresentation = React.memo((props: ChatPanelSurfaceProps): 
   return <ChatPanelSurface {...props} />;
 });
 
-const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
-
 export interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly messages: readonly ChatMessage[];
   readonly pendingMessages?: SpaceSnapshot["chat"]["pendingSends"];
@@ -42,6 +44,7 @@ export interface ChatPanelSurfaceProps extends ChatPanelProps {
   readonly onSendMessage?: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
   readonly onUploadAttachment?: (file: ChatUploadFile) => Promise<ChatAttachment>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
+  readonly onOpenAttachmentOnStage?: (attachment: ChatAttachment) => Promise<void>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
   readonly onLoadOlder?: () => Promise<void>;
   readonly hasOlder?: boolean;
@@ -63,7 +66,10 @@ export const ChatPanelSurface = React.memo(
     onReact,
     onUploadAttachment,
     pickChatFiles,
+    droppedFiles,
+    onDroppedFilesChange,
     onResolveAttachmentUrl,
+    onOpenAttachmentOnStage,
     onMarkRead,
     onRetryMessage,
     onLoadOlder,
@@ -86,15 +92,7 @@ export const ChatPanelSurface = React.memo(
     const uploads = useRef(new Map<ChatUploadFile, Promise<{ readonly attachment: ChatAttachment } | { readonly error: string }>>());
     const [failedUploads, setFailedUploads] = useState<ReadonlySet<ChatUploadFile>>(new Set());
     const [uploading, setUploading] = useState<ReadonlySet<ChatUploadFile>>(new Set());
-    const [previews, setPreviews] = useState<ReadonlyMap<ChatUploadFile, string>>(new Map());
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Create object URLs for staged image files; revoke exactly those URLs when files change or the composer unmounts.
-    useEffect(() => {
-      const urls = new Map(stagedFiles.flatMap((file) => (file instanceof File && file.type.startsWith("image/") ? [[file, URL.createObjectURL(file)] as const] : [])));
-      setPreviews(urls);
-      return () => {
-        for (const url of urls.values()) URL.revokeObjectURL(url);
-      };
-    }, [stagedFiles]);
+    const previews = useStagedFilePreviews(stagedFiles);
     const [sending, setSending] = useState(false);
     const [pickingFiles, setPickingFiles] = useState(false);
     const [composerError, setComposerError] = useState<string | null>(null);
@@ -134,13 +132,7 @@ export const ChatPanelSurface = React.memo(
         lastMarkedSequenceRef.current = localReadThroughSequence;
       }
     }, [localReadThroughSequence]);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Resize the mounted textarea to its measured scrollHeight when the draft changes.
-    useEffect(() => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-    }, [draft]);
+    useAutoGrowTextarea(textareaRef, draft);
     const startUpload = (file: ChatUploadFile) => {
       if (!onUploadAttachment) return undefined;
       setFailedUploads((current) => {
@@ -173,6 +165,7 @@ export const ChatPanelSurface = React.memo(
       return task;
     };
     const removeFile = (file: ChatUploadFile) => {
+      if (droppedFiles?.files.includes(file)) retainDrop(droppedFiles.files.filter((candidate) => candidate !== file));
       uploads.current.delete(file);
       setUploading((current) => {
         const next = new Set(current);
@@ -200,6 +193,7 @@ export const ChatPanelSurface = React.memo(
           attachments.push(result.attachment);
         }
         await onSendMessage({ text, attachments });
+        retainDrop([]);
         setDraft("");
         setStagedFiles([]);
         uploads.current.clear();
@@ -210,29 +204,23 @@ export const ChatPanelSurface = React.memo(
         setSending(false);
       }
     };
-    const selectFiles = (files: FileList | readonly ChatUploadFile[] | null) => {
-      if (!files) return;
-      const selected: ChatUploadFile[] = Array.from(files);
-      if (stagedFiles.length + selected.length > CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage) {
-        setComposerError(`You can attach up to ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files.`);
+    const selectFiles = (files: FileList | readonly ChatUploadFile[] | null, options: { readonly deferUploads?: boolean } = {}): readonly ChatUploadFile[] => {
+      if (!files) return [];
+      const incoming = [...files].filter((file) => !stagedFiles.includes(file));
+      const batch = prepareChatAttachmentBatch(incoming, stagedFiles.length);
+      if (batch.invalid) {
+        setComposerError(`${batch.invalid.fileName} is not a supported chat attachment.`);
         if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
+        return [];
       }
-      const invalid = selected.find((file) => {
-        const { fileName, mimeType, byteLength } = describeChatUploadFile(file);
-        const fileNameBytes = new TextEncoder().encode(fileName).byteLength;
-        return !fileName || !Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || fileNameBytes > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes || !ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType);
-      });
-      if (invalid) {
-        setComposerError(`${describeChatUploadFile(invalid).fileName} is not a supported chat attachment.`);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-      for (const file of selected) startUpload(file);
-      setStagedFiles((current) => [...current, ...selected]);
-      setComposerError(null);
+      if (!options.deferUploads) for (const file of batch.accepted) startUpload(file);
+      if (batch.accepted.length) setStagedFiles((current) => [...current, ...batch.accepted]);
+      setComposerError(chatSelectionNotice(batch));
       if (fileInputRef.current) fileInputRef.current.value = "";
+      return batch.accepted;
     };
+    const stageRetained = (files: readonly ChatUploadFile[]) => keepRetainedFiles(files, stagedFiles, selectFiles(files, { deferUploads: true }));
+    const retainDrop = useChatDropRouting({ droppedFiles, onDroppedFilesChange, stageFiles: stageRetained });
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {
@@ -274,7 +262,7 @@ export const ChatPanelSurface = React.memo(
     );
     // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Dispose queued scroll work when this composer unmounts.
     useEffect(() => () => scrollWork.dispose(), [scrollWork]);
-    const handleScroll = scrollWork.onScroll;
+    const notice = composerError || error;
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
         <CallCardStyles />
@@ -294,7 +282,7 @@ export const ChatPanelSurface = React.memo(
           </header>
         ) : null}
 
-        <div ref={scrollRef} className="call-chat-messages" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
+        <div ref={scrollRef} className="call-chat-messages" aria-label="Chat messages" aria-live="polite" onScroll={scrollWork.onScroll}>
           {hasOlder && onLoadOlder ? (
             <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
               {loadingOlder ? "Loading…" : "Load earlier messages"}
@@ -335,6 +323,7 @@ export const ChatPanelSurface = React.memo(
                         readBy={readBy}
                         participantNames={participantNames}
                         onResolveAttachmentUrl={onResolveAttachmentUrl}
+                        onOpenAttachmentOnStage={onOpenAttachmentOnStage}
                       />
                     </div>
                   );
@@ -371,11 +360,11 @@ export const ChatPanelSurface = React.memo(
           ))}
         </div>
 
-        {(error || composerError) && (
+        {notice ? (
           <p role="alert" className="mx-4 mb-2 rounded-lg bg-[var(--chalk-app-danger)]/10 px-3 py-2 text-sm text-[var(--chalk-app-danger)]">
-            {composerError || error}
+            {notice}
           </p>
-        )}
+        ) : null}
         {stagedFiles.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-t border-[var(--chalk-app-line)] px-4 pt-3" aria-label="Attachments">
             {stagedFiles.map((file, index) => (
@@ -418,6 +407,7 @@ export const ChatPanelSurface = React.memo(
               ref={textareaRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onPaste={(event) => stagePastedFiles(event, Boolean(onUploadAttachment), selectFiles)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey) return;
                 event.preventDefault();
@@ -445,6 +435,7 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
   const client = useSpaceClient();
   const canSendChat = useCan("sendChat");
   const chat = useChat();
+  const presenting = usePresenting();
   const participants = useParticipants();
   const self = useSelf();
   const localParticipantId = self.participantId ?? "local";
@@ -467,6 +458,14 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
         if (!attachment) throw new Error("The chat attachment is no longer available.");
         return client.chat.files.resolveUrl(attachment);
       }}
+      onOpenAttachmentOnStage={
+        presenting.available
+          ? async (attachment) => {
+              const result = await client.presenting.present(attachment.attachmentId);
+              if (result.kind !== "accepted") throw new Error("The file could not be opened on stage.");
+            }
+          : undefined
+      }
       onMarkRead={(sequence) => {
         const message = chat.messages.find((candidate) => candidate.sequence === sequence);
         return message ? client.chat.markRead(message.messageId) : undefined;

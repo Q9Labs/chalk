@@ -9,10 +9,28 @@ trap 'rm -rf "$fixture"' EXIT
 sed -E 's/__[A-Z0-9_]+__/fixture/g' "$managed_root/env/api.env.example" > "$fixture/full.env"
 fixture_api="$fixture/api.env"
 fixture_manifest="$fixture/manifest.json"
+cat >"$fixture/controller.env" <<'EOF'
+CHALK_SFU_WINDOW_ENVIRONMENT=production
+CHALK_SFU_WINDOW_MODE=scale
+CHALK_SFU_WINDOW_DATABASE_URL=postgresql://controller@db.example/chalk?sslmode=verify-full
+CHALK_SFU_APPLICATION_ID=fixture-application
+CHALK_SFU_SERVER_NAME=sfu.example
+CHALK_SFU_CA_FILE=/home/chalk-sfu-window/secrets/client-ca.crt
+CHALK_SFU_CLIENT_CERT_FILE=/home/chalk-sfu-window/secrets/server.crt
+CHALK_SFU_CLIENT_KEY_FILE=/home/chalk-sfu-window/secrets/server.key
+CHALK_SFU_WINDOW_PROVIDER_TOKEN=fixture-provider-token
+CHALK_SFU_WINDOW_SNAPSHOT_ID=123456
+CHALK_SFU_WINDOW_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+CHALK_SFU_WINDOW_REGION=sgp1
+CHALK_SFU_WINDOW_VPC_UUID=123e4567-e89b-42d3-a456-426614174000
+CHALK_SFU_WINDOW_FIREWALL_ID=123e4567-e89b-42d3-a456-426614174001
+CHALK_SFU_WINDOW_STANDING_SLOTS=8
+EOF
+chmod 600 "$fixture/controller.env"
 check_refusal() {
   local reason="$1" output
   chmod 600 "$fixture_api"
-  if output="$("$managed_root/scripts/validate-runtime" --env-root "$fixture" --secret-root "$fixture" --manifest "$fixture_manifest" --sync-proof "$fixture/not-needed" 2>&1)"; then
+  if output="$("$managed_root/scripts/validate-runtime" --env-root "$fixture" --sfu-window-env "$fixture/controller.env" --secret-root "$fixture" --manifest "$fixture_manifest" --sync-proof "$fixture/not-needed" 2>&1)"; then
     echo "Expected refusal: $reason" >&2
     exit 1
   fi
@@ -72,4 +90,21 @@ for flag in CHALK_SFU_COLOCATED_CAPTURE CHALK_SFU_CAPTURE_ENABLED CHALK_SFU_ENAB
   printf '%s=true\n%s=true\n' "$flag" "$flag" >> "$fixture_api"
   check_refusal "$flag must occur at most once"
 done
+cp "$fixture/controller.env" "$fixture/controller.valid"
+grep -v '^CHALK_SFU_WINDOW_MODE=' "$fixture/controller.valid" > "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_MODE must occur'
+sed 's/^CHALK_SFU_WINDOW_MODE=scale$/CHALK_SFU_WINDOW_MODE=destroy/' "$fixture/controller.valid" > "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_MODE must be scale or retire'
+sed 's|^CHALK_SFU_CA_FILE=.*|CHALK_SFU_CA_FILE=/tmp/client-ca.crt|' "$fixture/controller.valid" > "$fixture/controller.env"
+check_refusal 'CHALK_SFU_CA_FILE must use the managed controller CA path'
+sed 's/^CHALK_SFU_WINDOW_STANDING_SLOTS=8$/CHALK_SFU_WINDOW_STANDING_SLOTS=41/' "$fixture/controller.valid" > "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_STANDING_SLOTS must be 1 to 40'
+cp "$fixture/controller.valid" "$fixture/controller.env"
+printf 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS=01000\n' >> "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS must be 1 to 930'
+cp "$fixture/controller.valid" "$fixture/controller.env"
+printf 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS=10\nCHALK_SFU_WINDOW_BUDGET_NODE_HOURS=20\n' >> "$fixture/controller.env"
+check_refusal 'CHALK_SFU_WINDOW_BUDGET_NODE_HOURS must occur at most once'
+mv "$fixture/controller.valid" "$fixture/controller.env"
+chmod 600 "$fixture/controller.env"
 echo 'PASS managed Chalk SFU runtime input contract'

@@ -8,7 +8,7 @@ import { ChalkSheet } from "../chalk-ui";
 import { useStageDimensions } from "./useStageDimensions";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
-import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, speakingParticipantId, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
+import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, speakingParticipantId, isContentItem, stabilizeOrder, type ContentItem, type StageItem, type StageLayout } from "./stage-items";
 import { StageMotion } from "./StageMotion";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 
@@ -41,11 +41,11 @@ export interface StageProps {
   /** Tiles narrower than this fold the rest into overflow. */
   readonly minTileWidth?: number;
   /** Renders the focused screen share / whiteboard. Falls back to the unfocused card when omitted. */
-  readonly renderPrimaryContent?: (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>) => ReactNode;
+  readonly renderPrimaryContent?: (item: ContentItem) => ReactNode;
   /** Presentation seam for camera media that is not a live MediaStreamTrack. */
   readonly renderParticipant?: (item: Extract<StageItem, { kind: "participant" }>, context: StageTileRenderContext) => ReactNode;
   /** Presentation seam for unfocused shared content that is not a live MediaStreamTrack. */
-  readonly renderContentTile?: (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => ReactNode;
+  readonly renderContentTile?: (item: ContentItem, context: StageTileRenderContext) => ReactNode;
   /** Removes local pinning and keyboard commands while preserving the same layout. */
   readonly interactive?: boolean;
   /** Overrides system motion preference for deterministic render profiles. */
@@ -221,8 +221,8 @@ export function Stage({
     );
   }, [activePinnedId, box, interactive, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
-  const foldedContent = ordered.filter((item): item is Extract<StageItem, { kind: "screen-share" | "whiteboard" }> => item.kind !== "participant" && !framesById.has(item.id));
-  const renderContent = (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext, primaryRenderer: boolean) => {
+  const foldedContent = ordered.filter((item): item is ContentItem => item.kind !== "participant" && !framesById.has(item.id));
+  const renderContent = (item: ContentItem, context: StageTileRenderContext, primaryRenderer: boolean) => {
     if (primaryRenderer && renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
     if (renderContentTile) return renderContentTile(item, context);
     if (renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;

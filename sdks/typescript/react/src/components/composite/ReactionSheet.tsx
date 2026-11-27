@@ -62,6 +62,15 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
   const [sheet, setSheet] = useState<HTMLElement | null>(null);
   const findSheet = useCallback((node: HTMLElement | null) => setSheet(node?.closest<HTMLElement>(".chalk-sheet") ?? null), []);
   const { trigger } = useHaptics();
+  useLayoutEffect(() => {
+    const dock = frame?.querySelector<HTMLElement>("[data-part='dock']");
+    if (!open || !dock) return;
+    const visibility = dock.style.visibility;
+    dock.style.visibility = "hidden";
+    return () => {
+      dock.style.visibility = visibility;
+    };
+  }, [open, frame]);
   // Raise the call's notices above the open sheet, as the desktop tray does, so they do not cover its rows.
   useLayoutEffect(() => {
     const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");

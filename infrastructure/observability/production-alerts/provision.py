@@ -61,6 +61,7 @@ RULE_BRANCHES = (
     ("sfu-overflow.apl", ()),
     ("sfu-node-too-old.apl", ()),
     ("deadline-scheduler.apl", ()),
+    ("fleet-controller.apl", ()),
 )
 
 # What a monitor is compared on by --check.

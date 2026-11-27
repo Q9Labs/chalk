@@ -1,12 +1,13 @@
 locals {
   # The SFU's own node table: the ports and the sizes it was load-tested on.
-  table        = jsondecode(file("${path.module}/../../../features/media/sfu/internal/config/node.json"))
-  control_port = local.table.ports.control
-  media_port   = local.table.ports.media
-  name         = "chalk-sfu-${var.environment}"
+  table          = jsondecode(file("${path.module}/../../../features/media/sfu/internal/config/node.json"))
+  control_port   = local.table.ports.control
+  media_port     = local.table.ports.media
+  media_tcp_port = local.table.ports.mediaTcp
+  name           = "chalk-sfu-${var.environment}"
   # chalk-sfu marks every Chalk SFU node; the second tag names its environment.
   # The droplet creates them by name, so neither environment's state owns them.
-  tags = ["chalk-sfu", var.environment == "production" ? "chalk-sfu-prod" : "chalk-sfu-staging"]
+  tags           = ["chalk-sfu", var.environment == "production" ? "chalk-sfu-prod" : "chalk-sfu-staging"]
 }
 
 data "digitalocean_ssh_key" "operator" {
@@ -33,6 +34,7 @@ resource "digitalocean_droplet" "node" {
     control_port      = local.control_port
     udp_buffer        = local.table.udpBufferBytes
     media_port        = local.media_port
+    media_tcp_port    = local.media_tcp_port
   })
 
   lifecycle {
@@ -59,10 +61,17 @@ resource "digitalocean_firewall" "node" {
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
-  # A peer whose network blocks UDP reaches the node on the same port over TCP (SFU_TCP_ADDR).
+  # A peer whose network blocks UDP reaches the node over ICE-TCP. 50000 keeps existing
+  # clients working; 443 reaches peers whose networks allow only the HTTPS port.
   inbound_rule {
     protocol         = "tcp"
     port_range       = tostring(local.media_port)
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = tostring(local.media_tcp_port)
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 

@@ -48,6 +48,61 @@ func TestCreateSendsExactPinnedRequest(t *testing.T) {
 	}
 }
 
+func TestCreateAcceptsResponseWithoutVPCAndInspectsFullInventory(t *testing.T) {
+	accepted := windowDroplet(func(d map[string]any) {
+		d["status"] = "new"
+		d["networks"] = map[string]any{"v4": []any{}}
+		delete(d, "vpc_uuid")
+	})
+	booting := windowDroplet(func(d map[string]any) {
+		d["status"] = "new"
+		d["networks"] = map[string]any{"v4": []any{}}
+	})
+	fake := newFakeDigitalOcean(t, nil)
+	fake.handler = func(w http.ResponseWriter, r *http.Request, _ string) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/firewalls":
+			writeJSON(w, http.StatusOK, map[string]any{"firewalls": []map[string]any{goodFirewall()}})
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/droplets":
+			writeJSON(w, http.StatusOK, map[string]any{"droplets": []any{}})
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/droplets":
+			writeJSON(w, http.StatusAccepted, map[string]any{"droplet": accepted})
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/droplets/4242":
+			writeJSON(w, http.StatusOK, map[string]any{"droplet": booting})
+		default:
+			http.Error(w, "unexpected", http.StatusTeapot)
+		}
+	}
+	adapter := fake.adapter()
+	id, err := adapter.Create(context.Background(), testWindowName)
+	if err != nil || id != 4242 {
+		t.Fatalf("Create id=%d err=%v", id, err)
+	}
+	droplet, found, err := adapter.Inspect(context.Background(), testWindowName, id)
+	if err != nil || !found || droplet.ID != 4242 {
+		t.Fatalf("Inspect droplet=%+v found=%v err=%v", droplet, found, err)
+	}
+	if fake.count(http.MethodPost) != 1 {
+		t.Fatalf("%d POSTs, want 1", fake.count(http.MethodPost))
+	}
+}
+
+func TestCreateShapeMismatchKeepsProviderIDForInspection(t *testing.T) {
+	fake := newFakeDigitalOcean(t, nil)
+	base := routes(nil, []map[string]any{goodFirewall()})
+	fake.handler = func(w http.ResponseWriter, r *http.Request, body string) {
+		if r.Method == http.MethodPost {
+			writeJSON(w, http.StatusAccepted, map[string]any{"droplet": windowDroplet(func(d map[string]any) { d["vpc_uuid"] = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee" })})
+			return
+		}
+		base(w, r, body)
+	}
+	id, err := fake.adapter().Create(context.Background(), testWindowName)
+	if id != 4242 || !errors.Is(err, ErrSFUWindowCreateUnknown) {
+		t.Fatalf("Create id=%d err=%v", id, err)
+	}
+}
+
 func TestCreateRefusesDisagreeingFirewallBeforeAnyPost(t *testing.T) {
 	other := "99999999-2222-4333-8444-555555555555"
 	cases := map[string][]map[string]any{

@@ -163,6 +163,8 @@ export type SFUClientOptions = {
    * a UI that never reports tiles can pass 0 to pull every video at once.
    */
   readonly unreportedVideoTileWaitMs?: number;
+  /** False on a WebRTC implementation whose camera encoder cannot send simulcast; the camera then publishes one full-size stream. */
+  readonly cameraSimulcast?: boolean;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: SFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: SFURemoteTrack) => void;
@@ -214,6 +216,8 @@ export class SFUError extends Error {
       readonly status?: number;
       readonly retryableConnection?: boolean;
       readonly providerCode?: string;
+      /** The ICE state observed when a peer-connection wait expired. */
+      readonly iceConnectionState?: RTCIceConnectionState;
     } = {},
   ) {
     super(message);

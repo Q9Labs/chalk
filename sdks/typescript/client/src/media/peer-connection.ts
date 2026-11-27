@@ -1,4 +1,4 @@
-import { requireDescription } from "./tracks";
+import { requireDescription, waitFor } from "./tracks";
 import { SFUError, type SFUSnapshot } from "./types";
 
 export function connectionIsLive(connection: RTCPeerConnection): boolean {
@@ -6,6 +6,25 @@ export function connectionIsLive(connection: RTCPeerConnection): boolean {
 }
 export function connectionIsClosed(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "closed";
+}
+
+/** Waits for the whole WebRTC transport. A timeout stays `media_failed` so remote pulls keep their retry policy; the observed ICE state rides along for user-facing classification. */
+export async function waitForConnectionLive(connection: RTCPeerConnection, requireCurrent: () => void, timeoutMs: number, timeoutMessage = "Timed out waiting for the Chalk SFU peer connection"): Promise<void> {
+  try {
+    await waitFor(
+      () => {
+        requireCurrent();
+        return connectionIsLive(connection);
+      },
+      timeoutMs,
+      timeoutMessage,
+    );
+  } catch (error) {
+    if (error instanceof SFUError && error.code === "media_failed" && error.message === timeoutMessage) {
+      throw new SFUError(timeoutMessage, "media_failed", { iceConnectionState: connection.iceConnectionState });
+    }
+    throw error;
+  }
 }
 // The MIDs of the sections an offer turns on: a section the SFU sends on, not one it keeps recvonly or inactive.
 export function activeOfferedMids(offerSDP: string): ReadonlySet<string> {

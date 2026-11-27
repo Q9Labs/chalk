@@ -30,6 +30,7 @@ export type ChalkEmbeddedBoardContext = {
   readonly sceneStatus: string;
   readonly connectionStatus: string;
   readonly viewsAvailable: boolean;
+  readonly closeAvailable: boolean;
   readonly whoCanDraw?: { readonly policy: DrawPolicy; readonly people: readonly DrawPerson[] };
   readonly colors: {
     readonly canvas: string;

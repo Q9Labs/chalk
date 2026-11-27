@@ -10,7 +10,7 @@ import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } 
 import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./initial-media";
-import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode, mediaRefusalField } from "./lifecycle-failure";
+import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode, mediaIceFailureField, mediaRefusalField } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
@@ -1366,7 +1366,7 @@ function joinCancelledFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaRefusalField(value.cause) });
+  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaRefusalField(value.cause), ...mediaIceFailureField(value.cause) });
 }
 function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
   return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));

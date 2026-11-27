@@ -72,6 +72,180 @@ API `/readyz` shows `capabilities.screen_annotation: disabled` on the next reque
 
 Use the same statement with `true` to turn annotation back on, or `delete from screen_annotation_settings where singleton;` to use the startup default again. A client that connected while annotation was off must reconnect to negotiate it. Clients already using annotation before the flip get the current layer back without reconnecting.
 
+### Turn on presenting in production
+
+Presenting is off in production by default. Turn it on only after the renderer is deployed and the production API role can invoke it. Write its runtime inputs before the Promote that ships matching API, Sync and renderer code; that deploy is the first time the host reads them. Keep account identifiers, the production instance ID, parameter prefix, role names and concrete S3 version IDs in the private operator notes; do not paste them into Git.
+
+One-time bootstrap:
+
+1. Let a Nightly managed-release build publish the `renderer` member of `<release>.media.json`. Promote copies exact bytes later; never rebuild a renderer ZIP by hand.
+2. Copy that exact versioned ZIP into the production releases bucket under the same key. In a private operator workspace:
+
+   ```sh
+   SRC_BUCKET=<nightly artifact bucket>
+   PROD_BUCKET=chalk-production-releases-<account-id>-ap-southeast-1
+   SRC_KEY=<exact key from the media member; it may name an older carried-forward release>
+   DEST_KEY=document-renderer/<api-release-id>/<zip-sha256>.zip
+   SRC_VERSION=<version id from the media member>
+
+   COPY_RESULT=$(aws s3api copy-object \
+     --bucket "$PROD_BUCKET" --key "$DEST_KEY" \
+     --copy-source "$SRC_BUCKET/$SRC_KEY?versionId=$SRC_VERSION")
+   DEST_VERSION=$(jq -r '.VersionId' <<<"$COPY_RESULT")
+   [[ "$DEST_VERSION" != null && -n "$DEST_VERSION" ]]
+   ```
+
+   Verify the copied object's SHA-256 is the media member digest before continuing.
+
+3. Resolve the production API host's IAM role name without printing secrets:
+
+   ```sh
+   PROFILE_ARN=$(aws ec2 describe-instances --instance-ids <production instance id> \
+     --query 'Reservations[0].Instances[0].IamInstanceProfile.Arn' --output text)
+   PROFILE_NAME=${PROFILE_ARN##*/}
+   API_ROLE_NAME=$(aws iam get-instance-profile --instance-profile-name "$PROFILE_NAME" \
+     --query 'InstanceProfile.Roles[0].RoleName' --output text)
+   ```
+
+4. Write a mode-0600 private inputs file. Values not marked private are deterministic. Copy `alarm_actions` from the existing production dispatcher inputs or operator notes. `config_digest` is the SHA-256 of the exact environment JSON with `CHALK_CONFIG_DIGEST` omitted; the helper below computes it.
+
+   ```json
+   {
+     "function_name": "chalk-production-document-renderer",
+     "environment_name": "production",
+     "release_id": "<api release id from the selected manifest>",
+     "release_manifest_digest": "sha256:<sha256 of that release manifest file>",
+     "config_digest": "<computed below>",
+     "artifact_s3_bucket": "chalk-production-releases-<account-id>-ap-southeast-1",
+     "artifact_s3_key": "<DEST_KEY>",
+     "artifact_s3_object_version": "<DEST_VERSION>",
+     "artifact_sha256": "<zip-sha256>",
+     "artifact_sha256_base64": "<base64 of the hex digest>",
+     "timeout_seconds": 300,
+     "reserved_concurrency": 4,
+     "memory_size": 2048,
+     "ephemeral_storage_size": 1024,
+     "control_api_url": "https://api.chalkmeet.com",
+     "log_retention_days": 30,
+     "log_kms_key_arn": null,
+     "failure_queue_kms_key_arn": null,
+     "async_max_event_age_seconds": 3600,
+     "async_maximum_retry_attempts": 1,
+     "alarm_actions": ["<production alarm action ARN, or keep the array empty only while alerting is absent>"],
+     "control_api_invoker_principal": null,
+     "control_api_invoke_source_arn": null,
+     "control_api_invoker_role_name": "<API_ROLE_NAME>"
+   }
+   ```
+
+   ```sh
+   python3 - <<'PY'
+   import base64, hashlib, json
+   inputs_path = 'document-renderer-production.json'
+   data = json.load(open(inputs_path))
+   data['artifact_sha256_base64'] = base64.b64encode(bytes.fromhex(data['artifact_sha256'])).decode()
+   env = {
+     'CHALK_ENVIRONMENT': 'production',
+     'CHALK_RELEASE_ID': data['release_id'],
+     'CHALK_RELEASE_MANIFEST_DIGEST': data['release_manifest_digest'],
+     'CONTROL_API_BASE_URL': data['control_api_url'],
+     'LD_LIBRARY_PATH': '/var/task/lib',
+   }
+   data['config_digest'] = 'sha256:' + hashlib.sha256(json.dumps(env, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+   open(inputs_path, 'w').write(json.dumps(data, indent=2) + '\n')
+   PY
+   chmod 600 document-renderer-production.json
+   ```
+
+5. Bootstrap once. A fresh bootstrap requires a complete create-only plan; after an interruption the same command resumes the checkpoint, creates only missing resources and converges to a no-op plan. It is not the release path.
+
+   ```sh
+   AWS_PROFILE=q9labs \
+   CHALK_INFRA_INPUTS=$PWD/document-renderer-production.json \
+   CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP=approved \
+   pnpm infra bootstrap document-renderer production
+   ```
+
+   If an interrupted retry cannot read the half-created function's async invoke configuration, that is [issue #1706](https://github.com/Q9Labs/chalk/issues/1706). Recover manually rather than adopting anything. Before deleting, confirm all three of these, and stop if any one is not exactly as stated:
+   1. The bootstrap checkpoint for the `Function` resource in the document-renderer production state (the Alchemy AWS state backend in `infrastructure/platform/config.ts`) still has status `creating`.
+   2. This command returns `ResourceNotFoundException`. AccessDenied or any other error means stop:
+
+      ```sh
+      aws lambda get-function-event-invoke-config --function-name chalk-production-document-renderer
+      ```
+
+   3. The ownership tag equals the instance ID recorded in that checkpoint:
+
+      ```sh
+      aws lambda get-function --function-name chalk-production-document-renderer \
+        --query 'Tags."alchemy:instance"' --output text
+      ```
+
+   If the checkpoint cannot be read, anything differs, or anything is uncertain, stop and escalate; never delete an untagged or foreign function. Only when all three hold, delete that half-created function by name and rerun the same bootstrap command:
+
+   ```sh
+   aws lambda delete-function --function-name chalk-production-document-renderer
+   ```
+
+6. Verify before touching runtime inputs:
+
+   ```sh
+   AWS_PROFILE=q9labs pnpm infra plan document-renderer production
+   AWS_PROFILE=q9labs pnpm infra drift document-renderer production
+   aws lambda get-function-configuration --function-name chalk-production-document-renderer \
+     --query '{State:State,Update:LastUpdateStatus,CodeSha256:CodeSha256,Release:Environment.Variables.CHALK_RELEASE_ID}'
+   aws iam get-role-policy --role-name "$API_ROLE_NAME" \
+     --policy-name chalk-production-document-renderer-control-api-invoke \
+     --query 'PolicyDocument.Statement[0].Sid' --output text
+   ```
+
+   The plan must be no-op, drift clean, the function Active/Successful, and the role policy Sid `InvokeDocumentRendererOnly`.
+
+7. For today's production rollout, leave the GitHub environment variable `CHALK_RENDERER_RELEASE_ENABLED` unset; delete it if it was already created, and do not define a repository-wide fallback. The bootstrap above is enough: the API invokes the renderer by function name, and the renderer stays on its bootstrap version. While the variable is unset, managed release preflight, Promote rollback retention and hotfix retention skip renderer state entirely and explicitly leave the already-bootstrapped renderer live; no renderer DynamoDB permission or renderer release binding is needed for it to keep serving. Do not set the variable to `true` until [issue #1705](https://github.com/Q9Labs/chalk/issues/1705) fixes interrupted managed renderer release recovery. After that follow-up, setting it declares renderer release binding and the production deploy role must have the document-renderer state read/write, `.tflock`, versioned-ZIP copy/read and Lambda binding permissions described in `docs/managed-release.md`.
+
+Runtime input rollout:
+
+1. Generate the capability secret locally; do not print it in chat or CI logs. It is stored inside the existing `api.env` SecureString, not as a separate plaintext parameter:
+
+   ```sh
+   openssl rand -base64 48 > capability-secret.txt
+   chmod 600 capability-secret.txt
+   ```
+
+2. Before dispatching the Promote that ships the presenting code, update the two existing SecureStrings in the environment-scoped SSM prefix used by the deployment controller (the private `CHALK_MANAGED_PARAMETER_PREFIX`, scoped `/chalk/production/...`). Add these keys to `<prefix>/api.env`:
+
+   ```ini
+   CHALK_PRESENTING_ENABLED=true
+   CHALK_PRESENTING_CAPABILITY_SECRET=<48 random bytes, base64 encoded>
+   CHALK_PRESENTING_RENDERER_FUNCTION_NAME=chalk-production-document-renderer
+   ```
+
+   Ensure `CHALK_RECORDING_KMS_REGION` and the existing R2 keys are present; the preflight requires them when presenting is on. Add `CHALK_PRESENTING_ENABLED=true` to `<prefix>/sync.env` when that same Promote ships the Sync presenting code. For an API-only intermediate rollout leave the Sync value `false`; Sync `true` with API `false` is invalid and is rejected. Preserve each parameter as a SecureString and preserve its KMS key when overwriting; fetch the current `KeyId` with `aws ssm describe-parameters` and pass it as `--key-id`.
+
+3. Run the normal `Promote newest held nightly` workflow for the exact held release that ships the presenting code. The deployment controller fetches these SecureStrings as part of that new release's deploy, so the first boot of the release already has the intended API and Sync values. Never use a same-release deploy as a flag reload: an already-active release reports success before fetching changed SecureStrings, so a later flag change takes effect only with the next managed release.
+4. Verify `/readyz` reports `capabilities.presenting: "enabled"` after that Promote, then present one real small PDF in a production Space and confirm pages render and follower page state survives a reload. Check the renderer log group for invocation errors and the API log for `presenting.config_incomplete` (there must be none). Do not treat `deploy-managed-release.mjs --dry-run` as evidence for this step: it exits before the host SSM input step, so it can check local preflight inputs but does not prove the changed SecureStrings reached or were applied on the host.
+
+Undo:
+
+1. Use the database kill switch in [Turn off presenting](#turn-off-presenting) first; it takes effect without a restart or input reload and leaves the renderer idle.
+2. A later SSM flag change, including setting `CHALK_PRESENTING_ENABLED=false` or removing the presenting keys, takes effect only with the next managed release. Write the desired values before that release; do not expect the current active release to reload them in place.
+3. Renderer code has no rollback while `CHALK_RENDERER_RELEASE_ENABLED` is unset. Managed rollback leaves the renderer untouched, so the renderer keeps its bootstrap version. Step 1 is the undo for presenting, and rolling renderer code back needs the follow-up in [issue #1705](https://github.com/Q9Labs/chalk/issues/1705). Do not edit Lambda code, IAM or Alchemy state by hand.
+
+### Turn off presenting
+
+`CHALK_PRESENTING_ENABLED` is the startup default: off in production, on in local development, staging, nightly and Orbs. For a rollback without a restart, use the application's direct database connection with the operator role:
+
+```sql
+insert into presenting_settings (singleton, enabled) values (true, false)
+on conflict (singleton) do update set enabled = excluded.enabled;
+```
+
+The API decides whether it can serve presenting (the flag is on and its configuration is complete) and publishes that answer to `presenting_api_capability` at startup. Sync offers presenting only while that row says servable and the override above allows it, so a Present control never appears for an API that would answer `presenting.disabled`. The Sync default only applies until an API release that publishes has started.
+
+API `/readyz` shows `capabilities.presenting: disabled` on the next request. Participant presenting routes then reject new reads and writes with `presenting.disabled`; live calls, chat attachments and screen shares stay in place. Renderer control claims are rejected while the switch is off. Leases already issued may drain only through their completion, failure, heartbeat, page-ready and zoom-completion callbacks; their object writes remain unpublished if their lease has expired. No new Document can be created while the switch is off.
+
+Use the same statement with `true` to turn presenting back on, or `delete from presenting_settings where singleton;` to use the startup default again.
+
 ## Never stop the production node
 
 Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does block termination through the console, CLI or API.

@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	logglobal "go.opentelemetry.io/otel/log/global"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -43,7 +42,7 @@ func Start(ctx context.Context, config Config) (Runtime, error) {
 	if endpoint == "" {
 		otel.SetTracerProvider(tracenoop.NewTracerProvider())
 		otel.SetMeterProvider(metricnoop.NewMeterProvider())
-		logglobal.SetLoggerProvider(lognoop.NewLoggerProvider())
+		otel.SetLoggerProvider(lognoop.NewLoggerProvider())
 		otel.SetTextMapPropagator(propagator)
 		return Runtime{}, nil
 	}
@@ -83,7 +82,7 @@ func Start(ctx context.Context, config Config) (Runtime, error) {
 	logProvider := sdklog.NewLoggerProvider(logOptions...)
 	otel.SetTracerProvider(traceProvider)
 	otel.SetMeterProvider(meterProvider)
-	logglobal.SetLoggerProvider(logProvider)
+	otel.SetLoggerProvider(logProvider)
 	otel.SetTextMapPropagator(propagator)
 	runtimeMetricsOnce.Do(func() { runtime.Start(runtime.WithMeterProvider(meterProvider)) })
 
