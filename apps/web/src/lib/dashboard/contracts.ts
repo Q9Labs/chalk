@@ -5,6 +5,8 @@ import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
+import type { FocusDTO } from "./focus-contracts";
+export type { FocusDTO };
 import type { TalkTimeDTO } from "./talk-time";
 
 const id = z.uuid();
@@ -181,19 +183,6 @@ export type RecordingDTO = {
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
-export type FocusDTO = {
-  participants: {
-    participantId: string;
-    displayName: string;
-    awayTimeSeconds: number;
-    timesAway: number;
-    longestAwaySeconds: number;
-    reportingCoverageSeconds: number;
-    intervals: { state: string; windowed: boolean; startedAt: string; endedAt: string }[];
-    stepAways: { reason: string; startedAt: string; endedAt: string | null }[];
-  }[];
-  allowWindows: { actorParticipantId: string; startedAt: string; endsAt: string; endedAt: string | null }[];
-};
 export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; isYou: boolean; firstJoinedAt: string; lastLeftAt: string | null }[] };
 export type HomeCallDTO = CallDTO & { inviteUrl: string | null; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
 export type CueDTO = { startMs: number; endMs: number; text: string; speaker: { name: string | null; participantRef: string } | null };
