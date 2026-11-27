@@ -6,6 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { runJourney } from "./journey.mjs";
 
 const wait = 60_000;
@@ -82,7 +83,16 @@ await runJourney("focus-attention", async ({ step, person, seed, web, joinByLink
     const { episodes } = await system("GET", `/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes`);
     const live = episodes.at(0);
     if (!live) throw new Error("the call's Space has no Episode");
-    const focus = await system("GET", `/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes/${live.id}/focus`);
+    const url = `/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes/${live.id}/focus`;
+    // The guest's last interval closes when the window comes back, so the record settles a moment after the last step.
+    const deadline = Date.now() + wait;
+    let focus = await system("GET", url);
+    const kept = (record) => record.participants.some((person) => person.display_name === guest.name && person.times_away >= 1 && person.step_aways.some((away) => away.reason === "reading")) && record.allow_windows.length >= 1;
+    while (!kept(focus) && Date.now() < deadline) {
+      await delay(1000);
+      focus = await system("GET", url);
+    }
     await writeFile(join(out, "focus.json"), `${JSON.stringify(focus, null, 2)}\n`);
+    if (!kept(focus)) throw new Error(`the Episode's Focus record does not hold the guest's away time, step away and allowance: ${JSON.stringify(focus)}`);
   });
 });
