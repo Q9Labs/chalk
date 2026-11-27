@@ -625,13 +625,13 @@ function strictEvent(value: Record<string, unknown>): boolean {
     case "recording_status_changed":
       return exactObjectWithOptional(value.payload, ["recording_id", "status", "failure_code"], []) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "focus_step_away_set":
-      return exactObject(value.payload, ["participant_id", "reason"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id", "reason"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "focus_step_away_cleared":
-      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["participant_id"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "focus_allowance_opened":
-      return exactObject(value.payload, ["actor_participant_id", "minutes"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["actor_participant_id", "minutes"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "focus_allowance_closed":
-      return exactObject(value.payload, ["actor_participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
+      return exactObjectWithOptional(value.payload, ["actor_participant_id"], []) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     default:
       return false;
   }

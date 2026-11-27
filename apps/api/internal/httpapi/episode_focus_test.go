@@ -20,6 +20,10 @@ type episodeFocusProbe struct {
 	calls    int
 }
 
+func (p *admissionLifecycleProbe) GetEpisodeFocus(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.FocusArtifact, error) {
+	return episodes.FocusArtifact{}, nil
+}
+
 func (p *episodeFocusProbe) GetEpisodeFocus(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.FocusArtifact, error) {
 	p.calls++
 	return p.artifact, nil
