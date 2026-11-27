@@ -1,6 +1,7 @@
 import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
 export type { AccessGrant } from "../access/grant.js";
+import type { TenantHandoverClient } from "./tenant-handover-types.js";
 import type { APIKeyList, APIKeyWithSecret, CreateAPIKeyInput, ListAPIKeysInput, RotateAPIKeyInput } from "./api-key-types.js";
 export type * from "./api-key-types.js";
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
@@ -11,34 +12,7 @@ export type ChalkServerClientOptions = {
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkServerHeaders;
 };
-export type ChalkIdempotencyOptions = {
-  readonly idempotencyKey?: string;
-};
-export type TenantHandoverActor = {
-  readonly kind: "service" | "operator";
-  readonly service_id?: string;
-  readonly operator?: string;
-};
-export type TenantHandover = {
-  readonly accepted_at: string | null;
-  readonly accepted_by_user_id: string | null;
-  readonly canceled_at: string | null;
-  readonly canceled_by: TenantHandoverActor | null;
-  readonly created_at: string;
-  readonly expires_at: string;
-  readonly from_service_id: string;
-  readonly id: string;
-  readonly initiated_by: TenantHandoverActor;
-  readonly recipient_email: string;
-  readonly status: "pending" | "accepted" | "canceled" | "expired";
-  readonly tenant_id: string;
-  readonly to_service_id: string;
-  readonly updated_at: string;
-};
-export type CreateTenantHandoverInput = {
-  readonly recipientEmail: string;
-  readonly expiresInSeconds?: number;
-};
+export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
 export type RecordingPolicy = "disabled" | "manual" | "automatic";
 export type TranscriptionPolicy = "disabled" | "on_demand" | "automatic";
 export type CreateSpaceInput = {
@@ -307,11 +281,7 @@ export type ChalkServerClient = {
     rotate(apiKeyId: string, input?: RotateAPIKeyInput): Promise<APIKeyWithSecret>;
     revoke(apiKeyId: string): Promise<void>;
   };
-  readonly tenantHandovers: {
-    create(input: CreateTenantHandoverInput, options?: ChalkIdempotencyOptions): Promise<TenantHandover>;
-    get(handoverId: string): Promise<TenantHandover>;
-    cancel(handoverId: string): Promise<TenantHandover>;
-  };
+  readonly tenantHandovers: TenantHandoverClient;
   readonly recordings: {
     list(input?: ListRecordingsInput): Promise<RecordingList>;
     get(recordingId: string): Promise<Recording>;

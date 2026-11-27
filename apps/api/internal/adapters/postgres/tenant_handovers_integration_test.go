@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/tenanthandovers"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -44,7 +45,7 @@ func seedHandoverFixture(t *testing.T, pool *pgxpool.Pool, serviceID string) han
 	}
 	exec(`insert into tenants(id,name,created_by_service_id) values($1,'Handover fixture',$2)`, uuid(f.tenant), serviceID)
 	exec(`insert into tenant_artifact_policies(tenant_id,recording_retention_seconds,transcript_retention_seconds) values($1,3600,7200)`, uuid(f.tenant))
-	exec(`insert into spaces(id,name,tenant_id,slug,media_plane) values($1,'Handover fixture',$2,$3,'chalk_sfu')`, uuid(f.space), uuid(f.tenant), "handover-"+f.space.String())
+	exec(`insert into spaces(id,name,tenant_id,slug,media_plane) values($1,'Handover fixture',$2,$3,$4)`, uuid(f.space), uuid(f.tenant), "handover-"+f.space.String(), mediaplane.ProviderChalkSFU.SettingName())
 	exec(`insert into episodes(id,status,space_id,tenant_id,config_snapshot) values($1,'ended',$2,$3,'{}')`, uuid(f.episode), uuid(f.space), uuid(f.tenant))
 	exec(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,metadata) values($1,$2,$3,$4,'completed','s3','{}')`, uuid(f.recording), uuid(f.tenant), uuid(f.space), uuid(f.episode))
 	exec(`insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages) values($1,$2,$3,$4,$5,'complete','{en}')`, uuid(f.transcript), uuid(f.tenant), uuid(f.recording), uuid(f.space), uuid(f.episode))
@@ -80,8 +81,10 @@ func seedHandoverFixture(t *testing.T, pool *pgxpool.Pool, serviceID string) han
 	return f
 }
 
+var handoverTestNow = time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+
 func handoverService(pool *pgxpool.Pool) tenanthandovers.Service {
-	return tenanthandovers.NewService(NewTenantHandoverRepository(pool)).WithClock(func() time.Time { return time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC) })
+	return tenanthandovers.NewService(NewTenantHandoverRepository(pool)).WithClock(func() time.Time { return handoverTestNow })
 }
 
 func createHandover(t *testing.T, service tenanthandovers.Service, tenant utilities.ID, actor tenanthandovers.Actor, key, email string) tenanthandovers.CreateResult {
@@ -180,7 +183,7 @@ func TestTenantHandoverExpiryIntegration(t *testing.T) {
 	fixture := seedHandoverFixture(t, pool, "service-a")
 	service := handoverService(pool)
 	created := createHandover(t, service, fixture.tenant, tenanthandovers.Actor{Kind: tenanthandovers.ActorService, ServiceID: "service-a"}, "expire-start-0001", "recipient@example.test")
-	if _, err := pool.Exec(context.Background(), `update tenant_handovers set expires_at=now()-interval '1 second' where id=$1`, uuid(created.Handover.ID)); err != nil {
+	if _, err := pool.Exec(context.Background(), `update tenant_handovers set expires_at=$2 where id=$1`, uuid(created.Handover.ID), handoverTestNow.Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Accept(context.Background(), tenanthandovers.AcceptInput{HandoverID: created.Handover.ID, RecipientEmail: "recipient@example.test", RecipientName: "Recipient"}); !errors.Is(err, tenanthandovers.ErrHandoverExpired) {

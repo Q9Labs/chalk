@@ -179,55 +179,15 @@ func (r TenantHandoverRepository) Accept(ctx context.Context, input tenanthandov
 		}
 		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrHandoverAlreadyAccepted
 	}
-	if row.Status == tenanthandovers.StatusCanceled {
-		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrHandoverCanceled
-	}
-	if !row.ExpiresAt.Time.After(now) {
-		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrHandoverExpired
-	}
-	if input.RecipientEmail != row.RecipientEmail {
-		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrRecipientMismatch
-	}
-	if owner != row.FromServiceID {
-		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrOwnershipChanged
-	}
-	if err := q.LockTenantHandoverUserEmail(ctx, input.RecipientEmail); err != nil {
+	if err := handoverAcceptanceBlock(row, input, owner, now); err != nil {
 		return tenanthandovers.AcceptResult{}, err
 	}
-	userPG, err := q.GetTenantHandoverUserID(ctx, input.RecipientEmail)
-	if errors.Is(err, pgx.ErrNoRows) {
-		newID, idErr := utilities.NewID()
-		if idErr != nil {
-			return tenanthandovers.AcceptResult{}, idErr
-		}
-		userPG, err = q.CreateTenantHandoverUser(ctx, sqlc.CreateTenantHandoverUserParams{ID: uuid(newID), Name: input.RecipientName, Email: input.RecipientEmail})
-	}
-	if err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("upsert handover user: %w", err)
-	}
-	userID := nullableID(userPG)
-	membershipID, err := utilities.NewID()
+	userPG, err := upsertHandoverUser(ctx, q, input)
 	if err != nil {
 		return tenanthandovers.AcceptResult{}, err
 	}
-	if _, err = q.UpsertTenantHandoverOwnerMembership(ctx, sqlc.UpsertTenantHandoverOwnerMembershipParams{ID: uuid(membershipID), TenantID: uuid(tenantID), UserID: userPG}); err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("upsert handover owner membership: %w", err)
-	}
-	if _, err = q.TransferTenantHandoverOwnership(ctx, sqlc.TransferTenantHandoverOwnershipParams{
-		ToServiceID: optionalText(row.ToServiceID), TransferredAt: timestampValue(now), TenantID: uuid(tenantID), FromServiceID: optionalText(row.FromServiceID),
-	}); errors.Is(err, pgx.ErrNoRows) {
-		return tenanthandovers.AcceptResult{}, tenanthandovers.ErrOwnershipChanged
-	} else if err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("transfer tenant ownership: %w", err)
-	}
-	if _, err = q.RevokeTenantHandoverAPIKeys(ctx, sqlc.RevokeTenantHandoverAPIKeysParams{RevokedAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("revoke tenant API keys: %w", err)
-	}
-	if _, err = q.DisableTenantHandoverWebhookEndpoints(ctx, sqlc.DisableTenantHandoverWebhookEndpointsParams{DisabledAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("disable tenant webhook endpoints: %w", err)
-	}
-	if _, err = q.CancelTenantHandoverWebhookDeliveries(ctx, sqlc.CancelTenantHandoverWebhookDeliveriesParams{CanceledAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
-		return tenanthandovers.AcceptResult{}, fmt.Errorf("cancel tenant webhook deliveries: %w", err)
+	if err := transferHandoverOwnership(ctx, q, row, tenantID, userPG, now); err != nil {
+		return tenanthandovers.AcceptResult{}, err
 	}
 	updated, err := q.AcceptTenantHandover(ctx, sqlc.AcceptTenantHandoverParams{AcceptedByUserID: userPG, AcceptedAt: timestampValue(now), ID: uuid(input.HandoverID)})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -236,7 +196,7 @@ func (r TenantHandoverRepository) Accept(ctx context.Context, input tenanthandov
 	if err != nil {
 		return tenanthandovers.AcceptResult{}, fmt.Errorf("accept tenant handover: %w", err)
 	}
-	return tenanthandovers.AcceptResult{Handover: mapTenantHandover(updated), UserID: userID}, tx.Commit(ctx)
+	return tenanthandovers.AcceptResult{Handover: mapTenantHandover(updated), UserID: nullableID(userPG)}, tx.Commit(ctx)
 }
 
 func lockHandoverTenant(ctx context.Context, q *sqlc.Queries, tenantID utilities.ID) (string, error) {
@@ -266,4 +226,65 @@ func mapTenantHandover(row sqlc.TenantHandover) tenanthandovers.Handover {
 
 func timestampValue(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: value.UTC(), Valid: true}
+}
+
+func handoverAcceptanceBlock(row sqlc.TenantHandover, input tenanthandovers.AcceptInput, owner string, now time.Time) error {
+	if row.Status == tenanthandovers.StatusCanceled {
+		return tenanthandovers.ErrHandoverCanceled
+	}
+	if !row.ExpiresAt.Time.After(now) {
+		return tenanthandovers.ErrHandoverExpired
+	}
+	if input.RecipientEmail != row.RecipientEmail {
+		return tenanthandovers.ErrRecipientMismatch
+	}
+	if owner != row.FromServiceID {
+		return tenanthandovers.ErrOwnershipChanged
+	}
+	return nil
+}
+
+func upsertHandoverUser(ctx context.Context, q *sqlc.Queries, input tenanthandovers.AcceptInput) (pgtype.UUID, error) {
+	if err := q.LockTenantHandoverUserEmail(ctx, input.RecipientEmail); err != nil {
+		return pgtype.UUID{}, err
+	}
+	userPG, err := q.GetTenantHandoverUserID(ctx, input.RecipientEmail)
+	if errors.Is(err, pgx.ErrNoRows) {
+		newID, idErr := utilities.NewID()
+		if idErr != nil {
+			return pgtype.UUID{}, idErr
+		}
+		userPG, err = q.CreateTenantHandoverUser(ctx, sqlc.CreateTenantHandoverUserParams{ID: uuid(newID), Name: input.RecipientName, Email: input.RecipientEmail})
+	}
+	if err != nil {
+		return pgtype.UUID{}, fmt.Errorf("upsert handover user: %w", err)
+	}
+	return userPG, nil
+}
+
+func transferHandoverOwnership(ctx context.Context, q *sqlc.Queries, row sqlc.TenantHandover, tenantID utilities.ID, userPG pgtype.UUID, now time.Time) error {
+	membershipID, err := utilities.NewID()
+	if err != nil {
+		return err
+	}
+	if _, err = q.UpsertTenantHandoverOwnerMembership(ctx, sqlc.UpsertTenantHandoverOwnerMembershipParams{ID: uuid(membershipID), TenantID: uuid(tenantID), UserID: userPG}); err != nil {
+		return fmt.Errorf("upsert handover owner membership: %w", err)
+	}
+	if _, err = q.TransferTenantHandoverOwnership(ctx, sqlc.TransferTenantHandoverOwnershipParams{
+		ToServiceID: optionalText(row.ToServiceID), TransferredAt: timestampValue(now), TenantID: uuid(tenantID), FromServiceID: optionalText(row.FromServiceID),
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return tenanthandovers.ErrOwnershipChanged
+	} else if err != nil {
+		return fmt.Errorf("transfer tenant ownership: %w", err)
+	}
+	if _, err = q.RevokeTenantHandoverAPIKeys(ctx, sqlc.RevokeTenantHandoverAPIKeysParams{RevokedAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
+		return fmt.Errorf("revoke tenant API keys: %w", err)
+	}
+	if _, err = q.DisableTenantHandoverWebhookEndpoints(ctx, sqlc.DisableTenantHandoverWebhookEndpointsParams{DisabledAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
+		return fmt.Errorf("disable tenant webhook endpoints: %w", err)
+	}
+	if _, err = q.CancelTenantHandoverWebhookDeliveries(ctx, sqlc.CancelTenantHandoverWebhookDeliveriesParams{CanceledAt: timestampValue(now), TenantID: uuid(tenantID)}); err != nil {
+		return fmt.Errorf("cancel tenant webhook deliveries: %w", err)
+	}
+	return nil
 }

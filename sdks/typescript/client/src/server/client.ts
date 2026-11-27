@@ -25,8 +25,8 @@ import type {
   Space,
   SpacePublicInvite,
   SpaceList,
-  TenantHandover,
 } from "./types.js";
+import type { TenantHandover } from "./tenant-handover-types.js";
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
   const tenantId = required(options.tenantId, "tenantId");

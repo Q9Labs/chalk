@@ -66,30 +66,38 @@ func run() error {
 	var result any
 	switch operation {
 	case "start":
-		tenantID, err := utilities.ParseID(*tenant)
-		if err != nil {
-			return errors.New("valid tenant-id required")
-		}
-		created, err := service.Create(ctx, tenanthandovers.CreateInput{TenantID: tenantID, RecipientEmail: *email, ExpiresInSeconds: *expiresIn, RequestKey: *requestKey, ToServiceID: cfg.API.ServicePrincipal.ID, Actor: actor})
-		if err != nil {
-			return err
-		}
-		result = created.Handover
+		result, err = startHandover(ctx, service, actor, *tenant, *email, *requestKey, cfg.API.ServicePrincipal.ID, *expiresIn)
 	case "cancel":
-		tenantID, err := utilities.ParseID(*tenant)
-		if err != nil {
-			return errors.New("valid tenant-id required")
-		}
-		handoverID, err := utilities.ParseID(*handover)
-		if err != nil {
-			return errors.New("valid handover-id required")
-		}
-		result, err = service.Cancel(ctx, tenanthandovers.CancelInput{TenantID: tenantID, HandoverID: handoverID, Actor: actor})
-		if err != nil {
-			return err
-		}
+		result, err = cancelHandover(ctx, service, actor, *tenant, *handover)
 	default:
-		return errors.New("unknown operation")
+		err = errors.New("unknown operation")
+	}
+	if err != nil {
+		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(result)
+}
+
+func startHandover(ctx context.Context, service tenanthandovers.Service, actor tenanthandovers.Actor, tenant, email, requestKey, toServiceID string, expiresIn int64) (any, error) {
+	tenantID, err := utilities.ParseID(tenant)
+	if err != nil {
+		return nil, errors.New("valid tenant-id required")
+	}
+	created, err := service.Create(ctx, tenanthandovers.CreateInput{TenantID: tenantID, RecipientEmail: email, ExpiresInSeconds: expiresIn, RequestKey: requestKey, ToServiceID: toServiceID, Actor: actor})
+	if err != nil {
+		return nil, err
+	}
+	return created.Handover, nil
+}
+
+func cancelHandover(ctx context.Context, service tenanthandovers.Service, actor tenanthandovers.Actor, tenant, handover string) (any, error) {
+	tenantID, err := utilities.ParseID(tenant)
+	if err != nil {
+		return nil, errors.New("valid tenant-id required")
+	}
+	handoverID, err := utilities.ParseID(handover)
+	if err != nil {
+		return nil, errors.New("valid handover-id required")
+	}
+	return service.Cancel(ctx, tenanthandovers.CancelInput{TenantID: tenantID, HandoverID: handoverID, Actor: actor})
 }
