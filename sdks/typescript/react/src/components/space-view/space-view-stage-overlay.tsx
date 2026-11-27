@@ -7,6 +7,7 @@ import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 
 export interface SpaceViewStageOverlayOptions {
   readonly presentInputRef: RefObject<HTMLInputElement | null>;
+  readonly presentAccept: string;
   readonly dropActive: boolean;
   readonly dropTarget: string | null;
   readonly presentOpen: boolean;
@@ -26,7 +27,7 @@ export interface SpaceViewStageOverlayOptions {
   readonly onSelectReaction: (reaction: Reaction) => void;
 }
 
-function renderFilePresentingOverlay({ presentInputRef, dropActive, dropTarget, presentOpen, presentingAvailable, presentBusy, choosePresentFiles, presentChosenFiles }: SpaceViewStageOverlayOptions): React.JSX.Element {
+function renderFilePresentingOverlay({ presentInputRef, presentAccept, dropActive, dropTarget, presentOpen, presentingAvailable, presentBusy, choosePresentFiles, presentChosenFiles }: SpaceViewStageOverlayOptions): React.JSX.Element {
   return (
     <>
       <input
@@ -36,7 +37,7 @@ function renderFilePresentingOverlay({ presentInputRef, dropActive, dropTarget, 
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
-        accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+        accept={presentAccept}
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];
           event.target.value = "";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type SpaceClient } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, presentingFormatsFor, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
 import { presentFiles } from "../stage/presenting-files";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
@@ -11,12 +11,16 @@ export interface FilePresentingOptions {
   readonly chatOpen: boolean;
   readonly chatEnabled: boolean;
   readonly presentingAvailable: boolean;
+  readonly formats: readonly PresentingFormatId[];
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly openChat: () => void;
 }
 
 /** Owns the Present popover's file flow: validation toasts, the first-file-to-stage split, and window drop routing. */
-export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, presentingAvailable, pickChatFiles, openChat }: FilePresentingOptions) {
+export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, presentingAvailable, formats, pickChatFiles, openChat }: FilePresentingOptions) {
+  const presentAccept = presentingFormatsFor(formats)
+    .flatMap((format) => [...format.mimeTypes, ...format.extensions.map((extension) => `.${extension}`)])
+    .join(",");
   const [presentOpen, setPresentOpen] = useState(false);
   const [presentBusy, setPresentBusy] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -55,7 +59,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       setPresentBusy(true);
       setPresentOpen(false);
       try {
-        const result = await presentFiles(files, client, { presentingAvailable, chatEnabled });
+        const result = await presentFiles(files, client, { presentingAvailable, chatEnabled, formats });
         reportPresentingResult(result);
         if (result.chatFiles.length) {
           openChat();
@@ -65,7 +69,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
         setPresentBusy(false);
       }
     },
-    [chatEnabled, client, notify, openChat, presentBusy, presentingAvailable, reportPresentingResult],
+    [chatEnabled, client, formats, notify, openChat, presentBusy, presentingAvailable, reportPresentingResult],
   );
 
   const choosePresentFiles = useCallback(async () => {
@@ -127,5 +131,5 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
     });
   }, []);
 
-  return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, updateChatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
+  return { presentOpen, setPresentOpen, presentBusy, dropActive, dropTarget, chatDrop, updateChatDrop, presentInputRef, presentAccept, choosePresentFiles, presentChosenFiles };
 }

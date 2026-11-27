@@ -217,6 +217,7 @@ export function SpaceView({
     chatOpen: activePanel === "chat",
     chatEnabled: feature("chat"),
     presentingAvailable: presenting.available,
+    formats: presenting.formats,
     pickChatFiles,
     openChat: () => setActivePanel("chat"),
   });
