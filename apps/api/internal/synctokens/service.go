@@ -163,6 +163,7 @@ var validCapabilityNames = map[string]struct{}{
 	"sendChat": {}, "sendReaction": {}, "drawWhiteboard": {}, "manageWhiteboard": {}, "manageAdmission": {}, "assignRoles": {},
 	"muteOthers": {}, "stopVideoOthers": {}, "stopScreenOthers": {}, "requestMediaOthers": {}, "removeParticipant": {},
 	"manageRecording": {}, "startEpisode": {}, "extendEpisode": {}, "endEpisode": {}, "manageMembers": {}, "clearSpaceContent": {},
+	"focus.view": {}, "focus.manage": {}, "focus.exempt": {},
 }
 
 func validCapabilities(values []string) bool {
