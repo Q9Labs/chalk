@@ -36,7 +36,7 @@ export async function applyV1Event(state: V1ControlState, event: EventFrame): Pr
   if (event.base_revision !== state.revision || event.revision !== state.revision + 1) throw new V1ReplicaError("control event is not exact-next");
   if (event.schema_version !== state.stateSchemaVersion) throw new V1ReplicaError("control event schema version changed");
 
-  const next = reduceEvent(state, event);
+  const next = isFocusEvent(event) ? state : reduceEvent(state, event);
   const candidate = { ...next, revision: event.revision, stateDigest: event.resulting_state_digest };
   assertV1ControlSemantics(candidate);
   await assertDigest(candidate);
@@ -44,7 +44,7 @@ export async function applyV1Event(state: V1ControlState, event: EventFrame): Pr
 }
 
 export function optimisticV1Control(state: V1ControlState, actorId: string, commands: readonly V1TargetCommand[]): V1ControlState {
-  return commands.reduce((current, command) => applyOptimistic(current, actorId, command), state);
+  return commands.reduce((current, command) => (isFocusCommand(command) ? current : applyOptimistic(current, actorId, command)), state);
 }
 
 export function snapshotToState(snapshot: Snapshot): V1ControlState {
@@ -176,7 +176,6 @@ function isFocusCommand(command: V1TargetCommand): command is Extract<V1TargetCo
 }
 
 function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
-  if (isFocusEvent(event)) return state;
   switch (event.name) {
     case "participant_joined": {
       if (state.participants.some((participant) => participant.participantId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
@@ -221,7 +220,6 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
 }
 
 function applyOptimistic(state: V1ControlState, actorId: string, command: V1TargetCommand): V1ControlState {
-  if (isFocusCommand(command)) return state;
   switch (command.name) {
     case "set_hand_raised":
       return updateParticipant(state, actorId, (participant) => ({ ...participant, handRaised: command.payload.raised }), false);

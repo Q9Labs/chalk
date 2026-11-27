@@ -134,7 +134,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const followLabel = following ? "Stop following" : "Follow";
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
-  const actions = [...(participant.focusActions ?? []), ...tileActions({ label: actionLabel, run: onClick }, { label: followLabel, run: onFollow })];
+  const actions = tileActions({ label: actionLabel, run: onClick }, { label: followLabel, run: onFollow }, participant.focusActions);
   // On a phone a tap on the tile opens its options, so no tile carries its own "..." button.
   const tapForOptions = phone && actions.length > 0;
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -158,7 +158,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {deviceBadge ? <TileDevice device={deviceBadge} /> : null}
-          {showStatus ? <FocusChip focus={participant.focus} /> : null}
+          <FocusChip focus={participant.focus} visible={showStatus} />
           {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">

@@ -11,7 +11,7 @@ function awayLabel(focus: TileFocus, elapsedSeconds: number): string | null {
 }
 
 /** The tile chip that tells the other participants when this person is away from the window. */
-export function FocusChip({ focus }: { readonly focus?: TileFocus }) {
+export function FocusChip({ focus, visible }: { readonly focus?: TileFocus; readonly visible: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   const state = focus?.appState;
   const sinceRef = useRef(Date.now());
@@ -22,7 +22,7 @@ export function FocusChip({ focus }: { readonly focus?: TileFocus }) {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [state]);
-  if (!focus) return null;
+  if (!focus || !visible) return null;
   const label = awayLabel(focus, Math.max(0, Math.floor((now - sinceRef.current) / 1000)));
   if (!label) return null;
   return (

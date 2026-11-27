@@ -83,8 +83,7 @@ var capabilityOrder = []string{
 	"publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf",
 	"sendChat", "sendReaction", "drawWhiteboard", "manageWhiteboard", "manageAdmission", "assignRoles",
 	"muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant",
-	"manageRecording", "startEpisode", "extendEpisode", "endEpisode", "manageMembers", "clearSpaceContent",
-	"focus.view", "focus.manage", "focus.exempt",
+	"manageRecording", "startEpisode", "extendEpisode", "endEpisode", "manageMembers", "clearSpaceContent", "focus.view", "focus.manage", "focus.exempt",
 }
 
 var validCapabilities = func() map[string]struct{} {
