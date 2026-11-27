@@ -231,7 +231,7 @@ defmodule ChalkSync.ProtocolV1 do
   def encode!(frame) do
     if GeneratedV1.valid_server_frame?(frame),
       do: JSON.encode!(frame),
-      else: (snap = frame["snapshot"] || %{}; IO.inspect({Map.keys(frame), Map.keys(snap), Enum.map(snap["participants"] || [], &{Map.keys(&1), length(&1["capabilities"] || [])}), Map.new(snap["role_capabilities"] || %{}, fn {k, v} -> {k, length(v)} end), snap["admission_requests"], snap["recording"], snap["deadline_at_ms"], snap["status"]}, label: "BADFRAME", limit: :infinity, printable_limit: 3000); raise(ArgumentError, "invalid protocol-v1 server frame"))
+      else: raise(ArgumentError, "invalid protocol-v1 server frame")
   end
 
   defp normalize(

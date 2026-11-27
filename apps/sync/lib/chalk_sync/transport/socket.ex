@@ -244,7 +244,7 @@ defmodule ChalkSync.Transport.SocketV1 do
       )
     else
       {:error, :direct_limit} -> Lifecycle.stop(state, 1013, "try again later", :direct_limit)
-      {:error, _reason} -> Lifecycle.stop(state, 1008, "invalid token", :admission_rejected)
+      {:error, reason} -> (IO.inspect(reason, label: "REJECT", limit: 40); Lifecycle.stop(state, 1008, "invalid token", :admission_rejected))
     end
   end
 
