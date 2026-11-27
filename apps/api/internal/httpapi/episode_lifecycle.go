@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -68,28 +67,6 @@ type createEpisodeEndpointRequest struct {
 	RequestKey   string
 	MediaClients mediaplane.ClientProviders
 	Body         createEpisodeRequest
-}
-
-type admitParticipantRequest struct {
-	Admission          episodes.AdmissionMode `json:"admission,omitempty"`
-	ParticipantID      string                 `json:"participant_id,omitempty"`
-	Name               string                 `json:"name"`
-	Metadata           utilities.OptionalJSON `json:"metadata"`
-	Role               string                 `json:"role"`
-	IdentityID         string                 `json:"identity_id,omitempty"`
-	IdentityExternalID string                 `json:"identity_external_id,omitempty"`
-	IdentityKind       episodes.IdentityKind  `json:"identity_kind,omitempty"`
-}
-
-type admitParticipantEndpointRequest struct {
-	TenantID      utilities.ID
-	SpaceID       utilities.ID
-	EpisodeID     utilities.ID
-	RequestKey    string
-	ParticipantID utilities.ID
-	IdentityID    utilities.ID
-	MediaClients  mediaplane.ClientProviders
-	Body          admitParticipantRequest
 }
 
 type removeParticipantRequest struct {
@@ -306,13 +283,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 
 func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
-		if err := authorizeIdentityKind(ctx, request.Body.IdentityKind); err != nil {
-			return participantLifecycleResponse{}, err
-		}
-		// Refuse an SDK that cannot run the Episode's media before admission stores
-		// the Participant and takes a join seat. Other resolution failures surface
-		// from the join below, as before, so a waiting-room request needs no media.
-		if _, err := resolveMediaPlaneForClients(ctx, media, spacesService, tenantsService, request.TenantID, request.SpaceID, request.EpisodeID, request.MediaClients); errors.Is(err, mediaplane.ErrClientUnsupported) {
+		if err := checkAdmissionPreconditions(ctx, request, media, spacesService, tenantsService); err != nil {
 			return participantLifecycleResponse{}, err
 		}
 		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, IdentityExternalID: request.Body.IdentityExternalID, IdentityKind: request.Body.IdentityKind, Request: episodes.Request{Key: request.RequestKey}})
@@ -376,20 +347,6 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorIdentityKindConflict, apiErrorIdentityKindForbidden, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
-}
-
-func authorizeIdentityKind(ctx context.Context, kind episodes.IdentityKind) error {
-	if kind != episodes.IdentityKindAgent {
-		return nil
-	}
-	principal, ok := authentication.PrincipalFromContext(ctx)
-	if !ok {
-		return apiErrorUnauthenticated
-	}
-	if principal.Kind == authentication.PrincipalAPIKey || principal.Kind == authentication.PrincipalService {
-		return nil
-	}
-	return apiErrorIdentityKindForbidden
 }
 
 func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant, clients mediaplane.ClientProviders) (mediaplane.Join, error) {

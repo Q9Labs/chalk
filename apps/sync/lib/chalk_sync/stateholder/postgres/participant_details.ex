@@ -43,6 +43,20 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDetails do
     end)
   end
 
+  def overlay_page(connection, %EpisodeKey{} = episode, events) do
+    case read(connection, episode) do
+      {:ok, details} -> {:ok, overlay_events(events, details)}
+      {:retryable, reason} -> {:retryable, reason}
+    end
+  end
+
+  def overlay_recovery(%{snapshot: snapshot} = recovery, connection, %EpisodeKey{} = episode)
+      when is_map(snapshot) do
+    %{recovery | snapshot: overlay_snapshot(snapshot, read!(connection, episode))}
+  end
+
+  def overlay_recovery(recovery, _connection, _episode), do: recovery
+
   def overlay_snapshot(nil, _details), do: nil
 
   def overlay_snapshot(snapshot, details) when is_map(snapshot) and is_map(details) do

@@ -7,7 +7,6 @@ import { useSpaceClient } from "../../context/space-client-context";
 import { Icon } from "../../icons/Icon";
 import { usePressAnimation } from "../../motion/press";
 import { useCan, useParticipants, useSelf } from "../../hooks/space-hooks";
-import { AIBadge } from "../../primitives/AIBadge";
 import { ChalkText } from "../../primitives/ChalkText";
 import { IconButton } from "../../primitives/IconButton";
 import { Menu, MenuItem } from "../../primitives/Menu";
@@ -15,6 +14,7 @@ import { PillButton } from "../../primitives/PillButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
 import { fixed, space, corners } from "../../theme/tokens";
+import { PersonName } from "./PersonName";
 import { peopleRows, type PeopleRow } from "./people-model";
 import { TextField } from "./TextField";
 
@@ -185,15 +185,7 @@ const HandRow = memo(function HandRow({ participant, order, isSelf }: { readonly
         </ChalkText>
       </View>
       <Face name={participant.displayName} />
-      <ChalkText numberOfLines={1} style={styles.name} variant="bodyMedium">
-        {participant.displayName}
-        {isSelf ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  (You)"}
-          </ChalkText>
-        ) : null}
-      </ChalkText>
-      {participant.identityKind === "agent" ? <AIBadge testID={`people.hand.ai.${participant.participantId}`} /> : null}
+      <PersonName badgeTestID={`people.hand.ai.${participant.participantId}`} isSelf={isSelf} participant={participant} />
     </View>
   );
 });
@@ -243,20 +235,7 @@ const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, can
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <ChalkText accessibilityLabel={status ? `${participant.displayName}, ${status}` : participant.displayName} numberOfLines={1} style={styles.name} variant="bodyMedium">
-        {participant.displayName}
-        {isSelf ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  (You)"}
-          </ChalkText>
-        ) : null}
-        {host ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  Host"}
-          </ChalkText>
-        ) : null}
-      </ChalkText>
-      {participant.identityKind === "agent" ? <AIBadge testID={`people.ai.${participant.participantId}`} /> : null}
+      <PersonName accessibilityLabel={status ? `${participant.displayName}, ${status}` : participant.displayName} badgeTestID={`people.ai.${participant.participantId}`} host={host} isSelf={isSelf} participant={participant} />
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />
