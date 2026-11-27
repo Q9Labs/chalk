@@ -832,7 +832,7 @@ export const ParticipantSchema = Schema.Struct({
   admission_revision: PositiveIntegerSchema,
   role: RoleSchema,
   capabilities: Schema.Array(CapabilitySchema).check(
-    Schema.isMaxLength(23),
+    Schema.isMaxLength(26),
     Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique capabilities" })),
   ),
 }).check(exactKeys(["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"]));
@@ -840,7 +840,7 @@ export const AdmissionRequestSchema = Schema.Struct({ admission_request_id: Uuid
   exactKeys(["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]),
 );
 const UniqueCapabilityArraySchema = Schema.Array(CapabilitySchema).check(
-  Schema.isMaxLength(23),
+  Schema.isMaxLength(26),
   Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique capabilities" })),
 );
 const RoleCapabilitiesSchema = Schema.Record(RoleSchema, UniqueCapabilityArraySchema);
