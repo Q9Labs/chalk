@@ -1,0 +1,12 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LambdaPullDocumentRendererImage",
+      "Effect": "Allow",
+      "Principal": { "Service": "lambda.amazonaws.com" },
+      "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+      "Condition": { "StringLike": { "aws:sourceArn": "arn:aws:lambda:__REGION__:__ACCOUNT__:function:chalk-*-document-renderer-image" } }
+    }
+  ]
+}

@@ -22,8 +22,9 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
   const release = await prepareRelease({ allowedSecretIds, now, options });
   const binding = await dispatcherBinding({ commandRunner, options, dryRun: true });
   const renderer = await rendererBinding({ commandRunner, options, dryRun: true });
+  const rendererImage = await rendererImageBinding({ commandRunner, options, dryRun: true });
   if (options.dryRun) {
-    const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding, renderer_binding: renderer };
+    const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding, renderer_binding: renderer, renderer_image_binding: rendererImage };
     stdout.write(`${JSON.stringify(proof, null, 2)}\n`);
     return proof;
   }
@@ -37,6 +38,7 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
 async function completeWorkloadBindings({ commandRunner, options, result }) {
   result.deployment_phase = "host-ready";
   result.renderer_binding = { action: "pending", verified: false };
+  result.renderer_image_binding = { action: "pending", verified: false };
   result.dispatcher_binding = { action: "pending", verified: false };
   await persistProof(options, result);
   try {
@@ -44,6 +46,14 @@ async function completeWorkloadBindings({ commandRunner, options, result }) {
   } catch (error) {
     result.deployment_phase = "renderer-failed";
     result.renderer_binding = { action: "failed", verified: false };
+    await persistProof(options, result);
+    throw error;
+  }
+  try {
+    result.renderer_image_binding = await rendererImageBinding({ commandRunner, options, dryRun: false });
+  } catch (error) {
+    result.deployment_phase = "renderer-image-failed";
+    result.renderer_image_binding = { action: "failed", verified: false };
     await persistProof(options, result);
     throw error;
   }
@@ -87,6 +97,17 @@ export async function rendererBinding({ commandRunner, options, dryRun }) {
   const skipped = rendererGate(options);
   if (skipped) return skipped;
   const args = [fileURLToPath(new URL("../releases/media.py", import.meta.url)), "deploy_renderer", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment];
+  if (dryRun) args.push("--dry-run");
+  const result = await commandRunner({ command: "python3", args });
+  return JSON.parse(result.stdout);
+}
+
+export async function rendererImageBinding({ commandRunner, options, dryRun }) {
+  const members = resolve(options.manifestPath).replace(/\.json$/, ".media.json");
+  if (!(await fileExists(members))) return { action: "not-recorded", environment: options.environment };
+  if (options.environment !== "production") return rendererSkip(options.environment, "renderer-image-not-production-target");
+  if (process.env.CHALK_RENDERER_IMAGE_RELEASE_ENABLED !== "true") return rendererSkip(options.environment, "renderer-image-not-declared");
+  const args = [fileURLToPath(new URL("../releases/media.py", import.meta.url)), "deploy_renderer_image", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment];
   if (dryRun) args.push("--dry-run");
   const result = await commandRunner({ command: "python3", args });
   return JSON.parse(result.stdout);
