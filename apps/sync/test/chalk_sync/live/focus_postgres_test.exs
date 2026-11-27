@@ -148,7 +148,8 @@ defmodule ChalkSync.Live.FocusPostgresTest do
     {ack, sender} = command(sender, "clear_focus_step_away", %{})
     assert %{"type" => "ack", "outcome" => "committed"} = ack
 
-    assert {%{"focus_step_away_reason" => nil}, viewer} = next_presence_item(viewer, guest)
+    assert {back, viewer} = next_presence_item(viewer, guest)
+    refute Map.has_key?(back, "focus_step_away_reason")
 
     {ack, viewer} = command(viewer, "open_focus_allowance", %{"minutes" => 5})
     assert %{"type" => "ack", "outcome" => "committed"} = ack
