@@ -54,9 +54,10 @@ func (err *SFUWindowRateLimitError) Error() string { return "sfu window: Digital
 // SFUWindowConfig scopes the adapter to one environment's window nodes.
 //
 // The snapshot must be ready to boot: release preloaded, environment-specific
-// node TLS certificate baked in, no secrets in the image or in user data. The
-// adapter sends no user data and no SSH keys, and nothing deploys over SSH at
-// runtime. OwnerTag is the immutable environment owner tag and must be used by
+// node TLS certificate baked in, no secrets in the image. The only user data is
+// the optional Telemetry (Axiom ingest headers, write-only), which turns metric
+// and log export on. The adapter sends no SSH keys, and nothing deploys over SSH
+// at runtime. OwnerTag is the immutable environment owner tag and must be used by
 // nothing else (standbys and static nodes carry their own). FirewallID must be
 // the only firewall that targets OwnerTag or FirewallTag.
 type SFUWindowConfig struct {
@@ -69,6 +70,7 @@ type SFUWindowConfig struct {
 	SnapshotID  int64
 	Region      string
 	VPCUUID     string
+	Telemetry   SFUWindowTelemetry
 }
 
 // SFUWindowDroplet is the trusted view of one owned window node. Address is the
@@ -95,6 +97,7 @@ type SFUWindow struct {
 	snapshotID  int64
 	region      string
 	vpcUUID     string
+	telemetry   SFUWindowTelemetry
 	createMu    sync.Mutex
 	retryAt     atomic.Int64
 }
@@ -107,10 +110,14 @@ func NewSFUWindow(config SFUWindowConfig) (*SFUWindow, error) {
 	if !validSFUWindowTags(config) || !validSFUWindowNetwork(config) || !validSFUWindowToken(config.Token) {
 		return nil, ErrSFUWindowInvalid
 	}
+	if err := config.Telemetry.validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSFUWindowInvalid, err)
+	}
 	return &SFUWindow{
 		baseURL: baseURL, client: newSFUWindowHTTPClient(config.HTTPClient), token: config.Token,
 		ownerTag: config.OwnerTag, firewallTag: config.FirewallTag, firewallID: config.FirewallID,
 		snapshotID: config.SnapshotID, region: config.Region, vpcUUID: config.VPCUUID,
+		telemetry: config.Telemetry,
 	}, nil
 }
 
@@ -204,6 +211,7 @@ func (a *SFUWindow) Create(ctx context.Context, name string) (int64, error) {
 
 	payload := sfuWindowCreateRequest{
 		Name: name, Region: a.region, Size: SFUWindowSize, Image: a.snapshotID, Tags: a.expectedTags(), VPCUUID: a.vpcUUID,
+		UserData: a.telemetry.userData(),
 	}
 	var response struct {
 		Droplet sfuWindowDropletJSON `json:"droplet"`

@@ -3,6 +3,7 @@ import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { UserGroupIcon } from "../../utils/icons";
 import { ChalkBadge, ChalkEmptyState } from "../chalk-ui";
 import { useIsMobile } from "../../internal/useMediaQuery";
+import type { ParticipantDevice } from "@q9labsai/chalk-client";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { Stage } from "../stage/Stage";
 import { buildStageItems, type StageItem } from "../stage/stage-items";
@@ -11,7 +12,10 @@ export interface Participant {
   id: string;
   displayName: string;
   identityKind?: "user" | "agent" | "guest";
+  /** The device's name, with "· 2 devices" when the same person is connected twice. */
   deviceHint?: string;
+  /** The device behind the tile badge shown for a phone, tablet or foldable. */
+  device?: ParticipantDevice;
   isLocal?: boolean;
   /** A different seat belonging to the local person. */
   isOwnDevice?: boolean;

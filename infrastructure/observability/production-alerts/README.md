@@ -2,7 +2,7 @@
 
 The local Grafana rules do not run in production. Production has Axiom API logs, API/Sync traces and metrics, Postgres state and an uptime Worker. CloudWatch holds transcription Lambda and deployment logs and does not cover these failures.
 
-The three Axiom monitors have no notifier: nothing here sends a message to a person. They still evaluate every minute, and the API readiness and the goal check read their state. A new delivery target needs an owner's decision and a change to this folder, not a console edit, because `provision.py --check` reports any attached notifier as drift. Three grouped monitors fit the current monitor allowance (the free Axiom plan allows three), so a new rule joins an existing monitor instead of adding a fourth. The runbook for the Chalk SFU alerts, including the DigitalOcean node alerts `do-monitoring.sh` sets, is [sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names and monitor IDs in private configuration, never in this repo.
+The three Axiom monitors evaluate every minute, and the API readiness and the goal check read their state. They can share one delivery target. Three grouped monitors fit the current monitor allowance (the free Axiom plan allows three), so a new rule joins an existing monitor instead of adding a fourth. The runbook for the Chalk SFU alerts, including the DigitalOcean node alerts `do-monitoring.sh` sets, is [sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names and monitor IDs in private configuration, never in this repo.
 
 The rules are the `.apl` queries, `monitors.json`, `state.sql` and the thresholds in `provision.py`. Judgment behind them:
 
@@ -66,7 +66,7 @@ A managed release replaces only the managed runtime files and leaves `/opt/chalk
 
 ## Reconcile the native monitors
 
-Load these privately: `AXIOM_TOKEN` (monitor management), `AXIOM_ORG_ID`, `LOG_DATASET` and `TRACE_DATASET`.
+Load these privately: `AXIOM_TOKEN` (monitor management and notifier read access), `AXIOM_ORG_ID`, `LOG_DATASET` and `TRACE_DATASET`. Before applying to production, create the custom webhook notifier named **Chalk alert triage** in Axiom. Store the webhook URL in 1Password and in the Axiom notifier, never in this repo or the provisioner's environment.
 
 ```sh
 python3 infrastructure/observability/production-alerts/provision.py
@@ -77,7 +77,7 @@ python3 infrastructure/observability/production-alerts/provision.py --apply
 python3 infrastructure/observability/production-alerts/provision.py --check
 ```
 
-This folder is the only source of the monitors. A change made in the Axiom console shows up as `DRIFT` in `--check`; put it here or undo it there. `--check` compares the query text (whitespace collapsed), thresholds, intervals and flags, and expects no notifier on any monitor: an empty notifier list is the correct state, an attached one is drift.
+This folder is the only source of the monitors. A change made in the Axiom console shows up as `DRIFT` in `--check`; put it here or undo it there. `--check` compares the query text (whitespace collapsed), thresholds, intervals, flags and notifier assignments. Both apply and check resolve the named notifier in Axiom, so all three monitors must have exactly that notifier without a machine-specific ID. A missing, ambiguous or wrong-type notifier stops reconciliation before any monitor is changed. To detach delivery without disabling evaluation, run `--apply --without-notifier` and verify with `--check --without-notifier`. Normal apply reattaches the notifier if it exists.
 
 Install the collector that writes `database-unreachable` and `runtime-health` before the first `--apply` of these queries. The staleness monitor watches both rules, so applying it first turns the monitor red once per missing rule.
 
@@ -85,8 +85,8 @@ For a release that keeps existing alerts enabled, validate with the first comman
 
 To undo only the connection-report rules, keeping the previous job, traffic and freshness queries enabled, run `provision.py --apply --without-connection-reports` with the same private environment. It leaves the collector's harmless name field in place and does not disable the collector or any app unit.
 
-Only the three exact monitor names are reconciled, with an empty notifier list; unrelated configuration is untouched. The state and traffic monitors group per rule and treat no data as not a failure; the third monitor lists the rules that wrote no row in three minutes and alerts for each one on its own, so one stopped probe cannot hide behind the others. A lost host writes no rows, so this is the signal for a lost Sync host. Exporter health stays with the uptime Worker and existing telemetry checks.
+Only the three exact monitor names are reconciled; unrelated configuration is untouched. The fleet-controller rule is part of the first monitor. The state and traffic monitors group per rule and treat no data as not a failure; the third monitor lists the rules that wrote no row in three minutes and alerts for each one on its own, so one stopped probe cannot hide behind the others. A lost host writes no rows, so this is the signal for a lost Sync host. Exporter health stays with the uptime Worker and existing telemetry checks.
 
 ## Check the monitors and the collector
 
-Run `provision.py --check` after every apply and on a schedule: it reads the live monitors and exits 1 on any difference. Confirm the monitor evaluation from its history in Axiom, and query every rule group and its freshness. Run `collector --test` and `collector --clear-test` to write a `delivery-test` group with no database write or induced failure; with no notifier it only proves the rows reach the dataset and the monitors read them. Rollback disables the three named monitors and stops only `chalk-alert-state.timer`; it leaves app units alone.
+Run `provision.py --check` after every apply and on a schedule: it reads the live monitors and exits 1 on any difference. Confirm the monitor evaluation from its history in Axiom, and query every rule group and its freshness. Run `collector --test` and `collector --clear-test` to write a `delivery-test` group with no database write or induced failure. With the notifier attached, verify that the test reaches the Captain thread; without it, the test only proves the rows reach the dataset and the monitors read them. To roll back monitor evaluation, disable the three named monitors and stop only `chalk-alert-state.timer`; leave app units alone.

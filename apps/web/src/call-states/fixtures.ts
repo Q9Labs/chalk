@@ -1,4 +1,4 @@
-import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, LinkQuality, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, LinkQuality, Participant, ParticipantDeviceKind, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
 import { boardActivity, planScene, smallScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
@@ -21,6 +21,8 @@ export type Person = {
   readonly quality?: "good" | "weak" | "poor";
   /** This guest dropped out of the call and is trying to come back. */
   readonly reconnecting?: boolean;
+  /** The device this person declared, shown as a tile badge and in the People panel. */
+  readonly device?: ParticipantDeviceKind;
 };
 
 const BACKGROUNDS = ["#4d5d73", "#5c6650", "#6b5b4f", "#64576b", "#49645d", "#665d42", "#315f72", "#6d5158"];
@@ -174,6 +176,7 @@ function participant(person: Person, capabilities: readonly Capability[]): Parti
     ...(person.description === undefined ? {} : { description: person.description }),
     eligibleRoles: ["guest", "host"],
     capabilities,
+    ...(person.device ? { identityId: `identity-${person.id}`, deviceKind: person.device } : {}),
     handRaised: person.handRaised ?? false,
     media: { microphone: person.microphone === false ? "inactive" : "active", camera: person.camera === false ? "inactive" : "active", screenShare: person.sharing ? "active" : "inactive" },
     presence: { state: person.reconnecting ? "disconnected" : "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false, ...(person.quality ? { connectionQuality: person.quality } : {}) },

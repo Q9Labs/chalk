@@ -71,14 +71,35 @@ export function chatUploadFailureOf(cause: unknown): { readonly kind: ChatUpload
 }
 
 /** Sends the bytes to the presigned storage URL and keeps the cause: no HTTP answer at all versus an HTTP status. */
-export async function storeUpload(fetch: typeof globalThis.fetch, upload: { readonly uploadUrl: string; readonly method: string; readonly headers: Readonly<Record<string, string>> }, bytes: ArrayBuffer): Promise<void> {
-  let response: Response;
+const BROWSER_SET_HEADERS = new Set(["content-length", "host"]);
+
+type StorageUpload = { readonly uploadUrl: string; readonly method: string; readonly headers: Readonly<Record<string, string>> };
+
+/** Sends the bytes to the presigned storage URL and keeps the cause: no HTTP answer at all versus an HTTP status. Progress needs XMLHttpRequest, because fetch reports no upload progress. */
+export async function storeUpload(fetch: typeof globalThis.fetch, upload: StorageUpload, bytes: ArrayBuffer, onProgress?: (fraction: number) => void): Promise<void> {
+  let status: number;
   try {
-    response = await fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes });
+    status = onProgress && typeof XMLHttpRequest !== "undefined" ? await sendWithProgress(upload, bytes, onProgress) : (await fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).status;
   } catch (cause) {
     throw new ChalkChatFileError({ operation: "store_upload", code: "unavailable", recoverable: true, message: CHAT_FILE_STORAGE_UNREACHABLE_MESSAGE }, { cause });
   }
-  if (!response.ok) {
-    throw new ChalkChatFileError({ operation: "store_upload", code: "file_transfer_failed", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}`, httpStatus: response.status });
+  if (status < 200 || status > 299) {
+    throw new ChalkChatFileError({ operation: "store_upload", code: "file_transfer_failed", recoverable: status >= 500, message: `Attachment upload failed with HTTP ${status}`, httpStatus: status });
   }
+  onProgress?.(1);
+}
+
+function sendWithProgress(upload: StorageUpload, bytes: ArrayBuffer, onProgress: (fraction: number) => void): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open(upload.method, upload.uploadUrl);
+    for (const [name, value] of Object.entries(upload.headers)) if (!BROWSER_SET_HEADERS.has(name.toLowerCase())) request.setRequestHeader(name, value);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress(Math.min(1, event.loaded / event.total));
+    };
+    request.onload = () => resolve(request.status);
+    request.onerror = () => reject(new Error("Storage upload failed before an HTTP answer"));
+    request.onabort = () => reject(new Error("Storage upload was aborted"));
+    request.send(bytes);
+  });
 }

@@ -3,6 +3,7 @@ defmodule ChalkSync.Live.Projection.Validation do
   Checks the shape and bounds of projection items.
   """
 
+  alias ChalkSync.DeviceKind
   alias ChalkSync.UUID
 
   @limits %{media: 1_500, presence: 500}
@@ -43,7 +44,13 @@ defmodule ChalkSync.Live.Projection.Validation do
       item,
       ["participant_id", "state", "speaking", "active_speaker"] ++
         Enum.filter(
-          ["identity_id", "device_type", "admission_revision", "connection_quality"],
+          [
+            "identity_id",
+            "device_type",
+            "device_kind",
+            "admission_revision",
+            "connection_quality"
+          ],
           &Map.has_key?(item, &1)
         )
     ) and
@@ -55,7 +62,8 @@ defmodule ChalkSync.Live.Projection.Validation do
   end
 
   defp valid_presence_hints?(item) do
-    valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
+    valid_identity_hint?(item) and valid_device_hint?(item) and valid_device_kind?(item) and
+      valid_admission_hint?(item) and
       valid_connection_quality?(item)
   end
 
@@ -74,6 +82,9 @@ defmodule ChalkSync.Live.Projection.Validation do
     do: device in ["phone", "tablet", "computer"]
 
   defp valid_device_hint?(_item), do: true
+
+  defp valid_device_kind?(%{"device_kind" => kind}), do: DeviceKind.valid?(kind)
+  defp valid_device_kind?(_item), do: true
 
   defp valid_admission_hint?(%{"admission_revision" => revision}),
     do: is_integer(revision) and revision > 0

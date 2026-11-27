@@ -223,6 +223,10 @@ export type ChatUploadFile =
       readonly mimeType: string;
       readonly bytes: ArrayBuffer;
     };
+export type ChatUploadOptions = {
+  /** Called as the file's bytes reach storage, with the share sent so far from 0 to 1. */
+  readonly onProgress?: (fraction: number) => void;
+};
 export type CameraPreview = {
   readonly track: MediaStreamTrack;
   readonly release: () => void;
