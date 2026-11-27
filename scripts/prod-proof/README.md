@@ -34,6 +34,16 @@ Every run creates its own key, Space, Episode and Recording. There is no hard-de
 
 Proof Spaces run on the Chalk SFU. Reused proof Spaces must have the required Recording and Transcription policies.
 
+### Window-node load proof
+
+`scripts/prod-proof/autoscale-load.mjs` loads the production Chalk SFU with small classes (one Episode each, 2 or 3 guests, headless Chromium with a fake camera and microphone) to show that the window controller adds nodes under load and removes them afterwards. It is not part of `pnpm prod:proof` and changes nothing by itself: the controller only scales when its live slots pass `CHALK_SFU_WINDOW_STANDING_SLOTS`, so an operator must lower that value on the controller host first and restore it afterwards. Run it from a Linux machine (an Instabox 8x16 holds about 8 guests per box) with the proof Tenant's fields as `CHALK_PROOF_*` variables and `CHALK_PROOF_CONFIG_SOURCE=env`:
+
+```sh
+node scripts/prod-proof/autoscale-load.mjs --expect-api-host api.chalkmeet.com --wave1 4 --wave2 0 --guests 2 --hold-minutes 12 --out /tmp/load-out
+```
+
+Each class is sampled every 10 s and passes when every guest decoded camera frames from every other guest in every window after a 90 s ramp. The per-class files (`samples.jsonl`, `episode.json`, `verdict.json`, `error.json`) hold run identifiers, so keep them out of Git. The script does not record which SFU node serves a class; read each node's `/readyz` `sessions` count while the load runs. Check live Episodes and bookings before you start.
+
 ### Recovery times
 
 `pnpm prod:recovery --environment staging --scenario <label> --start-cmd '<command>' [--hold-s N --end-cmd '<command>' --watch-s 90 --guest2-chromium <launcher>]` puts two guests in a live Chalk SFU call, runs the fault command, waits, runs the end command, and samples both pages every 100 ms. The report in the run's private directory holds, for each direction, whether audio and video were interrupted (a gap above 2 s), the seconds from the end and from the start of the fault until they returned, whether they never did, and the SDK connection statuses seen. The harness does nothing to the call after the fault, so a recovery is the product's own. Server faults (restarting the SFU, stopping the API) need only the command. Client network faults run on a Linux machine with root: `scripts/prod-proof/recovery-rig up` prints a launcher for `--guest2-chromium` that starts guest 2's Chromium in its own network namespace, and `blackout`, `restore` and `change` act on that namespace only.
