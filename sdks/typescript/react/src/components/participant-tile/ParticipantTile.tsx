@@ -14,6 +14,8 @@ import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
 import { useFramesFrozen, useFrozenFrame } from "./useFrozenFrame";
 import { TileReconnecting, TileSignal } from "./TileConnection";
+import { TileDevice, badgeDevice } from "./TileDevice";
+import type { ParticipantDevice } from "@q9labsai/chalk-client";
 import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
 import { useTrueFor } from "../../internal/useTrueFor";
 
@@ -22,7 +24,10 @@ export interface ParticipantTileProps {
     id: string;
     displayName: string;
     identityKind?: "user" | "agent" | "guest";
+    /** The device's name, with "· 2 devices" when the same person is connected twice. */
     deviceHint?: string;
+    /** Shows a badge in the bottom-right corner for a phone, tablet or foldable. */
+    device?: ParticipantDevice;
     isLocal?: boolean;
     isSpeaking?: boolean;
     /** Normalized voice level (0–1). Activity-only integrations use a neutral speaking level. */
@@ -118,6 +123,9 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const phone = useMediaQuery("(max-width:640px)");
   const [localMirrored] = useMirrorSetting();
   const [deviceLabel, ...deviceDetails] = participant.deviceHint?.split(" · ") ?? [];
+  // The badge already names a phone, tablet or foldable, so the name tag then keeps only the device count.
+  const deviceBadge = badgeDevice(participant, showStatus);
+  const badged = deviceBadge !== undefined;
   const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
@@ -148,6 +156,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         <>
+          {deviceBadge ? <TileDevice device={deviceBadge} /> : null}
           {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
@@ -179,12 +188,14 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                   {participant.identityKind === "agent" ? <AIBadge /> : null}
                 </span>
               )}
-              {participant.deviceHint ? (
+              {deviceDetails.length > 0 ? (
                 <span data-part="tile-device" className="contents text-(length:--type-caption)">
-                  <span data-part="tile-device-type" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">
-                    {deviceLabel}
-                  </span>
-                  {deviceDetails.length > 0 && <span data-part="tile-device-count" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">{`· ${deviceDetails.join(" · ")}`}</span>}
+                  {badged ? null : (
+                    <span data-part="tile-device-type" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">
+                      {deviceLabel}
+                    </span>
+                  )}
+                  <span data-part="tile-device-count" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">{`· ${deviceDetails.join(" · ")}`}</span>
                 </span>
               ) : null}
             </span>

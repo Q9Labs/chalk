@@ -17,9 +17,9 @@ const day = amzDate.slice(0, 8);
 const credentials = { accessKeyId: LOCAL_ARTIFACT_ACCESS_KEY_ID, secretAccessKey: LOCAL_ARTIFACT_SECRET_ACCESS_KEY, now: signedAt };
 
 // An independent signer for the test: the SigV4 rules written out in the order the spec lists them.
-function sign({ method, path, query = {}, headers = {}, secret = LOCAL_ARTIFACT_SECRET_ACCESS_KEY, signedOnly }) {
+function sign({ method, path, query = {}, headers = {}, secret = LOCAL_ARTIFACT_SECRET_ACCESS_KEY, signedOnly, signedHost = host }) {
   const scope = `${day}/us-east-1/s3/aws4_request`;
-  const everyHeader = { host, "x-amz-date": amzDate, ...headers };
+  const everyHeader = { host: signedHost, "x-amz-date": amzDate, ...headers };
   const allHeaders = signedOnly ? Object.fromEntries(Object.entries(everyHeader).filter(([name]) => signedOnly.includes(name))) : everyHeader;
   const names = Object.keys(allHeaders)
     .map((name) => name.toLowerCase())
@@ -43,7 +43,7 @@ function headerSigned(method, path, headers = {}, secret) {
   return { method, url: path, headers: { host, authorization, ...sent, "x-amz-content-sha256": "UNSIGNED-PAYLOAD" } };
 }
 
-function presigned(method, path, { expires = 900, headers = {} } = {}) {
+function presigned(method, path, { expires = 900, headers = {}, signedHost } = {}) {
   const query = {
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": `${LOCAL_ARTIFACT_ACCESS_KEY_ID}/${day}/us-east-1/s3/aws4_request`,
@@ -51,7 +51,7 @@ function presigned(method, path, { expires = 900, headers = {} } = {}) {
     "X-Amz-Expires": String(expires),
     "X-Amz-SignedHeaders": ["host", ...Object.keys(headers)].sort().join(";"),
   };
-  const { signature } = sign({ method, path, query, headers, signedOnly: ["host", ...Object.keys(headers)] });
+  const { signature } = sign({ method, path, query, headers, signedOnly: ["host", ...Object.keys(headers)], signedHost });
   const search = Object.entries({ ...query, "X-Amz-Signature": signature })
     .map(([name, value]) => `${rfc3986(name)}=${rfc3986(value)}`)
     .join("&");
@@ -99,6 +99,14 @@ test("an uploaded document keeps its chat MIME type and is served as a download"
     else process.env.CHALK_DEV_DASHBOARD_ARTIFACTS = previous;
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a presigned upload through a proxy that forwards the public host is accepted", () => {
+  const request = presigned("PUT", path, { signedHost: "preview.example" });
+  const proxied = { host, "x-forwarded-host": "preview.example" };
+  assert.equal(isLocalArtifactRequestSigned({ ...request, headers: proxied }, credentials), true);
+  assert.equal(isLocalArtifactRequestSigned({ ...request, headers: { ...proxied, "x-forwarded-host": "other.example" } }, credentials), false);
+  assert.equal(isLocalArtifactRequestSigned({ ...request, headers: { host: "app.example", "x-forwarded-host": "preview.example" } }, credentials), false);
 });
 
 test("an unsigned or wrongly signed write is refused", () => {

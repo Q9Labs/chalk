@@ -2,7 +2,7 @@ import { whiteboardFileAvailability } from "../whiteboard/file-urls";
 import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
 import { SFUClient, createSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
-import { createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
+import { browserDeviceKind, createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
@@ -160,6 +160,7 @@ function createSyncClient(syncURL: string, syncDirectURL: string | null | undefi
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
     entryConfirmation: true,
+    deviceKind: browserDeviceKind(),
     ...directFirstSyncOptions(directURL, createBrowserWebSocketFactory(), input.onTransportPath),
   });
 }

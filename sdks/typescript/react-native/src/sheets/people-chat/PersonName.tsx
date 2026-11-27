@@ -1,57 +1,51 @@
-import type { Participant } from "@q9labsai/chalk-client";
 import { StyleSheet, View } from "react-native";
 import { AIBadge } from "../../primitives/AIBadge";
 import { ChalkText } from "../../primitives/ChalkText";
 import { space } from "../../theme/tokens";
 
 type PersonNameProps = {
-  readonly participant: Participant;
+  readonly name: string;
+  readonly participantId: string;
   readonly isSelf: boolean;
-  readonly host?: boolean;
-  readonly accessibilityLabel?: string;
+  readonly agent: boolean;
   readonly badgeTestID: string;
+  readonly host?: boolean;
+  /** What a screen reader says for the name, with the person's status. */
+  readonly label?: string;
+  /** What they are on, such as "iPhone" or "Mac · 2 devices"; absent when Sync sent nothing. */
+  readonly device?: string;
+  /** What the person or AI participant says it is for, shown as the last line. */
+  readonly description?: string;
 };
 
-function NameText({ participant, isSelf, host = false, accessibilityLabel, style }: Omit<PersonNameProps, "badgeTestID"> & { readonly style: object }): React.JSX.Element {
-  return (
-    <ChalkText accessibilityLabel={accessibilityLabel} numberOfLines={1} style={style} variant="bodyMedium">
-      {participant.displayName}
-      {isSelf ? (
-        <ChalkText tone="textMuted" variant="meta">
-          {"  (You)"}
-        </ChalkText>
-      ) : null}
-      {host ? (
-        <ChalkText tone="textMuted" variant="meta">
-          {"  Host"}
-        </ChalkText>
-      ) : null}
-    </ChalkText>
-  );
-}
-
-/** A person's name with the (You) and Host marks and the AI badge, as one flexible row item. */
-export function PersonName(props: PersonNameProps): React.JSX.Element {
-  return (
-    <>
-      <NameText {...props} style={styles.name} />
-      {props.participant.identityKind === "agent" ? <AIBadge testID={props.badgeTestID} /> : null}
-    </>
-  );
-}
-
-/** A person's name line with the AI badge and, when they have one, their description underneath. */
-export function PersonDetails(props: PersonNameProps): React.JSX.Element {
-  const { participant, badgeTestID } = props;
+/** A People row's name with its "(You)" and "Host" marks and the AI badge, then the device and the description on lines under it. */
+export function PersonName({ name, participantId, isSelf, agent, badgeTestID, host = false, label, device, description }: PersonNameProps): React.JSX.Element {
   return (
     <View style={styles.who}>
       <View style={styles.nameLine}>
-        <NameText {...props} style={styles.shrink} />
-        {participant.identityKind === "agent" ? <AIBadge testID={badgeTestID} /> : null}
+        <ChalkText accessibilityLabel={device && label ? `${label}, ${device}` : label} numberOfLines={1} style={styles.shrink} variant="bodyMedium">
+          {name}
+          {isSelf ? (
+            <ChalkText tone="textMuted" variant="meta">
+              {"  (You)"}
+            </ChalkText>
+          ) : null}
+          {host ? (
+            <ChalkText tone="textMuted" variant="meta">
+              {"  Host"}
+            </ChalkText>
+          ) : null}
+        </ChalkText>
+        {agent ? <AIBadge testID={badgeTestID} /> : null}
       </View>
-      {participant.description ? (
-        <ChalkText numberOfLines={1} style={styles.description} testID={`people.description.${participant.participantId}`} tone="textMuted" variant="meta">
-          {participant.description}
+      {device ? (
+        <ChalkText numberOfLines={1} style={styles.line} tone="textMuted" variant="meta" testID={`people.device.${participantId}`}>
+          {device}
+        </ChalkText>
+      ) : null}
+      {description ? (
+        <ChalkText numberOfLines={1} style={styles.line} testID={`people.description.${participantId}`} tone="textMuted" variant="meta">
+          {description}
         </ChalkText>
       ) : null}
     </View>
@@ -59,9 +53,8 @@ export function PersonDetails(props: PersonNameProps): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  name: { flex: 1 },
   who: { flex: 1 },
   nameLine: { flexDirection: "row", alignItems: "center", gap: space["1-5"] },
   shrink: { flexShrink: 1 },
-  description: { marginTop: space["0-5"] },
+  line: { marginTop: space["0-5"] },
 });
