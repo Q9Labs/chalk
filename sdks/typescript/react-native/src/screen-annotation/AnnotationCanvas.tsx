@@ -36,6 +36,7 @@ export type AnnotationCanvasProps = {
   readonly onReady: (ready: boolean) => void;
   readonly onHit: (request: number, markId: string | null) => void;
   readonly onBakedInk: (id: string, handedOff: boolean) => void;
+  readonly onFailure?: (reason: "load" | "process") => void;
 };
 
 type ExportJob = {
@@ -56,6 +57,7 @@ type MeasureJob = {
 };
 const maxBase64Length = 16 * 1024 * 1024;
 const chunkSize = 32768;
+const maxRendererAttempts = 2;
 
 function annotationHit(result: object): result is { hit: number; markId: string | null } {
   return "hit" in result && "markId" in result && typeof result.hit === "number" && (result.markId === null || (typeof result.markId === "string" && result.markId.length <= 36));
@@ -65,12 +67,14 @@ function annotationPngPart(result: object, currentLength: number): result is { p
   return !("failed" in result) && "part" in result && "final" in result && typeof result.part === "string" && typeof result.final === "boolean" && result.part.length <= chunkSize && /^[\w+/=]+$/.test(result.part) && currentLength + result.part.length <= maxBase64Length;
 }
 
-export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit, onBakedInk }, ref) {
+export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCanvasProps>(function AnnotationCanvas({ rendererUrl, scene, presence, nowMs, localTouch, onReady, onHit, onBakedInk, onFailure }, ref) {
   const view = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
+  const [rendererAttempt, setRendererAttempt] = useState(0);
   const job = useRef<ExportJob | null>(null);
   const nextId = useRef(0);
   const measures = useRef<MeasureJob | null>(null);
+  const terminalFailure = useRef<"load" | "process" | null>(null);
 
   function failMeasure(): void {
     const current = measures.current;
@@ -213,9 +217,19 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
     setReady(false);
     onReady(false);
   }
+  function retryRenderer(failedAttempt: number, reason: "load" | "process") {
+    reset();
+    if (failedAttempt + 1 >= maxRendererAttempts && terminalFailure.current === null) {
+      terminalFailure.current = reason;
+      onFailure?.(reason);
+    }
+    setRendererAttempt((current) => (current === failedAttempt ? current + 1 : current));
+  }
+  if (rendererAttempt >= maxRendererAttempts) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <WebView
+        key={rendererAttempt}
         ref={view}
         source={{ uri: rendererUrl }}
         originWhitelist={["*"]}
@@ -223,6 +237,7 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
         allowFileAccess
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
+        allowingReadAccessToURL={rendererUrl.slice(0, rendererUrl.lastIndexOf("/") + 1)}
         setSupportMultipleWindows={false}
         sharedCookiesEnabled={false}
         thirdPartyCookiesEnabled={false}
@@ -238,9 +253,10 @@ export const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, AnnotationCan
           // Android can drop bridge messages sent by the page while loading.
           view.current?.injectJavaScript(`if (typeof window.chalkAnnotationScene === "function") window.ReactNativeWebView?.postMessage("annotation-loaded");true;`);
         }}
-        onError={reset}
-        onContentProcessDidTerminate={reset}
-        onRenderProcessGone={reset}
+        onError={() => retryRenderer(rendererAttempt, "load")}
+        onContentProcessDidTerminate={() => retryRenderer(rendererAttempt, "process")}
+        onRenderProcessGone={() => retryRenderer(rendererAttempt, "process")}
+        renderError={() => <></>}
         style={styles.clear}
         containerStyle={styles.clear}
       />

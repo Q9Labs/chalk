@@ -194,6 +194,8 @@ if $web_https; then
   docker cp chalk-stack-front:/data/caddy/pki/authorities/local/root.crt "$dir/web-ca.crt"
 fi
 node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api" "$proof_origin" "$front_origin"
+# Browser journeys switch operator settings (such as presenting_settings) directly in this stack's database.
+printf 'CHALK_DATABASE_URL=%s\n' "$db_url" >> "$dir/proof.env"
 tick seed
 
 awk -v start="$boot_start" -v now="$(date +%s.%N)" 'BEGIN { printf "boot %-12s %6.1fs\n", "total", now - start }'

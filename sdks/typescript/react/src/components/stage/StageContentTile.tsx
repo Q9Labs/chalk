@@ -5,9 +5,7 @@ import { StageIcon } from "./StageIcon";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTileVisibility } from "../participant-tile/useVideoTileVisibility";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
-import type { StageItem } from "./stage-items";
-
-type ContentItem = Extract<StageItem, { kind: "screen-share" | "whiteboard" }>;
+import type { ContentItem } from "./stage-items";
 
 export interface StageContentTileProps extends Pick<ScreenSharePresentationProps, "onStopSharing" | "onChangeShare" | "capture" | "switcher" | "annotation"> {
   readonly annotationContext?: import("../screen-annotation/AnnotationSurface").AnnotationPresentationContext;
@@ -33,11 +31,14 @@ export interface StageContentTileSurfaceProps extends Omit<StageContentTileProps
 const BOARD_ACCENT = "var(--chalk-app-line-strong, currentColor)";
 
 export function contentTileLabel(item: ContentItem): string {
-  return item.kind === "whiteboard" ? "Whiteboard tile" : `Screen share tile for ${item.participant.displayName}`;
+  if (item.kind === "whiteboard") return "Whiteboard tile";
+  if (item.kind === "document") return `Document tile ${item.document.fileName ?? item.document.documentId}`;
+  return `Screen share tile for ${item.participant.displayName}`;
 }
 
 export function contentTileName(item: ContentItem): string {
   if (item.kind === "whiteboard") return "Board";
+  if (item.kind === "document") return item.document.fileName ?? "Document";
   return item.participant.isLocal ? "Your screen" : `${item.participant.displayName}'s screen`;
 }
 
@@ -87,6 +88,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       />
     );
   const accentColor = BOARD_ACCENT;
+  const documentIcon = item.kind === "document";
 
   return (
     <TileShell
@@ -102,7 +104,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       chip={
         primary ? null : (
           <>
-            <StageIcon name="pen" size={14} className="shrink-0" />
+            <StageIcon name={documentIcon ? "file" : "pen"} size={14} className="shrink-0" />
             <span className="min-w-0 truncate">{contentTileName(item)}</span>
           </>
         )
@@ -111,7 +113,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       <div className="relative z-10 block h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div>
       {!mediaVisible && (
         <div className="chalk-participant-wash absolute inset-0 z-10 flex items-center justify-center text-[var(--chalk-app-text-muted)]">
-          <StageIcon name="pen" size={32} />
+          <StageIcon name={documentIcon ? "file" : "pen"} size={32} />
         </div>
       )}
     </TileShell>

@@ -44,7 +44,12 @@ export function useCallToasts() {
       offError();
     };
   }, [client]);
+  const notify = useCallback((toast: Omit<Toast, "id"> & { readonly id?: string }) => {
+    const id = toast.id ?? `call-notice-${++sequence.current}`;
+    setToasts((current) => [...current.filter((existing) => existing.id !== id), { ...toast, id }].slice(-20));
+    return id;
+  }, []);
   const dismiss = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   const dismissFailure = useCallback((code: string) => setToasts((current) => current.filter((toast) => toast.failureCode !== code)), []);
-  return { toasts, dismiss, dismissFailure };
+  return { toasts, notify, dismiss, dismissFailure };
 }

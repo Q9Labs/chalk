@@ -127,7 +127,7 @@ function FixtureControls({ layout, share, people, secondHand, voiceLevel, onLayo
 }
 
 /** The actual frame and stage, with deterministic media and observable roster/share controls. */
-function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES, weak = 4 }: StageFixtureProps) {
+function StageFixtureBody({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES, weak = 4 }: StageFixtureProps) {
   const [count, setCount] = useState(initialCount);
   const [layout, setLayout] = useState(initialLayout);
   const [share, setShare] = useState(initialShare);
@@ -173,13 +173,18 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
   );
 }
 
-function BoardStageFixture(props: StageFixtureProps) {
-  const [client] = useState(() => createCallStateClient(liveSnapshot({ board: true, capabilities: HOST }), { scene: true }));
+/** The stage reads Presenting from the Chalk client, so every stage fixture gets one; the board variant also opens the whiteboard. */
+function StageFixture({ board = false, ...props }: StageFixtureProps) {
+  const [client] = useState(() => createCallStateClient(liveSnapshot({ board, capabilities: HOST }), { scene: true }));
   return (
     <ChalkProvider client={client}>
-      <StageFixture board {...props} />
+      <StageFixtureBody board={board} {...props} />
     </ChalkProvider>
   );
+}
+
+function BoardStageFixture(props: StageFixtureProps) {
+  return <StageFixture board {...props} />;
 }
 
 function SharedContentOverflowFixture() {

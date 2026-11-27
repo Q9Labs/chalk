@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { ControlBarProps } from "./control-bar-behavior";
+import type { ControlBarMicrophonePicker } from "./control-bar-props";
 
-export function useDeviceSheets(microphonePicker: ControlBarProps["microphonePicker"]) {
+export function useDeviceSheets(microphonePicker: ControlBarMicrophonePicker | undefined) {
   const [sheet, setSheet] = useState<"mic" | "video" | null>(null);
   return {
     microphoneOpen: microphonePicker?.open ?? sheet === "mic",

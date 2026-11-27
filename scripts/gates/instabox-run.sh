@@ -24,8 +24,8 @@ if [[ "$(swapon --show --noheadings | wc -l)" == 0 ]]; then
   sudo fallocate -l 3G "$swapfile"
   sudo chmod 600 "$swapfile"
   sudo mkswap "$swapfile" >/dev/null
-  sudo swapon "$swapfile"
-  trap 'sudo swapoff "$swapfile"; sudo umount /tmp && rm -rf -- "$scratch"' EXIT
+  sudo /usr/sbin/swapon "$swapfile"
+  trap 'sudo /usr/sbin/swapoff "$swapfile"; sudo umount /tmp && rm -rf -- "$scratch"' EXIT
 fi
 export TMPDIR=/tmp
 export GOTOOLCHAIN=auto

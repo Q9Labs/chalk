@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -39,6 +41,11 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.Capabilities.ScreenAnnotation = postgres.ScreenAnnotationSettings{
 		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.ScreenAnnotation,
 	}.Enabled
+	presentingServable := w.cfg.Capabilities.Presenting && w.options.Presenting != nil && w.options.PresentingCapabilityAuthorizer != nil
+	if err := w.queries.PublishPresentingServable(context.Background(), presentingServable); err != nil {
+		return nil, fmt.Errorf("publish presenting availability: %w", err)
+	}
+	w.options.Capabilities.Presenting = postgres.PresentingSettings{Queries: w.queries, Servable: presentingServable}.Enabled
 	if w.options.HelperAccess != nil {
 		w.options.HelperAccess.WithAnnotationAvailability(w.options.Capabilities.ScreenAnnotation)
 	}
@@ -85,6 +92,10 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 		options.RecorderFleetVerifier = nil
 		options.RecorderFleetEnvironment = ""
 		options.RecorderWorkerVerifier = nil
+	}
+	if !capabilities.Presenting {
+		options.Presenting = nil
+		options.PresentingCapabilityAuthorizer = nil
 	}
 	if !capabilities.WhiteboardFiles {
 		options.WhiteboardFiles = nil

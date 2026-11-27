@@ -106,7 +106,7 @@ export const ParticipantGridSurface = React.memo(function ParticipantGridSurface
 });
 
 function forwardParticipant(item: StageItem, handler: (participantId: string) => void): void {
-  if (item.kind === "whiteboard") return;
+  if (item.kind === "whiteboard" || item.kind === "document") return;
   handler(item.participant.id);
 }
 

@@ -22,3 +22,7 @@ export const problemReportAvailability = (base: string, tenantId: string) => ten
 export const chatUploads = (base: string) => route(base, "chat", "attachments", "uploads");
 export const chatUploadFinalize = (base: string, uploadId: string) => route(base, "chat", "attachments", "uploads", uploadId, "finalize");
 export const chatAttachmentDownload = (base: string, attachmentId: string) => route(base, "chat", "attachments", attachmentId, "download");
+
+export const presentingDocuments = (base: string) => route(base, "presenting", "documents");
+export const presentingDocument = (base: string, documentId: string) => route(base, "presenting", "documents", documentId);
+export const presentingDocumentPageZoom = (base: string, documentId: string, page: number) => route(base, "presenting", "documents", documentId, "pages", String(page), "zoom");

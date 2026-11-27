@@ -155,17 +155,22 @@ call_proof() {
 }
 
 # Delivers a release through the real SSM document and host controller and checks the controller reported it deployed and healthy.
-exclude=(--exclude-secret cloudflare-tunnel-token)
-[ "$with_call" = false ] || exclude=()
 deliver() {
   local file=$1 leg=$2 id proof
+  local -a leg_exclude=()
+  if [ "$with_call" = false ]; then
+    leg_exclude+=(--exclude-secret cloudflare-tunnel-token)
+  fi
+  if jq -e '.runtime_artifacts | has("systemd/chalk-sfu-window-controller.service")' "$file" >/dev/null 2>&1; then
+    leg_exclude+=(--exclude-secret sfu-window-controller-env)
+  fi
   id=$(jq -er .release_id "$file")
   proof="${RUNNER_TEMP:-/tmp}/host-proof-$leg.json"
   node "$root/scripts/deploy/deploy-managed-release.mjs" --manifest "$file" --proof-file "$proof" \
     --environment "$environment" --region "$region" --instance-id "$instance" --document-name "$document" \
     --document "$root/infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json" --parameter-prefix "$prefix" \
     --request-id "$run_id.hostproof.$leg.$id" --log-group-name "$log_group" --timeout-seconds 1800 \
-    --no-dispatcher-binding ${exclude[@]+"${exclude[@]}"}
+    --no-dispatcher-binding ${leg_exclude[@]+"${leg_exclude[@]}"}
   step "Release delivered by the host controller and healthy ($leg: $id)"
 }
 
