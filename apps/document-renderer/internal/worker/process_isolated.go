@@ -14,6 +14,7 @@ import (
 	"time"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
+	"github.com/q9labs/chalk/apps/document-renderer/internal/office"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 )
 
@@ -136,8 +137,14 @@ func closePipe(pipe *os.File) {
 	}
 }
 
+const isolatedChildTimeout = 20 * time.Second
+
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
-	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	return runIsolatedChildWithTimeout(ctx, isolatedChildTimeout, executable, mode, args...)
+}
+
+func runIsolatedChildWithTimeout(ctx context.Context, timeout time.Duration, executable, mode string, args ...string) error {
+	childCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	environment := isolatedChildEnvironment(mode)
 	command := exec.Command(executable, args...)
@@ -238,6 +245,9 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 
 func classifyIsolatedFailure(err error) string {
 	message := err.Error()
+	if code, ok := office.CodeFromMessage(message); ok {
+		return code
+	}
 	if strings.Contains(message, "password") || strings.Contains(message, "pdfium error 4") {
 		return "password_protected"
 	}
