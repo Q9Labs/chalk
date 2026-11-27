@@ -381,6 +381,19 @@
       }
     },
     {
+      "type": "projection_event",
+      "stream": "presence",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26",
+      "sequence": 1,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "state": "connected",
+        "speaking": false,
+        "active_speaker": false,
+        "device_kind": "toaster"
+      }
+    },
+    {
       "type": "reaction",
       "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80",
       "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",

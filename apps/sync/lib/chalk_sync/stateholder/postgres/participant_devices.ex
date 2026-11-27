@@ -9,7 +9,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
         case Postgrex.query(
                Database.connection(episode),
                """
-               select p.id, p.generation, p.identity_id, device.device_type,
+               select p.id, p.generation, p.identity_id, device.device_type, device.device_kind,
                  (seat->>'admission_revision')::bigint, p.capabilities, coalesce(i.kind, 'user'),
                  coalesce((e.config_snapshot->'focus'->>'enabled')::boolean, false),
                  step.reason, allowance.id is not null
@@ -52,6 +52,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                                  generation,
                                  identity_id,
                                  device_type,
+                                 device_kind,
                                  revision,
                                  capabilities,
                                  identity_kind,
@@ -64,6 +65,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
                  generation: generation,
                  identity_id: Scope.nullable_uuid(identity_id),
                  device_type: device_type,
+                 device_kind: device_kind,
                  admission_revision: revision,
                  capabilities: capabilities || [],
                  identity_kind: identity_kind,

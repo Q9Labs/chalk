@@ -195,6 +195,11 @@ func loadRuntime() (windowProvider, chalksfu.WindowControl, sfufleet.Policy, err
 		SnapshotID:  snapshot,
 		Region:      os.Getenv("CHALK_SFU_WINDOW_REGION"),
 		VPCUUID:     os.Getenv("CHALK_SFU_WINDOW_VPC_UUID"),
+		Telemetry: digitalocean.SFUWindowTelemetry{
+			Endpoint:       strings.TrimSpace(os.Getenv("CHALK_RECORDER_OTLP_ENDPOINT")),
+			MetricsHeaders: strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_METRICS_HEADERS")),
+			LogsHeaders:    strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")),
+		},
 	})
 	if err != nil {
 		return provider, control, policy, fmt.Errorf("configure SFU window provider: %w", err)

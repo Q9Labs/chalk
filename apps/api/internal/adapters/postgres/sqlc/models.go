@@ -367,6 +367,7 @@ type ParticipantDeviceHint struct {
 	ParticipantID pgtype.UUID `json:"participant_id"`
 	Generation    int64       `json:"generation"`
 	DeviceType    pgtype.Text `json:"device_type"`
+	DeviceKind    pgtype.Text `json:"device_kind"`
 }
 
 type ParticipantJoinSeat struct {

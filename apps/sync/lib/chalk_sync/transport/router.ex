@@ -3,6 +3,7 @@ defmodule ChalkSync.Transport.Router do
   use Plug.Router
   plug(:match)
   plug(:dispatch)
+  alias ChalkSync.DeviceKind
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Operations.Readiness
@@ -123,6 +124,8 @@ defmodule ChalkSync.Transport.Router do
             observability: observability,
             entry_confirmation: entry_confirmation,
             participant_devices: conn.query_params["participant_devices"] == "1",
+            participant_device_kinds: conn.query_params["participant_device_kinds"] == "1",
+            device_kind: DeviceKind.parse(conn.query_params["device_kind"]),
             participant_device_admissions:
               conn.query_params["participant_device_admissions"] in ["1", "2"],
             media_off_reason: conn.query_params["media_off_reason"] == "1",

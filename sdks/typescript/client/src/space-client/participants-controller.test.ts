@@ -54,6 +54,30 @@ it("shows who can join and sends a host's change to Sync, refusing a policy the 
   );
 });
 
+it("keeps a declared device for a guest that has no identity", async () => {
+  const snapshot = snapshotWithPolicy("open");
+  const control = { ...snapshot.control!, participants: [{ participantId: "guest-1", displayName: "Nora", role: "participant", eligibleRoles: [], capabilities: [], handRaised: false, admissionRevision: 1 }] };
+  const presence = { projectionId: "p", sequence: 1, items: [{ participantId: "guest-1", admissionRevision: 1, state: "connected", speaking: false, activeSpeaker: false, deviceType: "phone", deviceKind: "iphone" }] };
+  const sync = { getSnapshot: () => ({ ...snapshot, control, optimisticControl: control, presence }), getParticipantCollaborationCapabilities: () => ({}), subscribe: () => () => undefined } as unknown as ConnectionSyncClient;
+  const ports = { sync, media: { getSnapshot: () => null, subscribe: () => () => undefined } } as unknown as ConnectionPorts;
+  const connection = {
+    getSnapshot: () => ({ state: "live", subject: null }),
+    subscribePorts: (listener: (ports: ConnectionPorts | null) => void) => {
+      listener(ports);
+      return () => undefined;
+    },
+    runCommand: <A, E>(operation: (ports: ConnectionPorts) => Effect.Effect<A, E>) => operation(ports),
+  } as unknown as ConnectionLifecycleCapability;
+  const store = new SpaceStore();
+
+  await Effect.runPromise(Effect.scoped(makeParticipantsController(connection, store)));
+
+  const guest = store.getSnapshot().participants.roster.find((participant) => participant.participantId === "guest-1");
+  expect(guest?.identityId).toBeUndefined();
+  expect(guest?.deviceKind).toBe("iphone");
+  expect(guest?.deviceType).toBe("phone");
+});
+
 function snapshotWithPolicy(admissionPolicy: "open" | "knock"): V1EpisodeSnapshot {
   const control = {
     revision: 1,

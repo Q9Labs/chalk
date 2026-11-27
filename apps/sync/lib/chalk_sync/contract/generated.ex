@@ -655,6 +655,17 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   @connection_qualities ["good", "weak", "poor"]
   @app_states ["active", "inactive", "background"]
   @step_away_reasons ["reading", "notes", "break"]
+  @device_kinds [
+    "iphone",
+    "ipad",
+    "android_phone",
+    "android_tablet",
+    "android_foldable",
+    "mac",
+    "windows",
+    "linux",
+    "chromeos"
+  ]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
   @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
@@ -665,6 +676,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   def client_commands, do: @client_commands
   def client_operations, do: @client_operations
   def limits, do: @limits
+  def device_kinds, do: @device_kinds
   def close_code(code), do: Map.get(@close_codes, code)
   def metadata, do: @metadata
 
@@ -1462,9 +1474,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
-      "device_type", "admission_revision", "connection_quality", "focus_app_state",
-      "focus_windowed", "focus_step_away_reason", "focus_allowed"], &Map.has_key?(item, &1))) and
-      (not Map.has_key?(item, "connection_quality") or
+      "device_type", "device_kind", "admission_revision", "connection_quality",
+      "focus_app_state", "focus_windowed", "focus_step_away_reason", "focus_allowed"],
+      &Map.has_key?(item, &1))) and (not Map.has_key?(item, "connection_quality") or
       item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item,
       "focus_app_state") or item["focus_app_state"] in @app_states) and (not Map.has_key?(item,
       "focus_windowed") or is_boolean(item["focus_windowed"])) and (not Map.has_key?(item,
@@ -1472,7 +1484,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       (not Map.has_key?(item, "focus_allowed") or is_boolean(item["focus_allowed"])) and
       (not Map.has_key?(item, "identity_id") or valid_uuid?(item["identity_id"])) and
       (not Map.has_key?(item, "device_type") or item["device_type"] in ["phone", "tablet",
-      "computer"]) and (not Map.has_key?(item, "admission_revision") or
+      "computer"]) and (not Map.has_key?(item, "device_kind") or
+      item["device_kind"] in @device_kinds) and (not Map.has_key?(item, "admission_revision") or
       valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))

@@ -1,5 +1,4 @@
-import { deviceHint } from "./device-hint";
-import type { LocalMedia, MediaSource, Participant as SpaceParticipant, RemoteMedia } from "@q9labsai/chalk-client";
+import { deviceHint, participantDevice, type LocalMedia, type MediaSource, type Participant as SpaceParticipant, type RemoteMedia } from "@q9labsai/chalk-client";
 
 import type { AudioParticipant } from "../components/audio-output/AudioOutput";
 import type { Participant } from "../components/participant-grid/ParticipantGrid";
@@ -38,6 +37,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       id: localId,
       displayName: localFromSync?.displayName || displayName,
       deviceHint: deviceHint(localFromSync, participants),
+      device: participantDevice(localFromSync),
       isLocal: true,
       isMuted: !capturing(localMedia.microphone),
       isSpeaking: localFromSync?.presence.speaking ?? false,
@@ -58,6 +58,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       id: participant.participantId,
       displayName: participant.displayName,
       deviceHint: deviceHint(participant, participants),
+      device: participantDevice(participant),
       isOwnDevice: Boolean(localFromSync?.identityId && participant.identityId === localFromSync.identityId),
       isMuted: !sending(participant.media.microphone, media?.microphone),
       isSpeaking: participant.presence.speaking,

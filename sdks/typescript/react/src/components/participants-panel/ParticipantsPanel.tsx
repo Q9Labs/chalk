@@ -1,8 +1,8 @@
 import { FOCUS_COPY } from "../focus/focus-copy";
-import { deviceHint } from "../../selectors/device-hint";
 import { effectiveFocus } from "../../selectors/space-selectors";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
+import { deviceHint } from "@q9labsai/chalk-client";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
 import { useHandOrder } from "../../internal/useHandOrder";

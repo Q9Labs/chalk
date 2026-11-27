@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
 import { prepareChatAttachmentBatch } from "../composite/chat-upload-file";
-import { presentFiles, splitPresentingFiles } from "./presenting-files";
+import { presentableFilesHint, presentFiles, splitPresentingFiles } from "./presenting-files";
 
 function file(name: string, type = "application/pdf", byteLength = 1024): ChatUploadFile {
   return new File([new Uint8Array(byteLength)], name, { type }) as ChatUploadFile;
@@ -56,15 +56,39 @@ it("does not send hidden chat when both Presenting and chat are unavailable", as
   expect(sent).toEqual([]);
 });
 
-it("returns a failed Stage file for composer staging instead of sending it", async () => {
+it("returns a failed Stage file to the presenter instead of staging or sending it in chat", async () => {
   const { api, presented, sent } = client(false);
   const pdf = file("deck.pdf");
   const result = await presentFiles([pdf], api, { presentingAvailable: true, chatEnabled: true });
   expect(result.presented).toBeUndefined();
-  expect(result.chatFiles).toEqual([pdf]);
-  expect(result.failures).toEqual([{ fileName: "deck.pdf", reason: "failed" }]);
+  expect(result.stageFailure).toEqual({ file: pdf, failure: { fileName: "deck.pdf", reason: "failed" } });
+  expect(result.chatFiles).toEqual([]);
+  expect(result.failures).toEqual([]);
   expect(presented).toEqual(["attachment-deck.pdf"]);
   expect(sent).toEqual([]);
+});
+
+it("acknowledges the Stage file before uploading and passes upload progress through", async () => {
+  const events: string[] = [];
+  const api = {
+    chat: {
+      files: {
+        upload: async (uploaded: ChatUploadFile, options?: { onProgress?: (fraction: number) => void }) => {
+          events.push("upload");
+          options?.onProgress?.(0.5);
+          return { attachmentId: `attachment-${(uploaded as File).name}` };
+        },
+      },
+    },
+    presenting: { present: async () => ({ kind: "accepted", revision: 1 }) as const },
+  } as unknown as SpaceClient;
+  const result = await presentFiles([file("deck.pdf")], api, { onStageFile: (name) => events.push(`stage:${name}`), onProgress: (fraction) => events.push(`progress:${fraction}`) });
+  expect(result.presented).toBe("deck.pdf");
+  expect(events).toEqual(["stage:deck.pdf", "upload", "progress:0.5"]);
+});
+
+it("describes presentable files from the accepted types", () => {
+  expect(presentableFilesHint()).toBe("PDF or image, up to 25 MB");
 });
 
 it("splits a multi-file drop into one stage candidate and the remaining chat files", () => {
@@ -92,13 +116,13 @@ it("stages only five chat files and counts the rest", () => {
   expect(split.chatOverflow).toBe(1);
 });
 
-it("keeps the failed Stage file inside the five-file composer batch", async () => {
-  const files = Array.from({ length: 6 }, (_, index) => file(`deck-${index}.pdf`));
+it("keeps the failed Stage file out of the composer batch and stages the rest", async () => {
+  const files = Array.from({ length: 6 }, (_, index) => file("deck-" + index + ".pdf"));
   const { api } = client(false);
   const result = await presentFiles(files, api, { presentingAvailable: true, chatEnabled: true });
-  expect(result.chatFiles).toEqual(files.slice(0, 5));
-  expect(result.chatOverflow).toBe(1);
-  expect(result.failures).toEqual([{ fileName: "deck-0.pdf", reason: "failed" }]);
+  expect(result.stageFailure?.failure).toEqual({ fileName: "deck-0.pdf", reason: "failed" });
+  expect(result.chatFiles).toEqual(files.slice(1, 6));
+  expect(result.chatOverflow).toBe(0);
 });
 
 it("skips empty files instead of blocking the valid chat batch", () => {

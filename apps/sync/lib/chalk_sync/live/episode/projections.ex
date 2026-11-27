@@ -83,6 +83,7 @@ defmodule ChalkSync.Live.Episode.Projections do
            }
            |> put_known("identity_id", seat.identity_id)
            |> put_known("device_type", seat.device_type)
+           |> put_known("device_kind", seat.device_kind)
            |> put_known("connection_quality", seat_quality(state, seat))
            |> put_focus(state, seat)
          end)}

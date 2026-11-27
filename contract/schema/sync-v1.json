@@ -1695,6 +1695,7 @@
         "optionalFields": [
           "identity_id",
           "device_type",
+          "device_kind",
           "admission_revision",
           "connection_quality",
           "focus_app_state",
@@ -1713,7 +1714,9 @@
           "tablet",
           "computer"
         ],
+        "deviceKind": ["iphone", "ipad", "android_phone", "android_tablet", "android_foldable", "mac", "windows", "linux", "chromeos"],
         "negotiation": "participant_devices=1 WebSocket query opts into identity and coarse device hints; omitted for older clients",
+        "deviceKindNegotiation": "participant_device_kinds=1 WebSocket query, together with participant_devices=1, opts into device_kind, the device each person declared with the device_kind query (an unknown value is ignored); omitted when nothing was declared and for older clients",
         "connectionQualityNegotiation": "connection_quality=1 WebSocket query opts into connection_quality, the quality this person reported for their own link; omitted when nothing was reported and for older clients",
         "participantId": "uuid",
         "state": [

@@ -26,6 +26,7 @@ export function presenceItem(item: typeof PresenceProjectionItemSchema.Type): V1
     admissionRevision: item.admission_revision,
     identityId: item.identity_id,
     deviceType: item.device_type,
+    deviceKind: item.device_kind,
     state: item.state,
     speaking: item.speaking,
     activeSpeaker: item.active_speaker,

@@ -69,6 +69,8 @@ export interface ControlBarSurfaceProps {
   onPresent?: () => void;
   /** One of this person's Documents is on the Stage. */
   isPresenting?: boolean;
+  /** What the Stage accepts, shown beside Present a file. */
+  presentHint?: string;
   onOpenReactions?: () => void;
   /** The reactions tray is open; the button reports it with aria-expanded. */
   reactionsOpen?: boolean;
@@ -101,6 +103,7 @@ export interface ConnectedControlBarProps {
   readonly isWhiteboardOpen?: boolean;
   readonly onPresent?: () => void;
   readonly isPresenting?: boolean;
+  readonly presentHint?: string;
   readonly onOpenReactions?: () => void;
   readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;

@@ -129,7 +129,12 @@ defmodule ChalkSync.Transport.Socket.Hello do
   defp admit_entry(state, identity) do
     entry_stage(:admit, fn ->
       Stateholder.admit_socket_entry(
-        %{identity | device_type: Frames.device_type(state.connection_attributes[:user_agent])},
+        %{
+          identity
+          | device_type:
+              Frames.device_type(state.device_kind, state.connection_attributes[:user_agent]),
+            device_kind: state.device_kind
+        },
         state.requested_entry_generation
       )
     end)
