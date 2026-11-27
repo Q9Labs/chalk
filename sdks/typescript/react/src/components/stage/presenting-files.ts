@@ -1,16 +1,38 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, presentingFormatIdsFor, presentingMimeTypesFor, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, presentingFormatIdsFor, presentingFormatsFor, presentingMimeTypesFor, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
 import { describeChatUploadFile } from "../composite/chat-upload-file";
 
 export type PresentingFileOptions = { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean; readonly formats?: readonly PresentingFormatId[] };
 
-/** The MIME types Presenting accepts for the given formats; with none given, only the always-on formats. */
+/** The MIME types the Stage accepts for the given formats; with none given, only the always-on formats. */
 export function presentableMimeTypes(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): ReadonlySet<string> {
   return presentingMimeTypesFor(formats);
+}
+
+/** The file picker's accept list: the MIME types and extensions of the formats the Stage can present. Extensions matter because browsers report no type for many Office files. */
+export function presentableAccept(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): string {
+  return presentingFormatsFor(formats)
+    .flatMap((format) => [...format.mimeTypes, ...format.extensions.map((extension) => `.${extension}`)])
+    .join(",");
+}
+
+const HINT_KIND_LABELS = { pdf: "PDF", slides: "slides", document: "documents", spreadsheet: "spreadsheets", text: "text files", image: "image" } as const;
+
+/** "PDF or image, up to 25 MB", derived from the accepted formats so a new format widens the copy without a UI change. */
+export function presentableFilesHint(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): string {
+  const kinds = [...new Set(presentingFormatsFor(formats).map((format) => HINT_KIND_LABELS[format.kind]))];
+  const list = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} or ${kinds.at(-1)}` : (kinds[0] ?? "File");
+  return `${list}, up to ${Math.round(CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength / (1024 * 1024))} MB`;
+}
+
+export function chatAcceptsFile(file: ChatUploadFile): boolean {
+  return (CHALK_CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(describeChatUploadFile(file).mimeType);
 }
 
 export type PresentingFileFailure = { readonly fileName: string; readonly reason: "unsupported" | "too_big" | "failed" | "empty" };
 export type PresentingFileResult = {
   readonly presented?: string;
+  /** The Stage candidate when presenting it failed, kept so the presenter can retry it or send it to chat themselves. */
+  readonly stageFailure?: { readonly file: ChatUploadFile; readonly failure: PresentingFileFailure };
   readonly chatFiles: readonly ChatUploadFile[];
   readonly failures: readonly PresentingFileFailure[];
   readonly chatOverflow: number;
@@ -52,7 +74,7 @@ export function splitPresentingFiles(files: readonly ChatUploadFile[], options: 
       stageFile = file;
       continue;
     }
-    if (chatEnabled && (CHALK_CHAT_ATTACHMENT_MIME_TYPES as readonly string[]).includes(description.mimeType)) chatFiles.push(file);
+    if (chatEnabled && chatAcceptsFile(file)) chatFiles.push(file);
     else failures.push({ fileName: description.fileName, reason: "unsupported" });
   }
   return { stageFile, ...limitComposerFiles(chatFiles), failures };
@@ -63,23 +85,27 @@ function limitComposerFiles(files: readonly ChatUploadFile[]): { readonly chatFi
   return { chatFiles, chatOverflow: files.length - chatFiles.length };
 }
 
-/** Attempts the Stage candidate and returns every sendable file that must be staged in the composer instead of sent. */
-export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: PresentingFileOptions = {}): Promise<PresentingFileResult> {
-  const { stageFile, chatFiles: splitChatFiles, chatOverflow: splitOverflow, failures: splitFailures } = splitPresentingFiles(files, options);
-  const failures: PresentingFileFailure[] = [...splitFailures];
-  const chatFiles = [...splitChatFiles];
-  let presented: string | undefined;
-  if (stageFile) {
-    try {
-      const attachment = await client.chat.files.upload(stageFile);
-      const result = await client.presenting.present(attachment.attachmentId);
-      if (result.kind === "accepted") presented = describeChatUploadFile(stageFile).fileName;
-      else failures.push({ fileName: describeChatUploadFile(stageFile).fileName, reason: "failed" });
-    } catch {
-      failures.push({ fileName: describeChatUploadFile(stageFile).fileName, reason: "failed" });
-    }
-    if (!presented && options.chatEnabled !== false) chatFiles.unshift(stageFile);
+export type PresentFilesOptions = PresentingFileOptions & {
+  /** Called as soon as a Stage candidate is found, before any bytes move, so the Stage can acknowledge the file at once. */
+  readonly onStageFile?: (fileName: string) => void;
+  readonly onProgress?: (fraction: number) => void;
+};
+
+/**
+ * Attempts the Stage candidate and returns the other sendable files, which wait in the composer instead of being sent.
+ * A Stage candidate that fails comes back on its own and is never staged in chat: the presenter decides what happens to it.
+ */
+export async function presentFiles(files: readonly ChatUploadFile[], client: SpaceClient, options: PresentFilesOptions = {}): Promise<PresentingFileResult> {
+  const { stageFile, chatFiles, chatOverflow, failures } = splitPresentingFiles(files, options);
+  if (!stageFile) return { chatFiles, chatOverflow, failures };
+  const fileName = describeChatUploadFile(stageFile).fileName;
+  options.onStageFile?.(fileName);
+  try {
+    const attachment = await client.chat.files.upload(stageFile, { onProgress: options.onProgress });
+    const result = await client.presenting.present(attachment.attachmentId);
+    if (result.kind === "accepted") return { presented: fileName, chatFiles, chatOverflow, failures };
+  } catch {
+    // The upload or the present command failed; both read as this file's failure below.
   }
-  const limited = limitComposerFiles(chatFiles);
-  return { presented, ...limited, chatOverflow: splitOverflow + limited.chatOverflow, failures };
+  return { stageFailure: { file: stageFile, failure: { fileName, reason: "failed" } }, chatFiles, chatOverflow, failures };
 }

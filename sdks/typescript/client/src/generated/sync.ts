@@ -626,6 +626,7 @@ function strictProjectionItem(value: unknown, stream: unknown): boolean {
         ...["participant_id", "state", "speaking", "active_speaker"],
         ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []),
         ...(Object.hasOwn(value, "device_type") ? ["device_type"] : []),
+        ...(Object.hasOwn(value, "device_kind") ? ["device_kind"] : []),
         ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : []),
         ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
       ])
@@ -1374,6 +1375,9 @@ export const PresenceProjectionItemSchema = Schema.Struct({
   active_speaker: Schema.Boolean,
   identity_id: Schema.optional(UuidSchema),
   device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
+  device_kind: Schema.optional(
+    Schema.Union([Schema.Literal("iphone"), Schema.Literal("ipad"), Schema.Literal("android_phone"), Schema.Literal("android_tablet"), Schema.Literal("android_foldable"), Schema.Literal("mac"), Schema.Literal("windows"), Schema.Literal("linux"), Schema.Literal("chromeos")]),
+  ),
   admission_revision: Schema.optional(PositiveIntegerSchema),
   connection_quality: Schema.optional(Schema.Literals(["good", "weak", "poor"])),
 }).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));

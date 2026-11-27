@@ -23,7 +23,8 @@ if [ ! -f "$NATIVE/lib/libpdfium.so" ]; then
   cp "$TMP/extract/lib/libpdfium.so" "$NATIVE/lib/"
 fi
 cd "$APP"
-CGO_ENABLED=1 go build -buildvcs=false -o /tmp/chalk-document-renderer ./cmd/renderer
+BIN=/opt/chalk-document-renderer
+CGO_ENABLED=1 go build -buildvcs=false -o "$BIN" ./cmd/renderer
 API_PORT="${CHALK_API_ADDR##*:}"
 export LD_LIBRARY_PATH="$NATIVE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CONTROL_API_BASE_URL="http://127.0.0.1:$API_PORT"
@@ -39,4 +40,7 @@ if [ "${CHALK_PRESENTING_OFFICE_ENABLED:-true}" != "false" ]; then
     export RENDERER_KEYNOTE=1
   fi
 fi
-exec /tmp/chalk-document-renderer
+# Docker's default seccomp profile refuses the user and network namespaces the renderer sandbox asks for, the same as Lambda. Use the
+# renderer's Lambda-compatible boundary there. It empties /tmp on each job, so the binary lives outside it, and outside the bind-mounted checkout, whose root-owned files the host could not clean up.
+if ! unshare --user --net true 2>/dev/null; then export RENDERER_LAMBDA=1; fi
+exec "$BIN"

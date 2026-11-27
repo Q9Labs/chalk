@@ -427,7 +427,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#extensions = v1NegotiatedExtensions();
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
+      socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true, this.#options.deviceKind));
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();

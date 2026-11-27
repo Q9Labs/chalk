@@ -21,6 +21,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState, Platform } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { nativeDeviceKind } from "../platform/device-kind";
 import { createNativeAnnotationCapture } from "../screen-annotation/native-annotation-capture";
 import { createNativeCallSyncLifecycle } from "./native-call-sync-lifecycle";
 import { createNativeSession, type NativeSession } from "./native-session";
@@ -186,6 +187,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     webSocket,
     dialTimeoutMs,
     entryConfirmation: true,
+    deviceKind: nativeDeviceKind(),
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }

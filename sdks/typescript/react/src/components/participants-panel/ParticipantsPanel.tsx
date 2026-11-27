@@ -1,6 +1,6 @@
-import { deviceHint } from "../../selectors/device-hint";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
+import { deviceHint } from "@q9labsai/chalk-client";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
 import { useHandOrder } from "../../internal/useHandOrder";

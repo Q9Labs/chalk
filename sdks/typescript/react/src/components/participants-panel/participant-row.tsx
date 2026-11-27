@@ -73,7 +73,7 @@ export function ParticipantRow({
   const narrowWindow = useIsMobile();
   const phone = narrowCall || narrowWindow;
   const [before, match, after] = splitMatch(participant.displayName, query);
-  const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? "Sharing screen" : participant.deviceHint;
+  const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? ["Sharing screen", participant.deviceHint].filter(Boolean).join(" · ") : participant.deviceHint;
   const menu = (header?: ReactNode) => (
     <Suspense fallback={null}>
       <ParticipantOptionsMenu

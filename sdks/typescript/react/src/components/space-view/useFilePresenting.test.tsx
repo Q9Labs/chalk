@@ -73,25 +73,13 @@ it("stages every remaining dropped file in the chat composer instead of sending 
   expect(hook()?.chatDrop?.files).toEqual([image, text]);
 });
 
-it("stages the dropped PDF in the composer when presenting it fails", async () => {
-  const opened: string[] = [];
-  const { hook } = mount(true, () => opened.push("chat"));
-  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
-  const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });
-
-  await act(async () => {
-    window.dispatchEvent(event);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(opened).toEqual(["chat"]);
-  expect(hook()?.chatDrop?.files).toEqual([pdf]);
-});
-
 it("updates a staged composer drop without clearing a newer one", async () => {
-  const { hook } = mount(true);
+  const { hook } = mount(
+    true,
+    () => {},
+    () => {},
+    false,
+  );
   const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });

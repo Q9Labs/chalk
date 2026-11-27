@@ -13,13 +13,13 @@ import type { OfflineActionsHold } from "./offline-actions";
 import * as apiUrls from "../api-urls";
 import { DEFAULT_API_BASE_URL } from "../urls";
 import { SpaceStore } from "./store";
-import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, ChatUploadOptions, PendingChatSend } from "./types";
 export type ChatControllerEffects = {
   readonly react: (input: ChatReactionInput) => ClientEffect<ChatReactions>;
   readonly send: (input: ChatSendInput) => ClientEffect<ChatMessage>;
   readonly loadOlder: () => ClientEffect<ChalkChatPageResult>;
   readonly markRead: (messageId: string) => ClientEffect<ChatReadReceipt | null>;
-  readonly upload: (file: ChatUploadFile) => ClientEffect<ChatAttachment>;
+  readonly upload: (file: ChatUploadFile, options?: ChatUploadOptions) => ClientEffect<ChatAttachment>;
   readonly url: (attachment: ChatAttachment) => string;
   readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   readonly dispose: () => void;
@@ -150,7 +150,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
         );
     });
   };
-  upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> => {
+  upload = (file: ChatUploadFile, options?: ChatUploadOptions): ClientEffect<ChatAttachment> => {
     const fetch = this.#fetch;
     return Effect.suspend(() => {
       if (!this.#transport) {
@@ -163,7 +163,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
             Effect.flatMap((uploadFile) =>
               this.#connection.runPortCommand(() =>
                 foreign(() => this.#transport!.initiateUpload({ clientAttachmentId, fileName: uploadFile.fileName, mimeType: uploadFile.mimeType, byteLength: bytes.byteLength, sha256: chatDigest(bytes) })).pipe(
-                  Effect.flatMap((upload) => foreign(() => storeUpload(fetch, upload, bytes)).pipe(Effect.andThen(foreign(() => this.#transport!.finalizeUpload(upload.uploadId))))),
+                  Effect.flatMap((upload) => foreign(() => storeUpload(fetch, upload, bytes, options?.onProgress)).pipe(Effect.andThen(foreign(() => this.#transport!.finalizeUpload(upload.uploadId))))),
                   Effect.tapError((cause) => Effect.sync(() => reportUploadFailure(this.#connection, cause))),
                 ),
               ),
