@@ -82,10 +82,7 @@ let cleanupFailed = false;
 const verdicts = [];
 try {
   const { origin } = await prepareIntegration(shardRun, false);
-  const classes = [
-    ...Array.from({ length: fillers }, (_, index) => ({ index, booked: false, joinAt: startedAt, endAt: startedAt + fillerLength })),
-    { index: fillers, booked: true, joinAt: bookingStartsAt, endAt: bookedEndAt },
-  ];
+  const classes = [...Array.from({ length: fillers }, (_, index) => ({ index, booked: false, joinAt: startedAt, endAt: startedAt + fillerLength })), { index: fillers, booked: true, joinAt: bookingStartsAt, endAt: bookedEndAt }];
   const settled = await Promise.allSettled(classes.map((entry) => runClass(origin, entry)));
   settled.forEach((result, offset) => verdicts.push(result.status === "fulfilled" ? result.value : { class: classes[offset].index, pass: false, reason: "class-crashed" }));
 } finally {
@@ -95,7 +92,18 @@ try {
   });
 }
 const failed = verdicts.filter((verdict) => !verdict.pass).map((verdict) => verdict.class);
-const verdict = { startedAt: iso(startedAt), bookingStartsAt: iso(bookingStartsAt), bookingEndsAt: iso(bookingEndsAt), bookedEndAt: iso(bookedEndAt), classes: verdicts.length, passed: verdicts.length - failed.length, failed, cleanupFailed, pass: verdicts.length > 0 && failed.length === 0 && !cleanupFailed, verdicts };
+const verdict = {
+  startedAt: iso(startedAt),
+  bookingStartsAt: iso(bookingStartsAt),
+  bookingEndsAt: iso(bookingEndsAt),
+  bookedEndAt: iso(bookedEndAt),
+  classes: verdicts.length,
+  passed: verdicts.length - failed.length,
+  failed,
+  cleanupFailed,
+  pass: verdicts.length > 0 && failed.length === 0 && !cleanupFailed,
+  verdicts,
+};
 await save(resolve(out, "verdict.json"), verdict);
 console.log("window-overrun: " + verdict.passed + "/" + verdict.classes + " classes passed" + (failed.length ? "; failed " + failed.join(",") : ""));
 if (!verdict.pass) process.exitCode = 1;
