@@ -28,6 +28,11 @@ it("leaves a computer's tile without a badge", () => {
   expect(document.querySelector("[data-part='tile-device']")).toBeNull();
 });
 
+it("leaves your own tile without a badge, since you know your device", () => {
+  renderTile({ id: "me", displayName: "Nora", isLocal: true, deviceHint: "iPhone", device: { label: "iPhone", form: "phone" } });
+  expect(document.querySelector("[data-part='tile-device-badge']")).toBeNull();
+});
+
 it("keeps the device count in the name tag, and names a computer there since it has no badge", () => {
   renderTile({ id: "ada", displayName: "Ada", deviceHint: "iPad · 2 devices", device: { label: "iPad", form: "tablet" } });
   expect(document.querySelector("[data-part='tile-device-badge']")?.textContent).toBe("iPad");

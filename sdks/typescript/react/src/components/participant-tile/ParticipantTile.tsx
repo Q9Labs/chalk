@@ -122,7 +122,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const [localMirrored] = useMirrorSetting();
   const [deviceLabel, ...deviceDetails] = participant.deviceHint?.split(" · ") ?? [];
   // The badge already names a phone, tablet or foldable, so the name tag then keeps only the device count.
-  const badged = showStatus && participant.device !== undefined && participant.device.form !== "computer";
+  const badged = showStatus && !participant.isLocal && participant.device !== undefined && participant.device.form !== "computer";
   const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
@@ -153,7 +153,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         <>
-          {showStatus && participant.device ? <TileDevice name={participant.displayName} device={participant.device} /> : null}
+          {showStatus && !participant.isLocal && participant.device ? <TileDevice name={participant.displayName} device={participant.device} /> : null}
           {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
