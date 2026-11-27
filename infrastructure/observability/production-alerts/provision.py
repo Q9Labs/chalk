@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Reconcile only the three named Chalk monitors.
 
-The monitors have no notifier: they still evaluate, and the API readiness and the goal check read their state. This
-file creates and references no delivery target. It and the files beside it are the only source of the monitors:
---check lists every way the live monitors differ from them, and a notifier attached in the console is drift."""
+This folder owns the monitor definitions and their notifier assignments. Axiom stores the delivery target and its
+webhook URL. --check resolves the named notifier and reports any assignment that differs."""
 
 import argparse
 import json
@@ -13,6 +12,9 @@ import re
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+
+ALERT_NOTIFIER_NAME = "Chalk alert triage"
 
 
 # Thresholds of the Chalk SFU rules, set only here. The APL files read them as ${NAME}.
@@ -71,7 +73,7 @@ COMPARED_FIELDS = (
 )
 
 
-def monitor_definitions(variables, disabled=False, without_connection_reports=False):
+def monitor_definitions(variables, disabled=False, without_connection_reports=False, notifier_id=None):
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
     branches = {
         "RULE_BRANCHES": "".join(" | union (\n" + Path(__file__).with_name(file).read_text() + "\n)" for file, _ in RULE_BRANCHES),
@@ -90,14 +92,15 @@ def monitor_definitions(variables, disabled=False, without_connection_reports=Fa
         if "${" in monitor["aplQuery"]:
             raise RuntimeError(monitor["name"] + " has an unresolved placeholder")
         monitor["disabled"] = disabled
+        if notifier_id:
+            monitor["notifierIds"] = [notifier_id]
     return monitors
 
 
 def monitor_drift(expected, live):
     """Every way the live monitors differ from the repo, as readable lines; none means they match.
 
-    The query text is compared with its whitespace collapsed and is never printed. A monitor has no notifier, so any
-    attached notifier is drift."""
+    The query text is compared with its whitespace collapsed and is never printed."""
     problems = []
     live_by_name = {item["name"]: item for item in live}
     for monitor in expected:
@@ -113,9 +116,21 @@ def monitor_drift(expected, live):
                 want, have = " ".join(want.split()), " ".join((have or "").split())
             if want != have:
                 problems.append(f"{monitor['name']}: {field} differs")
-        if item.get("notifierIds"):
-            problems.append(f"{monitor['name']}: a notifier is attached")
+        want, have = monitor.get("notifierIds", []), item.get("notifierIds") or []
+        if sorted(want) != sorted(have):
+            detail = "notifierIds differs" if want else "a notifier is attached"
+            problems.append(f"{monitor['name']}: {detail}")
     return problems
+
+
+def alert_notifier_id():
+    matches = [item for item in api("GET", "/v2/notifiers") if item.get("name") == ALERT_NOTIFIER_NAME]
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected exactly one Axiom notifier named {ALERT_NOTIFIER_NAME!r}; found {len(matches)}")
+    item = matches[0]
+    if not item.get("id") or not (item.get("properties") or {}).get("customWebhook"):
+        raise RuntimeError(f"Axiom notifier {ALERT_NOTIFIER_NAME!r} must be a custom webhook with an ID")
+    return item["id"]
 
 
 def main():
@@ -124,6 +139,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="Read the live monitors and exit 1 if any differs from this folder; changes nothing")
     parser.add_argument("--disabled", action="store_true", help="Stage monitors without evaluating")
     parser.add_argument("--without-connection-reports", action="store_true", help="Undo the connection-report rules without disabling existing alerts")
+    parser.add_argument("--without-notifier", action="store_true", help="Expect no delivery notifier without disabling monitor evaluation")
     args = parser.parse_args()
     variables = {}
     for name in ("LOG_DATASET", "TRACE_DATASET"):
@@ -131,11 +147,15 @@ def main():
         if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
             raise RuntimeError(f"{name} must be a private dataset name")
         variables[name] = value
-    monitors = monitor_definitions(variables, args.disabled, args.without_connection_reports)
-    if args.check:
+    notifier_id = None
+    if args.apply or args.check:
         for name in ("AXIOM_TOKEN", "AXIOM_ORG_ID"):
             if not os.environ.get(name):
                 raise RuntimeError(f"{name} is required")
+        if not args.without_notifier:
+            notifier_id = alert_notifier_id()
+    monitors = monitor_definitions(variables, args.disabled, args.without_connection_reports, notifier_id)
+    if args.check:
         problems = monitor_drift(monitors, api("GET", "/v2/monitors"))
         for problem in problems:
             print("DRIFT " + problem, file=sys.stderr)
@@ -146,13 +166,10 @@ def main():
     if not args.apply:
         print(f"Validated {len(monitors)} monitor definitions; no production changes")
         return
-    for name in ("AXIOM_TOKEN", "AXIOM_ORG_ID"):
-        if not os.environ.get(name):
-            raise RuntimeError(f"{name} is required")
     existing_monitors = {item["name"]: item for item in api("GET", "/v2/monitors")}
     for monitor in monitors:
         existing = existing_monitors.get(monitor["name"])
-        monitor["notifierIds"] = []
+        monitor.setdefault("notifierIds", [])
         api("POST" if existing is None else "PUT", "/v2/monitors" + ("" if existing is None else "/" + existing["id"]), monitor)
         print("Reconciled " + monitor["name"] + (" (disabled)" if args.disabled else ""))
 
