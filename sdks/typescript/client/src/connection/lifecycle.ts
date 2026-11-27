@@ -3,7 +3,7 @@ import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/con
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import { SFUError, type ConnectionMediaSnapshot } from "../media";
-import type { V1EpisodeSnapshot } from "../sync";
+import { V1SyncError, type V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
@@ -76,7 +76,7 @@ export type ConnectionLifecycleCapability = {
   ) => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly getSyncToken: () => Effect.Effect<string, ConnectionLifecycleFailure>;
   readonly confirmEpisodeEnded: Effect.Effect<void>;
-  readonly runEpisodeEnd: <A, E>(operation: Effect.Effect<A, E>) => Effect.Effect<A, E>;
+  readonly runEpisodeEnd: <E>(operation: Effect.Effect<unknown, E>) => Effect.Effect<void, E>;
   readonly join: () => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly leave: () => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly runCommand: <A, E>(operation: (ports: ConnectionPorts) => Effect.Effect<A, E>) => Effect.Effect<A, ConnectionLifecycleFailure | E>;
@@ -1252,6 +1252,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                   if (model.epoch === epoch) model.episodeEndConfirmed = true;
                 }),
               ),
+              // Sync can deliver the Episode's end before it acknowledges the command, and the end stops the Sync client, which
+              // rejects the command that caused it. The end was confirmed, so the host's end succeeded.
+              Effect.catch((error) => (model.epoch === epoch && model.episodeEndConfirmed && error instanceof V1SyncError && error.code === "client_stopped" ? Effect.void : Effect.fail(error))),
+              Effect.asVoid,
               Effect.ensuring(
                 Effect.gen(function* () {
                   if (pendingEpisodeEnd === completed) pendingEpisodeEnd = null;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SFUError } from "../media";
+import { V1SyncError } from "../sync";
 import type { ConnectionDependencies, ConnectionMediaFactoryInput } from "./dependencies";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
@@ -77,6 +78,38 @@ describe("Episode end wins media rejection", () => {
       await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
       expect(test.events.ended).toHaveLength(1);
       expect(test.client.getSnapshot().connection.lastError).toBeNull();
+    } finally {
+      test.client.dispose();
+    }
+  });
+
+  // Production class 6 of the 27 Nov load test: Sync ended the Episode, the terminal snapshot stopped the Sync client, and the host's
+  // endEpisode() rejected with client_stopped before the acknowledgement arrived, although the Episode had ended.
+  it("resolves the host's endEpisode when the end stops the Sync client before the acknowledgement", async () => {
+    const test = fixture();
+    try {
+      await test.join();
+      test.platform.sync.endEpisode = async () => {
+        test.endEvent();
+        throw new V1SyncError("client_stopped", "client_stopped");
+      };
+      await expect(test.client.endEpisode()).resolves.toBeUndefined();
+      expect(test.client.getSnapshot().connection.status).toBe("left");
+      expect(test.events.ended).toHaveLength(1);
+      expect(test.events.errors).toEqual([]);
+    } finally {
+      test.client.dispose();
+    }
+  });
+
+  it("still rejects endEpisode with client_stopped when the Episode did not end", async () => {
+    const test = fixture();
+    try {
+      await test.join();
+      test.platform.sync.endEpisode = async () => {
+        throw new V1SyncError("client_stopped", "client_stopped");
+      };
+      await expect(test.client.endEpisode()).rejects.toMatchObject({ code: "client_stopped" });
     } finally {
       test.client.dispose();
     }
