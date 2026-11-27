@@ -1016,6 +1016,12 @@ export const PresentingDocumentPageZoomSchema = /* @__PURE__ */ (() =>
   }))();
 export type PresentingDocumentPageZoom = typeof PresentingDocumentPageZoomSchema.Type;
 
+export const PresentingFormatsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    formats: Schema.Array(Schema.String),
+  }))();
+export type PresentingFormats = typeof PresentingFormatsSchema.Type;
+
 export const ProblemReportAvailabilitySchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     available: Schema.Boolean,
@@ -3188,6 +3194,17 @@ export const GetPresentingDocumentPageZoom429ResponseHeadersSchema = /* @__PURE_
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetPresentingDocumentPageZoom429ResponseHeaders = typeof GetPresentingDocumentPageZoom429ResponseHeadersSchema.Type;
+
+export const GetPresentingFormatsResponseSchema = /* @__PURE__ */ (() => PresentingFormatsSchema)();
+export type GetPresentingFormatsResponse = typeof GetPresentingFormatsResponseSchema.Type;
+
+export const GetPresentingFormats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetPresentingFormats429ResponseHeaders = typeof GetPresentingFormats429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -7587,6 +7604,21 @@ export const GetPresentingDocumentPageZoomErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type GetPresentingDocumentPageZoomError = typeof GetPresentingDocumentPageZoomErrorSchema.Type;
+
+export const GetPresentingFormatsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PresentingDocumentNotFoundErrorSchema,
+  PresentingDocumentNotReadyErrorSchema,
+  PresentingInvalidRequestErrorSchema,
+  PresentingPageNotFoundErrorSchema,
+  PresentingRendererUnavailableErrorSchema,
+  PresentingUnsupportedTypeErrorSchema,
+  PresentingZoomNotReadyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+]);
+export type GetPresentingFormatsError = typeof GetPresentingFormatsErrorSchema.Type;
 
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;

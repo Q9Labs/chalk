@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chalk Presenting accepted files",
+  "$comment": "One source of truth for which files Presenting accepts and why a file can fail. scripts/codegen/presenting-files.mjs generates the Go and TypeScript tables. Flags: core is always on, office and keynote follow CHALK_PRESENTING_OFFICE_ENABLED and CHALK_PRESENTING_KEYNOTE_ENABLED (keynote also needs office).",
+  "kinds": ["pdf", "image", "slides", "document", "spreadsheet", "text"],
+  "flags": ["core", "office", "keynote"],
+  "formats": [
+    {
+      "id": "pdf",
+      "label": "PDF",
+      "extensions": ["pdf"],
+      "mimeTypes": ["application/pdf"],
+      "kind": "pdf",
+      "flag": "core"
+    },
+    {
+      "id": "png",
+      "label": "PNG image",
+      "extensions": ["png"],
+      "mimeTypes": ["image/png"],
+      "kind": "image",
+      "flag": "core"
+    },
+    {
+      "id": "jpeg",
+      "label": "JPEG image",
+      "extensions": ["jpg", "jpeg"],
+      "mimeTypes": ["image/jpeg"],
+      "kind": "image",
+      "flag": "core"
+    },
+    {
+      "id": "gif",
+      "label": "GIF image",
+      "extensions": ["gif"],
+      "mimeTypes": ["image/gif"],
+      "kind": "image",
+      "flag": "core"
+    },
+    {
+      "id": "webp",
+      "label": "WebP image",
+      "extensions": ["webp"],
+      "mimeTypes": ["image/webp"],
+      "kind": "image",
+      "flag": "core"
+    },
+    {
+      "id": "pptx",
+      "label": "PowerPoint presentation",
+      "extensions": ["pptx"],
+      "mimeTypes": ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+      "kind": "slides",
+      "flag": "office"
+    },
+    {
+      "id": "ppt",
+      "label": "PowerPoint 97-2003 presentation",
+      "extensions": ["ppt"],
+      "mimeTypes": ["application/vnd.ms-powerpoint"],
+      "kind": "slides",
+      "flag": "office"
+    },
+    {
+      "id": "odp",
+      "label": "OpenDocument presentation",
+      "extensions": ["odp"],
+      "mimeTypes": ["application/vnd.oasis.opendocument.presentation"],
+      "kind": "slides",
+      "flag": "office"
+    },
+    {
+      "id": "docx",
+      "label": "Word document",
+      "extensions": ["docx"],
+      "mimeTypes": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      "kind": "document",
+      "flag": "office"
+    },
+    {
+      "id": "doc",
+      "label": "Word 97-2003 document",
+      "extensions": ["doc"],
+      "mimeTypes": ["application/msword"],
+      "kind": "document",
+      "flag": "office"
+    },
+    {
+      "id": "odt",
+      "label": "OpenDocument text",
+      "extensions": ["odt"],
+      "mimeTypes": ["application/vnd.oasis.opendocument.text"],
+      "kind": "document",
+      "flag": "office"
+    },
+    {
+      "id": "xlsx",
+      "label": "Excel workbook",
+      "extensions": ["xlsx"],
+      "mimeTypes": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+      "kind": "spreadsheet",
+      "flag": "office"
+    },
+    {
+      "id": "xls",
+      "label": "Excel 97-2003 workbook",
+      "extensions": ["xls"],
+      "mimeTypes": ["application/vnd.ms-excel"],
+      "kind": "spreadsheet",
+      "flag": "office"
+    },
+    {
+      "id": "ods",
+      "label": "OpenDocument spreadsheet",
+      "extensions": ["ods"],
+      "mimeTypes": ["application/vnd.oasis.opendocument.spreadsheet"],
+      "kind": "spreadsheet",
+      "flag": "office"
+    },
+    {
+      "id": "txt",
+      "label": "Plain text",
+      "extensions": ["txt"],
+      "mimeTypes": ["text/plain"],
+      "kind": "text",
+      "flag": "office"
+    },
+    {
+      "id": "key",
+      "label": "Keynote presentation",
+      "extensions": ["key"],
+      "mimeTypes": ["application/vnd.apple.keynote", "application/x-iwork-keynote-sffkey"],
+      "kind": "slides",
+      "flag": "keynote"
+    }
+  ],
+  "failures": [
+    {
+      "code": "password_protected",
+      "message": "This file is password protected. Remove the password and try again."
+    },
+    {
+      "code": "corrupt",
+      "message": "This file is damaged or can't be opened. Check the file and try again."
+    },
+    {
+      "code": "too_many_pages",
+      "message": "This file has too many pages to present. Split it into smaller files and try again."
+    },
+    {
+      "code": "too_large",
+      "message": "This file is too large to present once it is converted. Try a smaller file."
+    },
+    {
+      "code": "unsupported_format",
+      "message": "This file type can't be presented. Choose a PDF, slides, a document, a spreadsheet or an image."
+    },
+    {
+      "code": "render_failed",
+      "message": "This file couldn't be prepared for presenting. Try again, or choose a different file."
+    },
+    {
+      "code": "infrastructure",
+      "message": "Presenting is having trouble right now. Try again in a moment."
+    }
+  ]
+}

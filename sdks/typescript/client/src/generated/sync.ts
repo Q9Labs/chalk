@@ -199,6 +199,8 @@ export const SyncProtocolMetadata = {
       "application/vnd.oasis.opendocument.text",
       "application/vnd.oasis.opendocument.spreadsheet",
       "application/vnd.oasis.opendocument.presentation",
+      "application/vnd.apple.keynote",
+      "application/x-iwork-keynote-sffkey",
     ],
     chatCursor: {
       exactFields: ["after_sequence", "retained_floor_sequence"],
@@ -943,6 +945,8 @@ export const ChatAttachmentMimeTypeSchema = Schema.Union([
   Schema.Literal("application/vnd.oasis.opendocument.text"),
   Schema.Literal("application/vnd.oasis.opendocument.spreadsheet"),
   Schema.Literal("application/vnd.oasis.opendocument.presentation"),
+  Schema.Literal("application/vnd.apple.keynote"),
+  Schema.Literal("application/x-iwork-keynote-sffkey"),
 ]);
 export const ChatAttachmentIdSchema = Schema.Array(UuidSchema).check(
   Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems),

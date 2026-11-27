@@ -174,6 +174,7 @@ type Service struct {
 	invoker    RendererInvoker
 	capability CapabilitySigner
 	available  func(context.Context) bool
+	formats    FormatFlags
 	now        func() time.Time
 }
 
@@ -184,6 +185,15 @@ func NewService(repository Repository, objects ObjectStore, invoker RendererInvo
 func (s Service) WithCapabilitySigner(signer CapabilitySigner) Service {
 	s.capability = signer
 	return s
+}
+
+func (s Service) WithFormats(formats FormatFlags) Service {
+	s.formats = formats
+	return s
+}
+
+func (s Service) AcceptedFormatIDs() []string {
+	return s.formats.AcceptedFormatIDs()
 }
 
 func (s Service) WithAvailability(available func(context.Context) bool) Service {

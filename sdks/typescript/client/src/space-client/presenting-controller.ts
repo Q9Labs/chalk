@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import { presentingFormatIdsFor, presentingFormatsFor } from "../presenting/files";
 import type { PresentingReplica } from "../presenting/replica";
 import type { PresentingCommandResult, PresentingDocumentManifest, PresentingSlice } from "../presenting/types";
 import * as apiUrls from "../api-urls";
@@ -39,6 +40,8 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
   #revision = 0;
   #status: PresentingSlice["status"] = "connecting";
   #available = false;
+  #formats: PresentingSlice["formats"] = presentingFormatIdsFor();
+  #formatsRequested = false;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeReplica: (() => void) | null = null;
 
@@ -98,6 +101,8 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
     } else {
       this.#status = "connecting";
       this.#available = false;
+      this.#formatsRequested = false;
+      this.#formats = presentingFormatIdsFor();
       this.#revision = 0;
       this.#documents = Object.freeze([]);
       this.#manifests.clear();
@@ -110,6 +115,10 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
     if (!snapshot) return;
     this.#status = snapshot.status;
     this.#available = this.#replica?.available === true;
+    if (this.#available && !this.#formatsRequested) {
+      this.#formatsRequested = true;
+      void this.#loadFormats();
+    }
     this.#revision = snapshot.status === "ready" ? snapshot.revision : 0;
     this.#documents = snapshot.status === "ready" ? Object.freeze([...snapshot.documents]) : Object.freeze([]);
     const active = new Set(this.#documents.map((document) => document.documentId));
@@ -134,6 +143,18 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
       this.#publish();
     } catch {
       this.#scheduleRefresh(documentId, null, 15_000);
+    }
+  }
+
+  async #loadFormats(): Promise<void> {
+    try {
+      const value = await this.#request<{ readonly formats?: unknown }>(apiUrls.presentingFormats(this.#apiBaseUrl), { method: "GET" });
+      if (!Array.isArray(value.formats)) return;
+      const ids = presentingFormatsFor(value.formats.filter((id): id is string => typeof id === "string")).map((format) => format.id);
+      this.#formats = Object.freeze(ids.length > 0 ? ids : presentingFormatIdsFor());
+      this.#publish();
+    } catch {
+      this.#formatsRequested = false;
     }
   }
 
@@ -169,7 +190,7 @@ class PresentingControllerRuntime implements PresentingControllerEffects {
 
   #publish(): void {
     const manifests = Object.freeze(Object.fromEntries(this.#manifests));
-    this.#store.update("presenting", Object.freeze({ status: this.#status, available: this.#available, revision: this.#revision, documents: this.#documents, manifests }));
+    this.#store.update("presenting", Object.freeze({ status: this.#status, available: this.#available, formats: this.#formats, revision: this.#revision, documents: this.#documents, manifests }));
   }
 }
 
