@@ -196,6 +196,15 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   defp overlay_event_details(event, _connection, _episode), do: event
 
+  defp uncertain_event(row, connection, episode) do
+    event = Control.event_from_row(row)
+
+    case ParticipantDetails.read(connection, episode) do
+      {:ok, details} -> ParticipantDetails.overlay_event(event, details)
+      {:retryable, _reason} -> event
+    end
+  end
+
   def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
       when is_integer(generation) and generation > 0 do
     connection = Database.alternate_connection(episode)
@@ -223,22 +232,13 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
         case Postgrex.query(connection, SQL.read_lifecycle_event(), event_params, timeout: 1_000) do
           {:ok, %{rows: [row]}} ->
-            event =
-              case ParticipantDetails.read(connection, episode) do
-                {:ok, details} ->
-                  ParticipantDetails.overlay_event(Control.event_from_row(row), details)
-
-                {:retryable, _reason} ->
-                  Control.event_from_row(row)
-              end
-
             {:ok,
              %LifecycleDecision{
                lifecycle_intent_id: lifecycle_intent_id,
                result: :already_applied,
                event_id: UUID.load!(event_id),
                revision: revision,
-               event: event
+               event: uncertain_event(row, connection, episode)
              }}
 
           _ ->
