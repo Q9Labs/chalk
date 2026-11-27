@@ -31,12 +31,28 @@ export function DocumentPageStrip({ pages, page, onSelect }: { readonly pages: r
   );
 }
 
-export function DocumentPageArea({ manifest, fileName, page, imageUrl, zoom }: { readonly manifest?: PresentingDocumentManifest; readonly fileName: string; readonly page: number; readonly imageUrl?: string; readonly zoom: number }): React.JSX.Element {
+export function DocumentPageArea({
+  manifest,
+  fileName,
+  page,
+  imageUrl,
+  zoom,
+  mine,
+  presenterName,
+}: {
+  readonly manifest?: PresentingDocumentManifest;
+  readonly fileName: string;
+  readonly page: number;
+  readonly imageUrl?: string;
+  readonly zoom: number;
+  readonly mine: boolean;
+  readonly presenterName: string;
+}): React.JSX.Element {
   const content = <PageContent page={page} imageUrl={imageUrl} fileName={fileName} zoom={zoom} />;
   return (
     <div className="relative min-h-0 flex-1">
       {manifest?.status === "preparing" || !manifest ? (
-        <DocumentPreparing manifest={manifest} fileName={fileName} />
+        <DocumentPreparing manifest={manifest} fileName={fileName} mine={mine} presenterName={presenterName} />
       ) : manifest.status === "failed" ? (
         <div className="grid h-full place-items-center p-4">
           <div role="alert" className="rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-5 text-sm">
@@ -52,20 +68,26 @@ export function DocumentPageArea({ manifest, fileName, page, imageUrl, zoom }: {
   );
 }
 
-function DocumentPreparing({ manifest, fileName }: { readonly manifest?: PresentingDocumentManifest; readonly fileName: string }): React.JSX.Element {
+function DocumentPreparing({ manifest, fileName, mine, presenterName }: { readonly manifest?: PresentingDocumentManifest; readonly fileName: string; readonly mine: boolean; readonly presenterName: string }): React.JSX.Element {
   const percent = preparedPercent(manifest);
+  const first = presenterName.split(/\s+/)[0] ?? presenterName;
   return (
-    <div className="grid h-full place-items-center p-4">
-      <div role="status" className="flex w-80 items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-scrim-soft)] p-4 shadow-lg">
-        <span className="grid h-9 w-8 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold text-[var(--chalk-on-overlay)]">PDF</span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">
-            Preparing {fileName}
-            {percent !== null ? ` · ${percent}%` : ""}
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--chalk-overlay-track)]">
-            <div className="h-full rounded-full bg-[var(--chalk-overlay-track-fill)]" style={{ width: `${percent ?? 35}%` }} />
-          </div>
+    <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="relative h-full max-w-full overflow-hidden rounded-sm bg-[var(--chalk-overlay-scrim-faint)]" style={{ aspectRatio: "850 / 1100" }} aria-hidden="true">
+        {[12, 20, 28, 36, 44, 52, 60, 68].map((top) => (
+          <i key={top} className="absolute left-[12%] right-[12%] h-2.5 animate-pulse rounded-full bg-[var(--chalk-overlay-hover-fill)]" style={{ top: `${top}%` }} />
+        ))}
+      </div>
+      <div className="absolute inset-0 grid place-items-center">
+        <div role="status" className="flex max-w-[80%] flex-col items-center gap-2.5 rounded-2xl bg-[var(--chalk-overlay-strong)] px-5 py-4 text-center">
+          <span className="h-[22px] w-[22px] animate-spin rounded-full border-[2.5px] border-[var(--chalk-overlay-track)] border-t-[var(--chalk-on-overlay)]" aria-hidden="true" />
+          <b className="text-sm font-semibold">{mine ? "Preparing your file" : `${first} is opening a file`}</b>
+          <span className="text-(length:--type-caption) opacity-70">{mine ? "Everyone sees page 1 as soon as it's ready" : fileName}</span>
+          {mine ? (
+            <div className="h-1 w-44 overflow-hidden rounded-full bg-[var(--chalk-overlay-track)]">
+              <div className="h-full rounded-full bg-[var(--chalk-overlay-track-fill)] transition-[width]" style={{ width: `${Math.max(8, percent ?? 8)}%` }} />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

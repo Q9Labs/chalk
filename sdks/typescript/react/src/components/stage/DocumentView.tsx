@@ -182,7 +182,7 @@ function PrimaryDocument(props: PrimaryDocumentProps): React.JSX.Element {
       <div className="relative flex min-h-0 flex-1">
         {props.thumbnails && props.ready ? <DocumentPageStrip pages={pages} page={props.page} onSelect={props.onTurn} /> : null}
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <DocumentPageArea manifest={props.manifest} fileName={props.fileName} page={props.page} imageUrl={props.pageImageUrl} zoom={props.zoom} />
+          <DocumentPageArea manifest={props.manifest} fileName={props.fileName} page={props.page} imageUrl={props.pageImageUrl} zoom={props.zoom} mine={props.mine} presenterName={props.presenterName} />
         </div>
       </div>
     </div>
