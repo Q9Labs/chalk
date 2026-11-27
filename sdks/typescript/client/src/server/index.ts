@@ -2,6 +2,31 @@ export { getAccessRefreshState, type AccessRefreshRequest, type AccessRefreshSta
 export { createChalkServerClient } from "./client.js";
 export { ChalkAPIError, ChalkServerOnlyError, isChalkAccessGrantError, type ChalkAccessGrantErrorCode } from "./errors.js";
 export type {
+  CreateTranscriptDownloadURLInput,
+  CreateWebhookEndpointInput,
+  ListTranscriptsInput,
+  ListWebhookDeliveriesInput,
+  ListWebhookEndpointsInput,
+  PutScheduledEpisodeInput,
+  RequestTranscriptInput,
+  RotateWebhookSecretInput,
+  RotateWebhookSecretResponse,
+  ScheduledEpisode,
+  ScheduledEpisodeExpectedParticipant,
+  Transcript,
+  TranscriptDocument,
+  TranscriptDownloadURL,
+  TranscriptList,
+  TranscriptRequestAcceptedResponse,
+  TranscriptText,
+  UpdateWebhookEndpointInput,
+  WebhookDeliveryCreated,
+  WebhookDeliveryList,
+  WebhookEndpoint,
+  WebhookEndpointList,
+  WebhookEndpointWithSecret,
+} from "./resource-types.js";
+export type {
   APIKey,
   APIKeyList,
   APIKeyWithSecret,
