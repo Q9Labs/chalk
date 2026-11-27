@@ -82,6 +82,7 @@
     "prod:recovery": "node scripts/prod-proof/recovery.mjs",
     "prod:class-window": "node scripts/prod-proof/class-window.mjs",
     "prod:autoscale-load": "node scripts/prod-proof/autoscale-load.mjs",
+    "prod:window-overrun": "node scripts/prod-proof/window-overrun.mjs",
     "prod:proof:compare-leave": "node scripts/prod-proof/leave-session.mjs",
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
     "web:proof": "node scripts/web-proof/run.mjs",

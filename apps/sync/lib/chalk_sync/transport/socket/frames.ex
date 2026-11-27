@@ -3,6 +3,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
   Frames a v1 socket sends: the projection context every outbound frame carries, and protocol errors.
   """
 
+  alias ChalkSync.DeviceKind
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
 
@@ -33,10 +34,16 @@ defmodule ChalkSync.Transport.Socket.Frames do
   defp own_identity_projection(frame, _state), do: frame
 
   # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
-  defp presence_hint_keys(%{connection_quality: false} = state),
-    do: ["connection_quality" | device_hint_keys(state)]
+  defp presence_hint_keys(state),
+    do: quality_hint_keys(state) ++ device_kind_hint_keys(state) ++ device_hint_keys(state)
 
-  defp presence_hint_keys(state), do: device_hint_keys(state)
+  defp quality_hint_keys(%{connection_quality: false}), do: ["connection_quality"]
+  defp quality_hint_keys(_state), do: []
+
+  # The finer device is a second opt-in on top of the coarse hints: a client that sends only
+  # `participant_devices=1` validates presence items strictly and would reject the new key.
+  defp device_kind_hint_keys(%{participant_devices: true, participant_device_kinds: true}), do: []
+  defp device_kind_hint_keys(_state), do: ["device_kind"]
 
   defp device_hint_keys(%{participant_devices: false}),
     do: ["identity_id", "device_type", "admission_revision"]
@@ -62,9 +69,12 @@ defmodule ChalkSync.Transport.Socket.Frames do
 
   defp media_projection(frame, _state), do: frame
 
-  def device_type(nil), do: nil
+  @doc "The coarse device: derived from the declared kind when there is one, else from the User-Agent."
+  def device_type(kind, agent), do: DeviceKind.device_type(kind) || user_agent_device_type(agent)
 
-  def device_type(agent) do
+  defp user_agent_device_type(nil), do: nil
+
+  defp user_agent_device_type(agent) do
     cond do
       String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
       String.contains?(agent, ["Mobile", "iPhone"]) -> "phone"

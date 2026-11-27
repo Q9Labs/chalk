@@ -3,6 +3,7 @@
 ## 6.1.0
 
 - Publish an iPhone camera as one stream because RTKWebRTC's iOS encoder factory cannot encode camera simulcast, so remote participants receive the video instead of a permanent avatar.
+- Declare the phone, iPad, Android tablet or foldable on the Sync connection, show a device badge on tiles for people on other than a computer, and name each person's device in the People list. Android reads foldable and tablet from a small addition to the call service module.
 - Offer screen annotation when Sync enables it. Supported Android full-screen shares can include marks in the shared video. Single-app shares keep marks separate, and the video overlay withdraws ink when capture can no longer be verified.
 - Say "Something on our side failed" instead of "Your network may block calls" when Chalk's media signalling refuses a join with a non-retryable 4xx.
 

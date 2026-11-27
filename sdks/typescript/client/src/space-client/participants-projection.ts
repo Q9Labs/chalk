@@ -5,7 +5,7 @@ import type { Capability, Participant, ParticipantPresence, ParticipantsSlice, S
 
 const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]), admissionPolicy: null });
-export type SeatDevice = Pick<Participant, "identityId" | "deviceType"> & { readonly admissionRevision: number };
+export type SeatDevice = Pick<Participant, "identityId" | "deviceType" | "deviceKind"> & { readonly admissionRevision: number };
 
 export function participantsFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, devices: ReadonlyMap<string, SeatDevice>): ParticipantsSlice {
   const control = controlFor(snapshot);
@@ -37,6 +37,7 @@ function rosterFor(
         participantId: participant.participantId,
         identityId: devices.get(participant.participantId)?.identityId,
         deviceType: devices.get(participant.participantId)?.deviceType,
+        deviceKind: devices.get(participant.participantId)?.deviceKind,
         displayName: participant.displayName,
         role: participant.role,
         eligibleRoles: Object.freeze([...participant.eligibleRoles]),
