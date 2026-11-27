@@ -6,15 +6,15 @@ Opens a page in iPhone Safari on an iOS Simulator and taps **Allow** on the came
 PROOF_URL='https://example.com/classroom' PROOF_SECONDS=120 PROOF_OUT=./out ./run.sh
 ```
 
-| Variable | Meaning |
-| --- | --- |
-| `PROOF_URL` | Required. The page to open. |
-| `PROOF_SECONDS` | How long the UI test watches and screenshots (default 90). |
-| `PROOF_OUT` | Output folder (default: an `out` folder next to the script). |
-| `PROOF_DEVICE` | Simulator UDID (default: the booted one). |
-| `PROOF_REOPEN_AFTER` | Seconds after which the URL is opened again, which is a reload and rejoin. |
+| Variable              | Meaning                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `PROOF_URL`           | Required. The page to open.                                                                 |
+| `PROOF_SECONDS`       | How long the UI test watches and screenshots (default 90).                                  |
+| `PROOF_OUT`           | Output folder (default: an `out` folder next to the script).                                |
+| `PROOF_DEVICE`        | Simulator UDID (default: the booted one).                                                   |
+| `PROOF_REOPEN_AFTER`  | Seconds after which the URL is opened again, which is a reload and rejoin.                  |
 | `PROOF_TAP_TO_HEAR=1` | Also taps the "Click to hear the call" notice, the gesture iOS needs before it plays sound. |
-| `PROOF_TAP_CENTER_AT` | Seconds after which the middle of the page is tapped once. |
+| `PROOF_TAP_CENTER_AT` | Seconds after which the middle of the page is tapped once.                                  |
 
 Output: `shot-NNN.png` every 5 seconds, `simulator.mp4` (screen recording), `ui-test.log` (every prompt it allowed, with timing) and `build.log` / `test.log`.
 
