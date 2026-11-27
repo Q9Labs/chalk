@@ -70,31 +70,39 @@ func FocusAwayIntervals(intervals []FocusInterval, allowances []FocusAllowWindow
 		pieces := []FocusInterval{interval}
 		for _, allowance := range allowances {
 			start, end := EffectiveFocusWindow(allowance, episodeEnd)
-			var next []FocusInterval
-			for _, piece := range pieces {
-				if end.Before(piece.StartedAt) || start.After(piece.EndedAt) || end.Equal(piece.StartedAt) || start.Equal(piece.EndedAt) {
-					next = append(next, piece)
-					continue
-				}
-				if start.After(piece.StartedAt) {
-					left := piece
-					left.EndedAt = start
-					next = append(next, left)
-				}
-				if end.Before(piece.EndedAt) {
-					right := piece
-					right.StartedAt = end
-					next = append(next, right)
-				}
-			}
-			pieces = next
+			pieces = subtractFocusWindow(pieces, start, end)
 		}
 		away = append(away, pieces...)
 	}
 	sort.Slice(away, func(i, j int) bool { return away[i].StartedAt.Before(away[j].StartedAt) })
-	merged := make([]FocusInterval, 0, len(away))
-	for _, interval := range away {
-		if interval.EndedAt.Before(interval.StartedAt) || interval.EndedAt.Equal(interval.StartedAt) {
+	return mergeFocusIntervals(away)
+}
+
+func subtractFocusWindow(pieces []FocusInterval, start, end time.Time) []FocusInterval {
+	var next []FocusInterval
+	for _, piece := range pieces {
+		if end.Before(piece.StartedAt) || start.After(piece.EndedAt) || end.Equal(piece.StartedAt) || start.Equal(piece.EndedAt) {
+			next = append(next, piece)
+			continue
+		}
+		if start.After(piece.StartedAt) {
+			left := piece
+			left.EndedAt = start
+			next = append(next, left)
+		}
+		if end.Before(piece.EndedAt) {
+			right := piece
+			right.StartedAt = end
+			next = append(next, right)
+		}
+	}
+	return next
+}
+
+func mergeFocusIntervals(sorted []FocusInterval) []FocusInterval {
+	merged := make([]FocusInterval, 0, len(sorted))
+	for _, interval := range sorted {
+		if !interval.EndedAt.After(interval.StartedAt) {
 			continue
 		}
 		if len(merged) > 0 {

@@ -163,7 +163,20 @@ async function assertDigest(state: V1ControlState): Promise<void> {
   if ((await computeV1StateDigest(state)) !== state.stateDigest) throw new V1StateDigestMismatchError();
 }
 
+const FOCUS_EVENTS: ReadonlySet<string> = new Set(["focus_step_away_set", "focus_step_away_cleared", "focus_allowance_opened", "focus_allowance_closed"]);
+const FOCUS_COMMANDS: ReadonlySet<string> = new Set(["set_focus_step_away", "clear_focus_step_away", "open_focus_allowance", "close_focus_allowance"]);
+
+/** Focus state lives in presence and the Episode artifact, so these events and commands leave the control state unchanged. */
+function isFocusEvent(event: EventFrame): event is Extract<EventFrame, { name: "focus_step_away_set" | "focus_step_away_cleared" | "focus_allowance_opened" | "focus_allowance_closed" }> {
+  return FOCUS_EVENTS.has(event.name);
+}
+
+function isFocusCommand(command: V1TargetCommand): command is Extract<V1TargetCommand, { name: "set_focus_step_away" | "clear_focus_step_away" | "open_focus_allowance" | "close_focus_allowance" }> {
+  return FOCUS_COMMANDS.has(command.name);
+}
+
 function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
+  if (isFocusEvent(event)) return state;
   switch (event.name) {
     case "participant_joined": {
       if (state.participants.some((participant) => participant.participantId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
@@ -204,15 +217,11 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
     case "participant_screen_share_stopped":
       requireParticipant(state, event.payload.participant_id);
       return state;
-    case "focus_step_away_set":
-    case "focus_step_away_cleared":
-    case "focus_allowance_opened":
-    case "focus_allowance_closed":
-      return state;
   }
 }
 
 function applyOptimistic(state: V1ControlState, actorId: string, command: V1TargetCommand): V1ControlState {
+  if (isFocusCommand(command)) return state;
   switch (command.name) {
     case "set_hand_raised":
       return updateParticipant(state, actorId, (participant) => ({ ...participant, handRaised: command.payload.raised }), false);
@@ -222,11 +231,6 @@ function applyOptimistic(state: V1ControlState, actorId: string, command: V1Targ
       return { ...state, admissionPolicy: command.payload.policy };
     case "assign_roles":
       return updateParticipant(state, command.payload.participant_id, (participant) => withDerivedRole(state, participant, command.payload.role), false);
-    case "set_focus_step_away":
-    case "clear_focus_step_away":
-    case "open_focus_allowance":
-    case "close_focus_allowance":
-      return state;
   }
 }
 

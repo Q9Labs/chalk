@@ -12,7 +12,7 @@ For managed databases, use the direct owner connection in `CHALK_DATABASE_URL`, 
 
 An `Up` migration must not remove or rename a table, column, type, or constraint that the previous release still uses. Use two releases: first stop using the object, then drop it only after that release is in production. The previous image must work without undoing migrations.
 
-The API gate checks new migrations for destructive changes. A deliberate second-release removal needs a standalone `-- chalk:removed-in #<PR>` comment in `Up` naming the merged PR that stopped using the object. This marker is an assertion, not proof: verify that the PR removed every use and is already in production. The check does not prove dynamic SQL or data changes safe. For its narrow concurrent-index retry exception, see `apps/api/scripts/check-additive-migrations.mjs`.
+The API gate checks new migrations for destructive changes. A deliberate second-release removal needs a standalone `-- chalk:removed-in #<PR>` comment in `Up` naming the merged PR that stopped using the object. This marker is an assertion, not proof: verify that the PR removed every use and is already in production. The check does not prove dynamic SQL or data changes safe. A CHECK redefined by dropping and adding a constraint of the same name on the same table in consecutive statements needs no marker, because the table is never left without it; keep the new definition a superset of the old one. For its narrow concurrent-index retry exception, see `apps/api/scripts/check-additive-migrations.mjs`.
 
 ## Queries and verification
 

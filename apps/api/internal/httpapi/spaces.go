@@ -499,10 +499,11 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 }
 
 func createFocusSettings(settings *spaces.FocusSettings) spaces.FocusSettings {
-	if settings == nil {
-		return spaces.FocusSettings{}
+	var focus spaces.FocusSettings
+	if settings != nil {
+		focus = *settings
 	}
-	return *settings
+	return focus
 }
 
 func (request updateSpaceRequest) toUpdateInput() (spaces.UpdateSpaceInput, error) {

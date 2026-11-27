@@ -14,10 +14,10 @@ import { useVideoTrack } from "./useVideoTrack";
 import { useFramesFrozen, useFrozenFrame } from "./useFrozenFrame";
 import { TileReconnecting, TileSignal } from "./TileConnection";
 import { TileDevice, badgeDevice } from "./TileDevice";
+import { FocusChip } from "../focus/FocusChip";
 import type { ParticipantDevice } from "@q9labsai/chalk-client";
 import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
 import { useTrueFor } from "../../internal/useTrueFor";
-import { FOCUS_COPY } from "../focus/focus-copy";
 
 export interface ParticipantTileProps {
   participant: {
@@ -255,32 +255,6 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
     </TileShell>
   );
 });
-
-function FocusChip({ focus }: { readonly focus?: import("../participant-grid/ParticipantGrid").TileFocus }) {
-  const [now, setNow] = useState(() => Date.now());
-  const state = focus?.appState;
-  const sinceRef = useRef(Date.now());
-  React.useEffect(() => {
-    sinceRef.current = Date.now();
-    if (state !== "background") return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [state]);
-  if (!focus) return null;
-  let label: string | null = null;
-  if (focus.steppedAway) label = `${FOCUS_COPY.steppedAway} · ${FOCUS_COPY.reasons[focus.steppedAway]}`;
-  else if (focus.allowed && state !== "active") label = FOCUS_COPY.allowed;
-  else if (state === "background") {
-    const elapsed = Math.max(0, Math.floor((now - sinceRef.current) / 1000));
-    label = `${FOCUS_COPY.notFocused} ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
-  } else if (state === "inactive") label = focus.windowed ? FOCUS_COPY.splitView : FOCUS_COPY.otherWindow;
-  if (!label) return null;
-  return (
-    <span role="status" data-part="tile-focus" className="pointer-events-none absolute left-2 top-2 z-30 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs font-medium text-[var(--chalk-overlay-warning)]">
-      {label}
-    </span>
-  );
-}
 
 ParticipantTile.displayName = "ParticipantTile";
 ParticipantTileSurface.displayName = "ParticipantTileSurface";

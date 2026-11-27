@@ -64,7 +64,9 @@ function check(sql) {
   }
   if (!sawUp) return "Missing goose Up section";
   const sqlUp = up.join(" ").toUpperCase();
-  const destructive = /\b(?:DROP|RENAME)\b|\bALTER\s+(?:COLUMN\s+)?\w+\s+(?:SET\s+DATA\s+)?TYPE\b/.exec(sqlUp);
+  // Dropping a CHECK and adding one of the same name on the same table in the next statement redefines it in one transaction.
+  const withoutCheckRedefinitions = sqlUp.replace(/ALTER TABLE (\w+) DROP CONSTRAINT (\w+) ; ALTER TABLE \1 ADD CONSTRAINT \2 CHECK\b/g, "ALTER TABLE $1 ADD CONSTRAINT $2 CHECK");
+  const destructive = /\b(?:DROP|RENAME)\b|\bALTER\s+(?:COLUMN\s+)?\w+\s+(?:SET\s+DATA\s+)?TYPE\b/.exec(withoutCheckRedefinitions);
   // This exact replacement only loosens the existing participant CHECK. No other
   // statement or constraint can enter through this exception.
   const widensRecordingParticipants = sqlUp === "ALTER TABLE RECORDING_CAPACITY DROP CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 ; ALTER TABLE RECORDING_CAPACITY ADD CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 CHECK ( RESERVED_PARTICIPANTS BETWEEN 0 AND 2 0 0 ) ;";

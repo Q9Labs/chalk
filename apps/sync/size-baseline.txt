@@ -11,3 +11,4 @@ lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex: flat list of lifecycle sta
 lib/chalk_sync/episodes/reducer/events.ex: one Episode action validation clause per wire action, kept with the action vocabulary it validates
 lib/chalk_sync/live/episode.ex: one live Episode coordination state; presence, media, and Focus transitions share the same socket lifecycle and projection transaction
 lib/chalk_sync/webhooks/producer.ex: one webhook production pipeline; revision fanout, object encoding, and idempotent completion transitions must change together
+lib/chalk_sync/transport/socket.ex: one clause per wire frame routes to its handler; the Focus app-state frame adds the last clause

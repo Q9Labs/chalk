@@ -39,14 +39,14 @@ export function FocusNotice({ focus, space }: { readonly focus?: TileFocus; read
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Persist the one-time disclosure only after the state first appears.
   useEffect(() => {
     if (!focus || typeof localStorage === "undefined") return;
-    const key = `${STORAGE_KEY}:${space}`;
-    if (localStorage.getItem(key) === "seen") return;
+    const flag = `${STORAGE_KEY}:${space}`;
+    if (localStorage.getItem(flag) === "seen") return;
     setOpen(true);
-    localStorage.setItem(key, "seen");
+    localStorage.setItem(flag, "seen");
   }, [focus, space]);
   if (!focus || !open) return null;
   return (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-black/35 p-4" role="presentation">
+    <div className="absolute inset-0 z-50 grid place-items-center bg-[var(--chalk-scrim)] p-4" role="presentation">
       <section role="dialog" aria-modal="true" aria-labelledby="focus-notice-title" className="w-full max-w-sm rounded-2xl bg-[var(--chalk-panel,var(--chalk-overlay))] p-5 text-center text-[var(--chalk-on-overlay)] shadow-(--elevation-toast)">
         <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl bg-[var(--chalk-overlay-warning)]/15 text-[var(--chalk-overlay-warning)]">
           <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

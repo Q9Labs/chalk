@@ -230,8 +230,9 @@ export class SpaceClientCore {
     if (this.#disposed) throw new SpaceClientError({ code: "connection.invalid_state", recoverable: false, message: "The SpaceClient has been disposed. Rejoin the call." });
   }
 }
+const FOCUS_KEYS = ["appState", "windowed", "steppedAway", "allowed"] as const;
 function sameFocus(left: Participant["focus"], right: Participant["focus"]): boolean {
-  return left?.appState === right?.appState && left?.windowed === right?.windowed && left?.steppedAway === right?.steppedAway && left?.allowed === right?.allowed;
+  return FOCUS_KEYS.every((key) => left?.[key] === right?.[key]);
 }
 
 function liveClock(dependencies: ConnectionDependencies) {
