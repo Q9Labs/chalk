@@ -31,7 +31,7 @@ function client(env: DashboardEnvironment) {
 }
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
   const api = await client(env);
-  const accepted = await run(api.tenants.getLatestAcceptedTenantHandover({ query: { recipient_email: person.email } }).pipe(Effect.catchTag("TenantHandoverNotFoundError", () => Effect.succeed(null))));
+  const accepted = !person.email ? null : await run(api.tenants.getLatestAcceptedTenantHandover({ query: { recipient_email: person.email } }).pipe(Effect.catchTag("TenantHandoverNotFoundError", () => Effect.succeed(null))));
   if (accepted) return accepted.tenant_id;
   const externalId = `${person.provider}:${env.CHALK_ENVIRONMENT}:${person.userId}`;
   const tenant = await run(api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(Effect.catchTag("TenantNotFoundError", () => Effect.succeed(null))));
