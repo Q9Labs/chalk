@@ -49,7 +49,11 @@ defmodule ChalkSync.Live.Projection.Validation do
             "device_type",
             "device_kind",
             "admission_revision",
-            "connection_quality"
+            "connection_quality",
+            "focus_app_state",
+            "focus_windowed",
+            "focus_step_away_reason",
+            "focus_allowed"
           ],
           &Map.has_key?(item, &1)
         )
@@ -64,8 +68,22 @@ defmodule ChalkSync.Live.Projection.Validation do
   defp valid_presence_hints?(item) do
     valid_identity_hint?(item) and valid_device_hint?(item) and valid_device_kind?(item) and
       valid_admission_hint?(item) and
-      valid_connection_quality?(item)
+      valid_connection_quality?(item) and valid_focus?(item)
   end
+
+  defp valid_focus?(item) do
+    valid_focus_state?(item) and valid_focus_windowed?(item) and
+      item["focus_step_away_reason"] in [nil, "reading", "notes", "break"] and
+      item["focus_allowed"] in [nil, true]
+  end
+
+  defp valid_focus_state?(%{"focus_app_state" => state}),
+    do: state in ["active", "inactive", "background"]
+
+  defp valid_focus_state?(_item), do: true
+
+  defp valid_focus_windowed?(%{"focus_windowed" => windowed}), do: is_boolean(windowed)
+  defp valid_focus_windowed?(_item), do: true
 
   defp valid_presence_activity?(%{"state" => "connected"}), do: true
   defp valid_presence_activity?(item), do: not item["speaking"] and not item["active_speaker"]
