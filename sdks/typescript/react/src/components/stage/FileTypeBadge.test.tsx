@@ -8,6 +8,7 @@ afterEach(() => document.body.replaceChildren());
 
 function badge(fileName: string): HTMLElement {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  document.body.replaceChildren();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() => root.render(<FileTypeBadge fileName={fileName} />));
   return document.body.querySelector("span") as HTMLElement;

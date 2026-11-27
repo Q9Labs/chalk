@@ -60,6 +60,20 @@ try {
         await presenter.page.waitForTimeout(1500);
         for (const { name, page } of sessions) await page.screenshot({ path: join(out, "screenshots", name + "-" + file + ".png") });
         steps.push({ name: file + " renders for both people", pass: true, ms: Date.now() - started });
+        if (file.endsWith(".xlsx")) {
+          const viewerPage = sessions[1].page;
+          for (let step = 0; step < 8; step++) {
+            await viewerPage.getByRole("button", { name: "More document options", exact: true }).click();
+            await viewerPage.getByRole("menuitem", { name: /^Zoom in/ }).click();
+            await viewerPage.waitForTimeout(400);
+          }
+          await viewerPage.waitForTimeout(1500);
+          await viewerPage.screenshot({ path: join(out, "screenshots", "Viewer-" + file + "-zoomed.png") });
+          await viewerPage.locator("[data-document-viewer]").first().hover();
+          await viewerPage.mouse.wheel(900, 0);
+          await viewerPage.waitForTimeout(1500);
+          await viewerPage.screenshot({ path: join(out, "screenshots", "Viewer-" + file + "-panned.png") });
+        }
         const stop = presenter.page.getByRole("button", { name: /stop presenting/i }).first();
         if (await stop.count()) await stop.click();
         await presenter.page.waitForTimeout(1500);
