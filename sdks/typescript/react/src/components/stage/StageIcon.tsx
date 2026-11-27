@@ -1,6 +1,6 @@
 import React, { type SVGProps } from "react";
 
-type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info";
+type StageIconName = "share" | "fill" | "fit" | "zoom-in" | "zoom-out" | "pip" | "volume" | "maximize" | "pause" | "more" | "mute" | "hand" | "pin" | "pen" | "file" | "download" | "chevron-left" | "chevron-right" | "close" | "info" | "pages" | "phone" | "tablet" | "foldable";
 const paths: Record<StageIconName, React.ReactNode> = {
   share: (
     <>
@@ -55,6 +55,24 @@ const paths: Record<StageIconName, React.ReactNode> = {
     </>
   ),
   pin: <path d="M12 17v5M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />,
+  phone: (
+    <>
+      <rect x="6" y="2" width="12" height="20" rx="2.5" />
+      <path d="M12 18h.01" strokeWidth="2.5" />
+    </>
+  ),
+  tablet: (
+    <>
+      <rect x="4" y="2" width="16" height="20" rx="2.5" />
+      <path d="M12 18h.01" strokeWidth="2.5" />
+    </>
+  ),
+  foldable: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M12 4v16" />
+    </>
+  ),
   pen: (
     <>
       <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
@@ -65,6 +83,14 @@ const paths: Record<StageIconName, React.ReactNode> = {
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <path d="M14 2v6h6M9 13h6M9 17h6" />
+    </>
+  ),
+  pages: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
     </>
   ),
   download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,

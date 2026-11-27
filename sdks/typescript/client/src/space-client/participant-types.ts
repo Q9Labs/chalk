@@ -1,4 +1,5 @@
 import type { ChalkParticipantMediaState } from "../collaboration/types";
+import type { ParticipantDeviceKind } from "../sync/device-kind";
 import type { V1AdmissionPolicy, V1AdmissionTarget } from "../sync/v1-types";
 import type { Capability } from "./types";
 
@@ -13,6 +14,8 @@ export type Participant = {
   /** Stable person identity, independent of the per-device participant ID. */
   readonly identityId?: string;
   readonly deviceType?: "phone" | "tablet" | "computer";
+  /** The device that person declared. Absent for a client that declared nothing. */
+  readonly deviceKind?: ParticipantDeviceKind;
   readonly participantId: string;
   readonly displayName: string;
   readonly role: string;

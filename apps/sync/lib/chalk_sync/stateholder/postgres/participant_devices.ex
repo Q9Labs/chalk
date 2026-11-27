@@ -9,7 +9,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
         case Postgrex.query(
                Database.connection(episode),
                """
-               select p.id, p.generation, p.identity_id, device.device_type,
+               select p.id, p.generation, p.identity_id, device.device_type, device.device_kind,
                  (seat->>'admission_revision')::bigint
                from sync_episode_control control
                join episodes e on e.tenant_id=control.tenant_id and e.space_id=control.space_id
@@ -30,12 +30,13 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantDevices do
              ) do
           {:ok, %{rows: rows}} ->
             {:ok,
-             Enum.map(rows, fn [id, generation, identity_id, device_type, revision] ->
+             Enum.map(rows, fn [id, generation, identity_id, device_type, device_kind, revision] ->
                %{
                  participant_id: Scope.nullable_uuid(id),
                  generation: generation,
                  identity_id: Scope.nullable_uuid(identity_id),
                  device_type: device_type,
+                 device_kind: device_kind,
                  admission_revision: revision
                }
              end)}
