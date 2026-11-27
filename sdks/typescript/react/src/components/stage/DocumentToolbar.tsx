@@ -1,15 +1,9 @@
-import React, { createContext, useContext, useSyncExternalStore } from "react";
+import React, { useSyncExternalStore } from "react";
 import { useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { StageIcon } from "./StageIcon";
-
-/** Where a Document's page controls live: a header attached to the Document, or a pill floating over the page. */
-export type DocumentControlsStyle = "header" | "pill";
-
-const DocumentControlsContext = createContext<DocumentControlsStyle>("header");
-export const DocumentControlsProvider = DocumentControlsContext.Provider;
 
 const iconButton = "grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--chalk-on-overlay)] transition hover:bg-[var(--chalk-overlay-hover-fill)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--chalk-on-overlay)] disabled:opacity-40";
 const pillButton = "flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-(length:--type-caption) font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--chalk-on-overlay)]";
@@ -34,12 +28,6 @@ export interface DocumentToolbarProps {
   readonly onPresentAnother?: () => void;
 }
 
-/** The control surface for the primary Document: who is presenting, the page, and one More menu. Stop needs presenter rights. */
-export function DocumentToolbar(props: DocumentToolbarProps): React.JSX.Element {
-  const style = useContext(DocumentControlsContext);
-  return style === "pill" ? <DocumentPill {...props} /> : <DocumentHeader {...props} />;
-}
-
 /** Phones and narrow tiles move page-rail and stop controls into More; the header keeps only what fits. */
 function useNarrow(): boolean {
   return useSyncExternalStore(
@@ -59,7 +47,8 @@ function useStop(documentId: string, mine: boolean) {
   return mine || self.can("stopScreenOthers") ? () => void client.presenting.stop(documentId) : null;
 }
 
-function DocumentHeader(props: DocumentToolbarProps): React.JSX.Element {
+/** The header over the primary Document: who is presenting, the page, and one More menu. Stop needs presenter rights. */
+export function DocumentToolbar(props: DocumentToolbarProps): React.JSX.Element {
   const stop = useStop(props.documentId, props.mine);
   const first = props.presenterName.split(/\s+/)[0] ?? props.presenterName;
   return (
@@ -102,35 +91,6 @@ function DocumentHeader(props: DocumentToolbarProps): React.JSX.Element {
         <button type="button" className={cn(pillButton, "ml-1 hidden bg-[var(--chalk-danger)] text-[var(--chalk-on-overlay)] hover:opacity-90 sm:flex")} onClick={stop}>
           Stop presenting
         </button>
-      ) : null}
-    </div>
-  );
-}
-
-function DocumentPill(props: DocumentToolbarProps): React.JSX.Element {
-  const stop = useStop(props.documentId, props.mine);
-  const first = props.presenterName.split(/\s+/)[0] ?? props.presenterName;
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-2">
-      {!props.mine ? (
-        <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--chalk-overlay-strong)] py-1 pl-3 pr-1 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg">
-          {props.browsing ? `You're on page ${props.page}` : `Following ${first}`}
-          {props.browsing ? (
-            <button type="button" className={cn(pillButton, "bg-[var(--chalk-on-overlay)] text-[var(--chalk-overlay-inverse)] hover:opacity-85")} onClick={props.onReturn}>
-              Back to {first}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {props.ready ? (
-        <div
-          className="pointer-events-auto flex items-center rounded-full bg-[var(--chalk-overlay-strong)] p-1 text-(length:--type-caption) text-[var(--chalk-on-overlay)] shadow-lg outline outline-1 outline-[var(--chalk-overlay-hairline)] backdrop-blur"
-          role="toolbar"
-          aria-label="Document controls"
-        >
-          <PageControls {...props} />
-          <DocumentMore {...props} stop={stop} />
-        </div>
       ) : null}
     </div>
   );

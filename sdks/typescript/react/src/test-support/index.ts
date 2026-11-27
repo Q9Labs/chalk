@@ -5,8 +5,6 @@ export { WhiteboardView } from "../components/whiteboard-view/WhiteboardView";
 export { createPreviewClient, createSnapshot } from "./preview-client";
 export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "./preview-devices";
 export { PreviewSpaceView } from "./preview-fixtures";
-export { DocumentControlsProvider } from "../components/stage/DocumentToolbar";
-export type { DocumentControlsStyle } from "../components/stage/DocumentToolbar";
 export type { Participant } from "../components/participant-grid/ParticipantGrid";
 export type { SpaceViewFeatures, SpaceViewWhiteboard } from "../components/space-view/SpaceView";
 export type { Toast } from "../components/toast-stack/ToastStack";
