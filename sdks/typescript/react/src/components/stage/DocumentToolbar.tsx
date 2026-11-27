@@ -3,6 +3,7 @@ import { useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
+import { FileTypeBadge } from "./FileTypeBadge";
 import { StageIcon } from "./StageIcon";
 
 const iconButton = "grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--chalk-on-overlay)] transition hover:bg-[var(--chalk-overlay-hover-fill)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--chalk-on-overlay)] disabled:opacity-40";
@@ -56,7 +57,7 @@ export function DocumentToolbar(props: DocumentToolbarProps): React.JSX.Element 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {props.mine ? (
           <>
-            <span className="grid h-5 min-w-7 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">PDF</span>
+            <FileTypeBadge fileName={props.fileName} className="h-5 min-w-7" />
             <span className="truncate font-semibold">{props.fileName}</span>
           </>
         ) : props.browsing ? (

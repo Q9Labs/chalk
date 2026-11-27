@@ -1,4 +1,5 @@
 import type { components } from "../generated/presenting-v1";
+import type { PresentingFormatId } from "./files.gen";
 
 export type PresentingWire = components["schemas"];
 export type PresentingDocument = {
@@ -31,6 +32,8 @@ export type PresentingSlice = {
   readonly status: "connecting" | "ready" | "unavailable";
   /** Whether the live Sync connection currently offers Presenting. */
   readonly available: boolean;
+  /** The file formats this deployment currently accepts; the always-on formats until the server answers. */
+  readonly formats: readonly PresentingFormatId[];
   readonly revision: number;
   readonly documents: readonly PresentingDocument[];
   readonly manifests: Readonly<Record<string, PresentingDocumentManifest>>;

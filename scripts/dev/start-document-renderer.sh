@@ -29,7 +29,19 @@ API_PORT="${CHALK_API_ADDR##*:}"
 export LD_LIBRARY_PATH="$NATIVE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CONTROL_API_BASE_URL="http://127.0.0.1:$API_PORT"
 export RENDERER_LOCAL_ADDR=127.0.0.1:8093
+if [ "${CHALK_PRESENTING_OFFICE_ENABLED:-true}" != "false" ]; then
+  if ! command -v soffice >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-impress libreoffice-writer libreoffice-calc python3-uno fonts-noto-core fonts-noto-extra fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea fontconfig
+  fi
+  if command -v soffice >/dev/null 2>&1; then
+    export RENDERER_SOFFICE="$(command -v soffice)"
+    export RENDERER_OFFICE_DRIVER="$APP/office/office_convert.py"
+    export RENDERER_KEYNOTE=1
+  fi
+fi
 # Docker's default seccomp profile refuses the user and network namespaces the renderer sandbox asks for, the same as Lambda. Use the
 # renderer's Lambda-compatible boundary there. It empties /tmp on each job, so the binary lives outside it, and outside the bind-mounted checkout, whose root-owned files the host could not clean up.
 if ! unshare --user --net true 2>/dev/null; then export RENDERER_LAMBDA=1; fi
-exec "$BIN"
+# The renderer exits after a rejected parser child so its state is recycled, as a fresh Lambda environment would be. Nothing else restarts it here.
+while true; do "$BIN" || true; sleep 1; done

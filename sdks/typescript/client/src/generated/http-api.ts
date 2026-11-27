@@ -264,6 +264,24 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getPresentingFormats", "/v1/presenting/formats", {
+      success: S.GetPresentingFormatsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PresentingInvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PresentingDocumentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingPageNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingDocumentNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingZoomNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingUnsupportedTypeErrorSchema.pipe(HttpApiSchema.status(422)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.PresentingRendererUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getProblemReportAvailability", "/v1/tenants/:tenant_id/problem-reports/availability", {
       params: S.GetProblemReportAvailabilityPathParamsSchema,
       success: S.GetProblemReportAvailabilityResponseSchema.pipe(HttpApiSchema.status(200)),
