@@ -645,10 +645,10 @@ function strictProjectionItem(value: unknown, stream: unknown): boolean {
         ...(Object.hasOwn(value, "device_kind") ? ["device_kind"] : []),
         ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : []),
         ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
-        ...(Object.hasOwn(value, "app_state") ? ["app_state"] : []),
-        ...(Object.hasOwn(value, "windowed") ? ["windowed"] : []),
-        ...(Object.hasOwn(value, "step_away_reason") ? ["step_away_reason"] : []),
-        ...(Object.hasOwn(value, "allowed") ? ["allowed"] : []),
+        ...(Object.hasOwn(value, "focus_app_state") ? ["focus_app_state"] : []),
+        ...(Object.hasOwn(value, "focus_windowed") ? ["focus_windowed"] : []),
+        ...(Object.hasOwn(value, "focus_step_away_reason") ? ["focus_step_away_reason"] : []),
+        ...(Object.hasOwn(value, "focus_allowed") ? ["focus_allowed"] : []),
       ])
     );
   return false;
