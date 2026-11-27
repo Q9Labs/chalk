@@ -80,7 +80,11 @@
         "sdks/typescript/react/src/components/participant-grid",
         "sdks/typescript/react/src/components/participant-tile",
         "sdks/typescript/react/src/components/participants-panel",
-        "sdks/typescript/react/src/components/stage"
+        "sdks/typescript/react/src/components/stage",
+        "apps/api/internal/httpapi/admission_request.go",
+        "apps/api/internal/httpapi/episode_lifecycle_auth_test.go",
+        "apps/sync/test/chalk_sync/participant_details_postgres_test.exs",
+        "sdks/typescript/react/src/components/AIBadgeSurfaces.test.tsx"
       ]
     },
     {

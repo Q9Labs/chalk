@@ -12,6 +12,7 @@ const SMALL: readonly Person[] = [
   { ...akash, handRaised: true },
   { ...sofia, microphone: false, camera: false },
 ];
+const SMALL_WITH_AGENT: readonly Person[] = [SMALL[0]!, { ...SMALL[1]!, agent: true, description: "AI teammate" }, SMALL[2]!];
 const BIG: readonly Person[] = [
   { ...nora, host: true, speaking: true },
   { ...akash, handRaised: true, sharing: true },
@@ -50,6 +51,7 @@ const DEVICES: readonly Person[] = [
 
 const variants = [
   { id: "small", title: "People: small call", others: SMALL, panel: true },
+  { id: "agent", title: "People: agent participant", others: SMALL_WITH_AGENT, panel: true },
   { id: "big", title: "People: big call", others: BIG, panel: true },
   { id: "devices", title: "People: each person's device", others: DEVICES, panel: true },
   { id: "search", title: "People: search", others: BIG, panel: true },

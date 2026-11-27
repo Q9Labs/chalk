@@ -324,6 +324,17 @@
           "maxBytes": 64,
           "trimmedNonEmpty": true
         },
+        "identityKind": {
+          "kind": "string",
+          "enum": ["user", "agent", "guest"],
+          "optional": true
+        },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
+          "optional": true
+        },
         "capabilities": {
           "kind": "array",
           "maxItems": 23,
@@ -424,6 +435,12 @@
       "wireName": "entry_confirmation",
       "optional": true,
       "value": true
+    },
+    "participantDetails": {
+      "wireName": "participant_details",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated participant_details=1: this Sync sends immutable participant detail fields on participant frames. A client that does not see it must not rely on them."
     },
     "mediaOffReason": {
       "wireName": "media_off_reason",
@@ -964,6 +981,17 @@
           "minBytes": 1,
           "maxBytes": 64,
           "trimmedNonEmpty": true
+        },
+        "identityKind": {
+          "kind": "string",
+          "enum": ["user", "agent", "guest"],
+          "optional": true
+        },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
+          "optional": true
         },
         "admissionRevision": {
           "kind": "integer",

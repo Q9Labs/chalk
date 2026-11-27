@@ -529,7 +529,7 @@ type Querier interface {
 	ReserveSFUWindowNode(ctx context.Context, arg ReserveSFUWindowNodeParams) (int64, error)
 	ReserveSpaceCreateRequest(ctx context.Context, arg ReserveSpaceCreateRequestParams) (SpaceCreateRequest, error)
 	ReserveWhiteboardFile(ctx context.Context, arg ReserveWhiteboardFileParams) (ReserveWhiteboardFileRow, error)
-	ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (pgtype.UUID, error)
+	ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (ResolveAdmissionIdentityRow, error)
 	RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (Space, error)
 	RetireRecordingCapturePublication(ctx context.Context, arg RetireRecordingCapturePublicationParams) (int64, error)
 	RetryArtifactJob(ctx context.Context, arg RetryArtifactJobParams) (ArtifactJob, error)

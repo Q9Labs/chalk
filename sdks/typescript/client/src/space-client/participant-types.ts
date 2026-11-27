@@ -11,6 +11,10 @@ export type ParticipantPresence = {
   readonly connectionQuality?: import("../media/link-quality").LinkTier;
 };
 export type Participant = {
+  /** Whether this seat belongs to a person or an admitted agent. Absent on older Sync connections. */
+  readonly identityKind?: "user" | "agent" | "guest";
+  /** Trusted backend-provided plain-text line about this seat. Absent when unset or on older Sync connections. */
+  readonly description?: string;
   /** Stable person identity, independent of the per-device participant ID. */
   readonly identityId?: string;
   readonly deviceType?: "phone" | "tablet" | "computer";

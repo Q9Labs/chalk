@@ -6,6 +6,7 @@ import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
+import { AIBadge } from "../atomic/AIBadge";
 import { Avatar } from "../atomic/Avatar";
 import { TileOptionsSlot, tileActions } from "./TileOptions";
 import { TileShell } from "./TileShell";
@@ -22,6 +23,7 @@ export interface ParticipantTileProps {
   participant: {
     id: string;
     displayName: string;
+    identityKind?: "user" | "agent" | "guest";
     /** The device's name, with "· 2 devices" when the same person is connected twice. */
     deviceHint?: string;
     /** Shows a badge in the bottom-right corner for a phone, tablet or foldable. */
@@ -170,7 +172,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-(--space-1-5) overflow-hidden">
               {showName && (
-                <>
+                <span className="inline-flex h-full min-w-0 max-w-full items-center gap-x-(--space-1-5)">
                   <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full items-center [unicode-bidi:plaintext]" title={participant.displayName}>
                     <span className="min-w-0 truncate">{participant.displayName}</span>
                     {participant.isLocal && participant.displayName !== "You" && (
@@ -183,7 +185,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                   <span dir="auto" data-part="tile-short-name" className="hidden h-full min-w-0 max-w-full shrink-0 truncate [unicode-bidi:plaintext]">
                     {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
                   </span>
-                </>
+                  {participant.identityKind === "agent" ? <AIBadge /> : null}
+                </span>
               )}
               {deviceDetails.length > 0 ? (
                 <span data-part="tile-device" className="contents text-(length:--type-caption)">

@@ -3,6 +3,7 @@
 import { Schema, SchemaGetter } from "effect";
 
 export const ChalkCodePointLimits = {
+  "AdmitEpisodeParticipantRequest.description": 80,
   "CreateSpaceRequest.name": 120,
   "CreateTenantRequest.external_id": 512,
   "ProblemReportRequest.description": 1000,
@@ -131,8 +132,10 @@ export type AccessGrant = typeof AccessGrantSchema.Type;
 export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission: Schema.optional(Schema.Literals(["policy", "direct"])),
+    description: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 80))),
     identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
     identity_id: Schema.optional(UUIDSchema),
+    identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.String.check(Schema.isMinLength(1)),
     participant_id: Schema.optional(ParticipantIdSchema),
@@ -942,6 +945,7 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
     ),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: ParticipantIdSchema,
@@ -969,6 +973,7 @@ export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
     }),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: UUIDSchema,
@@ -5126,6 +5131,44 @@ export const EpisodeNotFoundErrorSchema = EpisodeNotFoundErrorWireSchema.pipe(
   }),
 );
 
+export class IdentityKindConflictError extends Schema.TaggedErrorClass<IdentityKindConflictError>()("IdentityKindConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindConflictErrorSchema = IdentityKindConflictErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdentityKindForbiddenError extends Schema.TaggedErrorClass<IdentityKindForbiddenError>()("IdentityKindForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindForbiddenErrorSchema = IdentityKindForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class McpOauthConnectionNotFoundError extends Schema.TaggedErrorClass<McpOauthConnectionNotFoundError>()("McpOauthConnectionNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("mcp_oauth.connection_not_found"),
@@ -5616,6 +5659,25 @@ export const ParticipantConnectionSupersededErrorWireSchema = Schema.Struct({
 export const ParticipantConnectionSupersededErrorSchema = ParticipantConnectionSupersededErrorWireSchema.pipe(
   Schema.decodeTo(ParticipantConnectionSupersededError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantConnectionSupersededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantDescriptionForbiddenError extends Schema.TaggedErrorClass<ParticipantDescriptionForbiddenError>()("ParticipantDescriptionForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantDescriptionForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantDescriptionForbiddenErrorSchema = ParticipantDescriptionForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantDescriptionForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantDescriptionForbiddenError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -7470,8 +7532,11 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
+  IdentityKindConflictErrorSchema,
+  IdentityKindForbiddenErrorSchema,
   MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
+  ParticipantDescriptionForbiddenErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,

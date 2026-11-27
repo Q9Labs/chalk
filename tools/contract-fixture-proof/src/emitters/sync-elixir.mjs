@@ -3,6 +3,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ElixirAtom, renderAttribute, renderElixirValue, wrapElixirSource } from "./elixir-layout.mjs";
+import { renderElixirCommandPayloads, renderElixirEventPayloads, renderElixirFieldCheck, renderElixirOperationPayloads, snakeCase } from "./sync-elixir-payloads.mjs";
 import { codegenPath, loadSyncContract } from "./sync-contract.mjs";
 import { welcomeFlagsFor } from "./sync-welcome.mjs";
 
@@ -19,6 +20,12 @@ await writeFile(outputPath, wrapElixirSource(source));
 function renderElixir(contract) {
   const welcomeFlags = welcomeFlagsFor(contract);
   const limits = contract.limits;
+  const participantFields = Object.entries(contract.snapshot.participants.items).map(([name, field]) => [snakeCase(name), field]);
+  const participantRequiredKeys = participantFields.filter(([, field]) => !field.optional).map(([name]) => name);
+  const participantOptional = participantFields.filter(([, field]) => field.optional);
+  const participantOptionalKeys = participantOptional.map(([name]) => name);
+  const participantKeysExpression = participantOptionalKeys.length === 0 ? renderElixirValue(participantRequiredKeys) : `${renderElixirValue(participantRequiredKeys)} ++ Enum.filter(${renderElixirValue(participantOptionalKeys)}, &Map.has_key?(participant, &1))`;
+  const participantOptionalChecks = participantOptional.map(([name, field]) => `(not Map.has_key?(participant, ${JSON.stringify(name)}) or ${renderElixirFieldCheck(field, `participant[${JSON.stringify(name)}]`)})`).join(" and ");
   const eventOrigins = Object.fromEntries(contract.events.map((event) => [event.name, event.origin]));
   const metadata = {
     version: contract.version,
@@ -278,7 +285,7 @@ function renderElixir(contract) {
     "  defp valid_snapshot?(_snapshot), do: false",
     "",
     '  defp valid_participant?(%{"participant_id" => id, "display_name" => name, "hand_raised" => raised, "admission_revision" => admission_revision, "role" => role, "capabilities" => capabilities} = participant, role_capabilities) do',
-    '    exact_keys?(participant, ["participant_id", "display_name", "hand_raised", "admission_revision", "role", "capabilities"]) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role)',
+    `    exact_keys?(participant, ${participantKeysExpression}) and valid_uuid?(id) and bounded_string?(name, 1, 256) and is_boolean(raised) and valid_positive_integer?(admission_revision) and bounded_string?(role, 1, 64) and capabilities == Map.get(role_capabilities, role)${participantOptionalChecks ? ` and ${participantOptionalChecks}` : ""}`,
     "  end",
     "  defp valid_participant?(_participant, _role_capabilities), do: false",
     "",
@@ -440,56 +447,6 @@ function renderElixir(contract) {
   return `${lines.join("\n")}\n`;
 }
 
-/** @param {Record<string, any>[]} commands */
-function renderElixirCommandPayloads(commands) {
-  return commands.flatMap((command) => {
-    const fields = Object.entries(command.payload).map(([name, field]) => [snakeCase(name), field]);
-    const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
-    const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
-    return [`  defp valid_command_payload?(${JSON.stringify(command.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
-  });
-}
-
-/** @param {Record<string, any>[]} operations */
-function renderElixirOperationPayloads(operations) {
-  return operations.flatMap((operation) => {
-    const fields = Object.entries(operation.payload).map(([name, field]) => [snakeCase(name), field]);
-    const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
-    const checks = fields.length === 0 ? "true" : fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
-    return [`  defp valid_operation_payload?(${JSON.stringify(operation.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(fields.map(([name]) => name))}) and ${checks}`, "  end", ""];
-  });
-}
-
-/** @param {Record<string, any>[]} events */
-function renderElixirEventPayloads(events) {
-  return events.flatMap((event) => {
-    const fields = Object.entries(event.payload).map(([name, field]) => [snakeCase(name), field]);
-    const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
-    const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
-    return [`  defp valid_event_payload?(${JSON.stringify(event.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
-  });
-}
-
-/** @param {Record<string, any>} field @param {string} variable */
-function renderElixirFieldCheck(field, variable) {
-  if (field === "uuid") return `valid_uuid?(${variable})`;
-  if (Array.isArray(field)) return `${variable} in ${renderElixirValue(field)}`;
-  if (field.kind === "boolean") return `is_boolean(${variable})`;
-  if (field.kind === "integer") return field.minimum > 0 ? `valid_positive_integer?(${variable})` : `valid_non_negative_integer?(${variable})`;
-  if (field.kind === "array") {
-    const values = field.of === "role" ? `Enum.all?(${variable}, &bounded_string?(&1, 1, 64))` : `Enum.all?(${variable}, &(&1 in @capabilities))`;
-    return `is_list(${variable}) and length(${variable}) <= ${field.maxItems} and ${values}`;
-  }
-  if (field.format === "uuid") return `valid_uuid?(${variable})`;
-  if (field.enum) return `${variable} in ${renderElixirValue(field.enum)}`;
-  const minimum = field.minBytes ?? 0;
-  const trimmed = field.trimmedNonEmpty ? ` and ${variable} != "" and ${variable} == String.trim(${variable})` : "";
-  const check = `bounded_string?(${variable}, ${minimum}, ${field.maxBytes})${trimmed}`;
-  return field.nullable ? `(is_nil(${variable}) or ${check})` : check;
-}
-
 /**
  * @param {Record<string, any>} event
  */
@@ -529,13 +486,6 @@ function renderAckClause(ack) {
  */
 function inspectString(value) {
   return JSON.stringify(value);
-}
-
-/**
- * @param {string} value
- */
-function snakeCase(value) {
-  return value.replace(/[A-Z]/gu, (letter) => `_${letter.toLowerCase()}`);
 }
 
 /**

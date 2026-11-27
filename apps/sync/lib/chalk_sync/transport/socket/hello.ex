@@ -155,6 +155,7 @@ defmodule ChalkSync.Transport.Socket.Hello do
       protocol_options
       |> Map.put(:entry_confirmation, state.entry_confirmation)
       |> Map.put(:media_off_reason, state.media_off_reason)
+      |> Map.put(:participant_details, state.participant_details)
       |> Map.put(:screen_annotation, state.screen_annotation)
       |> Map.put(:presenting, state.presenting)
       |> Map.put(

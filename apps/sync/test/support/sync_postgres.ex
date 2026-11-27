@@ -82,6 +82,7 @@ defmodule ChalkSync.SyncPostgres do
           display_name: "Participant #{index}",
           capabilities: capabilities,
           role: role,
+          description: Map.get(participant, :description),
           admission_lifecycle_intent_id:
             Map.get_lazy(participant, :admission_lifecycle_intent_id, &UUID.generate/0)
         }
@@ -168,6 +169,7 @@ defmodule ChalkSync.SyncPostgres do
       delete(transaction, "sync_chat_messages", tenant_id)
       delete(transaction, "sync_chat_streams", tenant_id)
       delete(transaction, "participants", tenant_id)
+      delete(transaction, "identities", tenant_id)
       delete(transaction, "episode_create_requests", tenant_id)
       delete(transaction, "episodes", tenant_id)
       delete(transaction, "spaces", tenant_id)

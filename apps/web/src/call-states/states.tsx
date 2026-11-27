@@ -109,6 +109,7 @@ export const CALL_STATES: readonly CallState[] = [
 
   { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
   { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "duo-agent", title: "Two people, agent participant", render: () => <Live snapshot={liveSnapshot({ others: [{ ...nora, agent: true }] })} /> },
   { id: "duo-grid", title: "Two people, grid", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} layout="grid" /> },
   { id: "cameras-off", title: "Two people, both cameras off", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [{ ...nora, camera: false }] })} /> },
   {
