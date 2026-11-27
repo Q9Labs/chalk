@@ -85,38 +85,7 @@ func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID,
 		return r.updateSpaceWithWebhook(ctx, tenantID, spaceID, input)
 	}
 
-	space, err := r.queries.UpdateTenantSpace(ctx, sqlc.UpdateTenantSpaceParams{
-		TenantID:                         uuid(tenantID),
-		ID:                               uuid(spaceID),
-		NameSet:                          input.Name.Set,
-		Name:                             requiredText(input.Name),
-		SlugSet:                          input.Slug.Set,
-		Slug:                             requiredText(input.Slug),
-		MediaPlaneSet:                    input.MediaPlane.Set,
-		MediaPlane:                       requiredText(input.MediaPlane),
-		MediaPlaneSettingSet:             input.MediaPlaneSetting.Set,
-		MediaPlaneSetting:                optionalPlaneSetting(input.MediaPlaneSetting),
-		MetadataSet:                      input.Metadata.Set,
-		Metadata:                         jsonBytes(input.Metadata.Value),
-		RecurringPolicySet:               input.RecurringPolicy.Set,
-		RecurringPolicy:                  jsonBytes(input.RecurringPolicy.Value),
-		AdmissionPolicySet:               input.AdmissionPolicy.Set,
-		AdmissionPolicy:                  jsonBytes(input.AdmissionPolicy.Value),
-		DefaultEpisodeDurationSecondsSet: input.DefaultEpisodeDurationSeconds.Set,
-		DefaultEpisodeDurationSeconds:    optionalInt32(input.DefaultEpisodeDurationSeconds),
-		MaximumEpisodeDurationSecondsSet: input.MaximumEpisodeDurationSeconds.Set,
-		MaximumEpisodeDurationSeconds:    optionalInt32(input.MaximumEpisodeDurationSeconds),
-		LingerWindowSecondsSet:           input.LingerWindowSeconds.Set,
-		LingerWindowSeconds:              optionalInt32(input.LingerWindowSeconds),
-		RecordingPolicySet:               input.RecordingPolicy.Set,
-		RecordingPolicy:                  optionalRecordingPolicy(input.RecordingPolicy),
-		TranscriptionPolicySet:           input.TranscriptionPolicy.Set,
-		TranscriptLanguageSet:            input.TranscriptLanguage.Set,
-		TranscriptLanguage:               text(optionalLanguageString(input.TranscriptLanguage.Value)),
-		FocusSet:                         input.Focus.Set,
-		Focus:                            optionalFocusJSON(input.Focus),
-		TranscriptionPolicy:              optionalTranscriptionPolicy(input.TranscriptionPolicy),
-	})
+	space, err := r.queries.UpdateTenantSpace(ctx, updateTenantSpaceParams(tenantID, spaceID, input))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return spaces.Space{}, spaces.ErrSpaceNotFound
 	}
