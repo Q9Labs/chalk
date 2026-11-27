@@ -17,9 +17,9 @@ const seed = JSON.parse(await readFile(".private/chalk-dev/seed.json", "utf8"));
 const web = arg("--web") ?? seed.urls.public;
 const cases = [
   { file: "pptx-security.pptx", expect: "ready" },
+  { file: "locked-pass.docx", expect: "password_protected" },
   { file: "arabic-urdu.docx", expect: "ready" },
   { file: "wide-grades.xlsx", expect: "ready" },
-  { file: "locked-pass.docx", expect: "password_protected" },
 ];
 await mkdir(join(out, "screenshots"), { recursive: true });
 await mkdir(join(out, "video"), { recursive: true });

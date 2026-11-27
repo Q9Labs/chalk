@@ -43,4 +43,5 @@ fi
 # Docker's default seccomp profile refuses the user and network namespaces the renderer sandbox asks for, the same as Lambda. Use the
 # renderer's Lambda-compatible boundary there. It empties /tmp on each job, so the binary lives outside it, and outside the bind-mounted checkout, whose root-owned files the host could not clean up.
 if ! unshare --user --net true 2>/dev/null; then export RENDERER_LAMBDA=1; fi
-exec "$BIN"
+# The renderer exits after a rejected parser child so its state is recycled, as a fresh Lambda environment would be. Nothing else restarts it here.
+while true; do "$BIN" || true; sleep 1; done
