@@ -243,26 +243,7 @@ const PersonRow = memo(function PersonRow({ participant, device, isSelf, handNum
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <View style={styles.name}>
-        <ChalkText accessibilityLabel={[status ? `${participant.displayName}, ${status}` : participant.displayName, device].filter(Boolean).join(", ")} numberOfLines={1} variant="bodyMedium">
-          {participant.displayName}
-          {isSelf ? (
-            <ChalkText tone="textMuted" variant="meta">
-              {"  (You)"}
-            </ChalkText>
-          ) : null}
-          {host ? (
-            <ChalkText tone="textMuted" variant="meta">
-              {"  Host"}
-            </ChalkText>
-          ) : null}
-        </ChalkText>
-        {device ? (
-          <ChalkText numberOfLines={1} tone="textMuted" variant="meta" testID={`people.device.${participant.participantId}`}>
-            {device}
-          </ChalkText>
-        ) : null}
-      </View>
+      <PersonName device={device} host={host} isSelf={isSelf} label={status ? `${participant.displayName}, ${status}` : participant.displayName} name={participant.displayName} participantId={participant.participantId} />
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />

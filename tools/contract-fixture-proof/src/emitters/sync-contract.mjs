@@ -519,10 +519,7 @@ function validateSyncContractDocument(value) {
   }
   requireArrayProperty(collaboration, "errorCodes", "collaboration.errorCodes are required");
   const projectionFrames = /** @type {JsonObject} */ (value.projectionFrames);
-  for (const property of ["mediaSnapshot", "mediaEvent", "presenceSnapshot", "presenceEvent"]) {
-    const frame = requireObjectProperty(projectionFrames, property, `projectionFrames.${property} is required`);
-    requireArrayProperty(frame, "exactFields", `projectionFrames.${property}.exactFields are required`);
-  }
+  for (const property of ["mediaSnapshot", "mediaEvent", "presenceSnapshot", "presenceEvent"]) requireArrayProperty(requireObjectProperty(projectionFrames, property, `projectionFrames.${property} is required`), "exactFields", `projectionFrames.${property}.exactFields are required`);
   const presenceItems = requireObjectProperty(/** @type {JsonObject} */ (projectionFrames.presenceSnapshot), "items", "projectionFrames.presenceSnapshot.items is required");
   requireArrayProperty(presenceItems, "deviceKind", "projectionFrames.presenceSnapshot.items.deviceKind is required");
 

@@ -16,18 +16,28 @@ export type WebDeviceEnvironment = {
 // so this only recognises a foldable whose browser still sends it, such as Samsung Internet; the rest report phone or tablet.
 const FOLDABLE_MODEL = /\bSM-F\d{3}|\bPixel Fold\b/u;
 
+type Family = "ios" | "ipad" | "android" | "chromeos" | "mac" | "windows" | "linux";
+
+// Checked in order: the first family whose user agent pattern or declared platform matches wins.
+const FAMILIES: readonly { readonly family: Family; readonly agent: RegExp; readonly platforms: readonly string[] }[] = [
+  { family: "ios", agent: /iPhone|iPod/u, platforms: ["iOS"] },
+  { family: "ipad", agent: /iPad/u, platforms: [] },
+  { family: "android", agent: /Android/u, platforms: ["Android"] },
+  { family: "chromeos", agent: /CrOS/u, platforms: ["Chrome OS", "Chromium OS"] },
+  { family: "mac", agent: /Macintosh|Mac OS X/u, platforms: ["macOS"] },
+  { family: "windows", agent: /Windows/u, platforms: ["Windows"] },
+  { family: "linux", agent: /Linux|X11/u, platforms: ["Linux"] },
+];
+
 /** What this browser says it runs on, or undefined when it says nothing recognisable. */
 export function detectWebDeviceKind(environment: WebDeviceEnvironment): ParticipantDeviceKind | undefined {
   const { userAgent: agent, maxTouchPoints = 0, userAgentData } = environment;
-  const platform = userAgentData?.platform;
-  if (/iPhone|iPod/u.test(agent) || platform === "iOS") return /iPad/u.test(agent) ? "ipad" : "iphone";
-  if (/iPad/u.test(agent)) return "ipad";
-  if (/Android/u.test(agent) || platform === "Android") return androidKind(agent, userAgentData?.mobile);
-  if (/CrOS/u.test(agent) || platform === "Chrome OS" || platform === "Chromium OS") return "chromeos";
-  if (/Macintosh|Mac OS X/u.test(agent) || platform === "macOS") return maxTouchPoints > 1 ? "ipad" : "mac";
-  if (/Windows/u.test(agent) || platform === "Windows") return "windows";
-  if (/Linux|X11/u.test(agent) || platform === "Linux") return "linux";
-  return undefined;
+  const platform = userAgentData?.platform ?? "";
+  const family = FAMILIES.find((entry) => entry.agent.test(agent) || entry.platforms.includes(platform))?.family;
+  if (family === "ios") return /iPad/u.test(agent) ? "ipad" : "iphone";
+  if (family === "android") return androidKind(agent, userAgentData?.mobile);
+  if (family === "mac") return maxTouchPoints > 1 ? "ipad" : "mac";
+  return family;
 }
 
 function androidKind(agent: string, mobile: boolean | undefined): ParticipantDeviceKind {

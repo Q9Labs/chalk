@@ -2,9 +2,14 @@ import type { ParticipantDevice } from "@q9labsai/chalk-client";
 import { ChalkTooltip } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 
-/** The bottom-right icon on a phone, tablet or foldable tile. Hover or keyboard focus says where the person joined from. A computer never gets one. */
+/** The device that earns a tile badge: a phone, tablet or foldable that isn't yours, on a tile that shows status. A computer never gets one. */
+export function badgeDevice(participant: { readonly device?: ParticipantDevice; readonly isLocal?: boolean }, showStatus: boolean): ParticipantDevice | undefined {
+  if (!showStatus || participant.isLocal || participant.device?.form === "computer") return undefined;
+  return participant.device;
+}
+
+/** The bottom-right icon on a tile. Hover or keyboard focus says where the person joined from. */
 export function TileDevice({ device }: { readonly device: ParticipantDevice }) {
-  if (device.form === "computer") return null;
   const joined = `Joined from ${device.joinedFrom}`;
   return (
     <ChalkTooltip

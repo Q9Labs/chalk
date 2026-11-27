@@ -193,7 +193,7 @@
     "tests/board.e2e.ts": 394,
     "tools/contract-fixture-proof/src/emitters/effect-schemas.mjs": 628,
     "tools/contract-fixture-proof/src/emitters/sync-contract.mjs": 559,
-    "tools/contract-fixture-proof/src/emitters/sync-elixir.mjs": 610,
+    "tools/contract-fixture-proof/src/emitters/sync-elixir.mjs": 612,
     "tools/contract-fixture-proof/src/emitters/sync-typescript.mjs": 721,
     "tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs": 458,
     "tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs": 362,
