@@ -20,10 +20,7 @@ function same(left: Report, right: Report): boolean {
  * React Native Focus detection. AppState covers background and iOS inactive; a window smaller
  * than the screen covers iPad Split View/Slide Over and Android multi-window on the React Native surface.
  */
-export function observeNativeFocus(input: {
-  readonly report: (state: FocusState, windowed: boolean) => void;
-  readonly isScreenSharing: () => boolean;
-}): () => void {
+export function observeNativeFocus(input: { readonly report: (state: FocusState, windowed: boolean) => void; readonly isScreenSharing: () => boolean }): () => void {
   let current = observable(input);
   let timer: ReturnType<typeof setTimeout> | null = null;
   const clear = () => {

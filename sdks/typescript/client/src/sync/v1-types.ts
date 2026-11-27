@@ -272,10 +272,7 @@ export type V1CollaborationClient = {
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
-export type V1AppStateObserver = (input: {
-  readonly report: (state: "active" | "inactive" | "background", windowed: boolean) => void;
-  readonly isScreenSharing: () => boolean;
-}) => () => void;
+export type V1AppStateObserver = (input: { readonly report: (state: "active" | "inactive" | "background", windowed: boolean) => void; readonly isScreenSharing: () => boolean }) => () => void;
 export type V1SyncClientOptions = {
   readonly traceparent?: string;
   readonly telemetry?: TelemetrySink;

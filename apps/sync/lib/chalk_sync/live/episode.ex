@@ -153,20 +153,18 @@ defmodule ChalkSync.Live.Episode do
         {:error, :not_live}
 
       {:ok, authority} ->
-        now_ms = System.system_time(:millisecond)
-        current = Map.get(state.app_states, socket)
-
-        case current do
+        case Map.get(state.app_states, socket) do
           %{state: ^app_state, windowed: ^windowed} ->
             {:ok, state, []}
 
-          _changed ->
-            replace_app_state(state, socket, authority, current, app_state, windowed, now_ms)
+          current ->
+            replace_app_state(state, socket, authority, current, app_state, windowed)
         end
     end
   end
 
-  defp replace_app_state(state, socket, authority, current, app_state, windowed, now_ms) do
+  defp replace_app_state(state, socket, authority, current, app_state, windowed) do
+    now_ms = System.system_time(:millisecond)
     close_reported_app_state(state, socket, authority, current, now_ms)
     report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
     Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)

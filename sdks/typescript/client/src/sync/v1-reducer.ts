@@ -169,7 +169,6 @@ const FOCUS_COMMANDS: ReadonlySet<string> = new Set(["set_focus_step_away", "cle
 /** Focus state lives in presence and the Episode artifact, so these events and commands leave the control state unchanged. */
 type FocusEventFrame = Extract<EventFrame, { name: "focus_step_away_set" | "focus_step_away_cleared" | "focus_allowance_opened" | "focus_allowance_closed" }>;
 type FocusCommand = Extract<V1TargetCommand, { name: "set_focus_step_away" | "clear_focus_step_away" | "open_focus_allowance" | "close_focus_allowance" }>;
-
 function isFocusEvent(event: EventFrame): event is FocusEventFrame {
   return FOCUS_EVENTS.has(event.name);
 }

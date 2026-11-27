@@ -13,9 +13,13 @@ function environment(input?: { readonly hidden?: boolean; readonly focused?: boo
   const windowListeners = listeners;
   const environment: WebFocusEnvironment = {
     document: {
-      get visibilityState() { return state.hidden ? "hidden" : "visible"; },
+      get visibilityState() {
+        return state.hidden ? "hidden" : "visible";
+      },
       hasFocus: () => state.focused,
-      get pictureInPictureElement() { return state.pip ? ({ } as Element) : null; },
+      get pictureInPictureElement() {
+        return state.pip ? ({} as Element) : null;
+      },
       addEventListener: (name: string, listener: Listener) => add(documentListeners, name, listener),
       removeEventListener: (name: string, listener: Listener) => documentListeners.get(name)?.delete(listener),
     } as WebFocusEnvironment["document"],

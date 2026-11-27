@@ -132,7 +132,7 @@ function renderElixir(contract) {
     '  defp decode_connection_quality_set(%{"quality" => quality} = frame) when quality in @connection_qualities, do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set, quality}}, else: {:error, :invalid_connection_quality})',
     "  defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}",
     '  defp decode_app_state_set(%{"state" => state, "windowed" => windowed} = frame) when state in @app_states and is_boolean(windowed), do: if(exact_keys?(frame, ["type", "state", "windowed"]), do: {:ok, {:app_state_set, state, windowed}}, else: {:error, :invalid_app_state})',
-    '  defp decode_app_state_set(_frame), do: {:error, :invalid_app_state}',
+    "  defp decode_app_state_set(_frame), do: {:error, :invalid_app_state}",
     "",
     '  defp decode_command(%{"command_id" => command_id, "name" => name, "payload" => payload} = frame) do',
     '    if exact_keys?(frame, ["type", "command_id", "name", "payload"]) and valid_command_id?(command_id) and valid_command_payload?(name, payload),',

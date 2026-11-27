@@ -83,7 +83,14 @@ function capabilitiesFor(control: readonly string[], collaboration: readonly str
 function focusFor(participantId: string, presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"]): Pick<Participant, "focus"> {
   const item = presence?.items.find((candidate) => candidate.participantId === participantId);
   if (!item || (item.appState === undefined && item.stepAwayReason === undefined && item.allowed === undefined)) return {};
-  return { focus: Object.freeze({ ...(item.appState === undefined ? {} : { appState: item.appState }), ...(item.windowed === undefined ? {} : { windowed: item.windowed }), ...(item.stepAwayReason === undefined ? {} : { steppedAway: item.stepAwayReason }), ...(item.allowed === undefined ? {} : { allowed: item.allowed }) }) };
+  return {
+    focus: Object.freeze({
+      ...(item.appState === undefined ? {} : { appState: item.appState }),
+      ...(item.windowed === undefined ? {} : { windowed: item.windowed }),
+      ...(item.stepAwayReason === undefined ? {} : { steppedAway: item.stepAwayReason }),
+      ...(item.allowed === undefined ? {} : { allowed: item.allowed }),
+    }),
+  };
 }
 
 function participantMedia(participantId: string, media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]): ChalkParticipantMediaState {
