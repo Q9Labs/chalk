@@ -27,6 +27,7 @@ export type {
   ChatSendInput,
   ChatSlice,
   ChatUploadFile,
+  ChatUploadOptions,
   ClientEventHandler,
   ClientEventMap,
   ClientEventName,

@@ -5,12 +5,12 @@ import type { ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ControllerEffects } from "./controller-effects";
 import { SpaceClientCore, SpaceClientCoreService, makeSpaceClientCoreLayer, type SpaceClientPlatform } from "./core";
 import type { ClientEffect } from "./errors";
-import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ChatUploadOptions, ClientEventHandler, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 
 export type EffectMediaController = ControllerEffects["media"];
 export type EffectChatController = {
   readonly files: {
-    readonly upload: (file: ChatUploadFile) => ClientEffect<ChatAttachment>;
+    readonly upload: (file: ChatUploadFile, options?: ChatUploadOptions) => ClientEffect<ChatAttachment>;
     readonly url: (attachment: ChatAttachment) => string;
     readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   };

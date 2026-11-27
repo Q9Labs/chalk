@@ -10,6 +10,7 @@ import { DevicePopover, preloadDeviceSheet } from "../device-popover/DevicePopov
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
+import { PresentSheetLabel, shareMenuPresent } from "./present-entry";
 import { DockDeviceRows, DockLeave } from "./DockControls";
 import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior } from "./control-bar-behavior";
 import type { ConnectedControlBarProps, ControlBarSurfaceProps as SurfaceBehaviorProps } from "./control-bar-props";
@@ -36,6 +37,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect display-capture support after hydration so server and first client markup agree.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
+  const shareOwnsPresent = has("screenshare") && canCaptureDisplay;
   const iconButton = (label: string, icon: React.ReactNode, onClick?: () => void, active?: boolean, badge = 0) => (
     <ChalkTooltip
       trigger={
@@ -120,7 +122,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onSheetOpenChange={setCameraOpen}
         />
       ) : null}
-      {has("screenshare") && canCaptureDisplay ? (
+      {shareOwnsPresent ? (
         <ShareControl
           helperInstallUrl={props.helperInstallUrl}
           access={props.deviceAccess?.screen}
@@ -129,9 +131,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           sharing={props.isScreenSharing ?? false}
           onToggle={props.onToggleScreenShare}
           onStart={props.onStartScreenShare}
+          present={has("presenting") ? shareMenuPresent(props) : undefined}
         />
       ) : null}
-      {has("presenting") && (props.onPresent || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
+      {has("presenting") && (props.onPresent || props.displayOnly) && !shareOwnsPresent ? <span className="chalk-shell-desktop">{iconButton(props.isPresenting ? "Presenting" : "Present", <ShellIcon name="present" />, props.onPresent, props.isPresenting)}</span> : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -173,7 +176,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
               <span>Flip camera</span>
             </button>
           ) : null}
-          {has("screenshare") && canCaptureDisplay ? (
+          {shareOwnsPresent ? (
             <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
@@ -182,7 +185,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           {has("presenting") && props.onPresent ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onPresent}>
               <ShellIcon name="present" />
-              <span>{props.isPresenting ? "Presenting" : "Present"}</span>
+              <PresentSheetLabel presentHint={props.presentHint} isPresenting={props.isPresenting} />
             </button>
           ) : null}
           {has("whiteboard") ? (
