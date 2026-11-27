@@ -64,12 +64,12 @@ it("acknowledges a dropped file on the Stage at once", async () => {
 
 it("answers a dropped file that can't be presented on the Stage instead of a silent toast", async () => {
   const { hook } = mount(true);
-  const key = new File([new Uint8Array(8)], "slides.key", { type: "application/x-iwork-keynote-sffkey" });
+  const key = new File([new Uint8Array(8)], "clip.mov", { type: "video/quicktime" });
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [key] } });
   await act(async () => {
     window.dispatchEvent(event);
     await Promise.resolve();
   });
-  expect(hook()?.stageUpload).toMatchObject({ kind: "failed", fileName: "slides.key", reason: "unsupported" });
+  expect(hook()?.stageUpload).toMatchObject({ kind: "failed", fileName: "clip.mov", reason: "unsupported" });
 });

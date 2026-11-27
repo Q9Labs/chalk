@@ -18,7 +18,7 @@ function mount(live: boolean, openChat: () => void = () => {}, notify: Notify = 
   const client = createPreviewClient();
   let api: ReturnType<typeof useFilePresenting> | undefined;
   function Probe() {
-    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, formats: presentingFormatIdsFor({ office: true }), openChat });
+    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, formats: presentingFormatIdsFor(), openChat });
     return <input ref={api.presentInputRef} type="file" aria-hidden="true" />;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
