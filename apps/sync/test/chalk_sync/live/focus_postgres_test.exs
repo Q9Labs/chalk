@@ -2,10 +2,12 @@ defmodule ChalkSync.Live.FocusPostgresTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestWSClient, as: Client
+  alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -45,7 +47,7 @@ defmodule ChalkSync.Live.FocusPostgresTest do
         participants: [
           %{
             capabilities:
-              ChalkSync.Episodes.Reducer.new(ChalkSync.UUID.generate()).role_capabilities["owner"] --
+              Reducer.new(UUID.generate()).role_capabilities["owner"] --
                 ["focus.exempt"]
           },
           %{role: "observer"},
