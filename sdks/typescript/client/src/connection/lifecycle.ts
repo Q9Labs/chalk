@@ -1253,8 +1253,8 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                 }),
               ),
               // Sync can deliver the Episode's end before it acknowledges the command, and the end stops the Sync client, which
-              // rejects the command that caused it. The end was confirmed, so the host's end succeeded.
-              Effect.catch((error) => (model.epoch === epoch && model.episodeEndConfirmed && error instanceof V1SyncError && error.code === "client_stopped" ? Effect.void : Effect.fail(error))),
+              // rejects the command that caused it. The snapshot shows the Episode ended, so the host's end succeeded.
+              Effect.catch((error) => (model.epoch === epoch && episodeHasEnded() && error instanceof V1SyncError && error.code === "client_stopped" ? Effect.void : Effect.fail(error))),
               Effect.asVoid,
               Effect.ensuring(
                 Effect.gen(function* () {
