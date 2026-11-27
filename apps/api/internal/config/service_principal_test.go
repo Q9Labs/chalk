@@ -76,4 +76,14 @@ func TestLoadServicePrincipals(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("legacy dashboard secret keeps internal Unicode whitespace", func(t *testing.T) {
+		legacySecret := "test-dashboard\u00a0secret-0123456789012345"
+		t.Setenv(APIServiceSecrets, legacySecret)
+		t.Setenv(APIServicePrincipals, "")
+		got, dashboardID, err := loadServicePrincipals("")
+		if err != nil || dashboardID != "dashboard" || len(got) != 1 || got[0].Secrets[0] != legacySecret {
+			t.Fatalf("legacy dashboard secret changed: dashboard=%q, credentials=%v, error=%v", dashboardID, got, err)
+		}
+	})
 }

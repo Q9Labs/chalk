@@ -104,7 +104,7 @@ func validateServiceCredential(credential authentication.ServiceCredential, syst
 	}
 	ids[credential.ID] = true
 	for _, secret := range credential.Secrets {
-		if !validServiceSecret(secret, systemToken) || (secretOwners[secret] != "" && secretOwners[secret] != credential.ID) {
+		if !validAdditionalServiceSecret(secret, systemToken) || (secretOwners[secret] != "" && secretOwners[secret] != credential.ID) {
 			return fmt.Errorf("secrets must be valid UTF-8 of at least 32 characters, contain no whitespace, and not overlap other credentials")
 		}
 		secretOwners[secret] = credential.ID
@@ -117,10 +117,18 @@ func validateServiceCredential(credential authentication.ServiceCredential, syst
 	return nil
 }
 
-// Bearer parsing trims Unicode whitespace, so a secret containing any would be
-// compared against a different string than the one presented.
+// New service credentials forbid all Unicode whitespace. Bearer parsing trims
+// leading and trailing Unicode whitespace, so allowing it there could bind the
+// presented token to another service's unpadded secret.
+func validAdditionalServiceSecret(secret, systemToken string) bool {
+	return validServiceSecret(secret, systemToken) && strings.IndexFunc(secret, unicode.IsSpace) < 0
+}
+
+// Keep the legacy dashboard validation byte-for-byte compatible with the
+// single-service release: it rejected ASCII whitespace but allowed internal
+// Unicode whitespace, which bearer comparison preserves.
 func validServiceSecret(secret, systemToken string) bool {
-	return utf8.ValidString(secret) && utf8.RuneCountInString(secret) >= 32 && !apikeys.LooksLikeRawKey(secret) && secret != systemToken && strings.IndexFunc(secret, unicode.IsSpace) < 0
+	return utf8.ValidString(secret) && utf8.RuneCountInString(secret) >= 32 && !apikeys.LooksLikeRawKey(secret) && secret != systemToken && !strings.ContainsAny(secret, " \t\r\n")
 }
 
 func loadServicePrincipal(systemToken string) (authentication.ServiceCredential, error) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The server client supports Transcript listing, retrieval, and deletion, including structured documents, plain text, signed download URLs, and on-demand transcription requests.
+- Manage webhook endpoints and their revisions and secrets, list deliveries, and request redelivery with the server client.
+- Put, get, and cancel Scheduled Episodes with the server client. Participant admission now forwards `admission`, and Space updates forward `metadata` alongside artifact policies.
+
 ## 6.1.0
 
 - Let a WebRTC implementation declare that it cannot send camera simulcast; that client publishes one full-size camera stream instead.
