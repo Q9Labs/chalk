@@ -117,7 +117,8 @@ function lobbySummary(participants: readonly LobbyParticipant[]): string {
   const names = participants.map((participant) => participant.displayName);
   if (names.length === 1) return `${names[0]} is in this call`;
   if (names.length === 2) return `${names[0]} and ${names[1]} are in this call`;
-  return `${names[0]} and ${names[1]} and ${names.length - 2} others are in this call`;
+  const rest = names.length - 2;
+  return `${names[0]}, ${names[1]} and ${rest} ${rest === 1 ? "other" : "others"} are in this call`;
 }
 
 function Title({ children }: { readonly children: string }): React.JSX.Element {

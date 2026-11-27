@@ -19,7 +19,7 @@ it("caps the roster at two names and discloses every AI participant", () => {
     { displayName: "AI teammate", identityKind: "agent" },
     { displayName: "Sam", identityKind: "user" },
   ]);
-  expect(document.body.textContent).toContain("Ada and AI teammate and 1 others are in this call");
+  expect(document.body.textContent).toContain("Ada, AI teammate and 1 other are in this call");
   expect(document.body.textContent).toContain("AI teammate, an AI participant, is in this call.");
   expect(document.querySelectorAll("[data-testid='lobby.ai-notice']")).toHaveLength(1);
   act(() => root.unmount());
