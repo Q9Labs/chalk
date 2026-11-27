@@ -5,6 +5,7 @@ import { bootstrapInputsMatchCheckpoint, validateBootstrapResources, type Bootst
 const types: Record<string, string> = {
   ExecutionRole: "AWS.IAM.Role",
   Logs: "AWS.Logs.LogGroup",
+  FailureLogMetric: "AWS.Logs.MetricFilter",
   Function: "Chalk.Lambda.VersionedFunction",
   Errors: "AWS.CloudWatch.Alarm",
   Throttles: "AWS.CloudWatch.Alarm",

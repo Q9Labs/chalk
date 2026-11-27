@@ -1,6 +1,7 @@
 import type { ChatAttachment } from "@q9labsai/chalk-client";
 import { cn } from "../../utils/cn";
 import { UnavailableAttachment } from "./UnavailableAttachment";
+import { formatFileSize } from "./use-chat-attachment-previews";
 
 type MarkAttachmentFailed = (attachmentId: string, operation: "open" | "render" | "resolve") => void;
 
@@ -75,7 +76,7 @@ export function MessageAttachments({ attachments, resolvedUrls, failedAttachment
               </span>
               <span>
                 <b dir="auto">{file.fileName}</b>
-                <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
+                <small>{image ? "Loading preview…" : formatFileSize(file.byteLength)}</small>
               </span>
             </button>
             <span className="call-file-actions">

@@ -5,6 +5,7 @@ import type * as Schema from "effect/Schema";
 export const resourceTypes = {
   ExecutionRole: "AWS.IAM.Role",
   Logs: "AWS.Logs.LogGroup",
+  FailureLogMetric: "AWS.Logs.MetricFilter",
   Function: "Chalk.Lambda.VersionedFunction",
   ControlApiPermission: "AWS.Lambda.Permission",
   ControlApiInvokePolicy: "Chalk.IAM.RoleInlinePolicy",

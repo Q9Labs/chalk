@@ -10,6 +10,7 @@ import { reportFailure } from "./failure.ts";
 const expectedTypes: Record<string, string> = {
   ExecutionRole: "AWS.IAM.Role",
   Logs: "AWS.Logs.LogGroup",
+  FailureLogMetric: "AWS.Logs.MetricFilter",
   Function: "Chalk.Lambda.VersionedFunction",
   ControlApiPermission: "AWS.Lambda.Permission",
   ControlApiInvokePolicy: "Chalk.IAM.RoleInlinePolicy",

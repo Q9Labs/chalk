@@ -11,7 +11,7 @@ import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScr
 import { uploadChatAttachment } from "./chat-file-upload";
 import { describeChatUploadFile, prepareChatAttachmentBatch } from "./chat-upload-file";
 import type { ChatMessage } from "./chat-types";
-import { chatSelectionNotice, keepRetainedFiles, useAutoGrowTextarea, useChatDropRouting, useStagedFilePreviews } from "./chat-composer-effects";
+import { chatSelectionNotice, keepRetainedFiles, stagePastedFiles, useAutoGrowTextarea, useChatDropRouting, useStagedFilePreviews } from "./chat-composer-effects";
 
 export type { ChatMessage } from "./chat-types";
 
@@ -407,6 +407,7 @@ export const ChatPanelSurface = React.memo(
               ref={textareaRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onPaste={(event) => stagePastedFiles(event, Boolean(onUploadAttachment), selectFiles)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey) return;
                 event.preventDefault();

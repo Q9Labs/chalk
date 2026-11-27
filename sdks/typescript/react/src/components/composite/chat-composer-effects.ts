@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type ClipboardEvent, type RefObject } from "react";
 import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile } from "@q9labsai/chalk-client";
 import type { prepareChatAttachmentBatch } from "./chat-upload-file";
 
@@ -38,6 +38,13 @@ export function chatSelectionNotice(batch: ReturnType<typeof prepareChatAttachme
   if (batch.emptyCount) notices.push(batch.emptyCount === 1 ? "One empty file was skipped." : `${batch.emptyCount} empty files were skipped.`);
   if (batch.overflowCount) notices.push(`Only the first ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files can be attached to one message.`);
   return notices.length ? notices.join(" ") : null;
+}
+
+/** Stages files pasted into the composer; plain text paste is left to the browser. */
+export function stagePastedFiles(event: ClipboardEvent<HTMLTextAreaElement>, canUpload: boolean, stageFiles: (files: FileList) => unknown): void {
+  if (!canUpload || event.clipboardData.files.length === 0) return;
+  event.preventDefault();
+  stageFiles(event.clipboardData.files);
 }
 
 /** Stages a committed call drop once, then keeps the files still unsent with the parent until they are sent or removed. */

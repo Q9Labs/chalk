@@ -10,11 +10,15 @@ which also documents the threat model.
 
 ## Resources and inputs
 
-The stack manages six resources: a CloudWatch log group, an execution role with
-one inline policy, the versioned Lambda function, and three alarms (`Errors`,
-`Throttles` and `AsyncEventsDropped`). A seventh, the `ControlApiPermission` that
-lets the control API invoke the function, exists only when both control API
-permission inputs are set. The function is `provided.al2023` on arm64 with the
+The stack manages seven resources: a CloudWatch log group, a metric filter for
+reported render invocation failures, an execution role with one inline policy,
+the versioned Lambda function, and three alarms (`Errors`, `Throttles` and
+`AsyncEventsDropped`). An eighth, the `ControlApiPermission` that lets the
+control API invoke the function, exists only when both control API permission
+inputs are set. The `Errors` alarm uses the metric filter rather than Lambda's
+`Errors` metric because the renderer deliberately exits after every job to reset
+its execution environment, and Lambda counts even a successful deliberate recycle
+as a runtime error. The function is `provided.al2023` on arm64 with the
 `bootstrap` handler, active X-Ray tracing, and no VPC configuration, so it uses
 default Lambda networking.
 
