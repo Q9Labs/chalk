@@ -1,4 +1,5 @@
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
+import type React from "react";
 import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
@@ -29,15 +30,42 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   );
 }
 
+/** Presenting a file lives in the Share menu beside the screen sources, so the dock keeps one way to put something on the Stage. */
+export interface ShareControlPresent {
+  /** What the Stage accepts, like "PDF or image, up to 25 MB". */
+  readonly hint: string;
+  readonly presenting: boolean;
+  readonly onChoose: () => void;
+}
+
+function PresentFileItem({ present }: { readonly present?: ShareControlPresent }): React.JSX.Element | null {
+  if (!present) return null;
+  return (
+    <>
+      <Menu.Separator className="chalk-shell-menu-separator" />
+      <ChalkMenuLabel>Present</ChalkMenuLabel>
+      <Menu.Item className="chalk-menu-item chalk-shell-source" onClick={present.onChoose}>
+        <ShellIcon name="present" />
+        <span className="chalk-shell-device-label">
+          <span>{present.presenting ? "Another file" : "A file"}</span>
+          <small>{present.presenting ? "Replaces yours for everyone" : present.hint}</small>
+        </span>
+      </Menu.Item>
+    </>
+  );
+}
+
 export function ShareControl({
   sharing,
   onToggle,
   onStart,
   access,
+  present,
   disabled = false,
   startDisabled = false,
   helperInstallUrl,
 }: {
+  readonly present?: ShareControlPresent;
   readonly disabled?: boolean;
   readonly helperInstallUrl?: string;
   readonly startDisabled?: boolean;
@@ -94,9 +122,11 @@ export function ShareControl({
               Share something else
             </Menu.Item>
             <ChalkMenuItem onClick={onToggle}>Stop sharing</ChalkMenuItem>
+            <PresentFileItem present={present} />
           </>
         ) : (
           <>
+            <ChalkMenuLabel>Share your screen</ChalkMenuLabel>
             {(
               [
                 { value: "monitor", label: "Entire screen", description: "Everything on one display" },
@@ -119,6 +149,7 @@ export function ShareControl({
                 </span>
               </Menu.Item>
             ))}
+            <PresentFileItem present={present} />
             {/* The switch always follows the sources, so tab audio can be set before a tab is picked. */}
             <>
               <Menu.Separator className="chalk-shell-menu-separator" />

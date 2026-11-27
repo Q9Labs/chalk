@@ -1,4 +1,4 @@
-import { nextHandOrder, type AdmissionRequest, type Participant } from "@q9labsai/chalk-client";
+import { deviceHint, nextHandOrder, type AdmissionRequest, type Participant } from "@q9labsai/chalk-client";
 import { memo, useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { FlatList, Pressable, StyleSheet, View, type ListRenderItemInfo } from "react-native";
 import Animated from "react-native-reanimated";
@@ -16,6 +16,7 @@ import { useTheme } from "../../theme/theme";
 import { fixed, space, corners } from "../../theme/tokens";
 import { PersonName } from "./PersonName";
 import { peopleRows, type PeopleRow } from "./people-model";
+import { PersonName } from "./PersonName";
 import { TextField } from "./TextField";
 
 /** Past this many people the list gets a search field. */
@@ -83,11 +84,11 @@ export function PeopleTab(): React.JSX.Element {
           );
         case "person": {
           const isSelf = item.participant.participantId === self.participantId;
-          return <PersonRow canMute={canMute && !isSelf} canRemove={canRemove && !isSelf} canRename={canRename && isSelf} handNumber={item.handNumber} isSelf={isSelf} onMute={mute} onRemove={remove} onRename={rename} participant={item.participant} />;
+          return <PersonRow canMute={canMute && !isSelf} canRemove={canRemove && !isSelf} canRename={canRename && isSelf} device={deviceHint(item.participant, roster)} handNumber={item.handNumber} isSelf={isSelf} onMute={mute} onRemove={remove} onRename={rename} participant={item.participant} />;
         }
       }
     },
-    [admit, canMute, canRemove, canRename, deny, mute, remove, rename, self.participantId],
+    [admit, canMute, canRemove, canRename, deny, mute, remove, rename, roster, self.participantId],
   );
 
   const header = (
@@ -192,6 +193,8 @@ const HandRow = memo(function HandRow({ participant, order, isSelf }: { readonly
 
 type PersonRowProps = {
   readonly participant: Participant;
+  /** What they are on, such as "iPhone" or "Mac · 2 devices"; absent when Sync sent nothing. */
+  readonly device: string | undefined;
   readonly isSelf: boolean;
   readonly handNumber: number | null;
   readonly canMute: boolean;
@@ -202,7 +205,7 @@ type PersonRowProps = {
   readonly onRename: (name: string) => void;
 };
 
-const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, canMute, canRemove, canRename, onMute, onRemove, onRename }: PersonRowProps): React.JSX.Element {
+const PersonRow = memo(function PersonRow({ participant, device, isSelf, handNumber, canMute, canRemove, canRename, onMute, onRemove, onRename }: PersonRowProps): React.JSX.Element {
   const { colors } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -235,7 +238,7 @@ const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, can
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <PersonName accessibilityLabel={status ? `${participant.displayName}, ${status}` : participant.displayName} badgeTestID={`people.ai.${participant.participantId}`} host={host} isSelf={isSelf} participant={participant} />
+      <PersonName device={device} host={host} isSelf={isSelf} label={status ? `${participant.displayName}, ${status}` : participant.displayName} name={participant.displayName} participantId={participant.participantId} agent={participant.identityKind === "agent"} />
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />

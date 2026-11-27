@@ -13,6 +13,7 @@ import { JoinToast } from "./toast-fixtures";
 import { STATES_LANE } from "./states-lane";
 import { CONNECTION_STATES } from "./connection";
 import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
+import { DEVICE_STATES } from "./device-states";
 import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
@@ -128,6 +129,7 @@ export const CALL_STATES: readonly CallState[] = [
       />
     ),
   },
+  ...DEVICE_STATES,
   { id: "group-spotlight", title: "Ten people, spotlight", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} /> },
   { id: "group-grid", title: "Ten people, grid", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} layout="grid" /> },
   { id: "crowd-grid", title: "Thirty people, grid with pages", render: () => <Live snapshot={liveSnapshot({ others: crowd(29) })} layout="grid" /> },

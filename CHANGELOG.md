@@ -1,14 +1,37 @@
 # Changelog
 
-## 6.1.0
+## 6.2.0
+
+This minor release adds Stage file presenting, chat file drop and paste, and iPhone and iPad screen sharing, plus fixes for iPhone cameras, the mobile board and restrictive networks.
+
+### Calls and media
+
+- `@q9labsai/chalk-client` publishes iPhone cameras as a single stream instead of two simulcast encodings. The iOS WebRTC build bundled by `@cloudflare/react-native-webrtc` could negotiate simulcast without producing video, so web kept showing the iPhone guest's avatar while their camera was on (#1630).
+- The client accepts ICE-TCP candidates on port 443, so guests on networks that block UDP and every TCP port except 443 can reach the Chalk SFU. TCP 50000 keeps working for existing clients (#1634).
+- The SFU names the reason when it refuses a malformed request, and the SDK reports media failures with structured fields and a success count, so a listen-only join failure is diagnosable from telemetry (#1593).
 
 ### Screen sharing
 
-- iPhone and iPad can share their screen. `@q9labsai/chalk-react-native` shows Share screen in the More sheet on iOS as it does on Android, opens the system broadcast picker with the app's broadcast extension, and publishes once the broadcast starts. A dismissed picker fails like a declined Android or browser picker. Apps need a ReplayKit broadcast upload extension that posts the Darwin notification `<extension bundle id>.started` from `broadcastStarted`, and must set `RTCScreenSharingExtension` and `RTCAppGroupIdentifier` in Info.plist. Without those keys, or on a simulator, the row stays hidden.
+- iPhone and iPad can share their screen. `@q9labsai/chalk-react-native` shows Share screen in the More sheet on iOS as it does on Android, opens the system broadcast picker with the app's broadcast extension, and publishes once the broadcast starts. A dismissed picker fails like a declined Android or browser picker. Apps need a ReplayKit broadcast upload extension that posts the Darwin notification `<extension bundle id>.started` from `broadcastStarted`, and must set `RTCScreenSharingExtension` and `RTCAppGroupIdentifier` in Info.plist. Without those keys, or on a simulator, the row stays hidden (#1617).
+- iOS sharers can open picture-in-picture to see viewer marks and named cursors over a small copy of the shared frame while they use another app (#1605).
+- `@q9labsai/chalk-react-native` restores the screen-share tile after the board closes; the annotation WebView now loads with its renderer directory as the read root (#1633).
+- Chalk Helper is offered to screen sharers before anyone draws, and pairing requires native Allow and a fresh confirmation code for every attempt (#1603, #1604).
+
+### Board
+
+- Non-host participants who can draw open the board for everyone on mobile, as on web. The draw-permission predicate is shared in `@q9labsai/chalk-client` so web and React Native agree (#1631).
+
+### Chat and presenting
+
+- Dragging files over a call no longer navigates the browser away. `@q9labsai/chalk-react` handles file drags at the call surface and stages dropped or pasted files through the same validation and upload path as the paperclip; with chat closed, a drop opens chat (#1647, #1759).
+- Chat shows file sizes over 1 MB in MB (#1759).
+- Hosts can present PDFs and images up to 25 MiB on the Stage. Pages render through the document renderer and follow the presenter's page turns. The control appears only when the API reports presenting as available (#1648, #1649).
 
 ### Scheduled Episodes
 
 - The API adds `putScheduledEpisode`, `getScheduledEpisode` and `cancelScheduledEpisode` under `/v1/tenants/{tenant_id}/spaces/{space_id}/scheduled-episodes/{scheduled_episode_id}`, so a scheduler can record when an Episode is expected and who is expected. A Scheduled Episode never starts or ends an Episode and grants no access. Apply the `scheduled_episodes` migration before deploying the API. The generated clients gain the three operations and no new scope.
+
+## 6.1.0
 
 ### Screen annotation
 

@@ -38,10 +38,22 @@ function PeopleState({ scheme, others, host = true, knocks = 0 }: { readonly sch
   );
 }
 
+const DEVICES: readonly Person[] = [
+  { ...nora, device: "iphone" },
+  { ...akash, device: "ipad", handRaised: true },
+  { ...sofia, device: "mac" },
+  { ...malik, device: "android_tablet" },
+  { ...priya, device: "android_foldable" },
+  { ...eli, device: "chromeos" },
+  { ...june, device: "linux" },
+  { ...tomas, device: "windows" },
+];
+
 const variants = [
   { id: "small", title: "People: small call", others: SMALL, panel: true },
   { id: "agent", title: "People: agent participant", others: SMALL_WITH_AGENT, panel: true },
   { id: "big", title: "People: big call", others: BIG, panel: true },
+  { id: "devices", title: "People: each person's device", others: DEVICES, panel: true },
   { id: "search", title: "People: search", others: BIG, panel: true },
   { id: "menu", title: "People: host row menu", others: BIG, panel: true },
   { id: "menu-muted", title: "People: host row menu, muted person", others: BIG, panel: true },

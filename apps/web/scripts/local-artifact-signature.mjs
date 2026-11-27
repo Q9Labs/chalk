@@ -50,6 +50,13 @@ function canonicalQuery(searchParams) {
     .join("&");
 }
 
+// A public preview proxy (an Orb) forwards to the loopback port and moves the browser's host into x-forwarded-host, which is the host the URL was signed for.
+function publicHost(headers) {
+  const forwarded = headers["x-forwarded-host"];
+  if (forwarded && /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(headers.host ?? "")) return forwarded.split(",")[0].trim();
+  return headers.host;
+}
+
 /** Reads the signing fields from a presigned query or from the Authorization header. */
 function signingFields(request, url) {
   if (url.searchParams.has("X-Amz-Signature")) {
@@ -100,7 +107,7 @@ export function isLocalArtifactRequestSigned(request, { accessKeyId, secretAcces
     const names = fields.signedHeaders.split(";").map((name) => name.toLowerCase());
     if (!names.includes("host")) return false;
     const headerLines = names.map((name) => {
-      const value = request.headers[name];
+      const value = name === "host" ? publicHost(request.headers) : request.headers[name];
       if (value === undefined) throw new Error(`Missing signed header ${name}`);
       return `${name}:${String(value).trim().replace(/\s+/g, " ")}\n`;
     });
