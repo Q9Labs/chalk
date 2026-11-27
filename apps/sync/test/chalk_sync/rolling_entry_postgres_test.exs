@@ -177,7 +177,7 @@ defmodule ChalkSync.RollingEntryPostgresTest do
         stderr_to_stdout: true
       )
 
-    assert code in [0, 10], output
+    IO.puts("OLDOUT " <> action <> " " <> String.slice(output, -1500, 1500)); assert code in [0, 10], output
     code
   end
 

@@ -42,7 +42,15 @@ defmodule ChalkSync.Live.FocusPostgresTest do
   setup %{connection: connection} do
     fixture =
       SyncPostgres.seed_episode(connection, 3, %{focus: %{"enabled" => true}}, %{
-        participants: [%{}, %{role: "observer"}, %{role: "collaborator"}]
+        participants: [
+          %{
+            capabilities:
+              ChalkSync.Episodes.Reducer.new(ChalkSync.UUID.generate()).role_capabilities["owner"] --
+                ["focus.exempt"]
+          },
+          %{role: "observer"},
+          %{role: "collaborator"}
+        ]
       })
 
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
