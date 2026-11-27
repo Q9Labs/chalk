@@ -8,7 +8,11 @@ WITH failures AS (
   LEFT JOIN recording_pipelines pipelines ON pipelines.recording_id = jobs.recording_id
   LEFT JOIN episodes ON episodes.id = jobs.episode_id
   WHERE (jobs.kind = 'capture' AND jobs.state = 'terminal_failure'
-      AND jobs.terminal_at >= now() - interval '15 minutes')
+      AND jobs.terminal_at >= now() - interval '15 minutes'
+      AND (jobs.error_code IS DISTINCT FROM 'capture_empty'
+        OR EXISTS (SELECT 1 FROM participant_media_sessions sessions
+          WHERE sessions.tenant_id = jobs.tenant_id AND sessions.episode_id = jobs.episode_id
+            AND sessions.connected)))
     OR (jobs.kind = 'render' AND (
       (jobs.state = 'terminal_failure' AND jobs.terminal_at >= now() - interval '15 minutes')
       OR (jobs.state IN ('pending', 'leased', 'retryable_failure')
