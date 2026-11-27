@@ -46,7 +46,8 @@ type Options struct {
 	Capabilities         CapabilityStatus
 	CORS                 CORSOptions
 	LocalSystemToken     string
-	ServicePrincipal     authentication.ServiceCredential
+	ServicePrincipals    []authentication.ServiceCredential
+	DashboardServiceID   string
 
 	Middleware []func(http.Handler) http.Handler
 	Profiler   http.Handler
@@ -85,7 +86,8 @@ type Options struct {
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
 
-	Memberships MembershipService
+	Memberships     MembershipService
+	TenantHandovers TenantHandoverService
 
 	RecordingDownloads    RecordingDownloadService
 	RecordingExports      RecordingExportService
@@ -142,8 +144,8 @@ func NewRouter(options Options) http.Handler {
 		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
 	}
 
-	if options.ServicePrincipal.ID != "" {
-		r.Use(acceptServiceCredential(options.ServicePrincipal))
+	if len(options.ServicePrincipals) > 0 {
+		r.Use(acceptServiceCredentials(options.ServicePrincipals))
 	}
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {

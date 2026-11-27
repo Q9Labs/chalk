@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	AbandonRecordingFleetBootstrap(ctx context.Context, arg AbandonRecordingFleetBootstrapParams) (string, error)
+	AcceptTenantHandover(ctx context.Context, arg AcceptTenantHandoverParams) (TenantHandover, error)
 	AcceptTranscriptionChunkResult(ctx context.Context, arg AcceptTranscriptionChunkResultParams) (TranscriptionChunkResult, error)
 	AcquireRecordingTranscriptionSourceLease(ctx context.Context, arg AcquireRecordingTranscriptionSourceLeaseParams) (RecordingTranscriptionSource, error)
 	ActivateRecordingFleetBootstrap(ctx context.Context, arg ActivateRecordingFleetBootstrapParams) (RecordingFleetNode, error)
@@ -38,6 +39,8 @@ type Querier interface {
 	// Cancels a booking, or records a tombstone for an id that was never written. Cancelling again keeps
 	// the first cancelled_at.
 	CancelScheduledEpisode(ctx context.Context, arg CancelScheduledEpisodeParams) error
+	CancelTenantHandover(ctx context.Context, arg CancelTenantHandoverParams) (TenantHandover, error)
+	CancelTenantHandoverWebhookDeliveries(ctx context.Context, arg CancelTenantHandoverWebhookDeliveriesParams) (int64, error)
 	CancelWebhookDeliveriesForOldTarget(ctx context.Context, arg CancelWebhookDeliveriesForOldTargetParams) (int64, error)
 	CancelWebhookEndpointDeliveries(ctx context.Context, arg CancelWebhookEndpointDeliveriesParams) (int64, error)
 	ClaimArtifactJob(ctx context.Context, arg ClaimArtifactJobParams) (ArtifactJob, error)
@@ -124,6 +127,8 @@ type Querier interface {
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (CreateTenantRow, error)
 	CreateTenantEndPublicationFence(ctx context.Context, arg CreateTenantEndPublicationFenceParams) (pgtype.UUID, error)
 	CreateTenantExternalOperation(ctx context.Context, arg CreateTenantExternalOperationParams) (SyncExternalOperation, error)
+	CreateTenantHandover(ctx context.Context, arg CreateTenantHandoverParams) (TenantHandover, error)
+	CreateTenantHandoverUser(ctx context.Context, arg CreateTenantHandoverUserParams) (pgtype.UUID, error)
 	CreateTranscriptChunk(ctx context.Context, arg CreateTranscriptChunkParams) (TranscriptChunk, error)
 	CreateTranscription(ctx context.Context, arg CreateTranscriptionParams) (Transcription, error)
 	CreateTranscriptionAttempt(ctx context.Context, arg CreateTranscriptionAttemptParams) (TranscriptionAttempt, error)
@@ -139,6 +144,7 @@ type Querier interface {
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
+	DisableTenantHandoverWebhookEndpoints(ctx context.Context, arg DisableTenantHandoverWebhookEndpointsParams) (int64, error)
 	DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error
 	// The API registers the capture worker beside each Chalk SFU node from its node list. A revoked or
 	// existing row is never reactivated or rewritten here. These rows live apart from
@@ -185,6 +191,7 @@ type Querier interface {
 	GetEpisodeAttendance(ctx context.Context, arg GetEpisodeAttendanceParams) ([]GetEpisodeAttendanceRow, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
+	GetLatestAcceptedTenantHandoverForEmail(ctx context.Context, email string) (TenantHandover, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error)
 	GetMCPOAuthClientByPublicID(ctx context.Context, clientID string) (McpOauthClient, error)
@@ -262,6 +269,10 @@ type Querier interface {
 	GetTenantAPIKey(ctx context.Context, arg GetTenantAPIKeyParams) (GetTenantAPIKeyRow, error)
 	GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error)
 	GetTenantEpisode(ctx context.Context, arg GetTenantEpisodeParams) (Episode, error)
+	GetTenantHandover(ctx context.Context, arg GetTenantHandoverParams) (TenantHandover, error)
+	GetTenantHandoverByID(ctx context.Context, id pgtype.UUID) (TenantHandover, error)
+	GetTenantHandoverByRequestKey(ctx context.Context, arg GetTenantHandoverByRequestKeyParams) (TenantHandover, error)
+	GetTenantHandoverUserID(ctx context.Context, email string) (pgtype.UUID, error)
 	GetTenantIdentityByExternalID(ctx context.Context, arg GetTenantIdentityByExternalIDParams) (Identity, error)
 	GetTenantMembershipForUser(ctx context.Context, arg GetTenantMembershipForUserParams) (Membership, error)
 	GetTenantRecording(ctx context.Context, arg GetTenantRecordingParams) (Recording, error)
@@ -435,6 +446,9 @@ type Querier interface {
 	LockTelemetrySourceTable(ctx context.Context) error
 	LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
+	LockTenantHandover(ctx context.Context, id pgtype.UUID) (TenantHandover, error)
+	LockTenantHandoverTenant(ctx context.Context, tenantID pgtype.UUID) (LockTenantHandoverTenantRow, error)
+	LockTenantHandoverUserEmail(ctx context.Context, email string) error
 	LockTenantMediaLimits(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error)
 	// Serialize admission and policy changes without blocking the previous API's
@@ -529,6 +543,7 @@ type Querier interface {
 	// unavailable after row loss uses explicit tombstone placeholders; it can never
 	// authorize a worker or be activated as a bootstrap reservation.
 	RevokeRecordingFleetNode(ctx context.Context, arg RevokeRecordingFleetNodeParams) (string, error)
+	RevokeTenantHandoverAPIKeys(ctx context.Context, arg RevokeTenantHandoverAPIKeysParams) (int64, error)
 	RevokeTenantMCPOAuthGrant(ctx context.Context, arg RevokeTenantMCPOAuthGrantParams) (int64, error)
 	RotateActiveAPIKey(ctx context.Context, arg RotateActiveAPIKeyParams) (RotateActiveAPIKeyRow, error)
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
@@ -548,6 +563,7 @@ type Querier interface {
 	TerminalizePresentingRenderJobs(ctx context.Context) error
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
+	TransferTenantHandoverOwnership(ctx context.Context, arg TransferTenantHandoverOwnershipParams) (pgtype.UUID, error)
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
 	UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateSpacePublicArrivalStateParams) (SpacePublicArrival, error)
 	UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error)
@@ -559,6 +575,7 @@ type Querier interface {
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)
 	UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (UpsertRecordingPoolHealthRow, error)
+	UpsertTenantHandoverOwnerMembership(ctx context.Context, arg UpsertTenantHandoverOwnerMembershipParams) (pgtype.UUID, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -16,7 +16,23 @@ The API reads its settings from environment variables. Find the variables, defau
 
 **Direct door.** `CHALK_API_DIRECT_URL` is advertised as `directSignalingUrl` in Chalk SFU join grants (see `docs/operators/direct-sync-path.md`). Leaving it empty turns the direct door off for new joins without a web deploy.
 
-**Service principal.** `CHALK_API_SERVICE_ID`, `CHALK_API_SERVICE_SECRETS` and `CHALK_API_SERVICE_SCOPES` are all set or all unset. To rotate a secret, add the new one, deploy callers, then remove the old one; keep the ID unchanged. The service is never System. It owns Tenants it creates (repeated `POST /v1/tenants` with the same `external_id` returns the existing Tenant unchanged), sees only those, and with `tenants:write` may PATCH only `cors_allowed_origins`. Services cannot create or rotate API keys that carry `tenants:write`.
+**Service principals.** Operators register services through API configuration only. The existing dashboard variables are unchanged: `CHALK_API_SERVICE_ID`, `CHALK_API_SERVICE_SECRETS` and `CHALK_API_SERVICE_SCOPES` are all set or all unset; the secrets and scopes are comma-separated. Only this service may inspect, approve or deny MCP OAuth consent requests, subject to its existing scopes and Tenant ownership.
+
+Set `CHALK_API_SERVICE_PRINCIPALS` to a JSON array to register additional services, with or without the dashboard variables:
+
+```json
+[
+  {
+    "id": "service-a",
+    "secrets": ["replace-with-a-unique-random-secret"],
+    "scopes": ["tenants:read", "tenants:write", "spaces:read"]
+  }
+]
+```
+
+Use a stable, unique ID and a nonempty list of scopes and secrets for each service. Each secret must be at least 32 characters, contain no whitespace, and not be an API key, the local System token, or a secret assigned to another service (including the dashboard). Inject the JSON as a secret, not as checked-in config. To rotate, add the new secret to the same service, deploy callers, then remove the old one. Changing a service ID does not transfer Tenant ownership.
+
+A service is never System. It owns and sees only the Tenants it creates. Repeating `POST /v1/tenants` with the same `external_id` returns the existing Tenant unchanged for that service; another service can use the same `external_id` for its own Tenant. With `tenants:write`, a service may patch only `cors_allowed_origins`, `recording_render_mode` and `transcript_language`. Services cannot create or rotate API keys that carry `tenants:write`. The owning service can offer a Tenant to a person's dashboard account through the explicit handover lifecycle in [`docs/tenant-handover.md`](../../docs/tenant-handover.md); acceptance transfers ownership to the dashboard service, revokes existing Tenant API keys, and disables webhook endpoints.
 
 **Media.** The Chalk SFU is the only media plane. The public `media_plane` field accepts `chalk_sfu`; retired values return `400 space.invalid_media_plane`. SDKs that do not declare `chalk_sfu` receive `409 media.client_unsupported`. Enable and configure the fleet with the `CHALK_SFU_*` settings. When new Episodes are paused or the fleet has no room, the request fails without allocating media. Live Episodes keep their stored bindings.
 

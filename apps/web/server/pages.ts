@@ -7,6 +7,9 @@ import { DashboardError, json, query } from "./http";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
 import { developerMutation, developerPage } from "./developer";
+import { TenantIdSchema } from "@q9labsai/chalk-client/effect";
+import { Schema } from "effect";
+import { acceptHandover, handoverPage } from "./handover";
 import { homeMutation, homePage, homeStatus } from "./home";
 import { ownerAccess } from "./owner-access";
 import { viewerSeat } from "./owner-seats";
@@ -22,6 +25,8 @@ import {
   connectionsAction,
   developerAction,
   developerQuery,
+  handoverAction,
+  handoverQuery,
   homeAction,
   homeStatusQuery,
   pageQuery,
@@ -92,6 +97,16 @@ export const pages: Record<PageName, Route> = {
   sessions: page<"sessions">()({ query: sessionsQuery, read: ({ engine }, q) => sessionsPage(engine, q) }),
   recordings: page<"recordings">()({ query: recordingsQuery, read: ({ engine }, q) => recordingsPage(engine, q) }),
   developer: page<"developer">()({ query: developerQuery, read: ({ engine }, q) => developerPage(engine, q), action: developerAction, act: ({ engine }, a) => developerMutation(engine, a) }),
+  handover: page<"handover">()({
+    query: handoverQuery,
+    read: ({ engine, person }, q) => handoverPage(engine, q.handoverId, person.email),
+    action: handoverAction,
+    act: async ({ engine, person }, a) => {
+      const handover = await acceptHandover(engine, a.handoverId, person);
+      engine.tenantId = Schema.decodeUnknownSync(TenantIdSchema)(handover.tenantId);
+      return { handover };
+    },
+  }),
   connect: page<"connect">()({ query: connectQuery, read: ({ engine }, q) => connectPage(engine, q.request), action: connectAction, act: ({ engine }, a) => connectMutation(engine, a) }),
   connections: page<"connections">()({ query: pageQuery, read: ({ engine }, q) => connectionsPage(engine, q.cursor), action: connectionsAction, act: ({ engine }, a) => connectionsMutation(engine, a) }),
 };

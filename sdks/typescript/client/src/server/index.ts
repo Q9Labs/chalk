@@ -44,3 +44,4 @@ export type {
   UpdateSpaceInput,
   UpdateSpacePublicInviteInput,
 } from "./types.js";
+export type { CreateTenantHandoverInput, TenantHandover, TenantHandoverActor, TenantHandoverClient } from "./tenant-handover-types.js";

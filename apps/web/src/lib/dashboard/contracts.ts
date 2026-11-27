@@ -35,6 +35,7 @@ const spaceIds = (most: number) =>
     .pipe(z.array(id).min(1).max(most));
 /** Home's check reads activity for up to 300 calls; the call page's roster check uses the engine's 30-Space live read. */
 export const homeStatusQuery = z.union([z.strictObject({ home: z.literal("1"), spaceIds: spaceIds(HOME_STATUS_ROWS).default([]) }), z.strictObject({ home: z.undefined().optional(), spaceIds: spaceIds(30) })]);
+export type HandoverAction = z.infer<typeof handoverAction>;
 export type HomeStatusQuery = z.infer<typeof homeStatusQuery>;
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 const instant = z.iso.datetime({ offset: true });
@@ -49,6 +50,9 @@ export type SessionsQuery = z.infer<typeof sessionsQuery>;
 export type RecordingsQuery = z.infer<typeof recordingsQuery>;
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 const consentHandle = z.string().regex(new RegExp(`^${CONSENT_HANDLE_PATTERN}$`));
+export const handoverQuery = z.strictObject({ handoverId: id });
+export const handoverAction = z.strictObject({ action: z.literal("accept-handover"), handoverId: id });
+export type HandoverDTO = { id: string; tenantId: string; status: "pending" | "accepted" | "canceled" | "expired"; expiresAt: string; acceptedAt: string | null; recipientMatches: boolean };
 export const connectQuery = z.strictObject({ request: consentHandle });
 export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
 export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });
@@ -241,6 +245,7 @@ export type DashboardPages = {
   sessions: { query: SessionsQuery; data: SessionListDTO; action: never };
   recordings: { query: RecordingsQuery; data: SessionListDTO; action: never };
   developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
+  handover: { query: { handoverId: string }; data: HandoverDTO; action: HandoverAction };
   connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
   connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };
 };
@@ -284,6 +289,7 @@ export type ActionResults = {
   "webhook-deliveries": { deliveries: DeliveryDTO[]; nextCursor: string | null };
   "webhook-delivery": DeliveryDetailDTO;
   "redeliver-webhook": { deliveryId: string };
+  "accept-handover": { handover: HandoverDTO };
   "approve-connection": { redirectUrl: string };
   "deny-connection": { redirectUrl: string };
   "revoke-connection": Ok;

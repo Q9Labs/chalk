@@ -22,9 +22,10 @@ func v1RouteGroups(options Options) []routeGroup {
 	tenantEndpointsList := []RouteEndpoint{}
 	for _, endpoints := range [][]RouteEndpoint{
 		apiKeyEndpoints(options.APIKeys, options.TenantAuthz),
-		mcpOAuthConnectionEndpoints(options.OAuth, options.TenantAuthz),
+		mcpOAuthConnectionEndpoints(options.OAuth, options.TenantAuthz, options.DashboardServiceID),
 		tenantEndpoints(options.Tenants, options.TenantAuthz),
 		membershipEndpoints(options.Memberships, options.TenantAuthz),
+		tenantHandoverEndpoints(options.TenantHandovers, options.TenantAuthz, options.DashboardServiceID),
 		{recordingEntranceEndpoint(options.RecordingEntrance, options.TenantAuthz)},
 		spaceEndpoints(options.Spaces, options.TenantAuthz),
 		recordingPreparationEndpoints(options.RecordingPreparations, options.TenantAuthz),

@@ -119,11 +119,11 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 	documents := oauthDocuments{}
 	oauth := mcpauth.NewService(NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: issuer, ConsentURL: "https://dashboard.example.test/dashboard/connect", Now: clock.Now}).WithMetadataFetcher(documents)
 	options := httpapi.Options{
-		OAuth:            oauth,
-		TenantAuthz:      authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
-		Tenants:          tenants.NewService(NewTenantRepository(q)),
-		Spaces:           spaces.NewService(NewSpaceRepository(q, pool)),
-		ServicePrincipal: authentication.ServiceCredential{ID: oauthTestService, Secrets: []string{oauthTestSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}},
+		OAuth:              oauth,
+		TenantAuthz:        authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
+		Tenants:            tenants.NewService(NewTenantRepository(q)),
+		Spaces:             spaces.NewService(NewSpaceRepository(q, pool)),
+		DashboardServiceID: oauthTestService, ServicePrincipals: []authentication.ServiceCredential{{ID: oauthTestService, Secrets: []string{oauthTestSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}}},
 	}
 	options.RateLimit.DisableAuthenticated = true
 	options.MCP = httpapi.NewMCPHandler(options)
