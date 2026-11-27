@@ -175,7 +175,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     const known: Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
     const hint: Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind"> = this.#hintFor(participant, presence) ?? {};
     const identityId = hint.identityId ?? known.identityId;
-    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType, deviceKind: hint.deviceKind ?? known.deviceKind } : undefined;
+    const deviceType = hint.deviceType ?? known.deviceType;
+    const deviceKind = hint.deviceKind ?? known.deviceKind;
+    return identityId || deviceType || deviceKind ? { admissionRevision: participant.admissionRevision, identityId, deviceType, deviceKind } : undefined;
   }
   #hintFor(participant: V1Participant, presence: readonly V1Presence[]): V1Presence | undefined {
     return presence.find((item) => {
