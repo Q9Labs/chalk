@@ -8,7 +8,7 @@ const id = (finding) => `${finding.check}|${finding.key}`;
  * Findings a reviewer looked at and accepted, one per frame, each with the reason. A frame or finding not named here still blocks.
  * @type {{ frame: string, check: string, key: string, reason: string }[]}
  */
-export const ACCEPTED_FINDINGS = [
+const ACCEPTED_FINDINGS = [
   {
     frame: "settings@tablet-dark.1",
     check: "control-covered",
