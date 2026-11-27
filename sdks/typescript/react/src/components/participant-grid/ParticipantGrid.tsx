@@ -13,6 +13,7 @@ export type TileFocus = { readonly appState?: "active" | "inactive" | "backgroun
 export interface Participant {
   id: string;
   displayName: string;
+  identityKind?: "user" | "agent" | "guest";
   /** The device's name, with "· 2 devices" when the same person is connected twice. */
   deviceHint?: string;
   /** The device behind the tile badge shown for a phone, tablet or foldable. */

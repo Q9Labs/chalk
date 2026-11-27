@@ -184,18 +184,8 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if !ok {
 			return episodes.ErrInvalidRole
 		}
-		if input.IdentityExternalID != "" {
-			identityID, err := utilities.NewID()
-			if err != nil {
-				return fmt.Errorf("allocate admission identity: %w", err)
-			}
-			identity, err := queries.ResolveAdmissionIdentity(ctx, sqlc.ResolveAdmissionIdentityParams{
-				ID: uuid(identityID), TenantID: uuid(input.TenantID), ExternalID: input.IdentityExternalID, DisplayName: input.Name,
-			})
-			if err != nil {
-				return fmt.Errorf("resolve admission identity: %w", err)
-			}
-			input.IdentityID = utilities.IDFromBytes(identity.Bytes)
+		if err := resolveAdmissionIdentity(ctx, queries, &input); err != nil {
+			return err
 		}
 		payload := input.Request.Payload()
 		if input.Admission != episodes.AdmissionDirect {
@@ -225,7 +215,7 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 
 		participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
-			ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Metadata: jsonBytes(input.Metadata),
+			ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Metadata: jsonBytes(input.Metadata),
 			Capabilities: append([]string(nil), roleCapabilities...), Role: input.Role,
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), IdentityID: uuid(input.IdentityID),
 		})
@@ -312,7 +302,7 @@ func createKnockAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx,
 		return fmt.Errorf("reserve knock admission capacity: %w", err)
 	}
 	participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
-		ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Metadata: jsonBytes(input.Metadata), Capabilities: append([]string(nil), capabilities...), Role: input.Role,
+		ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Metadata: jsonBytes(input.Metadata), Capabilities: append([]string(nil), capabilities...), Role: input.Role,
 		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), IdentityID: uuid(input.IdentityID),
 	})
 	if err != nil {

@@ -8,6 +8,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
   alias ChalkSync.ProtocolV1
 
   @off_reason_keys ["off_reason", "off_revision"]
+  @participant_detail_keys ["identity_kind", "description"]
 
   def encode_with_context(state, encoded) when is_binary(encoded) do
     encode_with_context(state, JSON.decode!(encoded))
@@ -19,6 +20,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
     |> device_projection(presence_hint_keys(state))
     |> media_projection(state)
     |> focus_projection(state)
+    |> participant_details_projection(state)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
@@ -103,6 +105,46 @@ defmodule ChalkSync.Transport.Socket.Frames do
     do: %{frame | "item" => Map.drop(item, @off_reason_keys)}
 
   defp media_projection(frame, _state), do: frame
+
+  # Participant detail fields are immutable rendering metadata, not canonical control state.
+  # Keep the exact earlier frame shape unless this socket negotiated the extension.
+  defp participant_details_projection(frame, %{participant_details: true}), do: frame
+
+  defp participant_details_projection(
+         %{"type" => "welcome", "snapshot" => snapshot} = frame,
+         _state
+       )
+       when is_map(snapshot) do
+    participants =
+      snapshot
+      |> Map.get("participants", [])
+      |> Enum.map(&Map.drop(&1, @participant_detail_keys))
+
+    put_in(frame, ["snapshot", "participants"], participants)
+  end
+
+  defp participant_details_projection(%{"type" => "event", "payload" => payload} = frame, _state)
+       when is_map(payload),
+       do: put_in(frame, ["payload"], Map.drop(payload, @participant_detail_keys))
+
+  defp participant_details_projection(
+         %{"type" => "replay_page", "events" => events} = frame,
+         _state
+       )
+       when is_list(events) do
+    events =
+      Enum.map(events, fn
+        %{"payload" => payload} = event when is_map(payload) ->
+          Map.put(event, "payload", Map.drop(payload, @participant_detail_keys))
+
+        event ->
+          event
+      end)
+
+    Map.put(frame, "events", events)
+  end
+
+  defp participant_details_projection(frame, _state), do: frame
 
   @doc "The coarse device: derived from the declared kind when there is one, else from the User-Agent."
   def device_type(kind, agent), do: DeviceKind.device_type(kind) || user_agent_device_type(agent)

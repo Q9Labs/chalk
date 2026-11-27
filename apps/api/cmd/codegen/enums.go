@@ -29,6 +29,10 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		if schemaName == "AdmitEpisodeParticipantRequest" {
 			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}
 		}
+	case "identity_kind":
+		if schemaName == "AdmitEpisodeParticipantRequest" {
+			return []string{string(episodes.IdentityKindUser), string(episodes.IdentityKindAgent)}
+		}
 	case "role":
 		switch schemaName {
 		case "Membership", "MembershipList", "CreateMembershipRequest", "UpdateMembershipRequest":

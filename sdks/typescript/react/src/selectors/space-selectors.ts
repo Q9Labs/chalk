@@ -36,6 +36,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     {
       id: localId,
       displayName: localFromSync?.displayName || displayName,
+      ...(localFromSync?.identityKind === undefined ? {} : { identityKind: localFromSync.identityKind }),
       deviceHint: deviceHint(localFromSync, participants),
       device: participantDevice(localFromSync),
       isLocal: true,
@@ -57,6 +58,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     result.push({
       id: participant.participantId,
       displayName: participant.displayName,
+      ...(participant.identityKind === undefined ? {} : { identityKind: participant.identityKind }),
       deviceHint: deviceHint(participant, participants),
       device: participantDevice(participant),
       isOwnDevice: Boolean(localFromSync?.identityId && participant.identityId === localFromSync.identityId),

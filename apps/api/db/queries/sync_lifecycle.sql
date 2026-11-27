@@ -558,6 +558,7 @@ returning *;
 insert into participants (
     id,
     name,
+    description,
     metadata,
     capabilities,
     role,
@@ -570,6 +571,7 @@ insert into participants (
 ) values (
     sqlc.arg(id),
     sqlc.narg(name),
+    sqlc.narg(description),
     sqlc.narg(metadata),
     sqlc.arg(capabilities),
     sqlc.arg(role),

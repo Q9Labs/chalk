@@ -7,6 +7,7 @@ export function v1NegotiatedExtensions(welcome?: Welcome) {
   return {
     entryConfirmation: welcome?.entry_confirmation === true,
     mediaOffReason: welcome?.media_off_reason === true,
+    participantDetails: welcome?.participant_details === true,
     connectionQuality: welcome?.connection_quality === true,
     appState: welcome?.app_state === true,
     annotation,

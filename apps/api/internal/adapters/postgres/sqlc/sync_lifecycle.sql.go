@@ -593,6 +593,7 @@ const createLifecycleParticipant = `-- name: CreateLifecycleParticipant :one
 insert into participants (
     id,
     name,
+    description,
     metadata,
     capabilities,
     role,
@@ -612,15 +613,17 @@ insert into participants (
     $7,
     $8,
     $9,
+    $10,
     1,
     'joining'
 )
-returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+returning id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type CreateLifecycleParticipantParams struct {
 	ID           pgtype.UUID `json:"id"`
 	Name         pgtype.Text `json:"name"`
+	Description  pgtype.Text `json:"description"`
 	Metadata     []byte      `json:"metadata"`
 	Capabilities []string    `json:"capabilities"`
 	Role         string      `json:"role"`
@@ -634,6 +637,7 @@ func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLife
 	row := q.db.QueryRow(ctx, createLifecycleParticipant,
 		arg.ID,
 		arg.Name,
+		arg.Description,
 		arg.Metadata,
 		arg.Capabilities,
 		arg.Role,
@@ -646,6 +650,7 @@ func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLife
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
@@ -1057,7 +1062,7 @@ func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg Expire
 }
 
 const expiredParticipantPresence = `-- name: ExpiredParticipantPresence :many
-select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation,
+select p.id, p.name, p.description, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation,
     (lease.expires_at is not null)::boolean as has_presence_lease,
     (extract(epoch from clock_timestamp() - coalesce(lease.expires_at - interval '120 seconds', p.joined_at)) * 1000)::bigint as presence_age_ms
 from participants p
@@ -1104,6 +1109,7 @@ func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredPar
 		if err := rows.Scan(
 			&i.Participant.ID,
 			&i.Participant.Name,
+			&i.Participant.Description,
 			&i.Participant.Metadata,
 			&i.Participant.Capabilities,
 			&i.Participant.TenantID,
@@ -1828,7 +1834,7 @@ func (q *Queries) LockLifecycleIntentForRequestForUpdate(ctx context.Context, ar
 }
 
 const lockLifecycleParticipantForUpdate = `-- name: LockLifecycleParticipantForUpdate :one
-select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+select id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 from participants
 where
     tenant_id = $1
@@ -1856,6 +1862,7 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
@@ -2172,7 +2179,7 @@ where
     and id = $4
     and generation = $5
     and status = 'active'
-returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+returning id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type MarkLifecycleParticipantLeavingParams struct {
@@ -2195,6 +2202,7 @@ func (q *Queries) MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkL
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,

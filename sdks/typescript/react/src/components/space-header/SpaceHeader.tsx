@@ -155,7 +155,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
           <button type="button" className="chalk-shell-people-pill" aria-label={`People, ${props.people?.length ?? 0}${props.knockCount ? `, ${props.knockCount} waiting to join` : ""}`} onClick={props.onTogglePeople}>
             <span className="chalk-shell-faces">
               {props.people?.slice(0, 3).map((person) => (
-                <Avatar key={person.participantId} name={person.displayName} size="xs" />
+                <Avatar key={person.participantId} name={person.displayName} showAIBadge={person.identityKind === "agent"} size="xs" />
               ))}
             </span>
             <span>{props.people?.length ?? 0}</span>

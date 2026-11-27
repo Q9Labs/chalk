@@ -1,6 +1,7 @@
 import { SnapshotSchema, type SyncV1ServerFrame } from "../generated/sync";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { canonicalJsonBytesFromUnknown } from "./canonical";
+import { joinBytes, sameStrings } from "./v1-reducer-bytes";
 import type { V1AdmissionRequest, V1ControlState, V1Participant, V1Role, V1TargetCommand } from "./v1-types";
 
 type EventFrame = Extract<SyncV1ServerFrame, { readonly type: "event" }>;
@@ -64,6 +65,8 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
       displayName: participant.display_name,
       handRaised: participant.hand_raised,
       admissionRevision: participant.admission_revision,
+      ...(participant.identity_kind === undefined ? {} : { identityKind: participant.identity_kind }),
+      ...(participant.description === undefined ? {} : { description: participant.description }),
       role: participant.role,
       // The canonical wire contract carries one requested/assigned role. Keep
       // the former list-shaped alias for consumers that still render it.
@@ -243,6 +246,8 @@ function participantFromJoin(state: V1ControlState, payload: Extract<EventFrame,
     displayName: payload.display_name,
     handRaised: false,
     admissionRevision: payload.admission_revision,
+    ...(payload.identity_kind === undefined ? {} : { identityKind: payload.identity_kind }),
+    ...(payload.description === undefined ? {} : { description: payload.description }),
     role: payload.role,
     eligibleRoles: [payload.role],
     capabilities: [...capabilities],
@@ -314,18 +319,4 @@ function transitionRecording(state: V1ControlState, payload: RecordingEventPaylo
 
 function recordingFromPayload(payload: RecordingEventPayload): NonNullable<V1ControlState["recording"]> {
   return { recordingId: payload.recording_id, status: payload.status, failureCode: payload.failure_code };
-}
-
-function joinBytes(...parts: readonly Uint8Array[]): Uint8Array {
-  const output = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
-  let offset = 0;
-  for (const part of parts) {
-    output.set(part, offset);
-    offset += part.byteLength;
-  }
-  return output;
-}
-
-function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

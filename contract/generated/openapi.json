@@ -9635,7 +9635,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden", "participant.description_forbidden"]
           },
           "404": {
             "content": {
@@ -9657,7 +9657,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "media.client_unsupported", "participant.not_active", "request.idempotency_conflict"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "identity.kind_conflict", "media.client_unsupported", "participant.not_active", "request.idempotency_conflict"]
           },
           "413": {
             "content": {
@@ -16680,6 +16680,12 @@
             "enum": ["policy", "direct"],
             "type": "string"
           },
+          "description": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
+          },
           "identity_external_id": {
             "maxLength": 256,
             "minLength": 1,
@@ -16687,6 +16693,10 @@
           },
           "identity_id": {
             "$ref": "#/components/schemas/UUID"
+          },
+          "identity_kind": {
+            "enum": ["user", "agent"],
+            "type": "string"
           },
           "metadata": {
             "additionalProperties": true,
@@ -18544,6 +18554,9 @@
                 },
                 "type": "array"
               },
+              "description": {
+                "type": ["string", "null"]
+              },
               "episode_id": {
                 "$ref": "#/components/schemas/EpisodeId"
               },
@@ -18635,6 +18648,9 @@
                   "type": "string"
                 },
                 "type": "array"
+              },
+              "description": {
+                "type": ["string", "null"]
               },
               "episode_id": {
                 "$ref": "#/components/schemas/EpisodeId"

@@ -14,8 +14,8 @@ import { PillButton } from "../../primitives/PillButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
 import { fixed, space, corners } from "../../theme/tokens";
-import { peopleRows, type PeopleRow } from "./people-model";
 import { PersonName } from "./PersonName";
+import { peopleRows, type PeopleRow } from "./people-model";
 import { TextField } from "./TextField";
 
 /** Past this many people the list gets a search field. */
@@ -185,14 +185,7 @@ const HandRow = memo(function HandRow({ participant, order, isSelf }: { readonly
         </ChalkText>
       </View>
       <Face name={participant.displayName} />
-      <ChalkText numberOfLines={1} style={styles.name} variant="bodyMedium">
-        {participant.displayName}
-        {isSelf ? (
-          <ChalkText tone="textMuted" variant="meta">
-            {"  (You)"}
-          </ChalkText>
-        ) : null}
-      </ChalkText>
+      <PersonName badgeTestID={`people.hand.ai.${participant.participantId}`} isSelf={isSelf} participant={participant} />
     </View>
   );
 });
@@ -244,7 +237,7 @@ const PersonRow = memo(function PersonRow({ participant, device, isSelf, handNum
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <PersonName device={device} host={host} isSelf={isSelf} label={status ? `${participant.displayName}, ${status}` : participant.displayName} name={participant.displayName} participantId={participant.participantId} />
+      <PersonName badgeTestID={`people.ai.${participant.participantId}`} device={device} host={host} isSelf={isSelf} label={status ? `${participant.displayName}, ${status}` : participant.displayName} participant={participant} />
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />

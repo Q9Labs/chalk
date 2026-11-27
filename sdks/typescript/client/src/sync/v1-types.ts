@@ -37,6 +37,7 @@ export const V1_CAPABILITIES = [
 export type V1Capability = (typeof V1_CAPABILITIES)[number];
 // Roles are customer-defined; the wire accepts any non-empty role name.
 export type V1Role = string;
+export type V1IdentityKind = "user" | "agent" | "guest";
 export type V1AssignableRole = string;
 export type V1AdmissionPolicy = "open" | "knock" | "members_only";
 export type V1AdmissionTarget = SetAdmissionPolicyCommandFrame["payload"]["policy"];
@@ -47,6 +48,8 @@ export type V1Participant = {
   readonly displayName: string;
   readonly handRaised: boolean;
   readonly admissionRevision: number;
+  readonly identityKind?: V1IdentityKind;
+  readonly description?: string;
   readonly role: V1Role;
   readonly eligibleRoles: readonly V1Role[];
   readonly capabilities: readonly V1Capability[];

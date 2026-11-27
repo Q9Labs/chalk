@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261127140000.
+-- Schema snapshot through migration 20261127150000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -614,6 +614,7 @@ create table episode_create_requests (
 create table participants (
     id uuid primary key,
     name text,
+    description text,
     metadata jsonb,
     capabilities text[] not null,
     tenant_id uuid not null references tenants(id),

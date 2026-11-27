@@ -45,13 +45,14 @@ defmodule ChalkSync.SyncPostgres.Rows do
         connection,
         """
         insert into participants (
-          id, name, capabilities, tenant_id, space_id, episode_id,
+          id, name, description, capabilities, tenant_id, space_id, episode_id,
           generation, status, joined_at, role
-        ) values ($1, $2, $3, $4, $5, $6, $7, 'active', now(), $8)
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, 'active', now(), $9)
         """,
         [
           uuid(participant.id),
           participant.display_name,
+          participant.description,
           participant.capabilities,
           uuid(episode.tenant_id),
           uuid(episode.space_id),

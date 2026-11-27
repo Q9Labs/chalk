@@ -35,6 +35,8 @@ function rosterFor(
     participants.map((participant) =>
       Object.freeze({
         participantId: participant.participantId,
+        ...(participant.identityKind === undefined ? {} : { identityKind: participant.identityKind }),
+        ...(participant.description === undefined ? {} : { description: participant.description }),
         identityId: devices.get(participant.participantId)?.identityId,
         deviceType: devices.get(participant.participantId)?.deviceType,
         deviceKind: devices.get(participant.participantId)?.deviceKind,
