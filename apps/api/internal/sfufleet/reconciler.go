@@ -49,6 +49,8 @@ func NewReconciler(policy Policy, store Store, provider Provider, control Contro
 
 type Result struct {
 	Plan
+	LiveSlots     int
+	StandingSlots int
 	Serving       int
 	Starting      int
 	Draining      int
@@ -65,7 +67,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("load SFU window demand and inventory: %w", err)
 	}
-	result := Result{Plan: PlanWindow(state.Demand, r.policy.Capacity, state.ObservedAt, Lookahead)}
+	result := Result{
+		Plan:          PlanWindow(state.Demand, r.policy.Capacity, state.ObservedAt, Lookahead),
+		LiveSlots:     state.Demand.LiveSlots,
+		StandingSlots: r.policy.Capacity.StandingSlots,
+	}
 	result.BudgetLimited = state.NodeTime >= r.policy.MonthlyNodeTime
 	if r.policy.Retire || result.BudgetLimited {
 		result.TargetNodes = 0

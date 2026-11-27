@@ -22,6 +22,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/sfufleet"
 )
 
@@ -30,7 +31,12 @@ const controllerLease = 0x4348414c4b534655
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx); err != nil {
+	telemetry, err := observability.StartWorker(ctx, "chalk-sfu-window-controller", os.Getenv, os.Stderr)
+	if err == nil {
+		err = run(ctx)
+		telemetry.Close("sfu-window-controller", os.Stderr)
+	}
+	if err != nil {
 		slog.Error("SFU window controller stopped", "reason", err)
 		os.Exit(1)
 	}
@@ -116,7 +122,7 @@ func reconcileContinuously(ctx context.Context, conn *pgx.Conn, reconciler *sfuf
 		cancel()
 		if err == nil {
 			slog.Info("SFU window plan", "booked_slots", result.PeakBookedSlots,
-				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"live_slots", result.LiveSlots, "standing_slots", result.StandingSlots, "required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
 				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
 				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
 			if !notified {
@@ -128,7 +134,7 @@ func reconcileContinuously(ctx context.Context, conn *pgx.Conn, reconciler *sfuf
 			}
 		} else if ctx.Err() == nil {
 			slog.Warn("SFU window reconcile incomplete", "reason", err, "booked_slots", result.PeakBookedSlots,
-				"required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
+				"live_slots", result.LiveSlots, "standing_slots", result.StandingSlots, "required_nodes", result.RequiredNodes, "target_nodes", result.TargetNodes,
 				"serving", result.Serving, "online", result.Online, "starting", result.Starting,
 				"draining", result.Draining, "deleting", result.Deleting, "budget_limited", result.BudgetLimited)
 		}
