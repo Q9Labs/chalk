@@ -21,22 +21,32 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
 
   const release = await prepareRelease({ allowedSecretIds, now, options });
   const binding = await dispatcherBinding({ commandRunner, options, dryRun: true });
+  const renderer = await rendererBinding({ commandRunner, options, dryRun: true });
   if (options.dryRun) {
-    const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding };
+    const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding, renderer_binding: renderer };
     stdout.write(`${JSON.stringify(proof, null, 2)}\n`);
     return proof;
   }
 
   const result = await deployRelease({ commandRunner, options, release, sleep, stderr });
-  await completeDispatcherBinding({ commandRunner, options, result });
+  await completeWorkloadBindings({ commandRunner, options, result });
   stdout.write(`${JSON.stringify(result)}\n`);
   return result;
 }
 
-async function completeDispatcherBinding({ commandRunner, options, result }) {
+async function completeWorkloadBindings({ commandRunner, options, result }) {
   result.deployment_phase = "host-ready";
+  result.renderer_binding = { action: "pending", verified: false };
   result.dispatcher_binding = { action: "pending", verified: false };
   await persistProof(options, result);
+  try {
+    result.renderer_binding = await rendererBinding({ commandRunner, options, dryRun: false });
+  } catch (error) {
+    result.deployment_phase = "renderer-failed";
+    result.renderer_binding = { action: "failed", verified: false };
+    await persistProof(options, result);
+    throw error;
+  }
   try {
     result.dispatcher_binding = await dispatcherBinding({ commandRunner, options, dryRun: false });
   } catch (error) {
@@ -61,6 +71,25 @@ async function fileExists(path) {
     if (error.code !== "ENOENT") throw error;
     return false;
   }
+}
+
+const rendererSkip = (environment, action) => ({ action, environment, verified: false, left_live: true });
+
+function rendererGate(options) {
+  if (options.environment !== "production") return rendererSkip(options.environment, "renderer-not-production-target");
+  if (process.env.CHALK_RENDERER_RELEASE_ENABLED !== "true") return rendererSkip(options.environment, "renderer-not-declared");
+  return undefined;
+}
+
+export async function rendererBinding({ commandRunner, options, dryRun }) {
+  const members = resolve(options.manifestPath).replace(/\.json$/, ".media.json");
+  if (!(await fileExists(members))) return { action: "not-recorded", environment: options.environment };
+  const skipped = rendererGate(options);
+  if (skipped) return skipped;
+  const args = [fileURLToPath(new URL("../releases/media.py", import.meta.url)), "deploy_renderer", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment];
+  if (dryRun) args.push("--dry-run");
+  const result = await commandRunner({ command: "python3", args });
+  return JSON.parse(result.stdout);
 }
 
 async function dispatcherBinding({ commandRunner, options, dryRun }) {

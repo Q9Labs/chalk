@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Puts the inline policy that lets the nightly deploy role publish document-renderer ZIPs to the Nightly artifacts
+# bucket, or with --check compares the role's live policy with this file and exits 1 on drift.
+#
+#   AWS_PROFILE=<admin profile> apply-document-renderer-publish [--check]
+#
+# The role's other inline policies are not managed here. The nightly media build needs this one because it publishes the
+# renderer ZIP that Promote later reuses (docs/managed-release.md, "Environment setup").
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+role=chalk-nightly-github-deploy
+policy_name=chalk-nightly-document-renderer-publish
+mode=apply
+case "${1:-}" in
+  "") ;;
+  --check) mode=check ;;
+  *) echo "usage: apply-document-renderer-publish [--check]" >&2; exit 2 ;;
+esac
+
+account="$(aws sts get-caller-identity --query Account --output text)"
+desired="$(sed "s/__ACCOUNT__/$account/g" "$here/document-renderer-publish.policy.json" | jq -S .)"
+
+if [ "$mode" = apply ]; then
+  aws iam put-role-policy --role-name "$role" --policy-name "$policy_name" --policy-document "$desired"
+  echo "applied $policy_name to $role"
+  exit 0
+fi
+
+live="$(aws iam get-role-policy --role-name "$role" --policy-name "$policy_name" --query PolicyDocument --output json | jq -S .)"
+if [ "$live" != "$desired" ]; then
+  echo "drift: $policy_name on $role differs from document-renderer-publish.policy.json" >&2
+  diff <(printf '%s\n' "$desired") <(printf '%s\n' "$live") >&2 || true
+  exit 1
+fi
+echo "ok: $policy_name on $role matches"

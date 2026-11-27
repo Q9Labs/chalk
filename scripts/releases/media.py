@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Immutable recorder archives and dispatcher ZIP members of a managed release."""
+"""Immutable recorder archives and workload ZIP members of a managed release."""
 import argparse
 import base64
 import json
@@ -20,6 +20,8 @@ recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
 from dispatcher_binding import dispatcher_inputs, binding_target, release_config_digest, release_environment, verify_dispatcher
 from alchemy_dispatcher import run_plan
+from media_members import validate_members
+import renderer_media
 from github_release import GitHub, payload, retain, retained
 
 INPUTS = {
@@ -34,28 +36,6 @@ SUPPORTED_DISPATCHER_CONFIGURATION = '0a417c476f9f987390014507944d3d8a071e0b9249
 
 def fingerprint(member):
     return digest(subprocess.check_output(['git', 'ls-tree', '-r', 'HEAD', '--', *INPUTS[member]], cwd=ROOT))
-
-
-def validate_members(value):
-    require(value.get('schema_version') == 1 and set(value) in ({'schema_version', 'recorder_source_bucket', 'capture', 'render', 'dispatcher'}, {'schema_version', 'capture', 'render', 'dispatcher'}), 'invalid media members')
-    portable = 'recorder_source_bucket' in value
-    for role in ('capture', 'render'):
-        image = value[role]
-        require(re.fullmatch(r'[1-9][0-9]*', str(image['base_snapshot_id' if portable else 'image_id'])), 'invalid recorder image ID')
-        if portable:
-            require(re.fullmatch(r'[0-9a-f]{64}', image['archive_sha256']), 'invalid recorder archive SHA256')
-            require(image['archive_key'] == f"recorder/{role}/{image['archive_sha256']}.tar.gz", 'invalid recorder archive key')
-        require(re.fullmatch(r'sha256:[0-9a-f]{64}', image['image_digest']), 'invalid recorder digest')
-        require(re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,127}', image['release_id']), 'invalid recorder release')
-    if portable:
-        require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', value['recorder_source_bucket']), 'invalid recorder source bucket')
-    archive = value['dispatcher']
-    require(re.fullmatch(r'[0-9a-f]{64}', archive['sha256']), 'invalid dispatcher ZIP digest')
-    require(archive['version_id'] and archive['version_id'] != 'null', 'dispatcher ZIP must be version-pinned')
-    require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', archive['bucket']), 'invalid dispatcher bucket')
-    require(archive['corpus_digest'] == '' or re.fullmatch(r'[0-9a-f]{64}', archive['corpus_digest'].removeprefix('sha256:')), 'invalid legacy corpus digest')
-    require(archive['key'].startswith('transcription-dispatcher/') and '..' not in archive['key'], 'invalid dispatcher artifact key')
-    return value
 
 
 def settings(args):
@@ -81,6 +61,8 @@ def current(provider, config):
             result['recorder_source_bucket'] = bucket
     inputs = dispatcher_inputs(provider, config['dispatcher'])
     result['dispatcher'] = dict(bucket=inputs['artifact_s3_bucket'], key=inputs['artifact_s3_key'], version_id=inputs['artifact_s3_object_version'], sha256=inputs['artifact_sha256'], corpus_digest=inputs['deepinfra_corpus_digest'])
+    if config['dispatcher']['function_name'].startswith('chalk-production-'):
+        renderer_media.add_current_renderer_member(provider, result)
     return validate_members(result)
 
 
@@ -181,6 +163,16 @@ def publish_zip(args):
                                     manifest_sha256=digest(archive.with_suffix('.manifest.json').read_bytes()), corpus_digest=os.environ['CHALK_TRANSCRIPTION_CORPUS_DIGEST'])
         require(manifest.get('source_state') != 'dirty-local-proof', 'dirty dispatcher artifact')
     private_json(args.output, validate_members(result))
+
+
+def publish_renderer(args):
+    provider, config = settings(args)
+    del config
+    renderer_media.publish_renderer(args, provider)
+
+
+def deploy_renderer(args):
+    renderer_media.deploy_renderer(args, Provider(args.region, os.environ.get('AWS_PROFILE')))
 
 
 def write_parameter(provider, parameter, value):
@@ -292,7 +284,7 @@ def deploy_dispatcher(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'build_archives', 'publish_zip', 'zip_needed', 'pin_archives', 'deploy_dispatcher'))
+    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'build_archives', 'publish_zip', 'zip_needed', 'publish_renderer', 'pin_archives', 'deploy_dispatcher', 'deploy_renderer'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))

@@ -107,3 +107,25 @@ it("tells the call screens that Chalk's own media signalling refused the join, t
   expect(lastError?.mediaHttpStatus).toBe(400);
   expect(getConnectionFailureDetail({ code: lastError?.code, sync: lastError?.sync, mediaHttpStatus: lastError?.mediaHttpStatus })).toContain("Something on our side failed");
 });
+
+it("tells the call screens that ICE never established, through the connection snapshot", async () => {
+  const platform = createCoreTestPlatform();
+  const client = createSpaceClientForPlatform(
+    { space: "ice-proof", getAccess: async () => opaqueAccessGrant(1) },
+    {
+      dependencies: {
+        ...platform.dependencies,
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          start: async () => {
+            throw new SFUError("Timed out waiting for the Chalk SFU peer connection", "media_failed", { iceConnectionState: "checking" });
+          },
+        }),
+      },
+    },
+  );
+  await client.join({ microphone: false, camera: false }).catch(() => undefined);
+  const { lastError } = client.getSnapshot().connection;
+  expect(lastError?.mediaIceFailure).toBe(true);
+  expect(getConnectionFailureDetail({ code: lastError?.code, sync: lastError?.sync, mediaHttpStatus: lastError?.mediaHttpStatus, mediaIceFailure: lastError?.mediaIceFailure })).toContain("Turn off the VPN");
+});

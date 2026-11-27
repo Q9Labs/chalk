@@ -1,4 +1,7 @@
-const styles = `.call-card-tabs {
+import { callFileStyles } from "./CallCardFileStyles";
+
+const styles =
+  `.call-card-tabs {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -740,31 +743,10 @@ const styles = `.call-card-tabs {
 .call-attachments.image-1 .call-photo img { height: auto; min-height: 150px; max-height: 320px; }
 .call-attachments.image-3 .call-photo:nth-child(3) { grid-column: span 2; aspect-ratio: 2; }
 .call-photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: var(--chalk-scrim); color: var(--chalk-on-overlay); font-size: var(--type-title-sm); font-weight: 600; }
-.call-file > span:not(.call-file-type) {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.call-file b {
-  font-size: var(--type-body-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.call-file small {
-  font-size: var(--type-caption);
-  color: var(--chalk-muted-text);
-  line-height: 1.25;
-}
-.call-file-type { background: var(--chalk-file-other); }
-.call-file-type[data-extension="pdf"] { background: var(--chalk-file-pdf); }
-.call-file-type:is([data-extension="doc"],[data-extension="docx"]) { background: var(--chalk-file-doc); }
-.call-file-type:is([data-extension="xls"],[data-extension="xlsx"]) { background: var(--chalk-file-xls); }
-.call-file-type:is([data-extension="ppt"],[data-extension="pptx"]) { background: var(--chalk-file-ppt); }
-.call-reaction > span {
+
+` +
+  callFileStyles +
+  `.call-reaction > span {
   font-size: var(--type-body);
   line-height: 1;
 }

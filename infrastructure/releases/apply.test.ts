@@ -8,7 +8,7 @@ import { inMemoryState } from "alchemy/State";
 import type { CreatedResourceState, ResourceState } from "alchemy/State/ResourceState";
 import * as Effect from "effect/Effect";
 import { applyCheckedPlan } from "./apply.ts";
-import { planView } from "./plan-view.ts";
+import { blockingDrift, planView } from "./plan-view.ts";
 
 interface ExternalResource extends Resource<"Test.Dispatcher.External", { value: number }, { value: number }> {}
 const ExternalResource = Resource<ExternalResource>("Test.Dispatcher.External");
@@ -36,6 +36,26 @@ const lifecycleStates: ResourceState[] = [
   { ...completed, status: "replacing", old: completed, deleteFirst: false },
   { ...completed, status: "replaced", old: completed, deleteFirst: false },
 ];
+
+test("tagged partial Lambda release drift does not block retry or rollback, manual drift still does", () => {
+  const configuration = (release: string) => ({
+    description: `proof (${release})`,
+    environment: { CHALK_RELEASE_ID: release, STATIC: "same" },
+    tags: { chalk_release_id: release, chalk_config_digest: `config-${release}`, chalk_release_manifest_digest: `manifest-${release}`, static: "same" },
+    timeout: 30,
+  });
+  const persisted = { functionName: "fn", functionArn: "arn", version: "$LATEST", codeSha256: "old", configuration: configuration("release-old") };
+  const partial = { ...persisted, codeSha256: "new", configuration: configuration("release-new") };
+  const node = { state: { attr: persisted } };
+  assert.equal(blockingDrift("Function", { action: "drifted", resourceType: "Chalk.Lambda.VersionedFunction", attr: partial }, node, true), false);
+  const manual = structuredClone(partial);
+  manual.configuration.timeout = 31;
+  assert.equal(blockingDrift("Function", { action: "drifted", resourceType: "Chalk.Lambda.VersionedFunction", attr: manual }, node, true), true);
+  assert.equal(blockingDrift("Function", { action: "missing", resourceType: "Chalk.Lambda.VersionedFunction", attr: partial }, node), true);
+  assert.equal(blockingDrift("Function", { action: "skipped", resourceType: "Chalk.Lambda.VersionedFunction" }, { state: { status: "updating", attr: persisted } }), true);
+  assert.equal(blockingDrift("Function", { action: "skipped", resourceType: "Chalk.Lambda.VersionedFunction" }, { state: { status: "updating", attr: persisted } }, true), false);
+  assert.equal(blockingDrift("Function", { action: "skipped", resourceType: "Chalk.Lambda.VersionedFunction" }, { state: { status: "creating", attr: persisted } }, true), true);
+});
 
 for (const persisted of lifecycleStates) {
   test(`checked releases accept only stable persisted state: ${persisted.status}`, async () => {

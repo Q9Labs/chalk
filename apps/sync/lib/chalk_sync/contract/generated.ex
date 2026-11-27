@@ -1013,7 +1013,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
-    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in"],
+    flags = Enum.filter(["entry_confirmation","media_off_reason","connection_quality","screen_annotation","screen_annotation_burn_in","presenting"],
         &Map.has_key?(frame, &1))
     base = base ++ flags
     valid_flags = Enum.all?(flags, &(frame[&1] == true))

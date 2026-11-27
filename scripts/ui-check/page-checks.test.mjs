@@ -78,6 +78,21 @@ test("a control with a layer over its center is found", async () => {
   assert.ok(found.includes("control-covered"));
 });
 
+test("a control under a marked dismiss layer is not found", async () => {
+  const found = await checksFor(`<button aria-label="Present">p</button><div data-ui-dismiss-layer style="position:fixed;left:0;top:0;width:100px;height:100px;background:#0004"></div>`);
+  assert.ok(!found.includes("control-covered"));
+});
+
+test("a control under a marked dismiss layer's child is not found", async () => {
+  const found = await checksFor(`<button aria-label="Present">p</button><div data-ui-dismiss-layer style="position:fixed;left:0;top:0;width:100px;height:100px"><span style="display:block;width:100px;height:100px;background:#0004"></span></div>`);
+  assert.ok(!found.includes("control-covered"));
+});
+
+test("a control under an unmarked layer is still found next to a marked one", async () => {
+  const found = await checksFor(`<button aria-label="Present">p</button><div data-ui-dismiss-layer style="position:fixed;left:200px;top:200px;width:50px;height:50px"></div><div style="position:fixed;left:0;top:0;width:100px;height:100px;background:#0004"></div>`);
+  assert.ok(found.includes("control-covered"));
+});
+
 test("a control smaller than the minimum target is found", async () => {
   const found = await checksFor(`<button aria-label="Tiny" style="width:12px;height:12px">t</button>`);
   assert.ok(found.includes("tap-target"));
