@@ -411,7 +411,9 @@ function renderTypeScript(contract) {
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.state) +
-      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), device_kind: Schema.optional(" + renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.deviceKind) + "), admission_revision: Schema.optional(PositiveIntegerSchema), connection_quality: Schema.optional(Schema.Literals(['good', 'weak', 'poor'])) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
+      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), device_kind: Schema.optional(" +
+      renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.deviceKind) +
+      "), admission_revision: Schema.optional(PositiveIntegerSchema), connection_quality: Schema.optional(Schema.Literals(['good', 'weak', 'poor'])) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
   );
   lines.push(
     "export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal('projection_snapshot'), stream: Schema.Literal('media'), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(" +

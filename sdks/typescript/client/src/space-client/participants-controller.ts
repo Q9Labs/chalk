@@ -35,10 +35,11 @@ export const makeParticipantsController = (connection: ConnectionLifecycleCapabi
     (controller) => Effect.sync(() => controller.dispose()),
   );
 type DeviceFields = Pick<SeatDevice, "identityId" | "deviceType" | "deviceKind">;
+const DEVICE_KEYS = ["identityId", "deviceType", "deviceKind"] as const;
 
 /** What Sync just said about a seat, over what it said before for the same admission. Guests have no identity, so a device alone is enough. */
 function mergeDevice(admissionRevision: number, hint: DeviceFields | undefined, known: DeviceFields | undefined): SeatDevice | undefined {
-  const fields = { identityId: hint?.identityId ?? known?.identityId, deviceType: hint?.deviceType ?? known?.deviceType, deviceKind: hint?.deviceKind ?? known?.deviceKind };
+  const fields = Object.fromEntries(DEVICE_KEYS.map((key) => [key, hint?.[key] ?? known?.[key]])) as DeviceFields;
   return Object.values(fields).some(Boolean) ? { admissionRevision, ...fields } : undefined;
 }
 

@@ -3,13 +3,16 @@ import { ChalkTooltip } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 
 /** The device that earns a tile badge: a phone, tablet or foldable that isn't yours, on a tile that shows status. A computer never gets one. */
-export function badgeDevice(participant: { readonly device?: ParticipantDevice; readonly isLocal?: boolean }, showStatus: boolean): ParticipantDevice | undefined {
-  if (!showStatus || participant.isLocal || participant.device?.form === "computer") return undefined;
-  return participant.device;
+export function badgeDevice(participant: { readonly device?: ParticipantDevice; readonly isLocal?: boolean }, showStatus: boolean): BadgeDevice | undefined {
+  const device = participant.device;
+  if (!showStatus || participant.isLocal || !device || device.form === "computer") return undefined;
+  return device as BadgeDevice;
 }
 
+type BadgeDevice = ParticipantDevice & { readonly form: Exclude<ParticipantDevice["form"], "computer"> };
+
 /** The bottom-right icon on a tile. Hover or keyboard focus says where the person joined from. */
-export function TileDevice({ device }: { readonly device: ParticipantDevice }) {
+export function TileDevice({ device }: { readonly device: BadgeDevice }) {
   const joined = `Joined from ${device.joinedFrom}`;
   return (
     <ChalkTooltip
