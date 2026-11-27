@@ -38,7 +38,8 @@ export interface ShareControlPresent {
   readonly onChoose: () => void;
 }
 
-function PresentFileItem({ present }: { readonly present: ShareControlPresent }): React.JSX.Element {
+function PresentFileItem({ present }: { readonly present?: ShareControlPresent }): React.JSX.Element | null {
+  if (!present) return null;
   return (
     <>
       <Menu.Separator className="chalk-shell-menu-separator" />
@@ -121,7 +122,7 @@ export function ShareControl({
               Share something else
             </Menu.Item>
             <ChalkMenuItem onClick={onToggle}>Stop sharing</ChalkMenuItem>
-            {present ? <PresentFileItem present={present} /> : null}
+            <PresentFileItem present={present} />
           </>
         ) : (
           <>
@@ -148,7 +149,7 @@ export function ShareControl({
                 </span>
               </Menu.Item>
             ))}
-            {present ? <PresentFileItem present={present} /> : null}
+            <PresentFileItem present={present} />
             {/* The switch always follows the sources, so tab audio can be set before a tab is picked. */}
             <>
               <Menu.Separator className="chalk-shell-menu-separator" />

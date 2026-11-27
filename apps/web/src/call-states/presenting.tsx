@@ -1,5 +1,4 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import type React from "react";
 import { Live } from "./live";
 import { liveSnapshot, PEOPLE, type Person } from "./fixtures";
 import page01 from "./presenting-pages/page-01.webp";

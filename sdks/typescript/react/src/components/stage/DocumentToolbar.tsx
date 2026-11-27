@@ -56,7 +56,7 @@ export function DocumentToolbar(props: DocumentToolbarProps): React.JSX.Element 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {props.mine ? (
           <>
-            <span className="grid h-5 min-w-7 shrink-0 place-items-center rounded-[5px] bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">PDF</span>
+            <span className="grid h-5 min-w-7 shrink-0 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">PDF</span>
             <span className="truncate font-semibold">{props.fileName}</span>
           </>
         ) : props.browsing ? (

@@ -232,7 +232,6 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
-  const documentActions = useMemo(() => ({ presentAnother: canPublishScreen && presenting.available ? () => void filePresenting.choosePresentFiles() : undefined }), [canPublishScreen, filePresenting.choosePresentFiles, presenting.available]);
   const buttons = spaceViewControlBarButtons({ features, canPublishScreen, presentingAvailable: presenting.available, canManageRecording, canSendReaction, canDrawWhiteboard });
   const headerLayout = pinnedId ? "focus" : layout;
   const updateLayout = (nextLayout: "grid" | "focus") => {
@@ -321,7 +320,7 @@ export function SpaceView({
       <BoardToastContext.Provider value={showBoardToast}>
         <FrozenFramesContext.Provider value={connectionPhase.kind === "reconnecting" || connectionPhase.kind === "failed"}>
           <CallLimboContext.Provider value={limbo}>
-            <DocumentActionsContext.Provider value={documentActions}>
+            <DocumentActionsContext.Provider value={filePresenting.documentActions}>
               <SpacePresentation
                 connectionTrouble={connectionPhase.kind === "failed" ? "lost" : connectionPhase.kind === "reconnecting" ? "reconnecting" : undefined}
                 colorScheme={colorScheme}
