@@ -1764,7 +1764,11 @@ create table sync_command_receipts (
         'participant_leave',
         'start_episode',
         'extend_episode',
-        'end_episode'
+        'end_episode',
+        'set_focus_step_away',
+        'clear_focus_step_away',
+        'open_focus_allowance',
+        'close_focus_allowance'
     )),
     outcome text not null,
     rejection_reason text,
@@ -1832,7 +1836,11 @@ create table sync_command_receipts (
                 'participant_leave',
                 'start_episode',
                 'extend_episode',
-                'end_episode'
+                'end_episode',
+                'set_focus_step_away',
+                'clear_focus_step_away',
+                'open_focus_allowance',
+                'close_focus_allowance'
             )
             and (
                 (

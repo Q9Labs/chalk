@@ -165,7 +165,9 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
     capability = required_capability(command.name)
     allowed = participant.capabilities
 
-    if capability in allowed, do: :ok, else: {:error, :capability_denied}
+    if capability == "self" or capability in allowed,
+      do: :ok,
+      else: {:error, :capability_denied}
   end
 
   defp validate_command_authority(_identity, _command, _state), do: :ok

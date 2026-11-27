@@ -128,6 +128,71 @@ defmodule ChalkSync.Live.FocusPostgresTest do
     Client.close_tcp(nonviewer)
   end
 
+  test "a step away and an allowance are recorded and shown to viewers", %{
+    port: port,
+    connection: connection,
+    fixture: fixture,
+    host: host,
+    guest: guest
+  } do
+    path = "/v1/sync?app_state=1"
+    {_welcome, _items, sender} = session(port, path, guest)
+    {_welcome, _items, viewer} = session(port, path, host)
+
+    {ack, sender} = command(sender, "set_focus_step_away", %{"reason" => "reading"})
+    assert %{"type" => "ack", "outcome" => "committed"} = ack
+
+    assert {%{"focus_step_away_reason" => "reading"}, viewer} =
+             next_presence_item(viewer, guest)
+
+    {ack, sender} = command(sender, "clear_focus_step_away", %{})
+    assert %{"type" => "ack", "outcome" => "committed"} = ack
+
+    assert {%{"focus_step_away_reason" => nil}, viewer} = next_presence_item(viewer, guest)
+
+    {ack, viewer} = command(viewer, "open_focus_allowance", %{"minutes" => 5})
+    assert %{"type" => "ack", "outcome" => "committed"} = ack
+
+    {ack, viewer} = command(viewer, "close_focus_allowance", %{})
+    assert %{"type" => "ack", "outcome" => "committed"} = ack
+
+    [[allowances]] =
+      Postgrex.query!(
+        connection,
+        "select count(*) from episode_focus_allow_windows where tenant_id=$1 and space_id=$2 and episode_id=$3 and ended_at is not null",
+        [
+          ChalkSync.UUID.dump!(fixture.episode.tenant_id),
+          ChalkSync.UUID.dump!(fixture.episode.space_id),
+          ChalkSync.UUID.dump!(fixture.episode.episode_id)
+        ]
+      ).rows
+
+    assert allowances == 1
+    Client.close_tcp(sender)
+    Client.close_tcp(viewer)
+  end
+
+  defp command(client, name, payload) do
+    id = UUID.generate()
+
+    client =
+      Client.send_json(client, %{
+        "type" => "command",
+        "command_id" => id,
+        "name" => name,
+        "payload" => payload
+      })
+
+    receive_ack(client, id)
+  end
+
+  defp receive_ack(client, id) do
+    case Client.recv(client) do
+      {:json, %{"command_id" => ^id} = response, client} -> {response, client}
+      {:json, _other, client} -> receive_ack(client, id)
+    end
+  end
+
   defp session(port, path, identity) do
     {:ok, client} = Client.connect(port, path)
 
