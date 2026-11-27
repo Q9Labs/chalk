@@ -62,16 +62,16 @@ func TestTelemetryWithoutHeadersOrEndpointIsRefused(t *testing.T) {
 	}
 }
 
-// Podman refuses `secret create -` when stdin is a file, and cannot start in a directory the node user may not enter. Both failed on a real
-// window node (27 Nov), so the script keeps the pipe and the cd that `deploy` gives it.
+// Podman refuses a file on stdin for "secret create -" and cannot start in a directory the node user may not enter. Both failed on a
+// real window node (27 Nov), so the script keeps the pipe and the cd that deploy gives it.
 func TestTelemetryScriptFeedsPodmanThroughAPipeFromTheNodeHome(t *testing.T) {
 	for _, want := range []string{"cd /home/chalk-sfu
-", `cat "$dir/$file-headers" | as_sfu podman secret create "$secret" -`} {
+", "cat "$dir/$file-headers" | as_sfu podman secret create "$secret" -"} {
 		if !strings.Contains(sfuWindowTelemetryScript, want) {
 			t.Errorf("script lacks %q", want)
 		}
 	}
-	if strings.Contains(sfuWindowTelemetryScript, "secret create "$secret" - <") {
+	if strings.Contains(sfuWindowTelemetryScript, ""$secret" - <") {
 		t.Error("script redirects a file into podman secret create")
 	}
 }
