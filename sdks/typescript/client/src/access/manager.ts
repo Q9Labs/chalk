@@ -216,9 +216,11 @@ function canReuseAccess(input: FetchInput, now: number): boolean {
   return !input.force && input.current.access !== null && millisecondsUntil(input.current.access, now, input.refreshWindowMs) > 0;
 }
 
+// A client without a grant holds no media connection. Its first grant must open one of its own: resuming the
+// Participant's current one would share an SFU session with another page, such as one iOS Safari keeps in bfcache.
 function mediaReplacementRequested(input: FetchInput, now: number, held: boolean): boolean {
   const current = input.current.access;
-  return input.replaceMediaConnection || (current !== null && expiresAt(current.media.expiresAt) <= now && !held);
+  return input.replaceMediaConnection || current === null || (expiresAt(current.media.expiresAt) <= now && !held);
 }
 
 function validateHeldBinding(input: FetchInput, next: ParsedAccessGrant): void {
