@@ -112,6 +112,11 @@ env("api.env", {
   CHALK_SFU_CA_FILE: "/run/chalk/provider-bridge/client-ca.crt",
   CHALK_SFU_CLIENT_CERT_FILE: "/run/chalk/provider-bridge/server.crt",
   CHALK_SFU_CLIENT_KEY_FILE: "/run/chalk/provider-bridge/server.key",
+  // The API turns Presenting off when its config is incomplete while Sync still offers it, so the stack sets it whole. No
+  // renderer runs here: the browser proof checks the Document reaches both stages, not its rendered pages.
+  CHALK_PRESENTING_ENABLED: "true",
+  CHALK_PRESENTING_CAPABILITY_SECRET: randomBytes(48).toString("base64"),
+  CHALK_PRESENTING_RENDERER_ENDPOINT: "http://127.0.0.1:9/invoke",
 });
 
 env("sync.env", {
@@ -127,6 +132,7 @@ env("sync.env", {
   CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE: "/run/chalk/sync/sync-client.crt",
   CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE: "/run/chalk/sync/sync-client.key",
   CHALK_SYNC_PROVIDER_BRIDGE_CAFILE: "/run/chalk/sync/ca.crt",
+  CHALK_PRESENTING_ENABLED: "true",
 });
 
 env("sfu.env", {

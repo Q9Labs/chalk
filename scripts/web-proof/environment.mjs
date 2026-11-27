@@ -2,7 +2,7 @@ import { check } from "../prod-proof/runtime.mjs";
 
 export function childEnvironment(environment, { config, apiKey, invite, directory, runId, webUrl }) {
   return {
-    ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI", "CHALK_PROOF_JOIN_ORDER"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
+    ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI", "CHALK_PROOF_JOIN_ORDER", "CHALK_DATABASE_URL"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
     E2E_TELEMETRY_DISABLED: "1",
     CHALK_PROOF_WEBKIT: environment.CHALK_PROOF_WEBKIT === "1" ? "1" : "0",
     CHALK_PROOF_WEB_URL: webUrl,

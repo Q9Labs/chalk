@@ -22,6 +22,12 @@
       "kind": "env"
     },
     {
+      "id": "sfu-window-controller-env",
+      "suffix": "sfu-window-controller/controller.env",
+      "destination": "sfu-window-controller/controller.env",
+      "kind": "env"
+    },
+    {
       "id": "planetscale-sync-proof",
       "suffix": "planetscale-sync-proof.json",
       "destination": "evidence/planetscale-sync-proof.json",

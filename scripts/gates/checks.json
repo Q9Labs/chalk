@@ -854,6 +854,16 @@
       "sample": "0 failures in the audit sample."
     },
     {
+      "id": "workflow:ci.yml#build-renderer",
+      "owner": "Release chain",
+      "catches": "Document-renderer ZIP that does not build or does not match its manifest.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0,
+      "record": "unmeasured",
+      "sample": "No audit sample yet; the job is new on this branch."
+    },
+    {
       "id": "workflow:ci.yml#publish-managed-manifest",
       "owner": "Release chain",
       "catches": "A release manifest that cannot be published, so no deploy can start.",

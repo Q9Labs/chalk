@@ -36,7 +36,11 @@ type Config struct {
 
 	SyncToken     SyncTokenConfig
 	Transcription TranscriptionConfig
-	Webhooks      WebhookConfig
+	Presenting    PresentingConfig
+	// PresentingConfigError is the non-secret reason a non-production default-on presenting
+	// capability was disabled. Explicitly enabled or production configuration fails instead.
+	PresentingConfigError string
+	Webhooks              WebhookConfig
 }
 
 func Load() (Config, error) {

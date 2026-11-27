@@ -8,6 +8,8 @@ export const releaseContractRoots = [
   "scripts/recorder/release_io.py",
   "scripts/recorder/dispatcher_binding.py",
   "scripts/recorder/alchemy_dispatcher.py",
+  "scripts/recorder/alchemy_renderer.py",
+  "scripts/recorder/renderer_binding.py",
   "scripts/recorder/test_dispatcher_alchemy.py",
   "infrastructure",
   "features/scorecard",

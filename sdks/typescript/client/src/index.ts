@@ -4,6 +4,7 @@ export * from "./collaboration";
 export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
+export * from "./presenting";
 export { screenAnnotationFor } from "./screen-annotation";
 export type {
   ScreenAnnotationClient,

@@ -7,7 +7,7 @@ import { useSpaceClient } from "../context/space-client-context";
 import { useMeasuredRef } from "../frame/measurement";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
-import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
 import { canShareScreenNatively } from "../media/native-screen-share";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
@@ -19,6 +19,7 @@ import { SheetGroup, SheetRow } from "../primitives/SheetGroup";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { playSound } from "../sounds/sounds";
 import { useStageView, type StageLayoutChoice } from "../stage/stage-view";
+import { presentNativeBoard } from "../whiteboard/board-presentation";
 import { useTheme } from "../theme/theme";
 import { durations, fixed, space, corners, fontSizes } from "../theme/tokens";
 
@@ -56,8 +57,8 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
   const canRaiseHand = useCan("raiseHand");
   const live = useConnection().status === "live";
   const canReact = useCan("sendReaction") && live;
-  const canManageBoard = useCan("manageWhiteboard");
   const canPublishScreen = useCan("publishScreen");
+  const canDrawBoard = useCanDrawWhiteboard();
   const screen = useMedia().local.screen.state;
   const sharingScreen = screen === "enabled" || screen === "requesting";
 
@@ -103,27 +104,22 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
             testID="more.screenShare"
           />
         ) : null}
-        <SheetRow
-          icon="pen"
-          label="Board"
-          onPress={() => {
-            onClose();
-            const transport = client.whiteboard.transport();
-            if (!transport) {
-              fail("The board is unavailable in this call.")();
-              return;
-            }
-            void transport
-              .startSceneSubscription()
-              .then(async () => {
-                if (canManageBoard) await transport.setPresentation?.(true);
-                stage.setBoardOpen(true);
-                stage.showContent();
-              })
-              .catch(fail("Couldn’t open the board. Try again."));
-          }}
-          testID="more.board"
-        />
+        {canDrawBoard ? (
+          <SheetRow
+            icon="pen"
+            label="Board"
+            onPress={() => {
+              onClose();
+              const transport = client.whiteboard.transport();
+              if (!transport) {
+                fail("The board is unavailable in this call.")();
+                return;
+              }
+              void presentNativeBoard(client, stage, transport).catch(fail("Couldn’t open the board. Try again."));
+            }}
+            testID="more.board"
+          />
+        ) : null}
         <RecordingRow onDone={onClose} />
         <ChatRow onPress={onOpenChat} />
         <SheetRow end={<PeopleCount count={people} />} icon="users" label="People" onPress={onOpenPeople} testID="more.people" />

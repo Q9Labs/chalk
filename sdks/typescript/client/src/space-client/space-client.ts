@@ -12,6 +12,7 @@ class PromiseSpaceClient implements SpaceClient {
   readonly reactions;
   readonly recording;
   readonly whiteboard;
+  readonly presenting;
   readonly telemetry;
   readonly #core: SpaceClientCore;
   readonly #runtime: ManagedRuntime.ManagedRuntime<SpaceClientCoreService, never>;
@@ -35,6 +36,7 @@ class PromiseSpaceClient implements SpaceClient {
     this.reactions = toPromiseController(this.#runtime, controllers.reactions);
     this.recording = toPromiseController(this.#runtime, controllers.recording);
     this.whiteboard = toPromiseController(this.#runtime, controllers.whiteboard);
+    this.presenting = toPromiseController(this.#runtime, controllers.presenting);
   }
 
   join = (options?: Parameters<SpaceClient["join"]>[0]): Promise<void> => this.#runtime.runPromise(this.#core.join(options));

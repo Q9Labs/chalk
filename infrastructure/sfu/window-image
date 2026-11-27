@@ -52,7 +52,7 @@ environment_values() {
 # The unit has no [Install] section, so only window-boot starts the node, after it has written the settings.
 render_templates() {
   local out="$1" revision="$2" image_id="$3"
-  sed -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" -e "s|__UDP_BUFFER__|${udp_buffer}|" \
+  sed -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__MEDIA_TCP_PORT__|${media_tcp_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" -e "s|__UDP_BUFFER__|${udp_buffer}|" \
     -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__||" \
     "${node_dir}/sfu.env.in" >"${out}/sfu.env.template"
   sed -e "s|__IMAGE__|${image_id}|" \
@@ -75,14 +75,14 @@ operator_cidr() {
 # render_cloud_init renders node/cloud-init.yaml.tftpl the way OpenTofu does, for its two loops. The ports and the
 # UDP buffer come from the node table. It is the production bootstrap, unchanged.
 render_cloud_init() {
-  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v media_tcp_port="$media_tcp_port" -v udp_buffer="$udp_buffer" '
     /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
     /^%\{ endfor ~\}$/ {
       count = split(list, addresses, ",")
       for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
       looping = 0; next
     }
-    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{media_tcp_port\}/, media_tcp_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
   ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
@@ -144,7 +144,6 @@ build() {
   done
   [[ "$(node_table --arg size "$size" '.sizes[$size] != null')" == true ]] || die "size ${size} is not a measured size in ${sfu_table}"
   need doctl docker jq openssl ssh ssh-keygen curl git awk
-  doctl account get >/dev/null || die "doctl is not signed in"
   [[ -r "$SFU_SSH_KEY" ]] || die "no readable SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY to the operator key"
 
   environment_values "$environment"
@@ -311,7 +310,6 @@ verify() {
     esac
   done
   need doctl jq openssl curl nc
-  doctl account get >/dev/null || die "doctl is not signed in"
   environment_values "$environment"
   dir="${CHALK_SFU_PRIVATE_DIR}/${environment}"
   [[ -n "$revision" ]] || revision="$(jq -r .revision "${dir}/window-image-${snapshot_id}.json" 2>/dev/null)" ||
@@ -331,7 +329,7 @@ verify() {
   echo "==> creating a clone of ${snapshot_id}"
   doctl compute tag create "$tag" >/dev/null
   firewall_id="$(doctl compute firewall create --name "$tag" --tag-names "$tag" --output json \
-    --inbound-rules "protocol:tcp,ports:22,address:${operator} protocol:tcp,ports:${control_port},address:${operator} protocol:tcp,ports:${media_port},address:${operator}" \
+    --inbound-rules "protocol:tcp,ports:22,address:${operator} protocol:tcp,ports:${control_port},address:${operator} protocol:tcp,ports:${media_port},address:${operator} protocol:tcp,ports:${media_tcp_port},address:${operator}" \
     --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" |
     jq -er '.[0].id | select(type == "string" and length > 0)')"
   # The verification source must be allowed by the image's existing host
@@ -355,6 +353,7 @@ verify() {
     '.revision == $revision and .draining == false and .allocations == 0 and .host.udpReceiveBufferBytes >= $buffer and .host.udpSendBufferBytes >= $buffer' <<<"$ready")" == true ]] \
     || die "the clone's node reports ${ready}; want revision ${revision}, no calls and 8 MiB buffers"
   nc -z -w 5 "$address" "$media_port" || die "the media port ${media_port}/tcp is closed on the clone"
+  nc -z -w 5 "$address" "$media_tcp_port" || die "the media port ${media_tcp_port}/tcp is closed on the clone"
   if nc -z -w 5 "$address" 22; then die "port 22 answers on the clone; SSH must be off"; fi
   echo "verified snapshot ${snapshot_id}: revision ${revision} ready, certificate accepted, SSH closed"
   echo "not proved here: the announced address (readyz does not show it) and a real call; run the canary against the first node from this image"

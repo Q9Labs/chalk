@@ -9,7 +9,7 @@ const ipad = devices["iPad Pro 11"];
 const webkitEngine = web({ browser: "webkit", viewport: ipad.viewport, userAgent: ipad.userAgent, initScripts: [webMediaFixture(1, { permission: "granted" })] });
 
 export default {
-  tests: ["tests/call.e2e.ts", "tests/board.e2e.ts", "tests/pre-join.e2e.ts"],
+  tests: ["tests/call.e2e.ts", "tests/board.e2e.ts", "tests/pre-join.e2e.ts", "tests/presenting.e2e.ts"],
   targets: [
     { name: "web", engine, app: { url: process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}` } },
     ...(process.env.CHALK_PROOF_WEBKIT === "1" ? [{ name: "webkit-ipad", engine: webkitEngine, app: { url: process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}` } }] : []),

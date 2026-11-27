@@ -366,8 +366,21 @@ where attachment.tenant_id = $1
         attachment.status = 'attached'
         or (
             attachment.status = 'ready'
-            and attachment.participant_id = participant.id
-            and attachment.participant_generation = participant.generation
+            and attachment.expires_at > now()
+            and (
+                (
+                    attachment.participant_id = participant.id
+                    and attachment.participant_generation = participant.generation
+                )
+                or exists (
+                    select 1
+                    from presenting_documents document
+                    where document.tenant_id = attachment.tenant_id
+                        and document.space_id = attachment.space_id
+                        and document.episode_id = attachment.episode_id
+                        and document.attachment_id = attachment.attachment_id
+                )
+            )
         )
     )
 `

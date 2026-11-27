@@ -1,5 +1,6 @@
 export { ChalkWhiteboardViewBounds } from "./view-bounds";
 
+export { canDrawWhiteboard, type ChalkWhiteboardDrawAccess } from "./draw-access";
 export { createChalkWhiteboardV1FileDownloadTransport, type ChalkWhiteboardV1FileDownloadTransportOptions } from "./file-download-transport";
 export * from "./types";
 export { ChalkWhiteboardV1Client } from "./v1-client";

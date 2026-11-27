@@ -142,6 +142,8 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       fetch,
     }),
     replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
+    // RTKWebRTC's default iOS encoder factory has no simulcast encoder wrapper; a multi-encoding camera can negotiate but send no video.
+    cameraSimulcast: Platform.OS !== "ios",
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       return connection as unknown as globalThis.RTCPeerConnection;

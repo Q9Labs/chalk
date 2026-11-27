@@ -1,8 +1,10 @@
-import type { ActiveReaction, AdmissionPolicyTarget, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
-import { createPreviewMediaDevices } from "./preview-devices";
+import type { ActiveReaction, AdmissionPolicyTarget, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { createPreviewPresenting } from "./preview-presenting";
+import { createSnapshot } from "./preview-snapshot";
 import { applyRosterCommand } from "./preview-roster-commands";
 import { callEvents, createSpaceClient } from "@q9labsai/chalk-client";
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
+export { createSnapshot } from "./preview-snapshot";
 
 export type PreviewClientCommand =
   | { readonly type: "join" }
@@ -176,6 +178,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       setPolicy: async (policy: OfflineActionsPolicy) => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, policy } })),
     },
     whiteboard: { transport: () => null },
+    presenting: createPreviewPresenting(),
     telemetry: { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
@@ -198,29 +201,6 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   } satisfies SpaceClient;
 
   return Object.assign(client, { setSnapshot, updateSnapshot, dispatch });
-}
-
-export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): SpaceSnapshot {
-  return {
-    connection: { status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false },
-    self: { participantId: null, displayName: null, role: null, capabilities, handRaised: false, can: (capability) => capabilities.includes(capability) },
-    participants: { roster: [], admissionQueue: [], admissionPolicy: null },
-    media: {
-      devices: {
-        ...createPreviewMediaDevices(),
-      },
-      selection: { microphone: "preview-microphone", camera: "preview-camera", speaker: "preview-speaker" },
-      local: { microphone: { source: "microphone", state: "disabled", track: null }, camera: { source: "camera", state: "disabled", track: null }, screen: { source: "screen", state: "disabled", track: null } },
-      remote: [],
-      screenShare: { source: "screen", state: "disabled", track: null },
-      incomingRequests: [],
-    },
-    chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
-    reactions: { active: [] },
-    recording: { current: null },
-    offline: { pending: [], decisionNeeded: false, policy: "ask" },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
-  };
 }
 
 function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientCommand): SpaceSnapshot {
