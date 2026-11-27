@@ -322,7 +322,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "application/vnd.oasis.opendocument.text",
         "application/vnd.oasis.opendocument.spreadsheet",
-        "application/vnd.oasis.opendocument.presentation"
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.apple.keynote",
+        "application/x-iwork-keynote-sffkey"
       ],
       "chatCursor" => %{
         "exactFields" => ["after_sequence", "retained_floor_sequence"],
@@ -1491,7 +1493,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.oasis.opendocument.text",
   "application/vnd.oasis.opendocument.spreadsheet",
-  "application/vnd.oasis.opendocument.presentation"
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.apple.keynote",
+  "application/x-iwork-keynote-sffkey"
 ] and valid_positive_integer?(byte_length) and byte_length <= @limits["chatAttachmentMaxBytes"]
   defp valid_chat_attachment?(_attachment), do: false
   defp valid_chat_send_result?(%{"outcome" => "accepted",
