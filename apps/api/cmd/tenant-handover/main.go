@@ -47,7 +47,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if cfg.API.ServicePrincipal.ID == "" {
+	if cfg.API.DashboardServiceID == "" {
 		return errors.New("dashboard service ID is not configured")
 	}
 	url := os.Getenv("CHALK_DATABASE_URL")
@@ -66,7 +66,7 @@ func run() error {
 	var result any
 	switch operation {
 	case "start":
-		result, err = startHandover(ctx, service, actor, *tenant, *email, *requestKey, cfg.API.ServicePrincipal.ID, *expiresIn)
+		result, err = startHandover(ctx, service, actor, *tenant, *email, *requestKey, cfg.API.DashboardServiceID, *expiresIn)
 	case "cancel":
 		result, err = cancelHandover(ctx, service, actor, *tenant, *handover)
 	default:
