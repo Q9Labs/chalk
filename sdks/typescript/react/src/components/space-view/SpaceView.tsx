@@ -299,6 +299,7 @@ export function SpaceView({
     ...(connectionPhase.kind === "reconnected" ? [reconnectedToast(connectionPhase.awayMs)] : []),
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
     ...microphoneNotice.toasts,
+    ...(media.audioPlayback.blocked ? [{ id: "audio-playback-blocked", duration: Infinity, dismissible: false, message: "Your browser paused the sound. Click anywhere to hear the class." }] : []),
   ];
   const dismissToast = (id: string) => {
     if (id.startsWith("time-limit-")) dismissLimitWarning();
@@ -459,11 +460,7 @@ export function SpaceView({
                   ) : null}
                 </ToastStack>
               }
-              mediaOutput={
-                <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-(--elevation-toast)">
-                  <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
-                </div>
-              }
+              mediaOutput={<AudioOutput />}
               overlays={
                 <>
                   <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onReportProblem && !reportUnavailableReason ? onOpenReportProblem : undefined} />

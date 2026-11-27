@@ -16,6 +16,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
       remote: [],
       screenShare: { source: "screen", state: "disabled", track: null },
       incomingRequests: [],
+      audioPlayback: { blocked: false },
     },
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },

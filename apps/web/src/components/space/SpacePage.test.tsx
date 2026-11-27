@@ -16,6 +16,11 @@ const restoreCanvas = vi.hoisted(() => {
   return () => Object.defineProperty(HTMLCanvasElement.prototype, "getContext", descriptor);
 });
 afterAll(restoreCanvas);
+class RunningAudioContext {
+  readonly state = "running";
+  async close() {}
+}
+
 const marker = { space: "design-lab", episodeId: "33333333-3333-4333-8333-333333333333", participantId: "44444444-4444-4444-8444-444444444444", participantGeneration: 1, arrivalHandle: "initial-arrival", mediaProof: "stale-proof", displayName: "Ada", microphone: false, camera: false };
 const freshArrival = { state: "pending", arrival_handle: "new-arrival", identity: "guest", retry_after: 60, space: { name: "Design Lab", slug: "design-lab", admission_mode: "approval" } };
 const requests: string[] = [];
@@ -25,6 +30,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   // Vitest leaves Node's localStorage in place when it exists. Use the browser storage.
   vi.stubGlobal("localStorage", jsdom.window.localStorage);
+  vi.stubGlobal("AudioContext", RunningAudioContext);
   requests.length = 0;
   window.name = "";
   sessionStorage.clear();
@@ -77,6 +83,57 @@ it("joins fresh when window.open inherits a copy of the reload marker", async ()
   await entry("access.media_proof_rejected");
   await expectMessage("Asking to join Design Lab");
   expect(requests).toEqual(["fresh"]);
+});
+
+it("keeps the lobby open when only a speaker was remembered on a devices-off rejoin", async () => {
+  localStorage.setItem("chalk.display-name", "Ada");
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: true, camera: true, speakerDeviceId: "speaker", inputsChosen: false }));
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect(requests).toEqual([]);
+});
+
+it("keeps the lobby open when reload autoplay evidence is blocked", async () => {
+  vi.stubGlobal(
+    "AudioContext",
+    class {
+      readonly state = "suspended";
+      async close() {}
+    },
+  );
+  localStorage.setItem("chalk.display-name", "Ada");
+  writeReloadRejoin(sessionStorage, marker);
+  await entry("access.media_proof_rejected");
+  await expectMessage("Rejoin");
+  expect(requests).toEqual([]);
+  const join = [...document.querySelectorAll("button")].find((button) => button.textContent === "Rejoin");
+  expect(join).toBeDefined();
+  await act(async () => join?.click());
+  await vi.waitFor(() => expect(requests).toEqual(["restore", "replace"]));
+  expect(requests).not.toContain("fresh");
+  await expectMessage("Join as a new participant");
+  const joinFresh = [...document.querySelectorAll("button")].find((button) => button.textContent === "Join as a new participant");
+  await act(async () => joinFresh?.click());
+  await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
+});
+
+it("keeps the lobby open in an automated browser when autoplay evidence is blocked", async () => {
+  Object.defineProperty(globalThis.navigator, "webdriver", { configurable: true, value: true });
+  try {
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        readonly state = "suspended";
+        async close() {}
+      },
+    );
+    writeReloadRejoin(sessionStorage, marker);
+    await entry("access.media_proof_rejected");
+    await expectMessage("Rejoin");
+    expect(requests).toEqual([]);
+  } finally {
+    Reflect.deleteProperty(globalThis.navigator, "webdriver");
+  }
 });
 
 async function expectMessage(message: string) {

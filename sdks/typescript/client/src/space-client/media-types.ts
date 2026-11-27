@@ -1,5 +1,6 @@
 import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkIncomingMediaRequest } from "../collaboration/types";
+import type { AudioPlaybackSlice } from "./audio-playback";
 
 export type MediaDevice = {
   readonly deviceId: string;
@@ -41,6 +42,8 @@ export type MediaSlice = {
     readonly publicationId?: string;
   };
   readonly incomingRequests: readonly IncomingMediaRequest[];
+  /** Browser playback evidence for registered remote-audio elements and AudioContexts. */
+  readonly audioPlayback: AudioPlaybackSlice;
   /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
   readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];
   /** How well this person's own link carries the call, steadied over several windows. Omitted before the first window closes. */

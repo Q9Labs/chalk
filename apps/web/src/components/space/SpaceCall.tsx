@@ -1,13 +1,14 @@
 import { canExtendCall, reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
-import { Chalk, reportDiagnostics } from "@q9labsai/chalk-react";
+import { Chalk, ReportProblemDialog, StatusSurface, reportDiagnostics, statusFailure } from "@q9labsai/chalk-react";
 import { callAnnotation } from "../../lib/screen-annotation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { PublicSpaceAdmission } from "../../lib/chalk-access";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps } from "react";
+import { publicAPIBaseURL, type PublicSpaceAdmission } from "../../lib/chalk-access";
 import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { onPageFailure } from "../../lib/chunkReload";
 import { CallErrorBoundary } from "./CallErrorBoundary";
 import { problemReporter, type ReportProblem } from "../../lib/send-problem-report";
+import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
 
@@ -16,8 +17,6 @@ export { ReportProblemDialog, reportDiagnostics, StatusSurface, statusFailure } 
 
 export function LocalSpace({
   admission,
-  reportsAvailable,
-  reportUnavailableReason,
   onOpenReportProblem,
   displayName,
   defaults,
@@ -26,8 +25,6 @@ export function LocalSpace({
   onEnded,
 }: {
   readonly admission: PublicSpaceAdmission;
-  readonly reportsAvailable: boolean;
-  readonly reportUnavailableReason?: string;
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly displayName: string;
   readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
@@ -48,6 +45,11 @@ export function LocalSpace({
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const tenantId = session.reloadMarker().tenantId;
+  const subscribeReportAccess = useCallback((listener: () => void) => session.subscribe(listener), [session]);
+  const reportAccessExpiry = useCallback(() => session.mediaExpiresAt(), [session]);
+  const reportExpiresAt = useSyncExternalStore(subscribeReportAccess, reportAccessExpiry, reportAccessExpiry);
+  const reportExpired = useReportCredentialExpired(reportExpiresAt);
+  const reportsAvailable = useProblemReports(credential.apiBaseURL, tenantId);
   const annotation = useMemo(() => callAnnotation({ apiBaseUrl: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, client }), [credential.apiBaseURL, tenantId, session, client]);
   const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [credential.apiBaseURL, tenantId, session, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
@@ -74,6 +76,7 @@ export function LocalSpace({
         endReason: client.getSnapshot().connection.episodeEndReason,
         reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }), telemetry: client.telemetry }),
         reportExpiresAt: session.mediaExpiresAt(),
+        reportKey: reportSessionKey(session.reloadMarker()),
       });
     },
     [client, onEnded, release, credential.apiBaseURL, tenantId, session, offerSignUp, spaceName],
@@ -135,7 +138,7 @@ export function LocalSpace({
           onColorSchemeChange={setPreference}
           client={client}
           onReportProblem={reportsAvailable ? reportProblem : undefined}
-          reportUnavailableReason={reportUnavailableReason}
+          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
           onOpenReportProblem={() => onOpenReportProblem(reportProblem, reportDiagnostics(spaceName ?? "Call", connection))}
           displayName={displayName}
           defaults={defaults}
@@ -157,4 +160,68 @@ export function LocalSpace({
       </CallErrorBoundary>
     </main>
   );
+}
+
+export function EndedStatusSurface({
+  call,
+  endAction,
+  theme,
+  rejoinDisabled,
+  onRejoin,
+  onHome,
+  onOpenReportProblem,
+}: {
+  readonly call: EndedCall;
+  readonly endAction?: ComponentProps<typeof StatusSurface>["endAction"];
+  readonly theme?: ComponentProps<typeof StatusSurface>["theme"];
+  readonly rejoinDisabled: boolean;
+  readonly onRejoin: () => void;
+  readonly onHome: () => void;
+  readonly onOpenReportProblem: () => void;
+}) {
+  const reportExpired = useReportCredentialExpired(call.reportExpiresAt);
+  const reportsAvailable = useProblemReports(publicAPIBaseURL(), call.tenantId);
+  return (
+    <StatusSurface
+      phase={call.phase}
+      episodeEndReason={call.endReason}
+      endAction={endAction}
+      callName={call.callName}
+      {...statusFailure(call.failure)}
+      theme={theme}
+      onReportProblem={reportsAvailable && call.reportProblem && !reportExpired ? onOpenReportProblem : undefined}
+      rejoinDisabled={rejoinDisabled}
+      onRejoin={onRejoin}
+      onHome={onHome}
+    />
+  );
+}
+
+export function SpaceReportProblemDialog({
+  tenantId,
+  reportExpiresAt,
+  reportSession,
+  reportKey: endedReportKey,
+  ...props
+}: Omit<ComponentProps<typeof ReportProblemDialog>, "unavailableReason"> & {
+  readonly tenantId: string | undefined;
+  readonly reportExpiresAt: number | undefined;
+  readonly reportSession?: PublicSpaceAdmission["session"];
+  readonly reportKey?: string;
+}) {
+  const subscribeReportSession = useCallback((listener: () => void) => reportSession?.subscribe(listener) ?? (() => undefined), [reportSession]);
+  const liveReportExpiresAt = useSyncExternalStore(
+    subscribeReportSession,
+    () => reportSession?.mediaExpiresAt(),
+    () => reportSession?.mediaExpiresAt(),
+  );
+  const reportExpired = useReportCredentialExpired(reportSession ? liveReportExpiresAt : reportExpiresAt);
+  const reportsAvailable = useProblemReports(publicAPIBaseURL(), tenantId, props.open);
+  const reportIdentity = reportSession?.reloadMarker();
+  const dialogKey = reportIdentity ? reportSessionKey(reportIdentity) : (endedReportKey ?? "ended");
+  return <ReportProblemDialog key={dialogKey} {...props} unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined} />;
+}
+
+function reportSessionKey(marker: ReturnType<PublicSpaceAdmission["session"]["reloadMarker"]>): string {
+  return `${marker.participantId}:${marker.participantGeneration}`;
 }

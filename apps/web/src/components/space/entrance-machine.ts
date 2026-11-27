@@ -30,6 +30,7 @@ export type EndedCall = {
   readonly release: () => Promise<void>;
   readonly reportProblem?: ReportProblem;
   readonly reportExpiresAt?: number;
+  readonly reportKey?: string;
 };
 
 /** Gives an arrival back to the server. Calls that overlap share one request, and a failed one can be tried again. */

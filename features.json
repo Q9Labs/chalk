@@ -119,6 +119,10 @@
         "sdks/typescript/client/src/camera-effects-provider.ts",
         "sdks/typescript/client/src/camera-effects.ts",
         "sdks/typescript/client/src/media",
+        "sdks/typescript/client/src/space-client/audio-playback.ts",
+        "sdks/typescript/client/src/space-client/audio-playback.test.ts",
+        "sdks/typescript/client/src/space-client/camera-state.ts",
+        "sdks/typescript/client/src/space-client/media-audio-playback.ts",
         "sdks/typescript/client/src/space-client/media-controller.ts",
         "sdks/typescript/client/src/space-client/media-convergence.test.ts",
         "sdks/typescript/client/src/space-client/media-device-selection.ts",
@@ -650,6 +654,7 @@
         "apps/api/internal/httpapi/problem_reports.go",
         "apps/api/internal/problemreports",
         "apps/web/src/lib/problem-reports.test.ts",
+        "apps/web/src/lib/problem-reports.test.tsx",
         "apps/web/src/lib/problem-reports.ts",
         "apps/web/src/lib/send-problem-report.ts"
       ]

@@ -1,5 +1,5 @@
-import { canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, entranceStep, verifiedSpaceInviteLink, type ChalkPublicClient, type PublicSpaceArrival } from "@q9labsai/chalk-client";
-import { admitPublicSpace } from "../../lib/chalk-access";
+import { canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, entranceStep, verifiedSpaceInviteLink, type ChalkPublicClient, type PublicSpaceArrival, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { admitPublicSpace, resumePublicSpace } from "../../lib/chalk-access";
 import type { ArrivalOutcome, WaitingArrival } from "./entrance-machine";
 import { declinedFailure, neutralSpaceError } from "./entry-failure";
 
@@ -53,4 +53,16 @@ export async function arrivalEvent(client: ChalkPublicClient, arrival: PublicSpa
       return { type: "admitted", joined: { ...admitPublicSpace(client, await again(arrival.arrival_handle)), ...link } };
     }
   }
+}
+
+/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
+export async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
+  if (!inviteToken) throw new Error(neutralSpaceError);
+  return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });
+}
+
+/** A click in the reload lobby resumes the arrival the marker already names. */
+export async function resumeReloadOutcome(client: ChalkPublicClient, marker: ReloadRejoinMarker, slug: string | undefined): Promise<ArrivalOutcome> {
+  const admission = await resumePublicSpace(client, marker, slug);
+  return { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } };
 }

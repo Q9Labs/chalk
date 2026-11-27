@@ -5,6 +5,8 @@ export type RememberedDevices = {
   readonly microphoneDeviceId?: string;
   readonly cameraDeviceId?: string;
   readonly speakerDeviceId?: string;
+  /** False when only the speaker was chosen on a devices-off rejoin; older saved objects omit this and count as chosen. */
+  readonly inputsChosen?: boolean;
 };
 
 const STORAGE_KEY = "chalk.prejoin-devices";
@@ -34,7 +36,7 @@ export async function listedRememberedDevices(devices: RememberedDevices): Promi
     const ofKind = listed.filter((device) => device.kind === kind && device.deviceId !== "");
     return id !== undefined && (ofKind.length === 0 || ofKind.some((device) => device.deviceId === id));
   };
-  const { microphoneDeviceId, cameraDeviceId, speakerDeviceId, ...toggles } = devices;
+  const { microphoneDeviceId, cameraDeviceId, speakerDeviceId, inputsChosen: _inputsChosen, ...toggles } = devices;
   return {
     ...toggles,
     ...(present(microphoneDeviceId, "audioinput") ? { microphoneDeviceId } : {}),
@@ -45,14 +47,14 @@ export async function listedRememberedDevices(devices: RememberedDevices): Promi
 
 function parseRememberedDevices(value: unknown): RememberedDevices | null {
   if (typeof value !== "object" || value === null) return null;
-  const field = (key: string): unknown => Reflect.get(value, key);
-  const id = (key: string): string | undefined => {
-    const candidate = field(key);
-    return typeof candidate === "string" && candidate !== "" ? candidate : undefined;
-  };
-  const microphone = field("microphone");
-  const camera = field("camera");
+  const { microphone, camera, microphoneDeviceId, cameraDeviceId, speakerDeviceId, inputsChosen } = value as Partial<RememberedDevices>;
   if (typeof microphone !== "boolean" || typeof camera !== "boolean") return null;
-  const [microphoneDeviceId, cameraDeviceId, speakerDeviceId] = [id("microphoneDeviceId"), id("cameraDeviceId"), id("speakerDeviceId")];
-  return { microphone, camera, ...(microphoneDeviceId ? { microphoneDeviceId } : {}), ...(cameraDeviceId ? { cameraDeviceId } : {}), ...(speakerDeviceId ? { speakerDeviceId } : {}) };
+  return {
+    microphone,
+    camera,
+    ...(typeof microphoneDeviceId === "string" && microphoneDeviceId ? { microphoneDeviceId } : {}),
+    ...(typeof cameraDeviceId === "string" && cameraDeviceId ? { cameraDeviceId } : {}),
+    ...(typeof speakerDeviceId === "string" && speakerDeviceId ? { speakerDeviceId } : {}),
+    ...(typeof inputsChosen === "boolean" ? { inputsChosen } : {}),
+  };
 }

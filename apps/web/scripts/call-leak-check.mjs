@@ -81,6 +81,8 @@ async function openJourney({ browser, boardCss }) {
 async function loadCall(page, origin) {
   await page.goto(`${origin}/src/call-states/performance.html?state=perf-six`, { waitUntil: "load" });
   await page.getByRole("button", { name: "Leave call", exact: true }).waitFor();
+  // The fixture opens already inside a call; a real person reached it through Join. Make the same activation explicit so a sticky autoplay notice can recover instead of looking like retained DOM.
+  await page.mouse.click(5, 5);
   await page.waitForTimeout(1000);
 }
 

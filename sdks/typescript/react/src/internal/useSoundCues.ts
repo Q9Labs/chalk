@@ -8,7 +8,7 @@ import { createSoundPlayer, diffSoundCues, type SoundCue, type SoundPlayer } fro
  * Plays the join / leave / message / hand-raise / reaction cues for snapshot changes on the
  * current client while `enabled`. Autoplay refusals are retried after the next user gesture.
  */
-export function useSoundCues(enabled: boolean, createPlayer: (options: { readonly outputDeviceId?: string }) => SoundPlayer = createSoundPlayer): (cue: SoundCue, failure?: ClientFailure) => void {
+export function useSoundCues(enabled: boolean, createPlayer: (options: { readonly outputDeviceId?: string; readonly observeAudioContext?: (context: AudioContext) => { readonly detach: () => void } }) => SoundPlayer = createSoundPlayer): (cue: SoundCue, failure?: ClientFailure) => void {
   const playerRef = useRef<SoundPlayer | null>(null);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
@@ -33,7 +33,7 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Own the sound player and client subscriptions; dispose audio, subscriptions and queued failure cues on replacement.
   useEffect(() => {
-    const player = createPlayerRef.current({ outputDeviceId });
+    const player = createPlayerRef.current({ outputDeviceId, observeAudioContext: enabled ? client.media.observeAudioContext : undefined });
     playerRef.current = player;
     let previous = client.getSnapshot();
     const seenParticipants = new Set(previous.participants.roster.map((participant) => participant.participantId));
@@ -63,7 +63,7 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
       failureTurn.current = undefined;
       pendingFailures.current.clear();
     };
-  }, [client, outputDeviceId, playFailure]);
+  }, [client, enabled, outputDeviceId, playFailure]);
   return useCallback(
     (cue: SoundCue, failure?: ClientFailure) => {
       if (cue === "error" && failure) return playFailure(failure);

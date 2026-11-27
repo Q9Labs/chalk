@@ -122,6 +122,7 @@ export type SelfSlice = {
   readonly can: (capability: Capability) => boolean;
 };
 export type { IncomingMediaRequest, LocalMedia, MediaDevice, MediaSlice, RemoteMedia, ScreenShareCapture, ScreenShareOptions, ScreenShareSurface } from "./media-types";
+export type { AudioContextObservation, AudioElementObservation, AudioPlaybackSlice } from "./audio-playback";
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
 export type ChatReactionInput = import("../collaboration/types").ChalkChatReactionInput;

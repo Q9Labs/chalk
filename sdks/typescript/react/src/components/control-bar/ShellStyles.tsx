@@ -1,3 +1,4 @@
+import { MEDIA_GLYPH_CSS, MEDIA_GLYPH_REDUCED_CSS } from "./media-glyph-css";
 import { PHONE_DOCK_CSS, phoneRules } from "./shell-phone-css";
 
 export function ShellStyles() {
@@ -123,38 +124,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-split > .chalk-shell-main {
   transition: transform 0.15s ease-out, color 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.chalk-shell-media-body {
-  opacity: 1;
-  transition: opacity 0.12s ease-out;
-}
-.chalk-shell-media-cut,
-.chalk-shell-media-slash {
-  stroke-dasharray: 1 1;
-  stroke-dashoffset: 1;
-  opacity: 0;
-  transition: stroke-dashoffset 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0s 0.18s;
-}
-.chalk-shell-media[data-slashed="true"] .chalk-shell-media-cut,
-.chalk-shell-media[data-slashed="true"] .chalk-shell-media-slash {
-  stroke-dashoffset: 0;
-  opacity: 1;
-  transition: stroke-dashoffset 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0s;
-}
-.chalk-shell-media-trace {
-  opacity: 0;
-  stroke-dasharray: 0.24 0.76;
-  transition: opacity 0.12s ease-out;
-}
-.chalk-shell-media[data-busy="true"] .chalk-shell-media-body {
-  opacity: 0.4;
-}
-.chalk-shell-media[data-busy="true"] .chalk-shell-media-trace {
-  opacity: 1;
-  animation: chalk-shell-trace 1.1s linear infinite;
-}
-@keyframes chalk-shell-trace {
-  to {stroke-dashoffset: -1;}
-}
+${MEDIA_GLYPH_CSS}
 .chalk-shell-dock .chalk-shell-reactions-button {
   transition: transform 0.15s ease-out, background-color 0.18s ease-out, color 0.18s ease-out, box-shadow 0.18s ease-out;
 }
@@ -499,21 +469,14 @@ ${PHONE_DOCK_CSS}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-split button,
   .chalk-shell-split > .chalk-shell-main,
-  .chalk-shell-media-body,
-  .chalk-shell-media-cut,
-  .chalk-shell-media-slash,
-  .chalk-shell-media-trace,
   .chalk-shell-dock .chalk-shell-reactions-button,
   .chalk-shell-reactions-button svg {
     transition: none;
   }
-  .chalk-shell-media[data-busy="true"] .chalk-shell-media-trace {
-    animation: none;
-    opacity: 0;
-  }
   .chalk-shell-reactions-button[data-hand-raised] .chalk-shell-reactions-hand {
     animation: none;
   }
+  ${MEDIA_GLYPH_REDUCED_CSS}
 }
 .chalk-shell-more-actions {
   display: flex;

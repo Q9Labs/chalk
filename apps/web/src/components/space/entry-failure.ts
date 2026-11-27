@@ -1,4 +1,4 @@
-import { ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "@q9labsai/chalk-client";
+import { AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "@q9labsai/chalk-client";
 
 export type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string; readonly reason?: "declined" | "expired" };
 
@@ -26,4 +26,11 @@ export function entryFailure(cause: unknown): EntryFailure {
   if (globalThis.navigator?.onLine === false) return { message: "You’re offline. Reconnect, then try again.", retryable: true };
   if (cause && typeof cause === "object" && "status" in cause && typeof cause.status === "number" && cause.status >= 500) return { message: "Chalk is having trouble right now. Try again in a minute.", retryable: true };
   return { message: "Couldn’t reach Chalk. Check your connection, then try again.", retryable: true };
+}
+
+/** What the visitor can do after a reload resume cannot use its one-shot marker. */
+export function resumeFailure(cause: unknown): EntryFailure {
+  if (cause instanceof AccessMediaProofRejectedError) return { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" };
+  if (cause instanceof MediaUnavailableError) return entryFailure(cause);
+  return { message: "Could not return to the Episode. Check your access before joining again.", retryable: true };
 }

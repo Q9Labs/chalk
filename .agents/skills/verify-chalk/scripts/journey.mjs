@@ -87,24 +87,25 @@ export async function runJourney(journey, body) {
   let failure;
   const shot = (person, label) => person.page.screenshot({ path: join(out, "screenshots", `${person.name}-${label}.png`) });
 
-  const launch = (browserEngine, display) => {
+  const launch = (browserEngine, display, autoplayPolicy = "no-user-gesture-required") => {
     const tabTitle = typeof display === "string" ? display : undefined;
-    const key = browserEngine === webkit ? "webkit" : display ? `chromium+display:${display}` : "chromium";
+    const key = `${browserEngine === webkit ? "webkit" : display ? `chromium+display:${display}` : "chromium"}:${autoplayPolicy}`;
     if (!browsers.has(key)) {
-      const args = ["--autoplay-policy=no-user-gesture-required", ...(display && !tabTitle ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
+      const args = [`--autoplay-policy=${autoplayPolicy}`, ...(display && !tabTitle ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--enable-usermedia-screen-capturing"] : [])];
       if (tabTitle) args.push(`--auto-select-tab-capture-source-by-title=${tabTitle}`);
       browsers.set(key, browserEngine.launch({ headless: true, ...(browserEngine === chromium ? { args, ...(tabTitle ? { channel: "chromium" } : {}) } : {}) }));
     }
     return browsers.get(key);
   };
 
-  const person = async (name, fixture, { device = "desktop", engine: requestedEngine, display = false, permission = "prompt", camera, encodings, record = true } = {}) => {
+  const person = async (name, fixture, { device = "desktop", engine: requestedEngine, display = false, permission = "prompt", camera, encodings, record = true, autoplayPolicy, initScript } = {}) => {
     const profile = deviceProfiles[device];
     if (!profile) throw new Error(`unknown device ${device}`);
-    const browser = await launch(requestedEngine === "webkit" ? webkit : profile.engine, display);
+    const browser = await launch(requestedEngine === "webkit" ? webkit : profile.engine, display, autoplayPolicy);
     const { viewport } = profile.options;
     const context = await browser.newContext({ ...profile.options, ...(record ? { recordVideo: { dir: join(out, "video"), size: viewport } } : {}) });
     await context.addInitScript(webMediaFixture(fixture, { permission, camera, encodings }));
+    if (initScript) await context.addInitScript(initScript);
     const page = await context.newPage();
     page.on("console", (message) => logs.console.push({ who: name, type: message.type(), text: message.text().slice(0, 300), url: message.location().url.replace(/[?#].*/, "") }));
     page.on("pageerror", (error) => logs.console.push({ who: name, type: "pageerror", text: String(error.message).slice(0, 300) }));

@@ -53,14 +53,16 @@ export interface SoundPlayer {
 }
 
 /** A player belongs to one mounted call and closes its context on disposal. */
-export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?: string } = {}): SoundPlayer {
+export function createSoundPlayer({ outputDeviceId, observeAudioContext }: { readonly outputDeviceId?: string; readonly observeAudioContext?: (context: AudioContext) => { readonly detach: () => void } } = {}): SoundPlayer {
   let context: AudioContext | null = null;
+  let contextObservation: { readonly detach: () => void } | null = null;
   let disposed = false;
   const unlock = () => {
     if (disposed || typeof AudioContext === "undefined") return;
     const created = !context;
     try {
       context ??= new AudioContext();
+      contextObservation ??= observeAudioContext?.(context) ?? null;
       if (created && outputDeviceId && "setSinkId" in context && typeof context.setSinkId === "function") void Promise.resolve(context.setSinkId(outputDeviceId)).catch(() => undefined);
       if (context.state === "suspended") void context.resume().catch(() => undefined);
     } catch {
@@ -169,6 +171,8 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
         window.removeEventListener("click", unlock, true);
         window.removeEventListener("keydown", unlock, true);
       }
+      contextObservation?.detach();
+      contextObservation = null;
       if (context) void Promise.resolve(context.close()).catch(() => undefined);
     },
   };
