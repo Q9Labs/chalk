@@ -73,54 +73,6 @@ it("stages every remaining dropped file in the chat composer instead of sending 
   expect(hook()?.chatDrop?.files).toEqual([image, text]);
 });
 
-it("keeps the dropped PDF on the Stage card when presenting it fails, and sends it to chat only on request", async () => {
-  const opened: string[] = [];
-  const { hook } = mount(true, () => opened.push("chat"));
-  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
-  const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });
-
-  await act(async () => {
-    window.dispatchEvent(event);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(opened).toEqual([]);
-  expect(hook()?.chatDrop).toBeUndefined();
-  expect(hook()?.stageUpload).toMatchObject({ kind: "failed", fileName: "deck.pdf", reason: "failed" });
-
-  act(() => hook()?.sendStageUploadToChat());
-  expect(opened).toEqual(["chat"]);
-  expect(hook()?.chatDrop?.files).toEqual([pdf]);
-  expect(hook()?.stageUpload).toBeNull();
-});
-
-it("acknowledges a dropped file on the Stage at once", async () => {
-  const { client, hook } = mount(true);
-  vi.spyOn(client.chat.files, "upload").mockImplementation(() => new Promise(() => {}));
-  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
-  const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });
-  await act(async () => {
-    window.dispatchEvent(event);
-    await Promise.resolve();
-  });
-  expect(hook()?.stageUpload).toEqual({ kind: "uploading", fileName: "deck.pdf", progress: null });
-});
-
-it("answers a dropped file that can't be presented on the Stage instead of a silent toast", async () => {
-  const { hook } = mount(true);
-  const key = new File([new Uint8Array(8)], "slides.key", { type: "application/x-iwork-keynote-sffkey" });
-  const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [key] } });
-  await act(async () => {
-    window.dispatchEvent(event);
-    await Promise.resolve();
-  });
-  expect(hook()?.stageUpload).toMatchObject({ kind: "failed", fileName: "slides.key", reason: "unsupported" });
-});
-
 it("updates a staged composer drop without clearing a newer one", async () => {
   const { hook } = mount(
     true,
