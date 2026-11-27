@@ -237,7 +237,17 @@ const PersonRow = memo(function PersonRow({ participant, device, isSelf, handNum
   return (
     <View style={styles.row} testID={`people.row.${participant.participantId}`}>
       <Face name={participant.displayName} />
-      <PersonName device={device} host={host} isSelf={isSelf} label={status ? `${participant.displayName}, ${status}` : participant.displayName} name={participant.displayName} participantId={participant.participantId} agent={participant.identityKind === "agent"} badgeTestID={`people.ai.${participant.participantId}`} description={participant.description} />
+      <PersonName
+        device={device}
+        host={host}
+        isSelf={isSelf}
+        label={status ? `${participant.displayName}, ${status}` : participant.displayName}
+        name={participant.displayName}
+        participantId={participant.participantId}
+        agent={participant.identityKind === "agent"}
+        badgeTestID={`people.ai.${participant.participantId}`}
+        description={participant.description}
+      />
       {participant.handRaised ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.status}>
           <Icon color={colors.warning} name="hand" size={16} />
