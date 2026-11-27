@@ -109,7 +109,7 @@ defmodule ChalkSync.Live.FocusPostgresTest do
     # An older client neither negotiates nor sees the extension, and cannot send its frame.
     {old_welcome, old_items, old} = session(port, "/v1/sync", host)
     refute Map.has_key?(old_welcome, "app_state")
-    old_item = Enum.find(old_items, &(&1["participant_id"] == guest.participant_id))
+    {old_item, old} = presence_snapshot_item(old, old_items, guest)
     refute Map.has_key?(old_item, "focus_app_state")
 
     old =
@@ -169,6 +169,24 @@ defmodule ChalkSync.Live.FocusPostgresTest do
         "state" => state,
         "windowed" => windowed
       })
+
+  defp presence_snapshot_item(client, items, identity) do
+    case Enum.find(items, &(&1["participant_id"] == identity.participant_id)) do
+      nil -> next_snapshot_item(client, identity)
+      item -> {item, client}
+    end
+  end
+
+  defp next_snapshot_item(client, identity) do
+    case Client.recv(client) do
+      {:json, %{"type" => "projection_snapshot", "stream" => "presence", "items" => items},
+       client} ->
+        presence_snapshot_item(client, items, identity)
+
+      {:json, _other, client} ->
+        next_snapshot_item(client, identity)
+    end
+  end
 
   defp next_presence_item(client, identity) do
     case Client.recv(client) do
