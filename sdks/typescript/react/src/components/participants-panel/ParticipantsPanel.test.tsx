@@ -55,7 +55,6 @@ it("marks agent participants in the people list", () => {
     ),
   );
   expect(document.querySelectorAll("[aria-label='AI participant']")).toHaveLength(1);
-
 });
 
 it("shows each person's device under their name, with a count when one person is on two", () => {
