@@ -24,7 +24,7 @@ func admissionInputForTest(t *testing.T) AdmitParticipantInput {
 		ParticipantID: id(),
 		Name:          "Participant",
 		Role:          "collaborator",
-		Request:       Request{Key: "0123456789abcdef"},
+		Request:       Request{Key: "admission-test-request"},
 	}
 }
 

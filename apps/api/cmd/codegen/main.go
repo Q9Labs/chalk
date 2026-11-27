@@ -653,14 +653,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["maxLength"] = 512
 		schema[lengthUnitExtension] = codePointLengthUnit
 	}
-	if fieldName == "identity_external_id" {
-		schema["minLength"] = 1
-		schema["maxLength"] = 256
-	}
-	if request && schemaName == "AdmitEpisodeParticipantRequest" && fieldName == "description" {
-		schema["maxLength"] = 80
-		schema[lengthUnitExtension] = codePointLengthUnit
-	}
+	applyAdmissionFieldConstraints(schema, request, schemaName, fieldName)
 	if fieldName == "email" {
 		schema["format"] = "email"
 	}
