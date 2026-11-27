@@ -661,9 +661,62 @@ jobs:
             releases/document-renderer/manifest.json
           retention-days: 90
 
+  build-renderer-image:
+    name: Build immutable document-renderer image
+    needs: plan-managed
+    if: >-
+      !cancelled() && needs.plan-managed.result == 'success' &&
+      needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    environment:
+      name: nightly
+      deployment: false
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+    steps:
+      - name: Check the image build is declared
+        id: declared
+        run: echo "enabled=${{ vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED == 'true' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.declared.outputs.enabled == 'true'
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+      - name: Create an OCI-capable buildx builder
+        if: steps.declared.outputs.enabled == 'true'
+        run: docker buildx create --use --driver docker-container
+      - name: Build pinned arm64 renderer image
+        if: steps.declared.outputs.enabled == 'true'
+        run: scripts/build-document-renderer-image.sh
+      - name: Verify renderer image identity
+        if: steps.declared.outputs.enabled == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, tarfile
+          from pathlib import Path
+          root = Path('releases/document-renderer')
+          manifest = json.loads((root / 'image-manifest.json').read_text())
+          with tarfile.open(root / 'document-renderer-image-linux-arm64.oci.tar') as tar:
+              index = json.load(tar.extractfile('index.json'))
+          assert [item['digest'] for item in index['manifests']] == [manifest['digest']], 'renderer image digest mismatch'
+          assert manifest['platform'] == 'linux/arm64', 'renderer image is not arm64'
+          assert manifest['pdfiumVersion'] == 'chromium/8179', 'unexpected PDFium pin'
+          print(json.dumps({'digest': manifest['digest'], 'layerBytes': sum(manifest['layerBytes'])}))
+          PY
+      - uses: ./.github/actions/upload-sealed
+        if: steps.declared.outputs.enabled == 'true'
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: document-renderer-image-${{ needs.plan-managed.outputs.release_id }}
+          path: |
+            releases/document-renderer/document-renderer-image-linux-arm64.oci.tar
+            releases/document-renderer/image-manifest.json
+          retention-days: 7
+
   build-media:
     name: Build immutable media release archives
-    needs: [plan-managed, build-renderer]
+    needs: [plan-managed, build-renderer, build-renderer-image]
     # A status function keeps a skipped require-gate (a cut) from skipping this job through plan-managed.
     if: >-
       !cancelled() && needs.plan-managed.result == 'success' &&
@@ -679,6 +732,8 @@ jobs:
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ secrets.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
       CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
+      CHALK_RENDERER_IMAGE_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED }}
+      CHALK_RENDERER_IMAGE_REPOSITORY_URI: ${{ secrets.CHALK_RENDERER_IMAGE_REPOSITORY_URI }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -770,6 +825,20 @@ jobs:
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py publish_renderer "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+      - uses: ./.github/actions/download-sealed
+        if: vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED == 'true'
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: document-renderer-image-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/renderer-image-artifact
+      - name: Freeze versioned renderer image digest
+        if: vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED == 'true'
+        run: |
+          command -v skopeo >/dev/null || sudo apt-get install --yes --no-install-recommends skopeo
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py publish_renderer_image "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/renderer-image-artifact" --output "$RUNNER_TEMP/media.json"
       - uses: ./.github/actions/upload-sealed
         with:
           key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -1057,6 +1126,7 @@ jobs:
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
           CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
+          CHALK_RENDERER_IMAGE_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail

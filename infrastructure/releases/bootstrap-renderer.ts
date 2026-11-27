@@ -44,28 +44,25 @@ export function bootstrapInputsMatchCheckpoint(
     readonly artifact_s3_key?: unknown;
     readonly artifact_s3_object_version?: unknown;
     readonly artifact_sha256_base64?: unknown;
+    readonly package_type?: unknown;
+    readonly image_repository_uri?: unknown;
+    readonly image_digest?: unknown;
   },
 ): boolean {
   const fn = resources.find((row) => {
     const resource = row as { resource?: { FQN?: string }; state?: { status?: string } };
     return resource.resource?.FQN === "Function" && ["creating", "created", "updating", "updated"].includes(resource.state?.status ?? "");
-  }) as { state?: { props?: { tags?: Record<string, unknown>; code?: { bucket?: unknown; key?: unknown; version?: unknown; sha256?: unknown } } } } | undefined;
+  }) as { state?: { props?: { tags?: Record<string, unknown>; code?: { bucket?: unknown; key?: unknown; version?: unknown; sha256?: unknown; imageUri?: unknown } } } } | undefined;
   if (!fn?.state?.props) return true;
   const props = fn.state.props;
-  return (
-    props.tags?.chalk_release_id === input.release_id &&
-    props.tags?.chalk_release_manifest_digest === input.release_manifest_digest &&
-    props.tags?.chalk_config_digest === input.config_digest &&
-    props.code?.bucket === input.artifact_s3_bucket &&
-    props.code?.key === input.artifact_s3_key &&
-    props.code?.version === input.artifact_s3_object_version &&
-    props.code?.sha256 === input.artifact_sha256_base64
-  );
+  const sameTags = props.tags?.chalk_release_id === input.release_id && props.tags?.chalk_release_manifest_digest === input.release_manifest_digest && props.tags?.chalk_config_digest === input.config_digest;
+  if (input.package_type === "image") return sameTags && props.code?.imageUri === `${String(input.image_repository_uri)}@${String(input.image_digest)}`;
+  return sameTags && props.code?.bucket === input.artifact_s3_bucket && props.code?.key === input.artifact_s3_key && props.code?.version === input.artifact_s3_object_version && props.code?.sha256 === input.artifact_sha256_base64;
 }
 
 const main = Effect.gen(function* () {
   const { target, stage } = selectStack(process.argv[2], process.argv[3]);
-  if (target.stackName !== "document-renderer" || stage.kind !== "production") return yield* Effect.die("Only document-renderer production has a bootstrap command");
+  if (!["document-renderer", "document-renderer-image"].includes(target.stackName) || stage.kind !== "production") return yield* Effect.die("Only document-renderer and document-renderer-image production have a bootstrap command");
   if (process.env.CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP !== "approved") return yield* Effect.die("Production renderer bootstrap requires explicit CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP=approved");
   const stack = yield* Alchemist.importStack(entryFile(target));
   const plan = yield* Alchemist.plan({ stack, stage: stage.name, operation: "deploy" });

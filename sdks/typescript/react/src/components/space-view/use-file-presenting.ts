@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type SpaceClient } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
 import { describeChatUploadFile } from "../composite/chat-upload-file";
-import { chatAcceptsFile, presentFiles, splitPresentingFiles, type PresentingFileFailure } from "../stage/presenting-files";
+import { chatAcceptsFile, presentableAccept, presentableFilesHint, presentFiles, splitPresentingFiles, type PresentingFileFailure } from "../stage/presenting-files";
 
 type Notify = (toast: { readonly type: "info" | "error"; readonly message: string; readonly duration?: number; readonly action?: { readonly label: string; readonly onClick: () => void } }) => void;
 
@@ -20,6 +20,7 @@ export interface FilePresentingOptions {
   readonly chatOpen: boolean;
   readonly chatEnabled: boolean;
   readonly presentingAvailable: boolean;
+  readonly formats: readonly PresentingFormatId[];
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly openChat: () => void;
 }
@@ -37,7 +38,8 @@ function dropZoneAt(event: DragEvent): DropZone | null {
 }
 
 /** Owns the Present file flow: the picker, window drop routing, the Stage upload placeholder and its failure card. */
-export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, presentingAvailable, pickChatFiles, openChat }: FilePresentingOptions) {
+export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled, presentingAvailable, formats, pickChatFiles, openChat }: FilePresentingOptions) {
+  const presentAccept = presentableAccept(formats);
   const [stageUpload, setStageUpload] = useState<StageUpload | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
@@ -73,7 +75,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
     async (files: readonly ChatUploadFile[], zone: DropZone = "present") => {
       if (!files.length || presentBusy) return;
       const stageAvailable = presentingAvailable && zone === "present";
-      const split = splitPresentingFiles(files, { presentingAvailable: stageAvailable, chatEnabled });
+      const split = splitPresentingFiles(files, { presentingAvailable: stageAvailable, chatEnabled, formats });
       // Nothing here can go on the Stage: the first file's problem is the presenter's answer, shown where they looked.
       if (stageAvailable && !split.stageFile && split.failures[0] && !split.chatFiles.length) {
         const [first, ...rest] = split.failures;
@@ -85,6 +87,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       const result = await presentFiles(files, client, {
         presentingAvailable: stageAvailable,
         chatEnabled,
+        formats,
         onStageFile: (fileName) => setStageUpload({ kind: "uploading", fileName, progress: null }),
         onProgress: (progress) => setStageUpload((current) => (current?.kind === "uploading" ? { ...current, progress } : current)),
       });
@@ -92,7 +95,7 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
       reportOtherFailures(result.failures, result.chatOverflow);
       if (result.chatFiles.length) stageInChat(result.chatFiles);
     },
-    [chatEnabled, client, presentBusy, presentingAvailable, reportOtherFailures, stageInChat],
+    [chatEnabled, client, formats, presentBusy, presentingAvailable, reportOtherFailures, stageInChat],
   );
 
   const choosePresentFiles = useCallback(async () => {
@@ -179,5 +182,23 @@ export function useFilePresenting({ client, notify, live, chatOpen, chatEnabled,
 
   const documentActions = useMemo(() => ({ presentAnother: presentingAvailable ? () => void choosePresentFiles() : undefined }), [choosePresentFiles, presentingAvailable]);
 
-  return { documentActions, presentBusy, stageUpload, dismissStageUpload, retryStageUpload, sendStageUploadToChat, dropActive, dropZones, dropZone, chatDrop, updateChatDrop, presentInputRef, choosePresentFiles, presentChosenFiles };
+  return {
+    documentActions,
+    presentBusy,
+    stageUpload,
+    dismissStageUpload,
+    retryStageUpload,
+    sendStageUploadToChat,
+    dropActive,
+    dropZones,
+    dropZone,
+    chatDrop,
+    updateChatDrop,
+    presentHint: presentableFilesHint(formats),
+    presentInputRef,
+    presentAccept,
+    presentFormats: formats,
+    choosePresentFiles,
+    presentChosenFiles,
+  };
 }

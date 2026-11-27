@@ -10,7 +10,7 @@ which also documents the threat model.
 
 ## Resources and inputs
 
-The stack manages seven resources: a CloudWatch log group, a metric filter for
+The ZIP stack manages seven resources (the image stack has the same set under its own names): a CloudWatch log group, a metric filter for
 reported render invocation failures, an execution role with one inline policy,
 the versioned Lambda function, and three alarms (`Errors`, `Throttles` and
 `AsyncEventsDropped`). An eighth, the `ControlApiPermission` that lets the
@@ -87,6 +87,46 @@ owned resources. Their function name is `chalk-<stage>-document-renderer`. The
 run-owned provider stamps and checks ownership before cleanup. Never run a
 destroy or nuke command against production.
 
+## Container-image renderer
+
+Office conversion needs LibreOffice, which does not fit the 250 MB ZIP limit, so the renderer also ships as a
+container image. The image function is a second stack, `document-renderer-image`, next to the untouched ZIP stack:
+it has its own Alchemy state, execution role, log group, alarms and function
+(`chalk-<stage>-document-renderer-image`). Neither stack changes the other. Which function serves traffic is a
+config value: the API's `CHALK_PRESENTING_RENDERER_FUNCTION_NAME`, which names the ZIP function until the image
+path is approved.
+
+- **Inputs.** Image inputs carry `package_type: "image"`, `image_repository_uri` (an ECR repository URI) and
+  `image_digest` (`sha256:<64 hex>`) instead of the `artifact_*` fields. The function runs
+  `<repository>@<digest>`; tags are never deployed. Memory must be at least 3072 MB, because soffice needs it.
+  The function has no runtime or handler: the image's entrypoint is the Go bootstrap, which speaks the Lambda
+  Runtime API directly. `LD_LIBRARY_PATH` is `/opt/renderer/lib`.
+- **Image.** [`apps/document-renderer/image/Dockerfile`](../../apps/document-renderer/image/Dockerfile) builds on
+  Debian trixie (not the AWS base image), pinned by index digest, with apt packages frozen by a
+  `snapshot.debian.org` timestamp. It holds the Go bootstrap, the pinned PDFium and libwebp,
+  LibreOffice (Impress, Writer, Calc and `python3-uno`, no Java), the bundled fonts and
+  `/opt/renderer/office-convert.py`. It runs as uid 10001 with a read-only root; only `/tmp` is writable, which is
+  Lambda's rule anyway. `/opt/renderer/packages.txt` lists every installed package version.
+- **Build.** `scripts/build-document-renderer-image.sh` writes a single-manifest OCI archive and
+  `image-manifest.json` (digest, platform, layer sizes, PDFium pin). Run it on Linux with Docker buildx; it builds
+  arm64 by default and `RENDERER_IMAGE_PLATFORM=linux/amd64` builds a native x86 image for a quick proof. The digest
+  is not bit-reproducible (the font caches embed timestamps), so the pipeline builds once, pushes that archive and
+  deploys the digest it recorded.
+- **ECR repository.** `ecr/apply-ecr-repository` creates `chalk-document-renderer` with immutable tags, scan on
+  push, AES-256 encryption, a lifecycle policy (untagged images expire after a day; the 20 newest images stay) and a
+  repository policy that lets Lambda pull for `chalk-*-document-renderer-image` functions. `--check` exits 1 on
+  drift. Rollback depth is therefore the last 20 images; raise the count in `ecr/lifecycle-policy.json` to keep more.
+  `ecr/test-ecr-and-deploy-role.sh` proves both apply scripts offline with a fake `aws`.
+- **Release.** CI builds and pushes the image only when the repository variable
+  `CHALK_RENDERER_IMAGE_RELEASE_ENABLED` is `true`. `media.py publish_renderer_image` copies the archive to ECR with
+  the digest preserved and records `renderer_image` (repository, digest) in the media members.
+  `media.py deploy_renderer_image` runs `releases/renderer-image-driver.ts` with the recorded digest and then
+  checks Lambda's resolved image URI, state and release tag. The ZIP path is unchanged and still runs first.
+- **Bootstrap.** The first production deploy of the image function is a one-time bootstrap like the ZIP one:
+  `pnpm infra bootstrap document-renderer-image production` with the same approval variable, and inputs that name
+  the ECR repository and a recorded digest. Never run it before `ecr/apply-ecr-repository` and the deploy-role
+  policy (`nightly/deploy-role/apply-document-renderer-publish`) are applied.
+
 ## Bootstrap and rollback
 
 A brand-new production capability has no former OpenTofu state to import. The
@@ -106,3 +146,23 @@ then delete the Alchemy stage state. Never run both infrastructure owners.
 
 Rolling back renderer code uses the prior managed release manifest and media
 members. Promote copies exact versioned ZIP bytes; it never rebuilds them.
+
+### Rolling back from the image to the ZIP renderer
+
+The ZIP function stays deployed and current until the image path has shipped once, so the fastest undo is a config
+change, not a deploy.
+
+1. Set `CHALK_PRESENTING_RENDERER_FUNCTION_NAME=chalk-production-document-renderer` in the production SSM runtime
+   inputs and ship it with the next managed release (see [incident.md](../../docs/operators/incident.md)). The API
+   then invokes the ZIP function again; nothing in AWS changes.
+2. To stop the image path from deploying, unset the `CHALK_RENDERER_IMAGE_RELEASE_ENABLED` variable on the
+   production and nightly GitHub environments. The next Promote then records `renderer-image-not-declared` and leaves
+   the image function untouched.
+3. To roll the image function itself back, promote the previous release: its media members hold the previous
+   `renderer_image` digest, and `deploy_renderer_image` deploys that digest through the same checked driver. The
+   digest must still exist in ECR (the lifecycle keeps the last 20).
+4. Only after the image has served production for a full release cycle, retire the ZIP path in a separate change.
+   Never delete the ZIP function, its state or its S3 objects as part of the image rollout.
+
+Presenting itself can still be turned off without any of this by the database kill switch in
+[incident.md](../../docs/operators/incident.md#turn-off-presenting).

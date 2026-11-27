@@ -28,6 +28,8 @@ var allowedMIMETypes = map[string]struct{}{
 	"application/vnd.oasis.opendocument.text":                                   {},
 	"application/vnd.oasis.opendocument.spreadsheet":                            {},
 	"application/vnd.oasis.opendocument.presentation":                           {},
+	"application/vnd.apple.keynote":                                             {},
+	"application/x-iwork-keynote-sffkey":                                        {},
 }
 
 // initiateRequest holds the validated, normalized form of an InitiateInput.

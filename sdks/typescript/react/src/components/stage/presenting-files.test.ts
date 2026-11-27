@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
 import { prepareChatAttachmentBatch } from "../composite/chat-upload-file";
-import { presentableFilesHint, presentFiles, splitPresentingFiles } from "./presenting-files";
+import { presentableAccept, presentableFilesHint, presentableMimeTypes, presentFiles, presentingFileProblem, splitPresentingFiles } from "./presenting-files";
 
 function file(name: string, type = "application/pdf", byteLength = 1024): ChatUploadFile {
   return new File([new Uint8Array(byteLength)], name, { type }) as ChatUploadFile;
@@ -153,4 +153,30 @@ it("the composer accepts files up to its remaining capacity", () => {
 it("the composer still rejects an unsupported file before staging the batch", () => {
   const batch = prepareChatAttachmentBatch([file("notes.txt", "text/plain"), file("archive.zip", "application/zip")], 0);
   expect(batch.invalid?.fileName).toBe("archive.zip");
+});
+
+it("keeps Office files in chat until the server accepts their formats", () => {
+  const deck = file("deck.pptx", "");
+  const split = splitPresentingFiles([deck], { presentingAvailable: true, chatEnabled: true });
+  expect(split.stageFile).toBeUndefined();
+  expect(presentingFileProblem(deck)).toBe("unsupported");
+});
+
+it("presents Office and Keynote files once their formats are accepted, even when the browser reports no type", () => {
+  const deck = file("deck.pptx", "");
+  const old = file("old.ppt", "application/octet-stream");
+  const keynote = file("talk.key", "");
+  const formats = ["pdf", "pptx", "ppt", "key"] as const;
+  expect(splitPresentingFiles([deck], { formats }).stageFile).toBe(deck);
+  expect(splitPresentingFiles([old], { formats }).stageFile).toBe(old);
+  expect(splitPresentingFiles([keynote], { formats }).stageFile).toBe(keynote);
+  expect(presentingFileProblem(keynote, formats)).toBeNull();
+  expect(presentingFileProblem(keynote, ["pdf", "pptx"])).toBe("unsupported");
+});
+
+it("derives the picker's accept list and hint from the accepted formats", () => {
+  expect(presentableMimeTypes().has("text/plain")).toBe(false);
+  expect(presentableMimeTypes(["txt"]).has("text/plain")).toBe(true);
+  expect(presentableAccept(["pdf", "docx"])).toBe("application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx");
+  expect(presentableFilesHint(["pdf", "pptx", "docx", "xlsx"])).toBe("PDF, slides, documents or spreadsheets, up to 25 MB");
 });

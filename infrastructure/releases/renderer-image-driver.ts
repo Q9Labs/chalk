@@ -1,0 +1,16 @@
+import stack, { stackName } from "../document-renderer-image/alchemy.run.ts";
+import { parseInputs } from "../document-renderer/config.ts";
+import { rendererPolicy } from "../document-renderer/policy.ts";
+import { runDriver } from "./driver-run.ts";
+
+await runDriver({
+  name: "renderer",
+  stackId: "document-renderer-image",
+  stack,
+  stackName,
+  operations: ["noop", "release"],
+  usage: "Usage: renderer-image-driver.ts <plan|noop|release> <production|nightly-run-id> [--apply]",
+  parseInputs,
+  policy: rendererPolicy,
+  planOptions: { allowRecoverableInterruptedUpdate: true },
+});

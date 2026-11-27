@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261127110000.
+-- Schema snapshot through migration 20261127140000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -851,7 +851,9 @@ create table sync_chat_attachments (
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             'application/vnd.oasis.opendocument.text',
             'application/vnd.oasis.opendocument.spreadsheet',
-            'application/vnd.oasis.opendocument.presentation'
+            'application/vnd.oasis.opendocument.presentation',
+            'application/vnd.apple.keynote',
+            'application/x-iwork-keynote-sffkey'
         )
     ),
     check (byte_length between 1 and 26214400),
@@ -5774,7 +5776,7 @@ create table presenting_documents (
         references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (status in ('preparing', 'ready', 'failed')),
-    check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint', 'application/vnd.oasis.opendocument.presentation', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.oasis.opendocument.text', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'application/vnd.oasis.opendocument.spreadsheet', 'text/plain', 'application/vnd.apple.keynote', 'application/x-iwork-keynote-sffkey')),
     check (byte_length between 1 and 26214400),
     check (octet_length(source_sha256) = 32),
     check (octet_length(source_object_key) between 1 and 1024),

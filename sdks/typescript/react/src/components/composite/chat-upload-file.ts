@@ -1,4 +1,4 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChatUploadFile } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, resolveFileMimeType, type ChatUploadFile } from "@q9labsai/chalk-client";
 
 export interface ChatUploadFileDescription {
   readonly fileName: string;
@@ -7,8 +7,8 @@ export interface ChatUploadFileDescription {
 }
 
 export function describeChatUploadFile(file: ChatUploadFile): ChatUploadFileDescription {
-  if ("arrayBuffer" in file) return { fileName: file.name, mimeType: file.type, byteLength: file.size };
-  return { fileName: file.fileName, mimeType: file.mimeType, byteLength: file.bytes.byteLength };
+  if ("arrayBuffer" in file) return { fileName: file.name, mimeType: resolveFileMimeType(file.name, file.type), byteLength: file.size };
+  return { fileName: file.fileName, mimeType: resolveFileMimeType(file.fileName, file.mimeType), byteLength: file.bytes.byteLength };
 }
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);

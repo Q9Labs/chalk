@@ -1,4 +1,4 @@
-import type { SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { presentingFormatIdsFor, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
 
 export function createPreviewPresenting(): SpaceClient["presenting"] {
   return {
@@ -16,5 +16,5 @@ export function createPreviewPresenting(): SpaceClient["presenting"] {
 }
 
 export function createPreviewPresentingSnapshot(): SpaceSnapshot["presenting"] {
-  return { status: "connecting", available: true, revision: 0, documents: [], manifests: {} };
+  return { status: "connecting", available: true, formats: presentingFormatIdsFor(), revision: 0, documents: [], manifests: {} };
 }

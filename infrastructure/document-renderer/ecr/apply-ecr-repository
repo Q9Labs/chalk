@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Creates the document-renderer ECR repository and puts its lifecycle and repository policies, or with --check
+# compares the live repository with these files and exits 1 on drift. The repository has immutable tags, scan on push
+# and AES-256 encryption; encryption cannot change after creation, so --check reports a different type instead of
+# fixing it.
+#
+#   AWS_PROFILE=<admin profile> AWS_REGION=<region> apply-ecr-repository [--check]
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository=chalk-document-renderer
+mode=apply
+case "${1:-}" in
+  "") ;;
+  --check) mode=check ;;
+  *) echo "usage: apply-ecr-repository [--check]" >&2; exit 2 ;;
+esac
+
+account="$(aws sts get-caller-identity --query Account --output text)"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region)}}"
+render() { sed -e "s/__ACCOUNT__/$account/g" -e "s/__REGION__/$region/g" "$here/$1" | jq -S .; }
+lifecycle="$(render lifecycle-policy.json)"
+policy="$(render repository-policy.json)"
+
+live="$(aws ecr describe-repositories --repository-names "$repository" --query 'repositories[0]' --output json 2>/dev/null || true)"
+if [ -z "$live" ] || [ "$live" = null ]; then
+  if [ "$mode" = check ]; then
+    echo "drift: repository $repository does not exist" >&2
+    exit 1
+  fi
+  aws ecr create-repository --repository-name "$repository" --image-tag-mutability IMMUTABLE \
+    --image-scanning-configuration scanOnPush=true --encryption-configuration encryptionType=AES256 \
+    --tags Key=chalk_component,Value=document-renderer > /dev/null
+  echo "created $repository"
+elif [ "$mode" = apply ]; then
+  aws ecr put-image-tag-mutability --repository-name "$repository" --image-tag-mutability IMMUTABLE > /dev/null
+  aws ecr put-image-scanning-configuration --repository-name "$repository" --image-scanning-configuration scanOnPush=true > /dev/null
+fi
+
+if [ "$mode" = apply ]; then
+  aws ecr put-lifecycle-policy --repository-name "$repository" --lifecycle-policy-text "$lifecycle" > /dev/null
+  aws ecr set-repository-policy --repository-name "$repository" --policy-text "$policy" > /dev/null
+  echo "applied $repository"
+  exit 0
+fi
+
+status=0
+[ "$(jq -r .imageTagMutability <<<"$live")" = IMMUTABLE ] || { echo "drift: tags are not immutable" >&2; status=1; }
+[ "$(jq -r .imageScanningConfiguration.scanOnPush <<<"$live")" = true ] || { echo "drift: scan on push is off" >&2; status=1; }
+[ "$(jq -r .encryptionConfiguration.encryptionType <<<"$live")" = AES256 ] || { echo "drift: encryption is not AES256; recreate the repository" >&2; status=1; }
+live_lifecycle="$(aws ecr get-lifecycle-policy --repository-name "$repository" --query lifecyclePolicyText --output text | jq -S .)"
+[ "$live_lifecycle" = "$lifecycle" ] || { echo "drift: lifecycle policy differs from lifecycle-policy.json" >&2; status=1; }
+live_policy="$(aws ecr get-repository-policy --repository-name "$repository" --query policyText --output text | jq -S .)"
+[ "$live_policy" = "$policy" ] || { echo "drift: repository policy differs from repository-policy.json" >&2; status=1; }
+[ "$status" = 0 ] && echo "ok: $repository matches"
+exit "$status"

@@ -17,4 +17,6 @@ Non-JSON attachment download operations stay in OpenAPI and the generated wire t
 
 The default TypeScript client is Promise-based, and Effect is an optional subpath; see [effect-ts.md](effect-ts.md). Don't add empty language-SDK shells before a working client exists.
 
+[presenting-files-v1.json](../contract/schema/presenting-files-v1.json) is the one list of files Presenting accepts (id, label, extensions, MIME types, kind and the capability flag that gates it) and the user-facing failure messages. `scripts/codegen/presenting-files.mjs` generates the Go tables in `apps/api/internal/presenting` and the TypeScript tables in `sdks/typescript/client/src/presenting`; the API and the web list read those and never keep their own copy.
+
 The negotiated screen annotation extension uses [screen-annotation-v1.json](../contract/schema/screen-annotation-v1.json). The SDK generator emits its TypeScript payload types and Sync schema metadata. The [implementation plan](plans/screen-annotation.md) defines the contextual checks that the payload schema cannot express.

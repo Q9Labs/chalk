@@ -11,7 +11,7 @@ from release_core import require
 
 def validate_members(value):
     required = {'schema_version', 'capture', 'render', 'dispatcher'}
-    allowed = required | {'recorder_source_bucket', 'renderer'}
+    allowed = required | {'recorder_source_bucket', 'renderer', 'renderer_image'}
     require(value.get('schema_version') == 1 and required <= set(value) and set(value) <= allowed, 'invalid media members')
     portable = 'recorder_source_bucket' in value
     for role in ('capture', 'render'):
@@ -36,5 +36,9 @@ def validate_members(value):
         require(renderer['version_id'] and renderer['version_id'] != 'null', 'renderer ZIP must be version-pinned')
         require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', renderer['bucket']), 'invalid renderer bucket')
         require(renderer['key'].startswith('document-renderer/') and '..' not in renderer['key'], 'invalid renderer artifact key')
+    if 'renderer_image' in value:
+        image = value['renderer_image']
+        require(re.fullmatch(r'sha256:[0-9a-f]{64}', image['digest']), 'invalid renderer image digest')
+        require(re.fullmatch(r'\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[a-z0-9][a-z0-9._/-]{1,254}', image['repository_uri']), 'invalid renderer image repository')
     return value
 

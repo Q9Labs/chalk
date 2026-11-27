@@ -52,6 +52,8 @@ export const CHALK_CHAT_ATTACHMENT_MIME_TYPES = [
   "application/vnd.oasis.opendocument.text",
   "application/vnd.oasis.opendocument.spreadsheet",
   "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.apple.keynote",
+  "application/x-iwork-keynote-sffkey",
 ] as const;
 
 export type ChalkChatAttachmentMimeType = (typeof CHALK_CHAT_ATTACHMENT_MIME_TYPES)[number];
