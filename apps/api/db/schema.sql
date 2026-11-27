@@ -266,7 +266,7 @@ create table spaces (
     check (linger_window_seconds >= 0),
     constraint spaces_focus_check check (
         jsonb_typeof(focus) = 'object'
-        and focus <@ '{"enabled":false}'::jsonb
+        and focus - 'enabled' = '{}'::jsonb
         and jsonb_typeof(focus -> 'enabled') = 'boolean'
     )
 );
