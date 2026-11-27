@@ -2,7 +2,7 @@
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ChatUploadFile } from "@q9labsai/chalk-client";
+import { presentingFormatIdsFor, type ChatUploadFile } from "@q9labsai/chalk-client";
 import { createPreviewClient } from "../../test-support/preview-client";
 import { ChatPanelSurface } from "../composite/ChatPanel";
 import { useFilePresenting } from "./use-file-presenting";
@@ -18,7 +18,7 @@ function mount(live: boolean, openChat: () => void = () => {}, notify: Notify = 
   const client = createPreviewClient();
   let api: ReturnType<typeof useFilePresenting> | undefined;
   function Probe() {
-    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, openChat });
+    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, formats: presentingFormatIdsFor(), openChat });
     return <input ref={api.presentInputRef} type="file" aria-hidden="true" />;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));

@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatMessage, type ChalkChatReadReceipt } from "../collaboration/types";
+import { resolveFileMimeType } from "../presenting/files";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile } from "./types";
 
 export const MAX_CHAT_PAGE_SIZE = 100;
@@ -22,7 +23,7 @@ export function validateChatMessage(input: ChatSendInput): string | null {
 
 export function validateChatUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachmentId: string): { readonly fileName: string; readonly mimeType: ChatAttachment["mimeType"] } | string {
   const fileName = "fileName" in file ? file.fileName : file.name;
-  const mimeType = "mimeType" in file ? file.mimeType : file.type;
+  const mimeType = resolveFileMimeType(fileName, "mimeType" in file ? file.mimeType : file.type);
   const error = validateChatAttachment({ attachmentId: clientAttachmentId, fileName, mimeType: mimeType as ChatAttachment["mimeType"], byteLength: bytes.byteLength });
   return error ?? { fileName, mimeType: mimeType as ChatAttachment["mimeType"] };
 }

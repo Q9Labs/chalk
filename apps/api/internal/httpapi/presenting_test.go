@@ -33,6 +33,7 @@ func TestPresentingDocumentRoutes(t *testing.T) {
 		{"unsupported", http.MethodPost, "/presenting/documents", "sync", `{"attachmentId":"12345678-1234-4234-8234-123456789abc"}`, presenting.ErrUnsupportedType, http.StatusUnprocessableEntity},
 		{"create", http.MethodPost, "/presenting/documents", "sync", `{"attachmentId":"12345678-1234-4234-8234-123456789abc"}`, nil, http.StatusOK},
 		{"manifest", http.MethodGet, "/presenting/documents/12345678-1234-4234-8234-123456789abc", "sync", ``, nil, http.StatusOK},
+		{"formats", http.MethodGet, "/presenting/formats", "sync", "", nil, http.StatusOK},
 		{"zoom missing", http.MethodGet, "/presenting/documents/12345678-1234-4234-8234-123456789abc/pages/2/zoom", "sync", ``, presenting.ErrZoomNotReady, http.StatusConflict},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,6 +76,8 @@ func (p *presentingRouteProbe) Manifest(context.Context, presenting.Subject, uti
 	id, _ := utilities.ParseID("12345678-1234-4234-8234-123456789abc")
 	return presenting.Document{DocumentID: id, AttachmentID: id, FileName: "deck.pdf", Status: "preparing"}, nil, p.err
 }
+func (p *presentingRouteProbe) AcceptedFormatIDs() []string { return []string{"pdf"} }
+
 func (p *presentingRouteProbe) Zoom(context.Context, presenting.Subject, utilities.ID, int) (string, time.Time, error) {
 	p.calls++
 	return "https://example.invalid/zoom", time.Now(), p.err

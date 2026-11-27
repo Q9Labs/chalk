@@ -14,7 +14,7 @@ export interface BootstrapRow {
 export const bootstrapMatches = (stackName: string, rows: ReadonlyArray<BootstrapRow>) => {
   const types = new Map(
     Object.entries(
-      stackName === "document-renderer"
+      stackName === "document-renderer" || stackName === "document-renderer-image"
         ? {
             ExecutionRole: "AWS.IAM.Role",
             Logs: "AWS.Logs.LogGroup",
@@ -52,7 +52,7 @@ export const requireSeededState = Effect.fn(function* (plan: Alchemist.StackPlan
 export const prepareDeployment = Effect.fn(function* (name: string | undefined, stageName: string | undefined) {
   const { target, stage } = selectStack(name, stageName);
   requireDeployable(target);
-  if (target.stackName === "document-renderer" && stage.kind !== "ephemeral") return yield* Effect.die("Production renderer releases go through releases/renderer-driver.ts, not the generic deploy");
+  if ((target.stackName === "document-renderer" || target.stackName === "document-renderer-image") && stage.kind !== "ephemeral") return yield* Effect.die("Production renderer releases go through releases/renderer-driver.ts, not the generic deploy");
   const stack = yield* Alchemist.importStack(entryFile(target));
   const plan = yield* Alchemist.plan({ stack, stage: stage.name, operation: "deploy" });
   if (stage.kind === "ephemeral") yield* checkBootstrap(plan);

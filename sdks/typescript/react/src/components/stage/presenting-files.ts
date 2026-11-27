@@ -1,14 +1,25 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChatUploadFile, type SpaceClient } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, presentingFormatIdsFor, presentingFormatsFor, presentingMimeTypesFor, type ChatUploadFile, type PresentingFormatId, type SpaceClient } from "@q9labsai/chalk-client";
 import { describeChatUploadFile } from "../composite/chat-upload-file";
 
-export const PRESENTABLE_MIME_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"]);
+export type PresentingFileOptions = { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean; readonly formats?: readonly PresentingFormatId[] };
 
-/** The file picker's accept list: the same types the Stage can present. */
-export const PRESENTABLE_ACCEPT = [...PRESENTABLE_MIME_TYPES].join(",");
+/** The MIME types the Stage accepts for the given formats; with none given, only the always-on formats. */
+export function presentableMimeTypes(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): ReadonlySet<string> {
+  return presentingMimeTypesFor(formats);
+}
 
-/** "PDF or image, up to 25 MB", derived from the presentable types so a new type widens the copy without a UI change. */
-export function presentableFilesHint(): string {
-  const kinds = [...new Set([...PRESENTABLE_MIME_TYPES].map((type) => (type === "application/pdf" ? "PDF" : (type.split("/")[0] ?? type))))];
+/** The file picker's accept list: the MIME types and extensions of the formats the Stage can present. Extensions matter because browsers report no type for many Office files. */
+export function presentableAccept(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): string {
+  return presentingFormatsFor(formats)
+    .flatMap((format) => [...format.mimeTypes, ...format.extensions.map((extension) => `.${extension}`)])
+    .join(",");
+}
+
+const HINT_KIND_LABELS = { pdf: "PDF", slides: "slides", document: "documents", spreadsheet: "spreadsheets", text: "text files", image: "image" } as const;
+
+/** "PDF or image, up to 25 MB", derived from the accepted formats so a new format widens the copy without a UI change. */
+export function presentableFilesHint(formats: readonly PresentingFormatId[] = presentingFormatIdsFor()): string {
+  const kinds = [...new Set(presentingFormatsFor(formats).map((format) => HINT_KIND_LABELS[format.kind]))];
   const list = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} or ${kinds.at(-1)}` : (kinds[0] ?? "File");
   return `${list}, up to ${Math.round(CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength / (1024 * 1024))} MB`;
 }
@@ -34,16 +45,17 @@ export type PresentingFileSplit = {
   readonly chatOverflow: number;
 };
 
-export function presentingFileProblem(file: ChatUploadFile): "unsupported" | "too_big" | "empty" | null {
+export function presentingFileProblem(file: ChatUploadFile, formats?: readonly PresentingFormatId[]): "unsupported" | "too_big" | "empty" | null {
   const description = describeChatUploadFile(file);
   if (description.byteLength === 0) return "empty";
   if (description.byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength) return "too_big";
-  return PRESENTABLE_MIME_TYPES.has(description.mimeType) ? null : "unsupported";
+  return presentableMimeTypes(formats).has(description.mimeType) ? null : "unsupported";
 }
 
 /** Splits dropped or chosen files into the first Stage candidate, files chat can carry, and files neither accepts. */
-export function splitPresentingFiles(files: readonly ChatUploadFile[], options: { readonly presentingAvailable?: boolean; readonly chatEnabled?: boolean } = {}): PresentingFileSplit {
+export function splitPresentingFiles(files: readonly ChatUploadFile[], options: PresentingFileOptions = {}): PresentingFileSplit {
   const presentingAvailable = options.presentingAvailable !== false;
+  const presentable = presentableMimeTypes(options.formats);
   const chatEnabled = options.chatEnabled !== false;
   const failures: PresentingFileFailure[] = [];
   const chatFiles: ChatUploadFile[] = [];
@@ -58,7 +70,7 @@ export function splitPresentingFiles(files: readonly ChatUploadFile[], options: 
       failures.push({ fileName: description.fileName, reason: "too_big" });
       continue;
     }
-    if (presentingAvailable && !stageFile && PRESENTABLE_MIME_TYPES.has(description.mimeType)) {
+    if (presentingAvailable && !stageFile && presentable.has(description.mimeType)) {
       stageFile = file;
       continue;
     }
@@ -73,9 +85,7 @@ function limitComposerFiles(files: readonly ChatUploadFile[]): { readonly chatFi
   return { chatFiles, chatOverflow: files.length - chatFiles.length };
 }
 
-export type PresentFilesOptions = {
-  readonly presentingAvailable?: boolean;
-  readonly chatEnabled?: boolean;
+export type PresentFilesOptions = PresentingFileOptions & {
   /** Called as soon as a Stage candidate is found, before any bytes move, so the Stage can acknowledge the file at once. */
   readonly onStageFile?: (fileName: string) => void;
   readonly onProgress?: (fraction: number) => void;

@@ -17,6 +17,12 @@ import (
 type PresentingRepository struct {
 	queries *sqlc.Queries
 	db      presentingDB
+	formats presenting.FormatFlags
+}
+
+func (r PresentingRepository) WithFormats(formats presenting.FormatFlags) PresentingRepository {
+	r.formats = formats
+	return r
 }
 
 type presentingDB interface {
@@ -39,9 +45,7 @@ func (r PresentingRepository) CreateDocument(ctx context.Context, subject presen
 	if err != nil {
 		return presenting.Document{}, fmt.Errorf("read presenting source attachment: %w", err)
 	}
-	switch mimeType {
-	case "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp":
-	default:
+	if !r.formats.AcceptsMIMEType(mimeType) {
 		return presenting.Document{}, presenting.ErrUnsupportedType
 	}
 	inventoryJobID, err := utilities.NewID()
