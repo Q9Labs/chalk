@@ -97,7 +97,7 @@ Use `client.recording.start()` and `client.recording.stop()` inside an Episode, 
 
 The server SDK requests Exports and creates download URLs. Subscribe to `recording.completed` for verified MP4 readiness and `transcript.completed` for document readiness; both also emit `started` and `failed`. See the [webhook guide](docs/webhooks.md).
 
-A service that owns a Tenant can offer it to a person's Chalk dashboard account with `tenantHandovers.create`, inspect it with `tenantHandovers.get`, and cancel it with `tenantHandovers.cancel`. Creation takes an idempotency key and returns the handover ID used in the dashboard acceptance link. The lifecycle and cutoff semantics are in [the Tenant handover guide](../../docs/tenant-handover.md).
+A service that owns a Tenant can offer it to a person's Chalk dashboard account with `tenantHandovers.create`, inspect it with `tenantHandovers.get`, and cancel it with `tenantHandovers.cancel`. Creation takes an idempotency key and returns the handover ID used in the dashboard acceptance link. The lifecycle and cutoff semantics are in [the Tenant handover guide](../../../docs/tenant-handover.md).
 
 ## Feature controllers
 
