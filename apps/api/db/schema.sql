@@ -1,10 +1,4 @@
-<<<<<<< HEAD
--- Schema snapshot through migration 20261127110000.
-||||||| 46e7acad9
--- Schema snapshot through migration 20261127100000.
-=======
--- Schema snapshot through migration 20261127130000.
->>>>>>> origin/master
+-- Schema snapshot through migration 20261127140000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
