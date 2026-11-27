@@ -28,4 +28,15 @@ API_PORT="${CHALK_API_ADDR##*:}"
 export LD_LIBRARY_PATH="$NATIVE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CONTROL_API_BASE_URL="http://127.0.0.1:$API_PORT"
 export RENDERER_LOCAL_ADDR=127.0.0.1:8093
+if [ "${CHALK_PRESENTING_OFFICE_ENABLED:-true}" != "false" ]; then
+  if ! command -v soffice >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-impress libreoffice-writer libreoffice-calc python3-uno fonts-noto-core fonts-noto-extra fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea fontconfig
+  fi
+  if command -v soffice >/dev/null 2>&1; then
+    export RENDERER_SOFFICE="$(command -v soffice)"
+    export RENDERER_OFFICE_DRIVER="$APP/office/office_convert.py"
+    export RENDERER_KEYNOTE=1
+  fi
+fi
 exec /tmp/chalk-document-renderer
