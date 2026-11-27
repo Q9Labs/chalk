@@ -6,6 +6,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+// spaceSettingsChanged reports a change to a stored setting that no webhook event carries: the media plane setting or Focus.
+func spaceSettingsChanged(before spaces.Space, input spaces.UpdateSpaceInput) bool {
+	if input.Focus.Set && input.Focus.Value != nil && *input.Focus.Value != before.Focus {
+		return true
+	}
+	return input.MediaPlaneSetting.Set && !samePlaneSetting(before.MediaPlaneSetting, input.MediaPlaneSetting.Value)
+}
+
 // updateTenantSpaceParams is the one place a Space update maps to its query, for the plain write and the one that produces a webhook.
 func updateTenantSpaceParams(tenantID, spaceID utilities.ID, input spaces.UpdateSpaceInput) sqlc.UpdateTenantSpaceParams {
 	return sqlc.UpdateTenantSpaceParams{

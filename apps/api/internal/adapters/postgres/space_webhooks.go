@@ -116,9 +116,7 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 	}
 	before := mapSpace(beforeRow)
 	changed := spaceChangedFields(before, input)
-	focusChanged := input.Focus.Set && input.Focus.Value != nil && *input.Focus.Value != before.Focus
-	settingChanged := focusChanged || input.MediaPlaneSetting.Set && !samePlaneSetting(before.MediaPlaneSetting, input.MediaPlaneSetting.Value)
-	if len(changed) == 0 && !settingChanged {
+	if len(changed) == 0 && !spaceSettingsChanged(before, input) {
 		if err := tx.Commit(ctx); err != nil {
 			return spaces.Space{}, err
 		}
