@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261127100000.
+-- Schema snapshot through migration 20261127101000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -113,6 +113,48 @@ create table login_sessions (
     created_at timestamptz not null default now(),
     unique(token_hash)
 );
+
+create table tenant_handovers (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    recipient_email text not null,
+    status text not null check (status in ('pending', 'accepted', 'canceled')),
+    request_key text not null,
+    request_fingerprint bytea not null,
+    from_service_id text not null,
+    to_service_id text not null,
+    initiated_by_kind text not null check (initiated_by_kind in ('service', 'operator')),
+    initiated_by_service_id text,
+    initiated_by_operator text,
+    accepted_by_user_id uuid references users(id),
+    accepted_at timestamptz,
+    canceled_by_kind text check (canceled_by_kind in ('service', 'operator')),
+    canceled_by_service_id text,
+    canceled_by_operator text,
+    canceled_at timestamptz,
+    expires_at timestamptz not null,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, request_key),
+    constraint tenant_handovers_emails_check check (length(recipient_email) between 3 and 320 and btrim(recipient_email) = recipient_email),
+    constraint tenant_handovers_services_check check (
+        length(from_service_id) between 1 and 128 and btrim(from_service_id) = from_service_id
+        and length(to_service_id) between 1 and 128 and btrim(to_service_id) = to_service_id
+    ),
+    constraint tenant_handovers_initiator_check check (
+        (initiated_by_kind = 'service' and initiated_by_service_id is not null and initiated_by_operator is null)
+        or (initiated_by_kind = 'operator' and initiated_by_operator is not null and initiated_by_service_id is null)
+    ),
+    constraint tenant_handovers_acceptor_check check ((accepted_at is null) = (accepted_by_user_id is null)),
+    constraint tenant_handovers_canceler_check check (
+        (canceled_at is null) = (canceled_by_kind is null)
+        and (canceled_by_kind is null or (canceled_by_kind = 'service' and canceled_by_service_id is not null and canceled_by_operator is null)
+        or (canceled_by_kind = 'operator' and canceled_by_operator is not null and canceled_by_service_id is null))
+    )
+);
+create unique index tenant_handovers_one_pending_idx on tenant_handovers(tenant_id) where status = 'pending';
+create index tenant_handovers_tenant_created_at_id_idx on tenant_handovers(tenant_id, created_at desc, id desc);
+create index tenant_handovers_recipient_status_idx on tenant_handovers(recipient_email, status, created_at desc);
 
 create table api_keys (
     id uuid primary key,
