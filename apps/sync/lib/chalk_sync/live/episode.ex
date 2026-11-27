@@ -156,10 +156,12 @@ defmodule ChalkSync.Live.Episode do
         now_ms = System.system_time(:millisecond)
         current = Map.get(state.app_states, socket)
 
-        if (current && current.state == app_state) and current.windowed == windowed do
-          {:ok, state, []}
-        else
-          replace_app_state(state, socket, authority, current, app_state, windowed, now_ms)
+        case current do
+          %{state: ^app_state, windowed: ^windowed} ->
+            {:ok, state, []}
+
+          _changed ->
+            replace_app_state(state, socket, authority, current, app_state, windowed, now_ms)
         end
     end
   end
