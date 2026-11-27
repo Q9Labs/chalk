@@ -2,7 +2,7 @@
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ChatUploadFile } from "@q9labsai/chalk-client";
+import { presentingFormatIdsFor, type ChatUploadFile } from "@q9labsai/chalk-client";
 import { createPreviewClient } from "../../test-support/preview-client";
 import { ChatPanelSurface } from "../composite/ChatPanel";
 import { useFilePresenting } from "./use-file-presenting";
