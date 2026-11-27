@@ -153,7 +153,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         <>
-          {showStatus && !participant.isLocal && participant.device ? <TileDevice name={participant.displayName} device={participant.device} /> : null}
+          {showStatus && !participant.isLocal && participant.device ? <TileDevice device={participant.device} /> : null}
           {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">

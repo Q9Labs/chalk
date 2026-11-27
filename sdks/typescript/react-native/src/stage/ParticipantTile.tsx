@@ -45,8 +45,6 @@ type TileModel = {
 
 /** Below this width your own tile reads "You", because "<name> (You)" leaves no room for the name. */
 const SELF_NAME_MIN_WIDTH = 120;
-/** Below this width the device badge shows its icon alone. */
-const DEVICE_LABEL_MIN_WIDTH = 200;
 
 function selectTile(id: string) {
   return (snapshot: SpaceSnapshot): TileModel => {
@@ -99,7 +97,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag device={tile.device} deviceLabel={width >= DEVICE_LABEL_MIN_WIDTH} following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
+      <NameTag device={tile.device} following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );

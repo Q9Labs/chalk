@@ -20,13 +20,11 @@ export type NameTagProps = {
   readonly handOrder?: number;
   /** What the person is on. A phone, tablet or foldable gets a badge at the tile's bottom-right; a computer gets none. */
   readonly device?: ParticipantDevice;
-  /** Name the device beside its icon; off on a narrow tile, where the icon alone fits. */
-  readonly deviceLabel?: boolean;
   readonly testID?: string;
 };
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
-export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, device, deviceLabel = false, testID }: NameTagProps): React.JSX.Element {
+export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, device, testID }: NameTagProps): React.JSX.Element {
   const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
@@ -58,14 +56,9 @@ export const NameTag = memo(function NameTag({ name, muted = false, pinned = fal
           </View>
         ) : null}
       </View>
-      {device && device.form !== "computer" ? (
-        <View accessible accessibilityLabel={`${name}: on ${device.label}`} style={styles.device} testID={testID ? `${testID}.device` : undefined}>
+      {device && !you && device.form !== "computer" ? (
+        <View accessible accessibilityLabel={`Joined from ${device.joinedFrom}`} style={styles.device} testID={testID ? `${testID}.device` : undefined}>
           <Icon color={fixed.overlayText} name={device.form} size={14} />
-          {deviceLabel ? (
-            <ChalkText color={fixed.overlayText} numberOfLines={1} variant="label">
-              {device.label}
-            </ChalkText>
-          ) : null}
         </View>
       ) : null}
     </View>

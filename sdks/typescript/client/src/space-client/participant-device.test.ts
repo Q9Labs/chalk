@@ -16,22 +16,22 @@ const person = (id: string, device: Pick<Participant, "deviceKind" | "deviceType
 
 it("names each declared device in short sentence case and marks which ones earn a tile badge", () => {
   const cases = [
-    ["iphone", "iPhone", "phone"],
-    ["ipad", "iPad", "tablet"],
-    ["android_phone", "Android", "phone"],
-    ["android_tablet", "Android tablet", "tablet"],
-    ["android_foldable", "Foldable", "foldable"],
-    ["mac", "Mac", "computer"],
-    ["windows", "Windows", "computer"],
-    ["linux", "Linux", "computer"],
-    ["chromeos", "Chromebook", "computer"],
+    ["iphone", "iPhone", "iPhone", "phone"],
+    ["ipad", "iPad", "iPad", "tablet"],
+    ["android_phone", "Android", "an Android phone", "phone"],
+    ["android_tablet", "Android tablet", "an Android tablet", "tablet"],
+    ["android_foldable", "Foldable", "a foldable", "foldable"],
+    ["mac", "Mac", "a Mac", "computer"],
+    ["windows", "Windows", "a Windows computer", "computer"],
+    ["linux", "Linux", "a Linux computer", "computer"],
+    ["chromeos", "Chromebook", "a Chromebook", "computer"],
   ] as const;
-  for (const [deviceKind, label, form] of cases) expect(participantDevice(person("a", { deviceKind }))).toEqual({ label, form });
+  for (const [deviceKind, label, joinedFrom, form] of cases) expect(participantDevice(person("a", { deviceKind }))).toEqual({ label, joinedFrom, form });
 });
 
 it("falls back to the coarse type when a client declared no device, and to nothing when Sync sent neither", () => {
-  expect(participantDevice(person("a", { deviceType: "phone" }))).toEqual({ label: "Phone", form: "phone" });
-  expect(participantDevice(person("a", { deviceType: "computer" }))).toEqual({ label: "Computer", form: "computer" });
+  expect(participantDevice(person("a", { deviceType: "phone" }))).toEqual({ label: "Phone", joinedFrom: "a phone", form: "phone" });
+  expect(participantDevice(person("a", { deviceType: "computer" }))).toEqual({ label: "Computer", joinedFrom: "a computer", form: "computer" });
   expect(participantDevice(person("a"))).toBeUndefined();
   expect(participantDevice(undefined)).toBeUndefined();
 });
