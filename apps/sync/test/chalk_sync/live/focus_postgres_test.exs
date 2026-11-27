@@ -107,9 +107,9 @@ defmodule ChalkSync.Live.FocusPostgresTest do
     assert {state, windowed} == {"background", false}
 
     # An older client neither negotiates nor sees the extension, and cannot send its frame.
-    {old_welcome, _items, old} = session(port, "/v1/sync", host)
+    {old_welcome, old_items, old} = session(port, "/v1/sync", host)
     refute Map.has_key?(old_welcome, "app_state")
-    assert {old_item, old} = next_presence_item(old, guest)
+    old_item = Enum.find(old_items, &(&1["participant_id"] == guest.participant_id))
     refute Map.has_key?(old_item, "focus_app_state")
 
     old =
