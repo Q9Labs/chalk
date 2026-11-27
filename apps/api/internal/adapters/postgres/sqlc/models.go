@@ -386,6 +386,88 @@ type ParticipantPresenceLease struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 }
 
+type PresentingApiCapability struct {
+	Singleton bool               `json:"singleton"`
+	Servable  bool               `json:"servable"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PresentingDocument struct {
+	TenantID                       pgtype.UUID        `json:"tenant_id"`
+	SpaceID                        pgtype.UUID        `json:"space_id"`
+	EpisodeID                      pgtype.UUID        `json:"episode_id"`
+	DocumentID                     pgtype.UUID        `json:"document_id"`
+	AttachmentID                   pgtype.UUID        `json:"attachment_id"`
+	CreatedByParticipantID         pgtype.UUID        `json:"created_by_participant_id"`
+	CreatedByParticipantGeneration int64              `json:"created_by_participant_generation"`
+	FileName                       string             `json:"file_name"`
+	MimeType                       string             `json:"mime_type"`
+	ByteLength                     int64              `json:"byte_length"`
+	SourceObjectKey                string             `json:"source_object_key"`
+	SourceSha256                   []byte             `json:"source_sha256"`
+	Status                         string             `json:"status"`
+	FailureCode                    pgtype.Text        `json:"failure_code"`
+	FailureMessage                 pgtype.Text        `json:"failure_message"`
+	PageCount                      pgtype.Int4        `json:"page_count"`
+	CreatedAt                      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PresentingDocumentPage struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	DocumentID   pgtype.UUID        `json:"document_id"`
+	Page         int32              `json:"page"`
+	Width        int32              `json:"width"`
+	Height       int32              `json:"height"`
+	Status       string             `json:"status"`
+	ZoomReadyAt  pgtype.Timestamptz `json:"zoom_ready_at"`
+	ImageKey     pgtype.Text        `json:"image_key"`
+	ThumbnailKey pgtype.Text        `json:"thumbnail_key"`
+	ZoomKey      pgtype.Text        `json:"zoom_key"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PresentingRenderJob struct {
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SpaceID        pgtype.UUID        `json:"space_id"`
+	DocumentID     pgtype.UUID        `json:"document_id"`
+	JobID          pgtype.UUID        `json:"job_id"`
+	Kind           string             `json:"kind"`
+	PageStart      int32              `json:"page_start"`
+	PageEnd        int32              `json:"page_end"`
+	Status         string             `json:"status"`
+	AttemptCount   int32              `json:"attempt_count"`
+	AttemptLimit   int32              `json:"attempt_limit"`
+	LeaseToken     pgtype.UUID        `json:"lease_token"`
+	LeaseOwner     pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	AvailableAt    pgtype.Timestamptz `json:"available_at"`
+	ErrorCode      pgtype.Text        `json:"error_code"`
+	ErrorMessage   pgtype.Text        `json:"error_message"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PresentingRenderUpload struct {
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	SpaceID    pgtype.UUID        `json:"space_id"`
+	DocumentID pgtype.UUID        `json:"document_id"`
+	JobID      pgtype.UUID        `json:"job_id"`
+	Page       int32              `json:"page"`
+	Rendition  string             `json:"rendition"`
+	Attempt    int32              `json:"attempt"`
+	ObjectKey  string             `json:"object_key"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type PresentingSetting struct {
+	Singleton bool `json:"singleton"`
+	Enabled   bool `json:"enabled"`
+}
+
 type ProviderOperationObservation struct {
 	TenantID               pgtype.UUID        `json:"tenant_id"`
 	EpisodeID              pgtype.UUID        `json:"episode_id"`
@@ -1108,6 +1190,17 @@ type RecordingTranscriptionSourceChunk struct {
 	ObjectEtag            pgtype.Text `json:"object_etag"`
 }
 
+type RecordingTranscriptionSourceRenewal struct {
+	RecordingID       pgtype.UUID        `json:"recording_id"`
+	JobID             pgtype.UUID        `json:"job_id"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	DatabaseUser      string             `json:"database_user"`
+	Operator          string             `json:"operator"`
+	Reason            string             `json:"reason"`
+	SourceExpiresAt   pgtype.Timestamptz `json:"source_expires_at"`
+	RequestedAt       pgtype.Timestamptz `json:"requested_at"`
+}
+
 type ScheduledEpisode struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
 	SpaceID              pgtype.UUID        `json:"space_id"`
@@ -1526,6 +1619,38 @@ type SyncMediaStop struct {
 type SyncPresenceRuntime struct {
 	Singleton    bool               `json:"singleton"`
 	RecoverAfter pgtype.Timestamptz `json:"recover_after"`
+}
+
+type SyncPresentingDocument struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	SpaceID             pgtype.UUID `json:"space_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	DocumentID          pgtype.UUID `json:"document_id"`
+	PresenterID         pgtype.UUID `json:"presenter_id"`
+	PresenterGeneration int64       `json:"presenter_generation"`
+	Position            int64       `json:"position"`
+	Page                int32       `json:"page"`
+	Zoom                int32       `json:"zoom"`
+	StartedAtMs         int64       `json:"started_at_ms"`
+}
+
+type SyncPresentingReceipt struct {
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	SpaceID         pgtype.UUID `json:"space_id"`
+	EpisodeID       pgtype.UUID `json:"episode_id"`
+	ActorID         pgtype.UUID `json:"actor_id"`
+	ActorGeneration int64       `json:"actor_generation"`
+	OperationID     []byte      `json:"operation_id"`
+	Fingerprint     []byte      `json:"fingerprint"`
+	Revision        int64       `json:"revision"`
+	ExpiresAtMs     int64       `json:"expires_at_ms"`
+}
+
+type SyncPresentingState struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	Revision  int64       `json:"revision"`
 }
 
 type SyncPublicationFence struct {

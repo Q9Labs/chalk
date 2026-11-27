@@ -6,16 +6,38 @@ export const WHITEBOARD_ITEM_ID = "whiteboard";
 
 export const screenShareItemId = (participantId: string): string => `screen-share:${participantId}`;
 
-/** Everything on the stage is an item: participants, one item per live screen share, and the whiteboard when open. */
-export type StageItem = { readonly kind: "participant"; readonly id: string; readonly participant: Participant } | { readonly kind: "screen-share"; readonly id: string; readonly participant: Participant } | { readonly kind: "whiteboard"; readonly id: typeof WHITEBOARD_ITEM_ID };
+/** Facts the stage needs about one presented Document. */
+export type StageDocument = {
+  readonly documentId: string;
+  readonly presenterId: string;
+  readonly page: number;
+  readonly zoom: number;
+  readonly startedAtMs: number;
+  readonly fileName?: string;
+  readonly status?: "preparing" | "ready" | "failed";
+  readonly pageCount?: number;
+};
 
-export function buildStageItems(participants: readonly Participant[], whiteboardOpen: boolean): StageItem[] {
+/** Everything on the stage is an item: participants, one item per live screen share or Document, and the whiteboard when open. */
+export type StageItem =
+  | { readonly kind: "participant"; readonly id: string; readonly participant: Participant }
+  | { readonly kind: "screen-share"; readonly id: string; readonly participant: Participant }
+  | { readonly kind: "whiteboard"; readonly id: typeof WHITEBOARD_ITEM_ID }
+  | { readonly kind: "document"; readonly id: string; readonly document: StageDocument };
+
+/** Shared-content items: everything on the Stage that is not a person. */
+export type ContentItem = Extract<StageItem, { readonly kind: "screen-share" | "whiteboard" | "document" }>;
+
+export const documentItemId = (documentId: string): string => `document:${documentId}`;
+
+export function buildStageItems(participants: readonly Participant[], whiteboardOpen: boolean, documents: readonly StageDocument[] = []): StageItem[] {
   const items: StageItem[] = participants.map((participant) => ({ kind: "participant", id: participant.id, participant }));
   for (const participant of participants) {
     if (participant.isScreenSharing) {
       items.push({ kind: "screen-share", id: screenShareItemId(participant.id), participant });
     }
   }
+  for (const document of documents) items.push({ kind: "document", id: documentItemId(document.documentId), document });
   if (whiteboardOpen) items.push({ kind: "whiteboard", id: WHITEBOARD_ITEM_ID });
   return items;
 }
@@ -55,31 +77,31 @@ export interface PrimaryContext {
   readonly seenAt: ReadonlyMap<string, number>;
 }
 
-function firstScreenShare(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
-  let first: StageItem | undefined;
-  let firstSeen = Infinity;
+function newestMediaContent(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
+  let newest: StageItem | undefined;
+  let newestSeen = -Infinity;
   for (const item of items) {
-    if (item.kind !== "screen-share") continue;
-    const seen = seenAt.get(item.id) ?? Infinity;
-    if (!first || seen < firstSeen) {
-      first = item;
-      firstSeen = seen;
+    if (item.kind !== "screen-share" && item.kind !== "document") continue;
+    const seen = seenAt.get(item.id) ?? -Infinity;
+    if (!newest || seen > newestSeen) {
+      newest = item;
+      newestSeen = seen;
     }
   }
-  return first;
+  return newest;
 }
 
 function participantWhere(items: readonly StageItem[], predicate: (participant: Participant) => boolean): StageItem | undefined {
   return items.find((item) => item.kind === "participant" && predicate(item.participant));
 }
 
-/** A pin wins; otherwise the first live share, board, then active speaker leads Spotlight. */
+/** A pin wins; otherwise the newest live share or Document, board, then active speaker leads Spotlight. */
 export function choosePrimary(items: readonly StageItem[], context: PrimaryContext): StageItem | null {
   const eligible = items.filter((item) => !isOwnDeviceSeat(item));
   if (eligible.length === 0) return null;
   const pinned = context.pinnedId ? eligible.find((item) => item.id === context.pinnedId) : undefined;
   if (pinned) return pinned;
-  const content = firstScreenShare(eligible, context.seenAt) ?? eligible.find((item) => item.kind === "whiteboard");
+  const content = newestMediaContent(eligible, context.seenAt) ?? eligible.find((item) => item.kind === "whiteboard");
   if (content) return content;
   // Someone reconnecting is not in the call right now, so they never lead the stage unless pinned or nobody else is there.
   const present = (participant: Participant) => participant.isReconnecting !== true;

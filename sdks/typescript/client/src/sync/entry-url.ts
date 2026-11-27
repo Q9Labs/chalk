@@ -11,6 +11,7 @@ export function syncEntryUrl(value: string, generation: number | null, confirmat
   url.searchParams.set("connection_quality", "1");
   url.searchParams.set("screen_annotation", "1");
   url.searchParams.set("screen_annotation_burn_in", "1");
+  url.searchParams.set("presenting", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

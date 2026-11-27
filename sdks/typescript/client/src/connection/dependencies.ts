@@ -40,6 +40,7 @@ export type ConnectionMediaDevices = {
 };
 export type ConnectionSyncClient = V1CollaborationClient & {
   readonly annotation?: import("../screen-annotation/replica").AnnotationReplica;
+  readonly presenting?: import("../presenting/replica").PresentingReplica;
   readonly start: () => Promise<void>;
   /** Confirms entry after Sync is live and media has started. Without it, Sync confirms the entry at hello. */
   readonly confirmEntered?: () => Promise<void>;

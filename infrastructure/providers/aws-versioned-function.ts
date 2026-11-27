@@ -16,7 +16,7 @@ const functionProps = Schema.Struct({
   functionName: Schema.String,
   description: Schema.String,
   role: Schema.String,
-  runtime: Schema.Literal("nodejs22.x"),
+  runtime: Schema.Union([Schema.Literal("nodejs22.x"), Schema.Literal("provided.al2023")]),
   handler: Schema.String,
   architectures: Schema.Array(Schema.Literal("arm64")),
   code: Schema.Struct({ bucket: Schema.String, key: Schema.String, version: Schema.String, sha256: Schema.String }),
@@ -26,7 +26,7 @@ const functionProps = Schema.Struct({
   ephemeralStorageSize: Schema.Number,
   environment: Schema.Redacted(Schema.Record(Schema.String, Schema.String)),
   tracingMode: Schema.Literal("Active"),
-  eventInvokeConfig: Schema.Struct({ maximumEventAge: Schema.Number, maximumRetryAttempts: Schema.Number, onFailure: Schema.String }),
+  eventInvokeConfig: Schema.Struct({ maximumEventAge: Schema.Number, maximumRetryAttempts: Schema.Number, onFailure: Schema.optionalKey(Schema.String) }),
   tags: Schema.Record(Schema.String, Schema.String),
 });
 export type FunctionProps = typeof functionProps.Type;
@@ -100,7 +100,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
     ephemeralStorageSize: config.EphemeralStorage?.Size,
     environment: Redacted.make(environment),
     tracingMode: config.TracingConfig?.Mode,
-    ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination } } : {}),
+    ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, ...(invoke.DestinationConfig?.OnFailure?.Destination ? { onFailure: invoke.DestinationConfig.OnFailure.Destination } : {}) } } : {}),
     tags: Object.fromEntries(Object.entries(yield* tagsOf(current)).filter(([key]) => !key.startsWith("alchemy:"))),
   });
   if (!runOwned) Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))(configuration);
@@ -125,17 +125,25 @@ const readOwned = Effect.fn(function* (functionName: string, instanceId: string)
 });
 
 class NotSettled extends Data.TaggedError("NotSettled") {}
-
-const settled = Effect.fn(function* (functionName: string) {
+const settled = Effect.fn(function* (functionName: string, allowPreviousFailure = false) {
   return yield* lambda.getFunctionConfiguration({ FunctionName: functionName }).pipe(
-    Effect.flatMap((config) => (config.State === "Active" && config.LastUpdateStatus === "Successful" ? Effect.succeed(config) : Effect.fail(new NotSettled()))),
+    Effect.flatMap((config) => {
+      if (config.State === "Active" && config.LastUpdateStatus === "Successful") return Effect.succeed(config);
+      if (config.State === "Active" && config.LastUpdateStatus === "Failed") {
+        if (allowPreviousFailure) return Effect.succeed(config);
+        throw new Error("Lambda update failed; retry the checked release to repair it");
+      }
+      return Effect.fail(new NotSettled());
+    }),
     Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
 });
 
-export function requireRunOwnedFunction(stageName: string, functionName: string) {
+export function requireRunOwnedFunction(stageName: string, functionName: string, operation: "create" | "delete" = "create") {
   const stage = parseStage(stageName);
-  if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
+  const productionRendererBootstrap = operation === "create" && stage.kind === "production" && functionName === "chalk-production-document-renderer" && process.env.CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP === "approved";
+  const allowed = [`chalk-${stage.name}-transcription-dispatcher`, `chalk-${stage.name}-document-renderer`];
+  if (!productionRendererBootstrap && (stage.kind !== "ephemeral" || !allowed.includes(functionName))) throw new Error("Only a stage-scoped ephemeral workload function may be created or deleted");
 }
 type Configuration = Pick<FunctionProps, "environment">;
 // Lambda returns environment variables in its own order, and deepEqual compares a redacted record in
@@ -146,32 +154,42 @@ const environmentByKey = <T extends Configuration>(configuration: T) => ({
 });
 const sameConfiguration = (live: Configuration, desired: Configuration) => deepEqual(environmentByKey(live), environmentByKey(desired));
 
+const eventInvokeRequest = (news: FunctionProps) => ({
+  FunctionName: news.functionName,
+  MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge,
+  MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts,
+  ...(news.eventInvokeConfig.onFailure ? { DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } } : {}),
+});
+
 const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: string) {
   requireRunOwnedFunction(yield* Stage, news.functionName);
-  yield* lambda
-    .createFunction({
-      FunctionName: news.functionName,
-      Description: news.description,
-      Role: news.role,
-      Runtime: news.runtime,
-      Handler: news.handler,
-      Architectures: [...news.architectures],
-      Code: { S3Bucket: news.code.bucket, S3Key: news.code.key, S3ObjectVersion: news.code.version },
-      Publish: false,
-      Timeout: news.timeout,
-      MemorySize: news.memorySize,
-      EphemeralStorage: { Size: news.ephemeralStorageSize },
-      Environment: { Variables: Redacted.value(news.environment) },
-      TracingConfig: { Mode: news.tracingMode },
-      Tags: { ...news.tags, [ownerTagKey]: instanceId },
-    })
-    .pipe(Effect.retry({ while: (error) => error._tag === "ExecutionRoleNotAssumable" || (error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message)), schedule: Schedule.spaced("2 seconds"), times: 30 }));
+  const owned = yield* isOwnedBy(news.functionName, instanceId);
+  if (owned === false) return yield* refuse("Dispatcher function already exists without this run's ownership tag; refusing to adopt or replace it");
+  if (owned !== true)
+    yield* lambda
+      .createFunction({
+        FunctionName: news.functionName,
+        Description: news.description,
+        Role: news.role,
+        Runtime: news.runtime,
+        Handler: news.handler,
+        Architectures: [...news.architectures],
+        Code: { S3Bucket: news.code.bucket, S3Key: news.code.key, S3ObjectVersion: news.code.version },
+        Publish: false,
+        Timeout: news.timeout,
+        MemorySize: news.memorySize,
+        EphemeralStorage: { Size: news.ephemeralStorageSize },
+        Environment: { Variables: Redacted.value(news.environment) },
+        TracingConfig: { Mode: news.tracingMode },
+        Tags: { ...news.tags, [ownerTagKey]: instanceId },
+      })
+      .pipe(Effect.retry({ while: (error) => error._tag === "ExecutionRoleNotAssumable" || (error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message)), schedule: Schedule.spaced("2 seconds"), times: 30 }));
   yield* lambda.getFunctionConfiguration({ FunctionName: news.functionName }).pipe(
     Effect.flatMap((config) => (config.State === "Active" ? Effect.succeed(config) : Effect.fail(new NotSettled()))),
     Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
   yield* lambda.putFunctionConcurrency({ FunctionName: news.functionName, ReservedConcurrentExecutions: news.reservedConcurrency });
-  yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } });
+  yield* lambda.putFunctionEventInvokeConfig(eventInvokeRequest(news));
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
   if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
@@ -189,19 +207,25 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
   }),
   reconcile: Effect.fn(function* ({ news, olds, instanceId }) {
     if (!olds) return yield* createRunFunction(news, instanceId);
-    const before = yield* settled(news.functionName);
+    const before = yield* settled(news.functionName, true);
     const live = yield* readFunction(news.functionName);
     if (!live) return yield* refuse("Dispatcher function is missing; this migration never creates it.");
     const { code, ...configuration } = news;
     // Select the immutable object even when it contains identical bytes under a
     // new release key. Never rebuild, publish a version, or change architecture.
     const codeChanged = () => !deepEqual(olds?.code, code) || before.CodeSha256 !== code.sha256;
-    if (codeChanged()) {
-      yield* lambda.updateFunctionCode({ FunctionName: news.functionName, S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version, RevisionId: before.RevisionId, Publish: false });
-      yield* settled(news.functionName);
+    const configurationChanged = !sameConfiguration(live.configuration, configuration);
+    if (codeChanged() || configurationChanged) {
+      // Lambda has no atomic code+configuration update. Write the desired release
+      // identity tags first and the code last: any interruption leaves a tagged,
+      // recoverable partial release instead of anonymous drift, and a retry in
+      // either direction can reconcile the same function.
+      const removed = Object.keys(live.configuration.tags).filter((key) => !(key in news.tags));
+      if (removed.length) yield* lambda.untagResource({ Resource: live.functionArn, TagKeys: removed });
+      if (!deepEqual(live.configuration.tags, news.tags)) yield* lambda.tagResource({ Resource: live.functionArn, Tags: news.tags });
     }
-    if (!sameConfiguration(live.configuration, configuration)) {
-      const current = yield* settled(news.functionName);
+    if (configurationChanged) {
+      const current = yield* settled(news.functionName, true);
       yield* lambda.updateFunctionConfiguration({
         FunctionName: news.functionName,
         RevisionId: current.RevisionId,
@@ -217,23 +241,19 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
       });
       yield* settled(news.functionName);
       if (live.configuration.reservedConcurrency !== news.reservedConcurrency) yield* lambda.putFunctionConcurrency({ FunctionName: news.functionName, ReservedConcurrentExecutions: news.reservedConcurrency });
-      if (!deepEqual(live.configuration.eventInvokeConfig, news.eventInvokeConfig))
-        yield* lambda.putFunctionEventInvokeConfig({
-          FunctionName: news.functionName,
-          MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge,
-          MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts,
-          DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } },
-        });
-      const removed = Object.keys(live.configuration.tags).filter((key) => !(key in news.tags));
-      if (removed.length) yield* lambda.untagResource({ Resource: live.functionArn, TagKeys: removed });
-      yield* lambda.tagResource({ Resource: live.functionArn, Tags: news.tags });
+      if (!deepEqual(live.configuration.eventInvokeConfig, news.eventInvokeConfig)) yield* lambda.putFunctionEventInvokeConfig(eventInvokeRequest(news));
+    }
+    if (codeChanged()) {
+      const current = yield* settled(news.functionName);
+      yield* lambda.updateFunctionCode({ FunctionName: news.functionName, S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version, RevisionId: current.RevisionId, Publish: false });
+      yield* settled(news.functionName);
     }
     const result = yield* readFunction(news.functionName);
     if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP/configuration readback failed; no values logged.");
     return result;
   }),
   delete: Effect.fn(function* ({ output, instanceId }) {
-    requireRunOwnedFunction(yield* Stage, output.functionName);
+    requireRunOwnedFunction(yield* Stage, output.functionName, "delete");
     const owned = yield* isOwnedBy(output.functionName, instanceId);
     if (owned === undefined) return;
     if (!owned) return yield* refuse("Refusing to delete a Lambda function that this run did not create; its ownership tag is missing or belongs to another run");

@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
@@ -123,15 +122,11 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
 	media := newMediaConn(conn)
 	mux := webrtc.NewICEUDPMux(nil, media)
-	var tcpMux ice.TCPMux
-	if cfg.TCPAddr != "" {
-		listener, err := net.Listen("tcp4", cfg.TCPAddr)
-		if err != nil {
-			_ = mux.Close()
-			_ = conn.Close()
-			return nil, fmt.Errorf("listen on TCP %q: %w", cfg.TCPAddr, err)
-		}
-		tcpMux = webrtc.NewICETCPMux(nil, listener, iceTCPReadBuffer)
+	tcpMux, err := listenTCPMux(cfg.TCPAddrs, log)
+	if err != nil {
+		_ = mux.Close()
+		_ = conn.Close()
+		return nil, err
 	}
 	peers, err := newPeerFactory(cfg, mux, tcpMux)
 	if err != nil {

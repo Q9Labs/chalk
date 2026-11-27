@@ -60,11 +60,11 @@ where render_job_id = sqlc.arg(render_job_id)
 
 -- name: AuthorizeRecordingRenderInput :one
 select inputs.*,
-    (pipelines.capture_completed_at +
-        ((case when jobs.kind = 'transcription'
-            then recording_transcription_source_window_seconds(episodes.config_snapshot)
-            else recording_deferred_retention_seconds(episodes.config_snapshot)
-        end) * interval '1 second'))::timestamptz as source_expires_at
+    ((case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end))::timestamptz as source_expires_at
 from recording_render_inputs inputs
 join recording_jobs jobs on jobs.id = inputs.render_job_id
 join recording_job_attempt_authorities authority
@@ -98,11 +98,11 @@ where inputs.render_input_handle = sqlc.arg(render_input_handle)
   and ((jobs.kind = 'render' and pipelines.state = 'rendering')
     or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
 	and pipelines.capture_completed_at is not null
-  and pipelines.capture_completed_at +
-      ((case when jobs.kind = 'transcription'
-          then recording_transcription_source_window_seconds(episodes.config_snapshot)
-          else recording_deferred_retention_seconds(episodes.config_snapshot)
-      end) * interval '1 second') > clock_timestamp()
+  and (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
 for share of jobs;
 
 -- name: ListRecordingRenderCaptureObjects :many
@@ -181,11 +181,11 @@ where inputs.render_input_handle = sqlc.arg(render_input_handle)
   and render_jobs.lease_owner = sqlc.arg(lease_owner)
   and render_jobs.lease_expires_at = sqlc.arg(lease_expires_at)
   and render_jobs.lease_expires_at > clock_timestamp()
-  and pipelines.capture_completed_at +
-      ((case when render_jobs.kind = 'transcription'
-          then recording_transcription_source_window_seconds(episodes.config_snapshot)
-          else recording_deferred_retention_seconds(episodes.config_snapshot)
-      end) * interval '1 second') > clock_timestamp()
+  and (case when render_jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(render_jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
   and exists (
       select 1
       from recording_bundle_allocations allocations
@@ -226,11 +226,11 @@ with authorized as (
       and jobs.lease_owner = sqlc.arg(lease_owner)
       and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
       and jobs.lease_expires_at > clock_timestamp()
-      and pipelines.capture_completed_at +
-          ((case when jobs.kind = 'transcription'
-              then recording_transcription_source_window_seconds(episodes.config_snapshot)
-              else recording_deferred_retention_seconds(episodes.config_snapshot)
-          end) * interval '1 second') > clock_timestamp()
+      and (case when jobs.kind = 'transcription'
+                then recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot)
+                else pipelines.capture_completed_at +
+                    (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+            end) > clock_timestamp()
     for update of jobs
 ), next_version as (
     select coalesce(max(allocation_version), 0) + 1 as value
@@ -446,8 +446,7 @@ where inputs.render_input_handle = sqlc.arg(render_input_handle)
   and jobs.lease_expires_at > clock_timestamp()
   and pipelines.capture_completed_at is not null
   and pipelines.state <> 'deleted'
-  and pipelines.capture_completed_at +
-      (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
+  and recording_transcription_source_expires_at(jobs.recording_id, pipelines.capture_completed_at, episodes.config_snapshot) > clock_timestamp()
   and recordings.status in ('pending', 'processing', 'completed', 'failed')
 for update of jobs, recordings;
 

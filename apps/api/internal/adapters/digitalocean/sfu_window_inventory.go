@@ -20,11 +20,19 @@ func (a *SFUWindow) expectedTags() []string {
 // verifyOwned pins the droplet to the exact identity this adapter creates.
 // Destroy skips the image so a snapshot roll cannot strand a running node.
 func (a *SFUWindow) verifyOwned(droplet sfuWindowDropletJSON, name string, checkImage bool) error {
+	return a.verifyShape(droplet, name, checkImage, true)
+}
+
+func (a *SFUWindow) verifyCreateResponse(droplet sfuWindowDropletJSON, name string) error {
+	return a.verifyShape(droplet, name, false, false)
+}
+
+func (a *SFUWindow) verifyShape(droplet sfuWindowDropletJSON, name string, checkImage, requireVPC bool) error {
 	tags := slices.Clone(droplet.Tags)
 	slices.Sort(tags)
 	switch {
-	case droplet.ID <= 0, droplet.Name != name, droplet.SizeSlug != SFUWindowSize, droplet.Region.Slug != a.region, droplet.VPCUUID != a.vpcUUID,
-		!slices.Equal(tags, a.expectedTags()), checkImage && droplet.Image.ID != a.snapshotID:
+	case droplet.ID <= 0, droplet.Name != name, droplet.SizeSlug != SFUWindowSize, droplet.Region.Slug != a.region,
+		droplet.VPCUUID != a.vpcUUID && (requireVPC || droplet.VPCUUID != ""), !slices.Equal(tags, a.expectedTags()), checkImage && droplet.Image.ID != a.snapshotID:
 		return ErrSFUWindowDrift
 	}
 	return nil
