@@ -2,14 +2,14 @@
 
 The public contract lists these webhook Event types:
 
-| Area        | Event types                                                          |
-| ----------- | -------------------------------------------------------------------- |
-| Endpoint    | `endpoint.test`                                                      |
-| Space       | `space.created`, `space.updated`, `space.archived`, `space.restored` |
-| Episode     | `episode.started`, `episode.ended`, `focus.completed`                                   |
-| Participant | `participant.joined`, `participant.left`, `participant.focus_changed`                             |
-| Recording   | `recording.started`, `recording.completed`, `recording.failed`       |
-| Transcript  | `transcript.started`, `transcript.completed`, `transcript.failed`    |
+| Area        | Event types                                                           |
+| ----------- | --------------------------------------------------------------------- |
+| Endpoint    | `endpoint.test`                                                       |
+| Space       | `space.created`, `space.updated`, `space.archived`, `space.restored`  |
+| Episode     | `episode.started`, `episode.ended`, `focus.completed`                 |
+| Participant | `participant.joined`, `participant.left`, `participant.focus_changed` |
+| Recording   | `recording.started`, `recording.completed`, `recording.failed`        |
+| Transcript  | `transcript.started`, `transcript.completed`, `transcript.failed`     |
 
 Create an endpoint with a version, URL, enabled flag, and event list. The management client uses an idempotency key for mutating requests:
 

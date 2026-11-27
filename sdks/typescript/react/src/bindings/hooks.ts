@@ -9,6 +9,7 @@ import {
   type ConnectionSlice,
   type MediaSlice,
   type OfflineSlice,
+  type ParticipantFocus,
   type ParticipantsSlice,
   type ReactionsSlice,
   type RecordingSlice,
@@ -64,7 +65,9 @@ export function useParticipants(): ParticipantsSlice {
 }
 
 /** Focus state and commands. `own` is this device's report; roster entries carry the states the viewer may see. */
-export function useFocus() {
+export type UseFocusResult = SpaceClient["focus"] & { readonly own: ParticipantFocus | undefined; readonly participants: ParticipantsSlice["roster"] };
+
+export function useFocus(): UseFocusResult {
   const client = useSpaceClient();
   const self = useSelf();
   const participants = useParticipants();

@@ -120,10 +120,7 @@ func mergeFocusIntervals(sorted []FocusInterval) []FocusInterval {
 }
 
 func FocusReportedSeconds(intervals []FocusInterval) int64 {
-	ranges := make([]FocusInterval, 0, len(intervals))
-	for _, interval := range intervals {
-		ranges = append(ranges, interval)
-	}
+	ranges := append(make([]FocusInterval, 0, len(intervals)), intervals...)
 	sort.Slice(ranges, func(i, j int) bool { return ranges[i].StartedAt.Before(ranges[j].StartedAt) })
 	var total int64
 	var current *FocusInterval
