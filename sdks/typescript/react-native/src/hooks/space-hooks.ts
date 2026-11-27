@@ -1,4 +1,4 @@
-import type { Capability, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { canDrawWhiteboard, type Capability, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { useSpaceClient } from "../context/space-client-context";
@@ -44,4 +44,9 @@ export function useWhiteboard(): SpaceSnapshot["whiteboard"] {
 
 export function useCan(capability: Capability): boolean {
   return useSelf().can(capability);
+}
+
+/** Whether this person can draw on the board, with the same policy fallback as web. */
+export function useCanDrawWhiteboard(): boolean {
+  return canDrawWhiteboard(useWhiteboard(), useCan("drawWhiteboard"));
 }

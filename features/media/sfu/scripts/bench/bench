@@ -125,14 +125,14 @@ host_cidr() {
 # render_cloud_init renders infrastructure/sfu/node/cloud-init.yaml.tftpl the way OpenTofu does, for the two
 # loops it has: one rule line per address in control_addresses and ssh_addresses. The ports and the UDP buffer come from the node table.
 render_cloud_init() {
-  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v media_tcp_port="$media_tcp_port" -v udp_buffer="$udp_buffer" '
     /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
     /^%\{ endfor ~\}$/ {
       count = split(list, addresses, ",")
       for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
       looping = 0; next
     }
-    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{media_tcp_port\}/, media_tcp_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
   ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
@@ -204,7 +204,7 @@ up() {
 
   local droplet_ids
   droplet_ids="$(jq -rs '[.[][0].id] | join(",")' "${dir}"/*.json)"
-  local inbound="protocol:tcp,ports:22,address:${ssh_addresses//,/,address:} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
+  local inbound="protocol:tcp,ports:22,address:${ssh_addresses//,/,address:} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:tcp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:tcp,ports:${media_tcp_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
   local control_rule="protocol:tcp,ports:${control_port}"
   for extra in ${control_addresses//,/ }; do
     control_rule+=",address:${extra}"

@@ -2,6 +2,7 @@ import type { ClientFailure, ErrorCode } from "./types";
 
 const DEFAULT_FAILURE_DETAIL = "Something went wrong while joining. Try again.";
 const OUR_SIDE_MEDIA_DETAIL = "Something on our side failed while connecting audio and video. Try again in a moment.";
+const ICE_BLOCKED_DETAIL = "Your network or VPN is blocking the call connection. Turn off the VPN or try another network, then join again.";
 const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
   "access.invalid": "Access to this call was rejected. Refresh the page and try again.",
   "access.unavailable": "Couldn’t get access to the call. Try again.",
@@ -14,7 +15,8 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 };
 
 /** Safe, actionable failure copy shared by web and native call screens. */
-export function getConnectionFailureDetail({ code, sync, mediaHttpStatus }: { readonly code?: ErrorCode; readonly sync?: ClientFailure["sync"]; readonly mediaHttpStatus?: number }): string {
+export function getConnectionFailureDetail({ code, sync, mediaHttpStatus, mediaIceFailure }: { readonly code?: ErrorCode; readonly sync?: ClientFailure["sync"]; readonly mediaHttpStatus?: number; readonly mediaIceFailure?: true }): string {
+  if (mediaIceFailure) return ICE_BLOCKED_DETAIL;
   if (code === "connection.media_start_failed" && mediaHttpStatus !== undefined) return OUR_SIDE_MEDIA_DETAIL;
   if (sync?.stage === "upgrade") return sync.closeCode !== null ? "The connection closed before the call service could be reached. Try again." : "A connection to the call service could not be opened. Try again.";
   return (code && FAILURE_DETAILS[code]) ?? DEFAULT_FAILURE_DETAIL;

@@ -661,7 +661,7 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
-  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "app_state", "screen_annotation", "screen_annotation_burn_in"].filter((key) => Object.hasOwn(value, key));
+  const flags = ["entry_confirmation", "media_off_reason", "connection_quality", "app_state", "screen_annotation", "screen_annotation_burn_in", "presenting"].filter((key) => Object.hasOwn(value, key));
   if (flags.some((key) => value[key] !== true)) return false;
   if (value.screen_annotation_burn_in === true && value.screen_annotation !== true) return false;
   const fields = [...base, ...flags, ...(extensionValid ? ["extensions"] : []), ...["entry_generation", "participant_identity_id"].filter((key) => Object.hasOwn(value, key))];
@@ -1419,6 +1419,7 @@ const WelcomeBase = {
   app_state: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation: Schema.optionalKey(Schema.Literal(true)),
   screen_annotation_burn_in: Schema.optionalKey(Schema.Literal(true)),
+  presenting: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };

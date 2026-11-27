@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type AttachmentPreviewFailureOperation = "open" | "render" | "resolve";
 
+export function formatFileSize(byteLength: number): string {
+  if (byteLength < 1024 * 1024) return `${Math.max(1, Math.round(byteLength / 1024))} KB`;
+  return `${(byteLength / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+}
+
 export function useChatAttachmentPreviews(attachments: readonly ChatAttachment[], resolveUrl: ((attachmentId: string) => Promise<string>) | undefined) {
   const [resolvedUrls, setResolvedUrls] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [failedAttachmentIds, setFailedAttachmentIds] = useState<ReadonlySet<string>>(() => new Set());

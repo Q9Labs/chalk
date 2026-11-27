@@ -130,6 +130,7 @@ defmodule ChalkSync.Transport.Router do
             screen_annotation_burn_in:
               conn.query_params["screen_annotation"] == "1" and
                 conn.query_params["screen_annotation_burn_in"] == "1",
+            presenting: conn.query_params["presenting"] == "1",
             connection_quality: conn.query_params["connection_quality"] == "1",
             app_state: conn.query_params["app_state"] == "1",
             participant_self_identity: conn.query_params["participant_device_admissions"] == "2",

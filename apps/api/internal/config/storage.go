@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -16,6 +17,9 @@ const (
 	TranscriptionWorkloadAuthSecret     = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
 	TranscriptionControlAudience        = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction     = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
+	PresentingCapabilitySecret          = "CHALK_PRESENTING_CAPABILITY_SECRET"
+	PresentingRendererFunction          = "CHALK_PRESENTING_RENDERER_FUNCTION_NAME"
+	PresentingRendererEndpoint          = "CHALK_PRESENTING_RENDERER_ENDPOINT"
 	RecordingKMSKeyID                   = "CHALK_RECORDING_KMS_KEY_ID"
 	RecordingKMSRegion                  = "CHALK_RECORDING_KMS_REGION"
 	RecordingKMSRequestTimeoutMS        = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
@@ -35,6 +39,12 @@ type TranscriptionConfig struct {
 	WorkloadAuthSecret string
 	ControlAudience    string
 	DispatcherFunction string
+}
+
+type PresentingConfig struct {
+	CapabilitySecret string
+	RendererFunction string
+	RendererEndpoint string
 }
 
 func (cfg *Config) loadTimeouts() error {
@@ -78,6 +88,21 @@ func (cfg *Config) loadStorage() error {
 			return fmt.Errorf("%s and %s must be set when %s=true", RecordingKMSKeyID, RecordingKMSRegion, RecordingEnabled)
 		}
 	}
+	cfg.Presenting = PresentingConfig{
+		CapabilitySecret: envOrDefault(PresentingCapabilitySecret, ""),
+		RendererFunction: envOrDefault(PresentingRendererFunction, ""),
+		RendererEndpoint: envOrDefault(PresentingRendererEndpoint, ""),
+	}
+	if cfg.Capabilities.Presenting {
+		if problems := presentingConfigProblems(cfg.Presenting, cfg.SyncToken, cfg.R2, cfg.RecordingKMS); len(problems) != 0 {
+			message := fmt.Sprintf("presenting is enabled but its configuration is incomplete; missing or invalid: %s", strings.Join(problems, ", "))
+			if cfg.Observability.Environment == "production" || strings.EqualFold(strings.TrimSpace(os.Getenv(PresentingEnabled)), "true") {
+				return fmt.Errorf("%s", message)
+			}
+			cfg.PresentingConfigError = message
+			cfg.Capabilities.Presenting = false
+		}
+	}
 	cfg.Transcription = TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
 		ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
@@ -107,6 +132,28 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 		return err
 	}
 	return nil
+}
+
+func presentingConfigProblems(presenting PresentingConfig, syncToken SyncTokenConfig, r2 R2Config, kms RecordingKMSConfig) []string {
+	var problems []string
+	if len(presenting.CapabilitySecret) < 32 {
+		problems = append(problems, PresentingCapabilitySecret+" (at least 32 bytes)")
+	}
+	function := strings.TrimSpace(presenting.RendererFunction) != ""
+	endpoint := strings.TrimSpace(presenting.RendererEndpoint) != ""
+	if !function && !endpoint {
+		problems = append(problems, PresentingRendererFunction+" or "+PresentingRendererEndpoint)
+	}
+	if function && !endpoint && strings.TrimSpace(kms.Region) == "" {
+		problems = append(problems, RecordingKMSRegion)
+	}
+	if len(syncToken.PrivateKey) == 0 {
+		problems = append(problems, SyncTokenAudience+", "+SyncTokenIssuer+", "+SyncTokenKeyID+", and "+SyncTokenPrivateKey)
+	}
+	if validateR2Config(r2, PresentingEnabled) != nil {
+		problems = append(problems, R2Bucket+", either "+R2AccountID+" or "+R2Endpoint+", "+R2AccessKeyID+", and "+R2SecretAccessKey)
+	}
+	return problems
 }
 
 func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {

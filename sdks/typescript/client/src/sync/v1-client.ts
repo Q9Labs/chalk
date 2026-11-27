@@ -1,6 +1,6 @@
 import { observeWebFocus } from "./focus-web";
 import { v1NegotiatedExtensions } from "./v1-negotiated-extensions";
-import { sameHead, sameRawHead, type Head } from "./v1-frame-head";
+import { sameHead, sameRawHead } from "./v1-frame-head";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
@@ -11,10 +11,12 @@ import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { AnnotationReplica } from "../screen-annotation/replica";
+import { createV1PresentingReplica, receiveV1PresentingFrame } from "./v1-presenting";
 import { encodeV1ClientFrame, decodeInboundV1Frame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
-import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
+import type { CommandOptions, Recovery, RequestDeferred, RequestOptions } from "./v1-client-types";
+import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
 import { frameSignature, rememberBoundedEvidence } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
@@ -59,22 +61,6 @@ const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
 const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
-type RequestDeferred = Deferred<V1DirectedRequestResult> & {
-  readonly frame: SyncV1ClientFrame;
-};
-type Recovery = {
-  readonly id: string;
-  readonly head: Head;
-  replayEvents: number;
-  replayBytes: number;
-  controlComplete: boolean;
-};
-type CommandOptions = {
-  readonly commandId?: string;
-};
-type RequestOptions = {
-  readonly requestId?: string;
-};
 export { V1SyncError } from "./v1-error";
 export class V1SyncClient implements V1CollaborationClient {
   readonly #options: V1SyncClientOptions;
@@ -125,6 +111,7 @@ export class V1SyncClient implements V1CollaborationClient {
       return false;
     }
   });
+  readonly presenting = createV1PresentingReplica(() => ({ socket: this.#socket, phase: this.#phase.phase, negotiated: this.#extensions.presenting }));
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -241,6 +228,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket = null;
     this.#phase = { phase: "stopped" };
     this.annotation.disconnected(true);
+    this.presenting.disconnected(true);
     this.#options.mediaPlane?.remotePublicationsChanged?.([], "unavailable");
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
@@ -579,6 +567,7 @@ export class V1SyncClient implements V1CollaborationClient {
         if (this.#extensions.annotation && this.#phase.phase === "live") this.annotation.receive(frame.value);
         return;
       }
+      if (receiveV1PresentingFrame(frame, this.presenting, this.#extensions.presenting, this.#phase.phase)) return;
       await this.#handleFrame(frame.value);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
@@ -851,6 +840,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#missedHeartbeats = 0;
     if (this.#entryPending && this.#extensions.entryConfirmation) this.#send({ type: "entered" });
     this.annotation.enterLive(this.#extensions.annotation, this.#extensions.annotationBurnIn);
+    this.presenting.enterLive(this.#extensions.presenting);
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -898,6 +888,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
     this.annotation.disconnected(this.#phase.phase === "terminal");
+    this.presenting.disconnected(this.#phase.phase === "terminal");
     if (!this.#started || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -1110,7 +1101,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#timers.cancel("noticeProbe");
   }
   #emit(): void {
-    if (this.#phase.phase === "terminal") this.annotation.disconnected(true);
+    if (this.#phase.phase === "terminal") {
+      this.annotation.disconnected(true);
+      this.presenting.disconnected(true);
+    }
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }

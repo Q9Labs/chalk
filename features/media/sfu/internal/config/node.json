@@ -1,5 +1,5 @@
 {
-  "ports": { "control": 8443, "media": 50000 },
+  "ports": { "control": 8443, "media": 50000, "mediaTcp": 443 },
   "udpBufferBytes": 8388608,
   "defaultSize": "s-1vcpu-1gb",
   "sizes": {

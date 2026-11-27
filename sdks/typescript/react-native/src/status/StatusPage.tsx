@@ -51,7 +51,7 @@ function pageFor(outcome: CallOutcome, callName: string, endReason: CallEndReaso
 export function StatusPage({ outcome, callName, failure, endReason, onRejoin, onHome }: StatusPageProps): React.JSX.Element {
   const { colors } = useTheme();
   const page = pageFor(outcome, callName, endReason);
-  const detail = outcome === "failed" ? getConnectionFailureDetail({ code: failure?.code, sync: failure?.sync, mediaHttpStatus: failure?.mediaHttpStatus }) : page.detail;
+  const detail = outcome === "failed" ? getConnectionFailureDetail({ code: failure?.code, sync: failure?.sync, mediaHttpStatus: failure?.mediaHttpStatus, mediaIceFailure: failure?.mediaIceFailure }) : page.detail;
   const pageStyle = [styles.page, { backgroundColor: colors.canvas }];
   const ref = useMeasuredRef<View>("status.page", pageStyle);
   const firstAction = useRef<View>(null);

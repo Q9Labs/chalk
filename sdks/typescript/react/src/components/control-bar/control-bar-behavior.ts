@@ -1,11 +1,12 @@
 import { mergeDevices, withSelectedDeviceFallback, type MediaDevice } from "./control-bar-devices";
+import { DEFAULT_CONTROL_BAR_BUTTONS, type ConnectedControlBarProps, type ControlBarButtonName, type ControlBarSurfaceProps } from "./control-bar-props";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
 import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
-import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
+import type { ClientFailure } from "@q9labsai/chalk-client";
 import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { NO_DETECTED_DEVICES, watchMediaDevices } from "../../internal/media-devices";
 import { playSpeakerTestTone } from "../../internal/speaker-test";
@@ -15,109 +16,8 @@ import { useDeviceAccess } from "../device-access/useDeviceAccess";
 import type { DeviceKind } from "../device-access/model";
 
 export type { MediaDevice } from "./control-bar-devices";
-
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
-
-export interface ControlBarSurfaceProps {
-  layout?: "focus" | "grid";
-  onLayoutChange?: (layout: "focus" | "grid") => void;
-  density?: "comfortable" | "compact";
-  buttons?: ControlBarButtonName[];
-
-  microphoneTrack?: MediaStreamTrack | null;
-  microphonePicker?: ControlBarProps["microphonePicker"];
-  cameraTrack?: MediaStreamTrack | null;
-  captureCameraPreview?: () => Promise<CameraPreview>;
-  microphoneWarning?: boolean;
-  cameraWarning?: boolean;
-  /** A device the browser or the system refuses. Its dock button shows a ring and a badge and opens the access card. */
-  deviceAccess?: Partial<Record<DeviceKind, DeviceAccessControl>>;
-  speakingWhileMuted?: boolean;
-  noiseSuppression?: boolean;
-  onNoiseSuppressionChange?: (enabled: boolean) => void;
-  mirrored?: boolean;
-  onMirrorChange?: (mirrored: boolean) => void;
-  onTestSpeaker?: () => void;
-  onStartScreenShare?: (options: ScreenShareOptions) => void;
-  knockCount?: number;
-  isMuted?: boolean;
-  microphonePending?: boolean;
-  onCancelMicrophonePending?: () => void;
-  mediaEnableDisabled?: boolean;
-  reactionsDisabled?: boolean;
-  cameraPending?: boolean;
-  onCancelCameraPending?: () => void;
-  isVideoEnabled?: boolean;
-  isScreenSharing?: boolean;
-  isRecording?: boolean;
-  isRecordingPending?: boolean;
-  isChatOpen?: boolean;
-  isParticipantsOpen?: boolean;
-  isHandRaised?: boolean;
-  isWhiteboardOpen?: boolean;
-  unreadChatCount?: number;
-  audioInputDevices?: readonly MediaDevice[];
-  audioOutputDevices?: readonly MediaDevice[];
-  videoInputDevices?: readonly MediaDevice[];
-  selectedAudioInput?: string;
-  selectedAudioOutput?: string;
-  selectedVideoInput?: string;
-
-  onToggleMute?: () => void;
-  onToggleVideo?: () => void;
-  onAudioInputChange?: (deviceId: string) => void;
-  onAudioOutputChange?: (deviceId: string) => void;
-  onVideoInputChange?: (deviceId: string) => void;
-  onToggleScreenShare?: () => void;
-  onToggleRecording?: () => void;
-  onToggleChat?: () => void;
-  onToggleParticipants?: () => void;
-  onToggleHandRaise?: () => void;
-  onToggleWhiteboard?: () => void;
-  onOpenReactions?: () => void;
-  /** The reactions tray is open; the button reports it with aria-expanded. */
-  reactionsOpen?: boolean;
-  onLeft?: () => void;
-  onEndForEveryone?: () => void;
-
-  participantColorSeed?: string;
-  participantGradientPreference?: ParticipantGradientPreference;
-  expanded?: boolean;
-  detectDevices?: boolean;
-  /** Render the requested controls as inert display state without commands. */
-  displayOnly?: boolean;
-  className?: string;
-}
-
-export interface ControlBarProps {
-  /** Control the existing microphone picker from elsewhere in the call. */
-  readonly microphonePicker?: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void };
-  /** Local self-view only. Omit to use the persisted mirror preference. */
-  readonly mirrored?: boolean;
-  readonly onMirrorChange?: (mirrored: boolean) => void;
-  readonly layout?: "focus" | "grid";
-  readonly onLayoutChange?: (layout: "focus" | "grid") => void;
-  readonly density?: "comfortable" | "compact";
-  readonly buttons?: ControlBarButtonName[];
-  readonly activePanel?: "chat" | "participants" | null;
-  readonly onToggleChat?: () => void;
-  readonly onToggleParticipants?: () => void;
-  readonly onToggleWhiteboard?: () => void;
-  readonly isWhiteboardOpen?: boolean;
-  readonly onOpenReactions?: () => void;
-  readonly reactionsOpen?: boolean;
-  readonly onLeaveRequest?: () => void;
-  /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
-  readonly onEndForEveryone?: () => void;
-  readonly onLeft?: () => void;
-  /** The second argument retains the published MediaSource contract; the third also identifies speaker commands. */
-  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource, action?: MediaCommandAction, retryCommand?: () => Promise<unknown>) => void;
-  readonly participantColorSeed?: string;
-  readonly participantGradientPreference?: ParticipantGradientPreference;
-  readonly className?: string;
-}
-
-export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
+export type { ControlBarButtonName, ControlBarSurfaceProps } from "./control-bar-props";
+export { DEFAULT_CONTROL_BAR_BUTTONS } from "./control-bar-props";
 
 interface ControlBarSurfaceBehaviorOptions {
   readonly density: "comfortable" | "compact";
@@ -192,7 +92,7 @@ interface ConnectedControlBarBehavior {
   readonly commandAction?: MediaCommandAction;
 }
 
-export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
+export function useConnectedControlBarBehavior(props: ConnectedControlBarProps): ConnectedControlBarBehavior {
   const [mirrored, setMirrored] = useMirrorSetting();
   const client = useSpaceClient();
   const self = useSelf();
@@ -259,6 +159,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     if (button === "reactions") return canSendReaction;
     if (button === "handraise") return canRaiseHand;
     if (button === "whiteboard") return canDrawWhiteboard;
+    if (button === "presenting") return canPublishScreen;
     if (button === "record") return canManageRecording;
     return true;
   });

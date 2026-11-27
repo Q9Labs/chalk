@@ -14,6 +14,8 @@ export type { ParticipantPresence, ParticipantFocus, Participant, AdmissionReque
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
+import type { PresentingControllerEffects } from "./presenting-controller";
+import type { PresentingSlice } from "../presenting/types";
 import type { PromiseController } from "./promise-facade";
 import type { AccessContext, AccessReason } from "../access/context";
 import type { AppTelemetry } from "../telemetry/app";
@@ -86,6 +88,8 @@ export type ClientFailure = {
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
   /** Set when Chalk's own media signalling answered with a refusal (HTTP 4xx): the failure is ours, not the person's network. */
   readonly mediaHttpStatus?: number;
+  /** Set when media startup timed out or failed while ICE was connecting. */
+  readonly mediaIceFailure?: true;
   /** Set when a chat file upload failed: where it broke, and the storage HTTP status when storage answered. */
   readonly uploadFailure?: { readonly kind: import("../chat-files/types").ChatUploadFailureKind; readonly httpStatus?: number };
 };
@@ -200,6 +204,7 @@ export type SpaceSnapshot = {
   readonly reactions: ReactionsSlice;
   readonly recording: RecordingSlice;
   readonly whiteboard: WhiteboardSlice;
+  readonly presenting: PresentingSlice;
   readonly offline: OfflineSlice;
 };
 export type ChatSendInput = {
@@ -234,6 +239,7 @@ export type ParticipantsController = PromiseController<Omit<ParticipantsControll
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
 export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;
+export type PresentingController = PromiseController<Omit<PresentingControllerEffects, "dispose">>;
 export type ClientEventMap = {
   readonly participantJoined: {
     readonly participant: Participant;
@@ -272,6 +278,7 @@ export type SpaceClient = {
   readonly reactions: ReactionsController;
   readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;
+  readonly presenting: PresentingController;
   readonly offline: OfflineController;
   readonly telemetry: AppTelemetry;
   readonly join: (options?: JoinOptions) => Promise<void>;

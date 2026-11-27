@@ -37,7 +37,7 @@ type Reconciler struct {
 func NewReconciler(policy Policy, store Store, provider Provider, control Control) (*Reconciler, error) {
 	capacity := policy.Capacity
 	if policy.Application == "" || capacity.SlotsPerNode < 2 || capacity.SlotsPerNode > 5 ||
-		capacity.StandingSlots < 0 || capacity.StandingSlots > 10 ||
+		capacity.StandingSlots < 0 || capacity.StandingSlots > 40 ||
 		capacity.SpareSlots < 1 || capacity.SpareSlots > capacity.SlotsPerNode ||
 		capacity.MaxNodes < 1 || capacity.MaxNodes > 6 ||
 		policy.MonthlyNodeTime < minimumNodeTime || policy.MonthlyNodeTime > 930*time.Hour ||
@@ -49,6 +49,8 @@ func NewReconciler(policy Policy, store Store, provider Provider, control Contro
 
 type Result struct {
 	Plan
+	LiveSlots     int
+	StandingSlots int
 	Serving       int
 	Starting      int
 	Draining      int
@@ -65,7 +67,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("load SFU window demand and inventory: %w", err)
 	}
-	result := Result{Plan: PlanWindow(state.Demand, r.policy.Capacity, state.ObservedAt, Lookahead)}
+	result := Result{
+		Plan:          PlanWindow(state.Demand, r.policy.Capacity, state.ObservedAt, Lookahead),
+		LiveSlots:     state.Demand.LiveSlots,
+		StandingSlots: r.policy.Capacity.StandingSlots,
+	}
 	result.BudgetLimited = state.NodeTime >= r.policy.MonthlyNodeTime
 	if r.policy.Retire || result.BudgetLimited {
 		result.TargetNodes = 0
@@ -159,8 +165,9 @@ func (r *Reconciler) create(ctx context.Context) error {
 		return err
 	}
 	// DO has no idempotency key on create. Never send a second create for this
-	// name, even if the first response timed out. Observation adopts it by
-	// exact name and owner tag. An unresolved intent stays charged to the cap.
+	// name, even if the first response timed out. A returned or observed
+	// provider ID is confirmed by Inspect before the node is used. An
+	// unresolved intent stays charged to the cap.
 	providerID, pending, err := r.provider.Create(ctx, id)
 	if !pending {
 		return errors.Join(err, r.store.ForgetIntent(ctx, id))

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/recordercontrollease"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
 func main() {
@@ -23,7 +24,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	telemetry, err := observability.StartWorker(ctx, "chalk-recorder-fleet-controller", os.Getenv, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer telemetry.Close("recorder-fleet-controller", os.Stderr)
+	logger := slog.Default()
 	logStartupWarnings(config, logger)
 	lease, err := recordercontrollease.Acquire(config.JournalPath)
 	if err != nil {
@@ -34,8 +42,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	return runLoop(ctx, config.ReconcileInterval, reconciler, logger)
 }
 

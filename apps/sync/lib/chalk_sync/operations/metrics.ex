@@ -22,7 +22,8 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :entry, :stage],
     [:chalk, :sync, :direct, :admission],
     [:chalk, :sync, :annotation, :command],
-    [:chalk, :sync, :annotation, :attachment]
+    [:chalk, :sync, :annotation, :attachment],
+    [:chalk, :sync, :presenting, :rejection]
   ]
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
@@ -43,6 +44,7 @@ defmodule ChalkSync.Operations.Metrics do
     admit_configure admit_locks admit_seat admit_presence
   )a
   @direct_stages ~w(upgrade register authenticated)a
+  @presenting_rejection_reasons ~w(capacity forbidden invalid_state invalid_target not_active operation_id_conflict rate_limited)
   @handler_id __MODULE__
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -169,6 +171,11 @@ defmodule ChalkSync.Operations.Metrics do
   defp metric_labels([:chalk, :sync, :direct, :admission], %{stage: stage})
        when stage in @direct_stages do
     [Atom.to_string(stage)]
+  end
+
+  defp metric_labels([:chalk, :sync, :presenting, :rejection], %{reason: reason})
+       when reason in @presenting_rejection_reasons do
+    [reason]
   end
 
   defp metric_labels(_event, _metadata) do

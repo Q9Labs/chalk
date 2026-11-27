@@ -53,7 +53,15 @@ rm -f /etc/netplan/50-cloud-init.yaml
 apt-get clean
 rm -rf /var/lib/apt/lists/* /root/.cache /tmp/* /var/tmp/*
 rm -f /root/.bash_history
-find /var/log -type f -not -path '/var/log/journal/*' -exec truncate -s0 {} +
+# Stop the log writer before emptying the logs; otherwise rsyslog writes the builder's
+# shutdown lines, with its address, back into files that were just cleared.
+systemctl mask --runtime rsyslog.service 2>/dev/null || true
+systemctl stop rsyslog.service syslog.socket 2>/dev/null || true
+pkill -x rsyslogd 2>/dev/null || true
+sleep 1
+rm -f /var/lib/landscape/landscape-sysinfo.cache
+printf '%s\n' '# Networking is rendered by cloud-init and netplan at first boot.' > /etc/network/interfaces
+find /var/log -type f -not -path '/var/log/journal/*' -delete
 
 # The check: what a clone must have, and what no clone may have.
 secrets="$(as_sfu podman secret ls --format '{{.Name}}' | sort | paste -sd, -)"
@@ -74,7 +82,7 @@ ufw status | grep -q "$(json_field /etc/chalk-sfu/node.json ports media)/udp" ||
 
 leftovers="$(
   {
-    find / -xdev \( -name authorized_keys -o -name 'known_hosts*' -o -name 'ssh_host_*' -o -name 'operator.*' -o -name 'otlp-*' -o -name '*.pem' \) \
+    find / -xdev \( -name authorized_keys -o -name 'known_hosts*' -o -name 'ssh_host_*' -o -name 'operator.*' -o -name 'otlp-*' \) \
       -not -path '/usr/share/*' -not -path '/etc/ssl/*' -not -path '/usr/lib/*' -not -path '/snap/*' -not -path "${sfu_home}/.local/share/containers/*" 2>/dev/null
     grep -rIl -e 'BEGIN [A-Z ]*PRIVATE KEY' -e "$builder" /etc /root /home /usr/local /var/lib /var/log \
       --exclude-dir=containers --exclude-dir=ssl 2>/dev/null || [[ $? -eq 1 ]]

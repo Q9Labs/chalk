@@ -11,5 +11,6 @@ export function v1NegotiatedExtensions(welcome?: Welcome) {
     appState: welcome?.app_state === true,
     annotation,
     annotationBurnIn: annotation && welcome?.screen_annotation_burn_in === true,
+    presenting: welcome?.presenting === true,
   };
 }

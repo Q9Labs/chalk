@@ -610,9 +610,60 @@ jobs:
           path: ${{ runner.temp }}/images
           retention-days: 7
 
+  build-renderer:
+    name: Build immutable document-renderer ZIP
+    needs: plan-managed
+    if: >-
+      !cancelled() && needs.plan-managed.result == 'success' &&
+      needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    environment:
+      name: nightly
+      deployment: false
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: apps/document-renderer/go.mod
+          cache-dependency-path: apps/document-renderer/go.sum
+      - name: Install renderer build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc libwebp-dev
+      - name: Build pinned arm64 renderer ZIP
+        run: scripts/build-document-renderer.sh
+      - name: Test renderer
+        run: cd apps/document-renderer && RENDERER_LAMBDA=1 LD_LIBRARY_PATH="$PWD/native/pdfium/lib" go test ./cmd/renderer ./internal/...
+      - name: Verify renderer artifact identity
+        run: |
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('releases/document-renderer')
+          archive = root / 'document-renderer-linux-arm64.zip'
+          manifest = json.loads((root / 'manifest.json').read_text())
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == manifest['sha256'], 'renderer archive digest mismatch'
+          assert manifest['pdfiumSha256'] == '18bb6d568257b28d14f6c3b8bfb48caf73d4615b319ca4d43b424c2a03431d9f', 'unexpected PDFium pin'
+          print(json.dumps({'sha256': manifest['sha256'], 'pdfiumVersion': manifest['pdfiumVersion']}))
+          PY
+      - uses: ./.github/actions/upload-sealed
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: document-renderer-artifact-${{ needs.plan-managed.outputs.release_id }}
+          path: |
+            releases/document-renderer/document-renderer-linux-arm64.zip
+            releases/document-renderer/manifest.json
+          retention-days: 90
+
   build-media:
     name: Build immutable media release archives
-    needs: plan-managed
+    needs: [plan-managed, build-renderer]
     # A status function keeps a skipped require-gate (a cut) from skipping this job through plan-managed.
     if: >-
       !cancelled() && needs.plan-managed.result == 'success' &&
@@ -627,6 +678,7 @@ jobs:
       CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ secrets.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
+      CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -696,12 +748,28 @@ jobs:
           scripts/transcription-dispatcher/build-release.sh '${{ needs.plan-managed.outputs.release_id }}'
           archive=("$ARTIFACT_DIR"/*.zip)
           scripts/transcription-dispatcher/verify-artifact.sh "${archive[0]}"
+      - uses: ./.github/actions/download-sealed
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: document-renderer-artifact-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/renderer-artifact
+      - name: Stage verified renderer artifact
+        run: |
+          mkdir -p "$RUNNER_TEMP/media-build"
+          cp "$RUNNER_TEMP/renderer-artifact/document-renderer-linux-arm64.zip" "$RUNNER_TEMP/media-build/document-renderer-linux-arm64.zip"
+          cp "$RUNNER_TEMP/renderer-artifact/manifest.json" "$RUNNER_TEMP/media-build/manifest.json"
       - name: Freeze versioned dispatcher ZIP and recorder image identities
         run: |
           args=()
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py publish_zip "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+      - name: Freeze versioned renderer ZIP
+        run: |
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py publish_renderer "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
       - uses: ./.github/actions/upload-sealed
         with:
           key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -988,6 +1056,7 @@ jobs:
           DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
+          CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail

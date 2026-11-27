@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- scene composition maps each presentation rule to one tile or span; the branches are the rules, and the scene and stage-geometry tests cover each one.
 import { choosePrimary, DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, screenShareItemId, WHITEBOARD_ITEM_ID, type Participant, type StageBox, type StageItem } from "@q9labsai/chalk-react/headless";
 import { createRecordingPresentationCursor, type RecordingPresentationParticipantV1, type RecordingPresentationSnapshotV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import type { DecodedMediaIndexV1, DecodedVisualSourceV1 } from "../decoded-media.js";
@@ -227,6 +228,7 @@ function stageGeometry(items: readonly StageItem[], layout: RecordingPresentatio
 
 function sceneTile(item: StageItem, rect: Rect, sharedContent: RecordingPresentationSnapshotV1["sharedContent"], byId: ReadonlyMap<string, RecordingPresentationParticipantV1>, cameraByParticipant: ReadonlyMap<string, string>, available: (sourceId: string) => boolean): SceneTile | undefined {
   if (item.kind === "whiteboard") return sharedContent.kind === "whiteboard" ? { kind: "whiteboard", rect, stateAssetId: sharedContent.stateAssetId, revision: sharedContent.revision } : undefined;
+  if (item.kind === "document") return undefined;
   const participant = byId.get(item.participant.id);
   if (participant === undefined) return undefined;
   if (item.kind === "screen-share") return screenShareTile(rect, participant, sharedContent, available);

@@ -207,7 +207,12 @@
       "name": "transcripts",
       "summary": "Turns retained Episode audio into timestamped transcript documents.",
       "paths": [
+        "apps/api/cmd/recording-transcription-rearm",
+        "apps/api/db/migrations/20261126090000_recording_transcription_rearm.sql",
+        "apps/api/db/queries/recording_transcription_rearm.sql",
         "apps/api/internal/adapters/aws/lambdawaker",
+        "apps/api/internal/adapters/postgres/recording_transcription_rearm.go",
+        "apps/api/internal/adapters/postgres/recording_transcription_rearm_integration_test.go",
         "apps/api/internal/httpapi/transcription_artifacts.go",
         "apps/api/internal/httpapi/transcription_cleanup.go",
         "apps/api/internal/httpapi/transcription_document.go",
@@ -219,8 +224,10 @@
         "apps/api/internal/httpapi/transcription_worker_claim.go",
         "apps/api/internal/httpapi/transcription_worker_claim_test.go",
         "apps/api/internal/httpapi/transcription_worker_types.go",
+        "apps/api/internal/recordingpipeline/transcription_rearm.go",
         "apps/api/internal/transcripts",
         "apps/transcription-dispatcher",
+        "docs/operators/recording-transcription-rearm.md",
         "infrastructure/transcription-dispatcher",
         "infrastructure/transcription-storage",
         "packages/transcript-language",
@@ -245,13 +252,16 @@
         "sdks/typescript/client/src/space-client/chat-upload-report.ts",
         "sdks/typescript/client/src/space-client/reactions-controller.ts",
         "sdks/typescript/react-native/src/sheets/people-chat",
+        "sdks/typescript/react/src/components/composite/ChatPanel.test.tsx",
         "sdks/typescript/react/src/components/composite/ChatPanel.tsx",
+        "sdks/typescript/react/src/components/composite/MessageAttachments.tsx",
         "sdks/typescript/react/src/components/composite/MessageBubble.tsx",
         "sdks/typescript/react/src/components/composite/UnavailableAttachment.tsx",
         "sdks/typescript/react/src/components/composite/chat-file-upload.ts",
         "sdks/typescript/react/src/components/composite/chat-panel-model.ts",
         "sdks/typescript/react/src/components/composite/chat-types.ts",
         "sdks/typescript/react/src/components/composite/chat-upload-file.ts",
+        "sdks/typescript/react/src/components/composite/use-chat-attachment-previews.test.ts",
         "sdks/typescript/react/src/components/composite/use-chat-attachment-previews.ts"
       ]
     },
@@ -466,7 +476,8 @@
         "scripts/gates/obs-coverage.mjs",
         "scripts/gates/obs-coverage.test.mjs",
         "sdks/typescript/client/src/obs",
-        "sdks/typescript/client/src/transport-diagnostics.ts"
+        "sdks/typescript/client/src/transport-diagnostics.ts",
+        "apps/api/internal/httpapi/telemetry_chain_helpers_test.go"
       ]
     },
     {
@@ -591,6 +602,48 @@
         "apps/web/src/routes/dashboard_.call.$spaceId.join.tsx",
         "sdks/typescript/client/src/public-invites",
         "sdks/typescript/react-native/src/invites.ts"
+      ]
+    },
+    {
+      "name": "presenting",
+      "summary": "Puts a file on the call Stage as a Document everyone can follow, with the renderer producing page images and Sync carrying presenter state.",
+      "paths": [
+        "apps/api/db/migrations/20261125230000_presenting.sql",
+        "apps/api/db/migrations/20261125231000_presenting_publication.sql",
+        "apps/api/db/migrations/20261125232000_presenting_stage.sql",
+        "apps/api/db/migrations/20261127090000_presenting_api_capability.sql",
+        "apps/api/db/queries/presenting.sql",
+        "apps/api/internal/adapters/postgres/presenting.go",
+        "apps/api/internal/adapters/postgres/presenting_integration_test.go",
+        "apps/api/internal/adapters/postgres/presenting_api_capability_integration_test.go",
+        "apps/api/internal/adapters/postgres/presenting_settings.go",
+        "apps/api/internal/adapters/postgres/presenting_settings_test.go",
+        "apps/api/internal/httpapi/presenting.go",
+        "apps/api/internal/httpapi/presenting_capability.go",
+        "apps/api/internal/httpapi/presenting_test.go",
+        "apps/api/internal/httpapi/presenting_worker.go",
+        "apps/api/internal/presenting",
+        "apps/document-renderer",
+        "apps/sync/lib/chalk_sync/contract/generated_presenting_v1.ex",
+        "apps/sync/lib/chalk_sync/presenting",
+        "apps/sync/lib/chalk_sync/transport/socket/presenting.ex",
+        "apps/sync/test/chalk_sync/presenting",
+        "apps/web/src/call-states/presenting.tsx",
+        "contract/schema/presenting-v1.json",
+        "infrastructure/document-renderer",
+        "sdks/typescript/client/src/generated/presenting-v1.ts",
+        "sdks/typescript/client/src/presenting",
+        "sdks/typescript/client/src/space-client/presenting-controller.test.ts",
+        "sdks/typescript/client/src/space-client/presenting-controller.ts",
+        "sdks/typescript/react/src/components/stage/DocumentView.tsx",
+        "sdks/typescript/react/src/components/stage/presenting-files.ts",
+        "tests/presenting.e2e.ts",
+        "tools/contract-fixture-proof/src/emitters/presenting.mjs",
+        "apps/api/internal/httpapi/presenting_worker_request.go",
+        "apps/api/internal/adapters/postgres/presenting_render.go",
+        "apps/api/internal/adapters/postgres/presenting_zoom.go",
+        "sdks/typescript/react/src/components/composite/chat-composer-effects.ts",
+        "sdks/typescript/react/src/components/composite/ReactionSheet.test.tsx"
       ]
     },
     {
@@ -854,6 +907,7 @@
         "infrastructure/nightly/README.md",
         "infrastructure/nightly/direct-sync-trial.md",
         "infrastructure/nightly/env",
+        "infrastructure/nightly/deploy-role",
         "infrastructure/nightly/host-cloud-init.yaml",
         "infrastructure/nightly/host-proof",
         "packages/assets",
@@ -986,7 +1040,8 @@
         "sdks/typescript/react/tsconfig.json",
         "sdks/typescript/react/vitest.config.ts",
         "tests",
-        "tools"
+        "tools",
+        "apps/api/internal/httpapi/cors_test.go"
       ]
     }
   ]
