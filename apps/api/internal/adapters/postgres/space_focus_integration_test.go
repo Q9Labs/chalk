@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 // A Space update that changes only Focus is stored, though the webhook contract has no field for it.
 func TestUpdateSpaceStoresFocusOnItsOwn(t *testing.T) {
 	pool := settingsPool(t)
-	own := "chalk_sfu"
+	own := mediaplane.ProviderChalkSFU.SettingName()
 	tenant, space := seedSettingsSpace(t, pool, nil, &own, own)
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
 
