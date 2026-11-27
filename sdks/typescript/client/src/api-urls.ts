@@ -24,5 +24,6 @@ export const chatUploadFinalize = (base: string, uploadId: string) => route(base
 export const chatAttachmentDownload = (base: string, attachmentId: string) => route(base, "chat", "attachments", attachmentId, "download");
 
 export const presentingDocuments = (base: string) => route(base, "presenting", "documents");
+export const presentingFormats = (base: string) => route(base, "presenting", "formats");
 export const presentingDocument = (base: string, documentId: string) => route(base, "presenting", "documents", documentId);
 export const presentingDocumentPageZoom = (base: string, documentId: string, page: number) => route(base, "presenting", "documents", documentId, "pages", String(page), "zoom");

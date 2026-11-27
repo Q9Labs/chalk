@@ -1,6 +1,7 @@
 import React from "react";
 import type { PresentingDocumentManifest } from "@q9labsai/chalk-client";
 import { cn } from "../../utils/cn";
+import { FileTypeBadge } from "./FileTypeBadge";
 import { StageIcon } from "./StageIcon";
 
 type DocumentPage = PresentingDocumentManifest["pages"][number];
@@ -9,7 +10,7 @@ type DocumentPage = PresentingDocumentManifest["pages"][number];
 export function DocumentThumbnail({ documentId, fileName, page, ready, imageUrl }: { readonly documentId: string; readonly fileName: string; readonly page: number; readonly ready: boolean; readonly imageUrl?: string }): React.JSX.Element {
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[var(--chalk-app-tile-base)] p-1.5 text-[var(--chalk-on-overlay)]" data-document-viewer data-document-id={documentId}>
-      {ready && imageUrl ? <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className="max-h-full max-w-full object-contain" /> : <span className="grid h-9 w-8 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">PDF</span>}
+      {ready && imageUrl ? <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className="max-h-full max-w-full object-contain" /> : <FileTypeBadge fileName={fileName} className="h-9 min-w-8" />}
     </div>
   );
 }
@@ -62,8 +63,8 @@ export function DocumentPageArea({
         <div className="absolute inset-0 grid place-items-center p-6">
           <div role="alert" className="flex max-w-80 flex-col items-center gap-1.5 text-center">
             <StageIcon name="info" size={22} />
-            <h3 className="mt-1.5 text-sm font-semibold">Couldn't open {fileName}</h3>
-            <p className="text-(length:--type-caption) opacity-70">It may be password protected or damaged. Nobody else saw it.</p>
+            <h3 className="mt-1.5 text-sm font-semibold" style={{ letterSpacing: "normal" }}>{`Couldn't open ${fileName}`}</h3>
+            <p className="text-(length:--type-caption) opacity-70">{manifest.failure?.message ?? "It may be password protected or damaged."} Nobody else saw it.</p>
             <div className="mt-2.5 flex gap-2">
               <button type="button" className="flex h-8 items-center rounded-full bg-[var(--chalk-overlay-hover-fill)] px-3 text-(length:--type-caption) font-medium" onClick={onClose}>
                 Close
@@ -120,7 +121,7 @@ function PageContent({ page, imageUrl, fileName, zoom }: { readonly page: number
     );
   }
   const fit = zoom === 100;
-  return <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className={fit ? "h-full w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"} style={fit ? undefined : { width: `${zoom}%` }} />;
+  return <img src={imageUrl} alt={`${fileName}, page ${page}`} draggable={false} className={fit ? "h-full w-full object-contain shadow-2xl" : "max-w-none shrink-0 shadow-2xl"} style={fit ? undefined : { width: `${zoom}%`, maxWidth: "none" }} />;
 }
 
 function preparedPercent(manifest?: PresentingDocumentManifest): number | null {

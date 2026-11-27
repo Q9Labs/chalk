@@ -22,6 +22,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/sfufleet"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/apps/api/internal/tenanthandovers"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -51,6 +52,7 @@ func (w *apiWiring) wireAccountsAndSpaces() error {
 	w.tenantService = tenantService
 	w.options.Tenants = tenantService
 	w.options.Memberships = memberships.NewService(membershipRepository)
+	w.options.TenantHandovers = tenanthandovers.NewService(postgres.NewTenantHandoverRepository(w.pool))
 	w.options.TenantAuthz = authorization.NewTenantPolicy(membershipRepository, tenantRepository)
 	spaceRepository := postgres.NewSpaceRepository(w.queries, w.pool)
 	killSwitch := postgres.NewKillSwitch(w.pool)

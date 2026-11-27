@@ -1,6 +1,9 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const openAPITypes = new URL("../src/generated/openapi-types.d.ts", import.meta.url);
+await Promise.all(["ts", "cts"].map((extension) => copyFile(openAPITypes, new URL(`../dist/generated/openapi-types.d.${extension}`, import.meta.url))));
 
 for (const directory of ["webhooks", "server"]) {
   const declarationsDirectory = fileURLToPath(new URL(`../dist/${directory}/`, import.meta.url));

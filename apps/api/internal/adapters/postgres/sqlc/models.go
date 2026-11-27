@@ -1925,6 +1925,29 @@ type TenantArtifactPolicy struct {
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
 }
 
+type TenantHandover struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	RecipientEmail       string             `json:"recipient_email"`
+	Status               string             `json:"status"`
+	RequestKey           string             `json:"request_key"`
+	RequestFingerprint   []byte             `json:"request_fingerprint"`
+	FromServiceID        string             `json:"from_service_id"`
+	ToServiceID          string             `json:"to_service_id"`
+	InitiatedByKind      string             `json:"initiated_by_kind"`
+	InitiatedByServiceID pgtype.Text        `json:"initiated_by_service_id"`
+	InitiatedByOperator  pgtype.Text        `json:"initiated_by_operator"`
+	AcceptedByUserID     pgtype.UUID        `json:"accepted_by_user_id"`
+	AcceptedAt           pgtype.Timestamptz `json:"accepted_at"`
+	CanceledByKind       pgtype.Text        `json:"canceled_by_kind"`
+	CanceledByServiceID  pgtype.Text        `json:"canceled_by_service_id"`
+	CanceledByOperator   pgtype.Text        `json:"canceled_by_operator"`
+	CanceledAt           pgtype.Timestamptz `json:"canceled_at"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type TranscriptChunk struct {
 	ID             pgtype.UUID        `json:"id"`
 	TranscriptID   pgtype.UUID        `json:"transcript_id"`

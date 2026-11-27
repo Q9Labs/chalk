@@ -162,6 +162,7 @@ it("refreshes a ready manifest shortly before its signed urls expire", async () 
   };
   let fetches = 0;
   const fetching = (async (input: RequestInfo | URL) => {
+    if (String(input).endsWith("/presenting/formats")) return new Response(JSON.stringify({ formats: ["pdf"] }), { status: 200 });
     fetches += 1;
     return new Response(JSON.stringify(signed), { status: 200 });
   }) as typeof globalThis.fetch;
@@ -179,6 +180,29 @@ it("refreshes a ready manifest shortly before its signed urls expire", async () 
         yield* Effect.promise(() => vi.advanceTimersByTimeAsync(1_000));
         for (let index = 0; index < 10; index += 1) yield* Effect.promise(() => Promise.resolve());
         expect(fetches).toBe(2);
+        controller.dispose();
+      }),
+    ),
+  );
+});
+
+it("publishes the formats the server accepts and falls back to the always-on formats", async () => {
+  const requested: string[] = [];
+  const fetching = (async (input: RequestInfo | URL) => {
+    requested.push(String(input));
+    if (String(input).endsWith("/presenting/formats")) return new Response(JSON.stringify({ formats: ["pdf", "pptx", "unknown-format"] }), { status: 200 });
+    return new Response("{}", { status: 500 });
+  }) as typeof globalThis.fetch;
+  const { connection, store } = harness({ fetch: fetching });
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const controller = yield* makePresentingController({ connection, store, apiBaseUrl: "https://api.example", fetch: fetching });
+        expect(store.getSnapshot().presenting.formats).toEqual(["pdf", "png", "jpeg", "gif", "webp"]);
+        for (let index = 0; index < 20; index += 1) yield* Effect.promise(() => Promise.resolve());
+        expect(store.getSnapshot().presenting.formats).toEqual(["pdf", "pptx"]);
+        expect(requested.filter((url) => url.endsWith("/presenting/formats"))).toHaveLength(1);
         controller.dispose();
       }),
     ),

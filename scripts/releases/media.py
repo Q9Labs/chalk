@@ -175,6 +175,14 @@ def deploy_renderer(args):
     renderer_media.deploy_renderer(args, Provider(args.region, os.environ.get('AWS_PROFILE')))
 
 
+def publish_renderer_image(args):
+    renderer_media.publish_renderer_image(args, settings(args)[0])
+
+
+def deploy_renderer_image(args):
+    renderer_media.deploy_renderer_image(args, Provider(args.region, os.environ.get('AWS_PROFILE'), args.dry_run))
+
+
 def write_parameter(provider, parameter, value):
     before = provider.parameter(parameter['Name'])
     require(before['Version'] == parameter['Version'] and before['Value'] == parameter['Value'], 'fleet config changed during deployment')
@@ -284,7 +292,7 @@ def deploy_dispatcher(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'build_archives', 'publish_zip', 'zip_needed', 'publish_renderer', 'pin_archives', 'deploy_dispatcher', 'deploy_renderer'))
+    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'build_archives', 'publish_zip', 'zip_needed', 'publish_renderer', 'publish_renderer_image', 'pin_archives', 'deploy_dispatcher', 'deploy_renderer', 'deploy_renderer_image'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))

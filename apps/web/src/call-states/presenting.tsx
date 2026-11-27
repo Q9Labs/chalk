@@ -1,4 +1,4 @@
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { presentingFormatIdsFor, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { Live } from "./live";
 import { liveSnapshot, PEOPLE, type Person } from "./fixtures";
 import page01 from "./presenting-pages/page-01.webp";
@@ -51,6 +51,7 @@ function presentingSnapshot(options: PresentingFixtureOptions): SpaceSnapshot {
     presenting: {
       status: "ready",
       available: true,
+      formats: presentingFormatIdsFor(),
       revision: 3,
       documents: [{ documentId, presenterId, page: options.page ?? 3, zoom: options.zoom ?? 100, startedAtMs: Date.now() - 60_000 }],
       manifests: {

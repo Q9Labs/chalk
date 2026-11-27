@@ -17,7 +17,8 @@ import { VersionedFunction, functionProvider, type FunctionProps } from "./aws-v
 import { clearStage } from "../releases/cleanup.ts";
 
 export const name = "chalk-nightly-test-transcription-dispatcher";
-export const props: FunctionProps = {
+const tags: Record<string, string> = { chalk_environment: "nightly-test" };
+export const props = {
   functionName: name,
   description: "proof",
   role: "arn:aws:iam::000000000000:role/test",
@@ -32,8 +33,8 @@ export const props: FunctionProps = {
   environment: Redacted.make({ TEST: "value", ANOTHER: "value" }),
   tracingMode: "Active",
   eventInvokeConfig: { maximumEventAge: 60, maximumRetryAttempts: 0, onFailure: "arn:queue" },
-  tags: { chalk_environment: "nightly-test" },
-};
+  tags,
+} satisfies FunctionProps;
 export const ownerTag = "alchemy:instance";
 export const functionConfig = {
   FunctionName: name,
@@ -141,14 +142,14 @@ export const destroyTwice = (stack: ReturnType<typeof stackFor>) =>
     for (let attempt = 0; attempt < 2; attempt++) yield* clearStage(yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "destroy" }));
   });
 
-export const releaseProps = (release: string, sha: string): FunctionProps => ({
+export const releaseProps = (release: string, sha: string): typeof props => ({
   ...props,
   description: `proof (${release})`,
   code: { ...props.code, key: `proof-${release}.zip`, version: `${release}-version`, sha256: sha },
   environment: Redacted.make({ ...Redacted.value(props.environment), CHALK_RELEASE_ID: release, CHALK_CONFIG_DIGEST: `config-${release}`, CHALK_RELEASE_MANIFEST_DIGEST: `manifest-${release}` }),
   tags: { ...props.tags, chalk_release_id: release, chalk_config_digest: `config-${release}`, chalk_release_manifest_digest: `manifest-${release}` },
 });
-export const functionAttr = (live: FunctionProps) => ({
+export const functionAttr = (live: typeof props) => ({
   functionName: live.functionName,
   functionArn: functionConfig.FunctionArn,
   codeSha256: live.code.sha256,

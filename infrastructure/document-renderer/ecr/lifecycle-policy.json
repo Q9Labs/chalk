@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "Expire untagged images after one day",
+      "selection": { "tagStatus": "untagged", "countType": "sinceImagePushed", "countUnit": "days", "countNumber": 1 },
+      "action": { "type": "expire" }
+    },
+    {
+      "rulePriority": 2,
+      "description": "Keep the 20 newest release images for rollback",
+      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 20 },
+      "action": { "type": "expire" }
+    }
+  ]
+}

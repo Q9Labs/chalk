@@ -36,8 +36,8 @@ else if (operation === "table") {
               ? ["tsx", "releases/prove-dispatcher.ts", stage.name]
               : operation === "plan" && target.stackName === "transcription-dispatcher"
                 ? ["tsx", "releases/driver.ts", "plan", stage.name]
-                : operation === "plan" && target.stackName === "document-renderer"
-                  ? ["tsx", "releases/renderer-driver.ts", "plan", stage.name]
+                : operation === "plan" && (target.stackName === "document-renderer" || target.stackName === "document-renderer-image")
+                  ? ["tsx", target.stackName === "document-renderer" ? "releases/renderer-driver.ts" : "releases/renderer-image-driver.ts", "plan", stage.name]
                   : operation === "drift"
                     ? ["tsx", "platform/drift.ts", entryFile(target), stage.name]
                     : ["alchemy", operation ?? "", "--config", entryFile(target), "--stage", stage.name, "--no-input"];

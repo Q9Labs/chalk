@@ -86,6 +86,7 @@ jobs:
           CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || '/chalk/production/release/recorder.json' }}
           PREVIOUS_MEDIA_SHA256: ${{ fromJSON(needs.select.outputs.selection).previous.media_sha256 }}
           CHALK_RENDERER_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_RELEASE_ENABLED }}
+          CHALK_RENDERER_IMAGE_RELEASE_ENABLED: ${{ vars.CHALK_RENDERER_IMAGE_RELEASE_ENABLED }}
         run: |
           if [[ -z "$PREVIOUS_MEDIA_SHA256" ]]; then
             python3 scripts/releases/media.py retain_runtime --environment production --output previous-media.json

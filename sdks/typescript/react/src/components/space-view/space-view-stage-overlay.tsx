@@ -1,14 +1,17 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type Reaction } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, type ChatUploadFile, type PresentingFormatId, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import type React from "react";
 import type { RefObject } from "react";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
-import { PRESENTABLE_ACCEPT, presentableFilesHint, type PresentingFileFailure } from "../stage/presenting-files";
+import { FileTypeBadge } from "../stage/FileTypeBadge";
+import { presentableFilesHint, type PresentingFileFailure } from "../stage/presenting-files";
 import type { DropZone, StageUpload } from "./use-file-presenting";
 
 export interface SpaceViewStageOverlayOptions {
   readonly presentInputRef: RefObject<HTMLInputElement | null>;
+  readonly presentAccept: string;
+  readonly presentFormats: readonly PresentingFormatId[];
   readonly dropActive: boolean;
   readonly dropZones: readonly DropZone[];
   readonly dropZone: DropZone | null;
@@ -61,7 +64,7 @@ function StageUploadCard({ upload, onRetry, onSendToChat, onClose }: { readonly 
   return (
     <div className="absolute inset-0 z-40 grid place-items-center rounded-[inherit] bg-[var(--chalk-app-tile-base)] p-6 text-[var(--chalk-on-overlay)]">
       <div role={failed ? "alert" : "status"} className="flex w-80 max-w-full flex-col items-center gap-3 rounded-2xl bg-[var(--chalk-overlay-strong)] p-5 text-center shadow-xl">
-        <span className="grid h-9 w-8 place-items-center rounded-md bg-[var(--chalk-file-pdf)] text-(length:--type-micro) font-bold">{failed ? "!" : "PDF"}</span>
+        <FileTypeBadge fileName={upload.fileName} className="h-9 min-w-8" />
         <div className="max-w-full truncate text-sm font-semibold">{failed ? `Couldn't present ${upload.fileName}` : `Uploading ${upload.fileName}`}</div>
         {failed ? (
           <>
@@ -93,7 +96,7 @@ function StageUploadCard({ upload, onRetry, onSendToChat, onClose }: { readonly 
   );
 }
 
-function renderFilePresentingOverlay({ presentInputRef, dropActive, dropZones, dropZone, stageUpload, dismissStageUpload, retryStageUpload, sendStageUploadToChat, presentChosenFiles }: SpaceViewStageOverlayOptions): React.JSX.Element {
+function renderFilePresentingOverlay({ presentInputRef, presentAccept, presentFormats, dropActive, dropZones, dropZone, stageUpload, dismissStageUpload, retryStageUpload, sendStageUploadToChat, presentChosenFiles }: SpaceViewStageOverlayOptions): React.JSX.Element {
   return (
     <>
       <input
@@ -103,7 +106,7 @@ function renderFilePresentingOverlay({ presentInputRef, dropActive, dropZones, d
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
-        accept={PRESENTABLE_ACCEPT}
+        accept={presentAccept}
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];
           event.target.value = "";
@@ -114,7 +117,7 @@ function renderFilePresentingOverlay({ presentInputRef, dropActive, dropZones, d
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center gap-4 rounded-[inherit] bg-[var(--chalk-overlay-scrim-soft)] p-10">
           {dropZones.map((zone) =>
             zone === "present" ? (
-              <DropTarget key={zone} zone={zone} active={dropZone === zone || dropZones.length === 1} icon={UPLOAD_ICON} title="Drop to present" hint={`Everyone sees it on the Stage. ${presentableFilesHint()}`} />
+              <DropTarget key={zone} zone={zone} active={dropZone === zone || dropZones.length === 1} icon={UPLOAD_ICON} title="Drop to present" hint={`Everyone sees it on the Stage. ${presentableFilesHint(presentFormats)}`} />
             ) : (
               <DropTarget key={zone} zone={zone} active={dropZone === zone || dropZones.length === 1} icon={CHAT_ICON} title="Send in chat" hint={`Up to ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files, ${Math.round(CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength / (1024 * 1024))} MB each`} />
             ),

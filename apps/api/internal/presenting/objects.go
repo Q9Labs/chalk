@@ -25,12 +25,3 @@ func attemptThumbnailKey(tenantID, spaceID, episodeID, documentID, jobID utiliti
 func attemptZoomKey(tenantID, spaceID, episodeID, documentID, jobID utilities.ID, attempt, page int) string {
 	return attemptPagePrefix(tenantID, spaceID, episodeID, documentID, jobID, attempt, page) + "/3200.webp"
 }
-
-func supportedMIMEType(value string) bool {
-	switch value {
-	case "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp":
-		return true
-	default:
-		return false
-	}
-}

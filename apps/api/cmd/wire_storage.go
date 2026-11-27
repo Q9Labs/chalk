@@ -45,13 +45,14 @@ func (w *apiWiring) wireStorage() error {
 				invoker = lambdaInvoker
 			}
 			if w.syncParticipantVerifierConfigured {
-				presentingRepository := postgres.NewPresentingRepository(w.pool)
+				formats := presenting.FormatFlags{Office: w.cfg.Capabilities.PresentingOffice, Keynote: w.cfg.Capabilities.PresentingKeynote}
+				presentingRepository := postgres.NewPresentingRepository(w.pool).WithFormats(formats)
 				w.presentingCleanupScheduler = objectcleanup.NewScheduler(presenting.NewCleanupWorker(presentingRepository, storage), 0, w.logger)
 				capabilitySigner, err := presenting.NewCapabilitySigner(w.cfg.Presenting.CapabilitySecret)
 				if err != nil {
 					return fmt.Errorf("configure presenting render capabilities: %w", err)
 				}
-				service := presenting.NewService(presentingRepository, storage, invoker).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, Servable: true}.Enabled)
+				service := presenting.NewService(presentingRepository, storage, invoker).WithFormats(formats).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, Servable: true}.Enabled)
 				w.options.Presenting = service
 				w.presentingReconcileScheduler = objectcleanup.NewScheduler(presenting.NewReconcileWorker(service), presenting.ReconcileInterval, w.logger)
 			}

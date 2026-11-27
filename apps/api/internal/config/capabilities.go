@@ -7,6 +7,8 @@ const (
 	WhiteboardFilesEnabled   = "CHALK_WHITEBOARD_FILES_ENABLED"
 	ScreenAnnotationEnabled  = "CHALK_SCREEN_ANNOTATION_ENABLED"
 	PresentingEnabled        = "CHALK_PRESENTING_ENABLED"
+	PresentingOfficeEnabled  = "CHALK_PRESENTING_OFFICE_ENABLED"
+	PresentingKeynoteEnabled = "CHALK_PRESENTING_KEYNOTE_ENABLED"
 )
 
 type CapabilityConfig struct {
@@ -15,6 +17,9 @@ type CapabilityConfig struct {
 	WhiteboardFiles  bool
 	ScreenAnnotation bool
 	Presenting       bool
+
+	PresentingOffice  bool
+	PresentingKeynote bool
 }
 
 func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
@@ -39,9 +44,18 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
+	presentingOffice, err := envStrictBool(PresentingOfficeEnabled, defaultScreenAnnotation(environment))
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
+	presentingKeynote, err := envStrictBool(PresentingKeynoteEnabled, defaultScreenAnnotation(environment))
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
 	return CapabilityConfig{
 		Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles,
 		ScreenAnnotation: screenAnnotation, Presenting: presenting,
+		PresentingOffice: presentingOffice, PresentingKeynote: presentingOffice && presentingKeynote,
 	}, nil
 }
 
