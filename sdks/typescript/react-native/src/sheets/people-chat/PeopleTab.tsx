@@ -15,6 +15,7 @@ import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
 import { fixed, space, corners } from "../../theme/tokens";
 import { peopleRows, type PeopleRow } from "./people-model";
+import { PersonName } from "./PersonName";
 import { TextField } from "./TextField";
 
 /** Past this many people the list gets a search field. */
