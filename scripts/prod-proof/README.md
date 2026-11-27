@@ -42,7 +42,7 @@ Proof Spaces run on the Chalk SFU. Reused proof Spaces must have the required Re
 node scripts/prod-proof/autoscale-load.mjs --expect-api-host api.chalkmeet.com --wave1 4 --wave2 0 --guests 2 --hold-minutes 12 --out /tmp/load-out
 ```
 
-Each class is sampled every 10 s and passes when every guest decoded camera frames from every other guest in every window after a 90 s ramp. The per-class files (`samples.jsonl`, `episode.json`, `verdict.json`, `error.json`) hold run identifiers, so keep them out of Git. The script does not record which SFU node serves a class; read each node's `/readyz` `sessions` count while the load runs. Check live Episodes and bookings before you start.
+Each class is sampled every 10 s and passes when every guest decoded camera frames from every other guest in every window after a 90 s ramp. The per-class sample, Episode, verdict and error files hold run identifiers, so keep them out of Git. The script does not record which SFU node serves a class; read each node's `/readyz` `sessions` count while the load runs. Check live Episodes and bookings before you start.
 
 ### Recovery times
 
