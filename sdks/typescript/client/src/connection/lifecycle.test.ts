@@ -5,6 +5,7 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.
 import { SFUError } from "../media";
 import { track } from "../space-client/capture.test.helpers";
 import { getConnectionFailureDetail } from "../space-client/failure-detail";
+import type { AccessContext } from "../access/context";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -128,4 +129,27 @@ it("tells the call screens that ICE never established, through the connection sn
   const { lastError } = client.getSnapshot().connection;
   expect(lastError?.mediaIceFailure).toBe(true);
   expect(getConnectionFailureDetail({ code: lastError?.code, sync: lastError?.sync, mediaHttpStatus: lastError?.mediaHttpStatus, mediaIceFailure: lastError?.mediaIceFailure })).toContain("Turn off the VPN");
+});
+
+it("asks the app for a media connection of its own when it joins", async () => {
+  const platform = createCoreTestPlatform();
+  const requests: AccessContext[] = [];
+  const client = createSpaceClientForPlatform(
+    {
+      space: "fresh-join-proof",
+      getAccess: async (request) => {
+        requests.push(request);
+        return opaqueAccessGrant(1);
+      },
+    },
+    { dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    expect(requests[0]).toMatchObject({ reason: "join", replaceMediaConnection: true });
+    expect(requests[0]?.currentMediaToken).toBeUndefined();
+    expect(requests[0]?.expectedMediaConnectionId).toBeUndefined();
+  } finally {
+    await client.leave().catch(() => undefined);
+  }
 });
