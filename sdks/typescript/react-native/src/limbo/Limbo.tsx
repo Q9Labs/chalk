@@ -86,14 +86,18 @@ export function Limbo({ state, callName, recording, participants = [] }: LimboPr
 }
 
 function Lobby({ participants }: { readonly participants: readonly LobbyParticipant[] }): React.JSX.Element {
-  const agents = participants.filter((participant) => participant.identityKind === "agent");
+  const notice = participants
+    .filter((participant) => participant.identityKind === "agent")
+    .map((participant) => participant.notice?.trim())
+    .filter(Boolean)
+    .join(" ");
   return (
     <View style={styles.lobby} testID="limbo.lobby">
       <View style={styles.lobbySummary}>
         <View style={styles.lobbyAvatars}>
           {participants.slice(0, 3).map((participant, index) => (
             <View key={`${participant.displayName}-${index}`} style={index === 0 ? undefined : styles.overlappedAvatar}>
-              <FaceAvatar name={participant.displayName} showAIBadge={participant.identityKind === "agent"} size={24} testID={`limbo.lobby.avatar.${index}`} />
+              <FaceAvatar name={participant.displayName} size={24} testID={`limbo.lobby.avatar.${index}`} />
             </View>
           ))}
         </View>
@@ -101,24 +105,23 @@ function Lobby({ participants }: { readonly participants: readonly LobbyParticip
           {lobbySummary(participants)}
         </ChalkText>
       </View>
-      {agents.map((participant, index) => (
-        <View key={`${participant.displayName}-${index}`} style={styles.agentNotice} testID={`limbo.lobby.ai.${index}`}>
-          <FaceAvatar name={participant.displayName} showAIBadge size={24} />
-          <ChalkText tone="textMuted" variant="label" style={styles.agentNoticeText}>
-            {participant.notice?.trim() || `${participant.displayName}, an AI participant, is in this call.`}
-          </ChalkText>
-        </View>
-      ))}
+      {notice ? (
+        <ChalkText tone="textMuted" variant="label" style={styles.agentNoticeText} testID="limbo.lobby.notice">
+          {notice}
+        </ChalkText>
+      ) : null}
     </View>
   );
 }
 
 function lobbySummary(participants: readonly LobbyParticipant[]): string {
-  const names = participants.map((participant) => participant.displayName);
+  const names = participants.map((participant) => (participant.identityKind === "agent" ? `${participant.displayName} (AI)` : participant.displayName));
   if (names.length === 1) return `${names[0]} is in this call`;
   if (names.length === 2) return `${names[0]} and ${names[1]} are in this call`;
-  const rest = names.length - 2;
-  return `${names[0]}, ${names[1]} and ${rest} ${rest === 1 ? "other" : "others"} are in this call`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} are in this call`;
+  const rest = participants.slice(2);
+  const aiRest = rest.filter((participant) => participant.identityKind === "agent").length;
+  return `${names[0]}, ${names[1]} and ${rest.length} others${aiRest > 0 ? ` (${aiRest} AI)` : ""} are in this call`;
 }
 
 function Title({ children }: { readonly children: string }): React.JSX.Element {
@@ -206,7 +209,6 @@ const styles = StyleSheet.create({
   lobbySummary: { flexDirection: "row", alignItems: "center", gap: space[2] },
   lobbyAvatars: { flexDirection: "row", alignItems: "center", paddingLeft: space["1-5"] },
   overlappedAvatar: { marginLeft: -space["1-5"] },
-  agentNotice: { flexDirection: "row", alignItems: "center", gap: space["1-5"], maxWidth: 280 },
-  agentNoticeText: { flexShrink: 1, textAlign: "left" },
+  agentNoticeText: { maxWidth: 280, textAlign: "center" },
   spinner: { width: 18, height: 18, borderRadius: corners.pill, borderWidth: 2 },
 });

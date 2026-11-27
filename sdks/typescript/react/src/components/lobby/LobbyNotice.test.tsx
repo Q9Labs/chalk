@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { LobbyNotice, agentLobbyNotice, lobbySummary, type LobbyParticipant } from "./LobbyNotice";
+import { LobbyNotice, lobbyNotice, lobbySummary, type LobbyParticipant } from "./LobbyNotice";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -13,22 +13,35 @@ function render(participants: readonly LobbyParticipant[]) {
   return root;
 }
 
-it("caps the roster at two names and discloses every AI participant", () => {
+it("says who is in the call on one line, marks AI participants inline and shows only the supplied notice", () => {
   const root = render([
     { displayName: "Ada", identityKind: "user" },
-    { displayName: "AI teammate", identityKind: "agent" },
-    { displayName: "Sam", identityKind: "user" },
+    { displayName: "Aria", identityKind: "agent" },
+    { displayName: "Scribe", identityKind: "agent", notice: "Scribe may transcribe this call." },
   ]);
-  expect(document.body.textContent).toContain("Ada, AI teammate and 1 other are in this call");
-  expect(document.body.textContent).toContain("AI teammate, an AI participant, is in this call.");
-  expect(document.querySelectorAll("[data-testid='lobby.ai-notice']")).toHaveLength(1);
+  expect(document.body.textContent).toContain("Ada, Aria (AI) and Scribe (AI) are in this call");
+  expect(document.querySelector("[data-testid='lobby.ai-notice']")?.textContent).toBe("Scribe may transcribe this call.");
   act(() => root.unmount());
 });
 
-it("uses a supplied lobby notice and hides an empty roster", () => {
-  expect(agentLobbyNotice({ displayName: "AI teammate", identityKind: "agent", notice: "A supplied notice is in this call." })).toBe("A supplied notice is in this call.");
-  expect(lobbySummary([{ displayName: "Ada", identityKind: "user" }])).toBe("Ada is in this call");
-  const root = render([]);
-  expect(document.querySelector("[data-testid='lobby.notice']")).toBeNull();
+it("adds no notice line when no AI participant supplied one, and hides an empty roster", () => {
+  const root = render([{ displayName: "Aria", identityKind: "agent" }]);
+  expect(document.body.textContent).toContain("Aria (AI) is in this call");
+  expect(document.querySelector("[data-testid='lobby.ai-notice']")).toBeNull();
   act(() => root.unmount());
+  const empty = render([]);
+  expect(document.querySelector("[data-testid='lobby.notice']")).toBeNull();
+  act(() => empty.unmount());
+});
+
+it("counts the AI participants among the others once the roster passes three", () => {
+  expect(
+    lobbySummary([
+      { displayName: "Ada", identityKind: "user" },
+      { displayName: "Sam", identityKind: "user" },
+      { displayName: "Aria", identityKind: "agent" },
+      { displayName: "Sol", identityKind: "user" },
+    ]),
+  ).toBe("Ada, Sam and 2 others (1 AI) are in this call");
+  expect(lobbyNotice([{ displayName: "Aria", identityKind: "agent", notice: " Aria may transcribe this call. " }])).toBe("Aria may transcribe this call.");
 });

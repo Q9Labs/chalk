@@ -57,7 +57,7 @@ it("renders the pre-join roster and AI disclosure in the knocking lobby", () => 
       ]}
     />,
   );
-  expect(markup).toContain("Ada, AI teammate and 1 other are in this call");
+  expect(markup).toContain("Ada, AI teammate (AI) and Sam are in this call");
   expect(markup).toContain("A supplied notice is in this call.");
-  expect(markup).toContain("limbo.lobby.ai.0");
+  expect(markup).toContain("limbo.lobby.notice");
 });
