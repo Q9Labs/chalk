@@ -16,10 +16,10 @@ const functionProps = Schema.Struct({
   functionName: Schema.String,
   description: Schema.String,
   role: Schema.String,
-  runtime: Schema.Union([Schema.Literal("nodejs22.x"), Schema.Literal("provided.al2023")]),
-  handler: Schema.String,
+  runtime: Schema.optionalKey(Schema.Union([Schema.Literal("nodejs22.x"), Schema.Literal("provided.al2023")])),
+  handler: Schema.optionalKey(Schema.String),
   architectures: Schema.Array(Schema.Literal("arm64")),
-  code: Schema.Struct({ bucket: Schema.String, key: Schema.String, version: Schema.String, sha256: Schema.String }),
+  code: Schema.Union([Schema.Struct({ bucket: Schema.String, key: Schema.String, version: Schema.String, sha256: Schema.String }), Schema.Struct({ imageUri: Schema.String })]),
   timeout: Schema.Number,
   memorySize: Schema.Number,
   reservedConcurrency: Schema.Number,
@@ -30,6 +30,7 @@ const functionProps = Schema.Struct({
   tags: Schema.Record(Schema.String, Schema.String),
 });
 export type FunctionProps = typeof functionProps.Type;
+const isImage = (code: FunctionProps["code"]): code is { readonly imageUri: string } => "imageUri" in code;
 interface VersionedFunction extends Resource<
   "Chalk.Lambda.VersionedFunction",
   FunctionProps,
@@ -37,6 +38,7 @@ interface VersionedFunction extends Resource<
     functionName: string;
     functionArn: string;
     codeSha256: string;
+    imageUri?: string;
     version: string;
     configuration: Omit<FunctionProps, "code" | "reservedConcurrency" | "eventInvokeConfig"> & Partial<Pick<FunctionProps, "reservedConcurrency" | "eventInvokeConfig">>;
   }
@@ -91,8 +93,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
     functionName,
     description: config.Description ?? "",
     role: config.Role,
-    runtime: config.Runtime,
-    handler: config.Handler,
+    ...(config.PackageType === "Image" ? {} : { runtime: config.Runtime, handler: config.Handler }),
     architectures: config.Architectures,
     timeout: config.Timeout,
     memorySize: config.MemorySize,
@@ -104,7 +105,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
     tags: Object.fromEntries(Object.entries(yield* tagsOf(current)).filter(([key]) => !key.startsWith("alchemy:"))),
   });
   if (!runOwned) Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))(configuration);
-  return { functionName, functionArn: required(config.FunctionArn, "function ARN"), codeSha256: required(config.CodeSha256, "code digest"), version: required(config.Version, "version"), configuration };
+  return { functionName, functionArn: required(config.FunctionArn, "function ARN"), codeSha256: required(config.CodeSha256, "code digest"), ...(current.Code?.ResolvedImageUri ? { imageUri: current.Code.ResolvedImageUri } : {}), version: required(config.Version, "version"), configuration };
 });
 
 // Ownership is a fact stamped on the function, never inferred from its name. The
@@ -141,8 +142,8 @@ const settled = Effect.fn(function* (functionName: string, allowPreviousFailure 
 
 export function requireRunOwnedFunction(stageName: string, functionName: string, operation: "create" | "delete" = "create") {
   const stage = parseStage(stageName);
-  const productionRendererBootstrap = operation === "create" && stage.kind === "production" && functionName === "chalk-production-document-renderer" && process.env.CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP === "approved";
-  const allowed = [`chalk-${stage.name}-transcription-dispatcher`, `chalk-${stage.name}-document-renderer`];
+  const productionRendererBootstrap = operation === "create" && stage.kind === "production" && ["chalk-production-document-renderer", "chalk-production-document-renderer-image"].includes(functionName) && process.env.CHALK_DOCUMENT_RENDERER_PRODUCTION_BOOTSTRAP === "approved";
+  const allowed = [`chalk-${stage.name}-transcription-dispatcher`, `chalk-${stage.name}-document-renderer`, `chalk-${stage.name}-document-renderer-image`];
   if (!productionRendererBootstrap && (stage.kind !== "ephemeral" || !allowed.includes(functionName))) throw new Error("Only a stage-scoped ephemeral workload function may be created or deleted");
 }
 type Configuration = Pick<FunctionProps, "environment">;
@@ -153,6 +154,8 @@ const environmentByKey = <T extends Configuration>(configuration: T) => ({
   environment: Redacted.make(Object.fromEntries(Object.entries(Redacted.value(configuration.environment)).sort(([left], [right]) => left.localeCompare(right)))),
 });
 const sameConfiguration = (live: Configuration, desired: Configuration) => deepEqual(environmentByKey(live), environmentByKey(desired));
+
+const deployedMatches = (live: { readonly codeSha256: string; readonly imageUri?: string }, code: FunctionProps["code"]) => (isImage(code) ? live.imageUri === code.imageUri : live.codeSha256 === code.sha256);
 
 const eventInvokeRequest = (news: FunctionProps) => ({
   FunctionName: news.functionName,
@@ -171,10 +174,10 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
         FunctionName: news.functionName,
         Description: news.description,
         Role: news.role,
-        Runtime: news.runtime,
-        Handler: news.handler,
+        ...(news.runtime ? { Runtime: news.runtime } : {}),
+        ...(news.handler ? { Handler: news.handler } : {}),
         Architectures: [...news.architectures],
-        Code: { S3Bucket: news.code.bucket, S3Key: news.code.key, S3ObjectVersion: news.code.version },
+        ...(isImage(news.code) ? { PackageType: "Image" as const, Code: { ImageUri: news.code.imageUri } } : { Code: { S3Bucket: news.code.bucket, S3Key: news.code.key, S3ObjectVersion: news.code.version } }),
         Publish: false,
         Timeout: news.timeout,
         MemorySize: news.memorySize,
@@ -192,7 +195,7 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
   yield* lambda.putFunctionEventInvokeConfig(eventInvokeRequest(news));
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
-  if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
+  if (!result || !deployedMatches(result, code) || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP or image/configuration readback failed; no values logged");
   return result;
 });
 
@@ -213,7 +216,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     const { code, ...configuration } = news;
     // Select the immutable object even when it contains identical bytes under a
     // new release key. Never rebuild, publish a version, or change architecture.
-    const codeChanged = () => !deepEqual(olds?.code, code) || before.CodeSha256 !== code.sha256;
+    const codeChanged = () => !deepEqual(olds?.code, code) || (isImage(code) ? live.imageUri !== code.imageUri : before.CodeSha256 !== code.sha256);
     const configurationChanged = !sameConfiguration(live.configuration, configuration);
     if (codeChanged() || configurationChanged) {
       // Lambda has no atomic code+configuration update. Write the desired release
@@ -231,8 +234,8 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
         RevisionId: current.RevisionId,
         Description: news.description,
         Role: news.role,
-        Runtime: news.runtime,
-        Handler: news.handler,
+        ...(news.runtime ? { Runtime: news.runtime } : {}),
+        ...(news.handler ? { Handler: news.handler } : {}),
         Timeout: news.timeout,
         MemorySize: news.memorySize,
         EphemeralStorage: { Size: news.ephemeralStorageSize },
@@ -245,11 +248,11 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     }
     if (codeChanged()) {
       const current = yield* settled(news.functionName);
-      yield* lambda.updateFunctionCode({ FunctionName: news.functionName, S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version, RevisionId: current.RevisionId, Publish: false });
+      yield* lambda.updateFunctionCode({ FunctionName: news.functionName, ...(isImage(code) ? { ImageUri: code.imageUri } : { S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version }), RevisionId: current.RevisionId, Publish: false });
       yield* settled(news.functionName);
     }
     const result = yield* readFunction(news.functionName);
-    if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP/configuration readback failed; no values logged.");
+    if (!result || !deployedMatches(result, code) || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP or image/configuration readback failed; no values logged.");
     return result;
   }),
   delete: Effect.fn(function* ({ output, instanceId }) {

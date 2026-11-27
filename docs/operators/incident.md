@@ -229,7 +229,8 @@ Undo:
 
 1. Use the database kill switch in [Turn off presenting](#turn-off-presenting) first; it takes effect without a restart or input reload and leaves the renderer idle.
 2. A later SSM flag change, including setting `CHALK_PRESENTING_ENABLED=false` or removing the presenting keys, takes effect only with the next managed release. Write the desired values before that release; do not expect the current active release to reload them in place.
-3. Renderer code has no rollback while `CHALK_RENDERER_RELEASE_ENABLED` is unset. Managed rollback leaves the renderer untouched, so the renderer keeps its bootstrap version. Step 1 is the undo for presenting, and rolling renderer code back needs the follow-up in [issue #1705](https://github.com/Q9Labs/chalk/issues/1705). Do not edit Lambda code, IAM or Alchemy state by hand.
+3. The container-image renderer (the `-image` function) is selected by `CHALK_PRESENTING_RENDERER_FUNCTION_NAME`. If it misbehaves, write `chalk-production-document-renderer` back into that value and ship it with the next managed release: the ZIP function stays deployed and unchanged until the image path has shipped once, so this needs no AWS change. See [rolling back from the image to the ZIP renderer](../../infrastructure/document-renderer/README.md#rolling-back-from-the-image-to-the-zip-renderer).
+4. Renderer code has no rollback while `CHALK_RENDERER_RELEASE_ENABLED` is unset. Managed rollback leaves the renderer untouched, so the renderer keeps its bootstrap version. Step 1 is the undo for presenting, and rolling renderer code back needs the follow-up in [issue #1705](https://github.com/Q9Labs/chalk/issues/1705). Do not edit Lambda code, IAM or Alchemy state by hand.
 
 ### Turn off presenting
 
