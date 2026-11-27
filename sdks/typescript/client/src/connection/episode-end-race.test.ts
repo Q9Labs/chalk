@@ -109,7 +109,7 @@ describe("Episode end wins media rejection", () => {
       test.platform.sync.endEpisode = async () => {
         throw new V1SyncError("client_stopped", "client_stopped");
       };
-      await expect(test.client.endEpisode()).rejects.toMatchObject({ code: "client_stopped" });
+      await expect(test.client.endEpisode()).rejects.toThrow("client_stopped");
     } finally {
       test.client.dispose();
     }
