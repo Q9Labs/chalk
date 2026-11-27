@@ -61,8 +61,9 @@ test("one person presents a PDF and it lands on both stages", async () => {
     }
     await expect.poll(() => a.locator('[data-stage-item^="document:"][data-stage-role="primary"]').count(), { timeout: 10_000 }).toBe(1);
 
-    // Until the renderer finishes, the tile explains the document is being prepared.
-    await expect.poll(async () => (await a.locator('[data-stage-item^="document:"]').textContent()) ?? "", { timeout: 10_000 }).toContain("product-plan.pdf");
+    // The presenter's tile either says the file is being prepared or, once rendered, shows the page named after the file.
+    const tile = a.locator('[data-stage-item^="document:"]');
+    await expect.poll(async () => tile.getByText("Preparing your file").or(tile.getByRole("img", { name: /product-plan\.pdf/ })).count(), { timeout: 10_000 }).toBeGreaterThan(0);
 
     // The viewer's copy is the same document, so the presenter stopping removes it everywhere.
     const stop = a.getByRole("button", { name: "Stop showing", exact: true });
