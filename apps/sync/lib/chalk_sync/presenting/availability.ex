@@ -65,22 +65,20 @@ defmodule ChalkSync.Presenting.Availability do
   """
   @override_query "select coalesce((select enabled from presenting_settings where singleton), $1)"
 
-  defp read_enabled(default) do
-    Database.guard(
-      fn ->
-        case query(@published_query, default) do
-          {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} ->
-            case query(@override_query, default) do
-              {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} -> default
-              result -> enabled_or_false(result)
-            end
+  defp read_enabled(default), do: Database.guard(fn -> read_published(default) end, false)
 
-          result ->
-            enabled_or_false(result)
-        end
-      end,
-      false
-    )
+  defp read_published(default) do
+    case query(@published_query, default) do
+      {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} -> read_override(default)
+      result -> enabled_or_false(result)
+    end
+  end
+
+  defp read_override(default) do
+    case query(@override_query, default) do
+      {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} -> default
+      result -> enabled_or_false(result)
+    end
   end
 
   defp query(sql, default) do
