@@ -240,6 +240,8 @@ insert into presenting_settings (singleton, enabled) values (true, false)
 on conflict (singleton) do update set enabled = excluded.enabled;
 ```
 
+The API decides whether it can serve presenting (the flag is on and its configuration is complete) and publishes that answer to `presenting_api_capability` at startup. Sync offers presenting only while that row says servable and the override above allows it, so a Present control never appears for an API that would answer `presenting.disabled`. The Sync default only applies until an API release that publishes has started.
+
 API `/readyz` shows `capabilities.presenting: disabled` on the next request. Participant presenting routes then reject new reads and writes with `presenting.disabled`; live calls, chat attachments and screen shares stay in place. Renderer control claims are rejected while the switch is off. Leases already issued may drain only through their completion, failure, heartbeat, page-ready and zoom-completion callbacks; their object writes remain unpublished if their lease has expired. No new Document can be created while the switch is off.
 
 Use the same statement with `true` to turn presenting back on, or `delete from presenting_settings where singleton;` to use the startup default again.

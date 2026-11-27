@@ -1,6 +1,10 @@
 -- name: PresentingEnabled :one
 select coalesce((select enabled from presenting_settings where singleton), sqlc.arg(default_enabled)::boolean)::boolean;
 
+-- name: PublishPresentingServable :exec
+insert into presenting_api_capability (singleton, servable) values (true, sqlc.arg(servable)::boolean)
+on conflict (singleton) do update set servable = excluded.servable, updated_at = now();
+
 -- name: GetPresentingAttachmentMIMEType :one
 select attachment.mime_type
 from participants participant

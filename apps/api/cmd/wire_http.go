@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -39,10 +41,11 @@ func (w *apiWiring) wireRouters(reportAdapter *discordreports.Adapter) (*http.Se
 	w.options.Capabilities.ScreenAnnotation = postgres.ScreenAnnotationSettings{
 		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.ScreenAnnotation,
 	}.Enabled
-	presentingWired := w.options.Presenting != nil && w.options.PresentingCapabilityAuthorizer != nil
-	w.options.Capabilities.Presenting = postgres.PresentingSettings{
-		Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting && presentingWired,
-	}.Enabled
+	presentingServable := w.cfg.Capabilities.Presenting && w.options.Presenting != nil && w.options.PresentingCapabilityAuthorizer != nil
+	if err := w.queries.PublishPresentingServable(context.Background(), presentingServable); err != nil {
+		return nil, fmt.Errorf("publish presenting availability: %w", err)
+	}
+	w.options.Capabilities.Presenting = postgres.PresentingSettings{Queries: w.queries, Servable: presentingServable}.Enabled
 	if w.options.HelperAccess != nil {
 		w.options.HelperAccess.WithAnnotationAvailability(w.options.Capabilities.ScreenAnnotation)
 	}

@@ -384,6 +384,12 @@ type ParticipantPresenceLease struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 }
 
+type PresentingApiCapability struct {
+	Singleton bool               `json:"singleton"`
+	Servable  bool               `json:"servable"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PresentingDocument struct {
 	TenantID                       pgtype.UUID        `json:"tenant_id"`
 	SpaceID                        pgtype.UUID        `json:"space_id"`

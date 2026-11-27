@@ -167,6 +167,11 @@ for name in "${names[@]}"; do
   value=test-only-secret-bytes
   if [[ "$base" == */api.env ]]; then
     value="$(printf 'CHALK_API_VERSION=%s' "${FAKE_API_RELEASE_ID:-test-release}")"
+    if [[ -n "${FAKE_API_ENV_INCLUDE:-}" ]]; then
+      value="$(printf '%s\n#chalk-include %s' "$value" "$FAKE_API_ENV_INCLUDE")"
+    fi
+  elif [[ "$base" == */api.env.2 ]]; then
+    value="${FAKE_API_ENV_PART:-EXTRA_ONE=1}"
   elif [[ "$base" == */sync.env ]]; then
     value="$(printf 'CHALK_SYNC_INSTANCE_ID=sync-test-instance\nCHALK_SYNC_RELEASE_ID=%s\nCHALK_SYNC_SOURCE_COMMIT=%s\nOTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=%s,deployment.environment.name=production,service.instance.id=sync-test-instance' "${FAKE_SYNC_RELEASE_ID:-test-release}" "${FAKE_SYNC_SOURCE_COMMIT:-test-source-revision}" "${FAKE_SYNC_RELEASE_ID:-test-release}")"
   fi
@@ -1128,6 +1133,44 @@ make_manifest empty >"${fixture_root}/empty-manifest.json"
 FAKE_EMPTY_SUFFIX=api.env run_controller "$empty_state" "${fixture_root}/empty-request.json" "${fixture_root}/empty-manifest.json" ok >/dev/null
 jq -e '.inputs[] | select(.id == "api-env" and .missing == true and .version == 1)' "${empty_state}/active-release.json" >/dev/null || fail "excluded empty input was not recorded as missing"
 [[ ! -e "${fixture_root}/run/env/api.env" ]] || fail "excluded empty input was published to /run"
+
+include_state="${fixture_root}/include-state"
+mkdir -p "$include_state"
+make_request include "${fixture_root}/include-request.json"
+make_manifest include >"${fixture_root}/include-manifest.json"
+find "${fixture_root}/run" -mindepth 1 -depth -delete
+: >"${fixture_root}/aws.log"
+FAKE_API_ENV_INCLUDE=api.env.2:3 FAKE_API_ENV_PART=$'EXTRA_ONE=1\nEXTRA_TWO=2\n' run_controller "$include_state" "${fixture_root}/include-request.json" "${fixture_root}/include-manifest.json" ok >/dev/null
+assert_included_api_env() {
+  for line in EXTRA_ONE=1 EXTRA_TWO=2; do
+    grep -Fxq "$line" "${fixture_root}/run/env/api.env" || fail "included parameter text did not reach the runtime environment: $1"
+  done
+  [[ "$(grep -c '^CHALK_API_VERSION=' "${fixture_root}/run/env/api.env")" == 1 ]] || fail "the input's own key was lost or repeated: $1"
+  ! grep -Fq 'chalk-include' "${fixture_root}/run/env/api.env" || fail "the include directive reached the runtime environment: $1"
+}
+assert_included_api_env deploy
+grep -Fq -- '--names /chalk/production/managed-episode/api.env.2:3 ' "${fixture_root}/aws.log" || fail "the included parameter was not requested at its pinned version"
+find "${fixture_root}/run" -mindepth 1 -depth -delete
+printf '0' >"${fixture_root}/health-index"
+FAKE_API_ENV_INCLUDE=api.env.2:3 FAKE_API_ENV_PART=$'EXTRA_ONE=1\nEXTRA_TWO=2\n' run_restore "$include_state" ok >/dev/null
+assert_included_api_env restore
+include_rejected=0
+assert_include_rejected() {
+  local description="$1"
+  shift
+  include_rejected=$((include_rejected + 1))
+  local state="${fixture_root}/include-rejected-state-${include_rejected}"
+  mkdir -p "$state"
+  if (export "$@"; run_controller "$state" "${fixture_root}/include-request.json" "${fixture_root}/include-manifest.json" ok >/dev/null 2>&1); then
+    fail "an environment include was accepted: $description"
+  fi
+}
+assert_include_rejected "a key repeated across parts" FAKE_API_ENV_INCLUDE=api.env.2:3 FAKE_API_ENV_PART=CHALK_API_VERSION=other
+assert_include_rejected "an indented key repeated across parts" FAKE_API_ENV_INCLUDE=api.env.2:3 "FAKE_API_ENV_PART=  CHALK_API_VERSION=other"
+assert_include_rejected "a parameter outside the api.env family" FAKE_API_ENV_INCLUDE=sync.env:1
+assert_include_rejected "a version that is not pinned" FAKE_API_ENV_INCLUDE=api.env.2:0
+assert_include_rejected "a nested include" FAKE_API_ENV_INCLUDE=api.env.2:3 "FAKE_API_ENV_PART=#chalk-include api.env.3:1"
+assert_include_rejected "a missing included parameter" FAKE_API_ENV_INCLUDE=api.env.2:3 FAKE_MISSING_SUFFIX=api.env.2
 
 window_excluded_state="${fixture_root}/window-excluded-state"
 mkdir -p "$window_excluded_state"

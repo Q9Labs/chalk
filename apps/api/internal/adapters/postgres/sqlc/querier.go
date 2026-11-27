@@ -464,6 +464,7 @@ type Querier interface {
 	PollHelperDeviceRequest(ctx context.Context, pollHash []byte) (HelperDeviceRequest, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PresentingEnabled(ctx context.Context, defaultEnabled bool) (bool, error)
+	PublishPresentingServable(ctx context.Context, servable bool) error
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
 	// Replaces the expectation of a booking that is not cancelled. A cancelled booking is left alone and
 	// no row comes back. A replay that changes nothing keeps updated_at.

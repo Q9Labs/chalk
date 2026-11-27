@@ -51,7 +51,7 @@ func (w *apiWiring) wireStorage() error {
 				if err != nil {
 					return fmt.Errorf("configure presenting render capabilities: %w", err)
 				}
-				service := presenting.NewService(presentingRepository, storage, invoker).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, DefaultEnabled: w.cfg.Capabilities.Presenting}.Enabled)
+				service := presenting.NewService(presentingRepository, storage, invoker).WithCapabilitySigner(capabilitySigner).WithAvailability(postgres.PresentingSettings{Queries: w.queries, Servable: true}.Enabled)
 				w.options.Presenting = service
 				w.presentingReconcileScheduler = objectcleanup.NewScheduler(presenting.NewReconcileWorker(service), presenting.ReconcileInterval, w.logger)
 			}
