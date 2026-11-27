@@ -10,6 +10,7 @@ vi.mock("react-native", async () => {
   return {
     AccessibilityInfo: { setAccessibilityFocus: vi.fn() },
     findNodeHandle: () => null,
+    Platform: { OS: "ios", select: (choices: { readonly ios?: unknown }) => choices.ios },
     Pressable: host("button"),
     StyleSheet: { create: (styles: unknown) => styles },
     Text: host("span"),
@@ -31,10 +32,6 @@ vi.mock("react-native-reanimated", async () => {
     withSequence: (value: unknown) => value,
     withTiming: (value: unknown) => value,
   };
-});
-vi.mock("../avatar/FaceAvatar", async () => {
-  const React = await import("react");
-  return { FaceAvatar: ({ name, testID }: { readonly name: string; readonly testID?: string }) => React.createElement("span", { "data-testid": testID, "data-name": name }) };
 });
 vi.mock("react-native-svg", () => {
   const React = require("react") as typeof import("react");

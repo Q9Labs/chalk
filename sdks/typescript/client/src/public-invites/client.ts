@@ -4,7 +4,21 @@ import { MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "../urls.js";
 import { makeChalkEffectClient } from "../effect-client.js";
 import { ChalkPublicApi } from "../generated/public-http-api.js";
 import type { PublicSpaceArrival as GeneratedPublicSpaceArrival, PublicSpaceCreated as GeneratedPublicSpaceCreated } from "../generated/schemas.js";
-import type { ArriveBySpacePublicInviteInput, ChalkPublicClient, ChalkPublicClientOptions, ChalkPublicIdempotencyOptions, CreatePublicSpaceInput, LobbyParticipant, PublicArrivalOptions, PublicArrivalReference, PublicLeaveOptions, PublicRefreshAccessInput, PublicSpaceArrival, PublicSpaceCreated, SpaceEntrancePreparation } from "./types.js";
+import type {
+  ArriveBySpacePublicInviteInput,
+  ChalkPublicClient,
+  ChalkPublicClientOptions,
+  ChalkPublicIdempotencyOptions,
+  CreatePublicSpaceInput,
+  LobbyParticipant,
+  PublicArrivalOptions,
+  PublicArrivalReference,
+  PublicLeaveOptions,
+  PublicRefreshAccessInput,
+  PublicSpaceArrival,
+  PublicSpaceCreated,
+  SpaceEntrancePreparation,
+} from "./types.js";
 export function createChalkPublicClient(options: ChalkPublicClientOptions): ChalkPublicClient {
   const baseClientOptions = {
     baseUrl: options.baseUrl,

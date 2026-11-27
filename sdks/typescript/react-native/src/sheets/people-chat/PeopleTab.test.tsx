@@ -1,92 +1,67 @@
-import type { Participant } from "@q9labsai/chalk-client";
-import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, expect, it, vi } from "vitest";
-
-const state = vi.hoisted(() => ({ roster: [] as Participant[] }));
-
-vi.mock("react-native", async () => {
-  const React = await import("react");
-  const host = (tag: string) => {
-    return function Host({ children, ...props }: { readonly children?: React.ReactNode; readonly [key: string]: unknown }) {
-      return React.createElement(tag, props, typeof children === "function" ? children({ pressed: false }) : children);
-    };
-  };
-  const View = host("div");
-  return {
-    FlatList: function FlatList({ data, renderItem, ListHeaderComponent }: { readonly data: readonly { readonly key: string }[]; readonly renderItem: (input: { readonly item: unknown; readonly index: number }) => React.ReactNode; readonly ListHeaderComponent?: React.ReactNode }) {
-      return React.createElement(
-        React.Fragment,
-        null,
-        ListHeaderComponent,
-        data.map((item, index) => React.createElement(React.Fragment, { key: item.key }, renderItem({ item, index }))),
-      );
-    },
-    Pressable: host("button"),
-    StyleSheet: { create: (styles: unknown) => styles },
-    View,
-  };
-});
-
-vi.mock("react-native-reanimated", async () => {
-  const React = await import("react");
-  return {
-    default: { View: ({ children, ...props }: { readonly children?: React.ReactNode; readonly [key: string]: unknown }) => React.createElement("div", props, children) },
-    Easing: { bezier: () => () => 0 },
-  };
-});
-
-vi.mock("../../avatar/FaceAvatar", async () => {
-  const React = await import("react");
-  return { FaceAvatar: ({ name }: { readonly name: string }) => React.createElement("span", null, name.slice(0, 1)) };
-});
-vi.mock("../../context/space-client-context", () => ({
-  useSpaceClient: () => ({ participants: { admit: vi.fn(), deny: vi.fn(), mute: vi.fn(), remove: vi.fn(), renameSelf: vi.fn() } }),
-}));
-vi.mock("../../hooks/space-hooks", () => ({
-  useCan: () => false,
-  useParticipants: () => ({ roster: state.roster, admissionQueue: [] }),
-  useSelf: () => state.roster[0],
-}));
-vi.mock("../../icons/Icon", async () => {
-  const React = await import("react");
-  return { Icon: () => React.createElement("span") };
-});
-vi.mock("../../motion/press", () => ({ usePressAnimation: () => ({ onPressIn: vi.fn(), onPressOut: vi.fn(), scaleStyle: undefined }) }));
-vi.mock("../../primitives/ChalkText", async () => {
-  const React = await import("react");
-  return {
-    ChalkText: ({ children, testID }: { readonly children?: React.ReactNode; readonly testID?: string }) => React.createElement("span", { "data-testid": testID }, children),
-  };
-});
-vi.mock("../../primitives/AIBadge", async () => {
-  const React = await import("react");
-  return { AIBadge: ({ testID }: { readonly testID?: string }) => React.createElement("span", { "data-testid": testID }, "AI") };
-});
-vi.mock("../../primitives/IconButton", async () => {
-  const React = await import("react");
-  return { IconButton: () => React.createElement("button") };
-});
-vi.mock("../../primitives/Menu", async () => {
-  const React = await import("react");
-  return { Menu: () => null, MenuItem: () => React.createElement("button") };
-});
-vi.mock("../../primitives/PillButton", async () => {
-  const React = await import("react");
-  return { PillButton: ({ label }: { readonly label: string }) => React.createElement("button", null, label) };
-});
-vi.mock("../../primitives/toast/ToastStack", () => ({ useToasts: () => ({ show: vi.fn() }) }));
-vi.mock("../../theme/theme", () => ({ useTheme: () => ({ colors: { raised: "#fff", hover: "#eee", textMuted: "#777", text: "#111", warning: "#a80", dangerText: "#c00" } }) }));
-vi.mock("./TextField", async () => {
-  const React = await import("react");
-  return { TextField: () => React.createElement("input") };
-});
-
+import type { Participant, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { ReactNode } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { expect, it, vi } from "vitest";
+import { DeviceLayoutProvider } from "../../frame/device-layout";
+import { PortalProvider } from "../../frame/portal";
+import { ChalkProvider } from "../../context/space-client-context";
+import { ToastProvider } from "../../primitives/toast/ToastStack";
 import { PeopleTab } from "./PeopleTab";
 
-function participant(id: string, detail?: { readonly identityKind?: "agent"; readonly description?: string }): Participant {
+type HostProps = { readonly children?: ReactNode | ((state: { readonly pressed: boolean }) => ReactNode); readonly [key: string]: unknown };
+
+vi.mock("react-native", async () => {
+  const { createElement } = await import("react");
+  const host = (tag: string) => {
+    function Host(props: HostProps) {
+      const { children, ...rest } = props;
+      return createElement(tag, rest, children instanceof Function ? children({ pressed: false }) : children);
+    }
+    return Host;
+  };
+  return {
+    BackHandler: { addEventListener: () => ({ remove: () => undefined }) },
+    AccessibilityInfo: { announceForAccessibility: () => undefined },
+    FlatList: function FlatList({ data, renderItem, ListHeaderComponent }: { readonly data: readonly { readonly key: string }[]; readonly renderItem: (input: { readonly item: unknown; readonly index: number }) => ReactNode; readonly ListHeaderComponent?: ReactNode }) {
+      return createElement("FlatList", null, ListHeaderComponent, ...data.map((item, index) => createElement("Row", { key: item.key }, renderItem({ item, index }))));
+    },
+    Keyboard: { addListener: () => ({ remove: () => undefined }) },
+    Platform: { OS: "ios", select: (choices: { readonly ios?: unknown }) => choices.ios },
+    Pressable: host("Pressable"),
+    StyleSheet: { create: <Styles,>(styles: Styles) => styles, absoluteFill: {}, hairlineWidth: 1 },
+    Text: host("Text"),
+    TextInput: host("TextInput"),
+    View: host("View"),
+    findNodeHandle: () => null,
+  };
+});
+
+vi.mock("react-native-reanimated", () => ({
+  default: { View: "AnimatedView" },
+  Easing: { bezier: () => () => 0, out: (easing: unknown) => easing, cubic: () => 0 },
+  ReduceMotion: { System: "system" },
+  cancelAnimation: () => undefined,
+  runOnUI: (work: () => void) => work,
+  useAnimatedStyle: () => ({}),
+  useReducedMotion: () => false,
+  useSharedValue: (value: unknown) => ({ value }),
+  withDelay: (_delay: number, value: unknown) => value,
+  withRepeat: (value: unknown) => value,
+  withSequence: (...values: unknown[]) => values[0],
+  withTiming: (value: unknown) => value,
+}));
+
+vi.mock("react-native-safe-area-context", () => ({
+  useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock("react-native-svg", () => ({ default: "Svg", Circle: "Circle", G: "G", Path: "Path", Rect: "Rect", Text: "SvgText" }));
+
+function participant(id: string, displayName: string, detail: Partial<Participant> = {}): Participant {
   return {
     participantId: id,
-    displayName: id === "agent" ? "Akash Rao" : "Alex",
+    displayName,
     role: "guest",
     eligibleRoles: ["guest"],
     capabilities: [],
@@ -96,15 +71,42 @@ function participant(id: string, detail?: { readonly identityKind?: "agent"; rea
   } as Participant;
 }
 
-beforeEach(() => {
-  state.roster = [participant("self"), participant("agent", { identityKind: "agent", description: "AI teammate" })];
-});
+function spaceClient(roster: readonly Participant[]): SpaceClient {
+  const snapshot = {
+    participants: { roster, admissionQueue: [] },
+    self: { ...roster[0], can: () => false },
+  } as unknown as SpaceSnapshot;
+  return {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => undefined,
+    participants: {},
+  } as unknown as SpaceClient;
+}
+
+function render(roster: readonly Participant[]): ReactTestRenderer {
+  let renderer: ReactTestRenderer | undefined;
+  act(() => {
+    renderer = create(
+      <ChalkProvider client={spaceClient(roster)}>
+        <DeviceLayoutProvider>
+          <PortalProvider>
+            <ToastProvider>
+              <PeopleTab />
+            </ToastProvider>
+          </PortalProvider>
+        </DeviceLayoutProvider>
+      </ChalkProvider>,
+    );
+  });
+  if (!renderer) throw new Error("PeopleTab did not render");
+  return renderer;
+}
 
 it("renders the agent badge and description in a people row", () => {
-  const html = renderToStaticMarkup(<PeopleTab />);
-  expect(html).toContain('data-testid="people.ai.agent"');
-  expect(html).toContain('data-testid="people.description.agent"');
-  expect(html).toContain("AI teammate");
-  expect(html).not.toContain('data-testid="people.ai.self"');
-  expect(html).not.toContain('data-testid="people.description.self"');
+  const renderer = render([participant("self", "Alex"), participant("agent", "Akash Rao", { identityKind: "agent", description: "AI teammate" })]);
+  expect(renderer.root.findAllByProps({ testID: "people.ai.agent" })).not.toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: "people.description.agent" })).not.toHaveLength(0);
+  expect(JSON.stringify(renderer.toJSON())).toContain("AI teammate");
+  expect(renderer.root.findAllByProps({ testID: "people.ai.self" })).toHaveLength(0);
+  expect(renderer.root.findAllByProps({ testID: "people.description.self" })).toHaveLength(0);
 });

@@ -1,6 +1,6 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
-import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type ChalkPublicClient, type JoinOptions, type LobbyParticipant, type PublicSpaceArrival } from "@q9labsai/chalk-client";
+import { AccessMediaProofRejectedError, arrivalRetryDelayMs, entranceStep, isTerminalArrivalError, MediaUnavailableError, preconnect, readReloadRejoin, readSpaceInviteToken, type ChalkPublicClient, type JoinOptions, type PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPublicInviteClient, resumePublicSpace } from "../../lib/chalk-access";
@@ -8,9 +8,11 @@ import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
+import { useEntrance } from "./useEntrance";
+import { useLobbyParticipants } from "./useLobbyParticipants";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
-import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
+import { canStart, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
 import { FailedEntry } from "./FailedEntry";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
@@ -57,8 +59,7 @@ export function SpacePage(props: SpacePageProps = {}) {
 function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const client = useMemo(() => createPublicInviteClient(), []);
-  const routeInviteToken = inviteCode ?? readSpaceInviteToken(globalThis.location?.hash ?? "");
-  const [lobbyParticipants, setLobbyParticipants] = useState<readonly LobbyParticipant[]>([]);
+  const lobbyParticipants = useLobbyParticipants(client, inviteCode);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
@@ -99,21 +100,6 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const reportExpired = useReportCredentialExpired(ended?.reportExpiresAt ?? liveReportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), session?.reloadMarker().tenantId ?? ended?.tenantId);
   const active = useRef(true);
-  useEffect(() => {
-    if (!routeInviteToken) return;
-    let cancelled = false;
-    void client.prepareSpaceEntrance(routeInviteToken).then(
-      (preparation) => {
-        if (!cancelled) setLobbyParticipants(preparation.participants);
-      },
-      () => {
-        if (!cancelled) setLobbyParticipants([]);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [client, routeInviteToken]);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ ...(entranceSettings ?? devicesOff), displayName }), [displayName, entranceSettings]);
   useEffect(() => {
     active.current = true;
@@ -407,20 +393,6 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       ) : null}
     </div>
   );
-}
-
-/** The entrance's state and its one way to change it. `send` applies an event at once and says whether it changed anything, so a double click starts one arrival. */
-function useEntrance(initial: () => Entrance) {
-  const [entrance, setEntrance] = useState(initial);
-  const latest = useRef(entrance);
-  const send = useCallback((event: EntranceEvent): boolean => {
-    const next = entranceReducer(latest.current, event);
-    if (next === latest.current) return false;
-    latest.current = next;
-    setEntrance(next);
-    return true;
-  }, []);
-  return { entrance, send, latest };
 }
 
 function resumeFailure(cause: unknown): EntryFailure {

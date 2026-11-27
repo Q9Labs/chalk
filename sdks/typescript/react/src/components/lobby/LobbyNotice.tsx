@@ -8,11 +8,11 @@ export interface LobbyParticipant {
 }
 
 export type LobbyNoticeProps = {
-  readonly participants: readonly LobbyParticipant[];
+  readonly participants?: readonly LobbyParticipant[];
 };
 
 /** The privacy-limited roster and AI disclosure a joiner must see before entering. */
-export function LobbyNotice({ participants }: LobbyNoticeProps): React.JSX.Element | null {
+export function LobbyNotice({ participants = [] }: LobbyNoticeProps): React.JSX.Element | null {
   if (participants.length === 0) return null;
   const agents = participants.filter((participant) => participant.identityKind === "agent");
   return (

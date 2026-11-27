@@ -45,7 +45,7 @@ export type PreJoinProps = {
 };
 
 /** The step before the call: see yourself, hear yourself, press Join. */
-export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin, participants = [] }: PreJoinProps) {
+export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin, participants }: PreJoinProps) {
   const devices = usePreJoinDevices();
   const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
