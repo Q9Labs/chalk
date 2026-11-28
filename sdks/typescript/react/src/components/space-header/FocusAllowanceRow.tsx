@@ -12,6 +12,7 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds
 /** Seconds left of the allowance this tab opened, ticking once a second; undefined when the tab doesn't know the end. */
 function useSecondsLeft(until: { readonly endsAtMs: number } | undefined) {
   const [now, setNow] = useState(() => Date.now());
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh the allowance clock each second; clear the interval when the allowance ends or changes.
   useEffect(() => {
     if (!until) return;
     setNow(Date.now());

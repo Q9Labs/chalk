@@ -70,14 +70,15 @@ it("offers 5, 10 and 20 minutes and starts the one that is clicked", async () =>
 it("counts the allowance down when this tab opened it, and just says Allowed after a reload", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
-  const onEnd = vi.fn(async () => {});
+  let ended = 0;
+  const onEnd = async () => void ended++;
   mount({ focusAllowance: { active: true, until: { endsAtMs: 5 * 60_000, minutes: 5 }, onAllow: async () => {}, onEnd } });
   expect(rowNamed("Allow other tabs")?.textContent).toContain("5:00 left");
   await act(async () => vi.advanceTimersByTime(65_000));
   expect(rowNamed("Allow other tabs")?.textContent).toContain("3:55 left");
   await click(rowNamed("Allow other tabs"));
   await click(rowNamed("End allowance"));
-  expect(onEnd).toHaveBeenCalledOnce();
+  expect(ended).toBe(1);
   vi.useRealTimers();
   document.body.replaceChildren();
   mount({ focusAllowance: { active: true, onAllow: async () => {}, onEnd } });
