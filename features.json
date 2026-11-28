@@ -140,6 +140,7 @@
         "sdks/typescript/client/src/camera-effects-provider.ts",
         "sdks/typescript/client/src/camera-effects.ts",
         "sdks/typescript/client/src/media",
+        "sdks/typescript/client/src/space-client/denied-capture.test.ts",
         "sdks/typescript/client/src/space-client/media-controller.ts",
         "sdks/typescript/client/src/space-client/media-convergence.test.ts",
         "sdks/typescript/client/src/space-client/media-device-selection.ts",

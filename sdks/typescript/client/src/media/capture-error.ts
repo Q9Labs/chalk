@@ -42,9 +42,25 @@ export function deviceFailedEvent(cause: unknown, deviceKind: NonNullable<Teleme
   return { type: "device_failed", error_name: errorName, device_kind: deviceKind, permission_state: errorName === "NotAllowedError" ? "denied" : "unknown" };
 }
 
+const repeatedRefusals = new WeakSet<object>();
+
+/** A refusal the browser already gave and the SDK repeated locally, so the attempt never reached the browser and is not a new failure. */
+export function repeatedRefusal(original: unknown): DOMException {
+  const message = original instanceof Error ? original.message : "Permission denied";
+  const repeat = new DOMException(message, "NotAllowedError");
+  repeatedRefusals.add(repeat);
+  return repeat;
+}
+
+/** Records a device that would not open, unless the SDK only repeated an earlier refusal. */
+export function recordDeviceFailure(telemetry: Pick<TelemetrySink, "record"> | undefined, cause: unknown, device: NonNullable<TelemetryEvent["device_kind"]>): void {
+  if (typeof cause === "object" && cause !== null && repeatedRefusals.has(cause)) return;
+  telemetry?.record(deviceFailedEvent(cause, device));
+}
+
 /** Records a device that would not open, then rethrows the cause unchanged. */
 export function failCapture(telemetry: Pick<TelemetrySink, "record"> | undefined, cause: unknown, device: NonNullable<TelemetryEvent["device_kind"]>): never {
-  telemetry?.record(deviceFailedEvent(cause, device));
+  recordDeviceFailure(telemetry, cause, device);
   throw cause;
 }
 

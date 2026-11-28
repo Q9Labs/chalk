@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import { permissionBlockOf } from "../media/capture-error";
 import { SFUError } from "../media/types";
 import type { ConnectionFailure } from "./types";
 
@@ -9,6 +10,7 @@ export class ConnectionLifecycleFailure extends Data.TaggedError("ConnectionLife
   readonly message: string;
   readonly cause?: unknown;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  readonly devices?: readonly ("microphone" | "camera")[];
 }> {}
 
 export function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {
@@ -20,6 +22,11 @@ export function mediaRefusalField(cause: unknown): { readonly mediaHttpStatus?: 
   if (!(cause instanceof SFUError)) return {};
   const { status, retryableConnection } = cause.options;
   return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 403 && !retryableConnection ? { mediaHttpStatus: status } : {};
+}
+
+/** The devices a join went ahead without, and whether the operating system refused capture, as failure fields. */
+export function mediaDeviceFields(failure: ConnectionLifecycleFailure): { readonly devices?: readonly ("microphone" | "camera")[]; readonly permissionBlock?: "system" } {
+  return { ...(failure.devices ? { devices: failure.devices } : {}), ...(permissionBlockOf(failure.cause) ? { permissionBlock: "system" as const } : {}) };
 }
 
 /** Whether media startup failed on the ICE path, as a failure field. A whole-connection timeout counts only when ICE itself failed or never established; a connected ICE leg with a stalled DTLS handshake is not a VPN-shaped failure. */

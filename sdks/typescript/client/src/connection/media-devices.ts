@@ -3,15 +3,21 @@ import type { ConnectionMediaDevices } from "./dependencies";
 import { ConnectionError } from "./types";
 import { markMediaFailure } from "../media/failure-diagnostics";
 import { processCameraStream } from "../media/camera-effects";
+import { createRefusalLatch, type PermissionQuery } from "./refusal-latch";
 
-export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
+export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices, permissions: PermissionQuery | undefined = globalThis.navigator?.permissions as PermissionQuery | undefined): ConnectionMediaDevices {
+  const latch = createRefusalLatch(permissions);
   return {
+    allowRetry: latch.allowAll,
     async getUserMedia(constraints, signal) {
+      const wanted = latch.wantedBy(constraints);
+      latch.rejectIfRefused(wanted);
       if (!mediaDevices?.getUserMedia || globalThis.isSecureContext === false) throw new ConnectionError({ code: "unsupported_environment", action: null, recoverable: false, message: "Browser media capture is unavailable. Use a supported browser over HTTPS." });
       try {
         return await processCameraStream(await mediaDevices.getUserMedia(constraints), signal);
       } catch (error) {
         markMediaFailure(error, "local_capture");
+        latch.noteFailure(wanted, error);
         throw error;
       }
     },

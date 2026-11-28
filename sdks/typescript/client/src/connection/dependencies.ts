@@ -26,6 +26,8 @@ export type ConnectionMediaDevices = {
   /** Intrinsic frame size witnessed on this exact native capture before publishing. */
   readonly verifiedAnnotationCapture?: (track: MediaStreamTrack) => import("../screen-annotation").ScreenAnnotationFrameSize | undefined;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
+  /** Lets the next capture ask the browser again for a device it refused. Called when the person acts, such as joining or turning a device on. */
+  readonly allowRetry?: () => void;
   /**
    * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls
    * `release()`, because `stop()` there only marks the track ended and the native capture stays open.

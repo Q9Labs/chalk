@@ -85,6 +85,8 @@ export type ClientFailure = {
   readonly message: string;
   /** Set on `media.permission_denied` when the browser says the operating system refused capture. */
   readonly permissionBlock?: "system";
+  /** Set when a join went ahead without these devices because the browser would not open them. */
+  readonly devices?: readonly ("microphone" | "camera")[];
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
   /** Set when Chalk's own media signalling answered with a refusal (HTTP 4xx): the failure is ours, not the person's network. */
   readonly mediaHttpStatus?: number;

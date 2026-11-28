@@ -2,7 +2,7 @@ import type { ClientFailure } from "@q9labsai/chalk-client";
 
 export type DeviceKind = "microphone" | "camera" | "screen";
 export type BrowserName = "chrome" | "edge" | "safari" | "firefox";
-export type Platform = "mac" | "windows" | "other";
+export type Platform = "mac" | "windows" | "ios" | "android" | "other";
 export type PermissionAnswer = "prompt" | "granted" | "denied" | "unknown";
 
 export interface AccessEnvironment {
@@ -13,7 +13,17 @@ export interface AccessEnvironment {
 }
 
 /** The moments the card can show. Waiting and asking are not here: waiting has no card, and asking only happens on join. */
-export type DeviceAccessReason = { readonly kind: "blocked-browser"; readonly browser: BrowserName } | { readonly kind: "blocked-system"; readonly platform: Exclude<Platform, "other">; readonly browser: BrowserName } | { readonly kind: "busy" } | { readonly kind: "missing" };
+export type DeviceAccessReason =
+  | { readonly kind: "blocked-browser"; readonly browser: BrowserName; readonly platform: Platform }
+  | { readonly kind: "blocked-system"; readonly platform: Exclude<Platform, "ios" | "other">; readonly browser: BrowserName }
+  /** iPhone and iPad browsers other than Safari ask iPhone Settings, one switch per browser app. */
+  | { readonly kind: "blocked-app"; readonly browser: BrowserName }
+  | { readonly kind: "busy"; readonly platform: Platform }
+  | { readonly kind: "missing" }
+  /** The remembered microphone or camera is gone, so the browser could not match it. */
+  | { readonly kind: "unavailable" }
+  /** The screen picker was closed or refused, which only a new attempt can change. */
+  | { readonly kind: "screen-declined" };
 
 /**
  * Whether a failed command is shown by the card instead of a toast.
@@ -21,5 +31,5 @@ export type DeviceAccessReason = { readonly kind: "blocked-browser"; readonly br
  */
 export function isDeviceAccessFailure(failure: ClientFailure, device: string | undefined): device is DeviceKind {
   if (device === "screen") return failure.code === "media.permission_denied";
-  return (device === "microphone" || device === "camera") && (failure.code === "media.permission_denied" || failure.code === "media.device_busy" || failure.code === "media.device_not_found");
+  return (device === "microphone" || device === "camera") && (failure.code === "media.permission_denied" || failure.code === "media.device_busy" || failure.code === "media.device_not_found" || failure.code === "media.device_constraint_invalid");
 }

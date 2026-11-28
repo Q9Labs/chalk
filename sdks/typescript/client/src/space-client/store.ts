@@ -102,6 +102,8 @@ function connectionError(failure: ConnectionLifecycleSnapshot["failure"]): Conne
         ...(failure.sync ? { sync: failure.sync } : {}),
         ...(failure.mediaHttpStatus === undefined ? {} : { mediaHttpStatus: failure.mediaHttpStatus }),
         ...(failure.mediaIceFailure ? { mediaIceFailure: true } : {}),
+        ...(failure.devices ? { devices: failure.devices } : {}),
+        ...(failure.permissionBlock ? { permissionBlock: failure.permissionBlock } : {}),
       })
     : null;
 }

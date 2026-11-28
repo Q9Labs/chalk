@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A refused or busy microphone, camera or screen share now gets steps for the person's own platform: iPhone Safari (aA > Website Settings), Chrome on iPhone (iPhone Settings), Android Chrome, macOS Safari and Chrome (System Settings, then reopen the browser), and Windows. Try again appears only where one more attempt can work, and a retry that fails says so. A camera or microphone the browser can no longer find gets its own card with Choose another and Use default, and a closed screen picker says what to do.
+- The card opens once when a join goes ahead without a device the browser refused, instead of leaving a badge and a notice with no steps.
+- The device-access card no longer retries a blocked microphone or camera when the window regains focus. A system setting that changed is retried from the card's button, and a browser permission that changed is still retried by itself.
+
 ## 6.1.0
 
 - Show each participant's device: a bottom-right badge on tiles for phones, tablets and foldables, and the device under every name in the People panel.
