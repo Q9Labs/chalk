@@ -141,6 +141,10 @@ jobs:
           # A merge queue group diffs against the commit it was built on, which may be an earlier group's head.
           DIFF_BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
         run: |
+          if ! scripts/gates/conflict-markers.sh; then
+            echo "fatal=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group" ]]; then
             node scripts/gates/chalk-gate-plan.mjs --ci-jobs "${DIFF_BASE}" ${PROOF_FILE:+--proof "${PROOF_FILE}"} >> "${GITHUB_OUTPUT}"
           else
@@ -404,7 +408,10 @@ jobs:
       - name: Require every root lane group to pass
         run: |
           echo "Select gate jobs: ${{ needs.changes.result }}; root lane groups: ${{ needs.root-lanes.result }}"
-          if [[ "${{ needs.changes.outputs.fatal }}" == "true" ]]; then echo "::error::A gate task has no entry in scripts/gates/checks.json, so no lane ran. See the Select gate jobs log."; fi
+          if [[ "${{ needs.changes.outputs.fatal }}" == "true" ]]; then
+            echo "::error::Gate preflight failed. See the Select gate jobs log."
+            exit 1
+          fi
           [[ "${{ needs.root-lanes.result }}" == "success" ]]
 
   api:

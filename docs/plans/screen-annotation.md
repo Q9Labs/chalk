@@ -1,6 +1,6 @@
 # Screen annotation v1
 
-A viewer draws on the shared frame. The other viewers see the same mark in their call, and the sharer sees it on the screen they are using. The mark is never part of the published media. This plan covers the approved first release. It adds no running feature in phase 0.
+A viewer draws on the shared frame. The other viewers see the same mark in their call, and the sharer sees it on the screen they are using. The mark is never part of the published media. This is the original v1 design, not the implementation status. The [renderer and font package](../../packages/screen-annotation/) is integrated into the [desktop helper](../../apps/helper/README.md). Use the [feature map](../../features.json) for current source and verification paths. The phases below describe the original rollout plan.
 
 ## Layer and authority
 

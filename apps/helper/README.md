@@ -13,7 +13,7 @@ src-tauri/target/debug/bundle/macos/Chalk\ Helper.app/Contents/MacOS/chalk-helpe
 
 On Windows, install the Tauri v2 desktop prerequisites. Build with the same command, replacing `--bundles app` with `--bundles nsis`. The local installer is under `src-tauri/target/debug/bundle/nsis/`. These builds have no distribution signature. Do not distribute them. The **Helper development installers** workflow can build the same fixture on either platform. Leave all inputs blank for the offline fixture, then launch with `--fixture`. Supply all four inputs for a test deployment and omit `--fixture` when you launch it.
 
-If `packages/screen-annotation` is present, Tauri bundles its renderer and Figtree font. To build against Lane 2 before integration, set `CHALK_HELPER_RENDERER_SOURCE` to a local copy of that package. If neither is present, the development fixture uses a sample stroke painter.
+Tauri bundles the renderer and Figtree font from [`packages/screen-annotation`](../../packages/screen-annotation/). Set `CHALK_HELPER_RENDERER_SOURCE` to use a different local copy of the package. If neither source is available, the development fixture uses a sample stroke painter.
 
 ## Probe outgoing video
 

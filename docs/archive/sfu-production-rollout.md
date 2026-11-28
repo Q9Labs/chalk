@@ -1,5 +1,7 @@
 > **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
 
+The production rollout is complete. Keep these steps and undo notes for operator reference. For current incident response, start with the [incident runbook](../operators/incident.md).
+
 # Deploying the Chalk SFU
 
 Chalk SFU is the only media provider. The [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md) covers monitoring and alerts. Keep Tenant IDs, Space IDs, node addresses and environment values in private operator notes.
