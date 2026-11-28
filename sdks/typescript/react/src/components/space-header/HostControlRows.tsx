@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ChalkButton } from "../chalk-ui";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { RowIcon } from "./RowIcon";
-import { FOCUS_COPY } from "../focus/focus-copy";
+import { FocusAllowanceRow } from "./FocusAllowanceRow";
 import type { CallHostControls } from "./space-header-contract";
 
 const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
@@ -76,32 +76,7 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
           </div>
         </>
       ) : null}
-      {focusAllowance ? (
-        <>
-          <div className="chalk-shell-detail-helper" style={{ paddingTop: "var(--space-1)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-3)", alignItems: "center" }}>
-              <span>
-                <b style={{ color: "var(--chalk-text)" }}>{FOCUS_COPY.allowOtherTabs}</b>
-                <br />
-                {FOCUS_COPY.allowOtherTabsHelp}
-              </span>
-              {focusAllowance.active ? <span className="chalk-shell-detail-value">{FOCUS_COPY.allowanceOn}</span> : null}
-            </div>
-            <div style={{ display: "flex", gap: "var(--space-1-5)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
-              {[5, 10, 20].map((minutes) => (
-                <ChalkButton key={minutes} disabled={focusAllowance.active} onClick={() => void focusAllowance.onAllow(minutes)}>
-                  {minutes} min
-                </ChalkButton>
-              ))}
-              {focusAllowance.active ? (
-                <ChalkButton variant="solid" onClick={() => void focusAllowance.onEnd()}>
-                  {FOCUS_COPY.endAllow}
-                </ChalkButton>
-              ) : null}
-            </div>
-          </div>
-        </>
-      ) : null}
+      {focusAllowance ? <FocusAllowanceRow allowance={focusAllowance} /> : null}
       {error ? (
         <p role="alert" className="chalk-shell-detail-error">
           {error}

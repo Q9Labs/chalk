@@ -69,6 +69,7 @@ await runJourney("focus-attention", async ({ step, person, seed, web, joinByLink
 
   await step("the viewer allows other tabs and the guest leaving the window shows Allowed", async () => {
     await viewer.page.getByRole("button", { name: "Call details", exact: true }).click();
+    await viewer.page.getByRole("button", { name: /^Allow other tabs/ }).click();
     await viewer.page.getByRole("button", { name: "5 min", exact: true }).click();
     await viewer.page.getByText("Other tabs are allowed", { exact: true }).waitFor({ timeout: wait });
     await shot(viewer, "allowance");

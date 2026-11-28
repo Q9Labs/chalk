@@ -13,6 +13,8 @@ export const FOCUS_COPY = {
   allowOtherTabs: "Allow other tabs",
   allowOtherTabsHelp: "Leaving Chalk won't count as away for a set time.",
   endAllow: "End allowance",
+  allowanceOff: "Off",
+  timeLeft: (clock: string) => `${clock} left`,
   allowanceOn: "Other tabs are allowed",
   noticeTitle: "Focus is on",
   noticeBody: "People in this call can see when you leave this window or app. They never see what's on your screen.",

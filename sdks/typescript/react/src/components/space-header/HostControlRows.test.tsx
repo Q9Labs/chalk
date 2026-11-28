@@ -55,3 +55,39 @@ it("shows the failure from muting everyone in the menu, and disables the row whe
   mount({ muteEveryone: { unmutedCount: 0, onMute: async () => {} } });
   expect(rowNamed("Mute everyone")?.disabled).toBe(true);
 });
+
+it("offers 5, 10 and 20 minutes and starts the one that is clicked", async () => {
+  const minutes: number[] = [];
+  mount({ focusAllowance: { active: false, onAllow: async (value) => void minutes.push(value), onEnd: async () => {} } });
+  const row = rowNamed("Allow other tabs");
+  expect(row?.textContent).toContain("Off");
+  await click(row);
+  expect(["5 min", "10 min", "20 min"].map((name) => rowNamed(name)?.textContent)).toEqual(["5 min", "10 min", "20 min"]);
+  await click(rowNamed("10 min"));
+  expect(minutes).toEqual([10]);
+});
+
+it("counts the allowance down when this tab opened it, and just says Allowed after a reload", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const onEnd = vi.fn(async () => {});
+  mount({ focusAllowance: { active: true, until: { endsAtMs: 5 * 60_000, minutes: 5 }, onAllow: async () => {}, onEnd } });
+  expect(rowNamed("Allow other tabs")?.textContent).toContain("5:00 left");
+  await act(async () => vi.advanceTimersByTime(65_000));
+  expect(rowNamed("Allow other tabs")?.textContent).toContain("3:55 left");
+  await click(rowNamed("Allow other tabs"));
+  await click(rowNamed("End allowance"));
+  expect(onEnd).toHaveBeenCalledOnce();
+  vi.useRealTimers();
+  document.body.replaceChildren();
+  mount({ focusAllowance: { active: true, onAllow: async () => {}, onEnd } });
+  expect(rowNamed("Allow other tabs")?.textContent).toContain("Allowed");
+  expect(rowNamed("Allow other tabs")?.textContent).not.toContain("left");
+});
+
+it("shows why the allowance could not change", async () => {
+  mount({ focusAllowance: { active: false, onAllow: () => Promise.reject(new Error("Not allowed to change Focus")), onEnd: async () => {} } });
+  await click(rowNamed("Allow other tabs"));
+  await click(rowNamed("5 min"));
+  expect(alerts()).toEqual(["Not allowed to change Focus"]);
+});
