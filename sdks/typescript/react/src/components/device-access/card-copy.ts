@@ -13,6 +13,12 @@ export function systemSettingsLink(device: DeviceKind, platform: "mac" | "window
   return `x-apple.systempreferences:com.apple.preference.security?${pane}`;
 }
 
+/** Moving a switch in macOS needs the browser reopened, so a retry from the screen card cannot work. */
+export function canRetryFromCard(device: DeviceKind, reason: DeviceAccessReason): boolean {
+  if (reason.kind === "blocked-system") return !(device === "screen" && reason.platform === "mac");
+  return reason.kind === "blocked-browser" || reason.kind === "blocked-app" || reason.kind === "screen-declined" || reason.kind === "busy";
+}
+
 export interface CardCopy {
   readonly title: string;
   readonly detail: string;

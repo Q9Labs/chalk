@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { describeMediaCaptureError } from "../media/capture-error";
+import { describeMediaCaptureError, recordDeviceFailure } from "../media/capture-error";
+import type { TelemetrySink } from "../telemetry/types";
 import type { ConnectionMediaDevices } from "./dependencies";
 import { ConnectionLifecycleFailure, lifecycleFailure } from "./lifecycle-failure";
 import { releaseTracks, streamFromTracks } from "./media-devices";
@@ -37,7 +38,7 @@ export function acquireInitialMedia(
     camera: boolean;
   }>,
   mediaDevices: ConnectionMediaDevices,
-  onDeviceFailure: (source: "microphone" | "camera", cause: unknown) => void,
+  telemetry: TelemetrySink | undefined,
 ): Effect.Effect<
   {
     stream: MediaStream;
@@ -50,7 +51,7 @@ export function acquireInitialMedia(
     Effect.catch((cause) => {
       const initialFailure = captureFailure(cause);
       if (!initialFailure.recoverable) {
-        for (const source of ["microphone", "camera"] as const) if (intent[source]) onDeviceFailure(source, cause);
+        for (const source of ["microphone", "camera"] as const) if (intent[source]) recordDeviceFailure(telemetry, cause, source);
         return Effect.fail(initialFailure);
       }
       const tracks = new Set<MediaStreamTrack>();
@@ -62,7 +63,7 @@ export function acquireInitialMedia(
         for (const source of ["microphone", "camera"] as const) {
           if (!intent[source]) continue;
           if (!intent.microphone || !intent.camera) {
-            onDeviceFailure(source, cause);
+            recordDeviceFailure(telemetry, cause, source);
             failures.push({ source, failure: initialFailure });
             continue;
           }
@@ -74,7 +75,7 @@ export function acquireInitialMedia(
             ),
             Effect.catch((cause) =>
               Effect.sync(() => {
-                onDeviceFailure(source, cause);
+                recordDeviceFailure(telemetry, cause, source);
                 failures.push({ source, failure: captureFailure(cause) });
               }),
             ),
