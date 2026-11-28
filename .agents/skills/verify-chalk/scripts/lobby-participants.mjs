@@ -12,8 +12,8 @@ import { runJourney } from "./journey.mjs";
 
 await runJourney("lobby-participants", async ({ step, person, startCall, leave, shot, seed, web, out, people }) => {
   const host = await person("LobbyHost", 1);
-  const guest = await person("LobbyGuest", 2);
-  const phone = await person("LobbyPhone", 3, { device: "android" });
+  const guest = await person("LobbyGuest", 2, { permission: "granted" });
+  const phone = await person("LobbyPhone", 3, { device: "android", permission: "granted" });
   let call;
   let episodeId;
   let apiKey;
