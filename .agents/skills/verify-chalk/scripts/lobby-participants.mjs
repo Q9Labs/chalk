@@ -22,7 +22,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     const response = await fetch(new URL("/v1/tenants/" + call.tenantId + "/spaces/" + call.spaceId + "/episodes/" + episodeId + "/participants", web), {
       method: "POST",
       headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Chalk-Media-Providers": "chalk_sfu" },
-      body: JSON.stringify({ name, role: "collaborator", identity_kind: kind, admission: "direct" }),
+      body: JSON.stringify({ participant_id: randomUUID(), name, role: "collaborator", identity_kind: kind, admission: "direct" }),
     });
     if (!response.ok) throw new Error("admitting " + name + " answered HTTP " + response.status + " " + ((await response.json().catch(() => null))?.error?.code ?? ""));
   };
